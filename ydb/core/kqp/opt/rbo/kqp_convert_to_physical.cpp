@@ -1577,9 +1577,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
 
             for (const auto& mapElement : map->MapElements) {
                 TMaybeNode<TCoLambda> mapLambda;
-
-                if (std::holds_alternative<TExprNode::TPtr>(mapElement.second)) {
-                    auto lambda = TCoLambda(std::get<TExprNode::TPtr>(mapElement.second));
+                if (mapElement.IsExpression()) {
+                    auto lambda = TCoLambda(mapElement.GetExpression());
                     // clang-format off
                     mapLambda = Build<TCoLambda>(ctx, op->Pos)
                         .Args({arg})
@@ -1590,8 +1589,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                     .Done();
                     // clang-format on
                 } else {
-                    auto var = std::get<TInfoUnit>(mapElement.second);
-
+                    const auto var = mapElement.GetRename();
                     // clang-format off
                     mapLambda = Build<TCoLambda>(ctx, op->Pos)
                         .Args({arg})
@@ -1605,7 +1603,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
 
                 // clang-format off
                 auto tuple = Build<TCoNameValueTuple>(ctx, op->Pos)
-                    .Name().Value(mapElement.first.GetFullName()).Build()
+                    .Name().Value(mapElement.GetElementName().GetFullName()).Build()
                     .Value(mapLambda.Body())
                 .Done();
                 // clang-format on

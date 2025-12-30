@@ -111,7 +111,6 @@ TRenameStage::TRenameStage() : IRBOStage("Remove redundant maps") {
 }
 
 void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
-
     // We need to build scopes for the plan, because same aliases and variable names may be
     // used multiple times in different scopes
     auto scopes = Scopes();
@@ -145,12 +144,12 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         
         if (iter.Current->Kind == EOperator::Map && CastOperator<TOpMap>(iter.Current)->Project) {
             auto map = CastOperator<TOpMap>(iter.Current);
-            for (const auto& [to, body] : map->MapElements) {
-                mapsTo.push_back(to);
-                if (std::holds_alternative<TInfoUnit>(body)) {
-                    auto from = std::get<TInfoUnit>(body);
-                    if (to != from) {
-                        mapsFrom[to] = from;
+            for (const auto& mapElement: map->MapElements) {
+                mapsTo.push_back(mapElement.GetElementName());
+                if (mapElement.IsRename()) {
+                    auto from = mapElement.GetRename();
+                    if (mapElement.GetElementName() != from) {
+                        mapsFrom[mapElement.GetElementName()] = from;
                     }
                 }
             }

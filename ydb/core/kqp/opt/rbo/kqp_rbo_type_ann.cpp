@@ -189,23 +189,23 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
         }
     }
 
-    for (auto & mapEl : map->MapElements) {
-        if (std::holds_alternative<TInfoUnit>(mapEl.second)) {
-            TInfoUnit from = std::get<TInfoUnit>(mapEl.second);
+    for (auto& mapEl : map->MapElements) {
+        if (mapEl.IsRename()) {
+            TInfoUnit from = mapEl.GetRename();
             auto typeIt = std::find_if(typeItems.begin(), typeItems.end(), [&from](const TItemExprType* t){
                 return from.GetFullName() == t->GetName();
             });
-            if (typeIt==typeItems.end()) {
-                YQL_CLOG(TRACE, CoreDq) << "Did not find column: " 
-                << from.GetFullName() << " in " << *inputType << " while processing map " << map->ToString(ctx.ExprCtx);
+            if (typeIt == typeItems.end()) {
+                YQL_CLOG(TRACE, CoreDq) << "Did not find column: " << from.GetFullName() << " in " << *inputType << " while processing map "
+                                        << map->ToString(ctx.ExprCtx);
             }
-            Y_ENSURE(typeIt!=typeItems.end());
+            Y_ENSURE(typeIt != typeItems.end());
 
-            auto renameType = ctx.ExprCtx.MakeType<TItemExprType>(mapEl.first.GetFullName(), (*typeIt)->GetItemType());
+            auto renameType = ctx.ExprCtx.MakeType<TItemExprType>(mapEl.GetElementName().GetFullName(), (*typeIt)->GetItemType());
             resStructItemTypes.push_back(renameType);
         }
         else {
-            auto& lambda = std::get<TExprNode::TPtr>(mapEl.second);
+            auto& lambda = mapEl.GetExpression();
             if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -214,22 +214,19 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
             IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
             do {
                 status = ctx.TypeAnnTransformer->Transform(lambda, lambda, ctx.ExprCtx);
-
             } while (status == IGraphTransformer::TStatus::Repeat);
 
             auto lambdaType = lambda->GetTypeAnn();
             Y_ENSURE(lambdaType);
 
-            auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapEl.first.GetFullName(), lambdaType);
+            auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapEl.GetElementName().GetFullName(), lambdaType);
             resStructItemTypes.push_back(mapLambdaType);
         }
     }
 
     auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resStructItemTypes);
     const TTypeAnnotationNode* resultAnn = ctx.ExprCtx.MakeType<TListExprType>(resultItemType);
-
     map->Type = resultAnn;
-
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Map done: " << *resultAnn;
 
     return TStatus::Ok;

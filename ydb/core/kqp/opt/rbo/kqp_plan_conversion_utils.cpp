@@ -110,14 +110,14 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
     auto opMap = TKqpOpMap(node);
     auto input = ExprNodeToOperator(opMap.Input().Ptr());
     auto project = opMap.Project().IsValid();
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
+    TVector<TMapElement> mapElements;
 
     for (auto mapElement : opMap.MapElements()) {
         const auto iu = TInfoUnit(mapElement.Variable().StringValue());
         if (mapElement.Maybe<TKqpOpMapElementRename>()) {
             auto element = mapElement.Cast<TKqpOpMapElementRename>();
             auto fromIU = TInfoUnit(element.From().StringValue());
-            mapElements.push_back(std::make_pair(iu, fromIU));
+            mapElements.emplace_back(iu, fromIU);
         } else {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
             // case lambda ($arg) { member $arg `name }
@@ -126,9 +126,9 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
                 auto member = maybeMember.Cast();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
-                mapElements.push_back(std::make_pair(iu, fromIU));
+                mapElements.emplace_back(iu, fromIU);
             } else {
-                mapElements.push_back(std::make_pair(iu, element.Lambda().Ptr()));
+                mapElements.emplace_back(iu, element.Lambda().Ptr());
             }
         }
     }
@@ -192,7 +192,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
     auto output = input;
 
     TVector<TSortElement> sortElements;
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
+    TVector<TMapElement> mapElements;
 
     for (auto el : opSort.SortExpressions()) {
         TInfoUnit column;
@@ -202,7 +202,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
         } else {
             TString newName = "_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++);
             column = TInfoUnit(newName);
-            mapElements.push_back(std::make_pair(column, el.Lambda().Ptr()));
+            mapElements.emplace_back(column, el.Lambda().Ptr());
         }
         sortElements.push_back(TSortElement(column, el.Direction().StringValue() == "asc", el.NullsFirst().StringValue() == "first"));
     }

@@ -472,10 +472,27 @@ class TOpRead : public IOperator {
     TExprNode::TPtr OlapFilterLambda;
 };
 
+class TMapElement {
+public:
+    TMapElement(const TInfoUnit& elementName, TExprNode::TPtr expr);
+    TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename);
+    TMapElement(const TInfoUnit& elementName, const std::variant<TInfoUnit, TExprNode::TPtr>& elementHolder);
+    TInfoUnit GetElementName() const;
+    bool IsExpression() const;
+    bool IsRename() const;
+    TExprNode::TPtr GetExpression() const;
+    TExprNode::TPtr& GetExpression();
+    TInfoUnit GetRename() const;
+    void SetExpression(TExprNode::TPtr expr);
+
+private:
+    TInfoUnit ElementName;
+    std::variant<TInfoUnit, TExprNode::TPtr> ElementHolder;
+};
+
 class TOpMap : public IUnaryOperator {
   public:
-    TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements,
-           bool project);
+    TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
@@ -491,7 +508,7 @@ class TOpMap : public IUnaryOperator {
 
     virtual TString ToString(TExprContext& ctx) override;
 
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> MapElements;
+    TVector<TMapElement> MapElements;
     bool Project = true;
 };
 

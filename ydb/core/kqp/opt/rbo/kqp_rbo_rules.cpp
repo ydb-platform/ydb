@@ -510,6 +510,9 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     // EXISTS and NOT EXISTS
     else {
 
+        auto one = ctx.ExprCtx.NewCallable(filter->Pos, "Uint64", {ctx.ExprCtx.NewAtom(filter->Pos, "1")});
+        auto limit = std::make_shared<TOpLimit>(subplan.Plan, filter->Pos, one);
+
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
 
         TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> countMapElements;
@@ -524,7 +527,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         // clang-format on
 
         countMapElements.push_back(std::make_pair(countResult, zeroLambda));
-        auto countMap = std::make_shared<TOpMap>(subplan.Plan, filter->Pos, countMapElements, true);
+        auto countMap = std::make_shared<TOpMap>(limit, filter->Pos, countMapElements, true);
 
 
         TOpAggregationTraits aggFunction(countResult, "count", false);

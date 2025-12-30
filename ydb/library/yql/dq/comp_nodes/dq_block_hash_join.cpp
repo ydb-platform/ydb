@@ -55,7 +55,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         : Side_(side)
         , Stream_(stream.SelectSide(side))
         , StreamValues_(Stream_->GetValue(ctx))
-        , Buff_(meta->InputTypes.SelectSide(side).size())
+        , Buff_(ctx.MutableValues.get(), meta->InputTypes.SelectSide(side).size())
         , ArrowBlockToInternalConverter_(converters.SelectSide(side).get())
     {}
 
@@ -99,7 +99,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     [[maybe_unused]]ESide Side_;
     IComputationNode* Stream_;
     NYql::NUdf::TUnboxedValue StreamValues_;
-    TUnboxedValueVector Buff_;
+    std::span<NYql::NUdf::TUnboxedValue> Buff_;
     IBlockLayoutConverter* ArrowBlockToInternalConverter_;
 };
 
@@ -227,6 +227,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+
         TTypeInfoHelper helper;
         TSides<std::unique_ptr<IBlockLayoutConverter>> layouts;
         Meta_->GlobalContext = &ctx;

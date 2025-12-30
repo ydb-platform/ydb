@@ -33,7 +33,6 @@
 #include <util/string/escape.h>
 
 #include <cmath>
-#include <regex>
 
 namespace NKikimr {
 namespace NKqp {
@@ -56,16 +55,18 @@ class TDocumentIdPointer;
 
 namespace {
 
-TString WildcardToRegex(const std::string& pattern) {
-    // First, escape all regex special characters except *
-    static const std::regex escapeRegex(R"re([\^\$\.\\\+\?\(\)\|\{\}\[\]])re");
-    std::string escaped = std::regex_replace(pattern, escapeRegex, "\\$&");
-
-    // Then replace * with .*
-    static const std::regex starRegex("\\*");
-    std::string result = std::regex_replace(escaped, starRegex, ".*");
-
-    return result;
+TString WildcardToRegex(const TStringBuf wildcardPattern) {
+    static const TStringBuf special = R"(^$.\+?()|{}[])";
+    TStringBuilder builder;
+    for (char c : wildcardPattern) {
+        if (c == '*') {
+            builder << '.';
+        } else if (special.find(c) != TStringBuf::npos) {
+            builder << '\\';
+        }
+        builder << c;
+    }
+    return builder;
 }
 
 }

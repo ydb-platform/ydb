@@ -2581,7 +2581,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndNgram) {
+Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgram, Edge) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -2604,7 +2604,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgram) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db);
+    AddIndexNGram(db, 3, 5, Edge);
 
     { // basic cases
         TString query = R"sql(
@@ -2670,7 +2670,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgram) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcard) {
+Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgramWildcard, Edge) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -2697,7 +2697,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcard) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db);
+    AddIndexNGram(db, 3, 5, Edge);
 
     {
         TString query = R"sql(

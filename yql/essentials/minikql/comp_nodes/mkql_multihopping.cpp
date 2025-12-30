@@ -60,7 +60,7 @@ public:
             , StatesMap(0, hash, equal)
             , Ctx(ctx)
         {
-            if (!WatermarkMode && dataWatermarks) {
+            if (!watermarkMode && dataWatermarks) {
                 DataWatermarkTracker.emplace(TWatermarkTracker(delayHopCount * hopTime, hopTime));
             }
         }
@@ -257,18 +257,13 @@ public:
                     ++LateEventsThrown;
                     continue;
                 }
-
-                // TODO revert asap; diagnostics-only for q-stable-*
-                if (WatermarkMode && hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount) {
+                if (WatermarkMode && (hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount)) {
                     ++EarlyEventsThrown;
+                    continue;
                 }
-                if constexpr (false) { // TODO: if (WatermarkMode) {
-                    if (hopIndex >= keyState.HopIndex + DelayHopCount + IntervalHopCount) {
-                        ++EarlyEventsThrown;
-                        continue;
-                    }
-                } else {
-                    // Overflow is not possible, because hopIndex is a product of a division
+
+                // Overflow is not possible, because hopIndex is a product of a division
+                if (!WatermarkMode) {
                     auto closeBeforeIndex = Max<i64>(hopIndex + 1 - DelayHopCount - IntervalHopCount, 0);
                     CloseOldBucketsForKey(key, keyState, closeBeforeIndex, newHopsStat);
                 }
@@ -284,7 +279,8 @@ public:
                 }
 
                 if (DataWatermarkTracker) {
-                    if (const auto newWatermark = DataWatermarkTracker->HandleNextEventTime(ts)) {
+                    const auto newWatermark = DataWatermarkTracker->HandleNextEventTime(ts);
+                    if (newWatermark && !WatermarkMode) {
                         CloseOldBuckets(*newWatermark, newHopsStat);
                     }
                 }

@@ -2465,6 +2465,8 @@ message TColumnShardConfig {
         string DefaultCompactionPreset = 61 [default = "tiling"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
+
+    optional uint64 ScanMemoryLimit = 63 [default = 3221225472];
 }
 
 message TSchemeShardConfig {

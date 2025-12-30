@@ -972,7 +972,7 @@ private:
     }
 
     void GeneratePostfilterMatchers(const Ydb::Table::FulltextIndexSettings::Analyzers& analyzers, const TStringBuf query) {
-        if (!analyzers.use_filter_ngram() && !analyzers.use_filter_edge_ngram()) { // TODO: Replace with specific member
+        if (!analyzers.use_filter_ngram() && !analyzers.use_filter_edge_ngram()) {
             return;
         }
 
@@ -1491,7 +1491,7 @@ public:
         analyzers.set_use_filter_edge_ngram(false);
 
         for (const auto& matcher : PostfilterMatchers) {
-            const TString searchColumnValue(documentInfo.GetResultCell(SearchColumnIdx).AsBuf()); // TODO: don't copy, TODO: choose correct column
+            const TString searchColumnValue(documentInfo.GetResultCell(SearchColumnIdx).AsBuf()); // TODO: don't copy
 
             bool found = false;
             for (const auto& valueToken : NFulltext::Analyze(searchColumnValue, analyzers)) {

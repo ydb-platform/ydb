@@ -54,6 +54,8 @@ TString PrettyDurationString(TDuration duration, const TPrettyDurationFormatPara
     return TStringBuilder() << Prec(duration.MillisecondsFloat() / (paramerters.EntitiesPerSecond * 1000.0), PREC_POINT_DIGITS_STRIP_ZEROES, paramerters.MaxPrecision) << " " << paramerters.EntityName;
 }
 
+// Helper function to format duration in human-readable format
+// Returns empty string for zero duration, otherwise returns duration in format like "2h", "5m 30s", etc.
 TString HumanReadableDurationOrEmpty(TDuration duration) {
     if (duration == TDuration::Zero()) {
         return "";

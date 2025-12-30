@@ -29,7 +29,7 @@ protected:
     STATEFN(StateListening) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvPollerRegisterResult, Handle);
-            hFunc(NActors::TEvPollerReady, Handle);
+            cFunc(NActors::TEvPollerReady::EventType, HandlePollerReady);
             hFunc(TEvHttpProxy::TEvHttpIncomingConnectionClosed, Handle);
             hFunc(TEvHttpProxy::TEvReportSensors, Handle);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
@@ -112,10 +112,10 @@ protected:
 
     void Handle(NActors::TEvPollerRegisterResult::TPtr& ev) {
         PollerToken = std::move(ev->Get()->PollerToken);
-        PollerToken->Request(true, false); // request read polling
+        HandlePollerReady();
     }
 
-    void Handle(NActors::TEvPollerReady::TPtr&) {
+    void HandlePollerReady() {
         for (;;) {
             SocketAddressType addr;
             std::optional<SocketType> s = Socket->Socket.Accept(addr);

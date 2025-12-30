@@ -210,7 +210,6 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 
     NIceDb::TNiceDb db(context.GetDB());
 
-    ui64 oldVersion = table->AlterVersion;
     // Use coordinated version if available (from backup operations)
     // Otherwise, increment by 1 for backward compatibility
     if (txState->CoordinatedSchemaVersion.Defined()) {

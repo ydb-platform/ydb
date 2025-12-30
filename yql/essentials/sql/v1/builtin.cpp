@@ -2152,17 +2152,18 @@ private:
     TNodePtr Node;
 };
 
-THoppingWindow::THoppingWindow(TPosition pos, TVector<TNodePtr> args)
+THoppingWindow::THoppingWindow(TPosition pos, TVector<TNodePtr> args, bool useNamed)
     : INode(pos)
     , Args_(std::move(args))
     , FakeSource_(BuildFakeSource(pos))
+    , UseNamed_(useNamed)
     , Valid_(false)
 {}
 
 TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
     YQL_ENSURE(HasState(ENodeState::Initialized));
 
-    return Y(
+    auto result = Y(
         "HoppingTraits",
         Y("ListItemType", Y("TypeOf", label)),
         BuildLambda(Pos, Y("row"), TimeExtractor_),
@@ -2172,6 +2173,14 @@ TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
         Q(DataWatermarks_),
         Q("v2")
     );
+    if (SizeLimit_ || TimeLimit_ || EarlyPolicy_ || LatePolicy_) {
+        result->Add(
+            SizeLimit_ ? SizeLimit_ : Y("Void"),
+            TimeLimit_ ? TimeLimit_ : Y("Void"),
+            EarlyPolicy_ ? EarlyPolicy_ : Y("Void"),
+            LatePolicy_ ? LatePolicy_ : Y("Void"));
+    }
+    return result;
 }
 
 TNodePtr THoppingWindow::GetInterval() const {
@@ -2189,19 +2198,57 @@ bool THoppingWindow::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    if (Args_.size() != 3) {
-        ctx.Error(Pos) << "HoppingWindow requires three arguments";
-        return false;
-    }
-
     if (!Valid_) {
         ctx.Error(Pos) << "HoppingWindow can only be used as a top-level GROUP BY expression";
         return false;
     }
 
-    auto timeExtractor = Args_[0];
-    auto hopExpr = Args_[1];
-    auto intervalExpr = Args_[2];
+    TNodePtr timeExtractor;
+    TNodePtr hopExpr;
+    TNodePtr intervalExpr;
+    if (UseNamed_) {
+        YQL_ENSURE(Args_.size() == 2);
+        auto posArgs = Args_[0]->GetTupleNode();
+        Y_DEBUG_ABORT_UNLESS(posArgs);
+        if (posArgs->GetTupleSize() != 3) {
+            ctx.Error(Pos) << "HoppingWindow requires three positional arguments";
+            return false;
+        }
+        timeExtractor = posArgs->GetTupleElement(0);
+        hopExpr = posArgs->GetTupleElement(1);
+        intervalExpr = posArgs->GetTupleElement(2);
+        auto namedArgs = Args_[1]->GetStructNode();
+        Y_DEBUG_ABORT_UNLESS(namedArgs);
+        for (auto arg : namedArgs->GetExprs()) {
+            if (!arg->Init(ctx, FakeSource_.Get())) {
+                return false;
+            }
+
+            const auto& label = arg->GetLabel();
+            if (label == "SizeLimit") {
+                SizeLimit_ = std::move(arg);
+            } else if (label == "TimeLimit") {
+                TimeLimit_ = ProcessIntervalParam(arg);
+            } else if (label == "EarlyPolicy") {
+                EarlyPolicy_ = std::move(arg);
+            } else if (label == "LatePolicy") {
+                LatePolicy_ = std::move(arg);
+            } else {
+                ctx.Error(arg->GetPos()) << "HoppingWindow: unsupported parameter: " << label
+                                         << "; expected: SizeLimit, TimeLimit, EarlyPolicy, LatePolicy";
+                return false;
+            }
+        }
+    } else {
+        if (Args_.size() != 3) {
+            ctx.Error(Pos) << "HoppingWindow requires three positional arguments";
+            return false;
+        }
+
+        timeExtractor = Args_[0];
+        hopExpr = Args_[1];
+        intervalExpr = Args_[2];
+    }
 
     if (!timeExtractor->Init(ctx, src) ||
         !hopExpr->Init(ctx, FakeSource_.Get()) ||
@@ -2226,7 +2273,7 @@ void THoppingWindow::DoUpdateState() const {
 }
 
 TNodePtr THoppingWindow::DoClone() const {
-    return new THoppingWindow(Pos, CloneContainer(Args_));
+    return new THoppingWindow(Pos, CloneContainer(Args_), UseNamed_);
 }
 
 TString THoppingWindow::GetOpName() const {
@@ -2237,6 +2284,9 @@ TNodePtr THoppingWindow::ProcessIntervalParam(const TNodePtr& node) const {
     auto literal = node->GetLiteral("String");
     if (!literal) {
         return Y("EvaluateExpr", node);
+    }
+    if (*literal == "max") {
+        return node;
     }
 
     return new TYqlData(node->GetPos(), "Interval", {node});
@@ -3225,9 +3275,6 @@ struct TBuiltinFuncData {
             {"sessionstart", {"SessionStart", "Agg", BuildSimpleBuiltinFactoryCallback<TSessionStart<true>>()}},
             {"sessionstate", {"SessionState", "Agg", BuildSimpleBuiltinFactoryCallback<TSessionStart<false>>()}},
 
-            // New hopping
-            {"hoppingwindow", {"", "", BuildSimpleBuiltinFactoryCallback<THoppingWindow>()}},
-
             // Hopping intervals time functions
             {"hopstart", {"HopStart", "Agg", BuildSimpleBuiltinFactoryCallback<THoppingTime<true>>()}},
             {"hopend", {"HopEnd", "Agg", BuildSimpleBuiltinFactoryCallback<THoppingTime<false>>()}}
@@ -3866,6 +3913,12 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             return new TCallNodeImpl(pos, "SqlVisit", 1, -1, resultArgs);
         } else if (normalizedName == "sqlexternalfunction") {
             return new TCallNodeImpl(pos, "SqlExternalFunction", args);
+        } else if (normalizedName == "hoppingwindow") {
+            bool useNamed = mustUseNamed && *mustUseNamed;
+            if (useNamed) {
+                *mustUseNamed = false;
+            }
+            return new THoppingWindow(pos, args, useNamed);
         } else {
             return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown builtin: " << name);
         }

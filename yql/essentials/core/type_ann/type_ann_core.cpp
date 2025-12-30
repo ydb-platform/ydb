@@ -12804,7 +12804,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["GraceSelfJoinCore"] = &GraceSelfJoinCoreWrapper;
         Functions["CombineCore"] = &CombineCoreWrapper;
         Functions["GroupingCore"] = &GroupingCoreWrapper;
-        Functions["HoppingTraits"] = &HoppingTraitsWrapper;
+        ExtFunctions["HoppingTraits"] = &HoppingTraitsWrapper;
         Functions["HoppingCore"] = &HoppingCoreWrapper;
         Functions["MultiHoppingCore"] = &MultiHoppingCoreWrapper;
         Functions["EquiJoin"] = &EquiJoinWrapper;

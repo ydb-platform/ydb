@@ -208,13 +208,12 @@ namespace NSQLTranslationV1 {
         bool Valid;
     };
 
-    class THoppingWindow final : public INode {
+    class THoppingWindow final: public INode {
     public:
-        THoppingWindow(TPosition pos, TVector<TNodePtr> args);
+        THoppingWindow(TPosition pos, TVector<TNodePtr> args, bool useNamed);
         TNodePtr BuildTraits(const TString& label) const;
         TNodePtr GetInterval() const;
         void MarkValid();
-
     private:
         bool DoInit(TContext& ctx, ISource* src) override;
         TAstNode* Translate(TContext&) const override;
@@ -229,11 +228,15 @@ namespace NSQLTranslationV1 {
         TNodePtr TimeExtractor_;
         TNodePtr Hop_;
         TNodePtr Interval_;
+        TNodePtr SizeLimit_;
+        TNodePtr TimeLimit_;
+        TNodePtr EarlyPolicy_;
+        TNodePtr LatePolicy_;
         const TNodePtr Delay_ = Y("Interval", Q("0"));
         const TString DataWatermarks_ = "true";
+        bool UseNamed_ = false;
         bool Valid_;
     };
-
 
     // Implemented in join.cpp
     TString NormalizeJoinOp(const TString& joinOp);

@@ -656,13 +656,17 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "HoppingTraits"},
             "Children": [
-                {"Index": 0, "Name": "ItemType",       "Type": "TExprBase"},
-                {"Index": 1, "Name": "TimeExtractor",  "Type": "TCoLambda"},
-                {"Index": 2, "Name": "Hop",            "Type": "TExprBase"},
-                {"Index": 3, "Name": "Interval",       "Type": "TExprBase"},
-                {"Index": 4, "Name": "Delay",          "Type": "TExprBase"},
-                {"Index": 5, "Name": "DataWatermarks", "Type": "TExprBase"},
-                {"Index": 6, "Name": "Version",        "Type": "TExprBase"}
+                {"Index": 0,  "Name": "ItemType",       "Type": "TExprBase"},
+                {"Index": 1,  "Name": "TimeExtractor",  "Type": "TCoLambda"},
+                {"Index": 2,  "Name": "Hop",            "Type": "TExprBase"},
+                {"Index": 3,  "Name": "Interval",       "Type": "TExprBase"},
+                {"Index": 4,  "Name": "Delay",          "Type": "TExprBase"},
+                {"Index": 5,  "Name": "DataWatermarks", "Type": "TExprBase"},
+                {"Index": 6,  "Name": "Version",        "Type": "TExprBase"},
+                {"Index": 7,  "Name": "SizeLimit",      "Type": "TExprBase", "Optional": true},
+                {"Index": 8,  "Name": "TimeLimit",      "Type": "TExprBase", "Optional": true},
+                {"Index": 9,  "Name": "EarlyPolicy",    "Type": "TExprBase", "Optional": true},
+                {"Index": 10, "Name": "LatePolicy",     "Type": "TExprBase", "Optional": true}
             ]
         },
         {
@@ -2054,7 +2058,11 @@
                 {"Index": 11, "Name": "MergeHandler",   "Type": "TCoLambda"},
                 {"Index": 12, "Name": "FinishHandler",  "Type": "TCoLambda"},
                 {"Index": 13, "Name": "WatermarkMode",  "Type": "TExprBase"},
-                {"Index": 14, "Name": "HoppingColumn",  "Type": "TCoAtom"}
+                {"Index": 14, "Name": "HoppingColumn",  "Type": "TCoAtom"},
+                {"Index": 15, "Name": "SizeLimit",      "Type": "TExprBase", "Optional": true},
+                {"Index": 16, "Name": "TimeLimit",      "Type": "TExprBase", "Optional": true},
+                {"Index": 17, "Name": "EarlyPolicy",    "Type": "TExprBase", "Optional": true},
+                {"Index": 18, "Name": "LatePolicy",     "Type": "TExprBase", "Optional": true}
             ]
         },
         {

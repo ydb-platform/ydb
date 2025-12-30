@@ -642,7 +642,14 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
     }
 
     class TUniqueSecondaryIndex : public TTableDataModificationTester {
+    public:
+        bool EnableIndexStreamWrite = false;
+
     protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+        }
+
         void DoExecute() override {
             {
                 auto client = Kikimr->GetTableClient();
@@ -685,8 +692,9 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
         }
     };
 
-    Y_UNIT_TEST(TUniqueSecondaryIndexOltp) {
+    Y_UNIT_TEST_TWIN(TUniqueSecondaryIndexOltp, EnableIndexStreamWrite) {
         TUniqueSecondaryIndex tester;
+        tester.EnableIndexStreamWrite = EnableIndexStreamWrite;
         tester.SetIsOlap(false);
         tester.SetFillTables(false);
         tester.Execute();

@@ -2598,7 +2598,9 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
                 (2, "Werner Heisenberg"),
                 (3, "Bern city"),
                 (4, "lusedaedae"),
-                (5, "lusedaeda")
+                (5, "lusedaeda"),
+                (100, ""),
+                (101, NULL)
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2693,7 +2695,9 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
                 (6, "машинное обучение"),
                 (7, "машинное масло"),
                 (8, "котомор"),
-                (9, "морекот")
+                (9, "морекот"),
+                (100, ""),
+                (101, NULL)
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

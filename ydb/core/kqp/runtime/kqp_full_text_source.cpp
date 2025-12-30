@@ -1020,7 +1020,9 @@ private:
             }
         }
 
-        YQL_ENSURE(!Words.empty(), "Expression must produce at least one word after tokenization");
+        if (Words.empty()) {
+            NotifyCA();
+        }
     }
 
     void FetchDocumentStats(TIntrusivePtr<TDocumentInfo> docInfo) {

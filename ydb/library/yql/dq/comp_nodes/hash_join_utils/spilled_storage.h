@@ -181,12 +181,12 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         for(int index = 0; index < std::ssize(State_.Buckets); ++index) {
             TSides<TBucket>* thisBucket = std::get_if<TSides<TBucket>>(&State_.Buckets[index]);
             if (thisBucket) {
-                ForEachSide([&](ESide side){
+                for(ESide side: EachSide){
                     thisBucket->SelectSide(side).DetatchBuildingPage();
                     thisBucket->SelectSide(side).ForEachPage([&](TPackResult page){
                         State_.InMemoryPages.push_back(TValueAndLocation<TPackResult>{.Val = std::move(page), .Side = side, .BucketIndex = index});
                     });
-                });
+                }
             }
         }
     }

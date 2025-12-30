@@ -432,7 +432,9 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     class Sources {
       public:
         Sources(TSides<Source> data) {
-            ForEachSide([&](ESide side) { Data_.SelectSide(side).emplace(std::move(data.SelectSide(side))); });
+            for(ESide side: EachSide) { 
+                Data_.SelectSide(side).emplace(std::move(data.SelectSide(side))); 
+            }
         }
 
         Source Build() && {
@@ -590,7 +592,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     for (int index = 0; index < std::ssize(state.Spiller.GetState().Buckets); ++index) {
                         if (state.Spiller.IsBucketSpilled(index)) {
                             TSides<TBucket>& thisPair = *std::get_if<TSides<TBucket>>(&state.Spiller.GetState().Buckets[index]);
-                            ForEachSide([&](ESide side) {
+                            for(ESide side: EachSide) {
                                 TBucket& thisBucket = thisPair.SelectSide(side);
                                 thisBucket.DetatchBuildingPage();
                                 thisBucket.ForEachPage([&](TPackResult page){
@@ -600,7 +602,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                                 });
                                 alreadyDumped[index].SelectSide(side) = std::move(*thisBucket.SpilledPages);
                                 thisBucket.SpilledPages = std::nullopt;
-                            });
+                            }
                         }
                     }
                     for (auto& page : state.Spiller.GetState().InMemoryPages) {

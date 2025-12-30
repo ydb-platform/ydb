@@ -43,16 +43,14 @@ void f(int buildSize, int probeSize, bool buildRequired, bool probeRequired){
 vs
 
 void f(TSides<int> sizes, TSides<bool> required) {
-    ForEachSide([&](ESide side){
-        use(sizes.SelectSide(side) + (required.SelectSide(side) ? 0 : transform(sizes.SelectSide(side))));
-    });
+    for(ESide side: EachSide){
+        use(sizes.SelectSide(side) + (required.SelectSide(side) ? 0 : transform(sizes.SelectSide(side))));    
+    }
 }
 
 */
-void ForEachSide(std::invocable<ESide> auto fn) {
-    fn(ESide::Build);
-    fn(ESide::Probe);
-}
+
+inline std::array<ESide,2> EachSide = {ESide::Build, ESide::Probe};
 
 template <typename Container> std::optional<typename Container::value_type> GetFrontOrNull(Container& cont) {
     if (cont.empty()) {

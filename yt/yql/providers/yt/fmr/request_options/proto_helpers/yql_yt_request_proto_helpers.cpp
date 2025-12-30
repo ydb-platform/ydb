@@ -191,15 +191,39 @@ TTableStats TableStatsFromProto(const NProto::TTableStats& protoTableStats) {
     };
 }
 
+NProto::TSortedChunkStats SortedChunkStatsToProto(const TSortedChunkStats& sortedChunkStats) {
+    NProto::TSortedChunkStats protoSortedChunkStats;
+    protoSortedChunkStats.SetIsSorted(sortedChunkStats.IsSorted);
+    if (!sortedChunkStats.FirstRowKeys.IsUndefined()) {
+        protoSortedChunkStats.SetFirstRowKeys(NYT::NodeToYsonString(sortedChunkStats.FirstRowKeys));
+    }
+    return protoSortedChunkStats;
+}
+
+TSortedChunkStats SortedChunkStatsFromProto(const NProto::TSortedChunkStats& protoSortedChunkStats) {
+    TSortedChunkStats sortedChunkStats;
+    sortedChunkStats.IsSorted = protoSortedChunkStats.GetIsSorted();
+    if (!protoSortedChunkStats.GetFirstRowKeys().empty()) {
+        sortedChunkStats.FirstRowKeys = NYT::NodeFromYsonString(protoSortedChunkStats.GetFirstRowKeys());
+    }
+    return sortedChunkStats;
+}
+
 NProto::TChunkStats ChunkStatsToProto(const TChunkStats& chunkStats) {
     NProto::TChunkStats protoChunkStats;
     protoChunkStats.SetRows(chunkStats.Rows);
     protoChunkStats.SetDataWeight(chunkStats.DataWeight);
+    auto protoSortedChunkStats = SortedChunkStatsToProto(chunkStats.SortedChunkStats);
+    protoChunkStats.MutableSortedChunkStats()->Swap(&protoSortedChunkStats);
     return protoChunkStats;
 }
 
 TChunkStats ChunkStatsFromProto(const NProto::TChunkStats& protoChunkStats) {
-    return TChunkStats{.Rows = protoChunkStats.GetRows(), .DataWeight = protoChunkStats.GetDataWeight()};
+    TChunkStats chunkStats;
+    chunkStats.Rows = protoChunkStats.GetRows();
+    chunkStats.DataWeight = protoChunkStats.GetDataWeight();
+    chunkStats.SortedChunkStats = SortedChunkStatsFromProto(protoChunkStats.GetSortedChunkStats());
+    return chunkStats;
 }
 
 NProto::TTableChunkStats TableChunkStatsToProto(const TTableChunkStats& tableChunkStats) {
@@ -429,6 +453,7 @@ NProto::TMapOperationParams MapOperationParamsToProto(const TMapOperationParams&
         protoMapOperationParams.AddOutput()->Swap(&protoFmrTableRef);
     }
     protoMapOperationParams.SetSerializedMapJobState(mapOperationParams.SerializedMapJobState);
+    protoMapOperationParams.SetIsOrdered(mapOperationParams.IsOrdered);
     return protoMapOperationParams;
 }
 
@@ -441,7 +466,7 @@ TMapOperationParams MapOperationParamsFromProto(const NProto::TMapOperationParam
     for (auto& protoFmrTableRef: protoMapOperationParams.GetOutput()) {
         outputTables.emplace_back(FmrTableRefFromProto(protoFmrTableRef));
     }
-    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .SerializedMapJobState = protoMapOperationParams.GetSerializedMapJobState()};
+    return TMapOperationParams{.Input = inputTables, .Output = outputTables, .SerializedMapJobState = protoMapOperationParams.GetSerializedMapJobState(), .IsOrdered = protoMapOperationParams.GetIsOrdered()};
 }
 
 NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams) {
@@ -453,6 +478,7 @@ NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams)
         protoMapTaskParams.AddOutput()->Swap(&protoFmrTableOutputRef);
     }
     protoMapTaskParams.SetSerializedMapJobState(mapTaskParams.SerializedMapJobState);
+    protoMapTaskParams.SetIsOrdered(mapTaskParams.IsOrdered);
     return protoMapTaskParams;
 }
 
@@ -465,6 +491,7 @@ TMapTaskParams MapTaskParamsFromProto(const NProto::TMapTaskParams& protoMapTask
     }
     mapTaskParams.Output = outputTables;
     mapTaskParams.SerializedMapJobState = protoMapTaskParams.GetSerializedMapJobState();
+    mapTaskParams.IsOrdered = protoMapTaskParams.GetIsOrdered();
     return mapTaskParams;
 }
 
@@ -479,8 +506,7 @@ NProto::TOperationParams OperationParamsToProto(const TOperationParams& operatio
     } else if (auto* mergeOperationParamsPtr = std::get_if<TMergeOperationParams>(&operationParams)) {
         NProto::TMergeOperationParams protoMergeOperationParams = MergeOperationParamsToProto(*mergeOperationParamsPtr);
         protoOperationParams.MutableMergeOperationParams()->Swap(&protoMergeOperationParams);
-    } else {
-        auto* mapOperationParamsPtr = std::get_if<TMapOperationParams>(&operationParams);
+    } else if (auto* mapOperationParamsPtr = std::get_if<TMapOperationParams>(&operationParams)) {
         NProto::TMapOperationParams protoMapOperationParams = MapOperationParamsToProto(*mapOperationParamsPtr);
         protoOperationParams.MutableMapOperationParams()->Swap(&protoMapOperationParams);
     }
@@ -494,9 +520,10 @@ TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoO
         return UploadOperationParamsFromProto(protoOperationParams.GetUploadOperationParams());
     } else if (protoOperationParams.HasMergeOperationParams()) {
         return MergeOperationParamsFromProto(protoOperationParams.GetMergeOperationParams());
-    } else {
+    } else if (protoOperationParams.HasMapOperationParams()) {
         return MapOperationParamsFromProto(protoOperationParams.GetMapOperationParams());
     }
+    return TOperationParams();
 }
 
 NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
@@ -510,8 +537,7 @@ NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
     } else if (auto* mergeTaskParamsPtr = std::get_if<TMergeTaskParams>(&taskParams)) {
         NProto::TMergeTaskParams protoMergeTaskParams = MergeTaskParamsToProto(*mergeTaskParamsPtr);
         protoTaskParams.MutableMergeTaskParams()->Swap(&protoMergeTaskParams);
-    } else {
-        auto* mapTaskParamsPtr = std::get_if<TMapTaskParams>(&taskParams);
+    } else if (auto* mapTaskParamsPtr = std::get_if<TMapTaskParams>(&taskParams)) {
         NProto::TMapTaskParams protoMapTaskParams = MapTaskParamsToProto(*mapTaskParamsPtr);
         protoTaskParams.MutableMapTaskParams()->Swap(&protoMapTaskParams);
     }
@@ -526,7 +552,7 @@ TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams) {
         taskParams = UploadTaskParamsFromProto(protoTaskParams.GetUploadTaskParams());
     } else if (protoTaskParams.HasMergeTaskParams()) {
         taskParams = MergeTaskParamsFromProto(protoTaskParams.GetMergeTaskParams());
-    } else {
+    } else if (protoTaskParams.HasMapTaskParams()) {
         taskParams = MapTaskParamsFromProto(protoTaskParams.GetMapTaskParams());
     }
     return taskParams;
@@ -552,6 +578,76 @@ TClusterConnection ClusterConnectionFromProto(const NProto::TClusterConnection& 
     return clusterConnection;
 }
 
+NProto::TFileInfo FileInfoToProto(const TFileInfo& fileInfo) {
+    NProto::TFileInfo protoFileInfo;
+    protoFileInfo.SetMd5Key(fileInfo.Md5Key);
+    protoFileInfo.SetAlias(fileInfo.Alias);
+    protoFileInfo.SetLocalPath(fileInfo.LocalPath);
+    return protoFileInfo;
+}
+
+TFileInfo FileInfoFromProto(const NProto::TFileInfo& protoFileInfo) {
+    return TFileInfo{
+        .LocalPath = protoFileInfo.GetLocalPath(),
+        .Md5Key = protoFileInfo.GetMd5Key(),
+        .Alias = protoFileInfo.GetAlias()
+    };
+}
+
+NProto::TYtResourceInfo YtResourceInfoToProto(const TYtResourceInfo& ytResourceInfo) {
+    NProto::TYtResourceInfo protoYtResourceInfo;
+    protoYtResourceInfo.SetRichPath(SerializeRichPath(ytResourceInfo.RichPath));
+    protoYtResourceInfo.SetYtServerName(ytResourceInfo.YtServerName);
+    protoYtResourceInfo.SetToken(ytResourceInfo.Token);
+    protoYtResourceInfo.SetLocalPath(ytResourceInfo.LocalPath);
+    return protoYtResourceInfo;
+}
+
+TYtResourceInfo YtResourceInfoFromProto(const NProto::TYtResourceInfo& protoYtResourceInfo) {
+    return TYtResourceInfo {
+        .RichPath = DeserializeRichPath(protoYtResourceInfo.GetRichPath()),
+        .YtServerName = protoYtResourceInfo.GetYtServerName(),
+        .Token = protoYtResourceInfo.GetToken(),
+        .LocalPath = protoYtResourceInfo.GetLocalPath()
+    };
+}
+
+NProto::TFmrResourceOperationInfo FmrResourceOperationInfoToProto(const TFmrResourceOperationInfo& fmrResourceOperationInfo) {
+    NProto::TFmrResourceOperationInfo protoFmrResourceOperationInfo;
+    auto protoFmrTable = FmrTableRefToProto(fmrResourceOperationInfo.FmrTable);
+    protoFmrResourceOperationInfo.MutableFmrTable()->Swap(&protoFmrTable);
+    protoFmrResourceOperationInfo.SetAlias(fmrResourceOperationInfo.Alias);
+    return protoFmrResourceOperationInfo;
+}
+
+TFmrResourceOperationInfo FmrResourceOperationInfoFromProto(const NProto::TFmrResourceOperationInfo& protoFmrResourceOperationInfo) {
+    return TFmrResourceOperationInfo{
+        .FmrTable = FmrTableRefFromProto(protoFmrResourceOperationInfo.GetFmrTable()),
+        .Alias = protoFmrResourceOperationInfo.GetAlias()
+    };
+}
+
+NProto::TFmrResourceTaskInfo FmrResourceTaskInfoToProto(const TFmrResourceTaskInfo& fmrResourceTaskInfo) {
+    NProto::TFmrResourceTaskInfo protoFmrResourceTaskInfo;
+    for (auto& resourceTask: fmrResourceTaskInfo.FmrResourceTasks) {
+        auto protoResourceTask = FmrTableInputRefToProto(resourceTask);
+        protoFmrResourceTaskInfo.AddFmrResourceTasks()->Swap(&protoResourceTask);
+    }
+    protoFmrResourceTaskInfo.SetLocalPath(fmrResourceTaskInfo.LocalPath);
+    protoFmrResourceTaskInfo.SetAlias(fmrResourceTaskInfo.Alias);
+    return protoFmrResourceTaskInfo;
+}
+
+TFmrResourceTaskInfo FmrResourceTaskInfoFromProto(const NProto::TFmrResourceTaskInfo& protoFmrResourceTaskInfo) {
+    TFmrResourceTaskInfo resourceTaskInfo;
+    for (ui64 i = 0; i < protoFmrResourceTaskInfo.FmrResourceTasksSize(); ++i) {
+        resourceTaskInfo.FmrResourceTasks.emplace_back(FmrTableInputRefFromProto(protoFmrResourceTaskInfo.GetFmrResourceTasks(i)));
+    }
+    resourceTaskInfo.LocalPath = protoFmrResourceTaskInfo.GetLocalPath();
+    resourceTaskInfo.Alias = protoFmrResourceTaskInfo.GetAlias();
+    return resourceTaskInfo;
+}
+
 NProto::TTask TaskToProto(const TTask& task) {
     NProto::TTask protoTask;
     protoTask.SetTaskType(static_cast<NProto::ETaskType>(task.TaskType));
@@ -566,6 +662,21 @@ NProto::TTask TaskToProto(const TTask& task) {
     }
     if (task.JobSettings) {
         protoTask.SetJobSettings(NYT::NodeToYsonString(*task.JobSettings));
+    }
+    for (auto& fileInfo: task.Files) {
+        NProto::TFileInfo protoFileInfo = FileInfoToProto(fileInfo);
+        protoTask.AddFiles()->Swap(&protoFileInfo);
+    }
+    for (auto& ytResourceInfo: task.YtResources) {
+        NProto::TYtResourceInfo protoYtResourceInfo = YtResourceInfoToProto(ytResourceInfo);
+        protoTask.AddYtResources()->Swap(&protoYtResourceInfo);
+    }
+    for (auto& fmrResourceInfo: task.FmrResources) {
+        NProto::TFmrResourceTaskInfo protoFmrResourceTaskInfo = FmrResourceTaskInfoToProto(fmrResourceInfo);
+        protoTask.AddFmrResources()->Swap(&protoFmrResourceTaskInfo);
+    }
+    if (task.JobEnvironmentDir.Defined()) {
+        protoTask.SetJobEnvironmentDir(*task.JobEnvironmentDir);
     }
     return protoTask;
 }
@@ -584,6 +695,18 @@ TTask TaskFromProto(const NProto::TTask& protoTask) {
     task.ClusterConnections = taskClusterConnections;
     if (protoTask.HasJobSettings()) {
         task.JobSettings = NYT::NodeFromYsonString(protoTask.GetJobSettings());
+    }
+    for (ui64 i = 0; i < protoTask.FilesSize(); ++i) {
+        task.Files.emplace_back(FileInfoFromProto(protoTask.GetFiles(i)));
+    }
+    for (ui64 i = 0; i < protoTask.YtResourcesSize(); ++i) {
+        task.YtResources.emplace_back(YtResourceInfoFromProto(protoTask.GetYtResources(i)));
+    }
+    for (ui64 i = 0; i < protoTask.FmrResourcesSize(); ++i) {
+        task.FmrResources.emplace_back(FmrResourceTaskInfoFromProto(protoTask.GetFmrResources(i)));
+    }
+    if (protoTask.HasJobEnvironmentDir()) {
+        task.JobEnvironmentDir = protoTask.GetJobEnvironmentDir();
     }
     return task;
 }

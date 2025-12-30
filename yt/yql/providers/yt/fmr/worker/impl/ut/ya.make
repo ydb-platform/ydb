@@ -9,6 +9,9 @@ PEERDIR(
     yt/yql/providers/yt/fmr/coordinator/impl
     yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/file
     yt/yql/providers/yt/fmr/job_factory/impl
+    yt/yql/providers/yt/fmr/job_preparer/impl
+    yt/yql/providers/yt/fmr/test_tools/table_data_service
+    yt/yql/providers/yt/fmr/job/impl
     yt/yql/providers/yt/fmr/worker/impl
 )
 

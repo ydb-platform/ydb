@@ -149,6 +149,7 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TC
         self->Counters.GetTabletCounters()->OnCompactionWriteIndexCompleted(
             context.FinishedSuccessfully, context.BlobsWritten, context.BytesWritten);
     }
+    NChanges::TGeneralCompactionCounters::OnCompactionWriteIndexCompleted(context.BlobsWritten, context.BytesWritten);
 }
 
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {

@@ -39,7 +39,7 @@ void TVectorRecallEvaluator::SelectReferenceResults(const TVectorSampler& sample
         << "SELECT s.id AS id"
         << ", " << (isAscending ? "BOTTOM_BY" : "TOP_BY") << "(" << MakeKeyExpression(Params, "m.") <<
             ", Knn::" << functionName << "(m." << Params.EmbeddingColumn << ", s.embedding), " << Params.Limit << ") result_ids"
-        << " FROM " << Params.TableName << " m"
+        << " FROM " << Params.TableOpts.Name << " m"
         << (Params.PrefixColumn ? " INNER JOIN " : " CROSS JOIN ") << "AS_TABLE($Samples) AS s";
     if (Params.PrefixColumn) {
         refQueryBuilder << " ON s.prefix = m." << *Params.PrefixColumn;

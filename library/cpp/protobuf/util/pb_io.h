@@ -24,7 +24,7 @@ namespace NProtoBuf {
     void ParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven = false);
     bool TryParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven = false);
     template <typename T>
-    static T ParseFromBase64String(const TStringBuf& dataBase64, bool allowUneven = false) {
+    T ParseFromBase64String(const TStringBuf& dataBase64, bool allowUneven = false) {
         T m;
         ParseFromBase64String(dataBase64, m, allowUneven);
         return m;
@@ -82,8 +82,8 @@ bool TryParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
 
 // @see `ParseFromTextFormat`
 template <typename T>
-static T ParseFromTextFormat(const TString& fileName,
-                             const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr) {
+T ParseFromTextFormat(const TString& fileName,
+                      const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr) {
     T message;
     ParseFromTextFormat(fileName, message, options, warningStream);
     return message;
@@ -92,8 +92,8 @@ static T ParseFromTextFormat(const TString& fileName,
 // @see `ParseFromTextFormat`
 // NOTE: will read `in` till the end.
 template <typename T>
-static T ParseFromTextFormat(IInputStream& in, const EParseFromTextFormatOptions options = {},
-                             IOutputStream* warningStream = nullptr) {
+T ParseFromTextFormat(IInputStream& in, const EParseFromTextFormatOptions options = {},
+                      IOutputStream* warningStream = nullptr) {
     T message;
     ParseFromTextFormat(in, message, options, warningStream);
     return message;
@@ -120,8 +120,8 @@ bool TryMergeFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
 
 // @see `MergeFromTextFormat`
 template <typename T>
-static T MergeFromTextFormat(const TString& fileName,
-                             const EParseFromTextFormatOptions options = {}) {
+T MergeFromTextFormat(const TString& fileName,
+                      const EParseFromTextFormatOptions options = {}) {
     T message;
     MergeFromTextFormat(fileName, message, options);
     return message;
@@ -130,8 +130,8 @@ static T MergeFromTextFormat(const TString& fileName,
 // @see `MergeFromTextFormat`
 // NOTE: will read `in` till the end.
 template <typename T>
-static T MergeFromTextFormat(IInputStream& in,
-                             const EParseFromTextFormatOptions options = {}) {
+T MergeFromTextFormat(IInputStream& in,
+                      const EParseFromTextFormatOptions options = {}) {
     T message;
     MergeFromTextFormat(in, message, options);
     return message;

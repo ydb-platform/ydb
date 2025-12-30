@@ -1004,7 +1004,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto [totalRows, totalBatches] = CalcRowsAndBatches(it);
 
             UNIT_ASSERT_VALUES_EQUAL(totalRows, 100);
-            UNIT_ASSERT_VALUES_EQUAL(totalBatches, 100);
+            UNIT_ASSERT_GE_C(totalBatches, 100, "At least 100 batches are expected"); // ignore final empty batch, if any
         }
 
         auto settings = TExecuteQuerySettings().OutputChunkMaxSize(10000);
@@ -5059,7 +5059,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().contains("Data manipulation queries do not support column shard tables."),
+                prepareResult.GetIssues().ToString().contains(
+                    "Data manipulation queries with column-oriented tables are disabled."),
                 prepareResult.GetIssues().ToString());
         }
 

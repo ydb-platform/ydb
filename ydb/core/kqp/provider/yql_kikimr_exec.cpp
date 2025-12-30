@@ -164,6 +164,12 @@ namespace {
         return alterDatabaseSettings;
     }
 
+    TTruncateTableSettings ParseTruncateTableSettings(TKiTruncateTable truncateTable) {
+        TTruncateTableSettings truncateTableSettings;
+        truncateTableSettings.TablePath = truncateTable.TablePath().Value();
+        return truncateTableSettings;
+    }
+
     TCreateUserSettings ParseCreateUserSettings(TKiCreateUser createUser) {
         TCreateUserSettings createUserSettings;
         createUserSettings.UserName = TString(createUser.UserName());
@@ -178,8 +184,7 @@ namespace {
             } else if (name == "passwordEncrypted") {
                 // PasswordEncrypted is never used
             } else if (name == "hash") {
-                createUserSettings.IsHashedPassword = true;
-                createUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+                createUserSettings.HashedPassword = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 createUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
@@ -204,8 +209,7 @@ namespace {
             } else if (name == "passwordEncrypted") {
                 // PasswordEncrypted is never used
             } else if (name == "hash") {
-                alterUserSettings.IsHashedPassword = true;
-                alterUserSettings.Password = setting.Value().Cast<TCoAtom>().StringValue();
+                alterUserSettings.HashedPassword = setting.Value().Cast<TCoAtom>().StringValue();
             } else if (name == "login") {
                 alterUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
@@ -821,7 +825,7 @@ namespace {
             } else if (name == "token") {
                 dstSettings.EnsureOAuthToken().Token =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "token_secret_name") {
+            } else if (name == "token_secret_name" || name == "token_secret_path") {
                 dstSettings.EnsureOAuthToken().TokenSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "user") {
@@ -830,7 +834,7 @@ namespace {
             } else if (name == "password") {
                 dstSettings.EnsureStaticCredentials().Password =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "password_secret_name") {
+            } else if (name == "password_secret_name" || name == "password_secret_path") {
                 dstSettings.EnsureStaticCredentials().PasswordSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "service_account_id") {
@@ -839,7 +843,7 @@ namespace {
             } else if (name == "initial_token") {
                 dstSettings.EnsureIamCredentials().InitialToken.Token =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
-            } else if (name == "initial_token_secret_name") {
+            } else if (name == "initial_token_secret_name" || name == "initial_token_secret_path") {
                 dstSettings.EnsureIamCredentials().InitialToken.TokenSecretName =
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value();
             } else if (name == "resource_id") {
@@ -1287,7 +1291,14 @@ private:
 
         IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(res.Ref());
 
-        if (IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, SessionCtx->Query().Type)) {
+        if (SessionCtx->Query().Type == EKikimrQueryType::Script) {
+            if (fillSettings.Discard) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
+                    << "DISCARD not supported in YDB scripts"));
+                return SyncError();
+            }
+        }
+        if (!SessionCtx->Config().EnableDiscardSelect && SessionCtx->Query().Type == EKikimrQueryType::Query) {
             if (fillSettings.Discard) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
                     << "DISCARD not supported in YDB queries"));
@@ -1546,6 +1557,25 @@ public:
                 auto resultNode = ctx.NewWorld(input->Pos());
                 return resultNode;
             }, "Executing ALTER DATABASE");
+        }
+
+        if (auto maybeTruncateTable = TMaybeNode<TKiTruncateTable>(input)) {
+            auto requireStatus = RequireChild(*input, TKiExecDataQuery::idx_World);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto cluster = TString(maybeTruncateTable.Cast().DataSink().Cluster());
+            TTruncateTableSettings truncateTableSettings = ParseTruncateTableSettings(maybeTruncateTable.Cast());
+
+            auto future = Gateway->TruncateTable(cluster, truncateTableSettings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing TRUNCATE TABLE");
         }
 
         if (auto maybeCreate = TMaybeNode<TKiCreateTable>(input)) {

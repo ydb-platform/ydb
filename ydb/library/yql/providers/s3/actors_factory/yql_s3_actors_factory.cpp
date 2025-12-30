@@ -1,5 +1,7 @@
 #include "yql_s3_actors_factory.h"
 
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+
 namespace NYql::NDq {
 
     class TDefaultS3ActorsFactory : public IS3ActorsFactory {
@@ -87,4 +89,4 @@ namespace NYql::NDq {
         }
         return s3ReadActoryConfig;
     }
-}
+} // namespace NYql::NDq

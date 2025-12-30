@@ -42,10 +42,10 @@ YT_DEFINE_ERROR_ENUM(
     ((ChaosCellSuspended)                (3202))
     ((ReplicationCollocationNotKnown)    (3203))
     ((ReplicationCollocationIsMigrating) (3204))
-    ((ChaosLeaseNotKnown)                (3205))
     ((ShortcutNotFound)                  (3206))
     ((ShortcutHasDifferentEra)           (3207))
     ((ShortcutRevoked)                   (3208))
+    ((ChaosCellIsNotEnabled)             (3209))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

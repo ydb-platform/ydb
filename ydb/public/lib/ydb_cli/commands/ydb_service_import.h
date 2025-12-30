@@ -49,6 +49,7 @@ private:
     TVector<TString> IncludePaths;
     TString Description;
     ui32 NumberOfRetries = 10;
+    NImport::EIndexPopulationMode IndexPopulationMode = NImport::EIndexPopulationMode::Build;
     bool UseVirtualAddressing = true;
     bool NoACL = false;
     bool SkipChecksumValidation = false;

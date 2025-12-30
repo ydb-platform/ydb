@@ -35,7 +35,7 @@ public:
     }
 };
 
-NActors::IActor* CreateCqActor(int /*maxCqe*/, int /*maxWr*/, NMonitoring::TDynamicCounters* /*counters*/) {
+NActors::IActor* CreateCqActor(int /*maxCqe*/, int /*maxWr*/, ECqMode, NMonitoring::TDynamicCounters* /*counters*/) {
     return new TCqActorDummy();
 }
 

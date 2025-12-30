@@ -16,6 +16,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    contrib/libs/fmt
     library/cpp/getopt
     library/cpp/json
     library/cpp/regex/pcre
@@ -40,7 +41,6 @@ SRCS(
     partition_ut.cpp
     partitiongraph_ut.cpp
     pqtablet_ut.cpp
-    quota_tracker_ut.cpp
     sourceid_ut.cpp
     user_info_ut.cpp
     pqrb_describes_ut.cpp
@@ -60,6 +60,13 @@ RESOURCE(
     ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/after_write.html first_class_citizen_after_write.html
     ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/after_read.html first_class_citizen_after_read.html
     ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/turned_off.html first_class_citizen_turned_off.html
+
+    ydb/core/persqueue/ut/resources/partition_counters/federation_with_monitoring_project_id/after_write.html federation_with_monitoring_project_id_after_write.html
+    ydb/core/persqueue/ut/resources/partition_counters/federation_with_monitoring_project_id/after_read.html federation_with_monitoring_project_id_after_read.html
+    ydb/core/persqueue/ut/resources/partition_counters/federation_with_monitoring_project_id/turned_off.html federation_with_monitoring_project_id_turned_off.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen_with_monitoring_project_id/after_write.html first_class_citizen_with_monitoring_project_id_after_write.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen_with_monitoring_project_id/after_read.html first_class_citizen_with_monitoring_project_id_after_read.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen_with_monitoring_project_id/turned_off.html first_class_citizen_with_monitoring_project_id_turned_off.html
 
     ydb/core/persqueue/ut/resources/counters_pqproxy.html counters_pqproxy.html
 

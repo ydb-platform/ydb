@@ -109,6 +109,7 @@ class TieringTestBase(BaseTestSet):
                 'optimizer_freshness_check_duration_ms': 0,
                 'small_portion_detect_size_limit': 0,
                 'alter_object_enabled': True,
+                'bulk_upsert_require_all_columns': False,
             },
             additional_log_configs={
                 'TX_TIERING': LogLevels.DEBUG,
@@ -366,7 +367,7 @@ class TestAlterTiering(TieringTestBase):
             sth.execute_scheme_query(AlterTable(table).action(ResetSetting('TTL')), retries=2)
 
         for table in self.tables:
-            sth.execute_scheme_query(DropTable(table), retries=2)
-        sth.execute_scheme_query(DropTableStore('store'), retries=2)
+            sth.execute_scheme_query(DropTable(table), retries=5)
+        sth.execute_scheme_query(DropTableStore('store'), retries=5)
 
         self._tier_down_tiering_test(ctx)

@@ -1138,7 +1138,7 @@ private:
         YQL_ENSURE(FullCapture_);
 
         try {
-            TDumpOptions dumpOptions(options.SessionId());
+            auto dumpOptions = TDumpOptions(options.SessionId()).Config(options.Config());
             size_t tableDataSize = 0;
 
             ui64 generation = SessionGenerations_[options.SessionId()];
@@ -1193,6 +1193,14 @@ private:
         } catch (const std::exception& e) {
             FullCapture_->ReportError(e);
         }
+    }
+
+    NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) override {
+        return Inner_->DownloadTable(std::move(options));
+    }
+
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override {
+        return Inner_->GetYtTokenResolver();
     }
 
 private:

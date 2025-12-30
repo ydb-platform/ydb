@@ -1,5 +1,5 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/testshard_workload/workload_testshard")
 
 TEST_SRCS(

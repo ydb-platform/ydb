@@ -1,66 +1,19 @@
 import logging
-import time
 import random
 import string
 import yatest
+import time
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 from ydb.tests.fq.streaming.common import StreamingTestBase
-from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics
-from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
 logger = logging.getLogger(__name__)
 
 
 class TestStreamingInYdb(StreamingTestBase):
-    def monitoring_endpoint(self, kikimr, node_id=None):
-        node = kikimr.cluster.nodes[node_id]
-        return f"http://localhost:{node.mon_port}"
-
-    def get_sensors(self, kikimr, node_id, counters):
-        url = self.monitoring_endpoint(kikimr, node_id) + "/counters/counters={}/json".format(counters)
-        return load_metrics(url)
-
-    def get_checkpoint_coordinator_metric(self, kikimr, path, metric_name, expect_counters_exist=False):
-        sum = 0
-        found = False
-        for node_id in kikimr.cluster.nodes:
-            sensor = self.get_sensors(kikimr, node_id, "kqp").find_sensor(
-                {
-                    "path": path,
-                    "subsystem": "checkpoint_coordinator",
-                    "sensor": metric_name
-                }
-            )
-            if sensor is not None:
-                found = True
-                sum += sensor
-        assert found or not expect_counters_exist
-        return sum
-
-    def get_completed_checkpoints(self, kikimr, path):
-        return self.get_checkpoint_coordinator_metric(kikimr, path, "CompletedCheckpoints")
-
-    def wait_completed_checkpoints(self, kikimr, path,
-                                   timeout=plain_or_under_sanitizer_wrapper(120, 150)):
-        current = self.get_checkpoint_coordinator_metric(kikimr, path, "CompletedCheckpoints")
-        checkpoints_count = current + 2
-        deadline = time.time() + timeout
-        while True:
-            completed = self.get_completed_checkpoints(kikimr, path)
-            if completed >= checkpoints_count:
-                break
-            assert time.time() < deadline, "Wait checkpoint failed, actual completed: " + str(completed)
-            time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
-
-    def get_actor_count(self, kikimr, node_id, activity):
-        result = self.get_sensors(kikimr, node_id, "utils").find_sensor(
-            {"activity": activity, "sensor": "ActorsAliveByActivity", "execpool": "User"})
-        return result if result is not None else 0
-
     def test_read_topic(self, kikimr, entity_name):
         source_name = entity_name("test_read_topic")
         self.init_topics(source_name, create_output=False)

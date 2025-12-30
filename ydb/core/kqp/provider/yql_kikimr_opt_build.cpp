@@ -69,6 +69,14 @@ ui64 GetResultRowsLimit(const TResWriteBase& resWrite) {
     return 0;
 }
 
+bool GetResultDiscard(const TResWriteBase& resWrite) {
+    auto discardSetting = GetSetting(resWrite.Settings().Ref(), "discard");
+    if (discardSetting) {
+        return true;
+    }
+    return false;
+}
+
 enum class TPrimitiveYdbOperation : ui32 {
     Read = 1 << 0,
     Write = 1 << 1
@@ -714,6 +722,17 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         return true;
     }
 
+    if (auto maybeTruncateTable = node.Maybe<TKiTruncateTable>()) {
+        auto truncateTable = maybeTruncateTable.Cast();
+        if (!checkDataSink(truncateTable.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::TruncateTable, truncateTable.Pos(), ctx));
+        return true;
+    }
+
     if (node.Maybe<TCoCommit>()) {
         return true;
     }
@@ -837,6 +856,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
                 .Value(resWrite.Data())
                 .Columns(GetResultColumns(resWrite, ctx))
                 .RowsLimit().Build(GetResultRowsLimit(resWrite))
+                .Discard().Build(GetResultDiscard(resWrite))
                 .Done();
 
             queryResults.push_back(kiResult.Ptr());
@@ -1313,6 +1333,7 @@ TExprNode::TPtr KiBuildResult(TExprBase node, const TString& cluster, TExprConte
                 .Value(resFill.Data())
                 .Columns(GetResultColumns(resFill, ctx))
                 .RowsLimit().Build(GetResultRowsLimit(resFill))
+                .Discard().Build(GetResultDiscard(resFill))
                 .Build()
             .Build()
         .Effects()

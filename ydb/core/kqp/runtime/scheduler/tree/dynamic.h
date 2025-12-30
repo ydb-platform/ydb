@@ -55,7 +55,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         NSnapshot::TQuery* TakeSnapshot() override;
 
         TSchedulableTaskList::iterator AddTask(const TSchedulableTaskPtr& task);
-        void RemoveTask(const TSchedulableTaskList::iterator& it);
         ui32 ResumeTasks(ui32 count);
 
         void UpdateActualDemand();
@@ -74,7 +73,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         ui64 PrevBurstUsageExtra = 0;
         ui64 PrevBurstThrottle = 0;
 
-        TRWMutex TasksMutex;
+        TMutex TasksMutex;
         TSchedulableTaskList SchedulableTasks; // protected by TasksMutex
     };
 

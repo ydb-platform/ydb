@@ -1,5 +1,11 @@
 # utf8proc release history #
 
+## Version 2.11.2 ##
+
+2025-11-22
+
+- Fix composition for Hangul character U+11a7 ([#317]).
+
 ## Version 2.11.1 ##
 
 2025-11-13
@@ -477,3 +483,4 @@ Release of version 1.0.1
 [#294]: https://github.com/JuliaStrings/utf8proc/issues/294
 [#295]: https://github.com/JuliaStrings/utf8proc/issues/295
 [#311]: https://github.com/JuliaStrings/utf8proc/issues/311
+[#317]: https://github.com/JuliaStrings/utf8proc/issues/317

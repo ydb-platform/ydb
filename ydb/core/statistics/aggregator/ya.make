@@ -7,8 +7,12 @@ SRCS(
     aggregator_impl.cpp
     analyze_actor.h
     analyze_actor.cpp
+    column_statistic_eval.h
+    column_statistic_eval.cpp
     schema.h
     schema.cpp
+    select_builder.h
+    select_builder.cpp
     tx_ack_timeout.cpp
     tx_aggr_stat_response.cpp
     tx_analyze.cpp

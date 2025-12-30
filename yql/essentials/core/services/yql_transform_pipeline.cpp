@@ -198,6 +198,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                             typeCtx->CorrectLineage = true;
                             try {
                                 calculatedLineage = CalculateLineage(*input, *typeCtx, ctx, false);
+                                typeCtx->LineageSize = calculatedLineage.size();
                             } catch (const std::exception& e) {
                                 YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
                                 typeCtx->CorrectLineage = false;
@@ -208,15 +209,18 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 if (lineageError) {
                                     std::rethrow_exception(lineageError);
                                 }
-                                if (NormalizeLineage(calculatedLineage) != NormalizeLineage(loadedLineage)) {
-                                    YQL_LOG(INFO) << "Lineage in replay is different:"
-                                                  << "\nCalculated lineage:\n"
-                                                  << calculatedLineage
-                                                  << "\nLoaded lineage:\n"
-                                                  << loadedLineage;
+                                try {
+                                    CheckEquvalentLineages(calculatedLineage, loadedLineage);
+                                    YQL_LOG(INFO) << "Lineage replay is the same";
+                                } catch (const std::exception& e) {
+                                    YQL_LOG(ERROR) << "Lineage in replay is different for standalone mode:\n"
+                                                   << e.what()
+                                                   << "\nCalculated lineage:\n"
+                                                   << calculatedLineage
+                                                   << "\nLoaded lineage:\n"
+                                                   << loadedLineage;
                                     throw yexception() << "Lineage in replay is different";
                                 }
-                                YQL_LOG(INFO) << "Lineage replay is the same";
                             }
                             if (typeCtx->QContext && typeCtx->QContext.CanWrite() && *typeCtx->CorrectLineage) {
                                 typeCtx->QContext.GetWriter()->Put({LineageComponent, LineageResultLabel}, calculatedLineage).GetValueSync();
@@ -304,25 +308,33 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
             [typeCtx = TypeAnnotationContext_, &lineageOut](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 output = input;
                 lineageOut = CalculateLineage(*input, *typeCtx, ctx, true);
-                if (typeCtx->EnableStandaloneLineage) {
-                    if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
-                        auto loaded = typeCtx->QContext.GetReader()->Get({LineageComponent, StandaloneLineageLabel}).GetValueSync();
-                        if (loaded.Defined()) {
-                            if (NormalizeLineage(*lineageOut) != NormalizeLineage(loaded->Value)) {
-                                YQL_LOG(INFO) << "Lineage in replay is different for standalone mode:"
-                                              << "\nCalculated lineage:\n"
-                                              << *lineageOut
-                                              << "\nLoaded lineage:\n"
-                                              << loaded->Value;
-                                throw yexception() << "Lineage in replay is different";
-                            }
+                typeCtx->LineageSize = lineageOut->size();
+                if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
+                    auto loaded = typeCtx->QContext.GetReader()->Get({LineageComponent, StandaloneLineageLabel}).GetValueSync();
+                    if (loaded.Defined()) {
+                        try {
+                            CheckEquvalentLineages(*lineageOut, loaded->Value);
                             YQL_LOG(INFO) << "Lineage replay is the same";
+                        } catch (const std::exception& e) {
+                            TStringStream outCalculated;
+                            TStringStream outLoaded;
+                            NYson::TYsonWriter(&outCalculated, NYson::EYsonFormat::Pretty).OnRaw(*lineageOut);
+                            NYson::TYsonWriter(&outLoaded, NYson::EYsonFormat::Pretty).OnRaw(loaded->Value);
+                            YQL_LOG(ERROR) << "Lineage in replay is different for standalone mode:\n"
+                                           << e.what()
+                                           << "\nCalculated lineage:\n"
+                                           << outCalculated.Str()
+                                           << "\nLoaded lineage:\n"
+                                           << outLoaded.Str();
+                            throw yexception() << "Lineage in replay is different";
                         }
                     }
+                }
+                if (typeCtx->EnableStandaloneLineage) {
                     if (typeCtx->QContext && typeCtx->QContext.CanWrite()) {
                         try {
-                            // normalize is needed to check correctness of lineage output, e.g. if column-wise lineage section is empty, normalization will fail
-                            NormalizeLineage(*lineageOut);
+                            // need to check correctness of lineage output before saving, e.g. if column-wise lineage section is empty
+                            ValidateLineage(*lineageOut);
                             typeCtx->CorrectStandaloneLineage = true;
                         } catch (const std::exception& e) {
                             typeCtx->CorrectStandaloneLineage = false;

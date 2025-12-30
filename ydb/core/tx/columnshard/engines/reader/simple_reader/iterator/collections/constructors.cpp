@@ -12,6 +12,8 @@ void TPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) 
             TBase::DropNextConstructor();
             continue;
         }
+        const auto* cursorLocal = VerifyDynamicCast<ISimpleScanCursor*>(cursor.get());
+        TBase::MutableNextConstructor().ValidateCursor(*cursorLocal);
         if (usage) {
             TBase::MutableNextConstructor().SetIsStartedByCursor();
         } else {
@@ -35,8 +37,7 @@ std::vector<TInsertWriteId> TPortionsSources::GetUncommittedWriteIds() const {
 
 std::shared_ptr<TPortionDataSource> TSourceConstructor::Construct(
     const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const {
-    AFL_VERIFY(SourceIdx);
-    auto result = std::make_shared<TPortionDataSource>(*SourceIdx, Portion, context);
+    auto result = std::make_shared<TPortionDataSource>(GetSourceIdx(), Portion, context);
     result->SetPortionAccessor(std::move(accessor));
     if (IsStartedByCursorFlag) {
         result->SetIsStartedByCursor();

@@ -134,6 +134,9 @@ namespace NKikimr {
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
                     return true;
 
+                case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
+                    return true; // TODO(alexvru): accept writes only from BlobDepot agent-processed requests
+
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_ABORT();
@@ -2021,6 +2024,7 @@ namespace NKikimr {
                     PDiskCtx,
                     Db->LoggerID,
                     Db->LogCutterID,
+                    Db->SkeletonID,
                     Config->SyncLogMaxDiskAmount,
                     Config->SyncLogMaxEntryPointSize,
                     Config->SyncLogMaxMemAmount,
@@ -2108,6 +2112,9 @@ namespace NKikimr {
                     Db->LoggerID,
                     Db->LogCutterID,
                     Db->SyncLogID,
+                    Hull->GetHullDs()->LogoBlobs,
+                    Hull->GetHullDs()->Blocks,
+                    Hull->GetHullDs()->Barriers,
                     Config);
                 // syncer performes sync recovery
                 Db->SyncerID.Set(ctx.Register(CreateSyncerActor(sc, GInfo, ev->Get()->SyncerData)));

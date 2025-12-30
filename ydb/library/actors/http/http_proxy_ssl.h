@@ -61,7 +61,8 @@ struct TSslHelpers {
             // TODO(xenoxeno): more diagnostics?
             return nullptr;
         }
-        res = SSL_CTX_use_PrivateKey_file(ctx.Get(), key.c_str(), SSL_FILETYPE_PEM);
+        // Load key. The key can be set through explicit key field or with the same file with certificate
+        res = SSL_CTX_use_PrivateKey_file(ctx.Get(), key.empty() ? certificate.c_str() : key.c_str(), SSL_FILETYPE_PEM);
         if (res < 0) {
             // TODO(xenoxeno): more diagnostics?
             return nullptr;

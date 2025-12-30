@@ -1,11 +1,11 @@
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(19)
+SPLIT_FACTOR(27)
 
 SIZE(MEDIUM)
 

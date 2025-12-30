@@ -940,12 +940,13 @@ TTableHints GetTableFuncHints(TStringBuf funcName) {
     return res;
 }
 
-TNodePtr TSqlTranslation::NamedExpr(
+TNodeResult TSqlTranslation::NamedExpr(
     const TRule_expr& exprTree,
     const TRule_an_id_or_type* nameTree,
     EExpr exprMode)
 {
     TSqlExpression expr(Ctx_, Mode_);
+    expr.SetYqlSelectProduced(IsYqlSelectProduced_);
     if (exprMode == EExpr::GroupBy) {
         expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::GroupBy);
     } else if (exprMode == EExpr::SqlLambdaParams) {
@@ -954,37 +955,47 @@ TNodePtr TSqlTranslation::NamedExpr(
     if (nameTree) {
         expr.MarkAsNamed();
     }
-    TNodePtr exprNode = Unwrap(expr.Build(exprTree));
-    if (!exprNode) {
+
+    TNodeResult exprNode = expr.Build(exprTree);
+    if (!exprNode && exprNode.error() == ESQLError::Basic) {
         Ctx_.IncrementMonCounter("sql_errors", "NamedExprInvalid");
-        return nullptr;
+        return std::unexpected(ESQLError::Basic);
     }
+    if (!exprNode) {
+        return std::unexpected(exprNode.error());
+    }
+
     if (nameTree) {
-        exprNode = SafeClone(exprNode);
-        exprNode->SetLabel(Id(*nameTree, *this));
+        exprNode = Wrap(SafeClone(TNodePtr(*exprNode)));
+        (*exprNode)->SetLabel(Id(*nameTree, *this));
     }
+
     return exprNode;
 }
 
-TNodePtr TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode) {
+TNodeResult TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode) {
     return NamedExpr(
         node.GetRule_expr1(),
         (node.HasBlock2() ? &node.GetBlock2().GetRule_an_id_or_type2() : nullptr),
         exprMode);
 }
 
-bool TSqlTranslation::NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode) {
-    exprs.emplace_back(NamedExpr(node.GetRule_named_expr1(), exprMode));
-    if (!exprs.back()) {
-        return false;
+TSQLStatus TSqlTranslation::NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode) {
+    if (auto result = NamedExpr(node.GetRule_named_expr1(), exprMode)) {
+        exprs.emplace_back(std::move(*result));
+    } else {
+        return std::unexpected(result.error());
     }
+
     for (auto& b : node.GetBlock2()) {
-        exprs.emplace_back(NamedExpr(b.GetRule_named_expr2(), exprMode));
-        if (!exprs.back()) {
-            return false;
+        if (auto result = NamedExpr(b.GetRule_named_expr2(), exprMode)) {
+            exprs.emplace_back(std::move(*result));
+        } else {
+            return std::unexpected(result.error());
         }
     }
-    return true;
+
+    return std::monostate();
 }
 
 bool TSqlTranslation::BindList(const TRule_bind_parameter_list& node, TVector<TSymbolNameWithPos>& bindNames) {
@@ -1087,13 +1098,16 @@ bool TSqlTranslation::NamedBindParam(const TRule_named_bind_parameter& node, TSy
     return true;
 }
 
-TMaybe<TTableArg> TSqlTranslation::TableArgImpl(const TRule_table_arg& node) {
+TSQLResult<TTableArg> TSqlTranslation::TableArgImpl(const TRule_table_arg& node) {
     TTableArg ret;
+
     ret.HasAt = node.HasBlock1();
+
     TColumnRefScope scope(Ctx_, EColumnRefState::AsStringLiteral);
-    ret.Expr = NamedExpr(node.GetRule_named_expr2());
-    if (!ret.Expr) {
-        return Nothing();
+    if (auto result = NamedExpr(node.GetRule_named_expr2())) {
+        ret.Expr = std::move(*result);
+    } else {
+        return std::unexpected(result.error());
     }
 
     if (node.HasBlock3()) {
@@ -1924,9 +1938,9 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
 
                         auto& token = spec.GetBlock2().GetToken1();
                         auto tokenId = token.GetId();
-                        if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, ASC)) {
+                        if (IS_TOKEN(tokenId, ASC)) {
                             return true;
-                        } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, DESC)) {
+                        } else if (IS_TOKEN(tokenId, DESC)) {
                             desc = true;
                             return true;
                         } else {
@@ -3492,7 +3506,7 @@ TNodePtr TSqlTranslation::ValueConstructor(const TRule_value_constructor& node) 
     if (!call.Init(node)) {
         return {};
     }
-    return call.BuildCall();
+    return Unwrap(call.BuildCall());
 }
 
 TNodePtr TSqlTranslation::ListLiteral(const TRule_list_literal& node) {
@@ -3987,9 +4001,9 @@ bool TSqlTranslation::SortSpecification(const TRule_sort_specification& node, TV
         const auto& token = node.GetBlock2().GetToken1();
         Token(token);
         auto tokenId = token.GetId();
-        if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, ASC)) {
+        if (IS_TOKEN(tokenId, ASC)) {
             Ctx_.IncrementMonCounter("sql_features", "OrderByAsc");
-        } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, tokenId, DESC)) {
+        } else if (IS_TOKEN(tokenId, DESC)) {
             asc = false;
             Ctx_.IncrementMonCounter("sql_features", "OrderByDesc");
         } else {
@@ -4019,11 +4033,11 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node) const {
     TPosition pos;
-    return node.HasBlock1() && IS_TOKEN(Ctx_.Settings.Antlr4Parser, node.GetBlock1().GetToken1().GetId(), DISTINCT);
+    return node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT);
 }
 
 bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const {
-    if (node.HasBlock1() && IS_TOKEN(Ctx_.Settings.Antlr4Parser, node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
+    if (node.HasBlock1() && IS_TOKEN(node.GetBlock1().GetToken1().GetId(), DISTINCT)) {
         distinctPos = Ctx_.TokenPosition(node.GetBlock1().GetToken1());
         return true;
     }
@@ -4106,9 +4120,9 @@ void TSqlTranslation::LoginParameter(const TRule_login_option& loginOption, std:
     // login_option: LOGIN | NOLOGIN;
 
     auto token = loginOption.GetToken1().GetId();
-    if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, token, LOGIN)) {
+    if (IS_TOKEN(token, LOGIN)) {
         canLogin = true;
-    } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, token, NOLOGIN)) {
+    } else if (IS_TOKEN(token, NOLOGIN)) {
         canLogin = false;
     } else {
         Y_UNREACHABLE();
@@ -5525,8 +5539,8 @@ bool TSqlTranslation::ParseViewQuery(
     blockNode->Add("block", blockNode->Q(queryNode));
     features[TStreamingQuerySettings::QUERY_AST_FEATURE] = TDeferredAtom(blockNode, Ctx_);
 
-    auto begin = GetQueryPosition(Ctx_.Query, beforeToken, Ctx_.Settings.Antlr4Parser);
-    auto end = GetQueryPosition(Ctx_.Query, afterToken, Ctx_.Settings.Antlr4Parser);
+    auto begin = GetQueryPosition(Ctx_.Query, beforeToken);
+    auto end = GetQueryPosition(Ctx_.Query, afterToken);
     YQL_ENSURE(begin < Ctx_.Query.size() && end < Ctx_.Query.size());
     begin += beforeToken.value().size();
     YQL_ENSURE(begin < end);
@@ -5568,8 +5582,8 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
                     Y_UNREACHABLE();
             }
 
-            auto begin = GetQueryPosition(Ctx.Query, beginToken, Ctx.Settings.Antlr4Parser);
-            auto end = GetQueryPosition(Ctx.Query, *endToken, Ctx.Settings.Antlr4Parser);
+            auto begin = GetQueryPosition(Ctx.Query, beginToken);
+            auto end = GetQueryPosition(Ctx.Query, *endToken);
             if (begin == std::string::npos || end == std::string::npos) {
                 return {};
             }
@@ -5591,13 +5605,13 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
 
 } // anonymous namespace
 
-std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4) {
+std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token) {
     if (1 == token.GetLine() && 0 == token.GetColumn()) {
         return 0;
     }
 
     TPosition pos = {0, 1};
-    TTextWalker walker(pos, antlr4);
+    TTextWalker walker(pos, /*utf8Aware=*/true);
 
     std::string::size_type position = 0;
     for (char c : query) {
@@ -5950,13 +5964,13 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
     // Extract whole query text between BEGIN and END tokens
 
     const auto& queryBegin = inlineAction.GetToken1();
-    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(Ctx_.Settings.Antlr4Parser, queryBegin.GetId(), BEGIN));
+    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryBegin.GetId(), BEGIN));
 
     const auto& queryEnd = inlineAction.GetToken3();
-    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(Ctx_.Settings.Antlr4Parser, queryEnd.GetId(), END));
+    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryEnd.GetId(), END));
 
-    auto beginPos = GetQueryPosition(Ctx_.Query, queryBegin, Ctx_.Settings.Antlr4Parser);
-    const auto endPos = GetQueryPosition(Ctx_.Query, queryEnd, Ctx_.Settings.Antlr4Parser);
+    auto beginPos = GetQueryPosition(Ctx_.Query, queryBegin);
+    const auto endPos = GetQueryPosition(Ctx_.Query, queryEnd);
     if (beginPos == std::string::npos || endPos == std::string::npos) {
         Error() << "Failed to parse streaming query definition";
         return false;

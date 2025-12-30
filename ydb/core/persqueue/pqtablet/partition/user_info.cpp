@@ -1,4 +1,6 @@
 #include "user_info.h"
+
+#include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 
 namespace NKikimr {
@@ -80,14 +82,14 @@ TUserInfo::TUserInfo(
         }
 
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            LabeledCounters.Reset(new TUserLabeledCounters(
-                EscapeBadChars(user) + "||" + EscapeBadChars(topicConverter->GetClientsideName()), partition, dbPath));
+            LabeledCounters = CreateProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>(
+                EscapeBadChars(user) + "||" + EscapeBadChars(topicConverter->GetClientsideName()), partition, dbPath);
 
             SetupStreamCounters(streamCountersSubgroup);
         } else {
-            LabeledCounters.Reset(new TUserLabeledCounters(
+            LabeledCounters = CreateProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>(
                 user + "/" + (ImporantOrExtendedAvailabilityPeriod(*this) ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
-                partition));
+                partition);
 
             SetupTopicCounters(ctx, dcId, ToString<ui32>(partition));
         }
@@ -223,11 +225,7 @@ void TUserInfo::SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {
     subgroups.emplace_back("name", "topic.read.lag_milliseconds");
     ReadTimeLag.reset(new TPercentileCounter(
                     subgroup, {}, subgroups, "bin",
-                    TVector<std::pair<ui64, TString>>{{100, "100"}, {200, "200"}, {500, "500"},
-                                                    {1000, "1000"}, {2000, "2000"},
-                                                    {5000, "5000"}, {10'000, "10000"},
-                                                    {30'000, "30000"}, {60'000, "60000"},
-                                                    {180'000,"180000"}, {9'999'999, "999999"}},
+                    SLOW_LATENCY_INTERVALS,
                     true));
 }
 
@@ -255,11 +253,7 @@ void TUserInfo::SetupTopicCounters(const TActorContext& ctx, const TString& dcId
     additional_labels.push_back({"sensor", "TimeLags"});
     ReadTimeLag.reset(new TPercentileCounter(subgroup("pqproxy|readTimeLag"), aggr,
                     additional_labels, "Interval",
-                    TVector<std::pair<ui64, TString>>{{100, "100ms"}, {200, "200ms"}, {500, "500ms"},
-                                                    {1000, "1000ms"}, {2000, "2000ms"},
-                                                    {5000, "5000ms"}, {10'000, "10000ms"},
-                                                    {30'000, "30000ms"}, {60'000, "60000ms"},
-                                                    {180'000,"180000ms"}, {9'999'999, "999999ms"}},
+                    SLOW_LATENCY_MS_INTERVALS,
                     true));
 }
 
@@ -314,7 +308,7 @@ bool TUserInfo::UpdateTimestampFromCache() {
 void TUserInfo::SetImportant(bool important, TDuration availabilityPeriod) {
     Important = important;
     AvailabilityPeriod = availabilityPeriod;
-    if (LabeledCounters && !AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+    if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && LabeledCounters) {
         LabeledCounters->SetGroup(User + "/" + (ImporantOrExtendedAvailabilityPeriod(*this) ? "1" : "0") + "/" + TopicConverter->GetClientsideName());
     }
 }
@@ -477,7 +471,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
         return s
             ->GetSubgroup("Account", TopicConverter->GetAccount())
             ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
-            ->GetSubgroup("OriginDC", TopicConverter->GetCluster())
+            ->GetSubgroup("OriginDC", to_title(TopicConverter->GetCluster()))
             ->GetSubgroup("Partition", ToString(Partition));
     }
 }

@@ -2,8 +2,10 @@
 #include "direct_builder.h"
 #include "signals.h"
 
+#include <util/generic/overloaded.h>
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/splitter/simple.h>
@@ -11,6 +13,7 @@
 #include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
+#include <yql/essentials/minikql/jsonpath/parser/parser.h>
 #include <yql/essentials/types/binary_json/format.h>
 #include <yql/essentials/types/binary_json/write.h>
 
@@ -113,103 +116,16 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     return result;
 }
 
-class TJsonRestorer {
-private:
-    NJson::TJsonValue Result;
-
-public:
-    bool IsNull() const {
-        return !Result.IsDefined();
-    }
-
-    TConclusion<NBinaryJson::TBinaryJson> Finish() {
-        auto bJson = NBinaryJson::SerializeToBinaryJson(Result.GetStringRobust());
-        if (const TString* val = std::get_if<TString>(&bJson)) {
-            return TConclusionStatus::Fail(*val);
-        } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
-            return std::move(*val);
-        } else {
-            return TConclusionStatus::Fail("undefined case for binary json construction");
-        }
-    }
-
-    void SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue) {
-        ui32 start = 0;
-        bool enqueue = false;
-        bool wasEnqueue = false;
-        NJson::TJsonValue* current = &Result;
-        for (ui32 i = 0; i < path.size(); ++i) {
-            if (path[i] == '\\') {
-                ++i;
-                continue;
-            }
-            if (path[i] == '\'' || path[i] == '\"') {
-                wasEnqueue = true;
-                enqueue = !enqueue;
-                continue;
-            }
-            if (enqueue) {
-                continue;
-            }
-            if (path[i] == '.') {
-                if (wasEnqueue) {
-                    AFL_VERIFY(i > start + 2);
-                    TStringBuf key(path.data() + start + 1, (i - 1) - start - 1);
-                    NJson::TJsonValue* currentNext = nullptr;
-                    if (current->GetValuePointer(key, &currentNext)) {
-                        current = currentNext;
-                    } else {
-                        current = &current->InsertValue(key, NJson::JSON_MAP);
-                    }
-                } else {
-                    AFL_VERIFY(i > start);
-                    TStringBuf key(path.data() + start, i - start);
-                    NJson::TJsonValue* currentNext = nullptr;
-                    if (current->GetValuePointer(key, &currentNext)) {
-                        current = currentNext;
-                    } else {
-                        ui32 keyIndex;
-                        if (key.StartsWith("[") && key.EndsWith("]") && TryFromString<ui32>(key.data() + 1, key.size() - 2, keyIndex)) {
-                            AFL_VERIFY(!current->IsDefined() || current->IsArray() || (current->IsMap() && current->GetMapSafe().empty()));
-                            current->SetType(NJson::JSON_ARRAY);
-                            if (current->GetArraySafe().size() <= keyIndex) {
-                                current->GetArraySafe().resize(keyIndex + 1);
-                            }
-                            current = &current->GetArraySafe()[keyIndex];
-                        } else {
-                            AFL_VERIFY(!current->IsArray())("current_type", current->GetType())("current", current->GetStringRobust());
-                            current = &current->InsertValue(key, NJson::JSON_MAP);
-                        }
-                    }
-                }
-                wasEnqueue = false;
-                start = i + 1;
-            }
-        }
-        if (wasEnqueue) {
-            AFL_VERIFY(path.size() > start + 2)("path", path)("start", start);
-            TStringBuf key(path.data() + start + 1, (path.size() - 1) - start - 1);
-            current->InsertValue(key, jsonValue);
-        } else {
-            AFL_VERIFY(path.size() >= start)("path", path)("start", start);
-            TStringBuf key(path.data() + start, (path.size()) - start);
-            ui32 keyIndex;
-            if (key.StartsWith("[") && key.EndsWith("]") && TryFromString<ui32>(key.data() + 1, key.size() - 2, keyIndex)) {
-                AFL_VERIFY(!current->IsDefined() || current->IsArray() || (current->IsMap() && current->GetMapSafe().empty()));
-                current->SetType(NJson::JSON_ARRAY);
-
-                if (current->GetArraySafe().size() <= keyIndex) {
-                    current->GetArraySafe().resize(keyIndex + 1);
-                }
-                current->GetArraySafe()[keyIndex] = jsonValue;
-            } else {
-                AFL_VERIFY(!current->IsArray())("key", key)("current", current->GetStringRobust())("full", Result.GetStringRobust())(
-                    "current_type", current->GetType());
-                current->InsertValue(key, jsonValue);
-            }
-        }
-    }
-};
+TConclusion<NBinaryJson::TBinaryJson> ToBinaryJson(const TJsonRestorer& restorer) {
+    return std::visit(TOverloaded{
+        [](TString&& val) -> TConclusion<NBinaryJson::TBinaryJson> {
+            return TConclusionStatus::Fail(std::move(val));
+        },
+        [](NBinaryJson::TBinaryJson&& val) -> TConclusion<NBinaryJson::TBinaryJson> {
+            return std::move(val);
+        }},
+        NBinaryJson::SerializeToBinaryJson(restorer.GetResult().GetStringRobust()));
+}
 
 std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnConstructionContext& context) const {
     auto it = BuildUnorderedIterator();
@@ -233,7 +149,7 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
             if (value.IsNull()) {
                 TStatusValidator::Validate(builder->AppendNull());
             } else {
-                const TConclusion<NBinaryJson::TBinaryJson> bJson = value.Finish();
+                const TConclusion<NBinaryJson::TBinaryJson> bJson = ToBinaryJson(value);
                 NArrow::Append<arrow::BinaryType>(*builder, arrow::util::string_view(bJson->data(), bJson->size()));
             }
         };
@@ -266,6 +182,34 @@ std::shared_ptr<arrow::ChunkedArray> TSubColumnsArray::DoGetChunkedArray(const T
 IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
     return TLocalDataAddress(BuildBJsonArray(TColumnConstructionContext()), 0, 0);
+}
+
+bool TJsonRestorer::IsNull() const {
+    return !Result.IsDefined();
+}
+
+const NJson::TJsonValue& TJsonRestorer::GetResult() const {
+    return Result;
+}
+
+void TJsonRestorer::SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue) {
+    // Path may be empty (for backward compatibility), so make it $."" in this case
+    auto splitResult = NSubColumns::SplitJsonPath(NSubColumns::ToJsonPath(path.empty() ? "\"\"" : path), NSubColumns::TJsonPathSplitSettings{.FillTypes = true});
+    AFL_VERIFY(splitResult.IsSuccess())("error", splitResult.GetErrorMessage())("path", path);
+    const auto [pathItems, pathTypes, _] = splitResult.DetachResult();
+    AFL_VERIFY(pathItems.size() > 0);
+    AFL_VERIFY(pathItems.size() == pathTypes.size());
+    NJson::TJsonValue* current = &Result;
+    for (decltype(pathItems)::size_type i = 0; i < pathItems.size() - 1; ++i) {
+        AFL_VERIFY(pathTypes[i] == NYql::NJsonPath::EJsonPathItemType::MemberAccess);
+        NJson::TJsonValue* currentNext = nullptr;
+        if (current->GetValuePointer(pathItems[i], &currentNext)) {
+            current = currentNext;
+        } else {
+            current = &current->InsertValue(pathItems[i], NJson::JSON_MAP);
+        }
+    }
+    current->InsertValue(pathItems[pathItems.size() - 1], jsonValue);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

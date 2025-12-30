@@ -114,7 +114,7 @@ namespace NKikimr {
             TIndexForwardIterator it(HullCtx, &snapshot);
             it.Seek(key);
 
-            TFrequentlyCalledHPTimer timer(MaxProcessingTime); 
+            TFrequentlyCalledHPTimer timer(MaxProcessingTime);
 
             // copy data until we have some space
             ui32 result = 0;
@@ -187,7 +187,9 @@ namespace NKikimr {
                     [[fallthrough]];
                 case NKikimrBlobStorage::PhantomFlags:
                     pres = ProcessPhantomFlags(data);
-                    if (pres & LongProcessing) {
+                    if (pres & MsgFullFlag) {
+                        break;
+                    } else if (pres & LongProcessing) {
                         return false;
                     }
                     Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
@@ -197,7 +199,7 @@ namespace NKikimr {
             }
 
             bool finished = false;
-            
+
             if (pres & EmptyFlag) {
                 switch (GetProtocol()) {
                 case NKikimrBlobStorage::EFullSyncProtocol::Legacy:
@@ -291,7 +293,7 @@ namespace NKikimr {
         NKikimrBlobStorage::EFullSyncProtocol GetProtocol() override {
             return NKikimrBlobStorage::EFullSyncProtocol::Legacy;
         }
-    
+
         STRICT_STFUNC(StateFunc,
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
             cFunc(TEvents::TEvWakeup::EventType, Run)
@@ -337,7 +339,7 @@ namespace NKikimr {
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_HULL_SYNC_FULL_UNORDERED_DATA_PROTOCOL;
         }
-    
+
         THullSyncFullActorUnorderedDataProtocol(
                 const TIntrusivePtr<TVDiskConfig>& config,
                 const TIntrusivePtr<THullCtx>& hullCtx,
@@ -350,7 +352,7 @@ namespace NKikimr {
                 const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
                 const TEvBlobStorage::TEvVSyncFull::TPtr& ev)
             : THullSyncFullBase(config, hullCtx, parentId, std::forward<THullDsSnap>(fullSnap),
-                    syncState, selfVDiskId, ifaceMonGroup, fullSyncGroup, ev, TKeyLogoBlob::First(), 
+                    syncState, selfVDiskId, ifaceMonGroup, fullSyncGroup, ev, TKeyLogoBlob::First(),
                     TKeyBlock::First(), TKeyBarrier::First(), NKikimrBlobStorage::LogoBlobs)
             , TActorBootstrapped<THullSyncFullActorUnorderedDataProtocol>()
             , SyncLogActorId(syncLogActorId)

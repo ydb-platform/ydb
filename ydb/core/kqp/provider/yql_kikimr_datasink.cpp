@@ -199,6 +199,10 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleTruncateTable(NNodes::TKiTruncateTable, TExprContext&) override {
+        return TStatus::Ok;
+    }
+
     TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext& ctx) override {
         Y_UNUSED(ctx, node);
         return TStatus::Ok;
@@ -359,9 +363,6 @@ private:
                 {
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
-                } else if (mode == "fill_table") {
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
-                    return TStatus::Ok;
                 } else if (mode == "insert_ignore") {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                         << "INSERT OR IGNORE is not yet supported for Kikimr."));
@@ -450,6 +451,9 @@ private:
                     return TStatus::Ok;
                 } else if (mode == "drop" || mode == "drop_if_exists") {
                     HandleDropTable(SessionCtx, settings, key, cluster);
+                    return TStatus::Ok;
+                } else if (mode == "truncateTable") {
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath(), tableType);
                     return TStatus::Ok;
                 }
 
@@ -634,6 +638,10 @@ public:
 
     bool CanExecute(const TExprNode& node) override {
         if (node.IsCallable(TKiAlterDatabase::CallableName())) {
+            return true;
+        }
+
+        if (node.IsCallable(TKiTruncateTable::CallableName())) {
             return true;
         }
 
@@ -1075,11 +1083,6 @@ public:
             return true;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Datashard && mode == "analyze") {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << static_cast<TStringBuf>(mode) << " is not supported for oltp tables."));
-            return true;
-        }
-
         return false;
     }
 
@@ -1398,6 +1401,14 @@ public:
 
                 } else if (mode == "drop" || mode == "drop_if_exists") {
                     return MakeKiDropTable(node, settings, key, ctx);
+                } else if (mode == "truncateTable") {
+                    auto truncateTable = Build<TKiTruncateTable>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .TablePath().Build(key.GetTablePath())
+                        .Done();
+
+                    return truncateTable.Ptr();
                 } else {
                     YQL_ENSURE(false, "unknown TableScheme mode \"" << TString(mode) << "\"");
                 }
@@ -2140,6 +2151,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = callable.Maybe<TKiAlterSequence>()) {
         return HandleAlterSequence(node.Cast(), ctx);
+    }
+
+    if (auto node = callable.Maybe<TKiTruncateTable>()) {
+        return HandleTruncateTable(node.Cast(), ctx);
     }
 
     if (auto node = callable.Maybe<TKiAnalyzeTable>()) {

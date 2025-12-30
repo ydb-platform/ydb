@@ -1644,6 +1644,13 @@ private:
         return MakeFuture<IYtGateway::TLayersSnapshotResult>();
     }
 
+    NThreading::TFuture<IYtGateway::TDownloadTableResult> DownloadTable(TDownloadTableOptions&&) override {
+        return MakeFuture<IYtGateway::TDownloadTableResult>();
+    }
+
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override {
+        return nullptr;
+    }
 
 private:
     TYtFileServices::TPtr Services_;

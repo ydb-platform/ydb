@@ -1,9 +1,10 @@
 import math
 from datetime import datetime, timedelta
+from binascii import hexlify
 
 from ydb.tests.sql.lib.test_query import Query
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request
-from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, ttl_types
+from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, ttl_types, ttl_int_types
 
 
 class DMLOperations():
@@ -33,8 +34,7 @@ class DMLOperations():
             table_name, columns, pk_columns, index_columns, unique, sync)
         self.query(sql_create_table)
         if ttl != "":
-            sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl ==
-                                             "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
+            sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl in ttl_int_types else "", table_name)
             self.query(sql_ttl)
 
     def insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
@@ -117,22 +117,22 @@ class DMLOperations():
             rows = self.query(
                 f"SELECT COUNT(*) as count FROM `{table_name}` WHERE ttl_{cleanup_type_name(ttl)}={format_sql_value(ttl_types[ttl](count_assert), ttl)}")
             assert len(
-                rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in ttl_{cleanup_type_name(ttl)}, table {table_name}"
+                rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, failed in ttl_{cleanup_type_name(ttl)}, table {table_name}"
             count_assert += 1
 
         for type_name in all_types.keys():
-            if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
+            if type_name not in ("Json", "Yson", "JsonDocument", "pgjson", "pgjsonb"):
                 rows = self.query(
                     f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count_assert), type_name)}")
                 assert len(
-                    rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
+                    rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, failed in col_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
         if unique == "":
             for type_name in index.keys():
                 rows = self.query(
                     f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](count_assert), type_name)}")
                 assert len(
-                    rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
+                    rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, failed in col_index_{cleanup_type_name(type_name)}, table {table_name}"
                 count_assert += 1
         else:
             number_of_columns = len(pk_types) + len(all_types) + len(index) + 2
@@ -142,7 +142,7 @@ class DMLOperations():
                 rows = self.query(
                     f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](number_of_columns), type_name)}")
                 assert len(
-                    rows) == 1 and rows[0].count == 1, f"Expected {1} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
+                    rows) == 1 and rows[0].count == 1, f"Expected {1} rows after insert, failed in col_index_{cleanup_type_name(type_name)}, table {table_name}"
                 number_of_columns += 1
 
     def create_update(self, value: int, prefix: str, type_name: str, key: str, table_name: str):
@@ -175,12 +175,12 @@ class DMLOperations():
                                                         pk_types, count, index, number_of_columns - count + 1, ttl, number_of_columns - count + 1)
             rows = self.query(sql_select)
             assert len(
-                rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
+                rows) == 1 and rows[0].count == 1, f"Expected one rows, failed in {count} value, table {table_name}"
 
         for count in range(number_of_columns + 1, 2*number_of_columns + 1):
             create_all_type = []
             for type_name in all_types.keys():
-                if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument" and ((type_name != "Date" and type_name != "Datetime") or count < 106):
+                if type_name not in ("Json", "Yson", "JsonDocument", "pgjson", "pgjsonb") and ((type_name != "Date" and type_name != "Datetime") or count < 106):
                     create_all_type.append(
                         f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count), type_name)}")
             create_pk = []
@@ -204,7 +204,7 @@ class DMLOperations():
                 """
             rows = self.query(sql_select)
             assert len(
-                rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
+                rows) == 1 and rows[0].count == 1, f"Expected one rows, failed in {count} value, table {table_name}"
         rows = self.query(f"SELECT COUNT(*) as count FROM `{table_name}`")
         assert len(
             rows) == 1 and rows[0].count == 2*number_of_columns, f"Expected {2*number_of_columns} rows, after select all line"
@@ -240,30 +240,39 @@ class DMLOperations():
             number_of_columns += 1
 
         for type_name in pk_types.keys():
-            if type_name != "Bool":
-                self.create_delete(
-                    number_of_columns, "pk_", type_name, pk_types[type_name], table_name)
-            else:
+            if type_name == "Bool":
                 self.create_delete(
                     number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name)
+            elif type_name == "pgbool":
+                self.create_delete(
+                    number_of_columns, "pk_", "pgint8", pk_types["pgint8"], table_name)
+            else:
+                self.create_delete(
+                    number_of_columns, "pk_", type_name, pk_types[type_name], table_name)
             number_of_columns += 1
 
         for type_name in all_types.keys():
-            if type_name != "Bool" and type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
-                self.create_delete(
-                    number_of_columns, "col_", type_name, all_types[type_name], table_name)
-            else:
+            if type_name in ("Bool", "Json", "Yson", "JsonDocument"):
                 self.create_delete(
                     number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name)
+            elif type_name in ("pgbool", "pgjson", "pgjsonb"):
+                self.create_delete(
+                    number_of_columns, "pk_", "pgint8", pk_types["pgint8"], table_name)
+            else:
+                self.create_delete(
+                    number_of_columns, "col_", type_name, all_types[type_name], table_name)
             number_of_columns += 1
 
         for type_name in index.keys():
-            if type_name != "Bool":
-                self.create_delete(
-                    number_of_columns, "col_index_", type_name, index[type_name], table_name)
-            else:
+            if type_name == "Bool":
                 self.create_delete(
                     number_of_columns, "pk_", "Int64", pk_types["Int64"], table_name)
+            elif type_name in ("pgbool", "pgjson", "pgjsonb"):
+                self.create_delete(
+                    number_of_columns, "pk_", "pgint8", pk_types["pgint8"], table_name)
+            else:
+                self.create_delete(
+                    number_of_columns, "col_index_", type_name, index[type_name], table_name)
             number_of_columns += 1
 
         number_of_columns = len(pk_types) + len(all_types) + len(index)
@@ -276,13 +285,13 @@ class DMLOperations():
                                                         pk_types, count, index, number_of_columns - count + 1, ttl, number_of_columns - count + 1)
             rows = self.query(sql_select)
             assert len(
-                rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
+                rows) == 1 and rows[0].count == 1, f"Expected one rows, failed in {count} value, table {table_name}, {len(rows)=}, {rows[0].count=}"
 
         for count in range(number_of_columns + 1, 2*number_of_columns + 1):
             sql_select = self.create_select_sql_request(table_name, all_types, count, pk_types, count, index, count, ttl, count)
             rows = self.query(sql_select)
             assert len(
-                rows) == 1 and rows[0].count == 0, f"Expected one rows, faild in {count} value, table {table_name}"
+                rows) == 1 and rows[0].count == 0, f"Expected one rows, failed in {count} value, table {table_name}"
         rows = self.query(f"SELECT COUNT(*) as count FROM `{table_name}`")
         assert len(
             rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows, after select all line"
@@ -343,6 +352,9 @@ class DMLOperations():
         elif data_type == "Json" or data_type == "JsonDocument":
             assert str(values_from_rows).replace(
                 "'", "\"") == str(key[data_type](values)), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows}"
+        elif data_type == "pgbytea":
+            assert str(values_from_rows) == "\\x" + hexlify(key[data_type](values).encode()).decode(), \
+                f"{data_type}, expected {key[data_type](values)}, received {values_from_rows}"
         else:
             assert str(values_from_rows) == str(
                 key[data_type](values)), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows}"
@@ -350,7 +362,7 @@ class DMLOperations():
     def create_select_sql_request(self, table_name, all_types, all_types_value, pk_types, pk_types_value, index, index_value, ttl, ttl_value):
         create_all_type = []
         for type_name in all_types.keys():
-            if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
+            if type_name not in ("Json", "Yson", "JsonDocument", "pgjson", "pgjsonb"):
                 create_all_type.append(
                     f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](all_types_value), type_name)}")
         sql_select = f"""

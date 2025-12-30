@@ -461,6 +461,11 @@ namespace NTypeAnnImpl {
             }
 
             auto nameNode = child->Child(0);
+            if (nameNode->GetTypeAnn() && nameNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(nameNode->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!EnsureAtom(*nameNode, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -564,6 +569,30 @@ namespace NTypeAnnImpl {
 
         auto unitType = ctx.Expr.MakeType<TUnitExprType>();
         input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(unitType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Universal>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto universalType = ctx.Expr.MakeType<TUniversalExprType>();
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(universalType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::UniversalStruct>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto universalStructType = ctx.Expr.MakeType<TUniversalStructExprType>();
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(universalStructType));
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -736,6 +765,11 @@ namespace NTypeAnnImpl {
         }
 
         auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (type->GetKind() == ETypeAnnotationKind::UniversalStruct) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (type->GetKind() != ETypeAnnotationKind::Struct) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()), TStringBuilder() << "Expected struct type, but got: "
                 << *type));

@@ -17,13 +17,14 @@
 /ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
-/ydb/core/kqp/ut/indexes/*vector*
+/ydb/core/kqp/ut/indexes/ @ydb-platform/qp @ydb-platform/datashard
+/ydb/core/kqp/ut/knn/ @ydb-platform/datashard
 /ydb/core/public_http/ @ydb-platform/fq
 
 /ydb/docs/ @ydb-platform/docs
 
 /ydb/library/yql/ @ydb-platform/qp
-/ydb/library/yql/dq @ydb-platform/qp @ydb-platform/yql 
+/ydb/library/yql/dq @ydb-platform/qp @ydb-platform/yql
 /ydb/library/yql/dq/actors/common @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
@@ -97,3 +98,4 @@
 /ydb/core/sys_view/common/registry.cpp @ydb-platform/Security
 /ydb/core/sys_view/ut_registry.cpp @ydb-platform/Security
 /ydb/tests/compatibility/test_system_views.py @ydb-platform/Security
+/ydb/tests/functional/tenants/test_system_views.py @ydb-platform/Security

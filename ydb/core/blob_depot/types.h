@@ -34,7 +34,7 @@ namespace NKikimr::NBlobDepot {
         ui32 Generation = 0;
         ui32 Step = 0;
         ui32 Index = 0;
-        
+
         auto AsTuple() const { return std::make_tuple(Channel, Generation, Step, Index); }
 
         friend bool operator ==(const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() == y.AsTuple(); }

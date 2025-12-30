@@ -647,11 +647,6 @@ public:
         // nodes waiting for this group to become listable
         THashSet<TNodeId> WaitingNodes;
 
-        // group's geometry; it doesn't ever change since the group is created
-        const ui32 NumFailRealms = 0;
-        const ui32 NumFailDomainsPerFailRealm = 0;
-        const ui32 NumVDisksPerFailDomain = 0;
-
         // topology according to the geometry
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
 
@@ -784,11 +779,8 @@ public:
             , Down(PersistedDown)
             , VDisksInGroup(numFailRealms * numFailDomainsPerFailRealm * numVDisksPerFailDomain)
             , StoragePoolId(storagePoolId)
-            , NumFailRealms(numFailRealms)
-            , NumFailDomainsPerFailRealm(numFailDomainsPerFailRealm)
-            , NumVDisksPerFailDomain(numVDisksPerFailDomain)
             , Topology(std::make_shared<TBlobStorageGroupInfo::TTopology>(TBlobStorageGroupType(ErasureSpecies),
-                NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain))
+                numFailRealms, numFailDomainsPerFailRealm, numVDisksPerFailDomain))
         {
             Topology->FinalizeConstruction();
             Y_ABORT_UNLESS(VDisksInGroup.size() == Topology->GetTotalVDisksNum());
@@ -942,8 +934,6 @@ public:
         {}
 
     };
-
-    TMap<ui32, TSet<ui32>> NodesAwaitingKeysForGroup;
 
     struct THostConfigInfo {
         struct TDriveKey {
@@ -1545,7 +1535,7 @@ private:
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     TSelfHealSettings SelfHealSettings;
-    
+
     TClusterBalancingSettings ClusterBalancingSettings;
 
     TActorId SystemViewsCollectorId;
@@ -1730,7 +1720,7 @@ private:
     TDeque<TAutoPtr<IEventHandle>> InitQueue;
     THashMap<Schema::Group::Owner::Type, Schema::Group::ID::Type> OwnerIdIdxToGroup;
 
-    void ReadGroups(TSet<ui32>& groupIDsToRead, bool discard, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result,
+    void ReadGroups(TSet<TGroupId>& groupIDsToRead, bool discard, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result,
             TNodeId nodeId);
 
     void ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo& pdisk,
@@ -1946,7 +1936,6 @@ private:
 
     void UpdateWaitingGroups(const THashSet<TGroupId>& groupIds);
 
-    void NotifyNodesAwaitingKeysForGroups(ui32 groupId);
     ITransaction* CreateTxInitScheme();
     ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();
@@ -2039,14 +2028,14 @@ private:
     void CheckUnsyncedBridgePiles();
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
-        TSet<ui32>& groupIdsToRead, bool comprehensive);
+        TSet<TGroupId>& groupIdsToRead, bool comprehensive);
 
     void CheckSyncerDisconnectedNodes();
 
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
 
     void SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
-        TSet<ui32>& groupIdsToRead);
+        TSet<TGroupId>& groupIdsToRead);
 
     void Handle(TEvBlobStorage::TEvControllerUpdateSyncerState::TPtr ev);
 

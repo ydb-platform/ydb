@@ -4,11 +4,13 @@
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
+#include <ydb/library/workload/abstract/colors.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_nested.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h>
@@ -248,6 +250,121 @@ public:
     }
 };
 
+class TRandomDataGenerator final: public IBulkDataGenerator {
+private:
+    static constexpr size_t PORTION_SIZE = 8192;
+
+    const TVectorWorkloadParams& Params;
+    const NVector::TVectorOpts& VectorOpts;
+    const size_t RowCount;
+
+    std::mt19937 RandomGenerator;
+    std::uniform_real_distribution<float> Distribution;
+    TAdaptiveLock Lock;
+
+    size_t DoneRows = 0;
+
+private:
+    template<typename T>
+    TStringBuilder GenerateEmbedding() {
+        TStringBuilder buffer;
+        NKnnVectorSerialization::TSerializer<T> serializer(&buffer.Out);
+        for (size_t j = 0; j < VectorOpts.VectorDimension; ++j) {
+            if constexpr (std::is_same<T, float>::value) {
+                serializer.HandleElement(Distribution(RandomGenerator) * 2 - 1);
+            } else if constexpr (std::is_same<T, uint8_t>::value) {
+                serializer.HandleElement(Distribution(RandomGenerator) * (UINT8_MAX + 1));
+            } else if constexpr (std::is_same<T, int8_t>::value) {
+                serializer.HandleElement(Distribution(RandomGenerator) * (INT8_MAX - INT8_MIN + 1) + INT8_MIN);
+            } else if constexpr (std::is_same<T, bool>::value) {
+                serializer.HandleElement(Distribution(RandomGenerator) >= 0.5);
+            } else {
+                static_assert(false, "Unsupported type");
+            }
+        }
+        serializer.Finish();
+
+        return buffer;
+    }
+
+public:
+    TRandomDataGenerator(const TVectorWorkloadParams& params, const NVector::TVectorOpts& vectorOpts, const size_t rowCount, const uint32_t randomSeed)
+        : IBulkDataGenerator(params.TableOpts.Name, rowCount)
+        , Params(params)
+        , VectorOpts(vectorOpts)
+        , RowCount(rowCount)
+        , RandomGenerator(randomSeed)
+        , Distribution(0.0f, 1.0f)
+    { }
+
+    virtual TDataPortions GenerateDataPortion() override {
+        // Sequential generation is required to ensure reproducibility for fixed seed value.
+        with_lock(Lock) {
+            std::vector<std::shared_ptr<arrow::Array>> resultColumns;
+
+            arrow::UInt64Builder idsBuilder;
+            arrow::StringBuilder embeddingsBuilder;
+
+            std::function<TStringBuilder()> generateEmbedding;
+            if (VectorOpts.VectorType == "float") {
+                generateEmbedding = [this]() { return GenerateEmbedding<float>(); };
+            } else if (VectorOpts.VectorType == "uint8") {
+                generateEmbedding = [this]() { return GenerateEmbedding<uint8_t>(); };
+            } else if (VectorOpts.VectorType == "int8") {
+                generateEmbedding = [this]() { return GenerateEmbedding<int8_t>(); };
+            } else if (VectorOpts.VectorType == "bit") {
+                generateEmbedding = [this]() { return GenerateEmbedding<bool>(); };
+            } else {
+                ythrow yexception() << "Unknown vector type: " << VectorOpts.VectorType;
+            }
+
+            size_t currentBatchSize;
+            for (currentBatchSize = 0; currentBatchSize < PORTION_SIZE && DoneRows < RowCount; ++currentBatchSize, ++DoneRows) {
+                if (const auto status = idsBuilder.Append(static_cast<uint64_t>(DoneRows)); !status.ok()) {
+                    ythrow yexception() << status.ToString();
+                }
+
+                TStringBuilder buffer = generateEmbedding();
+                if (const auto status = embeddingsBuilder.Append(buffer.MutRef()); !status.ok()) {
+                    ythrow yexception() << status.ToString();
+                }
+            }
+            if (currentBatchSize == 0) {
+                return {};
+            }
+
+            std::shared_ptr<arrow::UInt64Array> newIdColumn;
+            if (const auto status = idsBuilder.Finish(&newIdColumn); !status.ok()) {
+                ythrow yexception() << status.ToString();
+            }
+            resultColumns.push_back(std::move(newIdColumn));
+
+            std::shared_ptr<arrow::StringArray> newEmbeddingColumn;
+            if (const auto status = embeddingsBuilder.Finish(&newEmbeddingColumn); !status.ok()) {
+                ythrow yexception() << status.ToString();
+            }
+            resultColumns.push_back(std::move(newEmbeddingColumn));
+
+            const auto schema = arrow::schema({
+                arrow::field("id", arrow::uint64()),
+                arrow::field("embedding", arrow::binary()),
+            });
+            const auto recordBatch = arrow::RecordBatch::Make(
+                schema,
+                currentBatchSize,
+                resultColumns
+            );
+
+            TDataPortion::TArrow arrowData(
+                arrow::ipc::SerializeRecordBatch(*recordBatch, arrow::ipc::IpcWriteOptions{}).ValueOrDie()->ToString(),
+                arrow::ipc::SerializeSchema(*schema).ValueOrDie()->ToString()
+            );
+
+            return {MakeIntrusive<TDataPortion>(Params.GetFullTableName(Params.TableOpts.Name.c_str()), std::move(arrowData), currentBatchSize)};
+        }
+    }
+};
+
 }
 
 TWorkloadVectorFilesDataInitializer::TWorkloadVectorFilesDataInitializer(const TVectorWorkloadParams& params)
@@ -256,7 +373,7 @@ TWorkloadVectorFilesDataInitializer::TWorkloadVectorFilesDataInitializer(const T
 { }
 
 void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = GetColors(Cout);
 
     TStringBuilder inputDescription;
     inputDescription
@@ -285,9 +402,9 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
 TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData() {
     const auto basicDataGenerator = std::make_shared<TDataGenerator>(
         *this,
-        Params.TableName,
+        Params.TableOpts.Name,
         0,
-        Params.TableName,
+        Params.TableOpts.Name,
         DataFiles,
         Params.GetColumns(),
         TDataGenerator::EPortionSizeUnit::Line
@@ -296,6 +413,27 @@ TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData
     return {
         std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName)
     };
+}
+
+TWorkloadVectorGenerateDataInitializer::TWorkloadVectorGenerateDataInitializer(const TVectorWorkloadParams& params)
+    : TWorkloadDataInitializerBase("generator", "Generate random vectors", params)
+    , Params(params)
+{ }
+
+void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
+    NVector::ConfigureVectorOpts(opts, &VectorOpts);
+    opts.AddLongOption( "rows", "Number of rows to generate")
+        .RequiredArgument("NUMBER")
+        .Required().StoreResult(&RowCount);
+    opts.AddLongOption("seed", "Seed for random number generator")
+        .RequiredArgument("NUMBER")
+        .DefaultValue(RandomSeed)
+        .StoreResult(&RandomSeed);
+}
+
+TBulkDataGeneratorList TWorkloadVectorGenerateDataInitializer::DoGetBulkInitialData() {
+    Cout << "Using random seed: " << RandomSeed << Endl;
+    return {std::make_shared<TRandomDataGenerator>(Params, VectorOpts, RowCount, RandomSeed)};
 }
 
 } // namespace NYdbWorkload

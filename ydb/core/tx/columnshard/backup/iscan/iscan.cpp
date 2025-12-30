@@ -65,6 +65,8 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
                 return TConclusionStatus::Fail("Exports to S3 are disabled");
             }
             break;
+        case NKikimrSchemeOp::TBackupTask::kFSSettings:
+            return TConclusionStatus::Fail("Exports to FS are not supported");
         case NKikimrSchemeOp::TBackupTask::SETTINGS_NOT_SET:
             return TConclusionStatus::Fail("Internal error. It is not possible to have empty settings for backup here");
     }

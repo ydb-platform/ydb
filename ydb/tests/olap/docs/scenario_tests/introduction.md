@@ -69,7 +69,7 @@ class TestSchenarioSimple(BaseTestSet):
         )
         assert sth.get_table_rows_count(table_name) == 2
         sth.bulk_upsert(table_name, dg.DataGeneratorPerColumn(self.schema1, 100), comment="100 sequetial ids")
-        sth.execute_scheme_query(DropTable(table_name), retries=2)
+        sth.execute_scheme_query(DropTable(table_name), retries=5)
 ```
 
 {% endcut %}

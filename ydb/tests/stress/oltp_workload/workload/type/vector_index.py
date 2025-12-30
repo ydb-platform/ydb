@@ -22,13 +22,19 @@ class WorkloadVectorIndex(WorkloadBase):
         logger.info(f"random vector type: {type}")
         if type == "float":
             values = [round(random.uniform(-100, 100), 2) for _ in range(size)]
-            return ",".join(f'{val}f' for val in values)
-
-        if type == "uint8":
+        elif type == "uint8":
             values = [random.randint(0, 255) for _ in range(size)]
-        else:
+        elif type == "int8":
             values = [random.randint(-127, 127) for _ in range(size)]
-        return ",".join(str(val) for val in values)
+        elif type == "bit":
+            values = [float(random.randint(0, 1)) for _ in range(size)]
+        else:
+            raise ValueError(f"Unknown vector type: {type}")
+
+        if type in ("float", "bit"):
+            return ",".join(f'{val}f' for val in values)
+        else:
+            return ",".join(str(val) for val in values)
 
     def _create_table(self, table_path):
         logger.info(f"Create table {table_path}")
@@ -58,7 +64,7 @@ class WorkloadVectorIndex(WorkloadBase):
         self.client.query(drop_index_sql, True)
 
     def _create_index(
-        self, index_name, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None, prefixed=False
+        self, index_name, table_path, vector_type, vector_dimension, levels, clusters, overlap_clusters=0, distance=None, similarity=None, prefixed=False
     ):
         logger.info(
             f"""Create index vector_type={vector_type},
@@ -75,6 +81,7 @@ class WorkloadVectorIndex(WorkloadBase):
             prefix = "user, "
         else:
             prefix = ""
+        overlap_param = f"overlap_clusters={overlap_clusters}," if overlap_clusters else ""
         create_index_sql = f"""
             ALTER TABLE `{table_path}`
             ADD INDEX `{index_name}` GLOBAL USING vector_kmeans_tree
@@ -83,6 +90,7 @@ class WorkloadVectorIndex(WorkloadBase):
                 vector_type={vector_type},
                 vector_dimension={vector_dimension},
                 levels={levels},
+                {overlap_param}
                 clusters={clusters}
             );
         """
@@ -143,6 +151,61 @@ class WorkloadVectorIndex(WorkloadBase):
         """
         return self.client.query(select_sql, False)
 
+    def _knn_search(self, table_path, vector_type, vector_dimension, distance, similarity, prefixed=False):
+        """KNN search without vector index (brute force with pushdown)."""
+        if distance is not None:
+            target = targets["distance"][distance]
+        else:
+            target = targets["similarity"][similarity]
+        order = "ASC" if distance is not None else "DESC"
+        vector = self._get_random_vector(vector_type, vector_dimension)
+        converter = to_binary_string_converters[vector_type]
+        name = converter.name
+        data_type = converter.data_type
+        if prefixed:
+            where = "WHERE user=1"
+        else:
+            where = ""
+        select_sql = f"""
+            $Target = {name}(Cast([{vector}] AS List<{data_type}>));
+            SELECT pk, embedding, {target}(embedding, $Target) as target
+            FROM `{table_path}`
+            {where}
+            ORDER BY {target}(embedding, $Target) {order}
+            LIMIT {self.limit};
+        """
+        return self.client.query(select_sql, False)
+
+    def _knn_search_check(self, table_path, vector_type, vector_dimension, distance, similarity, prefixed=False):
+        """Perform KNN search and verify results are ordered correctly."""
+        logger.info(f"KNN search: vector_type={vector_type}, distance={distance}, similarity={similarity}")
+        result_set = self._knn_search(
+            table_path=table_path,
+            vector_type=vector_type,
+            vector_dimension=vector_dimension,
+            distance=distance,
+            similarity=similarity,
+            prefixed=prefixed,
+        )
+        if len(result_set) == 0:
+            raise Exception(
+                f"KNN query returned an empty set for vector_type={vector_type}, distance={distance}, similarity={similarity}, prefixed={prefixed}"
+            )
+        rows = result_set[0].rows
+        logger.info(f"KNN search returned {len(rows)} rows")
+
+        if len(rows) > 1:
+            prev = rows[0]['target']
+            for row in rows[1:]:
+                cur = row['target']
+                condition = prev <= cur if distance is not None else prev >= cur
+                if not condition:
+                    raise Exception(
+                        f"KNN results not properly ordered: prev={prev}, cur={cur}"
+                    )
+                prev = cur
+        logger.info("KNN search completed successfully")
+
     def _select_top(self, index_name, table_path, vector_type, vector_dimension, distance, similarity, prefixed=False):
         logger.info("Select values from table")
         result_set = self._select(
@@ -195,8 +258,17 @@ class WorkloadVectorIndex(WorkloadBase):
             return
         raise Exception("Error getting index status")
 
-    def _check_loop(self, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None, prefixed=False):
-        index_name = f"{self.index_name_prefix}_{vector_type}_{vector_dimension}_{levels}_{clusters}_{distance}_{similarity}_{str(prefixed)}"
+    def _check_loop(self, table_path, vector_type, vector_dimension, levels, clusters, overlap_clusters=0, distance=None, similarity=None, prefixed=False):
+        self._knn_search_check(
+            table_path=table_path,
+            vector_type=vector_type,
+            vector_dimension=vector_dimension,
+            distance=distance,
+            similarity=similarity,
+            prefixed=prefixed,
+        )
+
+        index_name = f"{self.index_name_prefix}_{vector_type}_{vector_dimension}_{levels}_{clusters}_{overlap_clusters}_{distance}_{similarity}_{str(prefixed)}"
         self._create_index(
             index_name=index_name,
             table_path=table_path,
@@ -204,6 +276,7 @@ class WorkloadVectorIndex(WorkloadBase):
             vector_dimension=vector_dimension,
             levels=levels,
             clusters=clusters,
+            overlap_clusters=overlap_clusters,
             distance=distance,
             similarity=similarity,
             prefixed=prefixed,
@@ -260,6 +333,7 @@ class WorkloadVectorIndex(WorkloadBase):
                 vector_dimension=vector_dimension,
                 levels=levels,
                 clusters=clusters,
+                overlap_clusters=overlap_clusters,
                 distance=distance,
                 similarity=similarity,
                 prefixed=prefixed,
@@ -272,14 +346,15 @@ class WorkloadVectorIndex(WorkloadBase):
         table_path = self.get_table_path(self.table_name)
         distance_data = ["cosine", "manhattan", "euclidean"]
         similarity_data = ["cosine", "inner_product"]
-        vector_type_data = ["float", "int8", "uint8"]
+        vector_type_data = ["float", "int8", "uint8", "bit"]
         prefixed_data = [False, True]
         levels_data = [1, 3]
+        overlap_data = [0, 2]
         clusters_data = [2, 17]
         vector_dimension_data = [5]
         self._create_table(table_path)
 
-        distance_index_data = list(product(vector_type_data, vector_dimension_data, levels_data, clusters_data, distance_data, prefixed_data))
+        distance_index_data = list(product(vector_type_data, vector_dimension_data, levels_data, clusters_data, distance_data, prefixed_data, overlap_data))
         similarity_index_data = list(product(vector_type_data, vector_dimension_data, levels_data, clusters_data, similarity_data, prefixed_data))
 
         random.shuffle(distance_index_data)
@@ -305,7 +380,8 @@ class WorkloadVectorIndex(WorkloadBase):
                     levels=distance_idx_data[2],
                     clusters=distance_idx_data[3],
                     distance=distance_idx_data[4],
-                    prefixed=distance_idx_data[5])
+                    prefixed=distance_idx_data[5],
+                    overlap_clusters=distance_idx_data[6])
                 similarity_idx_data = next(similarity_iter)
 
                 self._upsert_values(
@@ -323,7 +399,8 @@ class WorkloadVectorIndex(WorkloadBase):
                     levels=similarity_idx_data[2],
                     clusters=similarity_idx_data[3],
                     similarity=similarity_idx_data[4],
-                    prefixed=similarity_idx_data[5])
+                    prefixed=similarity_idx_data[5],
+                    overlap_clusters=distance_idx_data[6])
             except Exception as ex:
                 logger.info(f"ERROR {ex}")
                 raise ex

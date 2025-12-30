@@ -4,7 +4,7 @@
 #include "changes/actualization/construction/context.h"
 #include "changes/cleanup_portions.h"
 #include "changes/cleanup_tables.h"
-#include "changes/general_compaction.h"
+#include "changes/counters/general.h"
 #include "changes/ttl.h"
 #include "loading/stages.h"
 
@@ -220,7 +220,9 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCo
         return {};
     }
     granule->OnStartCompaction();
+    TMonotonic startTime = TMonotonic::Now();
     auto changes = granule->GetOptimizationTasks(granule, dataLocksManager);
+    NChanges::TGeneralCompactionCounters::OnTasksGeneratred((TMonotonic::Now() - startTime).MicroSeconds(), changes.size());
     if (changes.empty()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")(
             "weight", granule->GetCompactionPriority().DebugString());
@@ -331,6 +333,11 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
         changes->AddTableToDrop(pathId);
     }
 
+    SignalCounters.OnCleanupPortionSkippedByLock(skipLocked);
+    if (limitExceeded) {
+        SignalCounters.OnCleanupPortionsLimitExceed();
+    }
+
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())("portions_prepared",
         changes->GetPortionsToAccess().size())("drop", portionsFromDrop)("skip", skipLocked)("portions_counter", portionsCount)(
         "chunks", chunksCount)("limit", limitExceeded)("max_portions", maxPortionsCount)("max_chunks", maxChunksCount);
@@ -339,7 +346,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     if (LWPROBE_ENABLED(StartCleanup)) {
         ui64 totalPortions = 0;
         for (const auto& [_, portions]: CleanupPortions) {
-        totalPortions += portions.size();
+            totalPortions += portions.size();
         }
         LWPROBE(StartCleanup, TabletId, CleanupPortions.size(), totalPortions, changes->GetPortionsToAccess().size(), portionsFromDrop, skipLocked, portionsCount, chunksCount, limitExceeded, maxPortionsCount, maxChunksCount);
     }
@@ -452,9 +459,10 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     }
 }
 
-std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
-    TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions) const {
-    std::vector<std::shared_ptr<TPortionInfo>> out;
+std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Select(TInternalPathId pathId, TSnapshot snapshot,
+    const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
+    const std::optional<THashSet<TInsertWriteId>>& ownPortions) const {
+    std::vector<TSelectedPortionInfo> out;
     auto spg = GranulesStorage->GetGranuleOptional(pathId);
     if (!spg) {
         return out;
@@ -475,7 +483,8 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
         const bool takePortion = pkRangesFilter.IsUsed(*portion);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
         if (takePortion) {
-            out.emplace_back(portion);
+            AFL_VERIFY(nonconflicting != conflicting)("nonconflicting", nonconflicting);
+            out.emplace_back(portion, nonconflicting);
         }
     }
     for (const auto& [_, portion] : spg->GetPortions()) {
@@ -483,7 +492,7 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
             continue;
         }
 
-        auto nonconflicting = portion->IsVisible(snapshot, true); 
+        auto nonconflicting = portion->IsVisible(snapshot, true);
         auto conflicting = !nonconflicting;
 
         // take compacted portions only if all the records are visible in the snapshot
@@ -498,7 +507,8 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
         const bool takePortion = pkRangesFilter.IsUsed(*portion);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
         if (takePortion) {
-            out.emplace_back(portion);
+            AFL_VERIFY(nonconflicting != conflicting)("nonconflicting", nonconflicting);
+            out.emplace_back(portion, nonconflicting);
         }
     }
 

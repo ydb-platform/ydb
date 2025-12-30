@@ -286,6 +286,7 @@ enum class TYdbOperation : ui64 {
     CreateSecret           = 1ull << 39,
     AlterSecret            = 1ull << 40,
     DropSecret             = 1ull << 41,
+    TruncateTable          = 1ull << 42,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);
@@ -460,7 +461,7 @@ public:
 public:
     THashMap<TString, TYdbOperations> TableOperations;
     THashMap<TKikimrPathId, TString> TableByIdMap;
-    TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
+    TMaybe<NKqpProto::EIsolationLevel> EffectiveIsolationLevel;
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
     bool Readonly = false;
     bool Invalidated = false;

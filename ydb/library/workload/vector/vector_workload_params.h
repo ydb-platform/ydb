@@ -1,5 +1,7 @@
 #pragma once
 
+#include "configure_opts.h"
+
 #include <ydb/library/workload/benchmark_base/workload.h>
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 
@@ -29,20 +31,22 @@ public:
 
     TVector<TString> GetColumns() const;
 
-    TString TableName;
+    NVector::TTableOpts TableOpts;
+    NVector::TTablePartitioningOpts TablePartitioningOpts;
+    NVector::TVectorOpts VectorOpts;
+
+    TString IndexName = "index";
+
     TString QueryTableName;
-    TString IndexName;
     std::vector<std::string> KeyColumns;
     std::string EmbeddingColumn;
-    std::string QueryTableKeyColumn;
+    std::vector<std::string> QueryTableKeyColumns;
     std::optional<std::string> PrefixColumn;
     std::optional<std::string> PrefixType;
     NYdb::NTable::TVectorIndexSettings::EMetric Metric;
     TString Distance;
-    TString VectorType;
     size_t KmeansTreeLevels = 0;
     size_t KmeansTreeClusters = 0;
-    size_t VectorDimension = 0;
     size_t Targets = 0;
     size_t VectorInitCount = 0;
     size_t KmeansTreeSearchClusters = 0;

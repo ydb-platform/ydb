@@ -365,7 +365,7 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
 }
 
 TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomList& inputColumns,
-    const TCoAtomList& autoincrement, const bool isSink,
+    const TCoAtomList& autoincrement, const bool isSink, const bool isStreamIndexWrite,
     const TKikimrTableDescription& table, TExprContext& ctx)
 {
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
@@ -376,6 +376,38 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
     TCoAtomList generateColumnsIfInsert = TCoNameValueTuple(generateColumnsIfInsertNode).Value().Cast<TCoAtomList>();
 
     generateColumnsIfInsert = ExtendGenerateOnInsertColumnsList(write, generateColumnsIfInsert, inputColumns, autoincrement, ctx);
+
+    if (isSink && isStreamIndexWrite) {
+        auto indexes = BuildAffectedIndexTables(table, write.Pos(), ctx, nullptr,
+            [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
+                return BuildTableMeta(meta, pos, ctx);
+            });
+        const auto onlyStreamIndexes = std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
+            return index.second->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree
+                && index.second->Type != TIndexDescription::EType::GlobalFulltext;
+        });
+
+        if (onlyStreamIndexes) {
+            if (generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
+                return Build<TKqlInsertOnConflictUpdateRows>(ctx, write.Pos())
+                    .Table(BuildTableMeta(table, write.Pos(), ctx))
+                    .Input(input.Ptr())
+                    .Columns(columns.Ptr())
+                    .ReturningColumns(write.ReturningColumns())
+                    .GenerateColumnsIfInsert(generateColumnsIfInsert)
+                    .Done();
+            }
+
+            return Build<TKqlUpsertRows>(ctx, write.Pos())
+                .Table(BuildTableMeta(table, write.Pos(), ctx))
+                .Input(input.Ptr())
+                .Columns(columns.Ptr())
+                .ReturningColumns(write.ReturningColumns())
+                .IsBatch(ctx.NewAtom(write.Pos(), "false"))
+                .Settings(settings)
+                .Done();
+        }
+    }
 
     auto effect = Build<TKqlUpsertRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))
@@ -908,7 +940,7 @@ TExprBase WriteTableWithIndexUpdate(const TKiWriteTable& write, const TCoAtomLis
     auto op = GetTableOp(write);
     switch (op) {
         case TYdbOperation::Upsert:
-            return BuildUpsertTableWithIndex(write, inputColumns, autoincrement, isSink, tableData, ctx);
+            return BuildUpsertTableWithIndex(write, inputColumns, autoincrement, isSink, isStreamIndexWrite, tableData, ctx);
         case TYdbOperation::Replace:
             return BuildReplaceTableWithIndex(write, inputColumns, autoincrement, isSink, tableData, ctx);
         case TYdbOperation::InsertAbort:
@@ -984,9 +1016,15 @@ TExprNode::TPtr HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, 
 TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ctx, TKqpOptimizeContext& kqpCtx,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    Y_UNUSED(kqpCtx);
     const auto& tableData = GetTableData(tablesData, update.DataSink().Cluster(), update.Table().Value());
     if (!CheckWriteToIndex(update, tableData, ctx) || !CheckDisabledWriteToUniqIndex(update, tableData, ctx)) {
+        return nullptr;
+    }
+
+    const bool allowBatchUpdates = kqpCtx.Config->EnableBatchUpdates && kqpCtx.Config->EnableOltpSink;
+    if (!allowBatchUpdates && update.IsBatch() == "true") {
+        const TString err = "BATCH operations are not supported at the current time.";
+        ctx.AddError(YqlIssue(ctx.GetPosition(update.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
         return nullptr;
     }
 
@@ -1000,9 +1038,15 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
 TExprNode::TPtr HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, TKqpOptimizeContext& kqpCtx,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    Y_UNUSED(kqpCtx);
     auto& tableData = GetTableData(tablesData, del.DataSink().Cluster(), del.Table().Value());
     if (!CheckWriteToIndex(del, tableData, ctx) || !CheckDisabledWriteToUniqIndex(del, tableData, ctx)) {
+        return nullptr;
+    }
+
+    const bool allowBatchUpdates = kqpCtx.Config->EnableBatchUpdates && kqpCtx.Config->EnableOltpSink;
+    if (!allowBatchUpdates && del.IsBatch() == "true") {
+        const TString err = "BATCH operations are not supported at the current time.";
+        ctx.AddError(YqlIssue(ctx.GetPosition(del.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
         return nullptr;
     }
 

@@ -228,7 +228,7 @@ public:
         return WriteCost(ev.GetCachedByteSize());
     }
 
-    ui64 GetCost(const TEvBlobStorage::TEvVPut& ev) const { 
+    ui64 GetCost(const TEvBlobStorage::TEvVPut& ev) const {
         const auto &record = ev.Record;
         const NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
         const ui64 size = record.HasBuffer() ? record.GetBuffer().size() : ev.GetPayload(0).GetSize();

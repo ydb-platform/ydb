@@ -13,6 +13,8 @@ namespace NYT::NAuth {
 struct ITvmService
     : public virtual TRefCounted
 {
+    virtual const TTvmServiceConfigPtr& GetConfig() = 0;
+
     //! Our TVM id.
     virtual TTvmId GetSelfTvmId() = 0;
 

@@ -17,7 +17,8 @@ using TCompatibilityPair = std::pair<ESchemaCompatibility, TError>;
 
 TCompatibilityPair CheckTypeCompatibilityImpl(
     const TComplexTypeFieldDescriptor& oldDescriptor,
-    const TComplexTypeFieldDescriptor& newDescriptor);
+    const TComplexTypeFieldDescriptor& newDescriptor,
+    const TTypeCompatibilityOptions& options);
 
 const TCompatibilityPair& MinCompatibility(const TCompatibilityPair& lhs, const TCompatibilityPair& rhs)
 {
@@ -251,6 +252,7 @@ TCompatibilityPair CheckTypeCompatibilitySimple(
 TCompatibilityPair CheckElementsCompatibility(
     const TComplexTypeFieldDescriptor& oldDescriptor,
     const TComplexTypeFieldDescriptor& newDescriptor,
+    const TTypeCompatibilityOptions& options,
     bool allowNewElements)
 {
     const auto oldSize = std::ssize(oldDescriptor.GetType()->GetElements());
@@ -273,7 +275,10 @@ TCompatibilityPair CheckElementsCompatibility(
     for (int i = 0; result.first != ESchemaCompatibility::Incompatible && i < oldSize; ++i) {
         result = MinCompatibility(
             result,
-            CheckTypeCompatibilityImpl(oldDescriptor.Element(i), newDescriptor.Element(i)));
+            CheckTypeCompatibilityImpl(
+                oldDescriptor.Element(i),
+                newDescriptor.Element(i),
+                options));
     }
     return result;
 }
@@ -281,72 +286,288 @@ TCompatibilityPair CheckElementsCompatibility(
 TCompatibilityPair CheckFieldsCompatibility(
     const TComplexTypeFieldDescriptor& oldDescriptor,
     const TComplexTypeFieldDescriptor& newDescriptor,
-    bool checkNewFieldsNullability)
+    const TTypeCompatibilityOptions& options,
+    ELogicalMetatype metatype)
 {
+    // Existing fields are mapped to their indices, removed fields are
+    // mapped to null (in case of struct).
+    auto buildStableNameToIndexMapping = [&] (const TComplexTypeFieldDescriptor& descriptor) {
+        THashMap<std::string, std::optional<int>> result;
+
+        const auto& type = descriptor.GetType();
+        const auto& fields = type->GetFields();
+        for (int fieldIndex = 0; fieldIndex < std::ssize(fields); ++fieldIndex) {
+            EmplaceOrCrash(result, fields[fieldIndex].StableName, fieldIndex);
+        }
+
+        if (metatype == ELogicalMetatype::Struct) {
+            for (const auto& stableName : type->GetRemovedFieldStableNames()) {
+                EmplaceOrCrash(result, stableName, std::nullopt);
+            }
+        }
+        return result;
+    };
+    auto stableNameToOldIndex = buildStableNameToIndexMapping(oldDescriptor);
+    auto stableNameToNewIndex = buildStableNameToIndexMapping(newDescriptor);
+
     const auto& oldFields = oldDescriptor.GetType()->GetFields();
     const auto& newFields = newDescriptor.GetType()->GetFields();
-    if (oldFields.size() > newFields.size()) {
+
+    auto result = std::pair(ESchemaCompatibility::FullyCompatible, TError());
+
+    auto onUnknownRemovedField = [&] (const auto& stableName) {
+        if (options.IgnoreUnknownRemovedFieldNames) {
+            return;
+        }
+        result = {
+            ESchemaCompatibility::Incompatible,
+            TError(
+                "Newly added name at \"removed_fields\" of %Qv does not refer to "
+                "any previously existing field",
+                oldDescriptor.GetDescription())
+                << TErrorAttribute("added_name", stableName)
+        };
+    };
+
+    auto onNewField = [&] (int newIndex) {
+        const auto& newFieldDescriptor = newDescriptor.Field(newIndex);
+        if (metatype == ELogicalMetatype::VariantStruct) {
+            return;
+        }
+        if (newFieldDescriptor.GetType()->IsNullable()) {
+            return;
+        }
+        result = {
+            ESchemaCompatibility::Incompatible,
+            TError(
+                "Newly added member %Qv is not optional",
+                newFieldDescriptor.GetDescription())
+                << TErrorAttribute("new_type", ToString(*newFieldDescriptor.GetType()))
+        };
+    };
+
+    auto onRemovedField = [&] (auto oldIndex) {
+        if (!options.AllowStructFieldRemoval) {
+            result = {
+                ESchemaCompatibility::Incompatible,
+                TError(
+                    "Field of %Qv cannot be removed since field removal is disabled",
+                    oldDescriptor.GetDescription())
+                    << TErrorAttribute("field_name", oldFields[oldIndex].Name),
+            };
+            return;
+        }
+        if (metatype == ELogicalMetatype::Struct) {
+            return;
+        }
+        result = MinCompatibility(
+            result,
+            {
+                ESchemaCompatibility::RequireValidation,
+                TError(
+                    "Field of variant struct %Qv was removed",
+                    oldDescriptor.GetDescription())
+                    << TErrorAttribute("field_name", oldFields[oldIndex].Name),
+            });
+    };
+
+    auto onDroppedField = [&] (auto oldIndex, const auto& stableName) {
+        if (metatype == ELogicalMetatype::VariantStruct) {
+            return onRemovedField(oldIndex);
+        }
+        result = {
+            ESchemaCompatibility::Incompatible,
+            TError(
+                "Field of %Qv cannot be simply dropped; instead, its stable name "
+                "must be added to \"removed_fields\" list",
+                oldDescriptor.GetDescription())
+                << TErrorAttribute("field_name", oldFields[oldIndex].Name)
+                << TErrorAttribute("field_stable_name", stableName),
+        };
+    };
+
+    auto onDroppedRemovedField = [&] (const auto& stableName) {
+        result = {
+            ESchemaCompatibility::Incompatible,
+            TError(
+                "Removing items from \"removed_fields\" of %Qv is not allowed",
+                oldDescriptor.GetDescription())
+                << TErrorAttribute("removed_name", stableName)
+        };
+    };
+
+    auto onUndeadField = [&] (const auto& stableName) {
+        result = {
+            ESchemaCompatibility::Incompatible,
+            TError(
+                "Removed field name of %Qv cannot be reused as a stable name of an "
+                "existing field",
+                oldDescriptor.GetDescription())
+                << TErrorAttribute("removed_field_name", stableName),
+        };
+    };
+
+    auto onRenamedField = [&] (auto oldIndex, auto newIndex, const auto& stableName) {
+        if (options.AllowStructFieldRenaming) {
+            return;
+        }
+        result = {
+            ESchemaCompatibility::Incompatible,
+            TError(
+                "Field of %Qv cannot be renamed since field renaming is disabled",
+                oldDescriptor.GetDescription())
+                << TErrorAttribute("field_old_name", oldFields[oldIndex].Name)
+                << TErrorAttribute("field_new_name", newFields[newIndex].Name)
+                << TErrorAttribute("field_stable_name", stableName),
+        };
+    };
+
+    bool areSomeFieldsRetained = false;
+    auto onRetainedField = [&] (auto oldIndex, auto newIndex) {
+        areSomeFieldsRetained = true;
+        result = MinCompatibility(
+            result,
+            CheckTypeCompatibilityImpl(
+                oldDescriptor.Field(oldIndex),
+                newDescriptor.Field(newIndex),
+                options));
+    };
+
+    // Each struct field can be in either of three states:
+    //   a. Unknown (aka absent from schema entirely).
+    //   b. Removed (present in removed field names, only for structs).
+    //   c. Existing (present as a regular field).
+    // Therefore, there is a total of 3 * 3 = 9 possible transitions.
+    // Unknown -> unknown as well as removed -> removed transitions are not
+    // particularly interesting, whereas the other 7 are handled below.
+
+    // Unknown -> * transitions.
+    for (const auto& [stableName, newIndex] : stableNameToNewIndex) {
+        if (stableNameToOldIndex.contains(stableName)) {
+            continue;
+        }
+
+        if (newIndex.has_value()) {
+            // Unknown -> existing.
+            onNewField(*newIndex);
+        } else {
+            // Unknown -> removed.
+            onUnknownRemovedField(stableName);
+        }
+
+        if (result.first == ESchemaCompatibility::Incompatible) {
+            return result;
+        }
+    }
+
+    // Removed|existing -> * transitions.
+    for (const auto& [stableName, oldIndex] : stableNameToOldIndex) {
+        if (auto it = stableNameToNewIndex.find(stableName); it != stableNameToNewIndex.end()) {
+            auto newIndex = it->second;
+
+            if (oldIndex.has_value() && !newIndex.has_value()) {
+                // Existing -> removed.
+                onRemovedField(*oldIndex);
+            } else if (!oldIndex.has_value() && newIndex.has_value()) {
+                // Removed -> existing.
+                onUndeadField(stableName);
+            } else if (oldIndex.has_value() && newIndex.has_value()) {
+                // Existing -> existing.
+                if (oldFields[*oldIndex].Name != newFields[*newIndex].Name) {
+                    onRenamedField(*oldIndex, *newIndex, stableName);
+                }
+                onRetainedField(*oldIndex, *newIndex);
+            }
+        } else if (oldIndex.has_value()) {
+            // Existing -> unknown.
+            onDroppedField(*oldIndex, stableName);
+        } else {
+            // Removed -> unknown.
+            onDroppedRemovedField(stableName);
+        }
+
+        if (result.first == ESchemaCompatibility::Incompatible) {
+            return result;
+        }
+    }
+
+    if (metatype == ELogicalMetatype::VariantStruct && !areSomeFieldsRetained) {
         return {
             ESchemaCompatibility::Incompatible,
-            TError("Some members of %Qv are removed",
+            TError(
+                "None of variant struct %Qv fields are retained",
                 oldDescriptor.GetDescription()),
         };
     }
 
-    int fieldIndex = 0;
-    //
-    auto result = std::pair(ESchemaCompatibility::FullyCompatible, TError());
-    for (; fieldIndex < std::ssize(oldFields) && result.first != ESchemaCompatibility::Incompatible; ++fieldIndex) {
-        const auto& oldName = oldFields[fieldIndex].Name;
-        const auto& newName = newFields[fieldIndex].Name;
-        if (oldName != newName) {
-            result = {
-                ESchemaCompatibility::Incompatible,
-                TError(
-                    "Member name mismatch in %Qv: old name %Qv, new name %Qv",
-                    oldDescriptor.GetDescription(),
-                    oldName,
-                    newName)
-            };
-        } else {
-            const auto& oldFieldDescriptor = oldDescriptor.Field(fieldIndex);
-            const auto& newFieldDescriptor = newDescriptor.Field(fieldIndex);
-            auto currentCompatibility = CheckTypeCompatibilityImpl(oldFieldDescriptor, newFieldDescriptor);
-            result = MinCompatibility(result, currentCompatibility);
-        }
+    if (options.AllowStructFieldRenaming && options.AllowStructFieldRemoval) {
+        return result;
     }
 
-    // All added fields must be nullable
-    if (checkNewFieldsNullability) {
-        for (; fieldIndex < std::ssize(newFields) && result.first != ESchemaCompatibility::Incompatible; ++fieldIndex) {
-            const auto& newFieldDescriptor = newDescriptor.Field(fieldIndex);
-            if (!newFieldDescriptor.GetType()->IsNullable()) {
-                result = {
-                    ESchemaCompatibility::Incompatible,
-                    TError(
-                        "Newly added member %Qv is not optional",
-                        newFieldDescriptor.GetDescription())
-                        << TErrorAttribute("new_type", ToString(*newFieldDescriptor.GetType()))
-                };
-            }
+    // Unless both renaming and removal are allowed, the following restrictions apply:
+    //   a. Existing fields must retain the original order.
+    //   b. All newly added fields must be at the end.
+    std::optional<int> lastOldIndex;
+    const TStructField* lastNewField = nullptr;
+    for (const auto& field : newFields) {
+        auto oldIndexIt = stableNameToOldIndex.find(field.StableName);
+
+        // Field is newly created.
+        if (oldIndexIt == stableNameToOldIndex.end()) {
+            lastNewField = &field;
+            continue;
         }
+
+        // Field already existed. Old index cannot be null, since reusing removed
+        // field names is forbidden (see onUndeadField above).
+        auto oldIndex = oldIndexIt->second;
+        YT_VERIFY(oldIndex.has_value());
+
+        if (lastNewField) {
+            return {
+                ESchemaCompatibility::Incompatible,
+                TError(
+                    "Newly added field of %Qv cannot preceed already existing field "
+                    "unless both field renaming and removal are enabled",
+                    oldDescriptor.GetDescription())
+                    << TErrorAttribute("new_field_name", lastNewField->Name)
+                    << TErrorAttribute("existing_field_name", field.Name),
+            };
+        }
+
+        if (lastOldIndex.has_value() && *lastOldIndex > *oldIndex) {
+            return {
+                ESchemaCompatibility::Incompatible,
+                TError(
+                    "Fields of %Qv cannot be reordered unless both "
+                    "field renaming and removal are enabled",
+                    oldDescriptor.GetDescription())
+                    << TErrorAttribute("first_field_name", field.Name)
+                    << TErrorAttribute("second_field_name", oldFields[*lastOldIndex].Name),
+            };
+        }
+        lastOldIndex = oldIndex;
     }
+
     return result;
 }
 
 TCompatibilityPair CheckDictTypeCompatibility(
     const TComplexTypeFieldDescriptor& oldDescriptor,
-    const TComplexTypeFieldDescriptor& newDescriptor)
+    const TComplexTypeFieldDescriptor& newDescriptor,
+    const TTypeCompatibilityOptions& options)
 {
     auto keyCompatibility = CheckTypeCompatibilityImpl(
         oldDescriptor.DictKey(),
-        newDescriptor.DictKey());
+        newDescriptor.DictKey(),
+        options);
     if (keyCompatibility.first == ESchemaCompatibility::Incompatible) {
         return keyCompatibility;
     }
     const auto valueCompatibility = CheckTypeCompatibilityImpl(
         oldDescriptor.DictValue(),
-        newDescriptor.DictValue());
+        newDescriptor.DictValue(),
+        options);
     return MinCompatibility(keyCompatibility, valueCompatibility);
 }
 
@@ -363,7 +584,8 @@ TCompatibilityPair CheckDecimalTypeCompatibility(
 
 TCompatibilityPair CheckTypeCompatibilityImpl(
     const TComplexTypeFieldDescriptor& oldDescriptor,
-    const TComplexTypeFieldDescriptor& newDescriptor)
+    const TComplexTypeFieldDescriptor& newDescriptor,
+    const TTypeCompatibilityOptions& options)
 {
     const auto oldMetatype = oldDescriptor.GetType()->GetMetatype();
     const auto newMetatype = newDescriptor.GetType()->GetMetatype();
@@ -377,11 +599,10 @@ TCompatibilityPair CheckTypeCompatibilityImpl(
         const auto [newElement, newNesting] = UnwrapOptionalAndTagged(newDescriptor);
 
         if (oldNesting == newNesting || oldNesting == 0 && newNesting == 1) {
-            return CheckTypeCompatibilityImpl(oldElement, newElement);
+            return CheckTypeCompatibilityImpl(oldElement, newElement, options);
         } else if (oldNesting == 1 && newNesting == 0) {
-            auto elementCompatibility = CheckTypeCompatibilityImpl(oldElement, newElement);
             return MinCompatibility(
-                elementCompatibility,
+                CheckTypeCompatibilityImpl(oldElement, newElement, options),
                 CreateResultPair(ESchemaCompatibility::RequireValidation, oldElement, newElement));
         } else {
             return CreateResultPair(ESchemaCompatibility::Incompatible, oldElement, newElement);
@@ -400,40 +621,42 @@ TCompatibilityPair CheckTypeCompatibilityImpl(
             // Optional and Tagged cases were checked earlier in this function.
             THROW_ERROR_EXCEPTION("Internal error; unexpected optional or tagged");
         case ELogicalMetatype::List:
-            return CheckTypeCompatibilityImpl(oldDescriptor.ListElement(), newDescriptor.ListElement());
+            return CheckTypeCompatibilityImpl(
+                oldDescriptor.ListElement(),
+                newDescriptor.ListElement(),
+                options);
         case ELogicalMetatype::VariantStruct:
-            return CheckFieldsCompatibility(
-                oldDescriptor,
-                newDescriptor,
-                /*checkNewFieldsNullability*/ false);
         case ELogicalMetatype::Struct:
             return CheckFieldsCompatibility(
                 oldDescriptor,
                 newDescriptor,
-                /*checkNewFieldsNullability*/ true);
+                options,
+                oldMetatype);
         case ELogicalMetatype::Tuple:
             return CheckElementsCompatibility(
                 oldDescriptor,
                 newDescriptor,
+                options,
                 /*allowNewElements*/ false);
         case ELogicalMetatype::VariantTuple:
             return CheckElementsCompatibility(
                 oldDescriptor,
                 newDescriptor,
+                options,
                 /*allowNewElement*/ true);
         case ELogicalMetatype::Dict:
-            return CheckDictTypeCompatibility(oldDescriptor, newDescriptor);
+            return CheckDictTypeCompatibility(oldDescriptor, newDescriptor, options);
         case ELogicalMetatype::Decimal:
             return CheckDecimalTypeCompatibility(oldDescriptor, newDescriptor);
     }
-    THROW_ERROR_EXCEPTION("Internal error; unexpected metatype: %Qlv", oldMetatype);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 
-std::pair<TComplexTypeFieldDescriptor, int> UnwrapOptionalAndTagged(const TComplexTypeFieldDescriptor& descriptor)
+std::pair<TComplexTypeFieldDescriptor, int> UnwrapOptionalAndTagged(
+    const TComplexTypeFieldDescriptor& descriptor)
 {
     int nesting = 0;
     auto current = descriptor;
@@ -453,9 +676,13 @@ std::pair<TComplexTypeFieldDescriptor, int> UnwrapOptionalAndTagged(const TCompl
 
 TCompatibilityPair CheckTypeCompatibility(
     const NYT::NTableClient::TLogicalTypePtr& oldType,
-    const NYT::NTableClient::TLogicalTypePtr& newType)
+    const NYT::NTableClient::TLogicalTypePtr& newType,
+    const TTypeCompatibilityOptions& options)
 {
-    return CheckTypeCompatibilityImpl(TComplexTypeFieldDescriptor(oldType), TComplexTypeFieldDescriptor(newType));
+    return CheckTypeCompatibilityImpl(
+        TComplexTypeFieldDescriptor(oldType),
+        TComplexTypeFieldDescriptor(newType),
+        options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

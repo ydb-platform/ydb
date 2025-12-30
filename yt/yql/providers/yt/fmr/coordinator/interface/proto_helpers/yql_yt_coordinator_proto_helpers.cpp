@@ -81,6 +81,18 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
     if (startOperationRequest.FmrOperationSpec) {
         protoStartOperationRequest.SetFmrOperationSpec(NYT::NodeToYsonString(*startOperationRequest.FmrOperationSpec));
     }
+    for (auto& fileInfo: startOperationRequest.Files) {
+        auto protoFileInfo = FileInfoToProto(fileInfo);
+        protoStartOperationRequest.AddFiles()->Swap(&protoFileInfo);
+    }
+    for (auto& ytResourceInfo: startOperationRequest.YtResources) {
+        auto protoYtResourceInfo = YtResourceInfoToProto(ytResourceInfo);
+        protoStartOperationRequest.AddYtResources()->Swap(&protoYtResourceInfo);
+    }
+    for (auto& fmrResourceInfo: startOperationRequest.FmrResources) {
+        auto protoFmrResourceOperationInfo = FmrResourceOperationInfoToProto(fmrResourceInfo);
+        protoStartOperationRequest.AddFmrResources()->Swap(&protoFmrResourceOperationInfo);
+    }
     return protoStartOperationRequest;
 }
 
@@ -100,6 +112,15 @@ TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperat
     startOperationRequest.ClusterConnections = startOperationRequestClusterConnections;
     if (protoStartOperationRequest.HasFmrOperationSpec()) {
         startOperationRequest.FmrOperationSpec = NYT::NodeFromYsonString(protoStartOperationRequest.GetFmrOperationSpec());
+    }
+    for (ui64 i = 0; i < protoStartOperationRequest.FilesSize(); ++i) {
+        startOperationRequest.Files.emplace_back(FileInfoFromProto(protoStartOperationRequest.GetFiles(i)));
+    }
+    for (ui64 i = 0; i < protoStartOperationRequest.YtResourcesSize(); ++i) {
+        startOperationRequest.YtResources.emplace_back(YtResourceInfoFromProto(protoStartOperationRequest.GetYtResources(i)));
+    }
+    for (ui64 i = 0; i < protoStartOperationRequest.FmrResourcesSize(); ++i) {
+        startOperationRequest.FmrResources.emplace_back(FmrResourceOperationInfoFromProto(protoStartOperationRequest.GetFmrResources(i)));
     }
     return startOperationRequest;
 }

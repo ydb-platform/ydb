@@ -2561,6 +2561,8 @@ TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeS
         .Settings = TVectorIndexSettings::FromProto(proto.settings()),
         .Clusters = proto.clusters(),
         .Levels = proto.levels(),
+        .OverlapClusters = proto.overlap_clusters(),
+        .OverlapRatio = proto.overlap_ratio(),
     };
 }
 
@@ -2568,6 +2570,8 @@ void TKMeansTreeSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) 
     Settings.SerializeTo(*settings.mutable_settings());
     settings.set_clusters(Clusters);
     settings.set_levels(Levels);
+    settings.set_overlap_clusters(OverlapClusters);
+    settings.set_overlap_ratio(OverlapRatio);
 }
 
 void TKMeansTreeSettings::Out(IOutputStream& o) const {
@@ -2710,6 +2714,8 @@ TFulltextIndexSettings TFulltextIndexSettings::FromProto(const Ydb::Table::Fullt
         switch (proto.layout()) {
         case Ydb::Table::FulltextIndexSettings::FLAT:
             return ELayout::Flat;
+        case Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE:
+            return ELayout::FlatRelevance;
         default:
             return ELayout::Unspecified;
         }
@@ -2729,6 +2735,8 @@ void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& sett
         switch (*Layout) {
         case ELayout::Flat:
             return Ydb::Table::FulltextIndexSettings::FLAT;
+        case ELayout::FlatRelevance:
+            return Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
         case ELayout::Unspecified:
             return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
         }

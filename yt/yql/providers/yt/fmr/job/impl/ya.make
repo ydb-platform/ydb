@@ -6,7 +6,10 @@ SRCS(
     yql_yt_raw_table_queue_reader.cpp
     yql_yt_raw_table_queue_writer.cpp
     yql_yt_table_data_service_reader.cpp
+    yql_yt_table_data_service_base_writer.cpp
     yql_yt_table_data_service_writer.cpp
+    yql_yt_table_data_service_sorted_writer.cpp
+    yql_yt_table_queue_writer_with_lock.cpp
 )
 
 PEERDIR(

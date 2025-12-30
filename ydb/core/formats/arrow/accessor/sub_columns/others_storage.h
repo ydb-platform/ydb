@@ -3,6 +3,7 @@
 #include "stats.h"
 
 #include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/common/container.h>
 
@@ -19,7 +20,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TGeneralContainer>, Records);
 
 public:
-    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view path, const ui32 recordsCount) const;
+    TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path, const ui32 recordsCount) const;
 
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;

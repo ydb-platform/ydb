@@ -1,6 +1,5 @@
 # Изменение конфигураций через CMS
 
-{% include [deprecated](_includes/deprecated.md) %}
 
 {% note info %}
 

@@ -428,7 +428,7 @@ public:
             } else {
                 *Mon.BandwidthPLogRecordHeader += sizeof(TLogPageHeader);
             }
-            P_LOG(PRI_DEBUG, BPD61, SelfInfo() << " LogPageHeader", 
+            P_LOG(PRI_DEBUG, BPD61, SelfInfo() << " LogPageHeader",
                     (ChunkIdx, ChunkIdx), (SectorIdx, SectorIdx), (Nonce, Nonce));
             Write(&header, sizeof(TLogPageHeader), reqId, traceId);
         }

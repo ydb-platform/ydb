@@ -2,13 +2,11 @@
 
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 bool TLeafCommand::Prompt(TConfig& config) {
-    Y_UNUSED(config);
     if (Dangerous && !config.AssumeYes) {
-        return AskPrompt("This command may damage your cluster, do you want to continue?", false);
+        return AskYesOrNo("This command may damage your cluster, do you want to continue?", /* defaultAnswer */ false);
     }
 
     return true;
@@ -60,5 +58,4 @@ void TYdbOperationCommand::Config(TConfig& config) {
         .RequiredArgument("ms").StoreResult(&OperationTimeout);
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

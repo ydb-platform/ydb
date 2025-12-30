@@ -1217,14 +1217,9 @@ void TYsonStructParameter<TValue>::WriteTypeSchema(
 }
 
 template <class TValue>
-void TYsonStructParameter<TValue>::TraverseParameter(TYsonStructParameterVisitor visitor, const NYPath::TYPath& path) const
+void TYsonStructParameter<TValue>::TraverseParameter(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path) const
 {
-    auto parameterPath = path + "/" + NYPath::ToYPathLiteral(Key_);
-    visitor({
-        .Parameter = this,
-        .Path = parameterPath,
-    });
-    TraverseYsonStruct<TValue>(visitor, parameterPath);
+    TraverseYsonStruct<TValue>(visitor, path);
 }
 
 template <class TValue>

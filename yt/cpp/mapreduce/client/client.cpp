@@ -100,6 +100,30 @@ ITransactionPtr TClientBase::StartTransaction(
     return MakeIntrusive<TTransaction>(RawClient_, GetParentClientImpl(), Context_, TransactionId_, options);
 }
 
+TDistributedWriteFileSessionWithCookies TClientBase::StartDistributedWriteFileSession(
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options)
+{
+    return RequestWithRetry<TDistributedWriteFileSessionWithCookies>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, cookieCount, &richPath, &options] (TMutationId& mutationId) {
+            return RawClient_->StartDistributedWriteFileSession(mutationId, TransactionId_, richPath, cookieCount, options);
+        });
+}
+
+TDistributedWriteTableSessionWithCookies TClientBase::StartDistributedWriteTableSession(
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options)
+{
+    return RequestWithRetry<TDistributedWriteTableSessionWithCookies>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, cookieCount, &richPath, &options] (TMutationId& mutationId) {
+            return RawClient_->StartDistributedWriteTableSession(mutationId, TransactionId_, richPath, cookieCount, options);
+        });
+}
+
 TNodeId TClientBase::Create(
     const TYPath& path,
     ENodeType type,
@@ -1569,19 +1593,6 @@ void TClient::ResumeOperation(
         });
 }
 
-TDistributedWriteTableSessionWithCookies TClient::StartDistributedWriteTableSession(
-    const TRichYPath& richPath,
-    i64 cookieCount,
-    const TStartDistributedWriteTableOptions& options)
-{
-    CheckShutdown();
-    return RequestWithRetry<TDistributedWriteTableSessionWithCookies>(
-        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, cookieCount, &richPath, &options] (TMutationId& mutationId) {
-            return RawClient_->StartDistributedWriteTableSession(mutationId, richPath, cookieCount, options);
-        });
-}
-
 void TClient::PingDistributedWriteTableSession(
     const TDistributedWriteTableSession& session,
     const TPingDistributedWriteTableOptions& options)
@@ -1604,19 +1615,6 @@ void TClient::FinishDistributedWriteTableSession(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &session, &results, &options] (TMutationId& mutationId) {
             RawClient_->FinishDistributedWriteTableSession(mutationId, session, results, options);
-        });
-}
-
-TDistributedWriteFileSessionWithCookies TClient::StartDistributedWriteFileSession(
-    const TRichYPath& richPath,
-    i64 cookieCount,
-    const TStartDistributedWriteFileOptions& options)
-{
-    CheckShutdown();
-    return RequestWithRetry<TDistributedWriteFileSessionWithCookies>(
-        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, cookieCount, &richPath, &options] (TMutationId& mutationId) {
-            return RawClient_->StartDistributedWriteFileSession(mutationId, richPath, cookieCount, options);
         });
 }
 

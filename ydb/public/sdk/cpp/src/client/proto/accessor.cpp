@@ -137,4 +137,31 @@ NImport::EImportProgress TProtoAccessor::FromProto(Ydb::Import::ImportProgress::
     }
 }
 
+Ydb::Import::ImportFromS3Settings::IndexPopulationMode TProtoAccessor::GetProto(NImport::EIndexPopulationMode value) {
+    switch (value) {
+    case NImport::EIndexPopulationMode::Build:
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD;
+    case NImport::EIndexPopulationMode::Import:
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
+    case NImport::EIndexPopulationMode::Auto:
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO;
+    default:
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_UNSPECIFIED;
+    }
+}
+
+NImport::EIndexPopulationMode TProtoAccessor::FromProto(Ydb::Import::ImportFromS3Settings::IndexPopulationMode value) {
+    switch (value) {
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_UNSPECIFIED:
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD:
+        return NImport::EIndexPopulationMode::Build;
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+        return NImport::EIndexPopulationMode::Import;
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
+        return NImport::EIndexPopulationMode::Auto;
+    default:
+        return NImport::EIndexPopulationMode::Unknown;
+    }
+}
+
 } // namespace NYdb

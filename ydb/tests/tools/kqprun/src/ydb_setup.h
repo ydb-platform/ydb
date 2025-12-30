@@ -49,6 +49,8 @@ public:
 
     TRequestResult QueryRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets, TProgressCallback progressCallback) const;
 
+    TRequestResult QueryRequest(const TRequestOptions& query) const;
+
     TRequestResult YqlScriptRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 
     TRequestResult GetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID, TExecutionMeta& meta) const;
@@ -68,6 +70,8 @@ public:
     void StartTraceOpt() const;
 
     static void StopTraceOpt();
+
+    TString GetDefaultDatabase() const;
 
 private:
     class TImpl;

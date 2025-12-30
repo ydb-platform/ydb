@@ -4,14 +4,17 @@ SRCS(
     aws.cpp
     cert_format_converter.cpp
     client_command_options.cpp
+    colors.cpp
     command.cpp
     command_utils.cpp
     common.cpp
     csv_parser.cpp
+    describe.cpp
     examples.cpp
     format.cpp
+    ftxui.cpp
     interactive.cpp
-    interruptible.cpp
+    interruptable.cpp
     normalize_path.cpp
     parameter_stream.cpp
     parameters.cpp
@@ -23,6 +26,7 @@ SRCS(
     progress_bar.cpp
     progress_indication.cpp
     query_stats.cpp
+    query_utils.cpp
     recursive_list.cpp
     recursive_remove.cpp
     retry_func.cpp
@@ -31,13 +35,16 @@ SRCS(
     sys.cpp
     tabbed_table.cpp
     waiting_bar.cpp
+    ydb_path.cpp
     ydb_updater.cpp
     yt.cpp
 )
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
+    contrib/libs/ftxui
     contrib/libs/openssl
+    contrib/restricted/patched/replxx
     library/cpp/getopt
     library/cpp/json/writer
     library/cpp/regex/pcre
@@ -56,8 +63,10 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/client/types/credentials
     ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange
+    ydb/public/sdk/cpp/src/client/types/status
     ydb/library/arrow_parquet
     ydb/library/plan2svg
+    ydb/library/yverify_stream
     ydb/public/lib/ydb_cli/common/ini_config
     ydb/public/lib/ydb_cli/common/yql_parser
 )

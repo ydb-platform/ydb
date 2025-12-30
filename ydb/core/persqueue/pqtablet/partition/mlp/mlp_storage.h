@@ -18,6 +18,7 @@ class TStorage {
     static constexpr size_t MAX_MESSAGES = 48000;
     static constexpr size_t MIN_MESSAGES = 100;
     static constexpr size_t MAX_PROCESSING_COUNT = 1023;
+    static constexpr TDuration VACUUM_INTERVAL = TDuration::Seconds(1);
 
 public:
     // The maximum number of messages per flight. If a larger number is required, then you need
@@ -51,7 +52,7 @@ public:
 
     struct TMessage {
         ui32 Status: 3 = static_cast<ui32>(EMessageStatus::Unprocessed);
-        ui32 Reserve: 3;
+        ui32 Reserve: 3 = 0;
         // It stores how many times the message was submitted to work.
         // If the value is large, then the message has been processed several times,
         // but it has never been processed successfully.
@@ -64,7 +65,10 @@ public:
         // in the topic.
         ui32 MessageGroupIdHash: 31 = 0;
         ui32 WriteTimestampDelta: 26 = 0;
-        ui32 Reserve2: 6;
+        ui32 Reserve2: 6 = 0;
+        ui32 LockingTimestampMilliSecondsDelta: 26 = 0;
+        ui32 LockingTimestampSign: 1 = 0;
+        ui32 Reserve3: 5 = 0;
 
         EMessageStatus GetStatus() const {
             return static_cast<EMessageStatus>(Status);
@@ -74,7 +78,7 @@ public:
             Status = static_cast<ui32>(status);
         }
     };
-    static_assert(sizeof(TMessage) == sizeof(ui32) * 3);
+    static_assert(sizeof(TMessage) == sizeof(ui32) * 4);
 
     struct TMessageWrapper {
         bool SlowZone;
@@ -83,6 +87,7 @@ public:
         ui32 ProcessingCount;
         TInstant ProcessingDeadline;
         TInstant WriteTimestamp;
+        TInstant LockingTimestamp;
     };
 
     struct TMessageIterator {
@@ -138,19 +143,6 @@ public:
         std::optional<TInstant> BaseWriteTimestamp;
     };
 
-    struct TMetrics {
-        size_t InflyMessageCount = 0;
-        size_t UnprocessedMessageCount = 0;
-        size_t LockedMessageCount = 0;
-        size_t LockedMessageGroupCount = 0;
-        size_t DelayedMessageCount = 0;
-        size_t CommittedMessageCount = 0;
-        size_t DeadlineExpiredMessageCount = 0;
-        size_t DLQMessageCount = 0;
-
-        size_t TotalScheduledToDLQMessageCount = 0;
-    };
-
     TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages = MIN_MESSAGES, size_t maxMessages = MAX_MESSAGES);
 
     void SetKeepMessageOrder(bool keepMessageOrder);
@@ -169,6 +161,7 @@ public:
     std::pair<const TMessage*, bool> GetMessage(ui64 message);
     std::deque<TDLQMessage> GetDLQMessages();
     const std::unordered_set<ui32>& GetLockedMessageGroupsId() const;
+    void InitMetrics();
 
 
     struct TPosition {
@@ -214,16 +207,20 @@ private:
     ui64 NormalizeDeadline(TInstant deadline);
 
     ui64 DoLock(ui64 offset, TMessage& message, TInstant& deadline);
-    bool DoCommit(ui64 offset);
+    bool DoCommit(ui64 offset, size_t& totalMetrics);
     bool DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);
     bool DoUndelay(ui64 offset);
 
     void UpdateFirstUncommittedOffset();
 
+    TInstant GetMessageLockingTime(const TMessage& message) const;
+    void SetMessageLockingTime(TMessage& message, const TInstant& lockingTime, const TInstant& baseDeadline) const;
+    void UpdateMessageLockingDurationMetrics(const TMessage& message);
     void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
 
     void RemoveMessage(ui64 offset, const TMessage& message);
+    void UpdateMessageMetrics(const TMessage& message);
 
     std::optional<ui32> GetRetentionDeadlineDelta() const;
 
@@ -243,6 +240,7 @@ private:
 
     TInstant BaseDeadline;
     TInstant BaseWriteTimestamp;
+    TInstant NextVacuumRun;
 
     std::deque<TMessage> Messages;
     std::map<ui64, TMessage> SlowMessages;

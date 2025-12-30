@@ -1,7 +1,8 @@
 #include <thread>
 #include <library/cpp/resource/resource.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
-#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_partitioner.h>
+#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_fmr_partitioner.h>
+#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_ordered_partitioner.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -82,7 +83,9 @@ public:
 
         for (auto& currentTaskParams: taskParams) {
             TString taskId = GenerateId();
-            TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, currentTaskParams, request.SessionId, request.ClusterConnections, fmrOperationSpec);
+            auto fmrResourceTasks = PartitionFmrResourcesIntoTasks(request.FmrResources, fmrOperationSpec);
+
+            TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, currentTaskParams, request.SessionId, request.ClusterConnections, request.Files, request.YtResources, fmrResourceTasks, fmrOperationSpec);
             Tasks_[taskId] = TCoordinatorTaskInfo{.Task = createdTask, .TaskStatus = ETaskStatus::Accepted, .OperationId = operationId, .NumRetries = 0};
             TasksToRun_.emplace(createdTask, taskId);
             taskIds.emplace(taskId);
@@ -269,7 +272,13 @@ public:
             }
         }
 
-        return NThreading::MakeFuture(THeartbeatResponse{.TasksToRun = currentTasksToRun, .TaskToDeleteIds = TaskToDeleteIds_, .NeedToRestart = false});
+        auto heartbeatResponseFuture =  NThreading::MakeFuture(THeartbeatResponse{
+            .TasksToRun = currentTasksToRun,
+            .TaskToDeleteIds = TaskToDeleteIds_,
+            .NeedToRestart = false
+        });
+
+        return heartbeatResponseFuture;
     }
 
     NThreading::TFuture<TGetFmrTableInfoResponse> GetFmrTableInfo(const TGetFmrTableInfoRequest& request) override {
@@ -547,21 +556,77 @@ private:
         return settings;
     }
 
-    std::vector<TTaskParams> PartitionOperationIntoSeveralTasks(const TOperationParams& operationParams, const NYT::TNode& fmrOperationSpec, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) {
-        auto fmrPartitionerSettings = GetFmrPartitionerSettings(fmrOperationSpec);
+    TOrderedPartitionSettings GetOrderedPartitionerSettings(const NYT::TNode& fmrOperationSpec) {
+        TOrderedPartitionSettings settings;
+        settings.FmrPartitionSettings = GetFmrPartitionerSettings(fmrOperationSpec);
+        settings.YtPartitionSettings = GetYtPartitionerSettings(fmrOperationSpec);
+        settings.YtPartitionSettings.PartitionMode = NYT::ETablePartitionMode::Ordered;
+        return settings;
+    }
+
+    bool CheckIsOperationOrdered(const TOperationParams& operationParams) {
+        if (auto mapOptions = std::get_if<TMapOperationParams>(&operationParams)) {
+                return mapOptions->IsOrdered;
+        }
+        return false;
+    }
+
+    TOperationPartitions PartitionOperationIntoSeveralTasks(const TOperationParams& operationParams, const NYT::TNode& fmrOperationSpec, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections) {
+        bool isOrdered = CheckIsOperationOrdered(operationParams);
         auto ytPartitionerSettings = GetYtPartitionerSettings(fmrOperationSpec);
-        auto fmrPartitioner = TFmrPartitioner(PartIdsForTables_,PartIdStats_, fmrPartitionerSettings); // TODO - fix this
+        auto partitionId = GenerateId();
+        YQL_CLOG(TRACE, FastMapReduce)
+        << "PartitionOperationIntoSeveralTasks: partitionId=" << partitionId
+        << ", isOrdered=" << isOrdered
+        << ", opIndex=" << operationParams.index();
 
-        std::vector<TYtTableRef> ytInputTables;
-        std::vector<TFmrTableRef> fmrInputTables;
-        GetOperationInputTables(ytInputTables, fmrInputTables, operationParams);
+        TPartitionResult partitionResult;
+        if (!isOrdered) {
+            auto fmrPartitionerSettings = GetFmrPartitionerSettings(fmrOperationSpec);
+            auto fmrPartitioner = TFmrPartitioner(PartIdsForTables_,PartIdStats_, fmrPartitionerSettings);
+            std::vector<TYtTableRef> ytInputTables;
+            std::vector<TFmrTableRef> fmrInputTables;
+            GetOperationInputTables(ytInputTables, fmrInputTables, operationParams);
+            partitionResult = PartitionInputTablesIntoTasks(ytInputTables, fmrInputTables, fmrPartitioner, YtCoordinatorService_, clusterConnections, ytPartitionerSettings);
+        } else {
+            auto orderedPartitionerSettings = GetOrderedPartitionerSettings(fmrOperationSpec);
+            auto orderedPartitioner = TOrderedPartitioner(PartIdsForTables_, PartIdStats_, orderedPartitionerSettings);
 
-        TPartitionResult partitionResult = PartitionInputTablesIntoTasks(ytInputTables, fmrInputTables, fmrPartitioner, YtCoordinatorService_, clusterConnections, ytPartitionerSettings);
+            TOperationInputTablesGetter tablesGetter{};
+            std::visit(tablesGetter, operationParams);
+            auto& inputTables = tablesGetter.OperationTableRef;
+            partitionResult = PartitionInputTablesIntoTasksOrdered(inputTables, orderedPartitioner, YtCoordinatorService_, clusterConnections);
+        }
         if (!partitionResult.PartitionStatus) {
             ythrow yexception() << "Failed to partition input tables into tasks";
             // TODO - return FAILED_PARTITIONING status instead.
         }
         return GetOutputTaskParams(partitionResult, operationParams);
+    }
+
+    std::vector<TFmrResourceTaskInfo> PartitionFmrResourcesIntoTasks(const std::vector<TFmrResourceOperationInfo>& fmrResources, const NYT::TNode& fmrOperationSpec) {
+        // need to split fmrResources into tasks and pass to JobPreparer, for simpliclty split each fmr table separately.
+        std::vector<TFmrResourceTaskInfo> fmrResourceTasks;
+
+        auto fmrPartitionerSettings = GetFmrPartitionerSettings(fmrOperationSpec);
+        auto fmrPartitioner = TFmrPartitioner(PartIdsForTables_,PartIdStats_, fmrPartitionerSettings);
+        for (auto& fmrResource: fmrResources) {
+            TFmrResourceTaskInfo curFmrResourceTaskInfo;
+            auto [partition, partitionSuccess] = fmrPartitioner.PartitionFmrTablesIntoTasks({fmrResource.FmrTable});
+            if (!partitionSuccess) {
+                throw yexception() << "Failed to partition fmrResources into tasks";
+            }
+
+            for (auto& partitionTable: partition) {
+                YQL_ENSURE(partitionTable.Inputs.size() == 1);
+                TFmrTableInputRef fmrTableInputRef = std::get<TFmrTableInputRef>(partitionTable.Inputs[0]);
+                curFmrResourceTaskInfo.FmrResourceTasks.emplace_back(fmrTableInputRef);
+            }
+
+            curFmrResourceTaskInfo.Alias = fmrResource.Alias;
+            fmrResourceTasks.emplace_back(curFmrResourceTaskInfo);
+        }
+        return fmrResourceTasks;
     }
 
     void GetOperationInputTables(std::vector<TYtTableRef>& ytInputTables, std::vector<TFmrTableRef>& fmrInputTables, const TOperationParams& operationParams) {
@@ -580,7 +645,7 @@ private:
         }
     }
 
-    std::vector<TTaskParams> GetOutputTaskParams(const TPartitionResult& partitionResult, const TOperationParams& operationParams) {
+    TOperationPartitions GetOutputTaskParams(const TPartitionResult& partitionResult, const TOperationParams& operationParams) {
         TOutputTaskParamsGetter taskGetter{.PartitionResult = partitionResult};
         std::visit(taskGetter, operationParams);
         return taskGetter.TaskParams;
@@ -840,6 +905,7 @@ private:
 
                 mapTaskParams.Output = fmrTableOutputRefs;
                 mapTaskParams.SerializedMapJobState = mapOperationParams.SerializedMapJobState;
+                mapTaskParams.IsOrdered = mapOperationParams.IsOrdered;
                 TaskParams.emplace_back(mapTaskParams);
             }
         }

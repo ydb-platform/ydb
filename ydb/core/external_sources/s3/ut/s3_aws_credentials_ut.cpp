@@ -77,14 +77,14 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
         const TString query = fmt::format(R"(
-            CREATE OBJECT id (TYPE SECRET) WITH (value=`minio`);
-            CREATE OBJECT key (TYPE SECRET) WITH (value=`minio123`);
+            CREATE SECRET id WITH (value="minio");
+            CREATE SECRET key WITH (value="minio123");
             CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="{location}",
                 AUTH_METHOD="AWS",
-                AWS_ACCESS_KEY_ID_SECRET_NAME="id",
-                AWS_SECRET_ACCESS_KEY_SECRET_NAME="key",
+                AWS_ACCESS_KEY_ID_SECRET_PATH="id",
+                AWS_SECRET_ACCESS_KEY_SECRET_PATH="key",
                 AWS_REGION="ru-central-1"
             );
             GRANT ALL ON `{external_source}` TO `root1@builtin`;
@@ -171,13 +171,17 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
 
                 NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
                 UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS_C(readyOp.Status().GetIssues().ToString(), "secret with name 'id' not found", readyOp.Status().GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(
+                    readyOp.Status().GetIssues().ToString(),
+                    "secrets `/Root/id`, `/Root/key` not found",
+                    readyOp.Status().GetIssues().ToString()
+                );
             }
             {
                 const TString query = R"(
-                    CREATE OBJECT `id:root1@builtin` (TYPE SECRET_ACCESS);
-                    CREATE OBJECT `key:root1@builtin` (TYPE SECRET_ACCESS);
-                    )";
+                    GRANT SELECT ROW ON `/Root/id` TO `root1@builtin`;
+                    GRANT SELECT ROW ON `/Root/key` TO `root1@builtin`;
+                )";
                 auto result = session.ExecuteSchemeQuery(query).GetValueSync();
                 UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
             }
@@ -261,14 +265,14 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
         const TString query = fmt::format(R"(
-            CREATE OBJECT id (TYPE SECRET) WITH (value=`minio`);
-            CREATE OBJECT key (TYPE SECRET) WITH (value=`minio123`);
+            CREATE SECRET id WITH (value="minio");
+            CREATE SECRET key WITH (value="minio123");
             CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
                 SOURCE_TYPE="ObjectStorage",
                 LOCATION="{location}",
                 AUTH_METHOD="AWS",
-                AWS_ACCESS_KEY_ID_SECRET_NAME="id",
-                AWS_SECRET_ACCESS_KEY_SECRET_NAME="key",
+                AWS_ACCESS_KEY_ID_SECRET_PATH="id",
+                AWS_SECRET_ACCESS_KEY_SECRET_PATH="key",
                 AWS_REGION="ru-central-1"
             );
             )",

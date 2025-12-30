@@ -95,9 +95,15 @@ message TTableStats {
     uint64 DataWeight = 3;
 }
 
+message TSortedChunkStats {
+    bool IsSorted = 1;
+    string FirstRowKeys = 2;
+}
+
 message TChunkStats {
     uint64 Rows = 1;
     uint64 DataWeight = 2;
+    TSortedChunkStats SortedChunkStats = 3;
 }
 
 message TTableChunkStats {
@@ -166,12 +172,14 @@ message TMapOperationParams {
     repeated TOperationTableRef Input = 1;
     repeated TFmrTableRef Output = 2;
     bytes SerializedMapJobState = 3;
+    bool IsOrdered = 4;
 }
 
 message TMapTaskParams {
     TTaskTableInputRef Input = 1;
     repeated TFmrTableOutputRef Output = 2;
     bytes SerializedMapJobState = 3;
+    bool IsOrdered = 4;
 }
 
 message TOperationParams {
@@ -198,6 +206,30 @@ message TClusterConnection {
     optional string Token = 3;
 }
 
+message TFileInfo {
+    string LocalPath = 1;
+    string Md5Key = 2;
+    string Alias = 3;
+}
+
+message TYtResourceInfo {
+    string RichPath = 1;
+    string YtServerName = 2;
+    string Token = 3;
+    string LocalPath = 4;
+}
+
+message TFmrResourceOperationInfo {
+    TFmrTableRef FmrTable = 1;
+    string Alias = 2;
+}
+
+message TFmrResourceTaskInfo {
+    repeated TFmrTableInputRef FmrResourceTasks = 1;
+    string LocalPath = 2;
+    string Alias = 3;
+}
+
 message TTask {
     ETaskType TaskType = 1;
     string TaskId = 2;
@@ -206,6 +238,10 @@ message TTask {
     optional uint32 NumRetries = 5;
     map<string, TClusterConnection> ClusterConnections = 6;
     optional string JobSettings = 7;
+    repeated TFileInfo Files = 8;
+    repeated TYtResourceInfo YtResources = 9;
+    repeated TFmrResourceTaskInfo FmrResources = 10;
+    optional string JobEnvironmentDir = 11;
 }
 
 message TTaskState {

@@ -369,6 +369,12 @@ public:
         ValidClusters.insert(cluster);
     }
 
+    bool IsValidCluster(const TString& cluster) const {
+        return ValidClusters.contains(cluster);
+    }
+
+    const THashSet<TString>& GetValidClusters() const;
+
     template <typename TType, EConfSettingType SettingType>
     TSettingHandlerImpl<TType, SettingType>& AddSetting(const TString& name, TConfSetting<TType, SettingType>& setting) {
         TIntrusivePtr<TSettingHandlerImpl<TType, SettingType>> handler = new TSettingHandlerImpl<TType, SettingType>(name, setting);
@@ -422,9 +428,6 @@ public:
     void Enumerate(std::function<void(std::string_view)> callback);
 
 protected:
-    // FIXME switch usages to an acesssor
-    const THashSet<TString>& GetValidClusters() const;
-
     THashSet<TString> ValidClusters; // NOLINT(readability-identifier-naming)
     THashMap<TString, TSettingHandler::TPtr> Handlers_;
     TSet<TString> Names_;

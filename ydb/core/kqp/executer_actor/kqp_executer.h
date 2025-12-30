@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
 namespace NKikimr {
@@ -35,6 +36,8 @@ struct TEvKqpExecuter {
 
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;
+        ui64 LocksBrokenAsBreaker = 0;
+        ui64 LocksBrokenAsVictim = 0;
 
         THashSet<ui32> ParticipantNodes;
 
@@ -156,7 +159,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const std::optional<TLlvmSettings>& llvmSettings,
-    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation);
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,

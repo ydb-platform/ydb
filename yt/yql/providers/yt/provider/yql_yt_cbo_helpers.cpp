@@ -50,7 +50,7 @@ IGraphTransformer::TStatus ExtractInMemorySize(
         YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
         return status;
     }
-    if (leftLeaf) {
+    if (leftLeaf && leftTablesReady) {
         const bool needPayload = op->JoinKind->IsAtom("Inner") || op->JoinKind->IsAtom("Right");
         const auto& label = labels.Inputs[0];
         TVector<TString> leftJoinKeyList(leftJoinKeys.begin(), leftJoinKeys.end());
@@ -69,7 +69,7 @@ IGraphTransformer::TStatus ExtractInMemorySize(
         }
     }
 
-    if (rightLeaf) {
+    if (rightLeaf && rightTablesReady) {
         const bool needPayload = op->JoinKind->IsAtom("Inner") || op->JoinKind->IsAtom("Left");
         const auto& label = labels.Inputs[numLeaves - 1];
         TVector<TString> rightJoinKeyList(rightJoinKeys.begin(), rightJoinKeys.end());
@@ -97,6 +97,16 @@ IGraphTransformer::TStatus CollectCboStatsLeaf(
     const TYtState::TPtr& state,
     TExprContext& ctx)
 {
+    TVector<TYtPathInfo::TPtr> tables;
+    for (auto path: leaf.Section.Paths()) {
+        auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
+        if (!pathInfo->Table->Stat) {
+            // This leaf is not ready, it's ok for partial reorder mode (pragma yt.CostBasedOptimizerPartial).
+            return IGraphTransformer::TStatus::Ok;
+        }
+        tables.push_back(pathInfo);
+    }
+
     TVector<TString> requestedColumnList;
     auto labels = JoinLeafLabels(leaf.Label);
     for (const auto& relName : labels) {
@@ -104,12 +114,6 @@ IGraphTransformer::TStatus CollectCboStatsLeaf(
         if (columnsPos != relJoinColumns.end()) {
             std::copy(columnsPos->second.begin(), columnsPos->second.end(), std::back_inserter(requestedColumnList));
         }
-    }
-
-    TVector<TYtPathInfo::TPtr> tables;
-    for (auto path: leaf.Section.Paths()) {
-        auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
-        tables.push_back(pathInfo);
     }
 
     IYtGateway::TPathStatResult result;

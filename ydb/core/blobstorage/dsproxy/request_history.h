@@ -58,7 +58,7 @@ public:
         ui8 OrderNumber;
         ui8 Status;
         TString ErrorReason;
-        
+
         TVResponseEntry(TMonotonic startTime, ui8 orderNumber, NKikimrProto::EReplyStatus status, const TString& errorReason)
             : TBaseEntry(startTime)
             , OrderNumber(orderNumber)
@@ -73,7 +73,7 @@ public:
                 << " NodeId# "      << info->GetActorId(OrderNumber).NodeId()
                 << " Status# "      << NKikimrProto::EReplyStatus_Name(Status);
             if (ErrorReason) {
-                str << "ErrorReason# \"" << ErrorReason << "\"";
+                str << " ErrorReason# \"" << ErrorReason << "\"";
             }
             str << " }";
         }
@@ -146,7 +146,7 @@ private:
 
     const TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TMonotonic StartTime;
-    
+
     constexpr static ui32 TypicalHistorySize = TypicalPartsInBlob * 2;
     TStackVec<TEntry, TypicalHistorySize> Entries;
     TStackVec<TEntry, 2> WaitingEntries;

@@ -178,7 +178,7 @@ bool IsCreate(ETxType t) {
             return false; // IsCreate
         case TxInvalid:
         case TxAllocatePQ:
-            Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
+            Y_DEBUG_ABORT("UNREACHABLE");
             Y_UNREACHABLE();
 
         //NOTE: intentionally no default: case
@@ -310,7 +310,7 @@ bool IsDrop(ETxType t) {
             return false; // IsDrop
         case TxInvalid:
         case TxAllocatePQ:
-            Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
+            Y_DEBUG_ABORT("UNREACHABLE");
             Y_UNREACHABLE();
 
         //NOTE: intentionally no default: case
@@ -441,7 +441,7 @@ bool CanDeleteParts(ETxType t) {
             return false; // CanDeleteParts
         case TxInvalid:
         case TxAllocatePQ:
-            Y_DEBUG_ABORT_UNLESS("UNREACHABLE");
+            Y_DEBUG_ABORT("UNREACHABLE");
             Y_UNREACHABLE();
 
         //NOTE: intentionally no default: case

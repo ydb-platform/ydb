@@ -30,7 +30,7 @@ namespace NKikimr {
     {}
 
     IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon) {
-        return new TBlobStorageGroupProxy(groupId, true, nodeMon, 
+        return new TBlobStorageGroupProxy(groupId, true, nodeMon,
                 TBlobStorageProxyParameters{
                     .Controls = TBlobStorageProxyControlWrappers{
                         .EnablePutBatching = TControlWrapper(false, false, true),
@@ -74,10 +74,11 @@ namespace NKikimr {
             case NKikimrProto::BLOCKED:
             case NKikimrProto::DEADLINE:
             case NKikimrProto::RACE:
-            case NKikimrProto::ERROR:
                 return NActors::NLog::EPriority::PRI_INFO;
             case NKikimrProto::NODATA:
                 return NActors::NLog::EPriority::PRI_NOTICE;
+            case NKikimrProto::ERROR:
+                return NActors::NLog::EPriority::PRI_ERROR;
             default:
                 return NActors::NLog::EPriority::PRI_ERROR;
         }

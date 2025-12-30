@@ -18,6 +18,11 @@ bool IsStableReplicaState(ETableReplicaState state)
         state == ETableReplicaState::Disabled;
 }
 
+std::string GetTabletCellBundlePath(const std::string& name)
+{
+    return "//sys/tablet_cell_bundles/" + name;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTabletClient

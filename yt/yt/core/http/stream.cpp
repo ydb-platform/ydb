@@ -58,11 +58,12 @@ http_parser_settings THttpParser::GetParserSettings()
 
 const http_parser_settings ParserSettings = THttpParser::GetParserSettings();
 
-THttpParser::THttpParser(http_parser_type parserType)
+THttpParser::THttpParser(http_parser_type parserType, std::optional<EMethod> requestMethod)
     : ParserType_(parserType)
+    , RequestMethod_(requestMethod)
     , Headers_(New<THeaders>())
 {
-    http_parser_init(&Parser_, parserType);
+    http_parser_init(&Parser_, ParserType_);
     Parser_.data = reinterpret_cast<void*>(this);
 }
 
@@ -222,7 +223,17 @@ int THttpParser::OnHeadersComplete(http_parser* parser)
 
     that->State_ = EParserState::HeadersFinished;
 
-    return 0;
+    // https://datatracker.ietf.org/doc/html/rfc2616#page-33
+    /* Callbacks should return non-zero to indicate an error. The parser will
+     * then halt execution.
+     *
+     * The one exception is on_headers_complete. In a HTTP_RESPONSE parser
+     * returning '1' from on_headers_complete will tell the parser that it
+     * should not expect a body. This is used when receiving a response to a
+     * HEAD request which may contain 'Content-Length' or 'Transfer-Encoding:
+     * chunked' headers that indicate the presence of a body.
+     */
+    return (that->ParserType_ == HTTP_RESPONSE && that->RequestMethod_ == EMethod::Head) ? 1 : 0;
 }
 
 int THttpParser::OnBody(http_parser* parser, const char* at, size_t length)
@@ -254,18 +265,24 @@ THttpInput::THttpInput(
     const TNetworkAddress& remoteAddress,
     IInvokerPtr readInvoker,
     EMessageType messageType,
+    std::optional<EMethod> requestMethod,
     THttpIOConfigPtr config)
     : Connection_(std::move(connection))
     , RemoteAddress_(remoteAddress)
     , MessageType_(messageType)
+    , RequestMethod_(requestMethod)
     , Config_(std::move(config))
     , ReadInvoker_(std::move(readInvoker))
     , InputBuffer_(TSharedMutableRef::Allocate<THttpParserTag>(Config_->ReadBufferSize, {.InitializeStorage = false}))
-    , Parser_(messageType == EMessageType::Request ? HTTP_REQUEST : HTTP_RESPONSE)
+    , Parser_(
+        messageType == EMessageType::Request ? HTTP_REQUEST : HTTP_RESPONSE,
+        requestMethod)
     , StartByteCount_(Connection_->GetReadByteCount())
     , StartStatistics_(Connection_->GetReadStatistics())
     , LastProgressLogTime_(TInstant::Now())
-{ }
+{
+    YT_VERIFY((MessageType_ != EMessageType::Response) || requestMethod.has_value());
+}
 
 std::pair<int, int> THttpInput::GetVersion()
 {

@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       pull_request_input:
-        description: 'Pull request, use with pull/* prefix, ex. pull/12345'
+        description: 'Pull request number (overrides default branches), ex: 12345'
         required: false
         default: ''
       initial_version_ref:
@@ -37,7 +37,7 @@ jobs:
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/tests/compatibility/
-      branches: ${{ inputs.pull_request_input || github.ref_name }}
+      branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || github.ref_name }}
       build_preset: ${{ matrix.build_preset }}
       additional_ya_make_args: >-
         ${{

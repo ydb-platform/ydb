@@ -199,7 +199,9 @@ private:
     };
 
     void HandleHttpError(TKeepAliveHttpClient::THttpCode statusCode, TString serializedResponse) {
-        if (statusCode = HTTP_OK) return;
+        if (statusCode == HTTP_OK) {
+            return;
+        }
         NProto::TErrorResponse protoErrorResponse;
         YQL_ENSURE(protoErrorResponse.ParseFromString(serializedResponse));
         ythrow yexception() << protoErrorResponse.GetErrorMessage();

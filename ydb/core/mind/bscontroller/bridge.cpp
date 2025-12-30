@@ -264,7 +264,7 @@ void TBlobStorageController::CheckUnsyncedBridgePiles() {
 }
 
 void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
-        TSet<ui32>& groupIdsToRead, bool comprehensive) {
+        TSet<TGroupId>& groupIdsToRead, bool comprehensive) {
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSCBR00, "ApplySyncerState", (NodeId, nodeId), (Update, update),
         (Comprehensive, comprehensive));
 
@@ -333,7 +333,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
         }
         if (updateGroupInfo) {
             // report fresh groups to the NodeWarden
-            groupIdsToRead.insert({groupId.GetRawId(), sourceGroupId.GetRawId(), targetGroupId.GetRawId()});
+            groupIdsToRead.insert({groupId, sourceGroupId, targetGroupId});
         }
         if (!correct) {
             updateNodeWarden = true;
@@ -630,7 +630,7 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
 
     for (TNodeId nodeId : nodesToUpdate) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
-        TSet<ui32> groupIdsToRead;
+        TSet<TGroupId> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCBR09, "ProcessSyncers: sending an update", (NodeId, nodeId),
@@ -640,7 +640,7 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
 }
 
 void TBlobStorageController::SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
-        TSet<ui32>& groupIdsToRead) {
+        TSet<TGroupId>& groupIdsToRead) {
     for (auto it = NodeToSyncerState.lower_bound({nodeId, nullptr}); it != NodeToSyncerState.end() && std::get<0>(*it) == nodeId; ++it) {
         const auto& [nodeId, syncerState] = *it;
 
@@ -657,7 +657,11 @@ void TBlobStorageController::SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage
 
         if (const TGroupInfo *group = FindGroup(syncerState->BridgeProxyGroupId)) {
             syncer->SetBridgeProxyGroupGeneration(group->Generation);
-            groupIdsToRead.insert({syncer->GetBridgeProxyGroupId(), syncer->GetSourceGroupId(), syncer->GetTargetGroupId()});
+            groupIdsToRead.insert({
+                syncerState->BridgeProxyGroupId,
+                syncerState->TargetGroupId,
+                sourceGroupId,
+            });
         } else if (const auto it = StaticGroups.find(syncerState->BridgeProxyGroupId); it != StaticGroups.end()) {
             syncer->SetBridgeProxyGroupGeneration(it->second.Info->GroupGeneration);
         } else {
@@ -671,7 +675,7 @@ void TBlobStorageController::SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateSyncerState::TPtr ev) {
     const TNodeId nodeId = ev->Sender.NodeId();
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSCBR04, "TEvControllerUpdateSyncerState", (NodeId, nodeId), (Msg, ev->Get()->Record));
-    TSet<ui32> groupIdsToRead;
+    TSet<TGroupId> groupIdsToRead;
     ApplySyncerState(nodeId, ev->Get()->Record, groupIdsToRead, false);
     if (groupIdsToRead) {
         auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
@@ -848,7 +852,7 @@ void TBlobStorageController::ApplyStaticGroupUpdateForSyncers(std::map<TGroupId,
     // kick syncers for changed groups
     for (TNodeId nodeId : nodesToUpdate) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
-        TSet<ui32> groupIdsToRead;
+        TSet<TGroupId> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
         SendToWarden(nodeId, std::move(ev), 0);

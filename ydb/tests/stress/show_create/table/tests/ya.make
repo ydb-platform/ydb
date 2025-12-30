@@ -1,7 +1,7 @@
 IF (NOT WITH_VALGRIND)
 
 PY3TEST()
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(STRESS_TEST_UTILITY="ydb/tests/stress/show_create/table/show_create_table")
@@ -20,6 +20,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    ydb/tests/stress/common
     ydb/tests/library
     ydb/tests/library/stress
     ydb/tests/stress/show_create/table/workload

@@ -107,17 +107,17 @@ TEST(TLogicalTypeTest, DictValidationTest)
     EXPECT_THROW_WITH_SUBSTRING(
         ValidateComplexLogicalType(Dict(
             StructLogicalType({
-                {"foo", Int64()},
-                {"bar", Yson()},
-            }),
+                {"foo", "foo", Int64()},
+                {"bar", "bar", Yson()},
+            }, /*removedFieldStableNames*/ {}),
             Optional(String()))),
         "is not allowed in dict key");
 
     EXPECT_THROW_WITH_SUBSTRING(
         ValidateComplexLogicalType(Dict(
             VariantStructLogicalType({
-                {"foo", Int64()},
-                {"bar", Optional(Yson())},
+                {"foo", "foo", Int64()},
+                {"bar", "bar", Optional(Yson())},
             }),
             Optional(String()))),
         "is not allowed in dict key");
@@ -147,13 +147,13 @@ TEST(TLogicalTypeTest, TestDetag)
         *DetagLogicalType(
             Tagged("tag",
                 StructLogicalType({
-                    {"list", Tagged("tag2", List(Int8()))},
-                    {"tuple", Tuple(Double(), Tagged("tag3", Optional(String())))},
-                }))),
+                    {"list", "stable_list", Tagged("tag2", List(Int8()))},
+                    {"tuple", "stable_tuple", Tuple(Double(), Tagged("tag3", Optional(String())))},
+                }, /*removedFieldStableNames*/ {"a", "b"}))),
         *StructLogicalType({
-            {"list", List(Int8())},
-            {"tuple", Tuple(Double(), Optional(String()))},
-        }));
+            {"list", "stable_list", List(Int8())},
+            {"tuple", "stable_tuple", Tuple(Double(), Optional(String()))},
+        }, /*removedFieldStableNames*/ {"a", "b"}));
 }
 
 const std::vector<TLogicalTypePtr> ComplexTypeExampleList = {
@@ -187,17 +187,17 @@ const std::vector<TLogicalTypePtr> ComplexTypeExampleList = {
 
     // Structs
     StructLogicalType({
-        {"key", Utf8()},
-        {"value", List(Utf8())},
-    }),
+        {"key", "stable_key", Utf8()},
+        {"value", "stable_value", List(Utf8())},
+    }, /*removedFieldStableNames*/ {"legacy_key", "legacy_value"}),
     StructLogicalType({
-        {"value", List(Utf8())},
-        {"key", Utf8()},
-    }),
+        {"value", "stable_value", List(Utf8())},
+        {"key", "stable_key", Utf8()},
+    }, /*removedFieldStableNames*/ {"legacy_value", "legacy_key"}),
     StructLogicalType({
-        {"key", Int64()},
-        {"value", List(Int64())},
-    }),
+        {"key", "stable_key", Int64()},
+        {"value", "stable_value", List(Int64())},
+    }, /*removedFieldStableNames*/ {"legacy_key", "legacy_value"}),
 
     // Tuples
     Tuple(Int64(), Optional(Int64())),
@@ -211,16 +211,16 @@ const std::vector<TLogicalTypePtr> ComplexTypeExampleList = {
 
     // VariantStruct
     VariantStructLogicalType({
-        {"string", String()},
-        {"int", Int64()},
+        {"string", "stable_string", String()},
+        {"int", "stable_int", Int64()},
     }),
     VariantStructLogicalType({
-        {"int", Int64()},
-        {"string", String()},
+        {"int", "stable_int", Int64()},
+        {"string", "stable_string", String()},
     }),
     VariantStructLogicalType({
-        {"string", String()},
-        {"string", String()},
+        {"string", "stable_string", String()},
+        {"string", "stable_string", String()},
     }),
 
     // Dict
@@ -305,7 +305,7 @@ TEST(TLogicalTypeTest, TestIsComparable) {
     EXPECT_TRUE(IsComparable(Decimal(3, 2)));
 }
 
-TString CanonizeYsonString(TString input)
+TString CanonizeYsonString(TStringBuf input)
 {
     auto node = ConvertToNode(TYsonString(input));
     auto binaryYson = ConvertToYsonString(node);
@@ -329,7 +329,7 @@ class TLogicalTypeYson
     : public ::testing::TestWithParam<bool>
 {
 public:
-    TLogicalTypePtr FromTypeV3(TString yson)
+    TLogicalTypePtr FromTypeV3(TStringBuf yson)
     {
         const auto parseFromNode = GetParam();
         const auto ysonStr = TYsonStringBuf(yson, EYsonType::Node);
@@ -475,22 +475,39 @@ TEST_P(TLogicalTypeYson, TestTypeV3Yson)
     // Struct
     CHECK_TYPE_V3(
         StructLogicalType({
-            {"a", Bool()},
-            {"b", StructLogicalType({
-                { "foo", Bool() },
-            })},
-        }),
+            {"a", "stable_a", Bool()},
+            {"b", "stable_b", StructLogicalType({
+                { "foo", "stable_foo", Bool() },
+            }, /*removedFieldStableNames*/ {"removed_1", "removed_2"})},
+        }, /*removedFieldStableNames*/ {"legacy_a", "legacy_b"}),
         R"(
         {
             type_name=struct;
             members=[
-                {name=a; type=bool};
+                {name=a; stable_name=stable_a; type=bool};
                 {
                     name=b;
+                    stable_name=stable_b;
                     type={
                         type_name=struct;
-                        members=[{name=foo;type=bool}];
+                        members=[{name=foo;stable_name=stable_foo;type=bool}];
+                        removed_members=[
+                            {
+                                stable_name=removed_1;
+                            };
+                            {
+                                stable_name=removed_2;
+                            };
+                        ];
                     };
+                };
+            ];
+            removed_members=[
+                {
+                    stable_name=legacy_a;
+                };
+                {
+                    stable_name=legacy_b;
                 };
             ];
         }
@@ -516,21 +533,22 @@ TEST_P(TLogicalTypeYson, TestTypeV3Yson)
     // VariantStruct
     CHECK_TYPE_V3(
         VariantStructLogicalType({
-            {"a", Bool()},
-            {"b", VariantStructLogicalType({
-                { "foo", Bool() },
+            {"a", "stable_a", Bool()},
+            {"b", "stable_b", VariantStructLogicalType({
+                { "foo", "stable_foo", Bool() },
             })},
         }),
         R"(
         {
             type_name=variant;
             members=[
-                {name=a; type=bool};
+                {name=a; stable_name=stable_a; type=bool};
                 {
                     name=b;
+                    stable_name=stable_b;
                     type={
                         type_name=variant;
-                        members=[{name=foo;type=bool}];
+                        members=[{name=foo;stable_name=stable_foo;type=bool}];
                     };
                 };
             ];
@@ -628,7 +646,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 using TCombineTypeFunc = std::function<TLogicalTypePtr(const TLogicalTypePtr&)>;
 
-std::vector<std::pair<TString, TCombineTypeFunc>> CombineFunctions = {
+std::vector<std::pair<std::string, TCombineTypeFunc>> CombineFunctions = {
     {
         "optional",
         [] (const TLogicalTypePtr& type) {
@@ -706,7 +724,7 @@ TEST(TLogicalTypeTest, TestAllTypesInCombineFunctions)
 }
 
 class TCombineLogicalMetatypeTests
-    : public ::testing::TestWithParam<std::pair<TString, TCombineTypeFunc>>
+    : public ::testing::TestWithParam<std::pair<std::string, TCombineTypeFunc>>
 { };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -716,25 +734,33 @@ INSTANTIATE_TEST_SUITE_P(
 
 TEST_P(TCombineLogicalMetatypeTests, TestValidateStruct)
 {
-    auto badType = StructLogicalType({{"", Int64()}});
+    for (auto isStableName : {false, true}) {
+        const auto* nameType = isStableName ? "Stable name" : "Name";
+        TStructField field{
+            .Name = isStableName ? "some_field" : "",
+            .StableName = isStableName ? "" : "some_field",
+            .Type = Int64(),
+        };
+        auto badType = StructLogicalType({std::move(field)}, /*removedFieldStableNames*/ {});
 
-    EXPECT_THROW_WITH_SUBSTRING(
-        ValidateComplexLogicalType(badType),
-        Format("Name of struct field #0 is empty"));
+        EXPECT_THROW_WITH_SUBSTRING(
+            ValidateComplexLogicalType(badType),
+            Format("%v of struct field #0 is empty", nameType));
 
-    const auto& [combineName, combineFunc] = GetParam();
-    const auto combinedType1 = combineFunc(badType);
-    const auto combinedType2 = combineFunc(combinedType1);
-    EXPECT_NE(*combinedType1, *badType);
-    EXPECT_NE(*combinedType1, *combinedType2);
+        const auto& [combineName, combineFunc] = GetParam();
+        const auto combinedType1 = combineFunc(badType);
+        const auto combinedType2 = combineFunc(combinedType1);
+        EXPECT_NE(*combinedType1, *badType);
+        EXPECT_NE(*combinedType1, *combinedType2);
 
-    EXPECT_THROW_WITH_SUBSTRING(
-        ValidateComplexLogicalType(combinedType1),
-        Format("Name of struct field #0 is empty"));
+        EXPECT_THROW_WITH_SUBSTRING(
+            ValidateComplexLogicalType(combinedType1),
+            Format("%v of struct field #0 is empty", nameType));
 
-    EXPECT_THROW_WITH_SUBSTRING(
-        ValidateComplexLogicalType(combinedType2),
-        Format("Name of struct field #0 is empty"));
+        EXPECT_THROW_WITH_SUBSTRING(
+            ValidateComplexLogicalType(combinedType2),
+            Format("%v of struct field #0 is empty", nameType));
+    }
 }
 
 TEST_P(TCombineLogicalMetatypeTests, TestValidateAny)
@@ -797,55 +823,191 @@ TEST_P(TCombineLogicalMetatypeTests, TestNonTrivialDetag)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void ValidateType(TLogicalTypePtr type, const TLogicalTypeValidationOptions& options = {})
+{
+    return ValidateLogicalType(
+        TComplexTypeFieldDescriptor("test-column", std::move(type)),
+        options);
+}
 
-class TStructValidationTest
+TStructField GenerateField(std::string name, std::string stableName)
+{
+    return TStructField{
+        .Name = std::move(name),
+        .StableName = std::move(stableName),
+        .Type = Int64(),
+    };
+};
+
+std::vector<TStructField> GenerateDummyFields(int fieldCount)
+{
+    std::vector<TStructField> result;
+    for (auto index : std::views::iota(0, fieldCount)) {
+        auto name = Format("dummy%v", index);
+        result.push_back(GenerateField(name, name));
+    }
+    return result;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TStructTypesValidationTest
     : public ::testing::TestWithParam<ELogicalMetatype>
-{ };
+{
+    TLogicalTypePtr ConstructTypeFromFields(std::vector<TStructField> fields) const
+    {
+        switch (GetParam()) {
+            case ELogicalMetatype::Struct:
+                return StructLogicalType(std::move(fields), /*removedFieldStableNames*/ {});
+            case ELogicalMetatype::VariantStruct:
+                return VariantStructLogicalType(std::move(fields));
+            default:
+                YT_ABORT();
+        }
+    }
+
+    void ValidateFields(
+        std::vector<TStructField> fields,
+        const TLogicalTypeValidationOptions& options = {}) const
+    {
+        return ValidateType(ConstructTypeFromFields(std::move(fields)), options);
+    }
+};
 
 INSTANTIATE_TEST_SUITE_P(
     Tests,
-    TStructValidationTest,
+    TStructTypesValidationTest,
     ::testing::ValuesIn({ELogicalMetatype::Struct, ELogicalMetatype::VariantStruct}));
 
-TEST_P(TStructValidationTest, Test)
+TEST_P(TStructTypesValidationTest, TestFields)
 {
-    auto metatype = GetParam();
-    auto validate = [&] (const std::vector<TStructField>& fields) {
-        std::function<TLogicalTypePtr(std::vector<TStructField> fields)> typeConstructor;
-        if (metatype == ELogicalMetatype::Struct) {
-            typeConstructor = StructLogicalType;
-        } else {
-            YT_VERIFY(metatype == ELogicalMetatype::VariantStruct);
-            typeConstructor = VariantStructLogicalType;
-        }
-        ValidateLogicalType(TComplexTypeFieldDescriptor("test-column", typeConstructor(fields)));
-    };
-    EXPECT_NO_THROW(validate({}));
+    EXPECT_NO_THROW(ValidateFields({}));
+
+    for (auto index : std::views::iota(0, 3)) {
+        auto fields = GenerateDummyFields(index);
+        EXPECT_NO_THROW(ValidateFields(fields));
+
+        fields.push_back(GenerateField("", "stable_name"));
+        EXPECT_THROW_WITH_SUBSTRING(
+            ValidateFields(fields),
+            Format("Name of struct field #%v is empty", index));
+
+        fields.back() = GenerateField("name", "");
+        EXPECT_THROW_WITH_SUBSTRING(
+            ValidateFields(fields),
+            Format("Stable name of struct field #%v is empty", index));
+    }
+
     EXPECT_THROW_WITH_SUBSTRING(
-        validate({{"", SimpleLogicalType(ESimpleLogicalValueType::Int64)}}),
-        "Name of struct field #0 is empty");
-    EXPECT_THROW_WITH_SUBSTRING(
-        validate({
-            {"a", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-            {"a", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-        }),
+        ValidateFields({GenerateField("a", "stable1"), GenerateField("a", "stable2")}),
         "Struct field name \"a\" is used twice");
     EXPECT_THROW_WITH_SUBSTRING(
-        validate({
-            {TString(257, 'a'), SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-        }),
-        "Name of struct field #0 exceeds limit");
+        ValidateFields({GenerateField("a", "stable"), GenerateField("b", "stable")}),
+        "Struct field stable name \"stable\" is used twice");
+
+    for (auto index : std::views::iota(0, 3)) {
+        auto fields = GenerateDummyFields(index);
+
+        fields.push_back(GenerateField(std::string(257, 'a'), "stable_name"));
+        EXPECT_THROW_WITH_SUBSTRING(
+            ValidateFields(fields),
+            Format("Name of struct field #%v exceeds limit", index));
+
+        fields.back() = GenerateField("name", std::string(257, 'a'));
+        EXPECT_THROW_WITH_SUBSTRING(
+            ValidateFields(fields),
+            Format("Stable name of struct field #%v exceeds limit", index));
+
+        fields.back() = GenerateField("\xFF", "stable_name");
+        EXPECT_THROW_WITH_SUBSTRING(
+            ValidateFields(fields),
+            Format("Name of struct field #%v is not valid utf8", index));
+
+        fields.back() = GenerateField("name", "\xFF");
+        EXPECT_THROW_WITH_SUBSTRING(
+            ValidateFields(fields),
+            Format("Stable name of struct field #%v is not valid utf8", index));
+    }
+
+    auto generateDeeplyNestedStruct = [&] (int depth) {
+        auto result = Int64();
+        for (; depth > 0; --depth) {
+            result = ConstructTypeFromFields({TStructField{
+                .Name = "a",
+                .StableName = "a",
+                .Type = std::move(result),
+            }});
+        }
+        return result;
+    };
+
+    static constexpr TLogicalTypeValidationOptions ValidationOptions{
+        .DepthLimit = 10,
+    };
+
+    EXPECT_NO_THROW(ValidateType(generateDeeplyNestedStruct(10), ValidationOptions));
     EXPECT_THROW_WITH_SUBSTRING(
-        validate({
-            {"\xFF", SimpleLogicalType(ESimpleLogicalValueType::Int64)},
-        }),
-        "Name of struct field #0 is not valid utf8");
+        ValidateType(generateDeeplyNestedStruct(11), ValidationOptions),
+        "exceeds type depth limit");
+}
+
+TEST(TStructsValidationTest, TestRemovedFieldNames)
+{
+    auto validateType = [] (
+        std::vector<TStructField> fields,
+        std::vector<std::string> removedFieldStableNames)
+    {
+        return ValidateType(
+            StructLogicalType(std::move(fields), std::move(removedFieldStableNames)));
+    };
+    auto validateRemovedFields = [&] (std::vector<std::string> removedFieldStableNames) {
+        return validateType(/*fields*/ {}, std::move(removedFieldStableNames));
+    };
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        validateRemovedFields({"a", "b", "a"}),
+        "Removed field stable name \"a\" is used twice");
+
+    for (auto index : std::views::iota(0, 3)) {
+        auto fields = GenerateDummyFields(index);
+        fields.push_back(GenerateField("name", "stable_name"));
+
+        EXPECT_THROW_WITH_SUBSTRING(
+            validateType(fields, {"stable_name", "a", "b"}),
+            Format(
+                "Removed field stable name \"stable_name\" cannot be used as a stable name "
+                "of struct field #%v",
+                index));
+
+        // Re-using removed field stable names as regular field names is fine,
+        // as long as stable names remain unique.
+        EXPECT_NO_THROW(validateType(fields, {"name", "a", "b"}));
+    }
+
+    // Unlike names and stable names, removed field names are not validated
+    // beyond their uniqueness, since they ultimately come from stable names
+    // of removed fields and thus are expected to be already valid.
+    EXPECT_NO_THROW(validateRemovedFields({"", "a"}));
+    EXPECT_NO_THROW(validateRemovedFields({"\xFF", "a"}));
+
+    auto generateManyRemovedFields = [] (int count) {
+        auto namesRange = std::views::iota(0, count)
+            | std::views::transform([] (auto index) {
+                return Format("removed-%v", index);
+            });
+
+        // TODO(s-berdnikov): Replace with range adaptor once C++23 becomes available.
+        return StructLogicalType(/*fields*/ {}, {namesRange.begin(), namesRange.end()});
+    };
+    EXPECT_EQ(generateManyRemovedFields(0)->GetTypeComplexity(), 1);
+    EXPECT_EQ(generateManyRemovedFields(5)->GetTypeComplexity(), 6);
+    EXPECT_EQ(generateManyRemovedFields(20)->GetTypeComplexity(), 21);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<std::vector<TString>> ParseData(TStringBuf data, int expectedFieldsCount) {
-    TString noComments;
+std::vector<std::vector<std::string>> ParseData(TStringBuf data, int expectedFieldsCount) {
+    std::string noComments;
     {
         TMemoryInput in(data);
         TString line;
@@ -857,13 +1019,13 @@ std::vector<std::vector<TString>> ParseData(TStringBuf data, int expectedFieldsC
         }
     }
 
-    std::vector<std::vector<TString>> result;
+    std::vector<std::vector<std::string>> result;
     for (TStringBuf record : StringSplitter(noComments).SplitByString(";;")) {
         record = StripString(record);
         if (record.empty()) {
             continue;
         }
-        std::vector<TString> fields;
+        std::vector<std::string> fields;
         for (TStringBuf field : StringSplitter(record).SplitByString("::")) {
             fields.emplace_back(StripString(field));
         }
@@ -881,12 +1043,8 @@ TEST(TTestLogicalTypesWithDataTest, GoodTypes)
 
     for (const auto& record : records) {
         const auto& typeYson = record.at(0);
-        // TODO(levysotsky): Remove when tz_* types are supported.
-        if (typeYson.Contains("tz_")) {
-            continue;
-        }
         const auto& typeText = record.at(1);
-        TString context = Format("text: %v\nyson: %v\n", typeText, typeYson);
+        auto context = Format("text: %v\nyson: %v\n", typeText, typeYson);
         auto wrapError = [&] (const std::exception& ex) {
             return yexception() << "Unexpected error: " << ex.what() << '\n' << context;
         };
@@ -916,10 +1074,6 @@ TEST(TTestLogicalTypesWithDataTest, BadTypes)
 
     for (const auto& record : records) {
         const auto& typeYson = record.at(0);
-        // TODO(levysotsky): Remove when tz_* types are supported.
-        if (typeYson.Contains("tz_")) {
-            continue;
-        }
 
         EXPECT_THROW(ConvertTo<TLogicalTypePtr>(TYsonStringBuf(typeYson)), TErrorException);
     }

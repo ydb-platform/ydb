@@ -569,10 +569,8 @@ namespace NKikimr {
     // TEvVPut
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    struct TMessageRelevanceTracker {};
-
     struct TEventWithRelevanceTracker {
-        std::optional<std::weak_ptr<TMessageRelevanceTracker>> MessageRelevanceTracker;
+        std::optional<TMessageRelevance> MessageRelevanceTracker;
     };
 
     struct TEvBlobStorage::TEvVPut
@@ -3250,7 +3248,7 @@ namespace NKikimr {
     public:
         ui32 MinHugeBlobInBytes;
 
-        TEvMinHugeBlobSizeUpdate(ui32 minHugeBlobInBytes) : MinHugeBlobInBytes(minHugeBlobInBytes) {  
+        TEvMinHugeBlobSizeUpdate(ui32 minHugeBlobInBytes) : MinHugeBlobInBytes(minHugeBlobInBytes) {
         };
     };
 } // NKikimr

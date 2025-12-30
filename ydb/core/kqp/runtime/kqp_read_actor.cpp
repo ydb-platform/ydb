@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -607,7 +608,7 @@ public:
         } else if (!Snapshot.IsValid() && !Settings->HasLockTxId() && !Settings->GetAllowInconsistentReads()) {
             return RuntimeError("Inconsistent reads without locks", NDqProto::StatusIds::UNAVAILABLE);
         }
-        if (Settings->GetIsolationLevel() == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
+        if (Settings->GetIsolationLevel() == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
             YQL_ENSURE(!Settings->HasLockTxId(), "SnapshotReadOnly should not take locks");
         }
 
@@ -891,6 +892,10 @@ public:
 
         if (Settings->HasLockNodeId()) {
             record.SetLockNodeId(Settings->GetLockNodeId());
+        }
+
+        if (Settings->HasVectorTopK()) {
+            *record.MutableVectorTopK() = Settings->GetVectorTopK();
         }
 
         CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
@@ -1376,6 +1381,11 @@ public:
             }
 
             auto id = result.ReadResult->Get()->Record.GetReadId();
+            // For VectorTopK pushdown, accumulate actual scanned rows from datashard stats
+            if (result.ProcessedRows == 0 && Settings->HasVectorTopK() && msg.Record.HasStats()) {
+                ScannedRowCount += msg.Record.GetStats().GetRows();
+                ScannedBytesCount += msg.Record.GetStats().GetBytes();
+            }
 
             for (; result.ProcessedRows < result.PackedRows; ++result.ProcessedRows) {
                 NMiniKQL::TBytesStatistics rowSize = GetRowSize((*batch)[result.ProcessedRows].GetElements());
@@ -1473,17 +1483,35 @@ public:
 
             }
 
-            auto consumedRows = mstats ? mstats->Inputs[InputIndex]->RowsConsumed : ReceivedRowCount;
-
             //FIXME: use real rows count
+            auto consumedRows = mstats ? mstats->Inputs[InputIndex]->RowsConsumed : ReceivedRowCount;
+            auto consumedBytes = mstats ? mstats->Inputs[InputIndex]->BytesConsumed : BytesStats.DataBytes;
+
+            // For VectorTopK pushdown, use actual scanned rows from datashard stats
+            if (Settings->HasVectorTopK()) {
+                consumedRows = ScannedRowCount;
+                consumedBytes = ScannedBytesCount;
+            }
+
             tableStats->SetReadRows(tableStats->GetReadRows() + consumedRows);
-            tableStats->SetReadBytes(tableStats->GetReadBytes() + (mstats ? mstats->Inputs[InputIndex]->BytesConsumed : BytesStats.DataBytes));
+            tableStats->SetReadBytes(tableStats->GetReadBytes() + consumedBytes);
             tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
 
             //FIXME: use evread statistics after KIKIMR-16924
             //tableStats->SetReadRows(tableStats->GetReadRows() + ReceivedRowCount);
             //tableStats->SetReadBytes(tableStats->GetReadBytes() + BytesStats.DataBytes);
             //tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
+
+            // Add lock stats for broken locks from read operations
+            if (!BrokenLocks.empty()) {
+                NKqpProto::TKqpTaskExtraStats extraStats;
+                if (stats->HasExtra()) {
+                    stats->GetExtra().UnpackTo(&extraStats);
+                }
+                extraStats.MutableLockStats()->SetBrokenAsVictim(
+                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                stats->MutableExtra()->PackFrom(extraStats);
+            }
         }
     }
 
@@ -1615,6 +1643,8 @@ private:
 
     NMiniKQL::TBytesStatistics BytesStats;
     ui64 ReceivedRowCount = 0;
+    ui64 ScannedRowCount = 0;  // Actual rows scanned (for VectorTopK, may differ from ReceivedRowCount)
+    ui64 ScannedBytesCount = 0;
     ui64 ProcessedRowCount = 0;
     ui64 ResetReads = 0;
     ui64 ReadId = 0;

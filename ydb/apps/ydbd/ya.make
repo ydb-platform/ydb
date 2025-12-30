@@ -4,7 +4,11 @@ IF (NOT SANITIZER_TYPE)  # for some reasons some tests with asan are failed, see
     # Disabling export of dynamic symbols allows to significantly reduce size of the stripped binary,
     # however, to be able to use dynamic UDFs (the --udfs-dir flag of ydbd server),
     # required explicit export of symbols from yql/essentials/public/udf/service/exception_policy/udf_service.cpp
-    EXPORTS_SCRIPT(ydb/apps/ydbd/exports.symlist)
+    IF (OS_LINUX)
+        EXPORTS_SCRIPT(ydb/apps/ydbd/exports.symlist)
+    ELSE()
+        NO_EXPORT_DYNAMIC_SYMBOLS()
+    ENDIF()
 ENDIF()
 
 IF (OS_LINUX)
@@ -47,6 +51,7 @@ PEERDIR(
     ydb/library/pdisk_io
     ydb/library/security
     ydb/library/yql/udfs/common/clickhouse/client
+    ydb/library/yql/udfs/common/fulltext
     ydb/library/yql/udfs/common/knn
     ydb/library/yql/udfs/common/roaring
     ydb/library/yql/udfs/statistics_internal

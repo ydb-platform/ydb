@@ -67,11 +67,31 @@ struct TOptimizerLinkSettings {
     bool HasCBOUnsupportedHints = false;
 };
 
+class TOrderJoinsParams {
+public:
+    TYtJoinNodeOp::TPtr Root;
+    TVector<TYtJoinNodeOp*> SuitableTrees;
+    size_t MaxLeaves = 0;
+    size_t NotReadyLeaves = 0;
+    size_t Limit = 2;
+
+    TOrderJoinsParams(const TYtJoinNodeOp::TPtr& op, size_t limit = 2);
+
+private:
+    struct TReadyJoin {
+        TYtJoinNode* ReadyTree;
+        size_t TotalLeaves;
+    };
+    void AddTree(const TReadyJoin& tree);
+    TReadyJoin InitRecursive(TYtJoinNode* node);
+};
+
 TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx);
 
 IGraphTransformer::TStatus RewriteYtEquiJoinLeaves(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx);
 IGraphTransformer::TStatus RewriteYtEquiJoin(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, const TYtState::TPtr& state, TExprContext& ctx);
 TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp& op, TExprContext& ctx, const TYtState::TPtr& state);
+TYtJoinNodeOp::TPtr OrderJoins(const TOrderJoinsParams& orderJoinsParams, const TYtState::TPtr& state, TExprContext& ctx, bool debug = false);
 TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, TExprContext& ctx, bool debug = false);
 
 class IBaseOptimizerNode;

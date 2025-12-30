@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/logoblob.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 #include "phantom_flags.h"
 
 #include <unordered_map>
@@ -24,43 +25,50 @@ public:
     TPhantomFlagThresholds(const TBlobStorageGroupType& gtype);
 
     void AddBlob(ui32 orderNumber, const TLogoBlobID& blob);
-    void AddHardBarrier(ui32 orderNumber, ui64 tabletId, ui32 channel, ui32 generation, ui32 step);
-    bool IsBehindThreshold(const TLogoBlobID& blob) const;
-    TPhantomFlags Sift(const TPhantomFlags& flags);
+    void AddBlob(const TLogoBlobID& blob);
+    void AddHardBarrier(ui32 orderNumber, ui64 tabletId, ui8 channel, ui32 generation, ui32 step);
+    bool IsBehindThresholdOnUnsynced(const TLogoBlobID& blob, const TSyncedMask& syncedMask) const;
+    TPhantomFlags Sift(const TPhantomFlags& flags, const TSyncedMask& syncedMask);
     ui64 EstimatedMemoryConsumption() const;
+    void Merge(TPhantomFlagThresholds&& other);
+    void Clear();
+
+    TString ToString() const;
 
 private:
     using TGenStep = std::pair<ui32, ui32>;
     static TGenStep MakeGenStep(const TLogoBlobID& blobId);
 
+    using TTabletChannel = std::pair<ui64, ui8>;
+    static TTabletChannel MakeTabletChannel(const TLogoBlobID& blobId);
+
+    struct THasher {
+        inline ui64 operator()(const TTabletChannel& x) const;
+    };
+
+private:
     // auxiliary classes
-    class TNeighbourThresholds {
+    class TTabletThresholds {
     public:
-        void AddBlob(const TLogoBlobID& blob);
-        void AddHardBarrier(ui64 tabletId, ui8 channel, TGenStep barrier);
-        bool IsBehindThreshold(const TLogoBlobID& blob) const;
-        ui64 EstimatedMemoryConsumption() const;
+        TTabletThresholds();
+
+        void AddBlob(ui32 orderNumber, TGenStep genStep);
+        void AddBlob(TBlobStorageGroupType groupType, TGenStep genStep);
+        // returns whether any blobs remain
+        bool AddHardBarrier(ui32 orderNumber, TGenStep barrier);
+        bool IsBehindThresholdOnUnsynced(TBlobStorageGroupType groupType, TGenStep genStep,
+                const TSyncedMask& syncedMask) const;
+        void Merge(TBlobStorageGroupType groupType, TTabletThresholds&& other);
+        TString ToString(TBlobStorageGroupType groupType) const;
 
     private:
-        class TTabletThresholds {
-        public:
-            void AddBlob(const TLogoBlobID& blob);
-            void AddHardBarrier(ui8 channel, TGenStep barrier);
-            bool IsBehindThreshold(const TLogoBlobID& blob) const;
-            bool IsEmpty() const;
-            ui64 EstimatedMemoryConsumption() const;
-    
-        private:
-            std::unordered_map<ui8, TGenStep> ChannelThresholds;
-        };
-    
-    private:
-        std::unordered_map<ui64, TTabletThresholds> TabletThresholds;
+        TStackVec<std::optional<TGenStep>, MaxExpectedDisksInGroup> Thresholds;
+        ui8 DisksWithThreshold = 0;
     };
 
 private:
     TBlobStorageGroupType GType;
-    std::vector<TNeighbourThresholds> NeighbourThresholds;
+    std::unordered_map<TTabletChannel, TTabletThresholds, THasher> TabletThresholds;
 };
 
 } // namespace NSyncLog

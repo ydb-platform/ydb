@@ -63,6 +63,10 @@ inputs:
     type: boolean
     default: false
     description: "Collect coredumps via enabling ulimit -c unlimited"
+  pull_number:
+    type: string
+    required: false
+    description: "Pull request number (for workflow_call events)"
 defaults:
   run:
     shell: bash
@@ -124,3 +128,4 @@ runs:
         telegram_alert_logins: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_LOGINS || '' }}
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
         collect_coredumps: ${{ inputs.collect_coredumps }}
+        pull_number: ${{ inputs.pull_number }}

@@ -92,7 +92,7 @@ public:
 
     //! Check whether ranges contain a range with row_index specified in either
     //! limit. This method is intended to be more lightweight than #GetNewRanges
-    //! and it does not require comparator.
+    //! and it does not require a comparator.
     bool HasRowIndexInRanges() const;
 
     void SetRanges(const std::vector<NChunkClient::TReadRange>& ranges);
@@ -174,7 +174,7 @@ public:
     void SetClusters(const std::vector<std::string>& value);
 
     // "create"
-    bool GetCreate() const;
+    std::variant<bool, NYTree::IAttributeDictionaryPtr> GetCreate() const;
 
     // "versioned_read_options"
     NTableClient::TVersionedReadOptions GetVersionedReadOptions() const;

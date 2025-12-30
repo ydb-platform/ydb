@@ -991,7 +991,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
             });
         }
 
-        if (types.LangVer >= MakeLangVersion(2024, 4)) {
+        if (!hasErrors && types.LangVer >= MakeLangVersion(2025, 4)) {
             hasErrors = !ValidateLinearTypes(*input, ctx);
         }
 

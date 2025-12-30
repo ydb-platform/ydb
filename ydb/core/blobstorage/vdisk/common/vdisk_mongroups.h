@@ -541,7 +541,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(PutTotalBytes, true);
                 COUNTER_INIT_IF_EXTENDED(GetTotalBytes, true);
             }
-                
+
             void MinHugeBlobInBytes(ui32 size) {
                 auto getCounter = [&](ui32 size) {
                     return GroupCounters->GetSubgroup("MinHugeBlobInBytes", ToString(size))->GetCounter("count", 1);
@@ -720,7 +720,7 @@ public:                                                                         
             COUNTER_DEF(PutTabletLog);
             COUNTER_DEF(PutUserData);
             COUNTER_DEF(PutAsyncBlob);
-            
+
             ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass) {
                 if (!handleClass) {
                     return Undefined();
@@ -1008,9 +1008,23 @@ public:                                                                         
             {
                 COUNTER_INIT(BuilderReadsFromDisk, true);
                 COUNTER_INIT(BuilderReadsFromDiskBytes, true);
+
+                COUNTER_INIT(IsPhantomFlagStorageActive, false);
+                COUNTER_INIT(IsPhantomFlagStorageBuilding, false);
+                COUNTER_INIT(StoredFlagsCount, false);
+                COUNTER_INIT(StoredFlagsMemoryConsumption, false);
+                COUNTER_INIT(ThresholdsMemoryConsumption, false);
+                COUNTER_INIT(SyncedMask, false);
             }
             COUNTER_DEF(BuilderReadsFromDisk);
             COUNTER_DEF(BuilderReadsFromDiskBytes);
+
+            COUNTER_DEF(IsPhantomFlagStorageActive);
+            COUNTER_DEF(IsPhantomFlagStorageBuilding);
+            COUNTER_DEF(StoredFlagsCount);
+            COUNTER_DEF(StoredFlagsMemoryConsumption);
+            COUNTER_DEF(ThresholdsMemoryConsumption);
+            COUNTER_DEF(SyncedMask);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

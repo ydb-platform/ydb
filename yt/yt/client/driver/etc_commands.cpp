@@ -92,6 +92,12 @@ constexpr auto StaticFeatures = std::to_array<std::pair<TStringBuf, bool>>({
     {"user_tokens_metadata", true},
 });
 
+#ifdef OPENSOURCE
+constexpr bool FlowPipelinesListEnabled = false;
+#else
+constexpr bool FlowPipelinesListEnabled = true;
+#endif
+
 void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
 {
     TGetClusterMetaOptions options;
@@ -108,6 +114,12 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
     for (auto staticFeature : StaticFeatures) {
         features->AddChild(TString(staticFeature.first), BuildYsonNodeFluently().Value(staticFeature.second));
     }
+    features->AddChild(
+        "flow_pipelines",
+        BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("pipeline_list_enabled").Value(FlowPipelinesListEnabled)
+            .EndMap());
     features->AddChild(
         "require_password_in_authentication_commands",
         BuildYsonNodeFluently().Value(context->GetConfig()->RequirePasswordInAuthenticationCommands));
@@ -256,6 +268,27 @@ void TTransferPoolResourcesCommand::DoExecute(ICommandContextPtr context)
         SourcePool,
         DestinationPool,
         PoolTree,
+        ResourceDelta,
+        Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TTransferBundleResourcesCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("source_bundle", &TThis::SourceBundle);
+    registrar.Parameter("destination_bundle", &TThis::DestinationBundle);
+    registrar.Parameter("resource_delta", &TThis::ResourceDelta);
+}
+
+void TTransferBundleResourcesCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->TransferBundleResources(
+        SourceBundle,
+        DestinationBundle,
         ResourceDelta,
         Options))
         .ThrowOnError();

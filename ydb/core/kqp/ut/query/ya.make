@@ -22,10 +22,13 @@ SRCS(
 
 PEERDIR(
     ydb/core/statistics/ut_common
+    ydb/library/yql/udfs/statistics_internal
     ydb/public/sdk/cpp/src/client/proto
     ydb/core/kqp
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
+    yql/essentials/udfs/common/digest
+    yql/essentials/udfs/common/hyperloglog
 )
 
 YQL_LAST_ABI_VERSION()

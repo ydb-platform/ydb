@@ -32,6 +32,19 @@ Y_UNIT_TEST(AlterDatabase) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(TruncateTable) {
+    TCases cases{
+        {"use plato;truncate table `/Root/test/table`;",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table`;\n"},
+
+        {"use plato;truncate table `/Root/test/table` with();",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH ();\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(GrantPermissions) {
     TCases cases{
         {"use plato;grant connect, modify tables, list on `/Root` to user;", "USE plato;\n\nGRANT CONNECT, MODIFY TABLES, LIST ON `/Root` TO user;\n"},

@@ -15,6 +15,198 @@ Increment the:
 
 ## [Unreleased]
 
+## [1.24 2025-11-20]
+
+* [RELEASE] Bump main branch to 1.24-dev
+  [#3662](https://github.com/open-telemetry/opentelemetry-cpp/pull/3662)
+
+* [TEST] Remove workaround for metrics cardinality limit test
+  [#3663](https://github.com/open-telemetry/opentelemetry-cpp/pull/3663)
+
+* Bump github/codeql-action from 3.30.3 to 3.30.4
+  [#3664](https://github.com/open-telemetry/opentelemetry-cpp/pull/3664)
+
+* [CONFIGURATION] File configuration - semantic version
+  [#3629](https://github.com/open-telemetry/opentelemetry-cpp/pull/3629)
+
+* [BUILD] Fix MinGW GCC cross compilation build on Linux for Windows
+  [#3666](https://github.com/open-telemetry/opentelemetry-cpp/pull/3666)
+
+* [CONFIGURATION] File configuration - cmake build
+  [#3655](https://github.com/open-telemetry/opentelemetry-cpp/pull/3655)
+
+* [CONFIGURATION] File configuration - bazel build
+  [#3654](https://github.com/open-telemetry/opentelemetry-cpp/pull/3654)
+
+* Bump step-security/harden-runner from 2.12.2 to 2.13.1
+  [#3671](https://github.com/open-telemetry/opentelemetry-cpp/pull/3671)
+
+* Bump github/codeql-action from 3.30.4 to 3.30.5
+  [#3670](https://github.com/open-telemetry/opentelemetry-cpp/pull/3670)
+
+* Bump actions/checkout from 4.2.2 to 5.0.0
+  [#3669](https://github.com/open-telemetry/opentelemetry-cpp/pull/3669)
+
+* [CMAKE] Only build and run the exemplar tests if the preview flag is set
+  [#3675](https://github.com/open-telemetry/opentelemetry-cpp/pull/3675)
+
+* [TEST] Update latest versions of protobuf, grpc, and curl for testing
+  [#3678](https://github.com/open-telemetry/opentelemetry-cpp/pull/3678)
+
+* [SDK] Fix typo in hashmap method GetEnteries
+  [#3680](https://github.com/open-telemetry/opentelemetry-cpp/pull/3680)
+
+* [TEST] add ryml to the conan files for install tests
+  [#3679](https://github.com/open-telemetry/opentelemetry-cpp/pull/3679)
+
+* [TRACE SDK] Batch span processor options now using env variables
+  [#3661](https://github.com/open-telemetry/opentelemetry-cpp/pull/3661)
+
+* Bump ossf/scorecard-action from 2.4.2 to 2.4.3
+  [#3677](https://github.com/open-telemetry/opentelemetry-cpp/pull/3677)
+
+* [CONFIGURATION] File configuration - cmake install
+  [#3668](https://github.com/open-telemetry/opentelemetry-cpp/pull/3668)
+
+* Bump github/codeql-action from 3.30.5 to 3.30.6
+  [#3683](https://github.com/open-telemetry/opentelemetry-cpp/pull/3683)
+
+* Bump peter-evans/create-or-update-comment from 4.0.0 to 5.0.0
+  [#3682](https://github.com/open-telemetry/opentelemetry-cpp/pull/3682)
+
+* Bump actions/stale from 10.0.0 to 10.1.0
+  [#3686](https://github.com/open-telemetry/opentelemetry-cpp/pull/3686)
+
+* [SDK] BatchLogRecordProcessorOptions from env variables
+  [#3687](https://github.com/open-telemetry/opentelemetry-cpp/pull/3687)
+
+* [BUILD] Upgrade third party versions to the latest
+  [#3685](https://github.com/open-telemetry/opentelemetry-cpp/pull/3685)
+
+* Bump github/codeql-action from 3.30.6 to 4.30.7
+  [#3689](https://github.com/open-telemetry/opentelemetry-cpp/pull/3689)
+
+* Bump github/codeql-action from 4.30.7 to 4.30.8
+  [#3692](https://github.com/open-telemetry/opentelemetry-cpp/pull/3692)
+
+* [Metrics] Allow registering one callback for multiple instruments
+  [#3667](https://github.com/open-telemetry/opentelemetry-cpp/pull/3667)
+
+* [CI] Upgrade tools/vcpkg to 2025.09.17
+  [#3701](https://github.com/open-telemetry/opentelemetry-cpp/pull/3701)
+
+* [CI] Upgrade to conan 2.21.0 for conanfile_latest
+  [#3703](https://github.com/open-telemetry/opentelemetry-cpp/pull/3703)
+
+* [bazel] Drop WORKSPACE support
+  [#3699](https://github.com/open-telemetry/opentelemetry-cpp/pull/3699)
+
+* Bump github/codeql-action from 4.30.8 to 4.30.9
+  [#3707](https://github.com/open-telemetry/opentelemetry-cpp/pull/3707)
+
+* [BUILD] Add rules_cc load statements
+  [#3697](https://github.com/open-telemetry/opentelemetry-cpp/pull/3697)
+
+* [CONFIGURATION] File configuration - parser location
+  [#3705](https://github.com/open-telemetry/opentelemetry-cpp/pull/3705)
+
+* [API] Fix -Werror=alloc-size-larger-than= warning in runtime_context.h
+  [#3709](https://github.com/open-telemetry/opentelemetry-cpp/pull/3709)
+
+* Bump github/codeql-action from 4.30.9 to 4.31.0
+  [#3720](https://github.com/open-telemetry/opentelemetry-cpp/pull/3720)
+
+* Bump actions/download-artifact from 5.0.0 to 6.0.0
+  [#3719](https://github.com/open-telemetry/opentelemetry-cpp/pull/3719)
+
+* [CONFIGURATION] File configuration - prometheus translation
+  [#3715](https://github.com/open-telemetry/opentelemetry-cpp/pull/3715)
+
+* [SDK] Misc cleanup in attribute_utils.h
+  [#3716](https://github.com/open-telemetry/opentelemetry-cpp/pull/3716)
+
+* [TEST] Disable test BasicCurlHttpTests.SendGetRequestAsync
+  [#3722](https://github.com/open-telemetry/opentelemetry-cpp/pull/3722)
+
+* [SDK] Add cardinality_limit to all derived classes of AggregationConfig
+  [#3728](https://github.com/open-telemetry/opentelemetry-cpp/pull/3728)
+
+* Bump github/codeql-action from 4.31.0 to 4.31.2
+  [#3733](https://github.com/open-telemetry/opentelemetry-cpp/pull/3733)
+
+* [BUILD] Upgrade to opentelemetry-proto 1.8.0
+  [#3730](https://github.com/open-telemetry/opentelemetry-cpp/pull/3730)
+
+* [SEMANTIC CONVENTIONS] Upgrade to semantic conventions 1.38.0
+  [#3729](https://github.com/open-telemetry/opentelemetry-cpp/pull/3729)
+
+* [CONFIGURATION] Implement declarative configuration (config.yaml)
+  [#2518](https://github.com/open-telemetry/opentelemetry-cpp/pull/2518)
+
+* [CONFIGURATION] File configuration - tls
+  [#3726](https://github.com/open-telemetry/opentelemetry-cpp/pull/3726)
+
+* [CONFIGURATION] File configuration - console metric exporter
+  [#3734](https://github.com/open-telemetry/opentelemetry-cpp/pull/3734)
+
+* [DOCS] Remove out-of-date vcpkg docs
+  [#3735](https://github.com/open-telemetry/opentelemetry-cpp/pull/3735)
+
+* [DOCKER] Update docker files to build all third party dependencies
+  from the tags file
+  [#3718](https://github.com/open-telemetry/opentelemetry-cpp/pull/3718)
+
+* Bump docker/setup-qemu-action from 3.6.0 to 3.7.0
+  [#3739](https://github.com/open-telemetry/opentelemetry-cpp/pull/3739)
+
+* Bump step-security/harden-runner from 2.13.1 to 2.13.2
+  [#3738](https://github.com/open-telemetry/opentelemetry-cpp/pull/3738)
+
+* [API] Make Request Context Token constructor public
+  [#3708](https://github.com/open-telemetry/opentelemetry-cpp/pull/3708)
+
+* [BUILD] Remove CMAKE POLICY CMP0092
+  [#3741](https://github.com/open-telemetry/opentelemetry-cpp/pull/3741)
+
+* [DOCS] Fix code sample for setting CustomLogHandler
+  [#3736](https://github.com/open-telemetry/opentelemetry-cpp/pull/3736)
+
+* Bump github/codeql-action from 4.31.2 to 4.31.3
+  [#3744](https://github.com/open-telemetry/opentelemetry-cpp/pull/3744)
+
+* [METRICS] Add tag to AggregationConfig for aggregation type validation
+  [#3732](https://github.com/open-telemetry/opentelemetry-cpp/pull/3732)
+
+* [BUILD] CMake install path with double slash
+  [#3747](https://github.com/open-telemetry/opentelemetry-cpp/pull/3747)
+
+* [CI] Free disk space
+  [#3749](https://github.com/open-telemetry/opentelemetry-cpp/pull/3749)
+
+* [SDK] Reset TraceFlags::IsSampled bit on sampler Decision::DROP
+  [#3745](https://github.com/open-telemetry/opentelemetry-cpp/pull/3745)
+
+* [CODE HEALTH] turn on the cppcoreguidelines-init-variables check and fix warnings
+  [#3751](https://github.com/open-telemetry/opentelemetry-cpp/pull/3751)
+
+* Bump actions/checkout from 5.0.0 to 5.0.1
+  [#3753](https://github.com/open-telemetry/opentelemetry-cpp/pull/3753)
+
+* Bump github/codeql-action from 4.31.3 to 4.31.4
+  [#3755](https://github.com/open-telemetry/opentelemetry-cpp/pull/3755)
+
+* Bump actions/checkout from 5.0.1 to 6.0.0
+  [#3757](https://github.com/open-telemetry/opentelemetry-cpp/pull/3757)
+
+New Features:
+
+* [CONFIGURATION] Implement declarative configuration (config.yaml)
+  [#2518](https://github.com/open-telemetry/opentelemetry-cpp/pull/2518)
+
+  * Configuration for opentelemetry-cpp can now be done using a config.yaml
+    file, instead of using environment variables.
+  * See [opentelemetry-configuration](https://github.com/open-telemetry/opentelemetry-configuration)
+
 ## [1.23 2025-09-25]
 
 * [CodeHealth] Fix clang-tidy warnings part 6

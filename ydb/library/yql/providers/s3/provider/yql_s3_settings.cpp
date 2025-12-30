@@ -1,5 +1,6 @@
 #include "yql_s3_settings.h"
 
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
 #include <util/generic/size_literals.h>

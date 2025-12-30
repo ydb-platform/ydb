@@ -47,7 +47,7 @@ TEST_F(TDoubleArrayTest, TestPlusMinus)
 {
     struct TTestCase
     {
-        TString Name;
+        std::string Name;
         TDoubleArray<4> Arg1;
         TDoubleArray<4> Arg2;
         TDoubleArray<4> ExpectedSum;

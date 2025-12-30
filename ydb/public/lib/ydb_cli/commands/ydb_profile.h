@@ -52,7 +52,7 @@ protected:
 
 private:
     void SetupProfileSetting(const TString& name, const TString& value, bool existingProfile, const TString &profileName,
-                             std::shared_ptr<IProfile> profile, bool interactive, bool cmdLine);
+                             std::shared_ptr<IProfile> profile, bool interactive, bool cmdLine, bool verbose);
     void SetupProfileAuthentication(bool existingProfile, const TString& profileName, std::shared_ptr<IProfile> profile,
                                     TConfig& config, bool interactive, bool cmdLine);
     bool SetAuthFromCommandLine(std::shared_ptr<IProfile> profile);

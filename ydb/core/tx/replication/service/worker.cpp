@@ -88,18 +88,22 @@ TEvWorker::TEvDataEnd::TEvDataEnd(ui64 partitionId, TVector<ui64>&& adjacentPart
 {
 }
 
-TEvWorker::TEvDataEnd::TEvDataEnd(ui64 partitionId, const TVector<ui64>& adjacentPartitionsIds, const TVector<ui64>& childPartitionsIds)
-    : PartitionId(partitionId)
-    , AdjacentPartitionsIds(adjacentPartitionsIds)
-    , ChildPartitionsIds(childPartitionsIds)
-{
-}
-
 TString TEvWorker::TEvDataEnd::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
         << " PartitionId: " << PartitionId
         << " AdjacentPartitionsIds: " << JoinSeq(", ", AdjacentPartitionsIds)
         << " ChildPartitionsIds: " << JoinSeq(", ", ChildPartitionsIds)
+    << " }";
+}
+
+TEvWorker::TEvTerminateWriter::TEvTerminateWriter(ui64 partitionId)
+    : PartitionId(partitionId)
+{
+}
+
+TString TEvWorker::TEvTerminateWriter::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " PartitionId: " << PartitionId
     << " }";
 }
 
@@ -161,7 +165,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 << ": sender# " << ev->Sender);
 
             Reader.Registered();
-            if (!InFlightData && !DataEnd) {
+            if (!InFlightData && !TerminateWriter) {
                 Send(Reader, new TEvWorker::TEvPoll());
             }
         } else if (ev->Sender == Writer) {
@@ -171,8 +175,8 @@ class TWorker: public TActorBootstrapped<TWorker> {
             Writer.Registered();
             if (InFlightData) {
                 Send(Writer, new TEvWorker::TEvData(InFlightData->PartitionId, InFlightData->Source, InFlightData->Records));
-            } else if (DataEnd) {
-                Send(Writer, new TEvWorker::TEvDataEnd(DataEnd->PartitionId, DataEnd->AdjacentPartitionsIds, DataEnd->ChildPartitionsIds));
+            } else if (TerminateWriter) {
+                Send(Writer, new TEvWorker::TEvTerminateWriter(TerminateWriter->PartitionId));
             }
         } else {
             LOG_W("Handshake from unknown actor"
@@ -202,7 +206,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
 
         InFlightData.Reset();
-        DataEnd.Reset();
+        TerminateWriter.Reset();
         if (Reader) {
             Send(ev->Forward(Reader));
         }
@@ -239,17 +243,17 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
     }
 
-    void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
+    void Handle(TEvWorker::TEvTerminateWriter::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
         if (ev->Sender != Reader) {
-            LOG_W("Data end from unknown actor"
+            LOG_W("Terminate writer from unknown actor"
                 << ": sender# " << ev->Sender);
             return;
         }
 
-        Y_ABORT_UNLESS(!DataEnd);
-        DataEnd = MakeHolder<TEvWorker::TEvDataEnd>(ev->Get()->PartitionId, ev->Get()->AdjacentPartitionsIds, ev->Get()->ChildPartitionsIds);
+        Y_ABORT_UNLESS(!TerminateWriter);
+        TerminateWriter = MakeHolder<TEvWorker::TEvTerminateWriter>(ev->Get()->PartitionId);
 
         if (Writer) {
             Send(ev->Forward(Writer));
@@ -364,8 +368,9 @@ public:
             hFunc(TEvWorker::TEvPoll, Handle);
             hFunc(TEvWorker::TEvCommit, Handle);
             hFunc(TEvWorker::TEvData, Handle);
-            hFunc(TEvWorker::TEvDataEnd, Handle);
+            hFunc(TEvWorker::TEvDataEnd, Forward);
             hFunc(TEvWorker::TEvGone, Handle);
+            hFunc(TEvWorker::TEvTerminateWriter, Handle);
             hFunc(TEvService::TEvGetTxId, Forward);
             hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(TEvService::TEvHeartbeat, Forward);
@@ -383,7 +388,7 @@ private:
     TActorInfo Reader;
     TActorInfo Writer;
     THolder<TEvWorker::TEvData> InFlightData;
-    THolder<TEvWorker::TEvDataEnd> DataEnd;
+    THolder<TEvWorker::TEvTerminateWriter> TerminateWriter;
     TDuration Lag;
 };
 

@@ -14,21 +14,6 @@
 namespace NYdbWorkload {
 
 void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    auto addInitParam = [&]() {
-        opts.AddLongOption( "rows", "Number of vectors to init the table")
-            .Required().StoreResult(&VectorInitCount);
-        opts.AddLongOption( "distance", "Distance/similarity function")
-            .Required().StoreResult(&Distance);
-        opts.AddLongOption( "vector-type", "Type of vectors")
-            .Required().StoreResult(&VectorType);
-        opts.AddLongOption( "vector-dimension", "Vector dimension")
-            .Required().StoreResult(&VectorDimension);
-        opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree")
-            .Required().StoreResult(&KmeansTreeLevels);
-        opts.AddLongOption( "kmeans-tree-clusters", "Number of cluster in kmeans")
-            .Required().StoreResult(&KmeansTreeClusters);
-    };
-
     auto addUpsertParam = [&]() {
     };
 
@@ -48,13 +33,12 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
         opts.AddLongOption( "non-indexed", "Take vector settings from the index, but search without the index")
             .StoreTrue(&NonIndexedSearch);
         opts.AddLongOption("stale-ro", "Read with StaleRO mode")
-            .StoreTrue(&StaleRO);            
+            .StoreTrue(&StaleRO);
     };
 
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
-        ConfigureCommonOpts(opts);
-        addInitParam();
+        NVector::ConfigureTableOpts(opts, &TableOpts);
         break;
     case TWorkloadParams::ECommandType::Import:
         ConfigureCommonOpts(opts);
@@ -77,18 +61,16 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
 
 void TVectorWorkloadParams::ConfigureCommonOpts(NLastGetopt::TOpts& opts) {
     opts.AddLongOption( "table", "Table name")
-        .DefaultValue("vector_index_workload").StoreResult(&TableName);
+        .DefaultValue(TableOpts.Name).StoreResult(&TableOpts.Name);
     opts.AddLongOption( "index", "Index name")
-        .DefaultValue("index").StoreResult(&IndexName);
+        .DefaultValue(IndexName).StoreResult(&IndexName);
 }
 
 void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
+    NVector::ConfigureVectorOpts(opts, &VectorOpts);
+
     opts.AddLongOption( "distance", "Distance/similarity function")
         .Required().StoreResult(&Distance);
-    opts.AddLongOption( "vector-type", "Type of vectors")
-        .Required().StoreResult(&VectorType);
-    opts.AddLongOption( "vector-dimension", "Vector dimension")
-        .Required().StoreResult(&VectorDimension);
     opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
         .Required().StoreResult(&KmeansTreeLevels);
     opts.AddLongOption( "kmeans-tree-clusters", "Number of clusters in kmeans. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
@@ -105,7 +87,7 @@ TVector<TString> TVectorWorkloadParams::GetColumns() const {
 }
 
 void TVectorWorkloadParams::Init() {
-    const TString tablePath = GetFullTableName(TableName.c_str());
+    const TString tablePath = GetFullTableName(TableOpts.Name.c_str());
 
     auto session = TableClient->GetSession().ExtractValueSync().GetSession();
     auto describeTableResult = session.DescribeTable(tablePath,
@@ -136,7 +118,7 @@ void TVectorWorkloadParams::Init() {
             // Extract the distance metric from index settings
             const auto& indexSettings = std::get<NYdb::NTable::TKMeansTreeSettings>(index.GetIndexSettings());
             Metric = indexSettings.Settings.Metric;
-            VectorDimension = indexSettings.Settings.VectorDimension;
+            VectorOpts.VectorDimension = indexSettings.Settings.VectorDimension;
 
             break;
         }
@@ -158,12 +140,12 @@ void TVectorWorkloadParams::Init() {
     if (!TableRowCount) {
         TableRowCount = tableDescription.GetTableRows();
     }
-    Y_ABORT_UNLESS(TableRowCount > 0, "Table %s is empty or statistics is not calculated yet", TableName.c_str());
+    Y_ABORT_UNLESS(TableRowCount > 0, "Table %s is empty or statistics is not calculated yet", TableOpts.Name.c_str());
 
     // If we have fewer vectors than requested targets, adjust Params.Targets
     Y_ABORT_UNLESS(TableRowCount >= Targets, "Requested more targets than row number in the dataset.");
 
-    Y_ABORT_UNLESS(indexFound, "Index %s not found in table %s", IndexName.c_str(), TableName.c_str());
+    Y_ABORT_UNLESS(indexFound, "Index %s not found in table %s", IndexName.c_str(), TableOpts.Name.c_str());
 
     if (QueryTableName) {
         const TString tablePath = GetFullTableName(QueryTableName.c_str());
@@ -171,9 +153,7 @@ void TVectorWorkloadParams::Init() {
         Y_ABORT_UNLESS(describeTableResult.IsSuccess(), "DescribeTable failed: %s", describeTableResult.GetIssues().ToString().c_str());
 
         const auto& tableDescription = describeTableResult.GetTableDescription();
-        Y_ABORT_UNLESS(tableDescription.GetPrimaryKeyColumns().size() == 1,
-            "Only single key is supported. But table %s has %d key columns", QueryTableName.c_str(), tableDescription.GetPrimaryKeyColumns().size());
-        QueryTableKeyColumn = tableDescription.GetPrimaryKeyColumns().at(0);
+        QueryTableKeyColumns = tableDescription.GetPrimaryKeyColumns();
     }
 
     if (NonIndexedSearch) {
@@ -208,7 +188,8 @@ THolder<IWorkloadQueryGenerator> TVectorWorkloadParams::CreateGenerator() const 
 
 TWorkloadDataInitializer::TList TVectorWorkloadParams::CreateDataInitializers() const {
     return {
-        std::make_shared<TWorkloadVectorFilesDataInitializer>(*this)
+        std::make_shared<TWorkloadVectorFilesDataInitializer>(*this),
+        std::make_shared<TWorkloadVectorGenerateDataInitializer>(*this),
     };
 }
 

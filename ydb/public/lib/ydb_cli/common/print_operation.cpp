@@ -14,6 +14,29 @@ namespace {
 
     using namespace NKikimr::NOperationId;
 
+    void AppendIssues(const TStatus& status, TStringBuilder& freeText) {
+        if (!status.GetIssues().Empty()) {
+            freeText << "Issues: " << Endl;
+            for (const auto& issue : status.GetIssues()) {
+                freeText << "  - " << issue << Endl;
+            }
+        }
+    }
+
+    void AppendOperationInfo(const TOperation& operation, TStringBuilder& freeText) {
+        if (!operation.CreatedBy().empty()) {
+            freeText << "Created by: " << operation.CreatedBy() << Endl;
+        }
+
+        if (operation.CreateTime() != TInstant::Zero()) {
+            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
+        }
+
+        if (operation.EndTime() != TInstant::Zero()) {
+            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
+        }
+    }
+
     /// Common
     TPrettyTable MakeTable(const TOperation&) {
         return TPrettyTable({"id", "ready", "status"});
@@ -29,26 +52,8 @@ namespace {
             .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()));
 
         TStringBuilder freeText;
-
-        if (!status.GetIssues().Empty()) {
-            freeText << "Issues: " << Endl;
-            for (const auto& issue : status.GetIssues()) {
-                freeText << "  - " << issue << Endl;
-            }
-        }
-        
-        if (!operation.CreatedBy().empty()) {
-            freeText << "Created by: " << operation.CreatedBy() << Endl;
-        }
-
-        if (operation.CreateTime() != TInstant::Zero()) {
-            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
-        }
-
-        if (operation.EndTime() != TInstant::Zero()) {
-            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
-        }
-
+        AppendIssues(status, freeText);
+        AppendOperationInfo(operation, freeText);
         row.FreeText(freeText);
     }
 
@@ -116,13 +121,7 @@ namespace {
             .Column(4, TStringBuilder() << settings.Host_ << ":" << settings.Port_.value_or(80));
 
         TStringBuilder freeText;
-
-        if (!status.GetIssues().Empty()) {
-            freeText << "Issues: " << Endl;
-            for (const auto& issue : status.GetIssues()) {
-                freeText << "  - " << issue << Endl;
-            }
-        }
+        AppendIssues(status, freeText);
 
         freeText << "Items: " << Endl;
         for (const auto& item : settings.Item_) {
@@ -141,18 +140,7 @@ namespace {
 
         freeText << "TypeV3: " << (settings.UseTypeV3_ ? "true" : "false") << Endl;
 
-        if (!operation.CreatedBy().empty()) {
-            freeText << "Created by: " << operation.CreatedBy() << Endl;
-        }
-
-        if (operation.CreateTime() != TInstant::Zero()) {
-            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
-        }
-
-        if (operation.EndTime() != TInstant::Zero()) {
-            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
-        }
-
+        AppendOperationInfo(operation, freeText);
         row.FreeText(freeText);
     }
 
@@ -179,6 +167,7 @@ namespace {
         TStringBuilder freeText;
 
         if constexpr (std::is_same_v<NExport::TExportToS3Response, T>) {
+            freeText << "Include index data: " << (settings.IncludeIndexData_ ? "true" : "false") << Endl;
             freeText << "StorageClass: " << settings.StorageClass_ << Endl;
             if (settings.Compression_) {
                 freeText << "Compression: " << *settings.Compression_ << Endl;
@@ -186,21 +175,18 @@ namespace {
         }
 
         if constexpr (std::is_same_v<NImport::TImportFromS3Response, T>) {
+            freeText << "Index population mode: " << settings.IndexPopulationMode_ << Endl;
+
             if (settings.NoACL_) {
                 freeText << "NoACL: " << *settings.NoACL_ << Endl;
             }
-            
+
             if (settings.SkipChecksumValidation_) {
                 freeText << "SkipChecksumValidation: " << *settings.SkipChecksumValidation_ << Endl;
             }
         }
 
-        if (!status.GetIssues().Empty()) {
-            freeText << "Issues: " << Endl;
-            for (const auto& issue : status.GetIssues()) {
-                freeText << "  - " << issue << Endl;
-            }
-        }
+        AppendIssues(status, freeText);
 
         freeText << "Items: " << Endl;
         for (const auto& item : settings.Item_) {
@@ -217,18 +203,7 @@ namespace {
             freeText << "Number of retries: " << settings.NumberOfRetries_.value() << Endl;
         }
 
-        if (!operation.CreatedBy().empty()) {
-            freeText << "Created by: " << operation.CreatedBy() << Endl;
-        }
-
-        if (operation.CreateTime() != TInstant::Zero()) {
-            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
-        }
-
-        if (operation.EndTime() != TInstant::Zero()) {
-            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
-        }
-
+        AppendOperationInfo(operation, freeText);
         row.FreeText(freeText);
     }
 
@@ -270,14 +245,8 @@ namespace {
             .Column(6, metadata.Desctiption ? metadata.Desctiption->GetIndexName() : "");
 
         TStringBuilder freeText;
-
-        if (!status.GetIssues().Empty()) {
-            freeText << "Issues: " << Endl;
-            for (const auto& issue : status.GetIssues()) {
-                freeText << "  - " << issue << Endl;
-            }
-        }
-
+        AppendIssues(status, freeText);
+        AppendOperationInfo(operation, freeText);
         row.FreeText(freeText);
     }
 
@@ -300,14 +269,8 @@ namespace {
             .Column(5, metadata.ExecMode);
 
         TStringBuilder freeText;
-
-        if (!status.GetIssues().Empty()) {
-            freeText << "Issues: " << Endl;
-            for (const auto& issue : status.GetIssues()) {
-                freeText << "  - " << issue << Endl;
-            }
-        }
-
+        AppendIssues(status, freeText);
+        AppendOperationInfo(operation, freeText);
         row.FreeText(freeText);
     }
 
@@ -340,26 +303,8 @@ namespace {
             .Column(3, PrintProgress(metadata));
 
         TStringBuilder freeText;
-
-        if (!status.GetIssues().Empty()) {
-            freeText << "Issues: " << Endl;
-            for (const auto& issue : status.GetIssues()) {
-                freeText << "  - " << issue << Endl;
-            }
-        }
-
-        if (!operation.CreatedBy().empty()) {
-            freeText << "Created by: " << operation.CreatedBy() << Endl;
-        }
-
-        if (operation.CreateTime() != TInstant::Zero()) {
-            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
-        }
-
-        if (operation.EndTime() != TInstant::Zero()) {
-            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
-        }
-
+        AppendIssues(status, freeText);
+        AppendOperationInfo(operation, freeText);
         row.FreeText(freeText);
     }
 
@@ -392,26 +337,8 @@ namespace {
             .Column(3, PrintProgress(metadata));
 
         TStringBuilder freeText;
-
-        if (!status.GetIssues().Empty()) {
-            freeText << "Issues: " << Endl;
-            for (const auto& issue : status.GetIssues()) {
-                freeText << "  - " << issue << Endl;
-            }
-        }
-
-        if (!operation.CreatedBy().empty()) {
-            freeText << "Created by: " << operation.CreatedBy() << Endl;
-        }
-
-        if (operation.CreateTime() != TInstant::Zero()) {
-            freeText << "Create time: " << operation.CreateTime().ToStringUpToSeconds() << Endl;
-        }
-
-        if (operation.EndTime() != TInstant::Zero()) {
-            freeText << "End time: " << operation.EndTime().ToStringUpToSeconds() << Endl;
-        }
-
+        AppendIssues(status, freeText);
+        AppendOperationInfo(operation, freeText);
         row.FreeText(freeText);
     }
 

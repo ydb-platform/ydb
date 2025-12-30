@@ -204,20 +204,21 @@ def py_program(unit, py3):
     Documentation: https://wiki.yandex-team.ru/devtools/commandsandvars/py_srcs/#modulpyprogramimakrospymain
     """
     arcadia_python = unit.get('USE_ARCADIA_PYTHON') == 'yes'
-    if py3:
-        peers = ['library/python/runtime_py3/main'] if arcadia_python else []
-        if unit.get('PYTHON_SQLITE3') != 'no':
-            peer = (
-                'contrib/tools/python3_prev/Modules/_sqlite'
-                if unit.get('USE_PYTHON3_PREV') == 'yes'
-                else 'contrib/tools/python3/Modules/_sqlite'
-            )
-            peers.append(peer)
-    else:
-        peers = ['library/python/runtime/main'] if arcadia_python else []
-        if unit.get('PYTHON_SQLITE3') != 'no':
-            peers.append('contrib/tools/python/src/Modules/_sqlite')
-    unit.onpeerdir(peers)
+    if arcadia_python:
+        if py3:
+            peers = ['library/python/runtime_py3/main']
+            if unit.get('PYTHON_SQLITE3') != 'no':
+                peer = (
+                    'contrib/tools/python3_prev/Modules/_sqlite'
+                    if unit.get('USE_PYTHON3_PREV') == 'yes'
+                    else 'contrib/tools/python3/Modules/_sqlite'
+                )
+                peers.append(peer)
+        else:
+            peers = ['library/python/runtime/main']
+            if unit.get('PYTHON_SQLITE3') != 'no':
+                peers.append('contrib/tools/python/src/Modules/_sqlite')
+        unit.onpeerdir(peers)
 
     # DEVTOOLSSUPPORT-53161
     if unit.get('OS_WINDOWS') == 'yes':

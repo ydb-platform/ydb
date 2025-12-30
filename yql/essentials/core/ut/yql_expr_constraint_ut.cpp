@@ -3465,13 +3465,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "");
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(GroupByHop) {
-        const TStringBuf s = R"((
-=======
 Y_UNIT_TEST(HOP) {
     const TStringBuf s = R"((
->>>>>>> ce841fb266c (Watermarks: YQL: fix constraints)
 (let list (AsList
     (AsStruct '('"time" (String '"2024-01-01T00:00:01Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
     (AsStruct '('"time" (String '"2024-01-01T00:00:02Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
@@ -3493,13 +3488,6 @@ Y_UNIT_TEST(HOP) {
 (return (Commit! world res))
     ))";
 
-<<<<<<< HEAD
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TDistinctConstraintNode>(exprRoot, "PartitionsByKeys", "Distinct((data,group0))");
-        CheckConstraint<TUniqueConstraintNode>(exprRoot, "PartitionsByKeys", "Unique((data,group0))");
-    }
-=======
     TExprContext exprCtx;
     const auto exprRoot = ParseAndAnnotate(s, exprCtx);
     CheckConstraint<TDistinctConstraintNode>(exprRoot, "MultiHoppingCore", "Distinct((data,group0))");
@@ -3534,7 +3522,6 @@ Y_UNIT_TEST(HoppingWindow) {
     CheckConstraint<TDistinctConstraintNode>(exprRoot, "MultiHoppingCore", "Distinct((data,group0))");
     CheckConstraint<TUniqueConstraintNode>(exprRoot, "MultiHoppingCore", "Unique((data,group0))");
 }
->>>>>>> ce841fb266c (Watermarks: YQL: fix constraints)
 
     Y_UNIT_TEST(StablePickleOfComplexUnique) {
         const TStringBuf s = R"(

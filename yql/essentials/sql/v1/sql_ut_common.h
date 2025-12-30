@@ -9653,14 +9653,6 @@ Y_UNIT_TEST_SUITE(HoppingWindow) {
         UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(HoppingWindowWithoutSource) {
-        ExpectFailWithError(
-            R"sql(SELECT 1 + HoppingWindow(key, 39, 42);)sql",
-            "<main>:1:12: Error: HoppingWindow requires data source\n"
-        );
-    }
-=======
 Y_UNIT_TEST(HoppingWindowNamedParameters) {
     {
         auto query = R"sql(
@@ -9693,12 +9685,12 @@ Y_UNIT_TEST(HoppingWindowNamedParameters) {
     }
 }
 
-Y_UNIT_TEST(HoppingWindowWithoutSource) {
-    ExpectFailWithError(
-        R"sql(SELECT 1 + HoppingWindow(key, 39, 42);)sql",
-        "<main>:1:12: Error: HoppingWindow requires data source\n");
-}
->>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
+    Y_UNIT_TEST(HoppingWindowWithoutSource) {
+        ExpectFailWithError(
+            R"sql(SELECT 1 + HoppingWindow(key, 39, 42);)sql",
+            "<main>:1:12: Error: HoppingWindow requires data source\n"
+        );
+    }
 
     Y_UNIT_TEST(HoppingWindowInProjection) {
         ExpectFailWithError(
@@ -9734,14 +9726,9 @@ Y_UNIT_TEST(HoppingWindowWithoutSource) {
                     key;
             )sql",
 
-<<<<<<< HEAD
             "<main>:7:21: Error: Source does not allow column references\n"
             "<main>:7:45: Error: Column reference 'subkey'\n"
         );
-    }
-=======
-        "<main>:7:21: Error: Source does not allow column references\n"
-        "<main>:7:45: Error: Column reference 'subkey'\n");
 
     ExpectFailWithError(
         R"sql(
@@ -9770,8 +9757,7 @@ Y_UNIT_TEST(HoppingWindowWithoutSource) {
 
         "<main>:7:21: Error: Source does not allow column references\n"
         "<main>:7:48: Error: Column reference 'subkey'\n");
-}
->>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
+    }
 
     Y_UNIT_TEST(HoppingWindowWithWrongNumberOfArgs) {
         ExpectFailWithError(
@@ -9782,12 +9768,7 @@ Y_UNIT_TEST(HoppingWindowWithoutSource) {
                 GROUP BY HoppingWindow(key, 39);
             )sql",
 
-<<<<<<< HEAD
-            "<main>:5:26: Error: HoppingWindow requires three arguments\n"
-        );
-=======
         "<main>:5:26: Error: HoppingWindow requires three positional arguments\n");
->>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
 
         ExpectFailWithError(
             R"sql(
@@ -9797,11 +9778,6 @@ Y_UNIT_TEST(HoppingWindowWithoutSource) {
                 GROUP BY HoppingWindow(key, 39, 42, 63);
             )sql",
 
-<<<<<<< HEAD
-            "<main>:5:26: Error: HoppingWindow requires three arguments\n"
-        );
-    }
-=======
         "<main>:5:26: Error: HoppingWindow requires three positional arguments\n");
 }
 
@@ -9832,7 +9808,6 @@ Y_UNIT_TEST(HoppingWindowWithEvaluatedLimit) {
         UNIT_ASSERT_VALUES_EQUAL(0, res.Issues.Size());
     }
 }
->>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
 
     Y_UNIT_TEST(DuplicateHoppingWindow) {
         ExpectFailWithError(

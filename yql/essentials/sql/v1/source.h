@@ -113,41 +113,14 @@ namespace NSQLTranslationV1 {
         TString GetGroupByColumnAlias(const TString& column) const;
         const TVector<TNodePtr>& Expressions(EExprSeat exprSeat) const;
 
-<<<<<<< HEAD
         virtual TWindowSpecificationPtr FindWindowSpecification(TContext& ctx, const TString& windowName) const;
-=======
-class THoppingWindow final: public INode {
-public:
-    THoppingWindow(TPosition pos, TVector<TNodePtr> args, bool useNamed);
-    TNodePtr BuildTraits(const TString& label) const;
-    TNodePtr GetInterval() const;
-    void MarkValid();
->>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
 
         TIntrusivePtr<ISource> CloneSource() const;
         TNodePtr BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, const TString& label, bool traits, bool assume);
 
-<<<<<<< HEAD
     protected:
         ISource(TPosition pos);
         virtual TAstNode* Translate(TContext& ctx) const;
-=======
-private:
-    TVector<TNodePtr> Args_;
-    TSourcePtr FakeSource_;
-    TNodePtr TimeExtractor_;
-    TNodePtr Hop_;
-    TNodePtr Interval_;
-    TNodePtr SizeLimit_;
-    TNodePtr TimeLimit_;
-    TNodePtr EarlyPolicy_;
-    TNodePtr LatePolicy_;
-    const TNodePtr Delay_ = Y("Interval", Q("0"));
-    const TString DataWatermarks_ = "true";
-    bool UseNamed_ = false;
-    bool Valid_;
-};
->>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
 
         void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortKeySelector, TNodePtr& sortDirection);
 
@@ -236,12 +209,12 @@ private:
         bool Valid_;
     };
 
-    class THoppingWindow final : public INode {
-    public:
-        THoppingWindow(TPosition pos, TVector<TNodePtr> args);
-        TNodePtr BuildTraits(const TString& label) const;
-        TNodePtr GetInterval() const;
-        void MarkValid();
+class THoppingWindow final: public INode {
+public:
+    THoppingWindow(TPosition pos, TVector<TNodePtr> args, bool useNamed);
+    TNodePtr BuildTraits(const TString& label) const;
+    TNodePtr GetInterval() const;
+    void MarkValid();
 
     private:
         bool DoInit(TContext& ctx, ISource* src) override;
@@ -251,16 +224,21 @@ private:
         TString GetOpName() const override;
         TNodePtr ProcessIntervalParam(const TNodePtr& val) const;
 
-    private:
-        TVector<TNodePtr> Args_;
-        TSourcePtr FakeSource_;
-        TNodePtr TimeExtractor_;
-        TNodePtr Hop_;
-        TNodePtr Interval_;
-        const TNodePtr Delay_ = Y("Interval", Q("0"));
-        const TString DataWatermarks_ = "true";
-        bool Valid_;
-    };
+private:
+    TVector<TNodePtr> Args_;
+    TSourcePtr FakeSource_;
+    TNodePtr TimeExtractor_;
+    TNodePtr Hop_;
+    TNodePtr Interval_;
+    TNodePtr SizeLimit_;
+    TNodePtr TimeLimit_;
+    TNodePtr EarlyPolicy_;
+    TNodePtr LatePolicy_;
+    const TNodePtr Delay_ = Y("Interval", Q("0"));
+    const TString DataWatermarks_ = "true";
+    bool UseNamed_ = false;
+    bool Valid_;
+};
 
 
     // Implemented in join.cpp

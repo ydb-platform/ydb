@@ -2215,10 +2215,6 @@ TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
         Interval_,
         Delay_,
         Q(DataWatermarks_),
-<<<<<<< HEAD
-        Q("v2")
-    );
-=======
         Q("v2"));
     if (SizeLimit_ || TimeLimit_ || EarlyPolicy_ || LatePolicy_) {
         result->Add(
@@ -2228,7 +2224,6 @@ TNodePtr THoppingWindow::BuildTraits(const TString& label) const {
             LatePolicy_ ? LatePolicy_ : Y("Void"));
     }
     return result;
->>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
 }
 
 TNodePtr THoppingWindow::GetInterval() const {
@@ -3982,17 +3977,13 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             }
             return new TCallNodeImpl(pos, "SqlVisit", 1, -1, resultArgs);
         } else if (normalizedName == "sqlexternalfunction") {
-<<<<<<< HEAD
             return new TCallNodeImpl(pos, "SqlExternalFunction", args);
-=======
-            return TNonNull(TNodePtr(new TCallNodeImpl(pos, "SqlExternalFunction", args)));
         } else if (normalizedName == "hoppingwindow") {
             bool useNamed = mustUseNamed && *mustUseNamed;
             if (useNamed) {
                 *mustUseNamed = false;
             }
             return TNonNull(TNodePtr(new THoppingWindow(pos, args, useNamed)));
->>>>>>> bb5e850eb09 (multihopping: add FarFuture statistics and limits)
         } else {
             return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown builtin: " << name);
         }

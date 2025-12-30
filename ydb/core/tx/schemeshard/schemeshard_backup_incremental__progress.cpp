@@ -52,10 +52,25 @@ public:
 
             if (Self->PathsById.contains(tablePathId)) {
                 auto tablePathInfo = Self->PathsById.at(tablePathId);
+                // Check if this table is an index impl table (parent is an index)
                 if (tablePathInfo->ParentPathId && Self->PathsById.contains(tablePathInfo->ParentPathId)) {
                     auto parentPath = Self->PathsById.at(tablePathInfo->ParentPathId);
                     if (parentPath->IsTableIndex() && Self->Indexes.contains(tablePathInfo->ParentPathId)) {
                         auto index = Self->Indexes.at(tablePathInfo->ParentPathId);
+                        maxVersion = Max(maxVersion, index->AlterVersion);
+                    }
+                }
+                // For main tables, also consider child index versions
+                for (const auto& [childName, childPathId] : tablePathInfo->GetChildren()) {
+                    if (!Self->PathsById.contains(childPathId)) {
+                        continue;
+                    }
+                    auto childPath = Self->PathsById.at(childPathId);
+                    if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                        continue;
+                    }
+                    if (Self->Indexes.contains(childPathId)) {
+                        auto index = Self->Indexes.at(childPathId);
                         maxVersion = Max(maxVersion, index->AlterVersion);
                     }
                 }

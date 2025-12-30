@@ -2637,7 +2637,7 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         if (txState.TargetPathTargetState) {
             proto.MutableTxCopyTableExtraData()->SetTargetPathTargetState(*txState.TargetPathTargetState);
         }
-        if (txState.CoordinatedSchemaVersion) {
+        if (txState.CoordinatedSchemaVersion.Defined()) {
             proto.MutableTxCopyTableExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
         }
         bool serializeRes = proto.SerializeToString(&extraData);
@@ -2652,7 +2652,7 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
     }  else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
-        if (txState.CoordinatedSchemaVersion) {
+        if (txState.CoordinatedSchemaVersion.Defined()) {
             proto.MutableTxCdcStreamExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
         }
         bool serializeRes = proto.SerializeToString(&extraData);
@@ -2665,11 +2665,20 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
                txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
-        if (txState.CoordinatedSchemaVersion) {
+        if (txState.CoordinatedSchemaVersion.Defined()) {
             proto.MutableTxCdcStreamExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
         }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
+    } else if (txState.TxType == TTxState::TxMoveIndex ||
+               txState.TxType == TTxState::TxDropTableIndex ||
+               txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
+        if (txState.CoordinatedSchemaVersion.Defined()) {
+            NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+            proto.MutableTxCdcStreamExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
+            bool serializeRes = proto.SerializeToString(&extraData);
+            Y_ABORT_UNLESS(serializeRes);
+        }
     }
 
     db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(

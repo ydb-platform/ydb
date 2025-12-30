@@ -143,7 +143,7 @@ public:
                 if (hasDrop) {
                     auto& dropNotice = *combined.MutableDropCdcStreamNotice();
                     txState->SourcePathId.ToProto(dropNotice.MutablePathId());
-                    if (txState->CoordinatedSchemaVersion) {
+                    if (txState->CoordinatedSchemaVersion.Defined()) {
                         dropNotice.SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
                     } else {
                         dropNotice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion + 1);
@@ -156,7 +156,7 @@ public:
 
                 if (hasCreate) {
                     NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
-                    if (txState->CoordinatedSchemaVersion) {
+                    if (txState->CoordinatedSchemaVersion.Defined()) {
                         combined.MutableCreateCdcStreamNotice()->SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
                     }
                 }
@@ -296,7 +296,7 @@ public:
             if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
                 auto srcTable = context.SS->Tables.at(srcPathId);
 
-                if (txState->CoordinatedSchemaVersion) {
+                if (txState->CoordinatedSchemaVersion.Defined()) {
                     srcTable->AlterVersion = *txState->CoordinatedSchemaVersion;
                 } else {
                     srcTable->AlterVersion += 1;

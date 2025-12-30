@@ -1,5 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
@@ -184,28 +185,8 @@ public:
         context.SS->PersistTableAlterVersion(db, pathId, table);
 
         // Sync remaining child index versions with main table
-        // (excluding the one being dropped)
-        for (const auto& [childName, childPathId] : path->GetChildren()) {
-            if (context.SS->PathsById.contains(childPathId)) {
-                auto childPath = context.SS->PathsById.at(childPathId);
-                if (childPath->IsTableIndex() && !childPath->PlannedToDrop() && !childPath->Dropped()) {
-                    if (context.SS->Indexes.contains(childPathId)) {
-                        auto index = context.SS->Indexes.at(childPathId);
-                        if (index->AlterVersion < table->AlterVersion) {
-                            index->AlterVersion = table->AlterVersion;
-                            // If there's ongoing alter operation, also update alterData version to converge
-                            if (index->AlterData && index->AlterData->AlterVersion < table->AlterVersion) {
-                                index->AlterData->AlterVersion = table->AlterVersion;
-                                context.SS->PersistTableIndexAlterData(db, childPathId);
-                            }
-                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
-                            context.SS->ClearDescribePathCaches(childPath);
-                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
-                        }
-                    }
-                }
-            }
-        }
+        // (excluding the one being dropped - skipPlannedToDrop=true)
+        NTableIndexVersion::SyncChildIndexVersions(path, table, table->AlterVersion, OperationId, context, db, true);
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);

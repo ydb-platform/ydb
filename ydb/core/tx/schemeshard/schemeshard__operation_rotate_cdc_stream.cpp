@@ -447,7 +447,7 @@ protected:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxRotateCdcStreamAtTable);
 
         // Use coordinated version if available (from backup operations)
-        if (txState->CoordinatedSchemaVersion) {
+        if (txState->CoordinatedSchemaVersion.Defined()) {
             notice.SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
         } else {
             notice.SetTableSchemaVersion(table->AlterVersion + 1);

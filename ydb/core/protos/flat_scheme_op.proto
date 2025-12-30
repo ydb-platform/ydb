@@ -1154,7 +1154,7 @@ message TIncrementalRestoreFinalize {
     repeated string TargetTablePaths = 3;
     repeated string BackupTablePaths = 4;
     // Per-table coordinated versions: PathId.LocalPathId -> version
-    map<uint64, uint64> TableCoordinatedVersions = 6;
+    map<uint64, uint64> TableCoordinatedVersions = 5;
 }
 
 message TIncrementalRestoreOperationId {

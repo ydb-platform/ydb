@@ -10,8 +10,6 @@ namespace NKikimr::NSchemeShard::NCdcStreamState {
 
 namespace {
 
-constexpr const char* CONTINUOUS_BACKUP_SUFFIX = "_continuousBackupImpl";
-
 bool IsExpectedTxType(TTxState::ETxType txType) {
     switch (txType) {
     case TTxState::TxCreateCdcStreamAtTable:
@@ -27,33 +25,12 @@ bool IsExpectedTxType(TTxState::ETxType txType) {
     }
 }
 
-bool IsContinuousBackupStream(const TString& streamName) {
-    return streamName.EndsWith(CONTINUOUS_BACKUP_SUFFIX);
-}
-
 struct TTableVersionContext {
     TPathId PathId;
     TPathId ParentPathId;
     TPathId GrandParentPathId;
     bool IsIndexImplTable = false;
-    bool IsContinuousBackupStream = false;
-    bool IsPartOfContinuousBackup = false;
 };
-
-bool DetectContinuousBackupStream(const TTxState& txState, TOperationContext& context) {
-    if (!txState.CdcPathId || !context.SS->PathsById.contains(txState.CdcPathId)) {
-        return false;
-    }
-
-    auto cdcPath = context.SS->PathsById.at(txState.CdcPathId);
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Checking CDC stream name"
-                << ", cdcPathId: " << txState.CdcPathId
-                << ", streamName: " << cdcPath->Name
-                << ", at schemeshard: " << context.SS->SelfTabletId());
-
-    return IsContinuousBackupStream(cdcPath->Name);
-}
 
 bool DetectIndexImplTable(TPathElement::TPtr path, TOperationContext& context, TPathId& outGrandParentPathId) {
     const TPathId& parentPathId = path->ParentPathId;
@@ -70,27 +47,6 @@ bool DetectIndexImplTable(TPathElement::TPtr path, TOperationContext& context, T
     return false;
 }
 
-bool HasParentContinuousBackup(const TPathId& grandParentPathId, TOperationContext& context) {
-    if (!grandParentPathId || !context.SS->PathsById.contains(grandParentPathId)) {
-        return false;
-    }
-
-    auto grandParentPath = context.SS->PathsById.at(grandParentPathId);
-    for (const auto& [childName, childPathId] : grandParentPath->GetChildren()) {
-        auto childPath = context.SS->PathsById.at(childPathId);
-        if (childPath->IsCdcStream() && IsContinuousBackupStream(childName)) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Detected continuous backup via parent table CDC stream"
-                        << ", parentTablePathId: " << grandParentPathId
-                        << ", cdcStreamName: " << childName
-                        << ", at schemeshard: " << context.SS->SelfTabletId());
-            return true;
-        }
-    }
-
-    return false;
-}
-
 TTableVersionContext BuildTableVersionContext(
     const TTxState& txState,
     TPathElement::TPtr path,
@@ -99,16 +55,7 @@ TTableVersionContext BuildTableVersionContext(
     TTableVersionContext ctx;
     ctx.PathId = txState.TargetPathId;
     ctx.ParentPathId = path->ParentPathId;
-    ctx.IsContinuousBackupStream = DetectContinuousBackupStream(txState, context);
     ctx.IsIndexImplTable = DetectIndexImplTable(path, context, ctx.GrandParentPathId);
-    
-    // Check if impl table is part of continuous backup
-    if (ctx.IsIndexImplTable) {
-        ctx.IsPartOfContinuousBackup = HasParentContinuousBackup(ctx.GrandParentPathId, context);
-    } else {
-        ctx.IsPartOfContinuousBackup = ctx.IsContinuousBackupStream;
-    }
-
     return ctx;
 }
 
@@ -251,6 +198,8 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
             }
         }
     } else {
+        // For main tables, sync all child indexes
+        // Note: We collect indexes to publish but don't publish here since we control ordering
         ui64 targetVersion = table->AlterVersion;
         for (const auto& [childName, childPathId] : path->GetChildren()) {
             if (!context.SS->PathsById.contains(childPathId)) {
@@ -336,3 +285,50 @@ bool TProposeAtTableDropSnapshot::HandleReply(TEvPrivate::TEvOperationPlan::TPtr
 }
 
 }  // NKikimr::NSchemeShard::NCdcStreamState
+
+namespace NKikimr::NSchemeShard::NTableIndexVersion {
+
+TVector<TPathId> SyncChildIndexVersions(
+    TPathElement::TPtr path,
+    TTableInfo::TPtr table,
+    ui64 targetVersion,
+    TOperationId operationId,
+    TOperationContext& context,
+    NIceDb::TNiceDb& db,
+    bool skipPlannedToDrop)
+{
+    TVector<TPathId> publishedIndexes;
+
+    for (const auto& [childName, childPathId] : path->GetChildren()) {
+        if (!context.SS->PathsById.contains(childPathId)) {
+            continue;
+        }
+        auto childPath = context.SS->PathsById.at(childPathId);
+        if (!childPath->IsTableIndex() || childPath->Dropped()) {
+            continue;
+        }
+        if (skipPlannedToDrop && childPath->PlannedToDrop()) {
+            continue;
+        }
+        if (!context.SS->Indexes.contains(childPathId)) {
+            continue;
+        }
+        auto index = context.SS->Indexes.at(childPathId);
+        if (index->AlterVersion < targetVersion) {
+            index->AlterVersion = targetVersion;
+            // If there's ongoing alter operation, also update alterData version to converge
+            if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
+                index->AlterData->AlterVersion = targetVersion;
+                context.SS->PersistTableIndexAlterData(db, childPathId);
+            }
+            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+            context.SS->ClearDescribePathCaches(childPath);
+            context.OnComplete.PublishToSchemeBoard(operationId, childPathId);
+            publishedIndexes.push_back(childPathId);
+        }
+    }
+
+    return publishedIndexes;
+}
+
+}  // NKikimr::NSchemeShard::NTableIndexVersion

@@ -85,6 +85,27 @@ void PrepareTables(TSession session) {
             INDEX idx GLOBAL ON (idx_a, idx_b)
         );
 
+        CREATE TABLE `Level1` ( `Id` Int32 NOT NULL, `Name` Utf8, `Date` Timestamp NOT NULL, `Level2_Name` Utf8, `OneToOne_Required_PK_Date` Timestamp, `Level1_Required_Id` Int32, `Level1_Optional_Id` Int32, `Level3_Name` Utf8,
+            `Level2_Required_Id` Int32, `Level2_Optional_Id` Int32, `Level4_Name` Utf8, `Level3_Required_Id` Int32, `Level3_Optional_Id` Int32, `OneToOne_Optional_PK_Inverse4Id` Int32, `OneToMany_Required_Inverse4Id` Int32,
+            `OneToMany_Optional_Inverse4Id` Int32, `OneToOne_Optional_PK_Inverse3Id` Int32, `OneToMany_Required_Inverse3Id` Int32, `OneToMany_Optional_Inverse3Id` Int32, `OneToOne_Optional_PK_Inverse2Id` Int32, `OneToMany_Required_Inverse2Id` Int32, `OneToMany_Optional_Inverse2Id` Int32,
+            INDEX `IX_Level1_Level1_Optional_Id` GLOBAL SYNC ON (`Level1_Optional_Id`),
+            INDEX `IX_Level1_Level1_Required_Id` GLOBAL SYNC ON (`Level1_Required_Id`),
+            INDEX `IX_Level1_Level2_Optional_Id` GLOBAL SYNC ON (`Level2_Optional_Id`),
+            INDEX `IX_Level1_Level2_Required_Id` GLOBAL SYNC ON (`Level2_Required_Id`),
+            INDEX `IX_Level1_Level3_Optional_Id` GLOBAL SYNC ON (`Level3_Optional_Id`),
+            INDEX `IX_Level1_Level3_Required_Id` GLOBAL SYNC ON (`Level3_Required_Id`),
+            INDEX `IX_Level1_OneToMany_Optional_Inverse2Id` GLOBAL SYNC ON (`OneToMany_Optional_Inverse2Id`),
+            INDEX `IX_Level1_OneToMany_Optional_Inverse3Id` GLOBAL SYNC ON (`OneToMany_Optional_Inverse3Id`),
+            INDEX `IX_Level1_OneToMany_Optional_Inverse4Id` GLOBAL SYNC ON (`OneToMany_Optional_Inverse4Id`),
+            INDEX `IX_Level1_OneToMany_Required_Inverse2Id` GLOBAL SYNC ON (`OneToMany_Required_Inverse2Id`),
+            INDEX `IX_Level1_OneToMany_Required_Inverse3Id` GLOBAL SYNC ON (`OneToMany_Required_Inverse3Id`),
+            INDEX `IX_Level1_OneToMany_Required_Inverse4Id` GLOBAL SYNC ON (`OneToMany_Required_Inverse4Id`),
+            INDEX `IX_Level1_OneToOne_Optional_PK_Inverse2Id` GLOBAL SYNC ON (`OneToOne_Optional_PK_Inverse2Id`),
+            INDEX `IX_Level1_OneToOne_Optional_PK_Inverse3Id` GLOBAL SYNC ON (`OneToOne_Optional_PK_Inverse3Id`),
+            INDEX `IX_Level1_OneToOne_Optional_PK_Inverse4Id` GLOBAL SYNC ON (`OneToOne_Optional_PK_Inverse4Id`),
+            PRIMARY KEY (`Id`)
+        );
+
         CREATE TABLE X (x_id Int32, a Int32, b Int32, PRIMARY KEY(x_id));
         CREATE TABLE Y (y_id Int32, a Int32, b Int32, c Int32, PRIMARY KEY(y_id), INDEX ix_a GLOBAL ON (a));
 

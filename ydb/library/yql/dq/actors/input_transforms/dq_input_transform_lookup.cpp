@@ -1,6 +1,7 @@
 #include "dq_input_transform_lookup.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
@@ -47,6 +48,7 @@ public:
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
+        TDqComputeActorWatermarks* watermarksTracker,
         const THashMap<TString, TString>& secureParams)
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
         , Alloc(alloc)
@@ -67,6 +69,7 @@ public:
         , LookupPayloadType(lookupPayloadType)
         , OutputRowType(outputRowType)
         , OutputRowColumnOrder(std::move(outputRowColumnOrder))
+        , WatermarksTracker(watermarksTracker)
         , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
         , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(Settings.GetCacheLimit(), lookupKeyType))
         , MaxDelayedRows(Settings.GetMaxDelayedRows())
@@ -139,6 +142,33 @@ private: //IDqComputeActorAsyncInput
         while (!ReadyQueue.empty()) {
             PushOutputValue(batch, ReadyQueue.Head());
             ReadyQueue.Pop();
+        }
+    }
+
+    void CheckPendingWatermark() {
+        if (WatermarksTracker && InputFlowFetchStatus == NUdf::EFetchStatus::Yield) {
+            if (auto pendingWatermark = WatermarksTracker->GetPendingWatermark()) {
+                Y_DEBUG_ABORT_UNLESS(PendingWatermark < *pendingWatermark);
+                WatermarksTracker->PopPendingWatermark();
+                PendingWatermark = *pendingWatermark;
+            }
+        }
+    }
+
+    void PushReadyWatermark() {
+        if (PendingWatermark) {
+            Y_DEBUG_ABORT_UNLESS(WatermarksTracker);
+            Y_DEBUG_ABORT_UNLESS(ReadyWatermark < *PendingWatermark);
+            ReadyWatermark = *PendingWatermark;
+            PendingWatermark.Clear();
+        }
+    }
+
+    void PopReadyWatermark(TMaybe<TInstant>& watermark) {
+        if (ReadyWatermark) {
+            Y_DEBUG_ABORT_UNLESS(WatermarksTracker);
+            watermark = *ReadyWatermark;
+            ReadyWatermark.Clear();
         }
     }
 
@@ -235,6 +265,7 @@ protected:
     const NMiniKQL::TMultiType* const OutputRowType;
     const TOutputRowColumnOrder OutputRowColumnOrder;
 
+    TDqComputeActorWatermarks* WatermarksTracker;
     NUdf::EFetchStatus InputFlowFetchStatus;
     std::unique_ptr<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl> LruCache;
     size_t MaxDelayedRows;
@@ -243,6 +274,8 @@ protected:
     size_t MinimumRowSize; // only account for unboxed parts
     size_t PayloadExtraSize; // non-embedded part of strings in ReadyQueue
     NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
+    TMaybe<TInstant> PendingWatermark;
+    TMaybe<TInstant> ReadyWatermark;
     NYql::NDq::TDqAsyncStats IngressStats;
     std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> KeysForLookup;
     i64 LastLruSize;
@@ -273,36 +306,36 @@ private: //events
 
 private:
     void AddSingleReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, const NUdf::TUnboxedValue *lookupPayload) {
-            NUdf::TUnboxedValue* outputRowItems;
-            NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
-            for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
-                const auto& [source, index] = OutputRowColumnOrder[i];
-                switch (source) {
-                    case EOutputRowItemSource::InputKey:
+        NUdf::TUnboxedValue* outputRowItems;
+        NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
+        for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
+            const auto& [source, index] = OutputRowColumnOrder[i];
+            switch (source) {
+                case EOutputRowItemSource::InputKey:
+                    outputRowItems[i] = lookupKey.GetElement(index);
+                    break;
+                case EOutputRowItemSource::InputOther:
+                    outputRowItems[i] = inputOther.GetElement(index);
+                    break;
+                case EOutputRowItemSource::LookupKey:
+                    if (lookupPayload) {
                         outputRowItems[i] = lookupKey.GetElement(index);
-                        break;
-                    case EOutputRowItemSource::InputOther:
-                        outputRowItems[i] = inputOther.GetElement(index);
-                        break;
-                    case EOutputRowItemSource::LookupKey:
-                        if (lookupPayload) {
-                            outputRowItems[i] = lookupKey.GetElement(index);
-                        }
-                        break;
-                    case EOutputRowItemSource::LookupOther:
-                        if (lookupPayload) {
-                            outputRowItems[i] = lookupPayload->GetElement(index);
-                        }
-                        break;
-                    case EOutputRowItemSource::None:
-                        Y_ABORT();
-                        break;
-                }
-                if (outputRowItems[i].IsString()) {
-                    PayloadExtraSize += outputRowItems[i].AsStringRef().size();
-                }
+                    }
+                    break;
+                case EOutputRowItemSource::LookupOther:
+                    if (lookupPayload) {
+                        outputRowItems[i] = lookupPayload->GetElement(index);
+                    }
+                    break;
+                case EOutputRowItemSource::None:
+                    Y_ABORT();
+                    break;
             }
-            ReadyQueue.PushRow(outputRowItems, OutputRowType->GetElementsCount());
+            if (outputRowItems[i].IsString()) {
+                PayloadExtraSize += outputRowItems[i].AsStringRef().size();
+            }
+        }
+        ReadyQueue.PushRow(outputRowItems, OutputRowType->GetElementsCount());
     }
 
     void AddReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, NUdf::TUnboxedValue *lookupPayload) {
@@ -344,6 +377,7 @@ private:
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
         }
         KeysForLookup->clear();
+        PushReadyWatermark();
         auto deltaLruSize = (i64)LruCache->Size() - LastLruSize;
         auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
@@ -361,7 +395,7 @@ private:
         TCommon::Free();
     }
 
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark, bool& finished, i64 freeSpace) final {
         Y_UNUSED(freeSpace);
         auto startCycleCount = GetCycleCountFast();
         auto guard = BindAllocator();
@@ -409,16 +443,21 @@ private:
                 }
                 ++row;
             }
+            CheckPendingWatermark();
             if (Batches && (!KeysForLookup->empty() || ReadyQueue.RowCount())) {
                 Batches->Inc();
                 LruHits->Add(ReadyQueue.RowCount());
                 LruMiss->Add(AwaitingQueue.size());
             }
-            if (!KeysForLookup->empty()) {
+            if (KeysForLookup->empty()) {
+                PushReadyWatermark();
+            } else {
                 Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
             }
             DrainReadyQueue(batch);
         }
+        PopReadyWatermark(watermark);
+
         auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
         if (CpuTimeUs) {
@@ -544,7 +583,10 @@ private: //events
                 ReadyQueue.PushRow(output.OutputRowItems, OutputRowType->GetElementsCount());
                 AwaitingQueue.pop_front();
                 LastRequestedIncomplete.reset();
+                PushReadyWatermark();
             }
+        } else {
+            PushReadyWatermark();
         }
         for (auto&& [k, v]: *lookupResult) {
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
@@ -587,7 +629,7 @@ private: //events
     }
 
 public:
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark, bool& finished, i64 freeSpace) final {
         Y_UNUSED(freeSpace);
         auto startCycleCount = GetCycleCountFast();
         auto guard = BindAllocator();
@@ -633,6 +675,7 @@ public:
                 ReadyQueue.PushRow(output.OutputRowItems, outputColumns);
                 AwaitingQueue.pop_front();
                 LastRequestedIncomplete.reset();
+                PushReadyWatermark();
             }
         }
         DrainReadyQueue(batch);
@@ -733,13 +776,19 @@ public:
                 }
                 ++row;
             }
+            CheckPendingWatermark();
             if (Batches && (!KeysForLookup->empty() || ReadyQueue.RowCount())) {
                 Batches->Inc();
             }
             DrainReadyQueue(batch);
         }
-        if (keysForLookupWasEmpty && !KeysForLookup->empty()) {
-            Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
+        PopReadyWatermark(watermark);
+        if (keysForLookupWasEmpty) {
+            if (KeysForLookup->empty()) {
+                PushReadyWatermark();
+            } else {
+                Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
+            }
         }
         auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;
@@ -1117,6 +1166,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 lookupPayloadType,
                 outputRowType,
                 std::move(outputColumnsOrder),
+                args.WatermarksTracker,
                 args.SecureParams
             ) :
             (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupNarrow(
@@ -1136,6 +1186,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 lookupPayloadType,
                 outputRowType,
                 std::move(outputColumnsOrder),
+                args.WatermarksTracker,
                 args.SecureParams
             );
         return {actor, actor};
@@ -1158,6 +1209,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
+            args.WatermarksTracker,
             args.SecureParams
         ) :
         (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupNarrow(
@@ -1177,6 +1229,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
+            args.WatermarksTracker,
             args.SecureParams
         );
     return {actor, actor};

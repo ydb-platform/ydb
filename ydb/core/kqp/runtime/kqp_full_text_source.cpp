@@ -1520,7 +1520,7 @@ public:
             const TIntrusivePtr<NKikimr::NKqp::TDocumentInfo> documentInfoPtr = it->second;
             CA_LOG_E("Adding row info about docnumid: " << documentInfoPtr->DocumentNumId);
             documentInfoPtr->AddRow(row);
-            if (Postfilter(*documentInfoPtr)) {
+            if (PostfilterMatchers.empty() || Postfilter(*documentInfoPtr)) {
                 ResultQueue.push_back(documentInfoPtr);
             }
         }

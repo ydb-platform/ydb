@@ -169,17 +169,9 @@ namespace NYdb::NConsoleClient {
         }
 
         TDuration ParseDurationHours(const TStringBuf str) {
-            double hours = 0;
-            if (!TryFromString(str, hours)) {
-                throw TMisuseException() << "Invalid hours duration '" << str << "'";
-            }
-            if (hours < 0) {
-                throw TMisuseException() << "Duration must be non-negative";
-            }
-            if (!std::isfinite(hours)) {
-                throw TMisuseException() << "Duration must be finite";
-            }
-            return TDuration::Seconds(hours * 3600); // using floating-point ctor with saturation
+            return ParseDurationWithDefaultUnit(str, [](double hours) {
+                return TDuration::Seconds(hours * 3600);
+            });
         }
     }
 
@@ -363,7 +355,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&MinActivePartitions_)
             .DefaultValue(1);
         config.Opts->AddLongOption("retention-period-hours", TStringBuilder()
-                << "Duration in hours for which data in topic is stored "
+                << "Duration in hours for which data in topic is stored (supports time units like '72h', '1440m') "
                 << "(default: " << NColorizer::StdOut().CyanColor() << RetentionPeriod_.Hours() << NColorizer::StdOut().OldColor() << ")")
             .Hidden()
             .Optional()
@@ -463,7 +455,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partitions-count", "Initial and minimum number of partitions for topic")
             .Optional()
             .StoreResult(&MinActivePartitions_);
-        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
+        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored (supports time units like '72h', '1440m')")
             .Hidden()
             .Optional()
             .RequiredArgument("HOURS")

@@ -306,36 +306,36 @@ private: //events
 
 private:
     void AddSingleReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, const NUdf::TUnboxedValue *lookupPayload) {
-            NUdf::TUnboxedValue* outputRowItems;
-            NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
-            for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
-                const auto& [source, index] = OutputRowColumnOrder[i];
-                switch (source) {
-                    case EOutputRowItemSource::InputKey:
+        NUdf::TUnboxedValue* outputRowItems;
+        NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
+        for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
+            const auto& [source, index] = OutputRowColumnOrder[i];
+            switch (source) {
+                case EOutputRowItemSource::InputKey:
+                    outputRowItems[i] = lookupKey.GetElement(index);
+                    break;
+                case EOutputRowItemSource::InputOther:
+                    outputRowItems[i] = inputOther.GetElement(index);
+                    break;
+                case EOutputRowItemSource::LookupKey:
+                    if (lookupPayload) {
                         outputRowItems[i] = lookupKey.GetElement(index);
-                        break;
-                    case EOutputRowItemSource::InputOther:
-                        outputRowItems[i] = inputOther.GetElement(index);
-                        break;
-                    case EOutputRowItemSource::LookupKey:
-                        if (lookupPayload) {
-                            outputRowItems[i] = lookupKey.GetElement(index);
-                        }
-                        break;
-                    case EOutputRowItemSource::LookupOther:
-                        if (lookupPayload) {
-                            outputRowItems[i] = lookupPayload->GetElement(index);
-                        }
-                        break;
-                    case EOutputRowItemSource::None:
-                        Y_ABORT();
-                        break;
-                }
-                if (outputRowItems[i].IsString()) {
-                    PayloadExtraSize += outputRowItems[i].AsStringRef().size();
-                }
+                    }
+                    break;
+                case EOutputRowItemSource::LookupOther:
+                    if (lookupPayload) {
+                        outputRowItems[i] = lookupPayload->GetElement(index);
+                    }
+                    break;
+                case EOutputRowItemSource::None:
+                    Y_ABORT();
+                    break;
             }
-            ReadyQueue.PushRow(outputRowItems, OutputRowType->GetElementsCount());
+            if (outputRowItems[i].IsString()) {
+                PayloadExtraSize += outputRowItems[i].AsStringRef().size();
+            }
+        }
+        ReadyQueue.PushRow(outputRowItems, OutputRowType->GetElementsCount());
     }
 
     void AddReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, NUdf::TUnboxedValue *lookupPayload) {
@@ -784,11 +784,11 @@ public:
         }
         PopReadyWatermark(watermark);
         if (keysForLookupWasEmpty) {
-           if (KeysForLookup->empty()) {
-               PushReadyWatermark();
-           } else {
-               Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
-           }
+            if (KeysForLookup->empty()) {
+                PushReadyWatermark();
+            } else {
+                Send(LookupSourceId, new IDqAsyncLookupSource::TEvLookupRequest(KeysForLookup));
+            }
         }
         auto deltaTime = GetCpuTimeDelta(startCycleCount);
         CpuTime += deltaTime;

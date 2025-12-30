@@ -12,30 +12,17 @@ class TDqComputeActorWatermarks
 public:
     explicit TDqComputeActorWatermarks(const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters = {});
 
-    void RegisterAsyncInput(ui64 inputId, TDuration idleTimeout = TDuration::Max()) {
-        RegisterAsyncInput(inputId, idleTimeout, TInstant::Now());
-    }
-    void RegisterInputChannel(ui64 inputId, TDuration idleTimeout = TDuration::Max()) {
-        RegisterInputChannel(inputId, idleTimeout, TInstant::Now());
-    }
+    void RegisterAsyncInput(ui64 inputId, TDuration idleTimeout = TDuration::Max(), TInstant systemTime = TInstant::Now());
+    void RegisterInputChannel(ui64 inputId, TDuration idleTimeout = TDuration::Max(), TInstant systemTime = TInstant::Now());
 
-    void RegisterAsyncInput(ui64 inputId, TDuration idleTimeout, TInstant systemTime);
-    void RegisterInputChannel(ui64 inputId, TDuration idleTimeout, TInstant systemTime);
-
-    void UnregisterAsyncInput(ui64 inputId);
-    void UnregisterInputChannel(ui64 inputId);
+    void UnregisterAsyncInput(ui64 inputId, bool silent = false);
+    void UnregisterInputChannel(ui64 inputId, bool silent = false);
 
     // Will return true, if local watermark inside this async input was moved forward.
-    bool NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark) {
-        return NotifyAsyncInputWatermarkReceived(inputId, watermark, TInstant::Now());
-    }
-    bool NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime);
+    bool NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime = TInstant::Now());
 
     // Will return true, if local watermark inside this input channel was moved forward.
-    bool NotifyInChannelWatermarkReceived(ui64 inputId, TInstant watermark) {
-        return NotifyInChannelWatermarkReceived(inputId, watermark, TInstant::Now());
-    }
-    bool NotifyInChannelWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime);
+    bool NotifyInChannelWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime = TInstant::Now());
 
     // Will return true, if pending watermark completed.
     bool NotifyWatermarkWasSent(TInstant watermark);
@@ -56,10 +43,9 @@ public:
 
     void SetLogPrefix(const TString& logPrefix);
 
-private:
-    void RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout, TInstant systemTime);
-    void UnregisterInput(ui64 inputId, bool isChannel);
-    bool NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime);
+    void RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout = TDuration::Max(), TInstant systemTime = TInstant::Now());
+    void UnregisterInput(ui64 inputId, bool isChannel, bool silent = false);
+    bool NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime = TInstant::Now());
 
 private:
     TString LogPrefix;

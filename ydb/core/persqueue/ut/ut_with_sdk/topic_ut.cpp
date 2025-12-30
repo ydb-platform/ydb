@@ -253,6 +253,41 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         // check that verify didn`t happened
         UNIT_ASSERT(event.has_value());
     }
-}
 
+    Y_UNIT_TEST(WriteBigMessage) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.GetRuntime().GetAppData().PQConfig.SetMaxMessageSizeBytes(1_KB);
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+        TWriteSessionSettings settings;
+        settings.Path(TEST_TOPIC)
+            .ProducerId("producer-1")
+            .MessageGroupId("producer-1")
+            .Codec(ECodec::RAW);
+
+        auto session = client.CreateWriteSession(settings);
+
+        auto event = session->GetEvent(true);
+        UNIT_ASSERT(event.has_value());
+        auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
+        UNIT_ASSERT(readyEvent);
+        session->Write(std::move(readyEvent->ContinuationToken), TString(2_KB, 'a'));
+
+        for (size_t i = 0; i < 10; ++i) {
+            event = session->GetEvent(false);
+            if (event.has_value()) {
+                auto closeEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event);
+                if (closeEvent) {
+                    UNIT_ASSERT_C(closeEvent->GetIssues().ToOneLineString().contains("Too big message"), closeEvent->GetIssues().ToOneLineString());
+                    return;
+                }
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+
+        UNIT_ASSERT_C(false, "Session closed event not received");
+    }
+}
 } // namespace NKikimr

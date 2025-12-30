@@ -5,6 +5,8 @@
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 
+#include <util/charset/utf8.h>
+
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/screen_interactive.hpp>

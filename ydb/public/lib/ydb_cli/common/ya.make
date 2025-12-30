@@ -9,6 +9,7 @@ SRCS(
     command_utils.cpp
     common.cpp
     config.cpp
+    log.cpp
     csv_parser.cpp
     describe.cpp
     examples.cpp
@@ -48,6 +49,7 @@ PEERDIR(
     contrib/restricted/patched/replxx
     library/cpp/getopt
     library/cpp/json/writer
+    library/cpp/logger
     library/cpp/regex/pcre
     library/cpp/string_utils/csv
     library/cpp/yaml/as

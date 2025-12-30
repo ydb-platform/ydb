@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_writer.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
@@ -68,7 +69,7 @@ ui32 TTopicOperationsScenario::GetTopicMaxPartitionCount() const
 THolder<TLogBackend> TTopicOperationsScenario::MakeLogBackend(ui32 level)
 {
     return CreateLogBackend("cerr",
-                            TConfig::VerbosityLevelToELogPriority(level));
+                            VerbosityLevelToELogPriority(level));
 }
 
 void TTopicOperationsScenario::InitLog(TConfig& config)

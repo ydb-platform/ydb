@@ -1,11 +1,14 @@
 #pragma once
 
-#include "interactive_log.h"
-
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+
+#include <util/generic/string.h>
 
 #include <memory>
 #include <optional>
+#include <variant>
+#include <vector>
 
 namespace NYdb::NConsoleClient {
 
@@ -48,6 +51,6 @@ struct TLineReaderSettings {
     bool ContinueAfterCancel = true;
 };
 
-ILineReader::TPtr CreateLineReader(const TLineReaderSettings& settings, const TInteractiveLogger& log);
+ILineReader::TPtr CreateLineReader(const TLineReaderSettings& settings);
 
 } // namespace NYdb::NConsoleClient

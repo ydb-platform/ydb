@@ -1,4 +1,5 @@
 #include "config.h"
+#include "log.h"
 
 #include <library/cpp/yaml/as/tstring.h>
 #include <yaml-cpp/yaml.h>
@@ -17,10 +18,6 @@ namespace {
 
 constexpr int DIR_MODE_PRIVATE = S_IRUSR | S_IWUSR | S_IXUSR; // rwx------
 
-// Debug logging for config - disabled
-#define CONFIG_LOG(msg) do { } while(0)
-
-// Used by CONFIG_LOG for debugging
 [[maybe_unused]] TString NodeTypeStr(const YAML::Node& node) {
     if (!node.IsDefined()) return "undefined";
     if (node.IsNull()) return "null";
@@ -102,17 +99,17 @@ bool TConfigNode::IsMap() const {
 TConfigNode TConfigNode::GetChildBySimpleKey(const TString& key) {
     TString childPath = Path.empty() ? key : (Path + "." + key);
 
-    CONFIG_LOG("GetChildBySimpleKey: path=\"" << Path << "\", key=\"" << key
-               << "\", Node=" << NodeTypeStr(Node));
+    GetGlobalLogger().Debug() << "GetChildBySimpleKey: path=\"" << Path << "\", key=\"" << key
+               << "\", Node=" << NodeTypeStr(Node);
 
     // Check if trying to access child of a scalar
     if (Node.IsDefined() && !Node.IsNull() && Node.IsScalar()) {
-        CONFIG_LOG("ERROR: Trying to access child of scalar!");
+        GetGlobalLogger().Debug() << "GetChildBySimpleKey: Trying to access child of scalar";
         throw std::runtime_error(TStringBuilder() << "operator[] call on a scalar (key: \"" << key << "\")");
     }
 
     YAML::Node child = Node[std::string(key)];
-    CONFIG_LOG("GetChildBySimpleKey result: childPath=\"" << childPath << "\", child=" << NodeTypeStr(child));
+    GetGlobalLogger().Debug() << "GetChildBySimpleKey result: childPath=\"" << childPath << "\", child=" << NodeTypeStr(child);
 
     return TConfigNode(child, Manager, childPath);
 }
@@ -188,7 +185,7 @@ double TConfigNode::AsDouble(double defaultValue) const {
 }
 
 void TConfigNode::SetValueInternal(const YAML::Node& value) {
-    CONFIG_LOG("SetValueInternal: Path=\"" << Path << "\"");
+    GetGlobalLogger().Debug() << "SetValueInternal: Path=\"" << Path << "\"";
 
     if (!Manager || Path.empty()) {
         Node = YAML::Clone(value);
@@ -205,44 +202,44 @@ void TConfigNode::SetValueInternal(const YAML::Node& value) {
 
     YAML::Node& root = Manager->Config;
 
-    CONFIG_LOG("SetValueInternal: parts.size=" << parts.size() << ", root=" << NodeTypeStr(root));
+    GetGlobalLogger().Debug() << "SetValueInternal: parts.size=" << parts.size() << ", root=" << NodeTypeStr(root);
 
     // Ensure root is a map
     if (!root.IsDefined() || root.IsNull()) {
         root = YAML::Node(YAML::NodeType::Map);
-        CONFIG_LOG("SetValueInternal: created root as map");
+        GetGlobalLogger().Debug() << "SetValueInternal: created root as map";
     }
 
     // Build complete subtree and assign to avoid yaml-cpp chained access issues
     // yaml-cpp has bugs with chained access like root["a"]["b"] = value
     switch (parts.size()) {
         case 1:
-            CONFIG_LOG("SetValueInternal: setting root[" << parts[0] << "]");
+            GetGlobalLogger().Debug() << "SetValueInternal: setting root[" << parts[0] << "]";
             root[std::string(parts[0])] = value;
-            CONFIG_LOG("SetValueInternal: after set, root=" << NodeTypeStr(root));
+            GetGlobalLogger().Debug() << "SetValueInternal: after set, root=" << NodeTypeStr(root);
             break;
         case 2: {
-            CONFIG_LOG("SetValueInternal: building subtree for " << parts[0] << "." << parts[1]);
+            GetGlobalLogger().Debug() << "SetValueInternal: building subtree for " << parts[0] << "." << parts[1];
             // Get existing subtree or create new one
             YAML::Node subtree;
             if (root[std::string(parts[0])].IsMap()) {
                 // Clone existing map to preserve other keys
                 subtree = YAML::Clone(root[std::string(parts[0])]);
-                CONFIG_LOG("SetValueInternal: cloned existing map");
+                GetGlobalLogger().Debug() << "SetValueInternal: cloned existing map";
             } else {
                 subtree = YAML::Node(YAML::NodeType::Map);
-                CONFIG_LOG("SetValueInternal: created new map");
+                GetGlobalLogger().Debug() << "SetValueInternal: created new map";
             }
             // Set the value in subtree
             subtree[std::string(parts[1])] = value;
             // Assign entire subtree to root
             root[std::string(parts[0])] = subtree;
-            CONFIG_LOG("SetValueInternal: after set, root=" << NodeTypeStr(root));
-            CONFIG_LOG("SetValueInternal: after set, root[" << parts[0] << "]=" << NodeTypeStr(root[std::string(parts[0])]));
+            GetGlobalLogger().Debug() << "SetValueInternal: after set, root=" << NodeTypeStr(root);
+            GetGlobalLogger().Debug() << "SetValueInternal: after set, root[" << parts[0] << "]=" << NodeTypeStr(root[std::string(parts[0])]);
             break;
         }
         case 3: {
-            CONFIG_LOG("SetValueInternal: building subtree for " << parts[0] << "." << parts[1] << "." << parts[2]);
+            GetGlobalLogger().Debug() << "SetValueInternal: building subtree for " << parts[0] << "." << parts[1] << "." << parts[2];
             // Level 1
             YAML::Node level1;
             if (root[std::string(parts[0])].IsMap()) {
@@ -261,11 +258,11 @@ void TConfigNode::SetValueInternal(const YAML::Node& value) {
             level2[std::string(parts[2])] = value;
             level1[std::string(parts[1])] = level2;
             root[std::string(parts[0])] = level1;
-            CONFIG_LOG("SetValueInternal: after set, root=" << NodeTypeStr(root));
+            GetGlobalLogger().Debug() << "SetValueInternal: after set, root=" << NodeTypeStr(root);
             break;
         }
         default:
-            Cerr << "Warning: Path too deep (max 3 levels): " << Path << Endl;
+            GetGlobalLogger().Warning() << "Path too deep (max 3 levels): " << Path;
             return;
     }
 
@@ -277,7 +274,7 @@ void TConfigNode::SetString(const TString& value) {
 }
 
 void TConfigNode::SetBool(bool value) {
-    CONFIG_LOG("SetBool: value=" << (value ? "true" : "false"));
+    GetGlobalLogger().Debug() << "SetBool: value=" << (value ? "true" : "false");
     SetValueInternal(YAML::Node(value));
 }
 
@@ -328,7 +325,7 @@ void TConfigNode::NotifyModified() {
 
 // TConfigurationManager implementation
 TConfigurationManager::TConfigurationManager() {
-    CONFIG_LOG("TConfigurationManager::ctor");
+    GetGlobalLogger().Debug() << "TConfigurationManager::ctor";
     Load();
 }
 
@@ -350,16 +347,16 @@ TFsPath TConfigurationManager::GetConfigFilePath() {
 void TConfigurationManager::Load() {
     try {
         TFsPath configPath = GetConfigFilePath();
-        CONFIG_LOG("Load: path=" << configPath.GetPath() << ", exists=" << configPath.Exists());
+        GetGlobalLogger().Debug() << "Load: path=" << configPath.GetPath() << ", exists=" << configPath.Exists();
         if (configPath.Exists()) {
             Config = YAML::LoadFile(configPath.GetPath());
-            CONFIG_LOG("Load: loaded Config=" << NodeTypeStr(Config));
+            GetGlobalLogger().Debug() << "Load: loaded Config=" << NodeTypeStr(Config);
         } else {
             Config = YAML::Node(YAML::NodeType::Map);
-            CONFIG_LOG("Load: created empty map");
+            GetGlobalLogger().Debug() << "Load: created empty map";
         }
     } catch (const std::exception& e) {
-        Cerr << "Warning: Failed to load CLI config: " << e.what() << Endl;
+        GetGlobalLogger().Warning() << "Failed to load CLI config: " << e.what();
         Config = YAML::Node(YAML::NodeType::Map);
     }
     Modified = false;
@@ -372,7 +369,7 @@ void TConfigurationManager::Save() {
 
         TFsPath configPath = GetConfigFilePath();
 
-        CONFIG_LOG("Save: before emit, Config=" << NodeTypeStr(Config));
+        GetGlobalLogger().Debug() << "Save: before emit, Config=" << NodeTypeStr(Config);
 
         YAML::Emitter out;
         out.SetMapFormat(YAML::Block);
@@ -380,7 +377,7 @@ void TConfigurationManager::Save() {
         out << Config;
 
         TString content = out.c_str();
-        CONFIG_LOG("Save: emitter output:\n" << content);
+        GetGlobalLogger().Debug() << "Save: emitter output:\n" << content;
 
         {
             TFileOutput file(TFile(configPath, CreateAlways | WrOnly | AWUser | ARUser));
@@ -391,11 +388,11 @@ void TConfigurationManager::Save() {
         Modified = false;
 
         // Reload config from file to ensure in-memory state is consistent
-        CONFIG_LOG("Save: reloading from file");
+        GetGlobalLogger().Debug() << "Save: reloading from file";
         Config = YAML::LoadFile(configPath.GetPath());
-        CONFIG_LOG("Save: after reload, Config=" << NodeTypeStr(Config));
+        GetGlobalLogger().Debug() << "Save: after reload, Config=" << NodeTypeStr(Config);
     } catch (const std::exception& e) {
-        Cerr << "Warning: Failed to save CLI config: " << e.what() << Endl;
+        GetGlobalLogger().Warning() << "Failed to save CLI config: " << e.what();
     }
 }
 
@@ -404,14 +401,14 @@ void TConfigurationManager::Reload() {
 }
 
 TConfigNode TConfigurationManager::operator[](const TString& key) {
-    CONFIG_LOG("operator[]: key=\"" << key << "\"");
+    GetGlobalLogger().Debug() << "operator[]: key=\"" << key << "\"";
     // Reload from file before each access to work around yaml-cpp corruption bug
     // when accessing non-existent keys
     TFsPath configPath = GetConfigFilePath();
     if (configPath.Exists()) {
         try {
             Config = YAML::LoadFile(configPath.GetPath());
-            CONFIG_LOG("operator[]: reloaded Config=" << NodeTypeStr(Config));
+            GetGlobalLogger().Debug() << "operator[]: reloaded Config=" << NodeTypeStr(Config);
         } catch (...) {
             // Keep current Config if reload fails
         }
@@ -424,12 +421,12 @@ TConfigNode TConfigurationManager::operator[](const char* key) {
 }
 
 TConfigNode TConfigurationManager::Root() {
-    CONFIG_LOG("Root: Config=" << NodeTypeStr(Config));
+    GetGlobalLogger().Debug() << "Root: Config=" << NodeTypeStr(Config);
     return TConfigNode(Config, this, "");
 }
 
 void TConfigurationManager::MarkModified() {
-    CONFIG_LOG("MarkModified: saving");
+    GetGlobalLogger().Debug() << "MarkModified: saving";
     Modified = true;
     Save();
 }
@@ -437,7 +434,7 @@ void TConfigurationManager::MarkModified() {
 // Global config functions
 TConfigurationManager::TPtr GetGlobalConfig() {
     if (!GlobalConfig) {
-        CONFIG_LOG("GetGlobalConfig: creating new instance");
+        GetGlobalLogger().Debug() << "GetGlobalConfig: creating new instance";
         GlobalConfig = std::make_shared<TConfigurationManager>();
     }
     return GlobalConfig;

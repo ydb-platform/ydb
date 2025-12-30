@@ -4,7 +4,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/ai_model_handler.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/api_utils.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
@@ -98,8 +98,8 @@ class TAiSessionRunner final : public TSessionRunnerBase {
     using TBase = TSessionRunnerBase;
 
 public:
-    TAiSessionRunner(const TAiSessionSettings& settings, const TInteractiveLogger& log)
-        : TBase(CreateSessionSettings(settings), log)
+    explicit TAiSessionRunner(const TAiSessionSettings& settings)
+        : TBase(CreateSessionSettings(settings))
         , ConfigurationManager(settings.ConfigurationManager)
         , Database(settings.Database)
         , Driver(settings.Driver)
@@ -133,7 +133,7 @@ public:
 
         if (!ModelHandler) {
             try {
-                ModelHandler = TModelHandler({.Profile = AiModel, .Prompt = Settings.Prompt, .Database = Database, .Driver = Driver, .ConnectionString = ConnectionString}, Log);
+                ModelHandler = TModelHandler({.Profile = AiModel, .Prompt = Settings.Prompt, .Database = Database, .Driver = Driver, .ConnectionString = ConnectionString});
             } catch (const std::exception& e) {
                 ModelHandler = std::nullopt;
                 Cerr << Colors.Red() << "Failed to setup AI model session: " << e.what() << Colors.OldColor() << Endl;
@@ -323,8 +323,8 @@ private:
 
 } // namespace NAi
 
-ISessionRunner::TPtr CreateAiSessionRunner(const TAiSessionSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<NAi::TAiSessionRunner>(settings, log);
+ISessionRunner::TPtr CreateAiSessionRunner(const TAiSessionSettings& settings) {
+    return std::make_shared<NAi::TAiSessionRunner>(settings);
 }
 
 } // namespace NYdb::NConsoleClient

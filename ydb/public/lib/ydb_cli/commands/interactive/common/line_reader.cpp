@@ -2,7 +2,8 @@
 #include "interactive_settings.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
@@ -23,7 +24,7 @@ namespace NYdb::NConsoleClient {
 namespace {
 
 class TLineReader final : public ILineReader {
-    inline static const NColorizer::TColors Colors = NColorizer::AutoColors(Cout);
+    inline static const NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
     class TFileHandlerLockGuard {
     public:
@@ -78,9 +79,8 @@ class TLineReader final : public ILineReader {
     };
 
 public:
-    TLineReader(const TLineReaderSettings& settings, const TInteractiveLogger& log)
-        : Log(log)
-        , ContinueAfterCancel(settings.ContinueAfterCancel)
+    explicit TLineReader(const TLineReaderSettings& settings)
+        : ContinueAfterCancel(settings.ContinueAfterCancel)
         , EnableSwitchMode(settings.EnableSwitchMode)
         , Prompt(settings.Prompt)
         , Placeholder(settings.Placeholder)
@@ -98,7 +98,7 @@ public:
 
         std::optional<TYQLCompleterConfig> yqlCompleterConfig;
         if (settings.EnableYqlCompletion) {
-            yqlCompleterConfig = TYQLCompleterConfig{.Color = CurrentColorSchema, .Driver = settings.Driver, .Database = settings.Database, .IsVerbose = Log.IsVerbose()};
+            yqlCompleterConfig = TYQLCompleterConfig{.Color = CurrentColorSchema, .Driver = settings.Driver, .Database = settings.Database, .IsVerbose = GetGlobalLogger().IsVerbose()};
         }
         YQLCompleter = MakeYQLCompositeCompleter(completionCommands, yqlCompleterConfig);
 
@@ -351,7 +351,6 @@ private:
     }
 
 private:
-    const TInteractiveLogger Log;
     const bool ContinueAfterCancel = true;
     const bool EnableSwitchMode = true;
     bool EnableYqlCompletion = true;
@@ -369,8 +368,8 @@ private:
 
 } // anonymous namespace
 
-ILineReader::TPtr CreateLineReader(const TLineReaderSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<TLineReader>(settings, log);
+ILineReader::TPtr CreateLineReader(const TLineReaderSettings& settings) {
+    return std::make_shared<TLineReader>(settings);
 }
 
 } // namespace NYdb::NConsoleClient

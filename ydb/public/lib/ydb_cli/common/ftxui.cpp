@@ -11,7 +11,7 @@
 #include <contrib/libs/ftxui/include/ftxui/screen/color.hpp>
 #include <contrib/libs/ftxui/include/ftxui/screen/screen.hpp>
 
-#include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <util/charset/utf8.h>
 #include <util/stream/output.h>

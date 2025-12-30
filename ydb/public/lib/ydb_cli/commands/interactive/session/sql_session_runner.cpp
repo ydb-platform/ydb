@@ -75,8 +75,8 @@ class TSqlSessionRunner final : public TSessionRunnerBase, public TInterruptable
     };
 
 public:
-    TSqlSessionRunner(const TSqlSessionSettings& settings, const TInteractiveLogger& log)
-        : TBase(CreateSessionSettings(settings), log)
+    explicit TSqlSessionRunner(const TSqlSessionSettings& settings)
+        : TBase(CreateSessionSettings(settings))
         , QueryPlanPrinter(EDataFormat::Default)
         , ExplainRunner(settings.Driver)
         , ExecuteRunner(settings.Driver)
@@ -251,8 +251,8 @@ private:
 
 } // anonymous namespace
 
-ISessionRunner::TPtr CreateSqlSessionRunner(const TSqlSessionSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<TSqlSessionRunner>(settings, log);
+ISessionRunner::TPtr CreateSqlSessionRunner(const TSqlSessionSettings& settings) {
+    return std::make_shared<TSqlSessionRunner>(settings);
 }
 
 } // namespace NYdb::NConsoleClient

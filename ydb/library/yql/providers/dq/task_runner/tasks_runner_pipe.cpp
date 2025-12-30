@@ -1814,6 +1814,10 @@ public:
         return {};
     }
 
+    TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 /*inputId*/) override {
+        return nullptr;
+    }
+
     std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 /*outputIndex*/) override {
         return {};
     }

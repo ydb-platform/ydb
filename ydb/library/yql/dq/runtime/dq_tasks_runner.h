@@ -451,6 +451,7 @@ public:
     virtual IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
     virtual IDqAsyncOutputBuffer::TPtr GetSink(ui64 outputIndex) = 0;
     virtual std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 inputIndex) = 0;
+    virtual TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) = 0;
     virtual std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 outputIndex) = 0;
 
     virtual IRandomProvider* GetRandomProvider() const = 0;

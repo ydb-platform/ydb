@@ -1035,11 +1035,6 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
     }
 
     Y_UNIT_TEST_F(InputTransformMultichannel, TSyncComputeActorTestFixture) {
-        if constexpr (true) {
-            // test temporarily disabled
-            // (functionality was broken before, but test was broken and checked nothing)
-            return;
-        }
         TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
         std::mt19937 rng(GetRandomSeed());
         for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);

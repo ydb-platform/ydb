@@ -315,6 +315,10 @@ protected:
         return sinkInfo.Buffer.Get();
     }
 
+    TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) override {
+        return TaskRunner ? TaskRunner->GetInputTransformWatermarksTracker(inputId): nullptr;
+    }
+
 protected:
     // methods that are called via static_cast<TDerived*>(this) and may be overriden by a dervied class
     void* GetSourcesState() const {

@@ -2,10 +2,8 @@
 /* kikimr can not */
 /* dqfile can not - missing langver support */
 /* hybridfile can not - missing langver support */
-/* ytfile can not - result error is yt specific */
-/* custom error: Duplicate lockable dynamic table*/
+/* custom error: Multiple modification of dynamic table is not supported yet*/
 use plato;
-pragma yt.UseNativeDynamicTableRead;
 
 replace into Output
 select "x" as key;

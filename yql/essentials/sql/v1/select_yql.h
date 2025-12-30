@@ -49,6 +49,7 @@ struct TYqlTableRefArgs {
     TString Service;
     TString Cluster;
     TString Key;
+    bool IsAnonymous = false;
 };
 
 struct TYqlValuesArgs {

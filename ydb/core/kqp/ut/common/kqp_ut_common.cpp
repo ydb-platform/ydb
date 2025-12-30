@@ -106,6 +106,7 @@ NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDateTime2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateMathModule();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateUnicodeModule();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDigestModule();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateFullTextModule();
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
@@ -118,6 +119,7 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     funcRegistry->AddModule("", "Math", CreateMathModule());
     funcRegistry->AddModule("", "Unicode", CreateUnicodeModule());
     funcRegistry->AddModule("", "Digest", CreateDigestModule());
+    funcRegistry->AddModule("", "FullText", CreateFullTextModule());
 
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();

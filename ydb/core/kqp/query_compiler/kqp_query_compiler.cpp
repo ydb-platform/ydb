@@ -27,6 +27,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
+#include <util/generic/bitmap.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -180,6 +181,8 @@ NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(EStreamLookupStrategyTy
             break;
         case EStreamLookupStrategyType::LookupRows:
             return NKqpProto::EStreamLookupStrategy::LOOKUP;
+        case EStreamLookupStrategyType::LookupUniqueRows:
+            return NKqpProto::EStreamLookupStrategy::UNIQUE;
         case EStreamLookupStrategyType::LookupJoinRows:
             return NKqpProto::EStreamLookupStrategy::JOIN;
         case EStreamLookupStrategyType::LookupSemiJoinRows:
@@ -340,6 +343,14 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
             auto systemColumn = GetSystemColumns().find(columnName);
             YQL_ENSURE(systemColumn != GetSystemColumns().end());
             columnId = systemColumn->second.ColumnId;
+        }
+
+
+        if (columnName == "_yql_full_text_relevance") {
+            auto& columnProto = *opProto.AddColumns();
+            // columnProto.SetId(columnId);
+            columnProto.SetName(columnName);
+            continue;
         }
 
         YQL_ENSURE(columnId, "Unknown column: " << columnName);
@@ -739,12 +750,33 @@ public:
         queryProto.SetForceImmediateEffectsExecution(
             Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
 
+        queryProto.SetDefaultTxMode(
+            Config->DefaultTxMode.Get().GetOrElse(NKqpProto::ISOLATION_LEVEL_UNDEFINED));
+
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
         queryProto.SetEnableWatermarks(Config->EnableWatermarks);
+
+        bool enableDiscardSelect = Config->EnableDiscardSelect;
+
+        TDynBitMap resultDiscardFlags;
+        ui32 resultCount = 0;
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
             if (queryBlockSettings.HasUncommittedChangesRead) {
                 queryProto.SetHasUncommittedChangesRead(true);
+            }
+
+            if (enableDiscardSelect) {
+                for (const auto& kiResult : queryBlock.Results()) {
+                    if (kiResult.Maybe<TKiResult>()) {
+                        auto result = kiResult.Cast<TKiResult>();
+                        bool discard = result.Discard().Value() == "1";
+                        if (discard) {
+                            resultDiscardFlags.Set(resultCount);
+                        }
+                        ++resultCount;
+                    }
+                }
             }
 
             auto ops = TableOperationsToProto(queryBlock.Operations(), ctx);
@@ -759,8 +791,23 @@ public:
             }
         }
 
-        for (const auto& tx : query.Transactions()) {
-            CompileTransaction(tx, *queryProto.AddTransactions(), ctx);
+        THashSet<std::pair<ui32, ui32>> shouldCreateChannel;
+        std::vector<TResultBindingInfo> resultBindings;
+
+        // if no discard flags are set, we can skip the dependency analysis
+        bool hasDiscards = enableDiscardSelect && resultDiscardFlags.Count() > 0;
+
+        if (enableDiscardSelect && hasDiscards) {
+            YQL_ENSURE(resultCount <= query.Results().Size(),
+                "resultCount=" << resultCount << " which exceeds query.Results().Size()=" << query.Results().Size());
+            shouldCreateChannel = BuildChannelDependencies(query);
+            resultBindings = BuildResultBindingsInfo(query, *querySettings.Type,
+                                                     resultDiscardFlags, shouldCreateChannel);
+        }
+
+        for (ui32 txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
+            const auto& tx = query.Transactions().Item(txIdx);
+            CompileTransaction(tx, *queryProto.AddTransactions(), ctx, txIdx, shouldCreateChannel, hasDiscards);
         }
 
         if (const auto overridePlanner = Config->OverridePlanner.Get()) {
@@ -775,25 +822,30 @@ public:
             }
         }
 
-        for (ui32 i = 0; i < query.Results().Size(); ++i) {
-            const auto& result = query.Results().Item(i);
+        ui32 resultIdx = 0;
+        auto processResult = [&](ui32 originalIndex, ui32 txIndex, ui32 txResultIndex, bool skipBinding) {
+            const auto& result = query.Results().Item(originalIndex);
 
             YQL_ENSURE(result.Maybe<TKqpTxResultBinding>());
             auto binding = result.Cast<TKqpTxResultBinding>();
-            auto txIndex = FromString<ui32>(binding.TxIndex().Value());
-            auto txResultIndex = FromString<ui32>(binding.ResultIndex());
 
             YQL_ENSURE(txIndex < queryProto.TransactionsSize());
             YQL_ENSURE(txResultIndex < queryProto.GetTransactions(txIndex).ResultsSize());
             auto& txResult = *queryProto.MutableTransactions(txIndex)->MutableResults(txResultIndex);
 
             YQL_ENSURE(txResult.GetIsStream());
-            txResult.SetQueryResultIndex(i);
 
+            if (skipBinding) {
+                return;
+            }
+
+            txResult.SetQueryResultIndex(resultIdx);
             auto& queryBindingProto = *queryProto.AddResultBindings();
             auto& txBindingProto = *queryBindingProto.MutableTxResultBinding();
             txBindingProto.SetTxIndex(txIndex);
             txBindingProto.SetResultIndex(txResultIndex);
+
+            resultIdx++;
 
             auto type = binding.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             YQL_ENSURE(type);
@@ -828,6 +880,23 @@ public:
                 auto& columnMeta = resultMetaColumns->at(bindingColumnId);
                 columnMeta.Setname(it != columnOrder.end() ? order.at(it->second).LogicalName : column.GetName());
                 ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta.mutable_type());
+            }
+        };
+
+        if (enableDiscardSelect && hasDiscards) {
+            for (const auto& bindingInfo : resultBindings) {
+                processResult(bindingInfo.OriginalIndex, bindingInfo.TxIndex,
+                            bindingInfo.ResultIndex, bindingInfo.IsDiscard);
+            }
+        } else {
+            for (ui32 i = 0; i < query.Results().Size(); ++i) {
+                const auto& result = query.Results().Item(i);
+                YQL_ENSURE(result.Maybe<TKqpTxResultBinding>());
+                auto binding = result.Cast<TKqpTxResultBinding>();
+                auto txIndex = FromString<ui32>(binding.TxIndex().Value());
+                auto txResultIndex = FromString<ui32>(binding.ResultIndex());
+
+                processResult(i, txIndex, txResultIndex, false);
             }
         }
 
@@ -1073,7 +1142,8 @@ private:
         stageProto.SetAllowWithSpilling(Config->EnableSpilling);
     }
 
-    void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx) {
+    void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx,
+                            ui32 txIdx, const THashSet<std::pair<ui32, ui32>>& shouldCreateChannel, bool hasDiscards) {
         auto txSettings = TKqpPhyTxSettings::Parse(tx);
         YQL_ENSURE(txSettings.Type);
         txProto.SetType(GetPhyTxType(*txSettings.Type));
@@ -1097,7 +1167,7 @@ private:
 
         txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination));
         txProto.SetHasEffects(hasEffectStage);
-
+        txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->DefaultDqChannelVersion));
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
             const auto& binding = paramBinding.Binding();
@@ -1125,7 +1195,8 @@ private:
         }
 
         TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
-        for (const auto& resultNode : tx.Results()) {
+        for (ui32 resIdx = 0; resIdx < tx.Results().Size(); ++resIdx) {
+            const auto& resultNode = tx.Results().Item(resIdx);
             YQL_ENSURE(resultNode.Maybe<TDqConnection>(), "" << NCommon::ExprToPrettyString(ctx, tx.Ref()));
             auto connection = resultNode.Cast<TDqConnection>();
 
@@ -1168,6 +1239,10 @@ private:
                 for (const auto& columnHint : columnHints) {
                     columnHintsProto.Add(TString(columnHint.Value()));
                 }
+            }
+            if (Config->EnableDiscardSelect && hasDiscards) {
+                bool canSkip = (shouldCreateChannel.find(std::make_pair(txIdx, resIdx)) == shouldCreateChannel.end());
+                resultProto.SetCanSkipChannel(canSkip);
             }
         }
 
@@ -1264,6 +1339,60 @@ private:
             if (readSettings.VectorTopKColumn) {
                 FillVectorTopKSettings(*readProto.MutableVectorTopK(), readSettings, settings.Columns().Cast());
             }
+
+        } else if (auto settings = source.Settings().Maybe<TKqpReadTableFullTextIndexSourceSettings>()) {
+            NKqpProto::TKqpFullTextSource& fullTextProto = *protoSource->MutableFullTextSource();
+            auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
+            FillTableId(settings.Table().Cast(), *fullTextProto.MutableTable());
+            fullTextProto.SetIndex(settings.Index().Cast().StringValue());
+
+            THashMap<TString, const TExprNode*> columnsMap;
+            for (auto item : settings.ResultColumns().Cast()) {
+                columnsMap[item.StringValue()] = item.Raw();
+            }
+            TVector<TCoAtom> columns;
+            auto type = settings.Raw()->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
+            for (auto item : type->GetItems()) {
+                columns.push_back(TCoAtom(columnsMap.at(item->GetName())));
+            }
+
+            FillColumns(columns, *tableMeta, fullTextProto, false);
+            {
+                TExprBase expr(settings.Query().Raw());
+                if (expr.Maybe<TCoString>()) {
+                    auto* literal = fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableLiteralValue();
+                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
+                    literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+                } else if (expr.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    YQL_ENSURE(false, "Unexpected VectorTopKTarget callable '" << expr.Ref().Content()
+                        << "'. Expected TCoString or TCoParameter.");
+                }
+            }
+
+            TKqpReadTableFullTextIndexSettings settingsObj = TKqpReadTableFullTextIndexSettings::Parse(settings.Settings().Cast());
+            if (settingsObj.ItemsLimit) {
+
+                auto itemsLimit = TExprBase(settingsObj.ItemsLimit);
+                if (itemsLimit.Maybe<TCoUint64>()) {
+                    auto* literal = fullTextProto.MutableTakeLimit()->MutableLiteralValue();
+
+                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+
+                    literal->MutableValue()->SetUint64(FromString<ui64>(itemsLimit.Cast<TCoUint64>().Literal().Value()));
+                } else if (itemsLimit.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableTakeLimit()->MutableParamValue()->SetParamName(itemsLimit.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    YQL_ENSURE(false, "Unexpected ItemsLimit callable " << itemsLimit.Ref().Content());
+                }
+            }
+            FillColumns(settings.Columns().Cast(), *tableMeta, *fullTextProto.MutableQuerySettings(), false);
         } else {
             YQL_ENSURE(false, "Unsupported source type");
         }
@@ -1273,7 +1402,7 @@ private:
         THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx)
     {
         const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category();
-        if (dataSourceCategory == NYql::KikimrProviderName || dataSourceCategory == NYql::YdbProviderName || dataSourceCategory == NYql::KqpReadRangesSourceName) {
+        if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName}, dataSourceCategory)) {
             FillKqpSource(source, protoSource, allowSystemColumns, tablesMap);
         } else {
             FillDqInput(source.Ptr(), protoSource, dataSourceCategory, ctx, true);
@@ -1913,7 +2042,8 @@ private:
             }
 
             switch (streamLookupProto.GetLookupStrategy()) {
-                case NKqpProto::EStreamLookupStrategy::LOOKUP: {
+                case NKqpProto::EStreamLookupStrategy::LOOKUP:
+                case NKqpProto::EStreamLookupStrategy::UNIQUE: {
                     YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Struct);
                     const auto& lookupKeyColumns = inputItemType->Cast<TStructExprType>()->GetItems();
                     for (const auto keyColumn : lookupKeyColumns) {
@@ -2168,6 +2298,63 @@ private:
     }
 
 private:
+    struct TResultBindingInfo {
+        ui32 OriginalIndex;
+        ui32 TxIndex;
+        ui32 ResultIndex;
+        bool IsDiscard;
+    };
+
+    THashSet<std::pair<ui32, ui32>> BuildChannelDependencies(const TKqpPhysicalQuery& query) {
+        THashSet<std::pair<ui32, ui32>> shouldCreateChannel;
+
+        for (ui32 txIdx = 0; txIdx < query.Transactions().Size(); ++txIdx) {
+            const auto& tx = query.Transactions().Item(txIdx);
+            for (const auto& paramBinding : tx.ParamBindings()) {
+                if (auto maybeResultBinding = paramBinding.Binding().Maybe<TKqpTxResultBinding>()) {
+                    auto resultBinding = maybeResultBinding.Cast();
+                    auto refTxIndex = FromString<ui32>(resultBinding.TxIndex());
+                    auto refResultIndex = FromString<ui32>(resultBinding.ResultIndex());
+                    shouldCreateChannel.insert({refTxIndex, refResultIndex});
+                }
+            }
+        }
+
+        return shouldCreateChannel;
+    }
+
+    std::vector<TResultBindingInfo> BuildResultBindingsInfo(
+        const TKqpPhysicalQuery& query,
+        EPhysicalQueryType queryType,
+        const TDynBitMap& resultDiscardFlags,
+        THashSet<std::pair<ui32, ui32>>& shouldCreateChannel)
+    {
+        std::vector<TResultBindingInfo> resultBindings;
+        resultBindings.reserve(query.Results().Size());
+
+        for (ui32 i = 0; i < query.Results().Size(); ++i) {
+            const auto& result = query.Results().Item(i);
+            if (result.Maybe<TKqpTxResultBinding>()) {
+                auto binding = result.Cast<TKqpTxResultBinding>();
+                auto txIndex = FromString<ui32>(binding.TxIndex().Value());
+                auto resultIndex = FromString<ui32>(binding.ResultIndex());
+
+                YQL_ENSURE(i < resultDiscardFlags.Size(),
+                    "Index " << i << " is out of bounds for resultDiscardFlags with size " << resultDiscardFlags.Size());
+
+                bool markedDiscard = (queryType == EPhysicalQueryType::GenericQuery) && resultDiscardFlags[i];
+                bool canDiscard = markedDiscard && !shouldCreateChannel.contains(std::pair{txIndex, resultIndex});
+
+                resultBindings.push_back({i, txIndex, resultIndex, canDiscard});
+
+                if (!canDiscard) {
+                    shouldCreateChannel.insert({txIndex, resultIndex});
+                }
+            }
+        }
+        return resultBindings;
+    }
+
     const TString Cluster;
     const TString Database;
     const TIntrusivePtr<TKikimrTablesData> TablesData;

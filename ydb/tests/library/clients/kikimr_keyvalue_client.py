@@ -9,6 +9,7 @@ import six
 import logging
 
 from ydb.public.api.grpc import ydb_keyvalue_v1_pb2_grpc as grpc_server
+from ydb.public.api.grpc import ydb_keyvalue_v2_pb2_grpc as grpc_server_v2
 from ydb.public.api.protos import ydb_keyvalue_pb2 as keyvalue_api
 
 logger = logging.getLogger()
@@ -51,15 +52,18 @@ class KeyValueClient(object):
         ]
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.KeyValueServiceStub(self._channel)
+        self._stub_v2 = grpc_server_v2.KeyValueServiceStub(self._channel)
 
-    def _get_invoke_callee(self, method):
+    def _get_invoke_callee(self, method, version):
+        if version == 'v2':
+            return getattr(self._stub_v2, method)
         return getattr(self._stub, method)
 
-    def invoke(self, request, method):
+    def invoke(self, request, method, version):
         retry = self.__retry_count
         while True:
             try:
-                callee = self._get_invoke_callee(method)
+                callee = self._get_invoke_callee(method, version)
                 return callee(request)
             except (RuntimeError, grpc.RpcError):
                 retry -= 1
@@ -69,7 +73,7 @@ class KeyValueClient(object):
 
                 time.sleep(self.__retry_sleep_seconds)
 
-    def kv_write(self, path, partition_id, key, value, channel=None):
+    def kv_write(self, path, partition_id, key, value, channel=None, version='v1'):
         request = keyvalue_api.ExecuteTransactionRequest()
         request.path = path
         request.partition_id = partition_id
@@ -78,9 +82,9 @@ class KeyValueClient(object):
         write.value = to_bytes(value)
         if channel is not None:
             write.storage_channel = channel
-        return self.invoke(request, 'ExecuteTransaction')
+        return self.invoke(request, 'ExecuteTransaction', version)
 
-    def kv_read(self, path, partition_id, key, offset=None, size=None):
+    def kv_read(self, path, partition_id, key, offset=None, size=None, version='v1'):
         request = keyvalue_api.ReadRequest()
         request.path = path
         request.partition_id = partition_id
@@ -89,7 +93,7 @@ class KeyValueClient(object):
             request.offset = offset
         if size is not None:
             request.size = size
-        return self.invoke(request, 'Read')
+        return self.invoke(request, 'Read', version)
 
     def kv_get_tablets_read_state(self, path, partition_ids):
         for id in partition_ids:
@@ -123,12 +127,12 @@ class KeyValueClient(object):
                 for media in channels:
                     new_channel = request.storage_config.channel.add()
                     new_channel.media = media
-        return self.invoke(request, 'CreateVolume')
+        return self.invoke(request, 'CreateVolume', version='v1')
 
     def drop_tablets(self, path):
         request = keyvalue_api.DropVolumeRequest()
         request.path = path
-        return self.invoke(request, 'DropVolume')
+        return self.invoke(request, 'DropVolume', version='v1')
 
     def close(self):
         self._channel.close()

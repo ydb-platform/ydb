@@ -1,9 +1,9 @@
 #include "kqp_rbo.h"
 
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NYql::NNodes;
@@ -14,13 +14,23 @@ using namespace NKikimr::NKqp;
 
 THashMap<TString, TString> AggregationFunctionToAggregationCallable{{"sum", "AggrAdd"}, {"min", "AggrMin"}, {"max", "AggrMax"}};
 
-struct TAggregationField {
-    TAggregationField(const TString& aggFieldName, const TString& aggFunc, const TString& stateFieldName, bool isOptional)
-        : AggFieldName(aggFieldName), AggFunc(aggFunc), StateFieldName(stateFieldName), IsOptional(isOptional) {}
+struct TPhysicalAggregationTraits {
+    TPhysicalAggregationTraits(const TString& inputColName, const TTypeAnnotationNode* inputItemType, const TString& aggFieldName,
+                               const TTypeAnnotationNode* outputItemType, const TString& aggFunc, const TString& stateFieldName)
+        : InputColName(inputColName)
+        , InputItemType(inputItemType)
+        , AggFieldName(aggFieldName)
+        , OutputItemType(outputItemType)
+        , AggFunc(aggFunc)
+        , StateFieldName(stateFieldName) {
+    }
+
+    TString InputColName;
+    const TTypeAnnotationNode* InputItemType;
     TString AggFieldName;
+    const TTypeAnnotationNode* OutputItemType;
     TString AggFunc;
     TString StateFieldName;
-    bool IsOptional{false};
 };
 
 TString GetValidJoinKind(const TString& joinKind) {
@@ -327,7 +337,16 @@ TExprNode::TPtr BuildGraceJoinCore(TOpJoin &join, TExprNode::TPtr leftInput, TEx
     TVector<TCoAtom> rightKeyColumnNames;
 
     auto leftIUs = join.GetLeftInput()->GetOutputIUs();
+
+    bool leftSideOnly = (join.JoinKind == "LeftSemi" || join.JoinKind == "LeftOnly");
+
     auto rightIUs = join.GetRightInput()->GetOutputIUs();
+    if (leftSideOnly) {
+        rightIUs.clear();
+        for ( auto &[left, right] : join.JoinKeys) {
+            rightIUs.push_back(right);
+        }
+    }
 
     auto leftTupleSize = leftIUs.size();
     for (size_t i = 0; i < leftIUs.size(); i++) {
@@ -367,7 +386,7 @@ TExprNode::TPtr BuildGraceJoinCore(TOpJoin &join, TExprNode::TPtr leftInput, TEx
     .Done().Ptr();
     // clang-format on
 
-    rightInput = ExpandJoinInput(rightInput, join.GetRightInput()->GetOutputIUs(), ctx);
+    rightInput = ExpandJoinInput(rightInput, rightIUs, ctx);
 
     // clang-format off
     auto graceJoin = Build<TCoGraceJoinCore>(ctx, pos)
@@ -552,6 +571,40 @@ TExprNode::TPtr BuildAvgAggregationInitialStateForOptionalType(TExprNode::TPtr a
     // clang-format on
 }
 
+TString GetTypeToSafeCastForSumAggregation(const TTypeAnnotationNode* itemType) {
+    Y_ENSURE(itemType);
+    const auto* type = itemType;
+    if (itemType->IsOptionalOrNull()) {
+        type = itemType->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    Y_ENSURE(type->GetKind() == ETypeAnnotationKind::Data);
+    const auto typeName = TString(type->Cast<TDataExprType>()->GetName());
+    if (typeName.StartsWith("Int")) {
+        return "Int64";
+    } else if (typeName.StartsWith("Uint")) {
+        return "Uint64";
+    }
+
+    return typeName;
+}
+
+TExprNode::TPtr BuildSumAggregationInitialState(TExprNode::TPtr asStruct, const TString& colName, const TTypeAnnotationNode* itemType, TExprContext& ctx,
+                                                TPositionHandle pos) {
+    // clang-format off
+    return ctx.Builder(pos)
+        .Callable("SafeCast")
+            .Callable(0, "Member")
+                .Add(0, asStruct)
+                .Atom(1, colName)
+            .Seal()
+            .Callable(1, "DataType")
+                .Atom(0, GetTypeToSafeCastForSumAggregation(itemType))
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
 TExprNode::TPtr BuildCountAggregationUpdateStateForOptionalType(TExprNode::TPtr asStructStateColumns, TExprNode::TPtr asStructInputColumns,
                                                                 const TString& stateColumn, const TString& columnName, TExprContext& ctx,
                                                                 TPositionHandle pos) {
@@ -668,6 +721,29 @@ TExprNode::TPtr BuildAvgAggregationUpdateState(TExprNode::TPtr asStructStateColu
     // clang-format on
 }
 
+TExprNode::TPtr BuildSumAggregationUpdateState(TExprNode::TPtr asStructStateColumns, TExprNode::TPtr asStrcutInputColumns,
+                                               const TString& stateColumn, const TString& columnName, const TTypeAnnotationNode* itemType, TExprContext& ctx,
+                                               TPositionHandle pos){
+    // clang-format off
+    return ctx.Builder(pos)
+        .Callable("AggrAdd")
+            .Callable(0, "Member")
+                .Add(0, asStructStateColumns)
+                .Atom(1, stateColumn)
+            .Seal()
+            .Callable(1, "SafeCast")
+                .Callable(0, "Member")
+                    .Add(0, asStrcutInputColumns)
+                    .Atom(1, columnName)
+                .Seal()
+                .Callable(1, "DataType")
+                    .Atom(0, GetTypeToSafeCastForSumAggregation(itemType))
+                .Seal()
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
 TExprNode::TPtr BuildAvgAggregationFinishStateForOptionalType(TExprNode::TPtr asStructStateColumns, const TString& stateName,
                                                               TExprContext& ctx, TPositionHandle pos) {
     // clang-format off
@@ -773,7 +849,7 @@ TExprNode::TPtr BuildKeyExtractorLambda(const TVector<TString>& keyFields, const
 // This lambdas initializes initial state for aggregation.
 // It has arguments in the following order - keys, inputs.
 TExprNode::TPtr BuildInitHandlerLambda(const TVector<TString>& keyFields, const TVector<TString>& inputFields,
-                                       const TVector<TAggregationField>& aggFields, TExprContext& ctx, const TPositionHandle pos) {
+                                       const TVector<TPhysicalAggregationTraits>& aggTraitsList, TExprContext& ctx, const TPositionHandle pos) {
     // clang-format off
     const ui32 lambdaArgsSize = keyFields.size() + inputFields.size();
     TVector<TExprNode::TPtr> lambdaArgs;
@@ -797,19 +873,20 @@ TExprNode::TPtr BuildInitHandlerLambda(const TVector<TString>& keyFields, const 
     // clang-format on
 
     TVector<TExprNode::TPtr> lambdaResults;
-    for (ui32 i = 0; i < aggFields.size(); ++i) {
-        const auto& aggFunction = aggFields[i].AggFunc;
-        const auto& aggName = aggFields[i].AggFieldName;
-        const auto isOptional = aggFields[i].IsOptional;
+    for (const auto& aggTraits : aggTraitsList) {
+        const auto& aggFunction = aggTraits.AggFunc;
+        const auto& aggName = aggTraits.AggFieldName;
+        const auto isOptional = aggTraits.OutputItemType->IsOptionalOrNull();
 
         TExprNode::TPtr initState;
         if (aggFunction == "count") {
-            initState = isOptional ? BuildCountAggregationInitialStateForOptionalType(asStruct, aggName, ctx, pos)
-                                   : BuildCountAggregationInitialState(ctx, pos);
-
+            initState =
+                isOptional ? BuildCountAggregationInitialStateForOptionalType(asStruct, aggName, ctx, pos) : BuildCountAggregationInitialState(ctx, pos);
         } else if (aggFunction == "avg") {
             initState = isOptional ? BuildAvgAggregationInitialStateForOptionalType(asStruct, aggName, ctx, pos)
                                    : BuildAvgAggregationInitialState(asStruct, aggName, ctx, pos);
+        } else if (aggFunction == "sum") {
+            initState = BuildSumAggregationInitialState(asStruct, aggName, aggTraits.InputItemType, ctx, pos);
         } else {
             // clang-format off
             initState = ctx.Builder(pos)
@@ -830,7 +907,7 @@ TExprNode::TPtr BuildInitHandlerLambda(const TVector<TString>& keyFields, const 
 // This lambda performs an aggregation.
 // It has arguments in the following order - keys, inputs, states.
 TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, const TVector<TString>& inputFields,
-                                         const TVector<TAggregationField>& aggFields,
+                                         const TVector<TPhysicalAggregationTraits>& aggTraitsList,
                                          TExprContext& ctx, const TPositionHandle pos) {
     ui32 lambdaArgsCounter = 0;
     TVector<TExprNode::TPtr> lambdaArgs;
@@ -845,7 +922,7 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
     }
 
     TVector<TExprNode::TPtr> stateArgs;
-    for (ui32 i = 0; i < aggFields.size(); ++i) {
+    for (ui32 i = 0; i < aggTraitsList.size(); ++i) {
         stateArgs.push_back(ctx.NewArgument(pos, "param" + ToString(lambdaArgsCounter++)));
     }
 
@@ -868,9 +945,9 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
     auto asStructStateColumns = ctx.Builder(pos)
         .Callable("AsStruct")
         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-            for (ui32 i = 0; i < aggFields.size(); ++i) {
+            for (ui32 i = 0; i < aggTraitsList.size(); ++i) {
                 parent.List(i)
-                    .Atom(0, aggFields[i].StateFieldName)
+                    .Atom(0, aggTraitsList[i].StateFieldName)
                     .Add(1, stateArgs[i])
                 .Seal();
             }
@@ -880,16 +957,15 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
     // clang-format on
 
     TVector<TExprNode::TPtr> lambdaResults;
-    for (const auto &aggField : aggFields) {
-        const auto &aggFunction = aggField.AggFunc;
-        const auto &columnName = aggField.AggFieldName;
-        const auto &stateName = aggField.StateFieldName;
-        const bool isOptional = aggField.IsOptional;
+    for (const auto& aggTraits : aggTraitsList) {
+        const auto& aggFunction = aggTraits.AggFunc;
+        const auto& columnName = aggTraits.AggFieldName;
+        const auto& stateName = aggTraits.StateFieldName;
+        const bool isOptional = aggTraits.OutputItemType->IsOptionalOrNull();
         TExprNode::TPtr aggFunc;
 
         if (aggFunction == "count") {
-            aggFunc = isOptional ? BuildCountAggregationUpdateStateForOptionalType(asStructStateColumns, asStructInputColumns, stateName,
-                                                                                   columnName, ctx, pos)
+            aggFunc = isOptional ? BuildCountAggregationUpdateStateForOptionalType(asStructStateColumns, asStructInputColumns, stateName, columnName, ctx, pos)
                                  : BuildCountAggregationUpdateState(asStructStateColumns, stateName, ctx, pos);
         } else if (aggFunction == "distinct") {
             // clang-format off
@@ -900,10 +976,10 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
                 .Seal().Build();
             // clang-format on
         } else if (aggFunction == "avg") {
-            aggFunc = isOptional
-                          ? BuildAvgAggregationUpdateStateForOptionalType(asStructStateColumns, asStructInputColumns, stateName, columnName,
-                                                                          ctx, pos)
-                          : BuildAvgAggregationUpdateState(asStructStateColumns, asStructInputColumns, stateName, columnName, ctx, pos);
+            aggFunc = isOptional ? BuildAvgAggregationUpdateStateForOptionalType(asStructStateColumns, asStructInputColumns, stateName, columnName, ctx, pos)
+                                 : BuildAvgAggregationUpdateState(asStructStateColumns, asStructInputColumns, stateName, columnName, ctx, pos);
+        } else if (aggFunction == "sum") {
+            aggFunc = BuildSumAggregationUpdateState(asStructStateColumns, asStructInputColumns, stateName, columnName, aggTraits.InputItemType, ctx, pos);
         } else {
             // clang-format off
             aggFunc = ctx.Builder(pos)
@@ -931,7 +1007,7 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
 
 // This lambda returns aggregation result.
 // It has arguments in the following order - keys, states.
-TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, const TVector<TAggregationField>& aggFields, bool distinctAll,
+TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, const TVector<TPhysicalAggregationTraits>& aggTraitsList, bool distinctAll,
                                          TExprContext& ctx, const TPositionHandle pos) {
     TVector<TExprNode::TPtr> lambdaKeyArgs;
     ui32 lambdaArgsCounter = 0;
@@ -940,7 +1016,7 @@ TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, cons
     }
 
     TVector<TExprNode::TPtr> lambdaStateArgs;
-    for (ui32 i = 0; i < aggFields.size(); ++i) {
+    for (ui32 i = 0; i < aggTraitsList.size(); ++i) {
         lambdaStateArgs.push_back(ctx.NewArgument(pos, "param" + ToString(lambdaArgsCounter++)));
     }
 
@@ -961,9 +1037,9 @@ TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, cons
     auto stateStruct = ctx.Builder(pos)
         .Callable("AsStruct")
         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-            for (ui32 i = 0; i < aggFields.size(); ++i) {
+            for (ui32 i = 0; i < aggTraitsList.size(); ++i) {
                 parent.List(i)
-                    .Atom(0, aggFields[i].StateFieldName)
+                    .Atom(0, aggTraitsList[i].StateFieldName)
                     .Add(1, lambdaStateArgs[i])
                 .Seal();
             }
@@ -987,10 +1063,10 @@ TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, cons
         }
     }
 
-    for (ui32 i = 0; i < aggFields.size(); ++i) {
-        const TString& aggFuncName = aggFields[i].AggFunc;
-        const TString& stateName = aggFields[i].StateFieldName;
-        const bool isOptional = aggFields[i].IsOptional;
+    for (const auto& aggTraits : aggTraitsList) {
+        const TString& aggFuncName = aggTraits.AggFunc;
+        const TString& stateName = aggTraits.StateFieldName;
+        const bool isOptional = aggTraits.OutputItemType->IsOptionalOrNull();
         TExprNode::TPtr result;
 
         if (aggFuncName == "avg") {
@@ -1012,8 +1088,16 @@ TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, cons
     return ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(lambdaKeyArgs)), std::move(lambdaResults));
 }
 
-TExprNode::TPtr BuildExpandMapForWideCombinerInput(TExprNode::TPtr input, const TVector<TString>& inputColumns, TExprContext& ctx,
-                                                   const TPositionHandle pos) {
+TExprNode::TPtr BuildExpandMapForWideCombinerInput(TExprNode::TPtr input, const TVector<TString>& inputColumns,
+                                                   const TVector<TPhysicalAggregationTraits>& aggTraitsList, TExprContext& ctx, const TPositionHandle pos) {
+    // This is a workaround, we will eliminate it once we will move from yql callables.
+    THashSet<TString> forceOptional;
+    for (const auto& aggTraits : aggTraitsList) {
+        if (!aggTraits.InputItemType->IsOptionalOrNull() && aggTraits.OutputItemType->IsOptionalOrNull()) {
+            forceOptional.insert(aggTraits.InputColName);
+        }
+    }
+
     // clang-format off
     return ctx.Builder(pos)
         .Callable("ExpandMap")
@@ -1024,11 +1108,21 @@ TExprNode::TPtr BuildExpandMapForWideCombinerInput(TExprNode::TPtr input, const 
                 .Param("narrow_input_param")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     for (ui32 i = 0; i < inputColumns.size(); ++i) {
-                        parent
-                            .Callable(i, "Member")
-                                .Arg(0, "narrow_input_param")
-                                .Atom(1, inputColumns[i])
-                            .Seal();
+                        if (forceOptional.contains(inputColumns[i])) {
+                            parent
+                                .Callable(i, "Just")
+                                    .Callable(0, "Member")
+                                        .Arg(0, "narrow_input_param")
+                                        .Atom(1, inputColumns[i])
+                                    .Seal()
+                                .Seal();
+                        } else {
+                            parent
+                                .Callable(i, "Member")
+                                    .Arg(0, "narrow_input_param")
+                                    .Atom(1, inputColumns[i])
+                                .Seal();
+                        }
                     }
                     return parent;
                 })
@@ -1037,8 +1131,7 @@ TExprNode::TPtr BuildExpandMapForWideCombinerInput(TExprNode::TPtr input, const 
     // clang-format on
 }
 
-TExprNode::TPtr BuildNarrowMapForWideOlapRead(TExprNode::TPtr input, const TVector<TString>& columns, TExprContext& ctx,
-                                              const TPositionHandle pos) {
+TExprNode::TPtr BuildNarrowMapForWideOlapRead(TExprNode::TPtr input, const TVector<TString>& columns, TExprContext& ctx, const TPositionHandle pos) {
     // clang-format off
     return ctx.Builder(pos)
         .Callable("NarrowMap")
@@ -1062,15 +1155,27 @@ TExprNode::TPtr BuildNarrowMapForWideOlapRead(TExprNode::TPtr input, const TVect
 }
 
 TExprNode::TPtr BuildNarrowMapForWideCombinerOutput(TExprNode::TPtr input, const TVector<TString>& keyFields,
-                                                    const TVector<TAggregationField>& aggFields,
-                                                    const THashMap<TString, TString>& projectionMap, bool distinctAll, TExprContext& ctx,
-                                                    const TPositionHandle pos) {
+                                                    const TVector<TPhysicalAggregationTraits>& aggTraitsList, const THashMap<TString, TString>& projectionMap,
+                                                    bool distinctAll, TExprContext& ctx, const TPositionHandle pos) {
     TVector<TString> outputFields;
     if (!distinctAll) {
         outputFields = keyFields;
     }
-    for (const auto& aggField : aggFields) {
-        outputFields.push_back(aggField.StateFieldName);
+    for (const auto& aggTraits : aggTraitsList) {
+        outputFields.push_back(aggTraits.StateFieldName);
+    }
+
+    if (keyFields.empty()) {
+        // clang-format off
+        input = Build<TCoTake>(ctx, pos)
+            .Input(input)
+            .Count<TCoUint64>()
+                .Literal<TCoAtom>()
+                    .Value("1")
+                .Build()
+            .Build()
+        .Done().Ptr();
+        // clang-format on
     }
 
     // clang-format off
@@ -1119,27 +1224,32 @@ TVector<TString> GetInputColumns(const TVector<TOpAggregationTraits>& aggregatio
     return TVector<TString>(inputFields.begin(), inputFields.end());
 }
 
-void GetAggregationFields(const TVector<TString>& inputColumns, const TVector<TOpAggregationTraits>& aggregationTraitsList,
-                          TVector<TString>& inputFields, TVector<TAggregationField>& aggFields,
-                          THashMap<TString, TString>& projectionMap, const TTypeAnnotationNode *aggType) {
-    Y_ENSURE(aggType);
-    const auto* structType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    THashMap<TString, std::pair<TString, bool>> aggColumns;
+void GetPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TOpAggregationTraits>& aggregationTraitsList,
+                                  TVector<TString>& inputFields, TVector<TPhysicalAggregationTraits>& aggTraits, THashMap<TString, TString>& projectionMap,
+                                  const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* aggType) {
+    Y_ENSURE(aggType && inputType);
+    const auto* inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto* aggStructType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    THashMap<TString, std::tuple<TString, const TTypeAnnotationNode*, const TTypeAnnotationNode*>> aggColumns;
     for (const auto& aggregationTraits : aggregationTraitsList) {
         const TString colName = aggregationTraits.OriginalColName.GetFullName();
-        const auto *itemType = structType->FindItemType(colName);
-        Y_ENSURE(itemType, "Cannot find type for item");
-        aggColumns[colName] = {aggregationTraits.AggFunction, itemType->IsOptionalOrNull()};
+        const auto *inputItemType = inputStructType->FindItemType(colName);
+        const auto *outputItemType = aggStructType->FindItemType(colName);
+        Y_ENSURE(inputItemType && outputItemType, "Cannot find type for item");
+        aggColumns[colName] = std::make_tuple(aggregationTraits.AggFunction, inputItemType, outputItemType);
     }
 
     for (ui32 i = 0; i < inputColumns.size(); ++i) {
         const auto fullName = inputColumns[i];
         if (auto it = aggColumns.find(fullName); it != aggColumns.end()) {
             auto aggName = "_kqp_agg_" + ToString(i);
-            const auto& aggFunction = it->second.first;
-            bool isOptional = it->second.second;
-            auto stateName = aggName + "_" + aggFunction;
+            const auto& tupleTraits = it->second;
+            const auto& aggFunction = std::get<0>(tupleTraits);
+            const auto* inputType = std::get<1>(tupleTraits);
+            const auto* outputType = std::get<2>(tupleTraits);
 
+            auto stateName = aggName + "_" + aggFunction;
             // No renames for distinct, we want to process only keys.
             if (aggFunction == "distinct") {
                 aggName = fullName;
@@ -1147,7 +1257,7 @@ void GetAggregationFields(const TVector<TString>& inputColumns, const TVector<TO
             }
 
             inputFields.push_back(aggName);
-            aggFields.push_back(TAggregationField(aggName, aggFunction, stateName, isOptional));
+            aggTraits.push_back(TPhysicalAggregationTraits(fullName, inputType, aggName, outputType, aggFunction, stateName));
             // Map agg state name to result name.
             projectionMap[stateName] = it->first;
         } else {
@@ -1164,14 +1274,113 @@ TVector<TString> GetKeyFields(const TVector<TInfoUnit>& keyColumns) {
     return keyFields;
 }
 
+TExprNode::TPtr CreateNothingForEmptyInput(const TTypeAnnotationNode* aggType, TExprContext& ctx, TPositionHandle pos) {
+    Y_ENSURE(aggType);
+    const auto* aggStructType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    // clang-format off
+    return Build<TCoNothing>(ctx, pos)
+        .OptionalType<TCoOptionalType>()
+            .ItemType(ExpandType(pos, *aggStructType, ctx))
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
+bool IsSuitableToWrapWithCondense(const TTypeAnnotationNode* aggType, const TVector<TString>& keyFields) {
+    if (!keyFields.empty()) {
+        return false;
+    }
+
+    Y_ENSURE(aggType);
+    const auto* aggStructType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    for (const auto* itemType : aggStructType->GetItems()) {
+        // FIXME: Need to update RBO TypeAnnotation to proper handle this case.
+        if (itemType->IsOptionalOrNull()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TExprNode::TPtr MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits, const THashMap<TString, TString>& projectionMap,
+                                  TExprContext& ctx, TPositionHandle pos) {
+    // clang-format off
+     return ctx.Builder(pos)
+        .Callable("Map")
+            .Add(0, input)
+            .Lambda(1)
+                .Param("arg")
+                .Callable(0, "AsStruct")
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    for (ui32 i = 0; i < traits.size(); ++i) {
+                        // Apply rename.
+                        auto fieldName = traits[i].StateFieldName;
+                        auto it = projectionMap.find(fieldName);
+                        if (it != projectionMap.end()) {
+                            fieldName = it->second;
+                        }
+                        const auto &aggFunc = traits[i].AggFunc;
+                        if (aggFunc == "count") {
+                            parent.List(i)
+                                .Atom(0, fieldName)
+                                .Callable(1, "Coalesce")
+                                    .Callable(0, "Member")
+                                        .Arg(0, "arg")
+                                        .Atom(1, fieldName)
+                                    .Seal()
+                                    .Callable(1, "Uint64")
+                                        .Atom(0, "0")
+                                    .Seal()
+                                .Seal()
+                            .Seal();
+                        } else {
+                            parent.List(i)
+                                .Atom(0, fieldName)
+                                .Callable(1, "Member")
+                                    .Arg(0, "arg")
+                                    .Atom(1, fieldName)
+                                .Seal()
+                            .Seal();
+                        }
+                    }
+                    return parent;
+                })
+                .Seal()
+            .Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildCondenseForAggregationOutputWithEmptyKeys(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
+                                                               const THashMap<TString, TString>& projectionMap, const TTypeAnnotationNode* type,
+                                                               TExprContext& ctx, TPositionHandle pos) {
+    // clang-format off
+    input = Build<TCoCondense>(ctx, pos)
+        .Input(input)
+        .State(CreateNothingForEmptyInput(type, ctx, pos))
+        .SwitchHandler()
+            .Args({"item", "state"})
+            .Body(MakeBool<false>(pos, ctx))
+        .Build()
+        .UpdateHandler()
+            .Args({"item", "state"})
+            .Body<TCoJust>()
+                .Input("item")
+            .Build()
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+
+    return MapCondenseOutput(input, traits, projectionMap, ctx, pos);
+}
+
+
 } // namespace
 
 namespace NKikimr {
 namespace NKqp {
 
-TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<IGraphTransformer> typeAnnTransformer, 
-                                 TAutoPtr<IGraphTransformer> peepholeTransformer) {
-    Y_UNUSED(peepholeTransformer);
+TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
 
     THashMap<int, TExprNode::TPtr> stages;
@@ -1184,7 +1393,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
     }
 
     int stageInputCounter = 0;
-    for (auto iter : root) {
+    for (const auto& iter : root) {
         auto op = iter.Current;
         auto opStageId = *(op->Props.StageId);
 
@@ -1212,7 +1421,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
 
             auto source = ctx.NewCallable(op->Pos, "DataSource", {ctx.NewAtom(op->Pos, "KqpReadRangesSource")});
             TVector<TExprNode::TPtr> columns;
-            for (auto c : opSource->Columns) {
+            for (const auto& c : opSource->Columns) {
                 columns.push_back(ctx.NewAtom(op->Pos, c));
             }
 
@@ -1234,16 +1443,24 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                 }
                 case NYql::EStorageType::ColumnStorage: {
                     // clang-format off
+                    auto processLambda = Build<TCoLambda>(ctx, op->Pos)
+                        .Args({"arg"})
+                        .Body("arg")
+                    .Done().Ptr();
+                    // clang-format on
+
+                    if (opSource->OlapFilterLambda) {
+                        processLambda = opSource->OlapFilterLambda;
+                    }
+
+                    // clang-format off
                     auto olapRead = Build<TKqpBlockReadOlapTableRanges>(ctx, op->Pos)
                             .Table(opSource->TableCallable)
                             .Ranges<TCoVoid>().Build()
                             .Columns().Add(columns).Build()
                             .Settings<TCoNameValueTupleList>().Build()
                             .ExplainPrompt<TCoNameValueTupleList>().Build()
-                            .Process()
-                            .Args({"row"})
-                                .Body("row")
-                            .Build()
+                            .Process(processLambda)
                     .Done().Ptr();
 
                     auto flowNonBlockRead = Build<TCoToFlow>(ctx, op->Pos)
@@ -1342,7 +1559,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
 
             TVector<TExprBase> items;
             if (!map->Project) {
-                for (auto iu : map->GetInput()->GetOutputIUs()) {
+                for (const auto& iu : map->GetInput()->GetOutputIUs()) {
                     // clang-format off
                     auto tuple = Build<TCoNameValueTuple>(ctx, op->Pos)
                         .Name().Value(iu.GetFullName()).Build()
@@ -1358,7 +1575,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
                 }
             }
 
-            for (auto mapElement : map->MapElements) {
+            for (const auto& mapElement : map->MapElements) {
                 TMaybeNode<TCoLambda> mapLambda;
 
                 if (std::holds_alternative<TExprNode::TPtr>(mapElement.second)) {
@@ -1480,7 +1697,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
             stageArgs[opStageId].push_back(rightArg);
             if (join->JoinKind == "Cross") {
                 currentStageBody = BuildCrossJoin(*join, leftInput, rightInput, ctx, op->Pos);
-            } else if (const auto joinKind = to_lower(join->JoinKind); (joinKind == "inner" || joinKind == "left")) {
+            } else if (const auto joinKind = to_lower(join->JoinKind); (joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi")) {
                 currentStageBody = BuildGraceJoinCore(*join, leftInput, rightInput, ctx, op->Pos);
             } else {
                 TStringBuilder builder;
@@ -1535,30 +1752,38 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
             const TVector<TString> keyFields = GetKeyFields(keyColumns);
 
             TVector<TString> inputFields;
-            TVector<TAggregationField> aggFields;
+            TVector<TPhysicalAggregationTraits> phyAggregationTraitsList;
             THashMap<TString, TString> projectionMap;
-            GetAggregationFields(inputColumns, aggregationTraitsList, inputFields, aggFields, projectionMap, aggregate->GetInput()->Type);
+            GetPhysicalAggregationTraits(inputColumns, aggregationTraitsList, inputFields, phyAggregationTraitsList, projectionMap, aggregate->GetInput()->Type,
+                                         aggregate->Type);
 
             // clang-format off
             auto wideCombiner = ctx.Builder(op->Pos)
                 .Callable("WideCombiner")
-                    .Add(0, BuildExpandMapForWideCombinerInput(stageInput, inputColumns, ctx, op->Pos))
+                    .Add(0, BuildExpandMapForWideCombinerInput(stageInput, inputColumns, phyAggregationTraitsList, ctx, op->Pos))
                     .Add(1, ctx.NewAtom(op->Pos, ""))
                     .Add(2, BuildKeyExtractorLambda(keyFields, inputFields, ctx, op->Pos))
-                    .Add(3, BuildInitHandlerLambda(keyFields, inputFields, aggFields, ctx, op->Pos))
-                    .Add(4, BuildUpdateHandlerLambda(keyFields, inputFields, aggFields, ctx, op->Pos))
-                    .Add(5, BuildFinishHandlerLambda(keyFields, aggFields, distinctAll, ctx, op->Pos))
+                    .Add(3, BuildInitHandlerLambda(keyFields, inputFields, phyAggregationTraitsList, ctx, op->Pos))
+                    .Add(4, BuildUpdateHandlerLambda(keyFields, inputFields, phyAggregationTraitsList, ctx, op->Pos))
+                    .Add(5, BuildFinishHandlerLambda(keyFields, phyAggregationTraitsList, distinctAll, ctx, op->Pos))
                 .Seal().Build();
             // clang-format on
 
-            // TODO: We could eliminate narrow map with wide channels enabled in dq stage settings.
-            auto narrowMap = BuildNarrowMapForWideCombinerOutput(wideCombiner, keyFields, aggFields, projectionMap, distinctAll, ctx, op->Pos);
-            //YQL_CLOG(TRACE, CoreDq) << "[KQP RBO Aggregate convert to physical] " << KqpExprToPrettyString(TExprBase(narrowMap), ctx);
+            auto physicalAggregation =
+                BuildNarrowMapForWideCombinerOutput(wideCombiner, keyFields, phyAggregationTraitsList, projectionMap, distinctAll, ctx, op->Pos);
 
+            if (IsSuitableToWrapWithCondense(aggregate->Type, keyFields)) {
+                physicalAggregation =
+                    BuildCondenseForAggregationOutputWithEmptyKeys(physicalAggregation, phyAggregationTraitsList, projectionMap, aggregate->Type, ctx, op->Pos);
+            }
+
+            YQL_CLOG(TRACE, CoreDq) << "[KQP RBO Aggregate convert to physical] " << KqpExprToPrettyString(TExprBase(physicalAggregation), ctx);
+            // clang-format off
             currentStageBody = ctx.Builder(op->Pos)
                 .Callable("FromFlow")
-                    .Add(0, narrowMap)
+                    .Add(0, physicalAggregation)
                 .Seal().Build();
+            // clang-format on
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
@@ -1576,11 +1801,11 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
     auto stageIds = graph.StageIds;
     auto stageInputIds = graph.StageInputs;
 
-    for (auto id : stageIds) {
+    for (const auto id : stageIds) {
         YQL_CLOG(TRACE, CoreDq) << "Finalizing stage " << id;
 
         TVector<TExprNode::TPtr> inputs;
-        for (auto inputStageId : stageInputIds.at(id)) {
+        for (const auto inputStageId : stageInputIds.at(id)) {
             auto inputStage = finalizedStages.at(inputStageId);
             auto connection = graph.GetConnection(inputStageId, id);
             YQL_CLOG(TRACE, CoreDq) << "Building connection: " << inputStageId << "->" << id << ", " << connection->Type;
@@ -1636,8 +1861,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
     auto lastStage = finalizedStages.at(lastStageIdx);
 
     TVector<TCoAtom> columnAtomList;
-    for (auto c : root.ColumnOrder) {
-        columnAtomList.push_back(Build<TCoAtom>(ctx, root.Pos).Value(c).Done());
+    for (const auto& column : root.ColumnOrder) {
+        columnAtomList.push_back(Build<TCoAtom>(ctx, root.Pos).Value(column).Done());
     }
     auto columnOrder = Build<TCoAtomList>(ctx, root.Pos).Add(columnAtomList).Done().Ptr();
 
@@ -1680,10 +1905,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
     // clang-format on
 
     // Build result type
-    typeAnnTransformer->Rewind();
+    rboCtx.TypeAnnTransformer->Rewind();
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
     do {
-        status = typeAnnTransformer->Transform(dqResult, dqResult, ctx);
+        status = rboCtx.TypeAnnTransformer->Transform(dqResult, dqResult, ctx);
     } while (status == IGraphTransformer::TStatus::Repeat);
 
     if (status != IGraphTransformer::TStatus::Ok) {

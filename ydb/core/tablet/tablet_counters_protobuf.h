@@ -263,7 +263,6 @@ TParsedOptsPair<T1,T2>* GetOptsPair() {
 
 
 // Class that incapsulates protobuf options parsing for user counters
-template <const NProtoBuf::EnumDescriptor* LabeledCountersDesc()>
 struct TLabeledCounterParsedOpts {
 public:
     const size_t Size;
@@ -278,51 +277,7 @@ protected:
     TVector<const char*> GroupNames;
     TString Groups;
 public:
-    explicit TLabeledCounterParsedOpts()
-        : Size(LabeledCountersDesc()->value_count())
-    {
-        const NProtoBuf::EnumDescriptor* labeledCounterDesc = LabeledCountersDesc();
-        NamesStrings.reserve(Size);
-        Names.reserve(Size);
-        SVNamesStrings.reserve(Size);
-        SVNames.reserve(Size);
-        AggregateFuncs.reserve(Size);
-        Types.reserve(Size);
-
-        // Parse protobuf options for enum values for app counters
-        for (ui32 i = 0; i < Size; ++i) {
-            const NProtoBuf::EnumValueDescriptor* vdesc = labeledCounterDesc->value(i);
-            Y_ABORT_UNLESS(vdesc->number() == vdesc->index(), "counter '%s' number (%d) != index (%d)",
-                   vdesc->full_name().data(), vdesc->number(), vdesc->index());
-            const TLabeledCounterOptions& co = vdesc->options().GetExtension(LabeledCounterOpts);
-
-            NamesStrings.push_back(GetFilePrefix(labeledCounterDesc->file()) + co.GetName());
-            SVNamesStrings.push_back(co.GetSVName());
-            AggregateFuncs.push_back(co.GetAggrFunc());
-            Types.push_back(co.GetType());
-        }
-
-        // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
-        std::transform(NamesStrings.begin(), NamesStrings.end(),
-                  std::back_inserter(Names), [](auto& string) { return string.data(); } );
-
-        std::transform(SVNamesStrings.begin(), SVNamesStrings.end(),
-                  std::back_inserter(SVNames), [](auto& string) { return string.data(); } );
-
-        //parse types for counter groups;
-        const TLabeledCounterGroupNamesOptions& gn = labeledCounterDesc->options().GetExtension(GlobalGroupNamesOpts);
-        ui32 size = gn.NamesSize();
-        GroupNamesStrings.reserve(size);
-        GroupNames.reserve(size);
-        for (ui32 i = 0; i < size; ++i) {
-            GroupNamesStrings.push_back(gn.GetNames(i));
-        }
-
-        std::transform(GroupNamesStrings.begin(), GroupNamesStrings.end(),
-                  std::back_inserter(GroupNames), [](auto& string) { return string.data(); } );
-
-        Groups = JoinRange("|", GroupNamesStrings.begin(), GroupNamesStrings.end());
-    }
+    explicit TLabeledCounterParsedOpts(const NProtoBuf::EnumDescriptor* labeledCountersDesc);
 
     virtual ~TLabeledCounterParsedOpts()
     {}
@@ -366,21 +321,26 @@ public:
     {
         return Types;
     }
-
-protected:
-    TString GetFilePrefix(const NProtoBuf::FileDescriptor* desc) {
-        if (desc->options().HasExtension(TabletTypeName)) {
-            return desc->options().GetExtension(TabletTypeName) + "/";
-        } else {
-            return TString();
-        }
-    }
 };
 
 template <const NProtoBuf::EnumDescriptor* LabeledCountersDesc()>
-TLabeledCounterParsedOpts<LabeledCountersDesc>* GetLabeledCounterOpts() {
+struct TLabeledCounterParsedOptsProvider {
+    TLabeledCounterParsedOptsProvider()
+        : ParsedOpts(LabeledCountersDesc())
+    {
+    }
+
+    TLabeledCounterParsedOpts ParsedOpts;
+
+    TLabeledCounterParsedOpts* Get() {
+        return &ParsedOpts;
+    }
+};
+
+template<const NProtoBuf::EnumDescriptor* LabeledCountersDesc()>
+TLabeledCounterParsedOpts* GetLabeledCounterOpts() {
     // Use singleton to avoid thread-safety issues and parse enum descriptor once
-    return Singleton<TLabeledCounterParsedOpts<LabeledCountersDesc>>();
+    return Singleton<TLabeledCounterParsedOptsProvider<LabeledCountersDesc>>()->Get();
 }
 
 } // NAux
@@ -637,47 +597,36 @@ public:
     }
 };
 
-
+void VerifyGroups(const NAux::TLabeledCounterParsedOpts* simpleOpts, const TString& group, const char delimiter);
+void VerifyGroupsSkipEmpty(const NAux::TLabeledCounterParsedOpts* simpleOpts, const TString& group, const char delimiter);
 
 // Tablet app user counters
 template <const NProtoBuf::EnumDescriptor* SimpleDesc()>
-class TProtobufTabletLabeledCounters : public TTabletLabeledCountersBase {
-public:
-    typedef NAux::TLabeledCounterParsedOpts<SimpleDesc> TLabeledCounterOpts;
+TTabletLabeledCountersBase CreateProtobufTabletLabeledCounters(TMaybe<TString> databasePath = Nothing(), const ui64 id = 0) {
+    const auto* simpleOpts = NAux::GetLabeledCounterOpts<SimpleDesc>();
+    return TTabletLabeledCountersBase(simpleOpts->Size, simpleOpts->GetSVNames(), simpleOpts->GetCounterTypes(),
+            simpleOpts->GetAggregateFuncs(), simpleOpts->GetGroups(), simpleOpts->GetGroupNames(),
+             id, databasePath);
+}
 
-    static TLabeledCounterOpts* SimpleOpts() {
-        return NAux::GetLabeledCounterOpts<SimpleDesc>();
-    }
+template <const NProtoBuf::EnumDescriptor* SimpleDesc()>
+TTabletLabeledCountersBase CreateProtobufTabletLabeledCounters(const TString& group, const ui64 id) {
+    const auto* simpleOpts = NAux::GetLabeledCounterOpts<SimpleDesc>();
 
-    TProtobufTabletLabeledCounters(TMaybe<TString> databasePath = Nothing(), const ui64 id = 0)
-        : TTabletLabeledCountersBase(
-            SimpleOpts()->Size, SimpleOpts()->GetSVNames(), SimpleOpts()->GetCounterTypes(),
-            SimpleOpts()->GetAggregateFuncs(), SimpleOpts()->GetGroups(), SimpleOpts()->GetGroupNames(), id, std::move(databasePath))
-    {
-    }
+    VerifyGroupsSkipEmpty(simpleOpts, group, '/');
 
-    TProtobufTabletLabeledCounters(const TString& group, const ui64 id)
-        : TTabletLabeledCountersBase(
-              SimpleOpts()->Size, SimpleOpts()->GetNames(), SimpleOpts()->GetCounterTypes(),
-              SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id, Nothing())
-    {
-        const size_t groups = StringSplitter(group).Split('/').SkipEmpty().Count();
+    return TTabletLabeledCountersBase(simpleOpts->Size, simpleOpts->GetNames(), simpleOpts->GetCounterTypes(),
+        simpleOpts->GetAggregateFuncs(), group, simpleOpts->GetGroupNames(), id, Nothing());
+}
 
-        Y_ABORT_UNLESS(SimpleOpts()->GetGroupNamesSize() == groups, "%zu != %zu; group=%s", SimpleOpts()->GetGroupNamesSize(), groups, group.Quote().c_str());
-    }
+template <const NProtoBuf::EnumDescriptor* SimpleDesc()>
+TTabletLabeledCountersBase CreateProtobufTabletLabeledCounters(const TString& group, const ui64 id, const TString& databasePath) {
+    const auto* simpleOpts = NAux::GetLabeledCounterOpts<SimpleDesc>();
 
-    TProtobufTabletLabeledCounters(const TString& group, const ui64 id,
-                                   const TString& databasePath)
-        : TTabletLabeledCountersBase(
-              SimpleOpts()->Size, SimpleOpts()->GetSVNames(), SimpleOpts()->GetCounterTypes(),
-              SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id, databasePath)
-    {
-        const size_t groups = StringSplitter(group).Split('|').Count();
+    VerifyGroups(simpleOpts, group, '|');
 
-        Y_ABORT_UNLESS(SimpleOpts()->GetGroupNamesSize() == groups, "%zu != %zu; group=%s", SimpleOpts()->GetGroupNamesSize(), groups, group.Quote().c_str());
-    }
-};
-
-
+    return TTabletLabeledCountersBase(simpleOpts->Size, simpleOpts->GetSVNames(), simpleOpts->GetCounterTypes(),
+        simpleOpts->GetAggregateFuncs(), group, simpleOpts->GetGroupNames(), id, databasePath);
+}
 
 } // end of NKikimr

@@ -84,6 +84,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableScriptExecutionOperations(true);
         featureFlags.SetEnableExternalSourceSchemaInference(true);
         featureFlags.SetEnableMoveColumnTable(true);
+        featureFlags.SetEnableSchemaSecrets(true);
 
         if (appConfig && appConfig->HasFeatureFlags()) {
             const auto& appFlags = appConfig->GetFeatureFlags();

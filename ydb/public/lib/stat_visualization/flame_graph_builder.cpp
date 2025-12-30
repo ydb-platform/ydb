@@ -244,4 +244,4 @@ void GenerateFlameGraphSvg(const TString &resultFile, const TString &statReportJ
     impl.GenerateSvg();
 }
 
-}
+} // namespace NKikimr::NVisual

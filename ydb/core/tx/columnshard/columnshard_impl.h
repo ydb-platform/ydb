@@ -228,6 +228,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TSchemaTransactionOperator;
     friend class TEvWriteTransactionOperator;
     friend class TBackupTransactionOperator;
+    friend class TRestoreTransactionOperator;
     friend class IProposeTxOperator;
     friend class TSharingTransactionOperator;
 

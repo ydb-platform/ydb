@@ -2,6 +2,7 @@
 
 #include "blobstorage_hullwritesst.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_fullsyncsst_add.h>
+#include <ydb/core/util/stlog.h>
 
 namespace NKikimr {
 
@@ -77,7 +78,6 @@ class TIndexSstWriter {
     void FinishChunk() {
         PutPlaceHolder();
         Writer->FinishChunk();
-        Writer.reset();
 
         LevelSegments.push_back(std::move(LevelSegment));
         Chunks.push_back(ChunkIdx);
@@ -96,7 +96,11 @@ public:
         , Recs(TMemoryConsumer(VCtx->SstIndex))
     {}
 
-    bool Push(const TIndexRecord<TKey, TMemRec>::TVec& records) {
+    bool Push(const TRec::TVec& records) {
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS20, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriter: Push"),
+            (RecordCount, records.size()), (RecordSize, sizeof(TRec)));
+
         if (!Writer) {
             PostponedRecs.insert(PostponedRecs.end(), records.begin(), records.end());
             return false;
@@ -104,6 +108,10 @@ public:
 
         auto freeSpace = Writer->GetFreeSpace();
         auto recsSize = sizeof(TRec) * records.size();
+
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS21, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriter: Push"),
+            (FreeSpace, freeSpace), (Size, recsSize), (RecordSize, sizeof(TRec)));
 
         if (recsSize + sizeof(TIdxDiskPlaceHolder) <= freeSpace) {
             Recs.insert(Recs.end(), records.begin(), records.end());
@@ -124,6 +132,10 @@ public:
     }
 
     void OnChunkReserved(ui32 chunkIdx) {
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS22, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriter: OnChunkReserved"),
+            (ChunkIdx, chunkIdx), (RecordSize, sizeof(TRec)));
+
         Writer = std::make_unique<TBufferedChunkWriter>(
             TMemoryConsumer(VCtx->SstIndex),
             PDiskCtx->Dsk->Owner,
@@ -148,6 +160,10 @@ public:
     }
 
     void Finish() {
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS23, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriter: Finish"),
+            (RecordSize, sizeof(TRec)));
+
         if (Writer) {
             FinishChunk();
         }
@@ -158,9 +174,14 @@ public:
     }
 
     std::unique_ptr<TEvAddFullSyncSsts> GenerateCommitMessage(const TActorId sstWriterId) {
-        if (!Writer) {
+        STLOG(PRI_DEBUG, BS_SYNCER, BSFS24, VDISKP(VCtx->VDiskLogPrefix,
+            "TIndexSstWriter: GenerateCommitMessage"),
+            (ChunkCount, Chunks.size()), (RecordSize, sizeof(TRec)));
+
+        if (!Writer || Chunks.empty()) {
             return {};
         }
+
         auto msg = std::make_unique<TEvAddFullSyncSsts>();
         msg->CommitChunks = std::move(Chunks);
         msg->LevelSegments = std::move(LevelSegments);

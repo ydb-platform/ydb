@@ -82,14 +82,14 @@ TUserInfo::TUserInfo(
         }
 
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            LabeledCounters.Reset(new TUserLabeledCounters(
-                EscapeBadChars(user) + "||" + EscapeBadChars(topicConverter->GetClientsideName()), partition, dbPath));
+            LabeledCounters = CreateProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>(
+                EscapeBadChars(user) + "||" + EscapeBadChars(topicConverter->GetClientsideName()), partition, dbPath);
 
             SetupStreamCounters(streamCountersSubgroup);
         } else {
-            LabeledCounters.Reset(new TUserLabeledCounters(
+            LabeledCounters = CreateProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor>(
                 user + "/" + (ImporantOrExtendedAvailabilityPeriod(*this) ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
-                partition));
+                partition);
 
             SetupTopicCounters(ctx, dcId, ToString<ui32>(partition));
         }
@@ -308,7 +308,7 @@ bool TUserInfo::UpdateTimestampFromCache() {
 void TUserInfo::SetImportant(bool important, TDuration availabilityPeriod) {
     Important = important;
     AvailabilityPeriod = availabilityPeriod;
-    if (LabeledCounters && !AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+    if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && LabeledCounters) {
         LabeledCounters->SetGroup(User + "/" + (ImporantOrExtendedAvailabilityPeriod(*this) ? "1" : "0") + "/" + TopicConverter->GetClientsideName());
     }
 }
@@ -471,7 +471,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
         return s
             ->GetSubgroup("Account", TopicConverter->GetAccount())
             ->GetSubgroup("TopicPath", TopicConverter->GetFederationPath())
-            ->GetSubgroup("OriginDC", TopicConverter->GetCluster())
+            ->GetSubgroup("OriginDC", to_title(TopicConverter->GetCluster()))
             ->GetSubgroup("Partition", ToString(Partition));
     }
 }

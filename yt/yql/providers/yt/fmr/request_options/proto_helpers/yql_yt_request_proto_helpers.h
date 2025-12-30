@@ -113,6 +113,22 @@ NProto::TClusterConnection ClusterConnectionToProto(const TClusterConnection& cl
 
 TClusterConnection ClusterConnectionFromProto(const NProto::TClusterConnection& protoClusterConnection);
 
+NProto::TFileInfo FileInfoToProto(const TFileInfo& fileInfo);
+
+TFileInfo FileInfoFromProto(const NProto::TFileInfo& protoFileInfo);
+
+NProto::TYtResourceInfo YtResourceInfoToProto(const TYtResourceInfo& ytResourceInfo);
+
+TYtResourceInfo YtResourceInfoFromProto(const NProto::TYtResourceInfo& protoYtResourceInfo);
+
+NProto::TFmrResourceOperationInfo FmrResourceOperationInfoToProto(const TFmrResourceOperationInfo& fmrResourceOperationInfo);
+
+TFmrResourceOperationInfo FmrResourceOperationInfoFromProto(const NProto::TFmrResourceOperationInfo& protoFmrResourceOperationInfo);
+
+NProto::TFmrResourceTaskInfo FmrResourceTaskInfoToProto(const TFmrResourceTaskInfo& fmrResourceTaskInfo);
+
+TFmrResourceTaskInfo FmrResourceTaskInfoFromProto(const NProto::TFmrResourceTaskInfo& protoFmrResourceTaskInfo);
+
 NProto::TTask TaskToProto(const TTask& task);
 
 TTask TaskFromProto(const NProto::TTask& protoTask);

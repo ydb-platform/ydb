@@ -1,16 +1,20 @@
+* Added the `Created by`, `Create time` and `End time` fields to the "build index" and the "execute script" operations in the `ydb operation` subcommands.
+* Added the `--include-index-data` option to the `ydb export s3` command, enabling index data export.
+* Added the `--index-population-mode` option to the `ydb import s3` command, allowing selection of the index population mode (e.g. build or import).
+
+## 2.28.0 ##
+
 * The `ydb admin cluster state fetch` command was renamed to the `ydb admin cluster diagnostics collect`.
 * Added a new `--no-sanitize` option of the `ydb admin cluster state fetch` command. The new option disable sanitization and preserve sensitive data in the output.
 * Added `snapshot-ro` and `snapshot-rw` transaction modes to `--tx-mode` option of the `ydb table query execute` command.
 * Added `NO_COLOR` environment variable support to disable ANSI colors in YDB CLI (no-color.org)
-* Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output .tar.bz2 file.
+* Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output compressed file.
 * Added a simple progress bar for non-interactive stderr.
 * Added a new `omit-indexes` property to the `--item` option of the `ydb tools copy` command, allowing tables to be copied without their indexes.
 * Fixed a bug where the `ydb tools restore` command could crash with an `mutex lock failure (Invalid argument)` error due to an internal race condition.
 * The `ydb workload vector` now supports the `import files` subcommand to populate the table from CSV or parquet files.
 * The `ydb workload vector` now supports the `import generate` subcommand to populate the table with random data.
 * Named expression-containing view restoration and restoration of views that access secondary indexes have been fixed.
-* Added the `--materialize-indexes` option to the `ydb export s3` command, enabling index materialization during export.
-* Added the `--index-filling-mode` option to the `ydb import s3` command, allowing selection of the index filling mode (e.g. build or import a materialized index).
 
 ## 2.27.0 ##
 

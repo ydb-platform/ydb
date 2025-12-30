@@ -136,6 +136,7 @@ message TEvLoadTestRequest {
         optional uint32 IntervalMsMax = 11;
         optional bool Reuse = 12 [default = false];
         optional bool IsWardenlessTest = 13 [default = false];
+        optional uint32 DelayBeforeMeasurementsSeconds = 14 [default = 15];
     }
     message TVDiskLoad {
         optional uint64 Tag = 1;
@@ -194,6 +195,7 @@ message TEvLoadTestRequest {
         optional uint32 IntervalMsMax = 11;
 
         optional bool IsWardenlessTest = 13 [default = false];
+        optional uint32 DelayBeforeMeasurementsSeconds = 14 [default = 15];
     }
     message TPDiskLogLoad {
         message TWorkerConfig {
@@ -218,6 +220,7 @@ message TEvLoadTestRequest {
         repeated TWorkerConfig Workers = 7;
 
         optional bool IsWardenlessTest = 8 [default = false];
+        optional uint32 DelayBeforeMeasurementsSeconds = 9 [default = 15];
     }
     message TKeyValueLoad {
         message TWorkerConfig {

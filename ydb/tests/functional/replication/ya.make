@@ -4,7 +4,7 @@ ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 
 ENV(YDB_ERASURE=block_4-2)
 
-ENV(YDB_FEATURE_FLAGS="enable_topic_transfer")
+ENV(YDB_FEATURE_FLAGS="enable_topic_transfer,enable_topic_autopartitioning_for_cdc,enable_topic_autopartitioning_for_replication")
 ENV(YDB_GRPC_SERVICES="replication")
 
 PEERDIR(

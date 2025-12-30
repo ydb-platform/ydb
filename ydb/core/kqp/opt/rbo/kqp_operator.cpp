@@ -161,17 +161,23 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs) {
 }
 
 /**
- * Scan expression and retrieve all members while respecting scalar context variables:
- *   If `withScalarContext` is true - retrieve all members including all scalar context IUs
+ * Scan expression and retrieve all members while respecting subplan context variables:
+ *   If `withSubplanContext` is true - retrieve all members including all subplan context IUs
  */
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& props, bool withScalarContext) {
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& props, bool withSubplanContext, bool withDependencies) {
     if (node->IsCallable("Member")) {
         auto member = TCoMember(node);
         auto iu = TInfoUnit(member.Name().StringValue());
-        if (props.ScalarSubplans.PlanMap.contains(iu)){
-            if (withScalarContext) {
-                iu.SetScalarContext(true);
+        if (props.Subplans.PlanMap.contains(iu)){
+            if (withSubplanContext) {
+                iu.SetSubplanContext(true);
+                iu.AddDependencies(props.Subplans.PlanMap.at(iu).Tuple);
                 IUs.push_back(iu);
+            }
+            if (withDependencies) {
+                for (auto dep : props.Subplans.PlanMap.at(iu).Tuple) {
+                    IUs.push_back(dep);
+                }
             }
         }
         else {
@@ -181,11 +187,11 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& pr
     }
 
     for (auto c : node->Children()) {
-        GetAllMembers(c, IUs, props, withScalarContext);
+        GetAllMembers(c, IUs, props, withSubplanContext, withDependencies);
     }
 }
 
-TInfoUnit::TInfoUnit(TString name, bool scalarContext) : ScalarContext(scalarContext) {
+TInfoUnit::TInfoUnit(TString name, bool subplanContext) : SubplanContext(subplanContext) {
     if (auto idx = name.find('.'); idx != TString::npos) {
         Alias = name.substr(0, idx);
         if (Alias.StartsWith("_alias_")) {
@@ -425,7 +431,17 @@ TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node->Pos(
     Alias = alias;
     StorageType = opSource.SourceType().StringValue() == "Row" ? NYql::EStorageType::RowStorage : NYql::EStorageType::ColumnStorage;
     TableCallable = opSource.Table().Ptr();
-    Pos = node->Pos();
+}
+
+TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType, const TExprNode::TPtr& tableCallable,
+                 const TExprNode::TPtr& olapFilterLambda, TPositionHandle pos)
+    : IOperator(EOperator::Source, pos)
+    , Alias(alias)
+    , Columns(columns)
+    , OutputIUs(outputIUs)
+    , StorageType(storageType)
+    , TableCallable(tableCallable)
+    , OlapFilterLambda(olapFilterLambda) {
 }
 
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {
@@ -452,7 +468,7 @@ void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     }
 }
 
-NYql::EStorageType TOpRead::GetTableStorageType() {
+NYql::EStorageType TOpRead::GetTableStorageType() const {
     return StorageType;
 }
 
@@ -461,15 +477,17 @@ TString TOpRead::ToString(TExprContext& ctx) {
     auto res = TStringBuilder();
     res << "Read (" << TKqpTable(TableCallable).Path().StringValue() << "," << Alias << ", [";
 
-    for (size_t i=0; i<Columns.size(); i++) {
+    for (size_t i = 0; i < Columns.size(); i++) {
         res << Columns[i] << ":" << OutputIUs[i].GetFullName();
-        if (i != Columns.size()-1) {
+        if (i != Columns.size() - 1) {
             res << ", ";
         }
     }
     res << "])";
     const TString storageType = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
     res << " (StorageType: " << storageType << ")";
+    if (OlapFilterLambda)
+        res << " OlapFilter: (" << PrintRBOExpression(OlapFilterLambda, ctx) << ")";
     return res;
 }
 
@@ -493,6 +511,18 @@ TVector<TInfoUnit> TOpMap::GetOutputIUs() {
     return res;
 }
 
+TVector<TInfoUnit> TOpMap::GetUsedIUs(TPlanProps& props) {
+    TVector<TInfoUnit> result;
+
+    for (auto lambda : GetLambdas()) {
+        TVector<TInfoUnit> lambdaIUs;
+        GetAllMembers(lambda, lambdaIUs, props, false, true);
+        result.insert(result.begin(), lambdaIUs.begin(), lambdaIUs.end());
+    }
+
+    return result;
+}
+
 TVector<TExprNode::TPtr> TOpMap::GetLambdas() {
     TVector<TExprNode::TPtr> result;
     for (auto &[_,body] : MapElements) {
@@ -503,7 +533,7 @@ TVector<TExprNode::TPtr> TOpMap::GetLambdas() {
     return result;
 }
 
-TVector<TInfoUnit> TOpMap::GetScalarSubplanIUs(TPlanProps& props) {
+TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
     TVector<TInfoUnit> allVars;
     TVector<TInfoUnit> res;
 
@@ -516,20 +546,11 @@ TVector<TInfoUnit> TOpMap::GetScalarSubplanIUs(TPlanProps& props) {
     }
 
     for (const auto& iu : allVars) {
-        if (iu.IsScalarContext()) {
+        if (iu.IsSubplanContext()) {
             res.push_back(iu);
         }
     }
     return res;
-}
-
-bool TOpMap::HasRenames() const {
-    for (auto &[iu, body] : MapElements) {
-        if (std::holds_alternative<TInfoUnit>(body)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 // Returns explicit renames as pairs of <to, from>
@@ -684,7 +705,9 @@ TString TOpProject::ToString(TExprContext& ctx) {
  */
 
 TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, TExprNode::TPtr filterLambda)
-    : IUnaryOperator(EOperator::Filter, pos, input), FilterLambda(filterLambda) {}
+    : IUnaryOperator(EOperator::Filter, pos, input)
+    , FilterLambda(filterLambda) {
+}
 
 TVector<TInfoUnit> TOpFilter::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 
@@ -706,14 +729,20 @@ TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {
     TVector<TInfoUnit> res;
 
     auto lambdaBody = TCoLambda(FilterLambda).Body();
-    GetAllMembers(lambdaBody.Ptr(), res, props, true);
+    GetAllMembers(lambdaBody.Ptr(), res, props, true, true);
     return res;
 }
 
-TVector<TInfoUnit> TOpFilter::GetScalarSubplanIUs(TPlanProps& props) {
+TVector<TInfoUnit> TOpFilter::GetUsedIUs(TPlanProps& props) {
+    TVector<TInfoUnit> res;
+    GetAllMembers(FilterLambda, res, props, false, true);
+    return res;
+}
+
+TVector<TInfoUnit> TOpFilter::GetSubplanIUs(TPlanProps& props) {
     TVector<TInfoUnit> res;
     for (const auto& iu : GetFilterIUs(props)) {
-        if (iu.IsScalarContext()) {
+        if (iu.IsSubplanContext()) {
             res.push_back(iu);
         }
     }
@@ -763,23 +792,23 @@ TConjunctInfo TOpFilter::GetConjunctInfo(TPlanProps& props) const {
         TExprNode::TPtr rightArg;
         if (TestAndExtractEqualityPredicate(conjObj, leftArg, rightArg)) {
             TVector<TInfoUnit> conjIUs;
-            GetAllMembers(conj, conjIUs, props);
+            GetAllMembers(conj, conjIUs, props, false, true);
 
             if (leftArg->IsCallable("Member") && rightArg->IsCallable("Member") && conjIUs.size() >= 2) {
                 TVector<TInfoUnit> leftIUs;
                 TVector<TInfoUnit> rightIUs;
-                GetAllMembers(leftArg, leftIUs, props);
-                GetAllMembers(rightArg, rightIUs, props);
+                GetAllMembers(leftArg, leftIUs, props, false, true);
+                GetAllMembers(rightArg, rightIUs, props, false, true);
                 res.JoinConditions.push_back(TJoinConditionInfo(conjObj, leftIUs[0], rightIUs[0]));
             }
             else {
                 TVector<TInfoUnit> conjIUs;
-                GetAllMembers(conj, conjIUs);
+                GetAllMembers(conj, conjIUs, props, false, true);
                 res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
             }
         } else {
             TVector<TInfoUnit> conjIUs;
-            GetAllMembers(conj, conjIUs, props);
+            GetAllMembers(conj, conjIUs, props, false, true);
             res.Filters.push_back(TFilterInfo(conj, conjIUs, fromPg));
         }
     }
@@ -805,6 +834,16 @@ TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
 
     res.insert(res.end(), rightInputIUs.begin(), rightInputIUs.end());
     return res;
+}
+
+TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    TVector<TInfoUnit> result;
+    for (auto & [leftKey, rightKey]: JoinKeys) {
+        result.push_back(leftKey);
+        result.push_back(rightKey);
+    }
+    return result;
 }
 
 void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
@@ -887,7 +926,16 @@ TString TOpLimit::ToString(TExprContext& ctx) {
 TOpSort::TOpSort(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TSortElement> sortElements, TExprNode::TPtr limitCond)
     : IUnaryOperator(EOperator::Sort, pos, input), SortElements(sortElements), LimitCond(limitCond) {}
 
-TVector<TInfoUnit> TOpSort::GetOutputIUs() { return GetInput()->GetOutputIUs(); }    
+TVector<TInfoUnit> TOpSort::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
+
+TVector<TInfoUnit> TOpSort::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    TVector<TInfoUnit> result;
+    for (auto el : SortElements) {
+        result.push_back(el.SortColumn);
+    }
+    return result;
+}
 
 void TOpSort::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
     Y_UNUSED(stopList);
@@ -939,8 +987,12 @@ TString TOpSort::ToString(TExprContext& ctx) {
 
 TOpAggregate::TOpAggregate(std::shared_ptr<IOperator> input, TVector<TOpAggregationTraits>& aggTraitsList, TVector<TInfoUnit>& keyColumns,
                            EAggregationPhase aggPhase, bool distinctAll, TPositionHandle pos)
-    : IUnaryOperator(EOperator::Aggregate, pos, input), AggregationTraitsList(aggTraitsList), KeyColumns(keyColumns),
-      AggregationPhase(aggPhase), DistinctAll(distinctAll) {}
+    : IUnaryOperator(EOperator::Aggregate, pos, input)
+    , AggregationTraitsList(aggTraitsList)
+    , KeyColumns(keyColumns)
+    , AggregationPhase(aggPhase)
+    , DistinctAll(distinctAll) {
+}
 
 TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
     // We assume that aggregation returns column is order [keys, states]
@@ -949,6 +1001,11 @@ TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
         outputIU.push_back(aggTraits.OriginalColName);
     }
     return outputIU;
+}
+
+TVector<TInfoUnit> TOpAggregate::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    return GetOutputIUs();
 }
 
 void TOpAggregate::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
@@ -973,9 +1030,9 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
 
     TStringBuilder strBuilder;
-    strBuilder << "Aggregate (";
+    strBuilder << "Aggregate [";
     for (ui32 i = 0; i < AggregationTraitsList.size(); ++i) {
-        strBuilder << AggregationTraitsList[i].AggFunction << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ") ";
+        strBuilder << AggregationTraitsList[i].AggFunction << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ")";
         if (i + 1 != AggregationTraitsList.size()) {
             strBuilder << ", ";
         }
@@ -988,13 +1045,12 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
             strBuilder << ", ";
         }
     }
-    strBuilder << "] : ";
+    strBuilder << "]]";
     if (AggregationPhase == EAggregationPhase::Intermediate) {
         strBuilder << "Initial";
     } else {
         strBuilder << "Final";
     }
-    strBuilder << ")";
     return strBuilder;
 }
 
@@ -1072,8 +1128,8 @@ void TOpRoot::ComputeParents() {
     std::shared_ptr<TOpRoot> noParent;
     ComputeParentsRec(GetInput(), noParent);
 
-    for (auto subplan : PlanProps.ScalarSubplans.Get()) {
-        ComputeParentsRec(subplan, noParent);
+    for (auto subplan : PlanProps.Subplans.Get()) {
+        ComputeParentsRec(subplan.Plan, noParent);
     }
 }
 
@@ -1084,6 +1140,10 @@ TString TOpRoot::ToString(TExprContext& ctx) {
 
 TString TOpRoot::PlanToString(TExprContext& ctx, ui32 printOptions) {
     auto builder = TStringBuilder();
+    for (auto & [iu, subplan] : PlanProps.Subplans.PlanMap) {
+        builder << "Subplan binding to " << iu.GetFullName() << ":\n";
+        PlanToStringRec(subplan.Plan, ctx, builder, 0, printOptions);
+    }
     PlanToStringRec(GetInput(), ctx, builder, 0, printOptions);
     return builder;
 }

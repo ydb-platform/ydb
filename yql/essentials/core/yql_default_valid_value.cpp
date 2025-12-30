@@ -23,6 +23,16 @@ private:
         Result_ = false; // YQL_ENSURE(false, "UnitExprType is not supported.");
     }
 
+    void Visit(const TUniversalExprType& type) override {
+        Y_UNUSED(type);
+        Result_ = false; // YQL_ENSURE(false, "UniversalExprType is not supported.");
+    }
+
+    void Visit(const TUniversalStructExprType& type) override {
+        Y_UNUSED(type);
+        Result_ = false; // YQL_ENSURE(false, "UniversalStructExprType is not supported.");
+    }
+
     void Visit(const TMultiExprType& type) override {
         Y_UNUSED(type);
         Result_ = false; // YQL_ENSURE(false, "MultiExprType is not supported.");
@@ -191,6 +201,16 @@ private:
     void Visit(const TUnitExprType& type) override {
         Y_UNUSED(type);
         YQL_ENSURE(false, "UnitExprType is not supported.");
+    }
+
+    void Visit(const TUniversalExprType& type) override {
+        Y_UNUSED(type);
+        YQL_ENSURE(false, "UniversalExprType is not supported.");
+    }
+
+    void Visit(const TUniversalStructExprType& type) override {
+        Y_UNUSED(type);
+        YQL_ENSURE(false, "UniversalStructExprType is not supported.");
     }
 
     void Visit(const TMultiExprType& type) override {

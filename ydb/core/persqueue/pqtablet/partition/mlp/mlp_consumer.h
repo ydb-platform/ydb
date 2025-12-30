@@ -63,6 +63,8 @@ private:
 
     void Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr&);
 
+    void Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr&);
+
     STFUNC(StateInit);
     STFUNC(StateWork);
     STFUNC(StateWrite);
@@ -113,6 +115,8 @@ private:
     bool HasSnapshot = false;
 
     bool FirstPipeCacheRequest = true;
+
+    ui64 CPUUsageMetric = 0;
 };
 
 }

@@ -191,6 +191,12 @@ struct TRuntimeTypeLoader {
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         return Builder.NewVoid().GetStaticType();
     }
+    TMaybe<TType> LoadUniversalType(ui32 /*level*/) {
+        return Builder.NewVoid().GetStaticType();
+    }
+    TMaybe<TType> LoadUniversalStructType(ui32 /*level*/) {
+        return Builder.NewVoid().GetStaticType();
+    }
     TMaybe<TType> LoadGenericType(ui32 /*level*/) {
         return Builder.GetTypeEnvironment().GetTypeOfTypeLazy();
     }

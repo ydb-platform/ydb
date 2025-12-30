@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import ydb
+from ydb.tests.stress.common.instrumented_pools import InstrumentedQuerySessionPool
 import time
 import random
 import logging
@@ -12,7 +13,7 @@ class Workload():
         self.database = database
         self.endpoint = endpoint
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
-        self.pool = ydb.QuerySessionPool(self.driver)
+        self.pool = InstrumentedQuerySessionPool(self.driver)
         self.duration = duration
         self.prefix = prefix
         self.input_topic = f'{prefix}/input_topic'

@@ -41,7 +41,7 @@ void TConnectionDynamicConfig::Register(TRegistrar registrar)
     registrar.Parameter("table_mount_cache", &TThis::TableMountCache)
         .DefaultNew();
     registrar.Parameter("timestamp_provider", &TThis::TimestampProvider)
-        .DefaultNew();
+        .Default(); // DefaultNew breaks exenodes job config due to direct patching.
     registrar.Parameter("tablet_write_backoff", &TThis::TabletWriteBackoff)
         .Default({
             .InvocationCount = 0,

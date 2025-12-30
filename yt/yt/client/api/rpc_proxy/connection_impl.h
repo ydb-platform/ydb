@@ -38,6 +38,7 @@ public:
     const std::string& GetLoggingTag() const override;
     const std::string& GetClusterId() const override;
     const std::optional<std::string>& GetClusterName() const override;
+    const std::optional<NAuth::TTvmId>& GetTvmId() const override;
 
     bool IsSameCluster(const IConnectionPtr& other) const override;
 

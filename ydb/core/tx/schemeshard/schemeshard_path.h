@@ -174,6 +174,7 @@ public:
     bool IsUnderDeleting() const;
     bool IsUnderMoving() const;
     bool IsUnderOutgoingIncrementalRestore() const;
+    bool IsUnderIncomingIncrementalRestore() const;
     TPath& RiseUntilOlapStore();
     TPath FindOlapStore() const;
     bool IsCommonSensePath() const;

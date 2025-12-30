@@ -127,7 +127,7 @@ namespace NKikimr {
     }
 
     bool TIngress::IsKeep(const TBlobStorageGroupType& gtype) const {
-        // DoNotKeep flag always wins, so == instead of & is intentional 
+        // DoNotKeep flag always wins, so == instead of & is intentional
         return GetCollectMode(IngressMode(gtype)) == ECollectMode::CollectModeKeep;
     }
 

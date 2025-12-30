@@ -13,8 +13,11 @@
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/lib/ydb_cli/common/sys.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/log.h>
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -313,10 +316,6 @@ TStatus CreateRateLimiter(
         return client.CreateResource(coordinationNodePath, rateLimiterPath, settings).ExtractValueSync();
     });
     return result;
-}
-
-bool IsSchemaSecret(TStringBuf secretName) {
-    return secretName.StartsWith('/');
 }
 
 } // anonymous
@@ -1566,17 +1565,15 @@ TRestoreResult TRestoreClient::CheckSecretsAndRewriteTheirPathsIfNeeded(TString&
     const TFsPath& fsPath, const TLog* log, NQuery::TQueryClient& queryClient)
 {
     auto secretSettings = GetSecretSettings(query);
-    for (auto& secretSetting : secretSettings) {
-        if (IsSchemaSecret(secretSetting.Value)) {
-            secretSetting.Value = RewriteAbsolutePath(secretSetting.Value, GetDatabase(query), dbRestoreRoot);
-        }
+    RewriteSecretSettings(secretSettings, GetDatabase(query), dbRestoreRoot);
+    for (const auto& secretSetting : secretSettings) {
         if (auto result = CheckSecretExistence(secretSetting.Value, log, queryClient); !result.IsSuccess()) {
             return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
         }
-        NYql::TIssues issues;
-        if (!RewriteCreateQuery(query, secretSetting.Name + " = '{}'", secretSetting.Value, issues)) {
-           return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
-        }
+    }
+    NYql::TIssues issues;
+    if (!RewriteQuerySecrets(query, secretSettings, issues)) {
+        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 
     return Result<TRestoreResult>();
@@ -1603,10 +1600,7 @@ TRestoreResult TRestoreClient::RestoreReplication(
     }
 
     NYql::TIssues issues;
-    if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
-        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
-    }
-    if (!RewriteCreateQuery(query, "CREATE ASYNC REPLICATION `{}`", dbPath, issues)) {
+    if (!RewriteCreateAsyncReplicationQueryNoSecrets(query, dbRestoreRoot, dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 
@@ -1644,10 +1638,7 @@ TRestoreResult TRestoreClient::RestoreTransfer(
     }
 
     NYql::TIssues issues;
-    if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
-        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
-    }
-    if (!RewriteCreateQuery(query, "CREATE TRANSFER `{}`", dbPath, issues)) {
+    if (!RewriteCreateTransferQueryNoSecrets(query, dbRestoreRoot, dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 
@@ -1769,7 +1760,7 @@ TRestoreResult TRestoreClient::RestoreExternalDataSource(
     }
 
     NYql::TIssues issues;
-    if (!RewriteCreateQuery(query, "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}`", dbPath, issues)) {
+    if (!RewriteCreateExternalDataSourceQueryNoSecrets(query, dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 
@@ -1802,7 +1793,7 @@ TRestoreResult TRestoreClient::RestoreExternalTable(
     TString query = ReadExternalTableQuery(fsPath, Log.get());
 
     NYql::TIssues issues;
-    if (!RewriteCreateQuery(query, "CREATE EXTERNAL TABLE IF NOT EXISTS `{}`", dbPath, issues)) {
+    if (!RewriteCreateExternalTableQuery(query, dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 

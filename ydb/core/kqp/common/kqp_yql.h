@@ -44,11 +44,13 @@ struct TKqpPhyTxSettings {
 };
 
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
+constexpr TStringBuf KqpFullTextSourceName = "KqpFullTextSource";
 constexpr TStringBuf KqpTableSinkName = "KqpTableSink";
 
 enum class EStreamLookupStrategyType {
     Unspecified,
     LookupRows,
+    LookupUniqueRows,
     LookupJoinRows,
     LookupSemiJoinRows,
 };
@@ -64,6 +66,7 @@ struct TKqpStreamLookupSettings {
 
     // stream lookup strategy types
     static constexpr std::string_view LookupStrategyName = "LookupRows"sv;
+    static constexpr std::string_view LookupUniqueStrategyName = "LookupUniqueRows"sv;
     static constexpr std::string_view LookupJoinStrategyName = "LookupJoinRows"sv;
     static constexpr std::string_view LookupSemiJoinStrategyName = "LookupSemiJoinRows"sv;
 
@@ -121,6 +124,21 @@ public:
     bool IsReverse() const {
         return Sorting == ERequestSorting::DESC;
     }
+};
+
+struct TKqpReadTableFullTextIndexSettings: public TSortingOperator<ERequestSorting::NONE> {
+public:
+    static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
+    static constexpr TStringBuf SkipLimitSettingName = "SkipLimit";
+
+    TExprNode::TPtr ItemsLimit;
+    TExprNode::TPtr SkipLimit;
+
+    void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
+    void SetSkipLimit(const TExprNode::TPtr& expr) { SkipLimit = expr; }
+
+    static TKqpReadTableFullTextIndexSettings Parse(const NNodes::TCoNameValueTupleList& node);
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 
 struct TKqpReadTableSettings: public TSortingOperator<ERequestSorting::NONE> {

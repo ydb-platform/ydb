@@ -392,6 +392,10 @@ public:
         Counters->WriteActorsCount->Inc();
     }
 
+    ~TKqpTableWriteActor() {
+        ClearMkqlData();
+    }
+
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         try {
@@ -859,8 +863,8 @@ public:
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
-                    NYql::NDqProto::StatusIds::OVERLOADED,
-                    NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
                     TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. Table `"
                         << TablePath << "`.",
                     getIssues());
@@ -1428,11 +1432,8 @@ public:
     }
 
     void PassAway() override {
-        {
-            Y_ABORT_UNLESS(Alloc);
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
-            ShardedWriteController.Reset();
-        }
+        Y_ABORT_UNLESS(Alloc);
+        ClearMkqlData();
         Counters->WriteActorsCount->Dec();
         Unlink();
         TActorBootstrapped<TKqpTableWriteActor>::PassAway();
@@ -1455,6 +1456,13 @@ public:
     }
 
 private:
+    void ClearMkqlData() {
+        if (Alloc && ShardedWriteController) {
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ShardedWriteController.Reset();
+        }
+    }
+
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
     bool LinkedPipeCache = false;
 
@@ -1523,9 +1531,12 @@ public:
 
 private:
     enum class EState {
+        BLOCKED,
         BUFFERING,
         LOOKUP_MAIN_TABLE,
         LOOKUP_UNIQUE_INDEX,
+        WRITING,
+        CLOSING,
         FINISHED,
     };
 
@@ -1546,7 +1557,6 @@ public:
         , PathId(pathId)
         , OperationType(operationType)
         , Alloc(std::move(alloc)) {
-
         for (const auto& keyColumn : keyColumns) {
             NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(keyColumn.GetTypeId(), keyColumn.GetTypeInfo());
             KeyColumnTypes.push_back(typeInfo);
@@ -1579,36 +1589,43 @@ public:
     void Write(IDataBatchPtr data) {
         AFL_ENSURE(!Closed);
         AFL_ENSURE(!IsError());
-        Memory += data->GetMemory();
-        BufferedBatches.push_back(std::move(data));
+        if (!data->IsEmpty()) {
+            Memory += data->GetMemory();
+            BufferedBatches.push_back(std::move(data));
+        }
     }
 
     void Close() {
         Closed = true;
     }
 
-    void Process() {
+    void Start() {
+        State = EState::BUFFERING;
+    }
+
+    void Process(bool forceFlush) {
         AFL_ENSURE(!IsFinished());
 
         auto stateIteration = [&]() -> bool {
             switch (State) {
+                case EState::BLOCKED:
+                    return false;
                 case EState::BUFFERING:
-                    return ProcessBuffering();
+                    return ProcessBuffering(forceFlush);
                 case EState::LOOKUP_MAIN_TABLE:
                     return ProcessLookupMainTable();
                 case EState::LOOKUP_UNIQUE_INDEX:
                     return ProcessLookupUniqueIndex();
+                case EState::WRITING:
+                    return ProcessWriting();
+                case EState::CLOSING:
+                    return ProcessClosing();
                 case EState::FINISHED:
-                    YQL_ENSURE(false);
+                    return false;
             }
         };
 
         while (stateIteration());
-
-        if (!IsError() && IsClosed() && IsEmpty()) {
-            AFL_ENSURE(GetMemory() == 0);
-            CloseWrite();
-        }
     }
 
     i64 GetMemory() const {
@@ -1627,8 +1644,24 @@ public:
         return State == EState::FINISHED;
     }
 
+    bool IsBlocked() const {
+        return State == EState::BLOCKED;
+    }
+
     i64 GetPriority() const {
         return Priority;
+    }
+
+    ui64 GetCookie() const {
+        return Cookie;
+    }
+
+    const THashMap<TPathId, TPathWriteInfo>& GetPathWriteInfo() const {
+        return PathWriteInfo;
+    }
+
+    const THashMap<TPathId, TPathLookupInfo>& GetPathLookupInfo() const {
+        return PathLookupInfo;
     }
 
     bool IsError() const {
@@ -1641,12 +1674,24 @@ public:
     }
 
 private:
-    bool ProcessBuffering() {
+    bool ProcessBuffering(bool forceFlush) {
         AFL_ENSURE(!IsError());
         AFL_ENSURE(ProcessBatches.empty());
         AFL_ENSURE(ProcessCells.empty());
-        if (BufferedBatches.empty()) {
-            return false;
+        AFL_ENSURE(Writes.empty());
+
+        if (IsClosed()) {
+            if (BufferedBatches.empty()) {
+                AFL_ENSURE(IsEmpty());
+                AFL_ENSURE(!IsError());
+                AFL_ENSURE(GetMemory() == 0);
+                State = EState::CLOSING;
+                return true;
+            }
+        } else {
+            if (!forceFlush || BufferedBatches.empty()) {
+                return false;
+            }
         }
 
         if (auto lookupInfoIt = PathLookupInfo.find(PathId); lookupInfoIt != PathLookupInfo.end()) {
@@ -1735,10 +1780,7 @@ private:
 
             State = EState::LOOKUP_UNIQUE_INDEX;
         } else {
-            // Write without lookups.
-            FlushWritesToActors();
-
-            State = EState::BUFFERING;
+            State = EState::WRITING;
         }
         return true;
     }
@@ -1839,11 +1881,19 @@ private:
 
             AFL_ENSURE(Writes.size() == 1);
             const auto writeRows = GetRows(Writes[0].Batch);
+            const auto& existsMask = Writes[0].ExistsMask;
+            AFL_ENSURE(writeRows.size() == existsMask.size());
 
             for (auto& [pathId, lookupInfo] : PathLookupInfo) {
                 if (pathId == PathId) {
                     continue;
                 }
+
+                const bool isPrimaryKeySubset = std::equal(
+                    lookupInfo.KeyIndexes.begin(),
+                    lookupInfo.KeyIndexes.end(),
+                    lookupInfo.OldKeyIndexes.begin(),
+                    lookupInfo.OldKeyIndexes.end());
 
                 TUniqueSecondaryKeyCollector collector(
                         KeyColumnTypes,
@@ -1854,8 +1904,14 @@ private:
 
                 AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
                 AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
-                for (const auto& row : writeRows) {
-                    if (lookupInfo.SkipEqualRowsForUniqCheck && IsEqual(
+                for (size_t index = 0; index < writeRows.size(); ++index) {
+                    const auto& row = writeRows[index];
+                    if (isPrimaryKeySubset && existsMask[index]
+                            && OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
+                        Error = ConflictWithExistingKeyErrorText;
+                        return false;
+                    }
+                    if (!isPrimaryKeySubset && lookupInfo.SkipEqualRowsForUniqCheck && IsEqual(
                             row,
                             {},
                             lookupInfo.KeyIndexes,
@@ -1872,6 +1928,7 @@ private:
                 }
 
                 const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
+
                 lookupInfo.Lookup->AddUniqueCheckTask(
                     Cookie,
                     std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
@@ -1881,10 +1938,7 @@ private:
 
             State = EState::LOOKUP_UNIQUE_INDEX;
         } else {
-            // Write
-            FlushWritesToActors();
-
-            State = EState::BUFFERING;
+            State = EState::WRITING;
         }
         return true;
     }
@@ -1927,9 +1981,35 @@ private:
             }
         }
 
+        State = EState::WRITING;
+        return true;
+    }
+
+    bool ProcessWriting() {
+        AFL_ENSURE(State == EState::WRITING);
+        AFL_ENSURE(!IsError());
+
+        if (!AllOf(PathWriteInfo, [](const auto& writeInfo) {
+                return writeInfo.second.WriteActor->IsReady();
+            })) {
+            return false;
+        }
+
         FlushWritesToActors();
         State = EState::BUFFERING;
+        return true;
+    }
 
+    bool ProcessClosing() {
+        AFL_ENSURE(State == EState::CLOSING);
+        AFL_ENSURE(!IsError());
+        if (!AllOf(PathWriteInfo, [](const auto& writeInfo) {
+                return writeInfo.second.WriteActor->IsReady();
+            })) {
+            return false;
+        }
+        CloseWrite();
+        State = EState::FINISHED;
         return true;
     }
 
@@ -1958,7 +2038,8 @@ private:
             for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
                 // At first, write to indexes
                 if (PathId != actorPathId) {
-                    if (!actorInfo.DeleteKeysIndexes.empty()) {
+                    const bool hasDelete = !actorInfo.DeleteKeysIndexes.empty();
+                    if (hasDelete) {
                         AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
                             && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
                         {
@@ -2041,7 +2122,6 @@ private:
                 actorInfo.WriteActor->Close(DeleteCookie);
             }
         }
-        State = EState::FINISHED;
     }
 
     const ui64 Cookie;
@@ -2052,7 +2132,7 @@ private:
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
-    EState State = EState::BUFFERING;
+    EState State = EState::BLOCKED;
 
     THashMap<TPathId, TPathWriteInfo> PathWriteInfo;
     THashMap<TPathId, TPathLookupInfo> PathLookupInfo;
@@ -2072,6 +2152,127 @@ private:
     std::vector<TWrite> Writes;
     std::vector<TConstArrayRef<TCell>> ProcessCells;
     THashMap<TConstArrayRef<TCell>, std::vector<ui32>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> KeyToIndexes;
+};
+
+class TWriteTasksPlanner {
+public:
+    void AddTask(TKqpWriteTask& task) {
+        AFL_ENSURE(!task.IsFinished());
+        AFL_ENSURE(PriorityToBlockedTask.emplace(task.GetPriority(), task).second);
+        while (PriorityToBlockedTask.contains(FirstUnknownPriority)) {
+            ++FirstUnknownPriority;
+        }
+    }
+
+    void ReleaseTask(TKqpWriteTask& task) {
+        AFL_ENSURE(task.IsFinished());
+        for (const auto& [pathId, _] : task.GetPathWriteInfo()) {
+            TableLocks.at(pathId).Release(task.GetCookie());
+        }
+        for (const auto& [pathId, _] : task.GetPathLookupInfo()) {
+            TableLocks.at(pathId).Release(task.GetCookie());
+        }
+    }
+
+    bool StartUnblockedTasks() {
+        bool startedTasks = false;
+        THashSet<TPathId> failedLocks;
+        for (auto it = PriorityToBlockedTask.begin(); it != PriorityToBlockedTask.end() && it->first < FirstUnknownPriority;) {
+            auto& task = it->second.get();
+            bool canAquireLocks = true;
+            // If some task failed to lock a path, then next tasks also can't lock this path.
+            for (const auto& [pathId, _] : task.GetPathWriteInfo()) {
+                if (failedLocks.contains(pathId)) {
+                    canAquireLocks = false;
+                } else if (!TableLocks[pathId].CheckAcquire(
+                        task.GetCookie(),
+                        TTableLock::ETableLockMode::EXCLUSIVE)) {
+                    canAquireLocks = false;
+                    failedLocks.insert(pathId);
+                }
+            }
+            for (const auto& [pathId, _] : task.GetPathLookupInfo()) {
+                if (failedLocks.contains(pathId)) {
+                    canAquireLocks = false;
+                } else if (!TableLocks[pathId].CheckAcquire(
+                        task.GetCookie(),
+                        TTableLock::ETableLockMode::SHARED)) {
+                    canAquireLocks = false;
+                    failedLocks.insert(pathId);
+                }
+            }
+            if (canAquireLocks) {
+                for (const auto& [pathId, _] : task.GetPathWriteInfo()) {
+                    TableLocks.at(pathId).Acquire(
+                        task.GetCookie(),
+                        TTableLock::ETableLockMode::EXCLUSIVE);
+                }
+                for (const auto& [pathId, _] : task.GetPathLookupInfo()) {
+                    TableLocks.at(pathId).Acquire(
+                        task.GetCookie(),
+                        TTableLock::ETableLockMode::SHARED);
+                }
+                task.Start();
+                it = PriorityToBlockedTask.erase(it);
+                startedTasks = true;
+            } else {
+                ++it;
+            }
+        }
+
+        return startedTasks;
+    }
+
+private:
+    class TTableLock {
+    public:
+        enum class ETableLockMode {
+            NONE,
+            SHARED,
+            EXCLUSIVE,
+        };
+
+        bool CheckAcquire(ui64 taskCookie, ETableLockMode mode) const {
+            AFL_ENSURE(mode != ETableLockMode::NONE);
+            if (Mode == ETableLockMode::NONE) {
+                AFL_ENSURE(Owners.empty());
+                return true;
+            } else if (Mode == ETableLockMode::SHARED) {
+                AFL_ENSURE(!Owners.empty());
+                if (mode == ETableLockMode::SHARED) {
+                    return true;
+                } else {
+                    return Owners.size() == 1 && Owners.contains(taskCookie);
+                }
+            } else {
+                AFL_ENSURE(Owners.size() == 1);
+                return Owners.contains(taskCookie);
+            }
+        }
+
+        void Acquire(ui64 taskCookie, ETableLockMode mode) {
+            AFL_ENSURE(CheckAcquire(taskCookie, mode));
+            if (Mode < mode) {
+                Mode = mode;
+            }
+            Owners.insert(taskCookie);
+        }
+
+        void Release(ui64 taskCookie) {
+            Owners.erase(taskCookie);
+            if (Owners.empty()) {
+                Mode = ETableLockMode::NONE;
+            }
+        }
+
+    private:
+        ETableLockMode Mode = ETableLockMode::NONE;
+        THashSet<ui64> Owners;
+    };
+
+    THashMap<TPathId, TTableLock> TableLocks;
+    TMap<i64, std::reference_wrapper<TKqpWriteTask>> PriorityToBlockedTask;
+    i64 FirstUnknownPriority = 0;
 };
 
 class TKqpDirectWriteActor : public TActorBootstrapped<TKqpDirectWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput, public IKqpTableWriterCallbacks {
@@ -3046,7 +3247,7 @@ public:
                 .NeedWriteProjection = !settings.LookupColumns.empty(),
             });
 
-            WriteTasks.emplace(
+            auto [taskIter, _] = WriteTasks.emplace(
                 token.Cookie,
                 TKqpWriteTask{
                     writeCookie,
@@ -3059,6 +3260,8 @@ public:
                     settings.KeyColumns,
                     Alloc
                 });
+
+            TasksPlanner.AddTask(taskIter->second);
         } else {
             token = *ev->Get()->Token;
         }
@@ -3097,7 +3300,7 @@ public:
         }
 
         ProcessRequestQueue();
-        if (!ProcessTasks()) {
+        if (!ProcessTasks(/* forceFlush */ EnableStreamWrite && GetTotalFreeSpace() <= 0)) {
             return false;
         }
         if (!ProcessFlush()) {
@@ -3123,26 +3326,17 @@ public:
 
     void ProcessRequestQueue() {
         for (auto& [pathId, queue] : RequestQueues) {
-            auto& writeInfo = WriteInfos.at(pathId);
-
-            for (const auto& [_, actor] : writeInfo.Actors) {
-                if (!actor.WriteActor->IsReady()) {
-                    CA_LOG_D("ProcessRequestQueue " << pathId << " NOT READY queue=" << queue.size());
-                    return;
-                }
-            }
-
             while (!queue.empty()) {
                 auto& message = queue.front();
 
                 AFL_ENSURE(message.Token.PathId == pathId);
                 auto& writeTask = WriteTasks.at(message.Token.Cookie);
-
                 writeTask.Write(std::move(message.Data));
                 if (message.Close) {
                     writeTask.Close();
                 }
 
+                // TODO: For stream write must send AckMessage only for working tasks.
                 AckQueue.push(TAckMessage{
                     .ForwardActorId = message.From,
                     .Token = message.Token,
@@ -3154,26 +3348,29 @@ public:
         }
     }
 
-    bool ProcessTasks() {
+    bool ProcessTasks(bool forceFlush) {
         TVector<ui64> finishedCookies;
-        for (auto& [cookie, writeTask] : WriteTasks) {
-            writeTask.Process();
-            if (writeTask.IsError()) {
-                ReplyError(
-                    NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
-                    NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                    TStringBuilder() << writeTask.GetError(),
-                    {});
-                return false;
+        do {
+            for (auto& [cookie, writeTask] : WriteTasks) {
+                writeTask.Process(forceFlush);
+                if (writeTask.IsError()) {
+                    ReplyError(
+                        NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                        NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                        TStringBuilder() << writeTask.GetError(),
+                        {});
+                    return false;
+                }
+                if (writeTask.IsFinished()) {
+                    TasksPlanner.ReleaseTask(writeTask);
+                    finishedCookies.push_back(cookie);
+                }
             }
-            if (writeTask.IsFinished()) {
-                finishedCookies.push_back(cookie);
-            }
-        }
 
-        for (const auto& cookie : finishedCookies) {
-            WriteTasks.erase(cookie);
-        }
+            for (const auto& cookie : finishedCookies) {
+                WriteTasks.erase(cookie);
+            }
+        } while (TasksPlanner.StartUnblockedTasks());
 
         return true;
     }
@@ -4120,8 +4317,8 @@ public:
                 << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             ReplyError(
-                NYql::NDqProto::StatusIds::OVERLOADED,
-                NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
                 TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. "
                     << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
@@ -4593,6 +4790,7 @@ private:
     TKqpTableWriteActor::TWriteToken CurrentWriteToken = 0;
 
     THashMap<TPathId, std::queue<TBufferWriteMessage>> RequestQueues;
+    TWriteTasksPlanner TasksPlanner;
 
     struct TAckMessage {
         TActorId ForwardActorId;
@@ -4781,12 +4979,6 @@ private:
 
         ev->SendTime = TInstant::Now();
 
-        if (ev->Data->IsEmpty() && ev->Close && WriteToken.IsEmpty()) {
-            // Nothing was written
-            OnFlushed();
-            return;
-        }
-
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));
     }
@@ -4814,6 +5006,7 @@ private:
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
+        AFL_ENSURE(!InFlight);
         Closed |= finished;
         Batcher->AddData(data);
         DataSize += size;

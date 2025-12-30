@@ -57,6 +57,9 @@ void TServerConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("nodelay", &TThis::NoDelay)
         .Default(true);
+
+    registrar.Parameter("server_name", &TThis::ServerName)
+        .Default("Http");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

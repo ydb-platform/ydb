@@ -1016,11 +1016,7 @@ namespace Tests {
 
         auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
 
-        NKikimrBlobStorage::TDefineBox boxConfig;
-        boxConfig.SetBoxId(Settings->BOX_ID);
-        boxConfig.SetItemConfigGeneration(boxConfigGeneration);
-
-        NKikimrBlobStorage::TDefineHostConfig hostConfig;
+        auto& hostConfig = *bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig();
         hostConfig.SetHostConfigId(nodeId);
         hostConfig.SetItemConfigGeneration(hostConfigGeneration);
         TString path;
@@ -1032,15 +1028,16 @@ namespace Tests {
         }
         hostConfig.AddDrive()->SetPath(path);
         if (Settings->Verbose) {
-            Cerr << "test_client.cpp: SetPath # " << path << Endl;
+            Cerr << "test_client.cpp: SetPath for PDisk # " << path << Endl;
         }
-        bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
 
+        auto& boxConfig = *bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox();
+        boxConfig.SetBoxId(Settings->BOX_ID);
+        boxConfig.SetItemConfigGeneration(boxConfigGeneration);
         auto& host = *boxConfig.AddHost();
         host.MutableKey()->SetFqdn(nodeInfo.Host);
         host.MutableKey()->SetIcPort(nodeInfo.Port);
         host.SetHostConfigId(hostConfig.GetHostConfigId());
-        bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
 
         for (const auto& [poolKind, storagePool] : Settings->StoragePoolTypes) {
             if (storagePool.GetNumGroups() > 0) {
@@ -1777,7 +1774,7 @@ namespace Tests {
     }
 
     void TServer::AddSysViewsRosterUpdateObserver() {
-        if (Runtime && !Runtime->IsRealThreads()) {
+        if (Runtime && !Runtime->IsRealThreads() && Settings->EnableStorage) {
             SysViewsRosterUpdateFinished = false;
             SysViewsRosterUpdateObserver = Runtime->AddObserver<NSysView::TEvSysView::TEvRosterUpdateFinished>([this](auto&) {
                 SysViewsRosterUpdateFinished = true;
@@ -1786,7 +1783,7 @@ namespace Tests {
     }
 
     void TServer::WaitForSysViewsRosterUpdate() {
-        if (Runtime && !Runtime->IsRealThreads()) {
+        if (Runtime && !Runtime->IsRealThreads() && Settings->EnableStorage) {
             Runtime->WaitFor("SysViewsRoster update finished", [this] {
                 return SysViewsRosterUpdateFinished;
             });

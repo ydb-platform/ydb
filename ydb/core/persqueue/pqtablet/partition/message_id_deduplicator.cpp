@@ -1,8 +1,6 @@
 #include "message_id_deduplicator.h"
 #include "partition.h"
 
-#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
-
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
@@ -11,10 +9,10 @@ namespace NKikimr::NPQ {
 namespace {
 
 constexpr TDuration MaxDeduplicationWindow = TDuration::Minutes(5);
+constexpr size_t MaxDeduplicationRPS = 1000;
 constexpr TDuration BucketSize = TDuration::Seconds(1);
-constexpr size_t MaxRPS = 1000;
 constexpr size_t MaxBucketCount = MaxDeduplicationWindow.MilliSeconds() / BucketSize.MilliSeconds();
-constexpr ui64 MaxDeduplicationIDs = MaxDeduplicationWindow.Seconds() * MaxRPS;
+constexpr ui64 MaxDeduplicationIDs = MaxDeduplicationWindow.Seconds() * MaxDeduplicationRPS;
 constexpr size_t MaxMessageIdInBucketCount = MaxDeduplicationIDs / MaxBucketCount;
 
 TInstant Trim(TInstant value) {
@@ -234,25 +232,11 @@ std::optional<ui64> TPartition::DeduplicateByMessageId(const TEvPQ::TEvWrite::TM
         return std::nullopt;
     }
 
-    NKikimrPQClient::TDataChunk proto;
-    bool res = proto.ParseFromString(msg.Data);
-    if (!res) {
+    if (!msg.MessageDeduplicationId) {
         return std::nullopt;
     }
 
-    std::optional<TString> deduplicationId;
-    for (auto& attr : *proto.MutableMessageMeta()) {
-        if (attr.key() == NMLP::NMessageConsts::MessageDeduplicationId) {
-            deduplicationId = attr.value();
-            break;
-        }
-    }
-
-    if (!deduplicationId) {
-        return std::nullopt;
-    }
-
-    return MessageIdDeduplicator.AddMessage(*deduplicationId, offset);
+    return MessageIdDeduplicator.AddMessage(*msg.MessageDeduplicationId, offset);
 }
 
 } // namespace NKikimr::NPQ

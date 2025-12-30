@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         }
     }
 
-    Y_UNIT_TEST(ScalarSubquery) {
+    Y_UNIT_TEST(ExpressionSubquery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -295,13 +295,57 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
-                SELECT bar.id FROM bar where bar.id = (SELECT id FROM foo);
+                SELECT bar.id FROM bar where bar.id = (SELECT id from foo);
+            )",
+            /*
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT bar.id FROM bar where bar.id IN (SELECT id from foo);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where foo.id NOT IN (SELECT id from bar);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where foo.id NOT IN (SELECT id from bar where id <> 0);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where foo.id = 0 AND foo.id NOT IN (SELECT id from bar where id <> 0);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where EXISTS (SELECT id from bar);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where foo.id = 0 AND EXISTS (SELECT id from bar);
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT foo.id FROM foo where NOT EXISTS (SELECT id from bar where id = 100);
             )"
+            */
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
             R"([["0"]])",
+            R"([["0"]])",
+            R"([])",
+            R"([["0"]])",
+            R"([["0"]])",
+            R"([["0"]])",
+            R"([["0"]])",
+            R"([["0"]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -695,7 +739,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 SET TablePathPrefix = "/Root/";
                 select t1.b, sum(t1.c) from t1 inner join t2 on t1.a = t2.a group by t1.b order by t1.b;
             )",
-            /*
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
@@ -704,7 +747,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
                 select sum(t1.b) as sum from t1
                 order by sum;
             )",
-            */
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
@@ -858,7 +900,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         std::vector<std::string> results = {
             R"([["1";"4"];["2";"6"]])",
             R"([["1";"4"];["2";"6"]])",
-            //R"([["4"];["6"];["8"]])",
+            R"([["4"];["6"];["8"]])",
             R"([["1";"1"];["2";"0"]])",
             R"([["1";"3"];["2";"4"]])",
             R"([["1";"2"];["2";"3"]])",

@@ -32,13 +32,13 @@ enum EPrintPlanOptions: ui32 {
  * Currently we only record the name and alias of the column, but we will extend it in the future
  */
 struct TInfoUnit {
-    TInfoUnit(TString alias, TString column, bool scalarContext = false)
+    TInfoUnit(TString alias, TString column, bool subplanContext = false)
         : Alias(alias)
         , ColumnName(column)
-        , ScalarContext(scalarContext) {
+        , SubplanContext(subplanContext) {
     }
 
-    TInfoUnit(TString name, bool scalarContext = false);
+    TInfoUnit(TString name, bool subplanContext = false);
     TInfoUnit() = default;
     ~TInfoUnit() = default;
 
@@ -48,8 +48,12 @@ struct TInfoUnit {
 
     TString GetAlias() const { return Alias; }
     TString GetColumnName() const { return ColumnName; }
-    bool IsScalarContext() const { return ScalarContext; }
-    void SetScalarContext(bool scalarContext) { ScalarContext = scalarContext; }
+    bool IsSubplanContext() const { return SubplanContext; }
+    void SetSubplanContext(bool subplanContext) { SubplanContext = subplanContext; }
+    void AddDependencies(TVector<TInfoUnit> deps) { 
+        SubplanDependencies.insert(SubplanDependencies.end(), deps.begin(), deps.end());
+    }
+    TVector<TInfoUnit> GetDependencies() const { return SubplanDependencies; }
 
     bool operator==(const TInfoUnit& other) const {
         return Alias == other.Alias && ColumnName == other.ColumnName;
@@ -64,7 +68,8 @@ struct TInfoUnit {
 private:
     TString Alias;
     TString ColumnName;
-    bool ScalarContext{false};
+    bool SubplanContext{false};
+    TVector<TInfoUnit> SubplanDependencies;
 };
 
 /**
@@ -293,15 +298,23 @@ private:
 
 class IOperator;
 
-struct TScalarSubplans {
+enum ESubplanType : ui32 { EXPR, IN, EXISTS };
 
-    void Add(TInfoUnit iu, std::shared_ptr<IOperator> op) {
+struct TSubplanEntry {
+    std::shared_ptr<IOperator> Plan;
+    TVector<TInfoUnit> Tuple;
+    ESubplanType Type;
+};
+
+struct TSubplans {
+
+    void Add(TInfoUnit iu, TSubplanEntry entry) {
         OrderedList.push_back(iu);
-        PlanMap[iu] = op;
+        PlanMap.insert({iu, entry});
     }
 
-    TVector<std::shared_ptr<IOperator>> Get() {
-        TVector<std::shared_ptr<IOperator>> result;
+    TVector<TSubplanEntry> Get() {
+        TVector<TSubplanEntry> result;
         for (auto iu : OrderedList) {
             result.push_back(PlanMap.at(iu));
         }
@@ -313,7 +326,7 @@ struct TScalarSubplans {
         PlanMap.erase(iu);
     }
 
-    THashMap<TInfoUnit, std::shared_ptr<IOperator>, TInfoUnit::THashFunction> PlanMap;
+    THashMap<TInfoUnit, TSubplanEntry, TInfoUnit::THashFunction> PlanMap;
     TVector<TInfoUnit> OrderedList;
 };
 
@@ -323,7 +336,7 @@ struct TScalarSubplans {
 struct TPlanProps {
     TStageGraph StageGraph;
     int InternalVarIdx = 1;
-    TScalarSubplans ScalarSubplans;
+    TSubplans Subplans;
     bool PgSyntax = false;
 };
 
@@ -332,7 +345,7 @@ struct TPlanProps {
  * Extract all into units from an expression in YQL
  */
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs);
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& props, bool withScalarContext=false);
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& props, bool withSubplanContext=false, bool withDependencies=false);
 
 /**
  * Interface for the operator
@@ -354,7 +367,9 @@ class IOperator {
      */
     virtual TVector<TInfoUnit> GetOutputIUs() = 0;
 
-    virtual TVector<TInfoUnit> GetScalarSubplanIUs(TPlanProps& props) { Y_UNUSED(props); return {}; }
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) { Y_UNUSED(props); return {}; }
+
+    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) { Y_UNUSED(props); return {}; }
 
     const TTypeAnnotationNode* GetIUType(TInfoUnit iu);
 
@@ -373,6 +388,7 @@ class IOperator {
     virtual TString ToString(TExprContext& ctx) = 0;
 
     bool IsSingleConsumer() { return Parents.size() <= 1; }
+    const TTypeAnnotationNode * GetTypeAnn() { return Type; }
 
     const EOperator Kind;
     TPhysicalOpProps Props;
@@ -435,6 +451,9 @@ class TOpEmptySource : public IOperator {
 class TOpRead : public IOperator {
   public:
     TOpRead(TExprNode::TPtr node);
+    TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
+            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, TPositionHandle pos);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
@@ -442,14 +461,15 @@ class TOpRead : public IOperator {
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
-    NYql::EStorageType GetTableStorageType();
+    NYql::EStorageType GetTableStorageType() const;
 
-   // TODO: make it private members, we should not access it directly
+    // TODO: make it private members, we should not access it directly
     TString Alias;
     TVector<TString> Columns;
     TVector<TInfoUnit> OutputIUs;
     NYql::EStorageType StorageType;
     TExprNode::TPtr TableCallable;
+    TExprNode::TPtr OlapFilterLambda;
 };
 
 class TOpMap : public IUnaryOperator {
@@ -457,15 +477,13 @@ class TOpMap : public IUnaryOperator {
     TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements,
            bool project);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
-    virtual TVector<TInfoUnit> GetScalarSubplanIUs(TPlanProps& props) override;
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
     virtual TVector<TExprNode::TPtr> GetLambdas() override;
-    virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
-
-    bool HasRenames() const;
-    bool HasLambdas() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
-    TVector<std::pair<TInfoUnit, TExprNode::TPtr>> GetLambdas() const;
+    virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
+
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
 
     virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
@@ -490,11 +508,12 @@ class TOpProject : public IUnaryOperator {
 
 struct TOpAggregationTraits {
     TOpAggregationTraits() = default;
-    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction)
-        : OriginalColName(originalColName), AggFunction(aggFunction) {}
+    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction, bool forceOptional)
+        : OriginalColName(originalColName), AggFunction(aggFunction), ForceOptional(forceOptional) {}
 
     TInfoUnit OriginalColName;
     TString AggFunction;
+    bool ForceOptional;
 };
 
 class TOpAggregate : public IUnaryOperator {
@@ -502,6 +521,7 @@ class TOpAggregate : public IUnaryOperator {
     TOpAggregate(std::shared_ptr<IOperator> input, TVector<TOpAggregationTraits>& aggFunctions, TVector<TInfoUnit>& keyColumns,
                  EAggregationPhase aggPhase, bool distinctAll, TPositionHandle pos);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
@@ -518,8 +538,10 @@ class TOpAggregate : public IUnaryOperator {
 class TOpFilter : public IUnaryOperator {
   public:
     TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, TExprNode::TPtr filterLambda);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
-    virtual TVector<TInfoUnit> GetScalarSubplanIUs(TPlanProps& props) override;
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual TVector<TExprNode::TPtr> GetLambdas() override;
     virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
@@ -540,6 +562,8 @@ class TOpJoin : public IBinaryOperator {
     TOpJoin(std::shared_ptr<IOperator> leftArg, std::shared_ptr<IOperator> rightArg, TPositionHandle pos, TString joinKind,
             TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
 
@@ -576,6 +600,7 @@ class TOpSort : public IUnaryOperator {
   public:
     TOpSort(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TSortElement> sortElements, TExprNode::TPtr limitCond = nullptr);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
 
@@ -644,8 +669,8 @@ class TOpRoot : public IUnaryOperator {
             Root = ptr;
 
             std::unordered_set<std::shared_ptr<IOperator>> visited;
-            for (auto scalarSubplan : Root->PlanProps.ScalarSubplans.Get()) {
-                BuildDfsList(scalarSubplan, {}, size_t(0), visited);
+            for (auto subplan : Root->PlanProps.Subplans.Get()) {
+                BuildDfsList(subplan.Plan, {}, size_t(0), visited);
             }
             auto child = ptr->GetInput();
             BuildDfsList(child, {}, size_t(0), visited);

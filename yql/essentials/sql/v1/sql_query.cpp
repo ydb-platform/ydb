@@ -186,6 +186,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
             "flush_interval",
             "batch_size_bytes",
             "directory",
+            "metrics_level",
         };
         for (const auto& names : REPLICATION_AND_TRANSFER_SECRETS_SETTINGS) {
             settings.insert(names.Name);
@@ -204,6 +205,12 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "consumer",
     };
 
+    static const TSet<TString> MetricsLevelValues = {
+        "database",
+        "object",
+        "detailed",
+    };
+
     const auto keyName = to_lower(key.Name);
     if (!ConfigSettings.count(keyName) && !StateSettings.contains(keyName) && !CreateOnlySettings.contains(keyName)) {
         ctx.Context().Error() << "Unknown transfer setting: " << key.Name;
@@ -220,6 +227,24 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         return false;
     }
 
+    if (keyName == "metrics_level") {
+        auto literalValue = value->GetLiteralValue();
+        if (!literalValue) {
+            ctx.Error() << " metrics_level value must be a string literal";
+            return false;
+        }
+
+        auto valueStr = to_lower(literalValue);
+        if (!MetricsLevelValues.contains(valueStr)) {
+            TStringBuilder validOptions;
+            for (const auto& val : MetricsLevelValues) {
+                validOptions << val << ", ";
+            }
+            ctx.Error() << "Invalid metrics_level value: " << valueStr
+                        << ". Allowed values: " << validOptions;
+            return false;
+        }
+    }
     if (!out.emplace(keyName, value).second) {
         ctx.Context().Error() << "Duplicate transfer setting: " << key.Name;
     }

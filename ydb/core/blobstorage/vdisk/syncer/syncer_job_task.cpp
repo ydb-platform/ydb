@@ -114,6 +114,12 @@ namespace NKikimr {
             // the protocol after receiving response
             FullRecoverInfo = TFullRecoverInfo(NKikimrBlobStorage::EFullSyncProtocol::UnorderedData);
             ++RedirCounter;
+
+            EnterFullRecovery = true;
+            Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_DEBUG, BS_SYNCER,
+                    VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
+                        "PrepareToFullRecovery: fromVDisk# %s toVDisk# %s",
+                        VDiskId.ToString().data(), Ctx->SelfVDiskId.ToString().data()));
         }
 
         TSjOutcome TSyncerJobTask::ContinueInFullRecoveryMode() {
@@ -180,7 +186,10 @@ namespace NKikimr {
                     FullRecoverInfo->BarrierFrom, FullRecoverInfo->Protocol);
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncFullBytesSent() += msg->GetCachedByteSize();
                 ++Ctx->SyncerCtx->MonGroup.SyncerVSyncFullMessagesSent();
-                return TSjOutcome::Event(ServiceId, std::move(msg));
+
+                bool full = EnterFullRecovery;
+                EnterFullRecovery = false;
+                return TSjOutcome::Event(ServiceId, std::move(msg), full);
             } else {
                 auto msg = std::make_unique<TEvBlobStorage::TEvVSync>(Current.SyncState, Ctx->SelfVDiskId, VDiskId);
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncBytesSent() += msg->GetCachedByteSize();
@@ -336,7 +345,7 @@ namespace NKikimr {
             FullRecoverInfo->LogoBlobFrom = LogoBlobIDFromLogoBlobID(record.GetLogoBlobFrom());
             FullRecoverInfo->BlockTabletFrom = record.GetBlockTabletFrom();
             FullRecoverInfo->BarrierFrom = TKeyBarrier(record.GetBarrierFrom());
-            
+
             if (record.HasProtocol()) {
                 FullRecoverInfo->Protocol = record.GetProtocol();
             } else {

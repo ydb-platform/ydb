@@ -1866,7 +1866,7 @@ TFutureHolder<T>::TFutureHolder(TFuture<T> future)
 template <class T>
 TFutureHolder<T>::~TFutureHolder()
 {
-    if (Future_) {
+    if (Future_ && !Future_.IsSet()) {
         Future_.Cancel(TError("Future holder destroyed"));
     }
 }

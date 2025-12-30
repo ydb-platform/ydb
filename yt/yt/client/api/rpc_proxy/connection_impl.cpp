@@ -318,6 +318,12 @@ const std::optional<std::string>& TConnection::GetClusterName() const
     return Config_->ClusterName;
 }
 
+const std::optional<NAuth::TTvmId>& TConnection::GetTvmId() const
+{
+    static std::optional<NAuth::TTvmId> TvmId_;
+    return TvmId_;
+}
+
 bool TConnection::IsSameCluster(const IConnectionPtr& other) const
 {
     // NB: Cluster tag is not defined for RPC proxy connection

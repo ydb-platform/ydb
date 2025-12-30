@@ -75,7 +75,6 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commit
     decltype(CheckpointTxs) checkpointTxs;
     decltype(WriteTxs) writeTxs;
     NYT::ITransactionPtr layersTx;
-    NYT::ITransactionPtr dumpTx;
     with_lock(Lock_) {
         binarySnapshotTx.Swap(BinarySnapshotTx);
         snapshotTxs.swap(SnapshotTxs);
@@ -85,7 +84,6 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commit
         checkpointTxs.swap(CheckpointTxs);
         writeTxs.swap(WriteTxs);
         layersTx.Swap(LayersSnapshotTx);
-        dumpTx.Swap(DumpTx);
     }
 
     if (layersTx) {
@@ -115,12 +113,12 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commit
     YQL_CLOG(INFO, ProviderYt) << "Committing tx " << GetGuidAsString(Tx->GetId())  << " on " << clusterName;
     Tx->Commit();
 
-    if (dumpTx) {
-        YQL_CLOG(INFO, ProviderYt) << (commitDumpTx ? "Commiting" : "Aborting") << " dump tx " << GetGuidAsString(dumpTx->GetId())  << " on " << clusterName;
+    if (DumpTx) {
+        YQL_CLOG(INFO, ProviderYt) << (commitDumpTx ? "Commiting" : "Aborting") << " dump tx " << GetGuidAsString(DumpTx->GetId())  << " on " << clusterName;
         if (commitDumpTx) {
-            dumpTx->Commit();
+            DumpTx->Commit();
         } else {
-            dumpTx->Abort();
+            DumpTx->Abort();
         }
     }
 }

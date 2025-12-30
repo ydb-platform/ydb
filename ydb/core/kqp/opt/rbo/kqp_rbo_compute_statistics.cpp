@@ -58,7 +58,9 @@ void ComputeAlisesForJoin(const std::shared_ptr<IOperator>& left,
     }
 
     leftAliases.insert(leftAliases.begin(), leftAliasSet.begin(), leftAliasSet.end());
+    std::sort(leftAliases.begin(), leftAliases.end());
     rightAliases.insert(rightAliases.begin(), rightAliasSet.begin(), rightAliasSet.end());
+    std::sort(rightAliases.begin(), rightAliases.end());
     std::set_union(leftAliasSet.begin(), leftAliasSet.end(), rightAliasSet.begin(), rightAliasSet.end(),
             std::back_inserter(unionOfAliases));
 }

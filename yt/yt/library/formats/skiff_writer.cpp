@@ -1088,7 +1088,7 @@ private:
             }
 
             SkiffWriter_->Flush();
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
         YT_UNUSED_FUTURE(Flush());
     }

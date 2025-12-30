@@ -40,7 +40,7 @@ TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
                 //FIXME: Currently only a single element tuple in IN clause is supported, so we hardcode this case
                 auto tupleElement = tupleType->Child(0)->Child(0)->Content();
                 auto tupleElementIU = TInfoUnit(TString(tupleElement));
-                entry = TSubplanEntry(subplan, {TInfoUnit(TString(tupleElement))}, ESubplanType::IN);
+                entry = TSubplanEntry(subplan, {TInfoUnit(TString(tupleElement))}, ESubplanType::IN_SUBPLAN);
             }
             PlanProps.Subplans.Add(sublinkVar, entry);
         }

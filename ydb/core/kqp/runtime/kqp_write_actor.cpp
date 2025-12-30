@@ -1928,13 +1928,9 @@ private:
                 DataBuffer.pop();
 
                 if (std::holds_alternative<IDataBatchPtr>(variant)) {
-<<<<<<< HEAD
-                    WriteTableActor->Write(WriteToken, GetOperation(Settings.GetType()), std::get<IDataBatchPtr>(std::move(variant)));
-=======
                     auto data = std::get<IDataBatchPtr>(std::move(variant));
                     DataBufferMemory -= data->GetMemory();
-                    WriteTableActor->Write(WriteToken, std::move(data));
->>>>>>> 4b52120014a (YQ-5002 fixed kqp write actor back pressure with checkpoints (#31571))
+                    WriteTableActor->Write(WriteToken, GetOperation(Settings.GetType()), std::move(data));
                 } else if (std::holds_alternative<NYql::NDqProto::TCheckpoint>(variant)) {
                     CheckpointInProgress = std::get<NYql::NDqProto::TCheckpoint>(std::move(variant));
                     WriteTableActor->FlushBuffers();

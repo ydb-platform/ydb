@@ -64,7 +64,7 @@ public:
         return Proto->GetEnableShuffleElimination();
     }
 
-    bool DqChannelVersion() const {
+    ui32 DqChannelVersion() const {
         return Proto->GetDqChannelVersion();
     }
 

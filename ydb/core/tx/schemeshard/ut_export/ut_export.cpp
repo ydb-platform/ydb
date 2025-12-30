@@ -822,14 +822,14 @@ namespace {
                 TStringBuilder() << "\nExpected query to start from:\n\n"
                     << expectedHeader << "\n\nActual query:\n\n" << content);
 
-			// Check if all expected properties are presented
+            // Check if all expected properties are presented
             for (const auto& property : expectedProperties) {
                 UNIT_ASSERT_C(content.find(property) != TString::npos,
                     TStringBuilder() << "Property not found:\n"
                     << "\nExpected property:\n\n" << property << "\n\nActual query:\n\n" << content);
             }
 
-			// Check if no other properties are presented
+            // Check if no other properties are presented
             UNIT_ASSERT_EQUAL_C(
                 std::ranges::count(content, ','),
                 static_cast<long>(expectedProperties.size()) - 1,
@@ -3721,11 +3721,11 @@ WITH (
                     key: "database_name",
                     value: "clickhouse"
                 }
-				Properties {
+                Properties {
                     key: "protocol",
                     value: "NATIVE"
                 }
-				Properties {
+                Properties {
                     key: "use_tls",
                     value: "TRUE"
                 }
@@ -3739,14 +3739,14 @@ WITH (
             "AUTH_METHOD = 'BASIC'",
             "DATABASE_NAME = 'clickhouse'",
             "LOGIN = 'my_login'",
-			"PROTOCOL = 'NATIVE'",
-			"USE_TLS = 'TRUE'",
+            "PROTOCOL = 'NATIVE'",
+            "USE_TLS = 'TRUE'",
         };
 
         TestExternalDataSource(scheme, expectedProperties);
     }
 
-	Y_UNIT_TEST(ExternalDataSourceAuthAWS) {
+    Y_UNIT_TEST(ExternalDataSourceAuthAWS) {
         TString scheme = R"(
             Name: "DataSource"
             SourceType: "ObjectStorage"
@@ -3754,7 +3754,7 @@ WITH (
             Auth {
                 Aws {
                     AwsAccessKeyIdSecretName: "id_secret",
-					AwsSecretAccessKeySecretName: "access_secret"
+                    AwsSecretAccessKeySecretName: "access_secret"
                     AwsRegion: "ru-central-1"
                 }
             }
@@ -3780,7 +3780,7 @@ WITH (
             Auth {
                 ServiceAccount {
                     Id: "id",
-					SecretName: "service_secret"
+                    SecretName: "service_secret"
                 }
             }
         )";
@@ -3800,7 +3800,7 @@ WITH (
         TString scheme = R"(
             Name: "DataSource"
             SourceType: "PostgreSQL"
-            Location: "https://postgesdb.net"
+            Location: "https://postgresdb.net"
             Auth {
                 MdbBasic {
                     ServiceAccountId: "id",
@@ -3823,7 +3823,7 @@ WITH (
 
         TVector<TString> expectedProperties = {
             "SOURCE_TYPE = 'PostgreSQL'",
-            "LOCATION = 'https://postgesdb.net'",
+            "LOCATION = 'https://postgresdb.net'",
             "AUTH_METHOD = 'MDB_BASIC'",
             "SERVICE_ACCOUNT_ID = 'id'",
             "SERVICE_ACCOUNT_SECRET_NAME = 'service_secret'",

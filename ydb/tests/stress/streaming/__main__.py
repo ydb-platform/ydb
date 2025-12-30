@@ -6,7 +6,7 @@ import logging
 logger = logging.getLogger("logger")
 
 if __name__ == '__main__':
-    
+
     logging.basicConfig(
         format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
         datefmt='%H:%M:%S',

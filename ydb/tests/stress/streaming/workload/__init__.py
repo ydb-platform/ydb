@@ -97,81 +97,27 @@ class Workload():
         logger.info("Workload::write_to_input_topic")
         
         writers = []
-    #    # for i in range(self.partitions_count):
-    #     #logger.info(f"writers add {i}")
-    #    # writer = self.driver.topic_client.writer(self.input_topic, partition_id=0)
-    #     writer = self.driver.topic_client.writer(self.input_topic, producer_id="producer-id")
-        
-    #     messages = []
-    #     for i in range(100):
-    #         level = "error" if random.choice([True, False]) else "warn"
-    #         messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
-    #     writer.write(messages)
-    #   #  writer.flush()
-    #     writer.close(flush=False)
-
-    #     # self.write_to_input_topic_impl(writers)
-    #     logger.info("Workload::write_to_input_topic finished_at")
-    #     # for writer in writers:
-    #     #     logger.info("Workload::close")
-    #     #     # try:
-    #     #     # #    writer.close(flush=False)
-    #     #     # except Exception:
-    #     #     #     pass
-    #     #     logger.info("Workload::close end")
-        finished_at = time.time() + self.duration
         for i in range(self.partitions_count):
             writers.append(self.driver.topic_client.writer(self.input_topic, partition_id=i))
 
-        #while time.time() < finished_at:
-            # for writer in writers:
-            #     messages = []
-            #     for i in range(100):
-            #         level = "error" if random.choice([True, False]) else "warn"
-            #         messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
-            #     writer.write(messages)
-
-        with self.driver.topic_client.writer(self.input_topic, producer_id="producer-id") as writer:
+        finished_at = time.time() + self.duration
+        for writer in writers:
             while time.time() < finished_at:
                 messages = []
-                for i in range(100):
+                for i in range(1):
                     level = "error" if random.choice([True, False]) else "warn"
                     messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
-                logger.info("write")
-                writer.write(messages)
-                logger.info("write end")
-
-        # for writer in writers:
-        #     logger.info("close")
-        #     writer.close(flush=False)
-        #     logger.info("close end")
-        logger.info("Workload::write_to_input_topic end")
-
-    def write_to_input_topic_impl(self, writers):
-        finished_at = time.time() + self.duration
-        logger.info(f"Workload::write_to_input_topic finished_at: {finished_at}")
-
-        # while time.time() < finished_at:
-        #     for writer in writers:
-        #         messages = []
-        #         for i in range(100):
-        #             level = "error" if random.choice([True, False]) else "warn"
-        #             messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
-        #         writer.write(messages)
-        #         break
-        #         if time.time() > finished_at:
-        #             return
+                try:
+                    writer.write(messages, timeout=0.5)
+                    writer.flush()
+                    # time.sleep(1)
+                except Exception as e:
+                    pass
 
         for writer in writers:
-            messages = []
-            for i in range(100):
-                level = "error" if random.choice([True, False]) else "warn"
-                messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
-            writer.write(messages)
-           
-
-
-        logger.info("Workload::write_to_input_topic finished")
+            writer.close(flush=False)
+        
+        logger.info("Workload::write_to_input_topic end")
 
     def read_from_output_topic(self):
         logger.info("Workload::read_from_output_topic")

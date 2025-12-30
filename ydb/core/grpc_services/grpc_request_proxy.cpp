@@ -9,6 +9,7 @@
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/util/stlog.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/scheme_board/scheme_board.h>
@@ -143,7 +144,8 @@ private:
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
-            LOG_ERROR_S(ctx, NKikimrServices::GRPC_SERVER, error);
+            STLOG(PRI_ERROR, GRPC_SERVER, GRPC_PROXY, error,
+                (trace_id, event->TraceId.GetHexTraceId()));
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, error);
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
@@ -220,7 +222,9 @@ private:
                 if (!DeferAndStartUpdate(databaseName, event, requestBaseCtx)) {
                     Counters->IncDatabaseUnavailableCounter();
                     const TString error = "Grpc proxy is not ready to accept request, database unknown";
-                    LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Limit for deferred events per database %s reached", databaseName.c_str());
+                    STLOG(PRI_ERROR, GRPC_SERVER, GRPC_PROXY, "Limit for deferred events per database reached",
+                        (database_name, databaseName),
+                        (trace_id, event->TraceId.GetHexTraceId()));
                     const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
                     requestBaseCtx->RaiseIssue(issue);
                     requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
@@ -237,7 +241,8 @@ private:
             if (rootIt == Databases.end() || !rootIt->second.IsDatabaseReady() || !rootIt->second.SchemeBoardResult) {
                 Counters->IncDatabaseUnavailableCounter();
                 const TString error = "Grpc proxy is not ready to accept request, root database unknown";
-                LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error);
+                STLOG(PRI_ERROR, GRPC_SERVER, GRPC_PROXY, error,
+                    (trace_id, event->TraceId.GetHexTraceId()));
                 const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
                 requestBaseCtx->RaiseIssue(issue);
                 requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
@@ -261,7 +266,11 @@ private:
                         error << "Unexpected node to perform query on database: " << databaseName
                               << ", domain: " << domain.GetDomainKey().ShortDebugString()
                               << ", resource domain: " << domain.GetResourcesDomainKey().ShortDebugString();
-                        LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error);
+                        STLOG(PRI_ERROR, GRPC_SERVER, GRPC_PROXY, "Unexpected node to perform query on database",
+                            (database_name, databaseName),
+                            (domain_key, domain.GetDomainKey().ShortDebugString()),
+                            (resource_domain_key, domain.GetResourcesDomainKey().ShortDebugString()),
+                            (trace_id, event->TraceId.GetHexTraceId()));
                         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
                         requestBaseCtx->RaiseIssue(issue);
                         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
@@ -283,8 +292,8 @@ private:
 
             if (requestBaseCtx->IsClientLost()) {
                 // Any status here
-                LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-                    "Client was disconnected before processing request (grpc request proxy)");
+                STLOG(PRI_DEBUG, GRPC_SERVER, GRPC_PROXY, "Client was disconnected before processing request (grpc request proxy)",
+                    (trace_id, event->TraceId.GetHexTraceId()));
                 requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
                 requestBaseCtx->FinishSpan();
                 return;
@@ -368,8 +377,9 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
 
     if (AppData()->DynamicNameserviceConfig) {
         DynamicNode = nodeID > AppData()->DynamicNameserviceConfig->MaxStaticNodeId;
-        LOG_NOTICE(ctx, NKikimrServices::GRPC_SERVER, "Grpc request proxy started, nodeid# %d, serve as %s node",
-            nodeID, (DynamicNode ? "dynamic" : "static"));
+        STLOG(PRI_NOTICE, GRPC_SERVER, GRPC_PROXY, "Grpc request proxy started",
+            (node_id, nodeID),
+            (node_type, DynamicNode ? "dynamic" : "static"));
     }
 
     Counters = CreateGRpcProxyCounters(AppData()->Counters);
@@ -405,7 +415,7 @@ void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TAct
 }
 
 void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-    LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Subscribed for config changes");
+    STLOG(PRI_INFO, GRPC_SERVER, GRPC_PROXY, "Subscribed for config changes");
 }
 
 void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -413,7 +423,7 @@ void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
 
     ChannelBufferSize.store(
         event.GetConfig().GetTableServiceConfig().GetResourceManager().GetChannelBufferSize());
-    LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updated app config");
+    STLOG(PRI_INFO, GRPC_SERVER, GRPC_PROXY, "Updated app config");
 
     auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
     Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
@@ -421,23 +431,23 @@ void TGRpcRequestProxyImpl::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
 
 void TGRpcRequestProxyImpl::HandleProxyService(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
     SchemeCache = ev->Get()->Services.SchemeCache;
-    LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-        "Got proxy service configuration");
+    STLOG(PRI_DEBUG, GRPC_SERVER, GRPC_PROXY, "Got proxy service configuration");
 }
 
 void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
     switch (ev->Get()->SourceType) {
         case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-            LOG_CRIT(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+            STLOG(PRI_CRIT, GRPC_SERVER, GRPC_PROXY,
                 "Failed to deliver subscription request to config dispatcher");
             break;
         case NConsole::TEvConsole::EvConfigNotificationResponse:
-            LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+            STLOG(PRI_ERROR, GRPC_SERVER, GRPC_PROXY,
                 "Failed to deliver config notification response");
             break;
         default:
-            LOG_ERROR(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-                "Undelivered event with unexpected source type: %d", ev->Get()->SourceType);
+            STLOG(PRI_ERROR, GRPC_SERVER, GRPC_PROXY,
+                "Undelivered event with unexpected source type",
+                (source_type, ev->Get()->SourceType));
             break;
     }
 }
@@ -467,7 +477,7 @@ void TGRpcRequestProxyImpl::HandleBootstrapClusterEvent(TAutoPtr<TEventHandle<TE
     IRequestProxyCtx* requestProxyCtx = event->Get();
     if (requestProxyCtx->IsClientLost()) {
         // Any status here
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+        STLOG(PRI_DEBUG, GRPC_SERVER, GRPC_PROXY,
             "Client was disconnected before processing request (grpc request proxy)");
         requestProxyCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
         requestProxyCtx->FinishSpan();
@@ -532,7 +542,8 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(TAutoPtr<TEventHandle<TEvent>>& ev
 
 void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx) {
     TString databaseName = ev->Get()->Path;
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "SchemeBoardUpdate " << databaseName);
+    STLOG(PRI_DEBUG, GRPC_SERVER, GRPC_PROXY, "SchemeBoardUpdate",
+        (database_name, databaseName));
     auto itDatabase = Databases.try_emplace(CanonizePath(databaseName));
     TDatabaseInfo& database = itDatabase.first->second;
     database.SchemeBoardResult = ev->Release();
@@ -551,17 +562,21 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
     if (describeScheme.GetPathDescription().HasDomainDescription()
         && describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()
         && describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updating SecurityState for " << databaseName);
+        STLOG(PRI_DEBUG, GRPC_SERVER, GRPC_PROXY, "Updating SecurityState",
+            (database_name, databaseName));
         Send(MakeTicketParserID(), new TEvTicketParser::TEvUpdateLoginSecurityState(
             describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState()
             ));
     } else {
         if (!describeScheme.GetPathDescription().HasDomainDescription()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no DomainDescription");
+            STLOG(PRI_DEBUG, GRPC_SERVER, GRPC_PROXY, "Can't update SecurityState - no DomainDescription",
+                (database_name, databaseName));
         } else if (!describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no SecurityState");
+            STLOG(PRI_DEBUG, GRPC_SERVER, GRPC_PROXY, "Can't update SecurityState - no SecurityState",
+                (database_name, databaseName));
         } else if (describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() == 0) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no PublicKeys");
+            STLOG(PRI_DEBUG, GRPC_SERVER, GRPC_PROXY, "Can't update SecurityState - no PublicKeys",
+                (database_name, databaseName));
         }
     }
 
@@ -571,8 +586,9 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
 }
 
 void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-        "SchemeBoardDelete " << ev->Get()->Path << " Strong=" << ev->Get()->Strong);
+    STLOG(PRI_WARN, GRPC_SERVER, GRPC_PROXY, "SchemeBoardDelete",
+        (path, ev->Get()->Path),
+        (strong, ev->Get()->Strong));
 
     if (ev->Get()->Strong) {
         ForgetDatabase(ev->Get()->Path);
@@ -600,7 +616,8 @@ void TGRpcRequestProxyImpl::ForgetDatabase(const TString& database) {
 }
 
 void TGRpcRequestProxyImpl::SubscribeToDatabase(const TString& database) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Subscribe to " << database);
+    STLOG(PRI_DEBUG, GRPC_SERVER, GRPC_PROXY, "Subscribe to database",
+        (database_name, database));
 
     TActorId subscriberId = Register(CreateSchemeBoardSubscriber(SelfId(), database));
     auto itSubscriber = Subscribers.emplace(database, subscriberId);
@@ -617,29 +634,20 @@ void TGRpcRequestProxyImpl::DoStartUpdate(const TString& database) {
 
 template<typename TEvent>
 void LogRequest(const TEvent& event) {
-    auto getDebugString = [&event]()->TString {
-        TStringStream ss;
-        ss << "Got grpc request# " << event->Get()->GetRequestName();
-        ss << ", traceId# " << event->Get()->GetTraceId().GetOrElse("undef");
-        ss << ", sdkBuildInfo# " << event->Get()->GetSdkBuildInfo().GetOrElse("undef");
-        ss << ", state# " << event->Get()->GetAuthState().State;
-        ss << ", database# " << event->Get()->GetDatabaseName().GetOrElse("undef");
-        ss << ", peer# " << event->Get()->GetPeerName();
-        ss << ", grpcInfo# " << event->Get()->GetGrpcUserAgent().GetOrElse("undef");
-        if (event->Get()->GetDeadline() == TInstant::Max()) {
-            ss << ", timeout# undef";
-        } else {
-            ss << ", timeout# " << event->Get()->GetDeadline() - TInstant::Now();
-        }
-        return ss.Str();
-    };
-
+    NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG;
     if constexpr (std::is_same_v<TEvListEndpointsRequest::TPtr, TEvent>) {
-        LOG_INFO(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
+        logPriority = NActors::NLog::PRI_INFO;
     }
-    else {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
-    }
+
+    STLOG(logPriority, GRPC_SERVER, GRPC_PROXY, "Got grpc request",
+        (request_type, event->Get()->GetRequestName()),
+        (trace_id, event->Get()->GetTraceId().GetOrElse("undef")),
+        (sdk_build_info, event->Get()->GetSdkBuildInfo().GetOrElse("undef")),
+        (state, event->Get()->GetAuthState().State),
+        (database, event->Get()->GetDatabaseName().GetOrElse("undef")),
+        (peer, event->Get()->GetPeerName()),
+        (grpc_info, event->Get()->GetGrpcUserAgent().GetOrElse("undef")),
+        (timeout, event->Get()->GetDeadline() == TInstant::Max() ? "undef" : (event->Get()->GetDeadline() - TInstant::Now()).ToString()));
 }
 
 void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {

@@ -7,6 +7,7 @@
 #include "rpc_common.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/util/stlog.h>
 #include <ydb/core/util/wilson.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -46,8 +47,10 @@ public:
         const auto& deadline = Request->GetDeadline();
 
         if (deadline <= now) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
-                SelfId() << " Request deadline has expired for " << now - deadline << " seconds");
+            STLOG(PRI_WARN, GRPC_PROXY, CREATE_SESSION, "Request deadline has expired",
+                (self_id, SelfId()),
+                (expired_seconds, (now - deadline).Seconds()),
+                (trace_id, GetTraceIdString()));
 
             Reply(Ydb::StatusIds::TIMEOUT);
             return;
@@ -111,8 +114,11 @@ private:
         auto actorId = NRpcService::DoLocalRpcSameMailbox<TEvDeleteSessionRequest>(
             std::move(request), std::move(cb), database, Request->GetSerializedToken(), ctx);
 
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
-            SelfId() << " Client lost, session " << sessionId << " will be closed by " << actorId);
+        STLOG(PRI_NOTICE, GRPC_PROXY, CREATE_SESSION, "Client lost, session will be closed",
+            (self_id, SelfId()),
+            (session_id, sessionId),
+            (actor_id, actorId),
+            (trace_id, GetTraceIdString()));
     }
 
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
@@ -143,6 +149,10 @@ private:
     }
 
 private:
+    TString GetTraceIdString() const {
+        return Span ? Span.GetTraceId().GetHexTraceId() : TString();
+    }
+
     virtual void SendSessionResult(const NKikimrKqp::TCreateSessionResponse& kqpResponse) = 0;
 
     template<typename TResp>

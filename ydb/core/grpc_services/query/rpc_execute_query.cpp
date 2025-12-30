@@ -9,6 +9,7 @@
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
+#include <ydb/core/util/stlog.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
@@ -339,12 +340,14 @@ private:
         }
     }
 
-    void Handle(TRpcServices::TEvGrpcNextReply::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " NextReply"
-            << ", left: " << ev->Get()->LeftInQueue
-            << ", queue: " << FlowControl_.QueueSize()
-            << ", inflight bytes: " << FlowControl_.InflightBytes()
-            << ", limit bytes: " << FlowControl_.InflightLimitBytes());
+    void Handle(TRpcServices::TEvGrpcNextReply::TPtr& ev, const TActorContext& _) {
+        STLOG(PRI_DEBUG, RPC_REQUEST, EXEC_QUERY, "NextReply",
+            (self_id, this->SelfId()),
+            (left_in_queue, ev->Get()->LeftInQueue),
+            (queue_size, FlowControl_.QueueSize()),
+            (inflight_bytes, FlowControl_.InflightBytes()),
+            (limit_bytes, FlowControl_.InflightLimitBytes()),
+            (trace_id, GetTraceIdString()));
 
         while (FlowControl_.QueueSize() > ev->Get()->LeftInQueue) {
             FlowControl_.PopResponse();
@@ -354,16 +357,18 @@ private:
         if (freeSpaceBytes > 0) {
             for (auto& [channelId, channel] : StreamChannels_) {
                 if (channel.ResumeIfStopped(SelfId(), freeSpaceBytes)) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Resume execution, "
-                        << ", channel: " << channelId
-                        << ", seqNo: " << channel.LastSeqNo
-                        << ", freeSpace: " << freeSpaceBytes);
+                    STLOG(PRI_DEBUG, RPC_REQUEST, EXEC_QUERY, "Resume execution",
+                        (self_id, this->SelfId()),
+                        (channel_id, channelId),
+                        (seq_no, channel.LastSeqNo),
+                        (free_space, freeSpaceBytes),
+                        (trace_id, GetTraceIdString()));
                 }
             }
         }
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& _) {
         Ydb::Query::ExecuteQueryResponsePart *response = ev->Get()->Arena->Allocate<Ydb::Query::ExecuteQueryResponsePart>();
         response->set_status(Ydb::StatusIds::SUCCESS);
         response->set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
@@ -390,11 +395,13 @@ private:
         channel.AckedFreeSpaceBytes = freeSpaceBytes;
         channel.ChannelId = ev->Get()->Record.GetChannelId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Send stream data ack"
-            << ", seqNo: " << ev->Get()->Record.GetSeqNo()
-            << ", freeSpace: " << freeSpaceBytes
-            << ", to: " << ev->Sender
-            << ", queue: " << FlowControl_.QueueSize());
+        STLOG(PRI_DEBUG, RPC_REQUEST, EXEC_QUERY, "Send stream data ack",
+            (self_id, this->SelfId()),
+            (seq_no, ev->Get()->Record.GetSeqNo()),
+            (free_space, freeSpaceBytes),
+            (to, ev->Sender),
+            (queue_size, FlowControl_.QueueSize()),
+            (trace_id, GetTraceIdString()));
 
         channel.SendAck(SelfId());
     }
@@ -483,8 +490,13 @@ private:
     }
 
 private:
-    void HandleClientLost(const TActorContext& ctx) {
-        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost");
+    TString GetTraceIdString() const {
+        return Span_ ? Span_.GetTraceId().GetHexTraceId() : TString();
+    }
+
+    void HandleClientLost(const TActorContext& _) {
+        STLOG(PRI_WARN, RPC_REQUEST, EXEC_QUERY, "Client lost",
+            (trace_id, GetTraceIdString()));
 
         // We must try to finish stream otherwise grpc will not free allocated memory
         // If stream already scheduled to be finished (ReplyFinishStream already called)
@@ -521,8 +533,9 @@ private:
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message)
     {
-        ALOG_INFO(NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
-            << Ydb::StatusIds::StatusCode_Name(status));
+        STLOG(PRI_INFO, RPC_REQUEST, EXEC_QUERY, "Finish grpc stream",
+            (status, Ydb::StatusIds::StatusCode_Name(status)),
+            (trace_id, GetTraceIdString()));
 
         // Skip sending empty result in case of success status - simplify client logic
         if (status != Ydb::StatusIds::SUCCESS || message.size() > 0) {
@@ -541,7 +554,9 @@ private:
     }
 
     void InternalError(const TString& message) {
-        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+        STLOG(PRI_ERROR, RPC_REQUEST, EXEC_QUERY, "Internal error",
+            (message, message),
+            (trace_id, GetTraceIdString()));
 
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
         ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);

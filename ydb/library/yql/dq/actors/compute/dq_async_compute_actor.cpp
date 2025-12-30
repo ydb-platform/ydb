@@ -711,6 +711,10 @@ private:
         return inputChannel->FreeSpace;
     }
 
+    TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 /*inputId*/) override {
+        return nullptr;
+    }
+
     void OnTaskRunnerCreated(NTaskRunnerActor::TEvTaskRunnerCreateFinished::TPtr& ev) {
         const auto& secureParams = ev->Get()->SecureParams;
         const auto& taskParams = ev->Get()->TaskParams;

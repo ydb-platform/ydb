@@ -354,11 +354,12 @@ TVector<TString> BuildSearchTerms(const TString& query, Ydb::Table::FulltextInde
     for (const TString& pattern : Analyze(query, settings, '*')) {
         for (const auto& term : StringSplitter(pattern).Split('*')) {
             const TString token(term.Token());
-            if (token.empty() || settings.filter_ngram_min_length() > static_cast<i32>(token.size())) {
+            const i64 tokenLength = GetLengthUTF8(token);
+            if (tokenLength == 0 || settings.filter_ngram_min_length() > tokenLength) {
                 continue;
             }
 
-            const size_t upper = MIN(settings.filter_ngram_max_length(), static_cast<i32>(GetLengthUTF8(token)));
+            const size_t upper = MIN(settings.filter_ngram_max_length(), tokenLength);
             BuildNgrams(token, upper, upper, edge, searchTerms);
 
             if (edge) {

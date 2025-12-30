@@ -8280,11 +8280,39 @@
             "uri": "https://{canondata_backend}/1942671/82ed7d067ef141d1fcef204dc3b89bf4e1c70c57/resource.tar.gz#test_sql2yql.test_select_op-select_op_precedence_named_node_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_pg-uncorrelated_asterisk_subquery_scalar]": [
+        {
+            "checksum": "3b69143ccf2e7dbfe6f4039eac6e66c3",
+            "size": 807,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_pg-uncorrelated_asterisk_subquery_scalar_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_pg-uncorrelated_asterisk_subquery_scalar_with_source]": [
+        {
+            "checksum": "7114c88b1634f3056d74b6164ad9e90e",
+            "size": 999,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_pg-uncorrelated_asterisk_subquery_scalar_with_source_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-alias]": [
         {
             "checksum": "b329dae3c0c24ddc4a044c5b77fed696",
             "size": 2168,
             "uri": "https://{canondata_backend}/1924537/7c266a8fc2827810e9c5a76a5330561b54cf9b80/resource.tar.gz#test_sql2yql.test_select_yql-alias_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-correlated_asterisk_subquery_scalar_with_join]": [
+        {
+            "checksum": "61c313a99ea81c03a8feaf39cb36055f",
+            "size": 1624,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_yql-correlated_asterisk_subquery_scalar_with_join_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-correlated_asterisk_subquery_scalar_with_source]": [
+        {
+            "checksum": "ad572bc4de24cf0ac8a91085cc4a1b72",
+            "size": 1367,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_yql-correlated_asterisk_subquery_scalar_with_source_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-correlated_order_by_trivial]": [
@@ -8817,6 +8845,62 @@
             "checksum": "78753324f38e085cb9722199b4ba7a23",
             "size": 1074,
             "uri": "https://{canondata_backend}/1924537/7c266a8fc2827810e9c5a76a5330561b54cf9b80/resource.tar.gz#test_sql2yql.test_select_yql-projection_in_expr_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-uncorrelated_asterisk_asterisk_subquery_scalar]": [
+        {
+            "checksum": "59cef0f2292a272340b9faf739e3776e",
+            "size": 1286,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_yql-uncorrelated_asterisk_asterisk_subquery_scalar_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-uncorrelated_asterisk_subquery_exists]": [
+        {
+            "checksum": "4ee70af823c8050d8d88e28f37316f44",
+            "size": 1093,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_yql-uncorrelated_asterisk_subquery_exists_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-uncorrelated_asterisk_subquery_exists_with_source]": [
+        {
+            "checksum": "bc3a7193554eec8a410a13aa6bad774b",
+            "size": 1249,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_yql-uncorrelated_asterisk_subquery_exists_with_source_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-uncorrelated_asterisk_subquery_in]": [
+        {
+            "checksum": "29ceeef5974b661ce748135c57a0e49e",
+            "size": 1125,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_yql-uncorrelated_asterisk_subquery_in_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-uncorrelated_asterisk_subquery_in_with_source]": [
+        {
+            "checksum": "24e4943df33a460d92ac67b6fef6db28",
+            "size": 1281,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_yql-uncorrelated_asterisk_subquery_in_with_source_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-uncorrelated_asterisk_subquery_scalar]": [
+        {
+            "checksum": "b38106f832039412e6aa9e66c4007834",
+            "size": 1091,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_yql-uncorrelated_asterisk_subquery_scalar_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-uncorrelated_asterisk_subquery_scalar_with_join]": [
+        {
+            "checksum": "cc426f3bb890d1499d32e20890463ad8",
+            "size": 1504,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_yql-uncorrelated_asterisk_subquery_scalar_with_join_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-uncorrelated_asterisk_subquery_scalar_with_source]": [
+        {
+            "checksum": "02a0e4bedd1d2989fd921166cd0db289",
+            "size": 1247,
+            "uri": "https://{canondata_backend}/1937367/18b6179d1fe346926204ef18d271c6725a66a4aa/resource.tar.gz#test_sql2yql.test_select_yql-uncorrelated_asterisk_subquery_scalar_with_source_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-uncorrelated_limit_trivial]": [
@@ -14145,6 +14229,16 @@
             "uri": "file://test_sql_format.test_select_yql-alias_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select_yql-correlated_asterisk_subquery_scalar_with_join]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-correlated_asterisk_subquery_scalar_with_join_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-correlated_asterisk_subquery_scalar_with_source]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-correlated_asterisk_subquery_scalar_with_source_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select_yql-correlated_order_by_trivial]": [
         {
             "uri": "file://test_sql_format.test_select_yql-correlated_order_by_trivial_/formatted.sql"
@@ -14518,6 +14612,46 @@
     "test_sql_format.test[select_yql-projection_in_expr]": [
         {
             "uri": "file://test_sql_format.test_select_yql-projection_in_expr_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-uncorrelated_asterisk_asterisk_subquery_scalar]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-uncorrelated_asterisk_asterisk_subquery_scalar_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-uncorrelated_asterisk_subquery_exists]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-uncorrelated_asterisk_subquery_exists_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-uncorrelated_asterisk_subquery_exists_with_source]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-uncorrelated_asterisk_subquery_exists_with_source_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-uncorrelated_asterisk_subquery_in]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-uncorrelated_asterisk_subquery_in_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-uncorrelated_asterisk_subquery_in_with_source]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-uncorrelated_asterisk_subquery_in_with_source_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-uncorrelated_asterisk_subquery_scalar]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-uncorrelated_asterisk_subquery_scalar_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-uncorrelated_asterisk_subquery_scalar_with_join]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-uncorrelated_asterisk_subquery_scalar_with_join_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-uncorrelated_asterisk_subquery_scalar_with_source]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-uncorrelated_asterisk_subquery_scalar_with_source_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-uncorrelated_limit_trivial]": [

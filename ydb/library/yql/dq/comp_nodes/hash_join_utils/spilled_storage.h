@@ -183,9 +183,9 @@ template <TSpillerSettings Settings> class TProbeSpiller {
             if (thisBucket) {
                 for(ESide side: EachSide){
                     thisBucket->SelectSide(side).DetatchBuildingPage();
-                    thisBucket->SelectSide(side).ForEachPage([&](TPackResult page){
+                    for( TPackResult& page: thisBucket->SelectSide(side).DetatchPages()){
                         State_.InMemoryPages.push_back(TValueAndLocation<TPackResult>{.Val = std::move(page), .Side = side, .BucketIndex = index});
-                    });
+                    }
                 }
             }
         }
@@ -229,10 +229,10 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         MKQL_ENSURE(thisBucket, "spilling row that should be looked up?");
         thisBucket->Probe.BuildingPage.AppendTuple(tuple.Val, Layout_);
         if (thisBucket->Probe.template DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>()) {
-            thisBucket->Probe.ForEachPage([&](TPackResult page){
+            for( TPackResult& page: thisBucket->Probe.DetatchPages()){
                 State_.InMemoryPages.push_back(
                     {.Val = std::move(page), .Side = tuple.Side, .BucketIndex = tuple.BucketIndex});
-            });
+            }
         }
     }
 

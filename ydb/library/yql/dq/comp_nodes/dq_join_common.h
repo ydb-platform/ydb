@@ -298,11 +298,11 @@ template <typename Source> class TInMemoryHashJoin {
             if (resEnum == EFetchResult::One) {
                 const IBlockLayoutConverter::TPackResult& thisPackResult =
                     std::get<One<IBlockLayoutConverter::TPackResult>>(var).Data;
-                thisPackResult.ForEachTuple([&](TSingleTuple probeTuple) {
+                for (TSingleTuple probeTuple: thisPackResult) {
                     Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
                         consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                     });
-                });
+                }
             }
 
             return resEnum;
@@ -528,7 +528,9 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     break;
                 }
                 }
-                state.Pack->ForEachTuple([&](TSingleTuple tuple) { state.Spiller.AddRow(tuple); });
+                for (TSingleTuple tuple: *state.Pack) { 
+                    state.Spiller.AddRow(tuple); 
+                }
                 state.Pack = std::nullopt;
             }
         } else if (auto* s = std::get_if<BuildingInMemoryTable>(&State_)) {
@@ -595,11 +597,12 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                             for(ESide side: EachSide) {
                                 TBucket& thisBucket = thisPair.SelectSide(side);
                                 thisBucket.DetatchBuildingPage();
-                                thisBucket.ForEachPage([&](TPackResult page){
+                                for( TPackResult& page: thisBucket.DetatchPages()){
+
                                     futures.push_back(TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>{
                                         .Val = SpillPage(*Spiller_, std::move(page)), .Side = side,
                                         .BucketIndex = index});
-                                });
+                                }
                                 alreadyDumped[index].SelectSide(side) = std::move(*thisBucket.SpilledPages);
                                 thisBucket.SpilledPages = std::nullopt;
                             }
@@ -636,7 +639,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
-                state.FetchedPack->ForEachTuple([&](TSingleTuple tuple) {
+                for (TSingleTuple tuple: *state.FetchedPack ) {
                     int bucketIndex = Settings.BucketIndex(tuple);
                     bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
                     if (thisBucketSpilled) {
@@ -646,7 +649,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         MKQL_ENSURE(thisTable, "sanity check");
                         lookupToTable(*thisTable, tuple);
                     }
-                });
+                }
                 state.FetchedPack = std::nullopt;
             }
         } else if (auto* s = std::get_if<DumpRestOfPages>(&State_)) {
@@ -706,9 +709,9 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     } else {
                         if (table->Futures.front().IsReady()) {
                             TPackResult pack = GetPage(*GetFrontOrNull(table->Futures), ESide::Probe);
-                            pack.ForEachTuple([&](TSingleTuple probeTuple) {
+                            for (TSingleTuple probeTuple: pack) {
                                 lookupToTable(table->Table, probeTuple);
-                            });
+                            }
                         } else {
                             return WaitWhileSpilling();
                         }

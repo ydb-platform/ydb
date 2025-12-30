@@ -103,14 +103,19 @@ struct TBucket {
         return DetatchBuildingPageIfLimitReached<0>();
     }
 
-
-    void ForEachPage(std::invocable<TPackResult> auto fn) {
-        for(auto& page: InMemoryPages_) {
-            MKQL_ENSURE(!page.Empty(), "sanity check");
-            fn(std::move(page));
-        }
+    TMKQLVector<TPackResult> DetatchPages() {
+        auto pages = std::move(InMemoryPages_);
         InMemoryPages_.clear();
+        return pages;
     }
+
+    // void ForEachPage(std::invocable<TPackResult> auto fn) {
+    //     for(auto& page: InMemoryPages_) {
+    //         MKQL_ENSURE(!page.Empty(), "sanity check");
+    //         fn(std::move(page));
+    //     }
+    //     InMemoryPages_.clear();
+    // }
 
     template <int SizeLimit> bool DetatchBuildingPageIfLimitReached() {
         if (BuildingPage.AllocatedBytes() > SizeLimit) {

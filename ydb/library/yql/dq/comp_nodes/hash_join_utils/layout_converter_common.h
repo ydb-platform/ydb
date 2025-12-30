@@ -44,15 +44,31 @@ struct TPackResult {
         }
         return allFieldEmpty;
     }
-
-    void ForEachTuple(std::invocable<TSingleTuple> auto fn) const {   // todo: add range-based for support
-        int tupleSize = std::ssize(PackedTuples) / NTuples;
-        for (int index = 0; index < NTuples; ++index) {
-            // Cout << Sprintf("index: %i, ", index);
-            // Cout.Flush();
-            fn(TSingleTuple{ .PackedData = &PackedTuples[index * tupleSize], .OverflowBegin = Overflow.data() });
+    struct Iterator{
+        using difference_type = std::ptrdiff_t;
+        using element_type = const TSingleTuple; // element_type is a reserved name that must be used in the definition
+        using pointer = element_type *;
+        using reference = element_type &;
+    private:
+        const TPackResult* base;
+        i32 index;
+        i32 Width() const {
+            return base->PackedTuples.size() / base->NTuples;
         }
-    }
+    public:
+        Iterator() { MKQL_ENSURE(false,"Not implemented"); }
+        Iterator(const TPackResult& pack, i32 idx) : base(&pack), index(idx) {}
+        element_type operator*() const { return {.PackedData = base->PackedTuples.data() + Width()*index, .OverflowBegin = base->Overflow.data()}; }
+        auto &operator++() { index++; return *this; }
+        auto operator++(int) { auto tmp = *this; ++(*this); return tmp; }
+        auto begin() {return Iterator(*base, 0);}
+        auto end() {return Iterator(*base, base->NTuples);}
+        bool operator==(const Iterator& other) const = default;
+    };
+
+    auto begin() const {return Iterator(*this, 0);}
+    auto end() const {return Iterator(*this, this->NTuples);}
+
 
     void Clear() {
         *this = TPackResult{};

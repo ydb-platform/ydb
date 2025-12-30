@@ -1,4 +1,6 @@
-#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
+#undef INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/api/grpc/ydb_federation_discovery_v1.grpc.pb.h>
 
 #include <ydb/public/sdk/cpp/src/client/federated_topic/impl/federation_observer.h>

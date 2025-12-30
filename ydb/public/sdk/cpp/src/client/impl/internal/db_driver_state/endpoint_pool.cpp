@@ -1,12 +1,19 @@
+#include <library/cpp/logger/log.h>
+
 #define INCLUDE_YDB_INTERNAL_H
 #include "endpoint_pool.h"
 
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
+
 namespace NYdb::inline Dev {
 
-TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client)
+TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client, const TLog& log)
     : Provider_(provider)
+    , Elector_(log)
     , LastUpdateTime_(TInstant::Zero().MicroSeconds())
     , BalancingPolicy_(client->GetBalancingSettings())
+    , Log_(log)
 {}
 
 TEndpointPool::~TEndpointPool() {
@@ -51,12 +58,18 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
                 pileStates[pile.pile_name()] = pile;
             }
 
+            size_t localCount = 0;
+            size_t foreignCount = 0;
+
             for (const auto& endpoint : result.Result.endpoints()) {
                 std::int32_t loadFactor = static_cast<std::int32_t>(multiplicator * std::min(LoadMax, std::max(LoadMin, endpoint.load_factor())));
                 std::uint64_t nodeId = endpoint.node_id();
-                if (!IsPreferredEndpoint(endpoint, selfLocation, pileStates)) {
+                if (IsPreferredEndpoint(endpoint, selfLocation, pileStates)) {
+                    ++localCount;
+                } else {
                     // Location mismatch, shift this endpoint
                     loadFactor += GetLocalityShift();
+                    ++foreignCount;
                 }
 
                 std::string sslTargetNameOverride = endpoint.ssl_target_name_override();
@@ -111,6 +124,13 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
                     records.emplace_back(std::move(endpointString), loadFactor, std::move(sslTargetNameOverride), nodeId);
                 }
             }
+
+            LOG_LAZY(Log_, TLOG_DEBUG,
+                TStringBuilder() << "[Driver] Endpoints parsed: count=" << records.size()
+                    << ", self_location=" << selfLocation
+                    << ", local=" << localCount
+                    << ", foreign=" << foreignCount);
+
             LastUpdateTime_ = TInstant::Now().MicroSeconds();
             removed = Elector_.SetNewState(std::move(records));
         }

@@ -1,6 +1,8 @@
 #include "read_session.h"
 
-#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>

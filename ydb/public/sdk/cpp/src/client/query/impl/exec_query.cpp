@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/session/kqp_session_common.h>
 #include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log_lazy.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -377,6 +378,10 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
     const TDbDriverStatePtr& driverState, const std::string& query, const TTxControl& txControl,
     const std::optional<TParams>& params, const TExecuteQuerySettings& settings, const std::optional<TSession>& session)
 {
+    LOG_LAZY(driverState->Log, TLOG_DEBUG,
+        TStringBuilder() << "[Query] StreamExecuteQuery"
+            << (session.has_value() ? TStringBuilder() << ": session_id=" << session->GetId() : TStringBuilder()));
+
     TPlainStatus plainStatus;
     TExecuteQueryProcessorPtr processor;
 
@@ -420,6 +425,10 @@ TAsyncExecuteQueryResult TExecQueryImpl::ExecuteQuery(const std::shared_ptr<TGRp
     const TDbDriverStatePtr& driverState, const std::string& query, const TTxControl& txControl,
     const std::optional<TParams>& params, const TExecuteQuerySettings& settings, const std::optional<TSession>& session)
 {
+    LOG_LAZY(driverState->Log, TLOG_DEBUG,
+        TStringBuilder() << "[Query] ExecuteQuery"
+            << (session.has_value() ? TStringBuilder() << ": session_id=" << session->GetId() : TStringBuilder()));
+
     auto syncSettings = settings;
     syncSettings.ConcurrentResultSets(true);
 

@@ -12,6 +12,8 @@
 
 #include <mutex>
 
+class TLog;
+
 namespace NYdb::inline Dev {
 
 struct TListEndpointsResult {
@@ -29,7 +31,7 @@ struct TEndpointUpdateResult {
 
 class TEndpointPool {
 public:
-    TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client);
+    TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client, const TLog& log);
     ~TEndpointPool();
     std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> UpdateAsync();
     TEndpointRecord GetEndpoint(const TEndpointKey& preferredEndpoint, bool onlyPreferred = false) const;
@@ -60,6 +62,7 @@ private:
     const TBalancingPolicy::TImpl BalancingPolicy_;
 
     NSdkStats::TStatCollector* StatCollector_ = nullptr;
+    const TLog& Log_;
 
     // Max, min load factor returned by discovery service
     static constexpr float LoadMax = 100.0;

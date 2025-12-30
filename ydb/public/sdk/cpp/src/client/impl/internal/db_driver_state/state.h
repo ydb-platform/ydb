@@ -55,7 +55,6 @@ public:
     const TSslCredentials SslCredentials;
     std::shared_ptr<ICredentialsProvider> CredentialsProvider;
     IInternalClient* Client;
-    TEndpointPool EndpointPool;
     // StopCb allow client to subscribe for notifications from lower layer
     std::mutex NotifyCbsLock;
     std::array<std::vector<TCb>, static_cast<size_t>(ENotifyType::COUNT)> NotifyCbs;
@@ -67,6 +66,7 @@ public:
     TPlainStatus LastDiscoveryStatus;
     NSdkStats::TStatCollector StatCollector;
     TLog Log;
+    TEndpointPool EndpointPool;
     NThreading::TPromise<void> DiscoveryCompletedPromise;
 };
 

@@ -1368,6 +1368,10 @@ private:
             Visit(b.GetRule_values_source_row2());
         }
 
+        if (rowList.HasBlock3()) {
+            Visit(rowList.GetBlock3().GetToken1());
+        }
+
         PopCurrentIndent();
         NewLine();
     }
@@ -1859,9 +1863,13 @@ private:
                         Visit(block.GetRule_an_id2());
                     }
 
+                    if (columns.HasBlock4()) {
+                        Visit(columns.GetBlock4().GetToken1());
+                    }
+
                     PopCurrentIndent();
                     NewLine();
-                    Visit(columns.GetToken4());
+                    Visit(columns.GetToken5());
                     NewLine();
                 }
 
@@ -2297,9 +2305,13 @@ private:
                     Visit(block.GetRule_an_id2());
                 }
 
+                if (columns.HasBlock4()) {
+                    Visit(columns.GetBlock4().GetToken1());
+                }
+
                 NewLine();
                 PopCurrentIndent();
-                Visit(columns.GetToken4());
+                Visit(columns.GetToken5());
             }
         }
 
@@ -2362,9 +2374,13 @@ private:
                 Visit(block.GetRule_an_id2());
             }
 
+            if (columns.HasBlock4()) {
+                Visit(columns.GetBlock4().GetToken1());
+            }
+
             PopCurrentIndent();
             NewLine();
-            Visit(columns.GetToken4());
+            Visit(columns.GetToken5());
             PopCurrentIndent();
         }
     }

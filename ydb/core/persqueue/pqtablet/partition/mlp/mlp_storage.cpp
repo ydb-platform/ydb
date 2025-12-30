@@ -502,7 +502,7 @@ std::pair<const TStorage::TMessage*, bool> TStorage::GetMessage(ui64 message) {
 }
 
 std::deque<TDLQMessage> TStorage::GetDLQMessages() {
-    static constexpr size_t MaxBatchSize = 100;
+    static constexpr size_t MaxBatchSize = 1000;
 
     auto retentionDeadlineDelta = GetRetentionDeadlineDelta();
 

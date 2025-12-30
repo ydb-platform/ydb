@@ -1,4 +1,5 @@
 #include <util/network/sock.h>
+#include <util/system/error.h>
 #include "http_proxy.h"
 #include "http_proxy_ssl.h"
 
@@ -120,10 +121,21 @@ protected:
             SocketAddressType addr;
             std::optional<SocketType> s = Socket->Socket.Accept(addr);
             if (!s) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                const int acceptErrno = errno;
+                if (acceptErrno == EINTR) {
+                    continue;
+                }
+                if (acceptErrno == EAGAIN || acceptErrno == EWOULDBLOCK) {
                     Y_ABORT_UNLESS(PollerToken);
                     if (PollerToken->RequestReadNotificationAfterWouldBlock()) {
                         continue; // we can try it again
+                    }
+                } else {
+                    ALOG_WARN(HttpLog,
+                        "Accept failed on " << (Endpoint ? Endpoint->WorkerName : TString(""))
+                        << ": errno=" << acceptErrno << " (" << LastSystemErrorText(acceptErrno) << ")");
+                    if (PollerToken) {
+                        PollerToken->Request(true, false);
                     }
                 }
                 break;

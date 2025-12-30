@@ -70,6 +70,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                                     TABLEH() {str << "Processing Count";}
                                     TABLEH() {str << "Processing Deadline";}
                                     TABLEH() {str << "Locking Timestamp";}
+                                    TABLEH() {str << "Offset";}
                                 }
                             }
                             TABLEBODY() {
@@ -82,6 +83,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                                         TABLED() { str << message.ProcessingCount; }
                                         TABLED() { str << (TInstant::Zero() == message.ProcessingDeadline ? "" : message.ProcessingDeadline.ToString()); }
                                         TABLED() { str << (TInstant::Zero() == message.LockingTimestamp ? "" : message.LockingTimestamp.ToString()); }
+                                        TABLED() { str << message.Offset; }
                                     }
                                 }
                             }

@@ -3983,7 +3983,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             if (useNamed) {
                 *mustUseNamed = false;
             }
-            return TNonNull(TNodePtr(new THoppingWindow(pos, args, useNamed)));
+            return new THoppingWindow(pos, args, useNamed);
         } else {
             return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown builtin: " << name);
         }

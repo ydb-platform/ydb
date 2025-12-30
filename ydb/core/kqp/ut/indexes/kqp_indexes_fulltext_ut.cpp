@@ -2352,7 +2352,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsEmpty) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::FulltextContains(`Text`, "404 not found")
+            WHERE FullText::Contains(`Text`, "404 not found")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -2366,7 +2366,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsEmpty) {
         TString query = R"sql(
             SELECT `Key`, `Text`
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::FulltextContains(`Text`, "404 not found")
+            WHERE FullText::Contains(`Text`, "404 not found")
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -2386,7 +2386,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsWithoutTextField) {
     TString query = R"sql(
         SELECT `Key`
         FROM `/Root/Texts` VIEW `fulltext_idx`
-        WHERE FullText::FulltextContains(`Text`, "dogs")
+        WHERE FullText::Contains(`Text`, "dogs")
         ORDER BY `Key`;
     )sql";
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();

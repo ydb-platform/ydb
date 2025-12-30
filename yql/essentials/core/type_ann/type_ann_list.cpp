@@ -6863,7 +6863,7 @@ namespace {
                     return IGraphTransformer::TStatus::Repeat;
                 }
                 const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-                auto convertStatus = TryConvertTo(farFutureSizeLimit, *expectedType, ctx.Expr, ctx.Types);
+                auto convertStatus = TryConvertTo(farFutureSizeLimit, *expectedType, ctx.Expr);
                 if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
                     return convertStatus;
                 }

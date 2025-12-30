@@ -2006,9 +2006,16 @@ void THive::Handle(TEvHive::TEvRequestHiveInfo::TPtr& ev) {
             BLOG_W("Can't find the tablet from RequestHiveInfo(TabletID=" << tabletId << ")");
         }
     } else {
+        std::optional<TSubDomainKey> filterObjectDomain;
+        if (record.HasFilterTabletsByObjectDomain()) {
+            filterObjectDomain = TSubDomainKey(record.GetFilterTabletsByObjectDomain());
+        }
         response->Record.MutableTablets()->Reserve(Tablets.size());
         for (auto it = Tablets.begin(); it != Tablets.end(); ++it) {
             if (record.HasTabletType() && record.GetTabletType() != it->second.Type) {
+                continue;
+            }
+            if (filterObjectDomain && it->second.NodeFilter.ObjectDomain != *filterObjectDomain) {
                 continue;
             }
             if (it->second.IsDeleting()) {

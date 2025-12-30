@@ -246,6 +246,7 @@ public:
 
     THashMap<TPathId, TTableInfo::TPtr> Tables;
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
+    ui32 MaxTTLShardsInFlight = 0;
 
     THashMap<TPathId, TTableIndexInfo::TPtr> Indexes;
     THashMap<TPathId, TCdcStreamInfo::TPtr> CdcStreams;

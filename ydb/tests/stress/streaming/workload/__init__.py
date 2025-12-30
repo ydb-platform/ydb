@@ -2,6 +2,9 @@
 import ydb
 import time
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Workload():
@@ -16,10 +19,12 @@ class Workload():
         self.output_topic = f'{prefix}/output_topic'
         self.query_name = f'{prefix}/query_name'
         self.consumer_name = 'consumer_name'
-        self.partitions_count = partitions_count
+        self.partitions_count = 1 #partitions_count
         self.receive_message_timeout_sec = 1
+        logger.info("Workload::init")
 
     def create_topics(self):
+        logger.info("Workload::create_topics")
         self.pool.execute_with_retries(
             f"""
                 CREATE TOPIC `{self.input_topic}` WITH (min_active_partitions = {self.partitions_count}, retention_period = Interval('PT1H'));
@@ -28,6 +33,8 @@ class Workload():
         )
 
     def drop_topics(self):
+        logger.info("Workload::drop_topics")
+
         self.pool.execute_with_retries(
             f"""
                 DROP TOPIC  `{self.input_topic}`;
@@ -36,6 +43,7 @@ class Workload():
         )
 
     def create_external_data_source(self):
+        logger.info("Workload::create_external_data_source")
         self.pool.execute_with_retries(
             f"""
                 CREATE EXTERNAL DATA SOURCE `{self.prefix}/source_name` WITH (
@@ -48,6 +56,7 @@ class Workload():
         )
 
     def create_streaming_query(self):
+        logger.info("Workload::create_streaming_query")
         self.pool.execute_with_retries(
             f"""
                 CREATE STREAMING QUERY `{self.prefix}/query_name` AS DO BEGIN
@@ -84,23 +93,87 @@ class Workload():
             raise Exception(f"Unexpected query status: expected 'RUNNING', got '{status}'")
 
     def write_to_input_topic(self):
-        finished_at = time.time() + self.duration
-
+        logger.info("Workload::write_to_input_topic")
+        
         writers = []
+    #    # for i in range(self.partitions_count):
+    #     #logger.info(f"writers add {i}")
+    #    # writer = self.driver.topic_client.writer(self.input_topic, partition_id=0)
+    #     writer = self.driver.topic_client.writer(self.input_topic, producer_id="producer-id")
+        
+    #     messages = []
+    #     for i in range(100):
+    #         level = "error" if random.choice([True, False]) else "warn"
+    #         messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
+    #     writer.write(messages)
+    #   #  writer.flush()
+    #     writer.close(flush=False)
+
+    #     # self.write_to_input_topic_impl(writers)
+    #     logger.info("Workload::write_to_input_topic finished_at")
+    #     # for writer in writers:
+    #     #     logger.info("Workload::close")
+    #     #     # try:
+    #     #     # #    writer.close(flush=False)
+    #     #     # except Exception:
+    #     #     #     pass
+    #     #     logger.info("Workload::close end")
+        finished_at = time.time() + self.duration
         for i in range(self.partitions_count):
             writers.append(self.driver.topic_client.writer(self.input_topic, partition_id=i))
 
-        while time.time() < finished_at:
-            for writer in writers:
+        #while time.time() < finished_at:
+            # for writer in writers:
+            #     messages = []
+            #     for i in range(100):
+            #         level = "error" if random.choice([True, False]) else "warn"
+            #         messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
+            #     writer.write(messages)
+
+        with self.driver.topic_client.writer(self.input_topic, producer_id="producer-id") as writer:
+            while time.time() < finished_at:
                 messages = []
                 for i in range(100):
                     level = "error" if random.choice([True, False]) else "warn"
                     messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
+                logger.info("write")
                 writer.write(messages)
+                logger.info("write end")
+
+        # for writer in writers:
+        #     logger.info("close")
+        #     writer.close(flush=False)
+        #     logger.info("close end")
+        logger.info("Workload::write_to_input_topic end")
+
+    def write_to_input_topic_impl(self, writers):
+        finished_at = time.time() + self.duration
+        logger.info(f"Workload::write_to_input_topic finished_at: {finished_at}")
+
+        # while time.time() < finished_at:
+        #     for writer in writers:
+        #         messages = []
+        #         for i in range(100):
+        #             level = "error" if random.choice([True, False]) else "warn"
+        #             messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
+        #         writer.write(messages)
+        #         break
+        #         if time.time() > finished_at:
+        #             return
+
         for writer in writers:
-            writer.close()
+            messages = []
+            for i in range(100):
+                level = "error" if random.choice([True, False]) else "warn"
+                messages.append(f'{{"time": {int(time.time() * 1000000)}, "level": "{level}"}}')
+            writer.write(messages)
+           
+
+
+        logger.info("Workload::write_to_input_topic finished")
 
     def read_from_output_topic(self):
+        logger.info("Workload::read_from_output_topic")
         count = 0
         with self.driver.topic_client.reader(self.output_topic, self.consumer_name) as reader:
             while True:

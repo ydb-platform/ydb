@@ -281,6 +281,7 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         const THashMap<TString, TString>& SecureParams;
         size_t MaxKeysInRequest;
+        const bool IsMultiMatches;
     };
 
     struct TSinkArguments {

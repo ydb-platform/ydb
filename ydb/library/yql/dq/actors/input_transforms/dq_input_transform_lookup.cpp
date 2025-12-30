@@ -47,11 +47,7 @@ public:
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
-        const THashMap<TString, TString>& secureParams,
-        size_t maxDelayedRows,
-        size_t cacheLimit,
-        std::chrono::seconds cacheTtl
-    )
+        const THashMap<TString, TString>& secureParams)
         : TActor(&TInputTransformStreamLookupDerivedBase::StateFunc)
         , Alloc(alloc)
         , HolderFactory(holderFactory)
@@ -72,9 +68,10 @@ public:
         , OutputRowType(outputRowType)
         , OutputRowColumnOrder(std::move(outputRowColumnOrder))
         , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
-        , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(cacheLimit, lookupKeyType))
-        , MaxDelayedRows(maxDelayedRows)
-        , CacheTtl(cacheTtl)
+        , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(Settings.GetCacheLimit(), lookupKeyType))
+        , MaxDelayedRows(Settings.GetMaxDelayedRows())
+        , CacheTtl(std::chrono::seconds(Settings.GetCacheTtlSeconds()))
+        , IsMultiMatches(Settings.GetIsMultiMatches())
         , MinimumRowSize(OutputRowColumnOrder.size()*sizeof(NUdf::TUnboxedValuePod))
         , PayloadExtraSize(0)
         , ReadyQueue(OutputRowType)
@@ -160,7 +157,8 @@ private: //IDqComputeActorAsyncInput
                 .TypeEnv = TypeEnv,
                 .HolderFactory = HolderFactory,
                 .SecureParams = SecureParams,
-                .MaxKeysInRequest = 1000 // TODO configure me
+                .MaxKeysInRequest = 1000, // TODO configure me
+                .IsMultiMatches = IsMultiMatches,
             };
             auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
             MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
@@ -241,6 +239,7 @@ protected:
     std::unique_ptr<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl> LruCache;
     size_t MaxDelayedRows;
     std::chrono::seconds CacheTtl;
+    const bool IsMultiMatches;
     size_t MinimumRowSize; // only account for unboxed parts
     size_t PayloadExtraSize; // non-embedded part of strings in ReadyQueue
     NKikimr::NMiniKQL::TUnboxedValueBatch ReadyQueue;
@@ -273,7 +272,7 @@ private: //events
     )
 
 private:
-    void AddReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, NUdf::TUnboxedValue *lookupPayload) {
+    void AddSingleReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, const NUdf::TUnboxedValue *lookupPayload) {
             NUdf::TUnboxedValue* outputRowItems;
             NUdf::TUnboxedValue outputRow = HolderFactory.CreateDirectArrayHolder(OutputRowColumnOrder.size(), outputRowItems);
             for (size_t i = 0; i != OutputRowColumnOrder.size(); ++i) {
@@ -286,10 +285,12 @@ private:
                         outputRowItems[i] = inputOther.GetElement(index);
                         break;
                     case EOutputRowItemSource::LookupKey:
-                        outputRowItems[i] = lookupPayload && *lookupPayload ? lookupKey.GetElement(index) : NUdf::TUnboxedValue {};
+                        if (lookupPayload) {
+                            outputRowItems[i] = lookupKey.GetElement(index);
+                        }
                         break;
                     case EOutputRowItemSource::LookupOther:
-                        if (lookupPayload && *lookupPayload) {
+                        if (lookupPayload) {
                             outputRowItems[i] = lookupPayload->GetElement(index);
                         }
                         break;
@@ -302,6 +303,24 @@ private:
                 }
             }
             ReadyQueue.PushRow(outputRowItems, OutputRowType->GetElementsCount());
+    }
+
+    void AddReadyQueue(NUdf::TUnboxedValue& lookupKey, NUdf::TUnboxedValue& inputOther, NUdf::TUnboxedValue *lookupPayload) {
+        if (lookupPayload && !*lookupPayload) {
+            lookupPayload = nullptr;
+        }
+        if (IsMultiMatches && lookupPayload) {
+            auto ptr = lookupPayload->GetElements();
+            Y_ENSURE(ptr);
+            auto size = lookupPayload->GetListLength();
+            Y_ENSURE(size > 0);
+            // TODO consider by-column for large size
+            for (; size--; ++ptr) {
+                AddSingleReadyQueue(lookupKey, inputOther, ptr);
+            }
+            return;
+        }
+        AddSingleReadyQueue(lookupKey, inputOther, lookupPayload);
     }
 
     void Handle(IDqAsyncLookupSource::TEvLookupResult::TPtr ev) {
@@ -1098,10 +1117,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 lookupPayloadType,
                 outputRowType,
                 std::move(outputColumnsOrder),
-                args.SecureParams,
-                settings.GetMaxDelayedRows(),
-                settings.GetCacheLimit(),
-                std::chrono::seconds(settings.GetCacheTtlSeconds())
+                args.SecureParams
             ) :
             (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupNarrow(
                 args.Alloc,
@@ -1120,10 +1136,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 lookupPayloadType,
                 outputRowType,
                 std::move(outputColumnsOrder),
-                args.SecureParams,
-                settings.GetMaxDelayedRows(),
-                settings.GetCacheLimit(),
-                std::chrono::seconds(settings.GetCacheTtlSeconds())
+                args.SecureParams
             );
         return {actor, actor};
     }
@@ -1145,10 +1158,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
-            args.SecureParams,
-            settings.GetMaxDelayedRows(),
-            settings.GetCacheLimit(),
-            std::chrono::seconds(settings.GetCacheTtlSeconds())
+            args.SecureParams
         ) :
         (TInputTransformStreamLookupBase*)new TInputTransformStreamLookupNarrow(
             args.Alloc,
@@ -1167,10 +1177,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
-            args.SecureParams,
-            settings.GetMaxDelayedRows(),
-            settings.GetCacheLimit(),
-            std::chrono::seconds(settings.GetCacheTtlSeconds())
+            args.SecureParams
         );
     return {actor, actor};
 }

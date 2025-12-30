@@ -684,7 +684,7 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 11, 12, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 11, 13, ctx)) {
         return TStatus::Error;
     }
     if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_Output), ctx)) {

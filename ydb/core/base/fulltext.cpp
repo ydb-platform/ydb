@@ -338,6 +338,33 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
     return tokens;
 }
 
+TVector<TString> BuildSearchTerms(const TString& query, Ydb::Table::FulltextIndexSettings::Analyzers settings) {
+    const bool expectWildcard = settings.use_filter_ngram() || settings.use_filter_edge_ngram();
+    const bool edge = settings.use_filter_edge_ngram();
+
+    if (!expectWildcard) {
+        return Analyze(query, settings);
+    }
+
+    // Prevent splitting tokens into ngrams
+    settings.set_use_filter_ngram(false);
+    settings.set_use_filter_edge_ngram(false);
+
+    TVector<TString> searchTerms;
+    for (const TString& pattern : Analyze(query, settings, '*')) {
+        for (const auto& term : StringSplitter(pattern).Split('*')) {
+            const TString token(term.Token());
+            if (settings.filter_ngram_min_length() > static_cast<i32>(token.size())) {
+                continue;
+            }
+
+            const size_t upper = MIN(settings.filter_ngram_max_length(), static_cast<i32>(token.size()));
+            BuildNgrams(token, upper, upper, edge, searchTerms);
+        }
+    }
+    return searchTerms;
+}
+
 bool ValidateColumnsMatches(const NProtoBuf::RepeatedPtrField<TString>& columns, const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
     return ValidateColumnsMatches(TVector<TString>{columns.begin(), columns.end()}, settings, error);
 }

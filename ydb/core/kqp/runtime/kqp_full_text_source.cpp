@@ -1020,7 +1020,7 @@ private:
 
                 if (analyzer.column() == column.GetName()) {
                     size_t wordIndex = 0;
-                    for(TString query: NFulltext::Analyze(expr, analyzer.analyzers())) {
+                    for (const TString& query: NFulltext::BuildSearchTerms(expr, analyzer.analyzers())) {
                         YQL_ENSURE(IndexTableReader);
                         Words.emplace_back(TWordReadState(wordIndex++, query, IndexTableReader));
                     }

@@ -15,7 +15,7 @@ from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
 
 from ydb.tests.tools.datastreams_helpers.control_plane import list_read_rules
-from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule, delete_stream
+from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule, delete_stream, update_stream
 from ydb.tests.tools.datastreams_helpers.data_plane import read_stream, write_stream
 from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
 
@@ -1335,3 +1335,55 @@ class TestPqRowDispatcher(TestYdsBase):
         for i in range(message_count):
             self.write_stream(['{"time": 101, "data": "Relativitätstheorie"}'], topic_path=None, partition_key=str(i))
         assert self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count
+
+    @yq_v1
+    def test_change_partition_count(self, kikimr, client):
+        self.init(client, "test_change_partition_count", partitions=1)
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = ['{"time": 101}']
+        self.write_stream(data)
+        expected = ['101']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        self.update_stream(self.input_topic, partitions_count=2)
+
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
+        )
+        # rename 
+        client.modify_query(
+            query_id,
+            "WATCHDOG.STOPPED",
+            sql,
+            execute_mode=fq.ExecuteMode.SAVE,
+            type=fq.QueryContent.QueryType.STREAMING
+        )
+
+        # stop
+        stop_yds_query(client, query_id)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+
+        # start / continue
+        client.modify_query(
+            query_id,
+            "WATCHDOG",
+            sql,
+            type=fq.QueryContent.QueryType.STREAMING,
+            state_load_mode=fq.StateLoadMode.EMPTY,
+            streaming_disposition=StreamingDisposition.from_last_checkpoint(force=True),
+        )
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+
+        data = ['{"time": 203}']
+        self.write_stream(data)
+        expected = ['203']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        stop_yds_query(client, query_id)

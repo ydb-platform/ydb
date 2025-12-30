@@ -18,7 +18,7 @@ class Workload():
         self.prefix = prefix
         self.input_topic = f'{prefix}/input_topic'
         self.output_topic = f'{prefix}/output_topic'
-        self.query_name = f'{prefix}/query_name'for i in range(100):
+        self.query_name = f'{prefix}/query_name'
         self.consumer_name = 'consumer_name'
         self.partitions_count = partitions_count
         self.receive_message_timeout_sec = 1

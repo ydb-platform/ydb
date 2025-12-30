@@ -346,14 +346,8 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
 
-        uint i = 0;
-        auto data = TStringBuilder();
-
-        while (i++ < 1000) {
-            data << 'X';
-        }
-
-        i = 1;
+        uint i = 1;
+        auto data = TString(1000,'X');
 
         do {
             auto insertQuery = TStringBuilder()

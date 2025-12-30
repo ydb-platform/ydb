@@ -2144,7 +2144,10 @@ public:
 
     void FillQueryIssues(const NYql::TIssues& issues) {
         if (!QueryState) {
-            STLOG_W("Try to put issues into empty QueryState", (trace_id, TraceId()));
+            STLOG_W("Try to put issues into empty QueryState", 
+                (issues, issues.ToOneLineString()),
+                (trace_id, TraceId())
+            );
             return;
         }
 

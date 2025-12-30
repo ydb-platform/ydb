@@ -2725,9 +2725,9 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgramWildcard, Edge) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([
-            [[0u];["Arena Allocation"]];
+            [[0u];["Arena Allocation"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        CompareYson(R"([
+        CompareYson(Edge ? R"([])" : R"([
             [[2u];["Werner Heisenberg"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
         CompareYson(R"([

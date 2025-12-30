@@ -474,6 +474,7 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId id, const TT
 TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 bool CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 bool CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result, TPathId& outStream);
+bool CreateAlterContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result, TPathId& outStream, ui64 coordinatedVersion);
 TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateBackup(TOperationId id, const TTxTransaction& tx);

@@ -213,6 +213,140 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
     return CreateAlterContinuousBackup(opId, tx, context, result, unused);
 }
 
+bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result, TPathId& outStream, ui64 coordinatedVersion) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup);
+
+    const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+    const auto& cbOp = tx.GetAlterContinuousBackup();
+    const auto& tableName = cbOp.GetTableName();
+    const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
+
+    TMaybeFail<TString> lastStreamName;
+    static_assert(
+        std::is_same_v<
+            TMap<TString, TPathId>,
+            std::decay_t<decltype(tablePath.Base()->GetChildren())>> == true,
+        "Assume path children list is lexicographically sorted");
+
+    for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+        if (childName.EndsWith("_continuousBackupImpl")) {
+            TPath childPath = tablePath.Child(childName);
+            if (!childPath.IsDeleted() && childPath.IsCdcStream()) {
+                if (context.SS->CdcStreams.contains(childPathId)) {
+                    const auto& streamInfo = context.SS->CdcStreams.at(childPathId);
+                    if (streamInfo->Format == NKikimrSchemeOp::ECdcStreamFormatProto) {
+                        lastStreamName = childName;
+                    }
+                }
+            }
+        }
+    }
+
+    if (lastStreamName.Empty()) {
+        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
+            TStringBuilder() << "Last continuous backup stream is not found")};
+        return false;
+    }
+
+    const auto checksResult = NCdc::DoAlterStreamPathChecks(opId, workingDirPath, tableName, *lastStreamName);
+    if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
+        result = {std::get<ISubOperation::TPtr>(checksResult)};
+        return false;
+    }
+
+    const auto [_, streamPath] = std::get<NCdc::TStreamPaths>(checksResult);
+    TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
+
+    const auto topicPath = streamPath.Child("streamImpl");
+    TTopicInfo::TPtr topic = context.SS->Topics.at(topicPath.Base()->PathId);
+
+    const auto backupTablePath = workingDirPath.Child(cbOp.GetTakeIncrementalBackup().GetDstPath(), TPath::TSplitChildTag{});
+
+    const NScheme::TTypeRegistry* typeRegistry = AppData(context.Ctx)->TypeRegistry;
+
+    NKikimrSchemeOp::TTableDescription schema;
+    context.SS->DescribeTable(*table, typeRegistry, true, &schema);
+
+    TString errStr;
+    if (!context.SS->CheckApplyIf(tx, errStr)) {
+        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};
+        return false;
+    }
+
+    if (!context.SS->CheckLocks(tablePath.Base()->PathId, tx, errStr)) {
+        result = {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, errStr)};
+        return false;
+    }
+
+    switch (cbOp.GetActionCase()) {
+    case NKikimrSchemeOp::TAlterContinuousBackup::kStop:
+    case NKikimrSchemeOp::TAlterContinuousBackup::kTakeIncrementalBackup:
+        break;
+    default:
+        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+            << "Unknown action: " << static_cast<ui32>(cbOp.GetActionCase()))};
+
+        return false;
+    }
+
+    if (cbOp.GetActionCase() == NKikimrSchemeOp::TAlterContinuousBackup::kTakeIncrementalBackup) {
+        TString newStreamName;
+        if (cbOp.GetTakeIncrementalBackup().HasDstStreamPath()) {
+            newStreamName = cbOp.GetTakeIncrementalBackup().GetDstStreamPath();
+        } else {
+            newStreamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
+        }
+
+        const auto cdcChecksResult = NCdc::DoNewStreamPathChecks(context, opId, workingDirPath, tableName, newStreamName, false);
+        if (std::holds_alternative<ISubOperation::TPtr>(cdcChecksResult)) {
+            result = {std::get<ISubOperation::TPtr>(cdcChecksResult)};
+            return false;
+        }
+
+        const auto [_, newStreamPath] = std::get<NCdc::TStreamPaths>(cdcChecksResult);
+
+        NKikimrSchemeOp::TRotateCdcStream rotateCdcStreamOp;
+        rotateCdcStreamOp.SetTableName(tableName);
+        rotateCdcStreamOp.SetOldStreamName(*lastStreamName);
+        rotateCdcStreamOp.SetCoordinatedSchemaVersion(coordinatedVersion);
+
+        NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
+        createCdcStreamOp.SetTableName(tableName);
+        auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
+        streamDescription.SetName(newStreamName);
+        streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+        streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+
+        rotateCdcStreamOp.MutableNewStream()->CopyFrom(createCdcStreamOp);
+
+        NCdc::DoRotateStream(result, rotateCdcStreamOp, opId, workingDirPath, tablePath);
+        DoCreateIncrBackupTable(opId, backupTablePath, schema, result);
+        DoAlterPqPart(opId, backupTablePath, topicPath, topic, result);
+
+        TVector<TString> boundaries;
+        const auto& partitions = table->GetPartitions();
+        boundaries.reserve(partitions.size() - 1);
+
+        for (ui32 i = 0; i < partitions.size(); ++i) {
+            const auto& partition = partitions.at(i);
+            if (i != partitions.size() - 1) {
+                boundaries.push_back(partition.EndOfRange);
+            }
+        }
+
+        NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, newStreamPath, newStreamName, table, boundaries, false);
+    } else if (cbOp.GetActionCase() == NKikimrSchemeOp::TAlterContinuousBackup::kStop) {
+        NKikimrSchemeOp::TAlterCdcStream alterCdcStreamOp;
+        alterCdcStreamOp.SetTableName(tableName);
+        alterCdcStreamOp.SetStreamName(*lastStreamName);
+        alterCdcStreamOp.MutableDisable();
+        NCdc::DoAlterStream(result, alterCdcStreamOp, opId, workingDirPath, tablePath);
+    }
+
+    outStream = streamPath->PathId;
+    return true;
+}
+
 TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     TVector<ISubOperation::TPtr> result;
 

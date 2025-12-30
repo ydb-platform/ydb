@@ -36,19 +36,4 @@ void CheckSrcDirOnPropose(
 
 namespace NKikimr::NSchemeShard::NCdcStreamState {
 
-// Synchronize child index versions when parent table version is updated for continuous backup
-void SyncIndexEntityVersion(
-    const TPathId& indexPathId,
-    ui64 targetVersion,
-    TOperationId operationId,
-    TOperationContext& context,
-    NIceDb::TNiceDb& db);
-
-void SyncChildIndexes(
-    TPathElement::TPtr parentPath,
-    ui64 targetVersion,
-    TOperationId operationId,
-    TOperationContext& context,
-    NIceDb::TNiceDb& db);
-
 } // namespace NKikimr::NSchemeShard::NCdcStreamState

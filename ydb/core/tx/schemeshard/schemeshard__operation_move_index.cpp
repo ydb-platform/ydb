@@ -85,7 +85,12 @@ public:
 
             auto notice = tx.MutableMoveIndex();
             pathId.ToProto(notice->MutablePathId());
-            notice->SetTableSchemaVersion(table->AlterVersion + 1);
+            // Use coordinated version if available (from backup operations)
+            if (txState->CoordinatedSchemaVersion.Defined()) {
+                notice->SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
+            } else {
+                notice->SetTableSchemaVersion(table->AlterVersion + 1);
+            }
 
             auto remap = notice->MutableReMapIndex();
 
@@ -281,10 +286,43 @@ public:
         Y_ABORT_UNLESS(txState->PlanStep);
 
         NIceDb::TNiceDb db(context.GetDB());
-        table->AlterVersion += 1;
+        // Use coordinated version if available (from backup operations)
+        // Otherwise, increment by 1 for backward compatibility
+        if (txState->CoordinatedSchemaVersion.Defined()) {
+            table->AlterVersion = *txState->CoordinatedSchemaVersion;
+        } else {
+            table->AlterVersion += 1;
+        }
 
         context.SS->PersistTableAlterVersion(db, path->PathId, table);
 
+        // Sync child index versions with main table to prevent version mismatch
+        // CRITICAL: Must sync and publish indexes BEFORE publishing main table
+        // so that main table's TIndexDescription.SchemaVersion values are current
+        for (const auto& [childName, childPathId] : path->GetChildren()) {
+            if (context.SS->PathsById.contains(childPathId)) {
+                auto childPath = context.SS->PathsById.at(childPathId);
+                if (childPath->IsTableIndex() && !childPath->Dropped()) {
+                    if (context.SS->Indexes.contains(childPathId)) {
+                        auto index = context.SS->Indexes.at(childPathId);
+                        if (index->AlterVersion < table->AlterVersion) {
+                            index->AlterVersion = table->AlterVersion;
+                            // If there's ongoing alter operation, also update alterData version to converge
+                            if (index->AlterData && index->AlterData->AlterVersion < table->AlterVersion) {
+                                index->AlterData->AlterVersion = table->AlterVersion;
+                                context.SS->PersistTableIndexAlterData(db, childPathId);
+                            }
+                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                            context.SS->ClearDescribePathCaches(childPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Publish main table LAST so its TIndexDescription.SchemaVersion values are current
+        context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;

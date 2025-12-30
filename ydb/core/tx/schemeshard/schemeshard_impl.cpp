@@ -1905,7 +1905,8 @@ void TSchemeShard::PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId)
 
     TTableIndexInfo::TPtr alterData = index->AlterData;
     Y_ABORT_UNLESS(alterData);
-    Y_ABORT_UNLESS(index->AlterVersion < alterData->AlterVersion);
+    // Relaxed to <= to allow convergence when multiple operations use CoordinatedSchemaVersion
+    Y_ABORT_UNLESS(index->AlterVersion <= alterData->AlterVersion);
 
     db.Table<Schema::TableIndex>().Key(element->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(alterData->AlterVersion),
@@ -2636,6 +2637,9 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         if (txState.TargetPathTargetState) {
             proto.MutableTxCopyTableExtraData()->SetTargetPathTargetState(*txState.TargetPathTargetState);
         }
+        if (txState.CoordinatedSchemaVersion) {
+            proto.MutableTxCopyTableExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
+        }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     } else if (txState.TxType == TTxState::TxChangePathState) {
@@ -2648,6 +2652,9 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
     }  else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
+        if (txState.CoordinatedSchemaVersion) {
+            proto.MutableTxCdcStreamExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
+        }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable ||
@@ -2658,6 +2665,9 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
                txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
+        if (txState.CoordinatedSchemaVersion) {
+            proto.MutableTxCdcStreamExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
+        }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     }

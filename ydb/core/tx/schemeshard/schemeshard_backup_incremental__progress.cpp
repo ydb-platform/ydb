@@ -44,6 +44,26 @@ public:
         const auto& tablePath = Self->PathsById.at(streamPath->ParentPathId);
         const auto& workingDir = Self->PathToString(Self->PathsById.at(tablePath->ParentPathId));
 
+        TMaybe<ui64> coordinatedVersion;
+        TPathId tablePathId = streamPath->ParentPathId;
+        if (Self->Tables.contains(tablePathId)) {
+            ui64 tableVersion = Self->Tables.at(tablePathId)->AlterVersion;
+            ui64 maxVersion = tableVersion;
+
+            if (Self->PathsById.contains(tablePathId)) {
+                auto tablePathInfo = Self->PathsById.at(tablePathId);
+                if (tablePathInfo->ParentPathId && Self->PathsById.contains(tablePathInfo->ParentPathId)) {
+                    auto parentPath = Self->PathsById.at(tablePathInfo->ParentPathId);
+                    if (parentPath->IsTableIndex() && Self->Indexes.contains(tablePathInfo->ParentPathId)) {
+                        auto index = Self->Indexes.at(tablePathInfo->ParentPathId);
+                        maxVersion = Max(maxVersion, index->AlterVersion);
+                    }
+                }
+            }
+
+            coordinatedVersion = maxVersion + 1;
+        }
+
         NewCleaners.emplace_back(
             CreateContinuousBackupCleaner(
                 Self->TxAllocatorClient,
@@ -52,7 +72,8 @@ public:
                 item.PathId,
                 workingDir,
                 tablePath->Name,
-                streamPath->Name
+                streamPath->Name,
+                coordinatedVersion
         ));
     }
 

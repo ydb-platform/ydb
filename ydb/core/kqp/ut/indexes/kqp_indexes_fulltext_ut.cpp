@@ -61,11 +61,11 @@ void AddIndex(NQuery::TQueryClient& db, const char* layout = "flat") {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, const size_t nGramMaxLength = 3, const bool edgeNGram = false) {
+void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, const size_t nGramMaxLength = 3, const bool edgeNGram = false, const bool covered = false) {
     const TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
             GLOBAL USING fulltext
-            ON (Text)
+            ON (Text) %s
             WITH (
                 layout=flat,
                 tokenizer=standard,
@@ -75,7 +75,7 @@ void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, co
                 filter_ngram_min_length=%d,
                 filter_ngram_max_length=%d
             );
-    )sql", !edgeNGram, edgeNGram, nGramMinLength, nGramMaxLength);
+    )sql", covered ? "COVER (Text, Data)" : "", !edgeNGram, edgeNGram, nGramMinLength, nGramMaxLength);
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -2581,7 +2581,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
     }
 }
 
-Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgram, Edge) {
+Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -2604,7 +2604,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgram, Edge) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 3, 3, Edge);
+    AddIndexNGram(db, 3, 3, Edge, Covered);
 
     {
         TString query = R"sql(
@@ -2672,7 +2672,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgram, Edge) {
     }
 }
 
-Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgramWildcard, Edge) {
+Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgramWildcard, Edge, Covered) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -2699,7 +2699,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextContainsAndNgramWildcard, Edge) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    AddIndexNGram(db, 3, 5, Edge);
+    AddIndexNGram(db, 3, 5, Edge, Covered);
 
     {
         TString query = R"sql(

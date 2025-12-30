@@ -2496,6 +2496,98 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT(!HasTabletIssue(result));
     }
 
+    Y_UNIT_TEST(TestOnlyRequestNeededTablets) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        struct THiveInfoObserver {
+            size_t TabletCount = 0;
+            TTestActorRuntimeBase::TEventObserverHolder Observer;
+
+            void Do(TEvHive::TEvResponseHiveInfo::TPtr& ev) {
+                TabletCount += ev->Get()->Record.TabletsSize();
+            }
+
+            THiveInfoObserver(TServer& server) {
+                Observer = server.GetRuntime()->AddObserver<TEvHive::TEvResponseHiveInfo>([this](auto&& ev) { Do(ev); });
+            }
+        };
+
+        struct TCreateTabletObserver {
+            size_t TabletCount = 0;
+            TTestActorRuntimeBase::TEventObserverHolder Observer;
+            ui64 SchemeShard;
+
+            void Do(TEvHive::TEvCreateTablet::TPtr& ev) {
+                auto& record = ev->Get()->Record;
+                auto* allowedDomain = record.AddAllowedDomains();
+                allowedDomain->SetSchemeShard(SchemeShard);
+                allowedDomain->SetPathId(1);
+                record.MutableObjectDomain()->SetSchemeShard(SchemeShard);
+                record.MutableObjectDomain()->SetPathId(1 + (++TabletCount % 2));
+            }
+
+            TCreateTabletObserver(TServer& server) {
+                Observer = server.GetRuntime()->AddObserver<TEvHive::TEvCreateTablet>([this](auto&& ev) { Do(ev); });
+                SchemeShard = ChangeStateStorage(Tests::SchemeRoot, server.GetSettings().Domain);
+            }
+        };
+
+        struct TNavigateObserver {
+            ui64 Hive;
+            ui64 SchemeShard;
+            TTestActorRuntimeBase::TEventObserverHolder Observer;
+
+            void Do(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+                TSchemeCacheNavigate::TEntry& entry(ev->Get()->Request->ResultSet.front());
+                TString path = CanonizePath(entry.Path);
+                if (path == "/Root/database") {
+                    entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+                    entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+                    entry.Path = {"Root", "database"};
+                    entry.DomainInfo = MakeIntrusive<TDomainInfo>(TPathId{SchemeShard, 2}, TPathId{SchemeShard, 1});
+                    entry.DomainInfo->Params.SetHive(Hive);
+                }
+            }
+
+            TNavigateObserver(TServer& server) {
+                Observer = server.GetRuntime()->AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([this](auto&& ev) { Do(ev); });
+                SchemeShard = ChangeStateStorage(Tests::SchemeRoot, server.GetSettings().Domain);
+                Hive = server.GetRuntime()->GetAppData().DomainsInfo->GetHive();
+            }
+
+        };
+
+        THiveInfoObserver infoObserver(server);
+        TCreateTabletObserver tabletObserver(server);
+        TNavigateObserver navigateObserver(server);
+        auto tenantObserver = runtime->AddObserver<NConsole::TEvConsole::TEvGetTenantStatusResponse>([](auto&& ev) { ChangeGetTenantStatusResponse(&ev, "/Root/database"); });
+
+        server.SetupDynamicLocalService(2, "Root");
+        server.StartPQTablets(10);
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = std::make_unique<NHealthCheck::TEvSelfCheckRequest>();
+        ev->Database = "/Root/database";
+        runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, ev.release(), 0));
+        runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL(infoObserver.TabletCount, tabletObserver.TabletCount / 2);
+    }
+
     void SendHealthCheckConfigUpdate(TTestActorRuntime &runtime, const TActorId& sender, const NKikimrConfig::THealthCheckConfig &cfg) {
         auto *event = new NConsole::TEvConsole::TEvConfigureRequest;
 

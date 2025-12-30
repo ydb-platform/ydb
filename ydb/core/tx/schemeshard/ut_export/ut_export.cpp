@@ -3223,4 +3223,126 @@ attributes {
             }
         )");
     }
+
+    Y_UNIT_TEST(TopicExportWithAllFields) {
+        EnvOptions().EnablePermissionsExport(true);
+        Env();
+        ui64 txId = 100;
+        TString topicProto = R"(
+            Name: "topic_full_test"
+            TotalGroupCount: 3
+            PartitionPerTablet: 3
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 12
+                    StorageLimitBytes: 104857600
+                    WriteSpeedInBytesPerSecond: 1024
+                    BurstSize: 2048
+                }
+                Codecs {
+                    Ids: 0
+                    Ids: 1
+                    Ids: 2
+                }
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+                PartitionStrategy {
+                    MinPartitionCount: 3
+                    MaxPartitionCount: 10
+                    ScaleThresholdSeconds: 400
+                    ScaleUpPartitionWriteSpeedThresholdPercent: 91
+                    ScaleDownPartitionWriteSpeedThresholdPercent: 31
+                    PartitionStrategyType: CAN_SPLIT
+                }
+                Consumers {
+                    Name: "consumer_1"
+                    Important: true
+                    Codec {
+                        Ids: 0
+                        Ids: 1
+                    }
+                }
+                Consumers {
+                    Name: "consumer_2"
+                    Important: false
+                    Codec {
+                        Ids: 1
+                        Ids: 2
+                    }
+                }
+            }
+        )";
+
+        TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topicProto);
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto schemeshardId = TTestTxConfig::SchemeShard;
+        TString exportRequest = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/topic_full_test"
+                destination_prefix: "topic_export"
+              }
+            }
+        )", S3Port());
+
+        TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", exportRequest, "", "", Ydb::StatusIds::SUCCESS);
+        Env().TestWaitNotification(Runtime(), txId, schemeshardId);
+        TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        auto topicPath = "/topic_export/create_topic.pb";
+        UNIT_ASSERT_C(HasS3File(topicPath), "Topic description file should exist");
+        auto content = GetS3FileContent(topicPath);
+
+        Ydb::Topic::CreateTopicRequest topicDescription;
+        UNIT_ASSERT_C(
+            google::protobuf::TextFormat::ParseFromString(content, &topicDescription),
+            "Failed to parse topic description from S3"
+        );
+
+        const auto& partSettings = topicDescription.partitioning_settings();
+        UNIT_ASSERT_VALUES_EQUAL(partSettings.min_active_partitions(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(partSettings.max_active_partitions(), 10);
+
+        const auto& autoPartSettings = partSettings.auto_partitioning_settings();
+        UNIT_ASSERT_VALUES_EQUAL(autoPartSettings.strategy(), Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+
+        const auto& writeSpeed = autoPartSettings.partition_write_speed();
+        UNIT_ASSERT_VALUES_EQUAL(writeSpeed.stabilization_window().seconds(), 400);
+        UNIT_ASSERT_VALUES_EQUAL(writeSpeed.up_utilization_percent(), 91);
+        UNIT_ASSERT_VALUES_EQUAL(writeSpeed.down_utilization_percent(), 31);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.retention_period().seconds(), 12);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.retention_storage_mb(), 100);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs_size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs(0), 1); // CODEC_RAW
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs(1), 2); // CODEC_GZIP
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.supported_codecs().codecs(2), 3); // CODEC_LZOP
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.partition_write_speed_bytes_per_second(), 1024);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.partition_write_burst_bytes(), 2048);
+
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.consumers_size(), 2);
+
+        const auto& consumer1 = topicDescription.consumers(0);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.name(), "consumer_1");
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.important(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.supported_codecs().codecs_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.supported_codecs().codecs(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer1.supported_codecs().codecs(1), 2);
+
+        const auto& consumer2 = topicDescription.consumers(1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.name(), "consumer_2");
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.important(), false);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(0), 2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer2.supported_codecs().codecs(1), 3);
+
+        auto permissionsPath = "/topic_export/permissions.pb";
+        UNIT_ASSERT_C(HasS3File(permissionsPath), "Permissions file should exist");
+    }
 }

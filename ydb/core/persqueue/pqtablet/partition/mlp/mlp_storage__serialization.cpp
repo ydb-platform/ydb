@@ -390,7 +390,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 
             moveUnlockedOffset = moveUnlockedOffset && messageStatus != EMessageStatus::Delayed && messageStatus != EMessageStatus::Unprocessed;
             moveUncommittedOffset = moveUncommittedOffset && messageStatus != EMessageStatus::Unprocessed && messageStatus != EMessageStatus::DLQ && messageStatus != EMessageStatus::Locked;
-            
+
             if (moveUnlockedOffset) {
                 ++FirstUnlockedOffset;
             }

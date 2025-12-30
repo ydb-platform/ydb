@@ -1057,7 +1057,7 @@ void TStorage::InitMetrics() {
     for (const auto& [_, message] : SlowMessages) {
         UpdateMessageMetrics(message);
     }
-    
+
     for (const auto& message : Messages) {
         UpdateMessageMetrics(message);
     }

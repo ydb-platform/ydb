@@ -1240,6 +1240,10 @@ private:
     }
 
     bool AddFileByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() < 2 || args.size() > 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
             return false;
@@ -1270,6 +1274,10 @@ private:
     }
 
     bool SetFileOption(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() != 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 3 arguments, but got " << args.size()));
             return false;
@@ -1278,6 +1286,10 @@ private:
     }
 
     bool SetPackageVersion(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() != 2) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 arguments, but got " << args.size()));
             return false;
@@ -1354,6 +1366,10 @@ private:
     }
 
     bool AddFolderByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() < 2 || args.size() > 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
             return false;

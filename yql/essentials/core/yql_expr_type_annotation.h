@@ -174,6 +174,8 @@ bool EnsureEquatableKey(TPositionHandle position, const TTypeAnnotationNode* key
 bool EnsureHashableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx);
 bool EnsureDataOrOptionalOfData(const TExprNode& node, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx);
 bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode* type, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx);
+bool EnsureDataOrOptionalOfData(const TExprNode& node, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx, bool& isUniversal);
+bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode* type, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx, bool& isUniversal);
 bool EnsureLinearType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDynamicLinearType(const TExprNode& node, TExprContext& ctx);
 bool EnsurePersistable(const TExprNode& node, TExprContext& ctx);
@@ -186,6 +188,8 @@ bool EnsureListOrOptionalType(const TExprNode& node, TExprContext& ctx);
 bool EnsureListOrOptionalListType(const TExprNode& node, TExprContext& ctx);
 bool EnsureStructOrOptionalStructType(const TExprNode& node, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx);
 bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx);
+bool EnsureStructOrOptionalStructType(const TExprNode& node, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx, bool& isUniversal);
+bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx, bool& isUniversal);
 bool EnsureSeqType(const TExprNode& node, TExprContext& ctx, bool* isStream = nullptr);
 bool EnsureSeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, bool* isStream = nullptr);
 bool EnsureSeqOrOptionalType(const TExprNode& node, TExprContext& ctx);

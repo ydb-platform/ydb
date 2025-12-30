@@ -805,7 +805,8 @@ public:
             return IGraphTransformer::TStatus::Ok;
         }
 
-        if (input->IsCallable({"FileContent","FilePath","FolderPath", "TableName"})) {
+        if (input->IsCallable({"FileContent","FilePath","FolderPath", "TableName",
+            "SecureParam"})) {
             input->SetTypeAnn(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::String));
             return IGraphTransformer::TStatus::Ok;
         }

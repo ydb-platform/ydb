@@ -61,7 +61,7 @@ TOpRoot PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     auto rootInput = ExprNodeToOperator(opRoot.Input().Ptr());
     TVector<TString> columnOrder;
 
-    for (auto c : opRoot.ColumnOrder()) {
+    for (const auto& c : opRoot.ColumnOrder()) {
         columnOrder.push_back(c.StringValue());
     }
 
@@ -105,6 +105,35 @@ std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr nod
     return result;
 }
 
+bool GetForceOptional(const TKqpOpMapElementLambda& mapElement) {
+    auto maybeForceOptional = mapElement.ForceOptional();
+    return maybeForceOptional && maybeForceOptional.Cast().StringValue() == "True";
+}
+
+TExprNode::TPtr GetMapElementLambda(TExprNode::TPtr lambdaPtr, const bool forceOptional, TExprContext& ctx) {
+    auto lambda = TCoLambda(lambdaPtr);
+    auto body = lambda.Body().Ptr();
+    auto lambdaArg = lambda.Args().Arg(0);
+    auto bodyType = body->GetTypeAnn();
+    Y_ENSURE(bodyType);
+    // Force optional by adding Just.
+    if (!bodyType->IsOptionalOrNull() && forceOptional) {
+        // clang-format off
+        body = Build<TCoJust>(ctx, lambdaPtr->Pos())
+            .Input(body)
+        .Done().Ptr();
+
+        lambdaPtr = Build<TCoLambda>(ctx, lambdaPtr->Pos())
+            .Args({"arg"})
+            .Body<TExprApplier>()
+                .Apply(TExprBase(body))
+                .With(lambdaArg, "arg")
+            .Build()
+        .Done().Ptr();
+        // clang-format on
+    }
+    return lambdaPtr;
+}
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
     auto opMap = TKqpOpMap(node);
@@ -112,7 +141,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
     auto project = opMap.Project().IsValid();
     TVector<TMapElement> mapElements;
 
-    for (auto mapElement : opMap.MapElements()) {
+    for (const auto& mapElement : opMap.MapElements()) {
         const auto iu = TInfoUnit(mapElement.Variable().StringValue());
         if (mapElement.Maybe<TKqpOpMapElementRename>()) {
             auto element = mapElement.Cast<TKqpOpMapElementRename>();
@@ -120,15 +149,16 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
             mapElements.emplace_back(iu, fromIU);
         } else {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
+            const auto forceOptional = GetForceOptional(element);
             // case lambda ($arg) { member $arg `name }
             if (auto maybeMember = element.Lambda().Body().Maybe<TCoMember>();
-                maybeMember && maybeMember.Cast().Struct().Ptr() == element.Lambda().Args().Arg(0).Ptr()) {
+                !forceOptional && maybeMember && maybeMember.Cast().Struct().Ptr() == element.Lambda().Args().Arg(0).Ptr()) {
                 auto member = maybeMember.Cast();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
                 mapElements.emplace_back(iu, fromIU);
             } else {
-                mapElements.emplace_back(iu, element.Lambda().Ptr());
+                mapElements.emplace_back(iu, GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx));
             }
         }
     }
@@ -179,8 +209,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr n
     auto input = ExprNodeToOperator(opProject.Input().Ptr());
 
     TVector<TInfoUnit> projectList;
-
-    for (auto p : opProject.ProjectList()) {
+    for (const auto& p : opProject.ProjectList()) {
         projectList.push_back(TInfoUnit(p.StringValue()));
     }
     return std::make_shared<TOpProject>(input, node->Pos(), projectList);
@@ -194,7 +223,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
     TVector<TSortElement> sortElements;
     TVector<TMapElement> mapElements;
 
-    for (auto el : opSort.SortExpressions()) {
+    for (const auto& el : opSort.SortExpressions()) {
         TInfoUnit column;
 
         if (auto member = el.Lambda().Body().Maybe<TCoMember>()) {
@@ -215,14 +244,6 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
     return output;
 }
 
-bool GetForceOptional(const TKqpOpAggregationTraits& traits) {
-    const auto traitsPtr = traits.Ptr();
-    if (traitsPtr->ChildrenSize() > TKqpOpAggregationTraits::idx_ForceOptional) {
-        return TString(TCoAtom(traitsPtr->ChildPtr(TKqpOpAggregationTraits::idx_ForceOptional))) == "True" ? true : false;
-    }
-    return false;
-}
-
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr node) {
     auto opAggregate = TKqpOpAggregate(node);
     auto input = ExprNodeToOperator(opAggregate.Input().Ptr());
@@ -231,8 +252,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
     for (const auto& traits : opAggregate.AggregationTraitsList()) {
         const auto originalColName = TInfoUnit(TString(traits.OriginalColName()));
         const auto aggFuncName = TString(traits.AggregationFunction());
-        const auto forceOptional = GetForceOptional(traits);
-        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, forceOptional);
+        TOpAggregationTraits opAggTraits(originalColName, aggFuncName);
         opAggTraitsList.push_back(opAggTraits);
     }
 

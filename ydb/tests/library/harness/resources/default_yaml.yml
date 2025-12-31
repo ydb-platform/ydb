@@ -80,6 +80,8 @@ grpc_config:
   - "monitoring"
   - "auth"
   - "query_service"
+  - "export"
+  - "import"
 feature_flags:
   enable_persistent_query_stats: true
 kqpconfig:

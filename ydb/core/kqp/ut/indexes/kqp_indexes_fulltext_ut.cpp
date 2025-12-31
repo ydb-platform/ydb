@@ -3092,6 +3092,92 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
     }
 }
 
+Y_UNIT_TEST(SelectWithFulltextContainsAndEdgeNgramWildcard) {
+        auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    NYdb::NQuery::TExecuteQuerySettings querySettings;
+    querySettings.ClientTimeout(TDuration::Minutes(1));
+
+    CreateTexts(db);
+
+    {
+        const TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+                (0, "aaaaabbcd efg"),
+                (1, "123456+789=")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    AddIndexNGram(db, 1, 5, true);
+
+    {
+        const TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "aaaaabbcd efg")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "aaaaab*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "aa*bc*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "*ef*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "ef")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "12*6+7*9=")
+            ORDER BY `Key`;
+            
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "123450+789=")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "123*")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "1")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[0u];["aaaaabbcd efg"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[0u];["aaaaabbcd efg"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(R"([
+            [[0u];["aaaaabbcd efg"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
+        CompareYson(R"([
+            [[0u];["aaaaabbcd efg"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
+        CompareYson(R"([
+            [[1u];["123456+789="]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
+        CompareYson(R"([
+            [[1u];["123456+789="]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(7)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(8)));
+    }
+}
+
 }
 
 }

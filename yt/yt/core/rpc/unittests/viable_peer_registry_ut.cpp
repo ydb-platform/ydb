@@ -325,6 +325,12 @@ IClientRequestPtr CreateRequest(bool enableStickiness = false)
     return request;
 }
 
+void SetRequestStickyGroupSize(IClientRequestPtr& request, int stickyGroupSize)
+{
+    auto* balancingHeaderExt = request->Header().MutableExtension(NRpc::NProto::TBalancingExt::balancing_ext);
+    balancingHeaderExt->set_sticky_group_size(stickyGroupSize);
+}
+
 TEST_P(TParametrizedViablePeerRegistryTest, GetChannelBasic)
 {
     auto channelFactory = New<TFakeChannelFactory>();
@@ -663,6 +669,41 @@ TEST(TPreferLocalViablePeerRegistryTest, DoNotCrashIfNoLocalPeers)
 
     EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("a.man.yp-c.yandex.net"));
     auto otherChannel = viablePeerRegistry->PickRandomChannel(req, /*hedgingOptions*/ {});
+    EXPECT_EQ(otherChannel->GetEndpointDescription(), "b.sas.yp-c.yandex.net");
+}
+
+TEST(TPreferLocalViablePeerRegistryTest, StickyGroupSize)
+{
+    auto channelFactory = New<TFakeChannelFactory>();
+    auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 4);
+
+    auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
+        NNet::SetLocalHostName(oldLocalHostName);
+    });
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
+
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("a.man.yp-c.yandex.net"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("c.man.yp-c.yandex.net"));
+
+    auto req = CreateRequest();
+    SetRequestStickyGroupSize(req, 1);
+
+    for (int i = 0; i < 10; ++i) {
+        auto localChannel = viablePeerRegistry->PickStickyChannel(req);
+        EXPECT_TRUE(
+            localChannel->GetEndpointDescription() == "a.man.yp-c.yandex.net" ||
+            localChannel->GetEndpointDescription() == "c.man.yp-c.yandex.net");
+    }
+
+    EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("a.man.yp-c.yandex.net"));
+    for (int i = 0; i < 10; ++i) {
+        auto localChannel = viablePeerRegistry->PickStickyChannel(req);
+        EXPECT_EQ(localChannel->GetEndpointDescription(), "c.man.yp-c.yandex.net");
+    }
+
+    EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("c.man.yp-c.yandex.net"));
+    auto otherChannel = viablePeerRegistry->PickStickyChannel(req);
     EXPECT_EQ(otherChannel->GetEndpointDescription(), "b.sas.yp-c.yandex.net");
 }
 

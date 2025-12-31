@@ -140,11 +140,13 @@ struct TUnlockerSettings {
 IActor* CreateUnlocker(const NActors::TActorId& parentId, TUnlockerSettings&& settings);
 
 struct TMessageDeadlineChangerSettings {
+    using TDeadlines = std::variant<TInstant, std::vector<TInstant>>;
+
     TString DatabasePath;
     TString TopicName;
     TString Consumer;
     std::vector<TMessageId> Messages;
-    TInstant Deadline;
+    TDeadlines Deadlines;
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };

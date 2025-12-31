@@ -429,8 +429,8 @@ void TCommandImportFileBase::Config(TConfig& config) {
 
     config.Opts->GetOpts().SetTrailingArgTitle("<input files...>",
             "One or more file paths to import from. If a directory is provided, all files in the directory with supported extension will be imported.");
-    config.Opts->AddLongOption("timeout", "Operation timeout. Operation should be executed on server within this timeout. "
-            "There could also be a delay up to 200ms to receive timeout error from server. Supports time units (e.g., '5s', '1m').")
+    config.Opts->AddLongOption("timeout", "Operation timeout. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds. "
+            "There could also be a delay up to 200ms to receive timeout error from server.")
         .RequiredArgument("DURATION").StoreMappedResult(&OperationTimeout, &ParseDurationMilliseconds).DefaultValue(TDuration::Seconds(5 * 60));
 
     config.Opts->AddLongOption('p', "path", "Database path to table")

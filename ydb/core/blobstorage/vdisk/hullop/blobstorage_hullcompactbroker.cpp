@@ -1,5 +1,6 @@
 #include "blobstorage_hullcompactbroker.h"
 #include <memory>
+#include <cmath>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/base/counters.h>
@@ -90,16 +91,18 @@ namespace NKikimr {
         TCompactionKey Key;
         double Priority;
         TInstant RequestTime;
+        ui64 RequestOrder;
 
-        TCompactionRequest(const TString& vDiskId, const TActorId actorId, const double priority)
+        TCompactionRequest(const TString& vDiskId, const TActorId actorId, const double priority, ui64 requestOrder)
             : Key(vDiskId, actorId)
             , Priority(priority)
             , RequestTime(TInstant::Now())
+            , RequestOrder(requestOrder)
         {}
 
         TString ToString() const {
             TStringStream str;
-            str << "{TCompactionRequest " << Key.ToString() << " Priority# " << Priority << " RequestTime# " << RequestTime.ToStringUpToSeconds() << " WaitTimeMs# " << (TInstant::Now() - RequestTime).MilliSeconds() << "}";
+            str << "{TCompactionRequest " << Key.ToString() << " Priority# " << Priority << " RequestTime# " << RequestTime.ToStringUpToSeconds() << " WaitTimeMs# " << (TInstant::Now() - RequestTime).MilliSeconds() << " RequestOrder# " << RequestOrder << "}";
             return str.Str();
         }
     };
@@ -128,6 +131,7 @@ namespace NKikimr {
 
     struct TCompactionQueue {
         i64 MaxActiveCompactions;
+        ui64 NextRequestOrder = 0;
 
         struct TCompactionRequests : public THashMap<TString, TCompactionRequest> {
             TString ToString() const {
@@ -178,7 +182,7 @@ namespace NKikimr {
             Y_VERIFY_S(infoIt == CompactionsInfo.end(), 
                 "UpdateRequestCompactionToken: trying to request token during active compaction for " << key.ToString());
 
-            PendingCompactions.emplace(key.ToString(), TCompactionRequest(vdiskId, actorId, priority));
+            PendingCompactions.emplace(key.ToString(), TCompactionRequest(vdiskId, actorId, priority, NextRequestOrder++));
         }
 
         void UpdateRequestCompactionToken(const TString& vdiskId, const TActorId& actorId, double priority) {
@@ -223,7 +227,11 @@ namespace NKikimr {
 
             auto it = std::max_element(PendingCompactions.begin(), PendingCompactions.end(),
                     [](const auto& lhs, const auto& rhs) {
-                        return lhs.second.Priority < rhs.second.Priority;
+                        constexpr double epsilon = 1e-9;
+                        if (std::abs(lhs.second.Priority - rhs.second.Priority) > epsilon) {
+                            return lhs.second.Priority < rhs.second.Priority;
+                        }
+                        return lhs.second.RequestOrder > rhs.second.RequestOrder;
                     });
             Y_VERIFY(it != PendingCompactions.end());
             const TString& key = it->first;
@@ -372,10 +380,15 @@ namespace NKikimr {
             TVector<TString> longWaitingCompactions;
             TVector<TString> longWorkingCompactions;
             
+            NMonitoring::TBucketBounds waitBounds{10, 30, 60, 300, 600, 1800, 3600, 7200, 21600};
+            auto waitCollector = NMonitoring::ExplicitHistogram(waitBounds);
+            NMonitoring::TBucketBounds workBounds{60, 300, 600, 1800, 3600, 7200, 21600, 43200, 86400};
+            auto workCollector = NMonitoring::ExplicitHistogram(workBounds);
+            
             for (const auto& [pdiskId, queue] : CompactionsPerPDisk.CompactionsPerPDisk) {
                 for (const auto& [key, request] : queue.PendingCompactions) {
                     double waitTimeSeconds = (now - request.RequestTime).SecondsFloat();
-                    Mon->WaitTimeSeconds->Collect(waitTimeSeconds);
+                    waitCollector->Collect(waitTimeSeconds);
                     
                     if (longWaitingThreshold > 0 && waitTimeSeconds >= longWaitingThreshold) {
                         TStringStream ss;
@@ -390,7 +403,7 @@ namespace NKikimr {
                 
                 for (const auto& [key, info] : queue.CompactionsInfo) {
                     double workTimeSeconds = (now - info.StartTime).SecondsFloat();
-                    Mon->WorkTimeSeconds->Collect(workTimeSeconds);
+                    workCollector->Collect(workTimeSeconds);
                     
                     if (longWorkingThreshold > 0 && workTimeSeconds >= longWorkingThreshold) {
                         TStringStream ss;
@@ -404,6 +417,14 @@ namespace NKikimr {
                     }
                 }
             }
+            
+            auto waitSnapshot = waitCollector->Snapshot();
+            Mon->WaitTimeSeconds->Reset();
+            Mon->WaitTimeSeconds->Collect(*waitSnapshot);
+            
+            auto workSnapshot = workCollector->Snapshot();
+            Mon->WorkTimeSeconds->Reset();
+            Mon->WorkTimeSeconds->Collect(*workSnapshot);
             
             if (!longWaitingCompactions.empty()) {
                 LOG_WARN_S(ctx, NKikimrServices::BS_COMP_BROKER, 

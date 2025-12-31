@@ -60,9 +60,8 @@ private:
     private:
         using TBase = TExtendedTransactionBase;
         const ui64 TxId;
-        bool NeedContinueFlag = false;
 
-        virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /* ctx */) override {
+        virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
             if (!op || op->ReceiveAck) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_ack_flag")("txId", TxId);
@@ -72,16 +71,13 @@ private:
                     op->TxBroken = false;
                 }
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
-                if (!op->NeedReceiveBroken) {
-                    NeedContinueFlag = true;
+                if (!op->IsInProgress()) {
+                    Self->EnqueueProgressTx(ctx, TxId);
                 }
             }
             return true;
         }
-        virtual void DoComplete(const NActors::TActorContext& ctx) override {
-            if (NeedContinueFlag) {
-                Self->EnqueueProgressTx(ctx, TxId);
-            }
+        virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
         }
 
     public:
@@ -101,36 +97,49 @@ private:
     private:
         using TBase = TExtendedTransactionBase;
         const ui64 TxId;
+        const ui64 Step;
+        const ui64 ArbiterTabletId;
         const bool BrokenFlag;
+        TEvTxProcessing::TEvReadSetAck* BrokenFlagAck = nullptr;
 
-        virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /* ctx */) override {
+        virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& ctx) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
             if (!op) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
+                // send the ack anyway, so that the primary waits less time to progress
+                TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, Step, TxId, ArbiterTabletId);
+                return true;
+            } 
+            
+            BrokenFlagAck = TEvWriteCommitSyncTransactionOperator::MakeBrokenFlagAck(op->GetStep(), op->GetTxId(), Self->TabletID(), ArbiterTabletId);
+            if (op->TxBroken.has_value()) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
+                // we cannot send the ack here, because the previous transaction (that successfully set TxBroken) may be not completed yet
             } else {
                 op->TxBroken = BrokenFlag;
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
+                // we cannot send the ack right away, we must make sure that we have stored the TxBroken value
+                // but we can proceed right away, because we received from the primary the decision
+                Self->EnqueueProgressTx(ctx, TxId);
             }
             return true;
         }
-        virtual void DoComplete(const NActors::TActorContext& ctx) override {
+        virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
             if (NYDBTest::TControllers::GetColumnShardController()->GetInterruptionOnLockedTransactions()) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_continue");
                 return;
             }
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
-            if (!op) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_broken_flag")("txId", TxId);
-            } else {
-                op->SendBrokenFlagAck(*Self);
-                Self->EnqueueProgressTx(ctx, TxId);
+            if (BrokenFlagAck != nullptr) {
+                TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, BrokenFlagAck);
             }
         }
 
     public:
-        TTxWriteReceivedBrokenFlag(TColumnShard* owner, const ui64 txId, const bool broken)
+        TTxWriteReceivedBrokenFlag(TColumnShard* owner, const ui64 txId, const ui64 step, const ui64 arbiterTabletId, const bool broken)
             : TBase(owner, "write_received_broken_flag")
             , TxId(txId)
+            , Step(step)
+            , ArbiterTabletId(arbiterTabletId)
             , BrokenFlag(broken) {
         }
     };
@@ -138,14 +147,7 @@ private:
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveBrokenFlagTx(
         TColumnShard& owner, const ui64 sendTabletId, const bool broken) const override {
         AFL_VERIFY(ArbiterTabletId == sendTabletId);
-        return std::make_unique<TTxWriteReceivedBrokenFlag>(&owner, GetTxId(), broken);
-    }
-
-    void SendBrokenFlagAck(TColumnShard& owner) {
-        owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
-            new TEvPipeCache::TEvForward(
-                new TEvTxProcessing::TEvReadSetAck(GetStep(), GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), 0), ArbiterTabletId, true),
-            IEventHandle::FlagTrackDelivery, GetTxId());
+        return std::make_unique<TTxWriteReceivedBrokenFlag>(&owner, GetTxId(), GetStep(), sendTabletId, broken);
     }
 
     void SendResult(TColumnShard& owner) {
@@ -155,11 +157,8 @@ private:
         }
         NKikimrTx::TReadSetData readSetData;
         readSetData.SetDecision(SelfBroken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
-        owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
-            new TEvPipeCache::TEvForward(new TEvTxProcessing::TEvReadSet(
-                                             0, GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), readSetData.SerializeAsString()),
-                ArbiterTabletId, true),
-            IEventHandle::FlagTrackDelivery, GetTxId());
+        auto* event = new TEvTxProcessing::TEvReadSet(0, GetTxId(), owner.TabletID(), ArbiterTabletId, owner.TabletID(), readSetData.SerializeAsString());
+        TEvWriteCommitSyncTransactionOperator::SendPersistent(owner, event, ArbiterTabletId, GetTxId());
     }
 
     virtual void DoOnTabletInit(TColumnShard& /*owner*/) override {
@@ -175,12 +174,12 @@ private:
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId);
             op->SelfBroken = lock.IsBroken();
             Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
+            if (!op->ReceiveAck) {
+                op->SendResult(*Self);
+            }
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
-            if (auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true)) {
-                op->SendResult(*Self);
-            }
         }
 
     public:
@@ -191,7 +190,7 @@ private:
     };
 
     virtual bool DoIsInProgress() const override {
-        return !TxBroken.has_value();
+        return !ReceiveAck || !TxBroken.has_value();
     }
 
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
@@ -200,7 +199,10 @@ private:
     }
 
     virtual void OnTimeout(TColumnShard& owner) override {
-        SendResult(owner);
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iea", "secondary on timeout")("receive_ack", ReceiveAck)("tx_broken_has_value", TxBroken.has_value());
+        if (!ReceiveAck) {
+            SendResult(owner);
+        }
     }
 
 public:

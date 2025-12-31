@@ -2538,6 +2538,106 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
     }
 }
 
+Y_UNIT_TEST(LuceneRelevanceComparison) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    // Create table with fulltext index using relevance layout
+    TString createQuery = R"sql(
+        CREATE TABLE `/Root/Texts` (
+            Key Uint64,
+            Text String,
+            PRIMARY KEY (Key)
+        );
+    )sql";
+    auto result = db.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    // Insert exact documents from Lucene test
+    TString insertQuery = R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+            (0, "the quick brown fox jumps over the lazy dog"),
+            (1, "quick quick fox"),
+            (2, "lazy dog sleeps"),
+            (3, "brown bear eats honey"),
+            (4, "xylophone music is rare")
+    )sql";
+    result = db.ExecuteQuery(insertQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    // Add fulltext index with relevance layout
+    TString indexQuery = R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+            GLOBAL USING fulltext
+            ON (Text)
+            WITH (layout=flat_relevance, tokenizer=standard, use_filter_lowercase=true)
+    )sql";
+    result = db.ExecuteQuery(indexQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    // Test queries with exact relevance scores from Lucene BM25
+    std::vector<std::pair<std::string, std::vector<std::pair<ui64, double>>>> testCases = {
+        {"quick fox", {
+            {1, 1.0704575},  // doc1: "quick quick fox"
+            {0, 0.5720391}   // doc0: "the quick brown fox jumps over the lazy dog"
+        }},
+        {"lazy dog", {
+            {2, 0.92791617}, // doc2: "lazy dog sleeps"
+            {0, 0.5720391}   // doc0: "the quick brown fox jumps over the lazy dog"
+        }},
+        {"brown fox", {
+            {0, 0.5720391}  // doc0: "the quick brown fox jumps over the lazy dog"
+        //    {1, 0.46395808}, // doc1: "quick quick fox"
+        //    {3, 0.42037117}  // doc3: "brown bear eats honey" (skip it, because we support only AND terms in the query)
+        }},
+        {"honey", {
+            {3, 0.66565275}  // doc3: "brown bear eats honey"
+        }},
+        {"xylophone rare", {
+            {4, 1.3313055}   // doc4: "xylophone music is rare"
+        }}
+    };
+
+    for (const auto& [query, expectedResults] : testCases) {
+        // Get the actual relevance scores
+        TString relevanceQuery = Sprintf(R"sql(
+            SELECT Key, FullText::Relevance(Text, "%s") as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql", query.c_str(), query.c_str());
+
+        auto result = db.ExecuteQuery(relevanceQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_C(resultSet.RowsCount() == expectedResults.size(),
+            "Expected " + std::to_string(expectedResults.size()) + " results for query: " + query);
+
+        NYdb::TResultSetParser parser(resultSet);
+        size_t idx = 0;
+        while (parser.TryNextRow()) {
+            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+            double relevance = parser.ColumnParser("Relevance").GetDouble();
+
+            UNIT_ASSERT_C(idx < expectedResults.size(),
+                "More results than expected for query: " + query);
+
+            auto expectedKey = expectedResults[idx].first;
+            auto expectedRelevance = expectedResults[idx].second;
+
+            UNIT_ASSERT_VALUES_EQUAL_C(key, expectedKey,
+                "Key mismatch for query '" + query + "' at position " + std::to_string(idx) +
+                ": expected " + std::to_string(expectedKey) + ", got " + std::to_string(key));
+
+            // Allow small floating-point differences (similar to Lucene's 0.0001f tolerance)
+            UNIT_ASSERT_C(std::abs(relevance - expectedRelevance) < 1e-4,
+                "Relevance score mismatch for query '" + query + "' key " + std::to_string(key) +
+                ": expected " + std::to_string(expectedRelevance) + ", got " + std::to_string(relevance));
+
+            ++idx;
+        }
+    }
+}
+
 Y_UNIT_TEST(SelectWithFulltextContainsAndSnowball) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();

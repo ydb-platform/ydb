@@ -357,7 +357,7 @@ public:
         for(size_t i = 0; i < ContainingWords.size(); ++i) {
             double docFreq = static_cast<double>(ContainingWords[i]);
             double idf = QueryCtx->GetIDFValue(i);
-            double tf = tf = (docFreq * (K1_FACTOR + 1)) / (docFreq + documentFactor);
+            double tf = docFreq / (docFreq + documentFactor);
             score += idf * tf;
         }
         return score;
@@ -1118,7 +1118,9 @@ private:
     }
 
     void StartWordReads() {
-        // Initialize read states for each word
+        QueryCtx = MakeIntrusive<TQueryCtx>(
+            Words.size(), SumDocLength, DocCount, RelevanceColumnIdx);
+
         for (auto& word : Words) {
             if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
                 EnrichWordInfo(word);
@@ -1631,9 +1633,6 @@ public:
             SumDocLength = StatsTableReader->GetSumDocLength(row);
             CA_LOG_E("Total stats: doc count: " << DocCount << ", sum doc length: " << SumDocLength);
         }
-
-        QueryCtx = MakeIntrusive<TQueryCtx>(
-            Words.size(), SumDocLength, DocCount, RelevanceColumnIdx);
 
         StartWordReads();
     }

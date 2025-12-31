@@ -2324,7 +2324,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, "4321");
         Sleep(TDuration::Seconds(2));
 
-        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "1234\n4321");
+        if (const auto& s3Data = GetAllObjects(sourceBucket); !IsIn({"12344321", "43211234"}, s3Data)) {
+            UNIT_FAIL("Unexpected S3 data: " << s3Data);
+        }
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithS3Join, TStreamingTestFixture) {

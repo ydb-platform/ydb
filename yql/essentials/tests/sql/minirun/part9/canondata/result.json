@@ -1594,6 +1594,20 @@
             "uri": "https://{canondata_backend}/1937429/18d53b6e51c2d67a4139b1541925383ccf907eb1/resource.tar.gz#test.test_select_op-select_op_order_by-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_pg-uncorrelated_asterisk_subquery_scalar-default.txt-Debug]": [
+        {
+            "checksum": "14236cc383a9ffe6f7c96e4cd4eb3530",
+            "size": 322,
+            "uri": "https://{canondata_backend}/1937424/c3e6a9bd0e0f78531a6a2bc10cfa691afbbe6516/resource.tar.gz#test.test_select_pg-uncorrelated_asterisk_subquery_scalar-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_pg-uncorrelated_asterisk_subquery_scalar-default.txt-Results]": [
+        {
+            "checksum": "ce3ebe4a2ba8198c413dfdb5a2374106",
+            "size": 733,
+            "uri": "https://{canondata_backend}/1937424/c3e6a9bd0e0f78531a6a2bc10cfa691afbbe6516/resource.tar.gz#test.test_select_pg-uncorrelated_asterisk_subquery_scalar-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-correlated_order_by_trivial-default.txt-Debug]": [
         {
             "checksum": "ca3262ed30aa724f87ea624afe4c77fd",
@@ -1690,6 +1704,20 @@
             "checksum": "ab80439f28cdf0f1faf521b0e5b347df",
             "size": 976,
             "uri": "https://{canondata_backend}/1924537/2a68d4cbfd9732b1379cfd2bd96a6206a8fc47a7/resource.tar.gz#test.test_select_yql-projection_column_order-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-uncorrelated_asterisk_subquery_in_with_source-default.txt-Debug]": [
+        {
+            "checksum": "dc2b25e226fd1d79e801347c0bf5c34d",
+            "size": 379,
+            "uri": "https://{canondata_backend}/1937424/c3e6a9bd0e0f78531a6a2bc10cfa691afbbe6516/resource.tar.gz#test.test_select_yql-uncorrelated_asterisk_subquery_in_with_source-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-uncorrelated_asterisk_subquery_in_with_source-default.txt-Results]": [
+        {
+            "checksum": "b5fae5a6253aedc595c8dcbc9c51f8b3",
+            "size": 697,
+            "uri": "https://{canondata_backend}/1937424/c3e6a9bd0e0f78531a6a2bc10cfa691afbbe6516/resource.tar.gz#test.test_select_yql-uncorrelated_asterisk_subquery_in_with_source-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-uncorrelated_projection_in-default.txt-Debug]": [

@@ -92,7 +92,7 @@ TEST_F(TFutureTest, VoidUniqueApply)
 
 TEST_F(TFutureTest, WellKnownUniqueFuture)
 {
-    auto future = VoidFuture.AsUnique();
+    auto future = OKFuture.AsUnique();
     // Multiple subscriptions are fine.
     EXPECT_TRUE(future.IsSet());
     EXPECT_TRUE(future.Get().IsOK());
@@ -210,7 +210,7 @@ TEST_F(TFutureTest, NoncopyableApply7)
 
 TEST_F(TFutureTest, NoncopyableApply8)
 {
-    auto f = VoidFuture;
+    auto f = OKFuture;
     auto g = f.Apply(BIND([] {
         return MakeFuture<std::unique_ptr<double>>(nullptr).AsUnique();
     }));
@@ -373,7 +373,7 @@ TEST_F(TFutureTest, IsNull)
 TEST_F(TFutureTest, IsNullVoid)
 {
     TFuture<void> empty;
-    TFuture<void> nonEmpty = VoidFuture;
+    TFuture<void> nonEmpty = OKFuture;
 
     EXPECT_FALSE(empty);
     EXPECT_TRUE(nonEmpty);
@@ -1229,7 +1229,7 @@ TEST_F(TFutureTest, AllCombinerCancel)
 TEST_F(TFutureTest, AllCombinerVoid0)
 {
     std::vector<TFuture<void>> futures;
-    EXPECT_EQ(VoidFuture, AllSucceeded(futures));
+    EXPECT_EQ(OKFuture, AllSucceeded(futures));
 }
 
 TEST_F(TFutureTest, AllCombinerVoid1)

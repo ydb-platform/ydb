@@ -805,7 +805,8 @@ public:
             return IGraphTransformer::TStatus::Ok;
         }
 
-        if (input->IsCallable({"FileContent","FilePath","FolderPath", "TableName"})) {
+        if (input->IsCallable({"FileContent","FilePath","FolderPath", "TableName",
+            "SecureParam"})) {
             input->SetTypeAnn(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::String));
             return IGraphTransformer::TStatus::Ok;
         }
@@ -922,6 +923,21 @@ bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issu
     TVector<TTransformStage> transformers;
     transformers.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply),
                                             "ExpandApply", TIssuesIds::CORE_PRE_TYPE_ANN));
+    transformers.push_back(TTransformStage(CreateFunctorTransformer([&typeCtx](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx){
+        TOptimizeExprSettings settings(&typeCtx);
+        return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext& ctx){
+            if (node->IsCallable("FormatCode")) {
+                return ctx.Builder(node->Pos())
+                    .Callable("String")
+                        .Atom(0, "")
+                    .Seal()
+                    .Build();
+            }
+
+            return node;
+        }, ctx, settings);
+    }),
+                                            "RewriteEvaluation", TIssuesIds::CORE_PRE_TYPE_ANN));
     transformers.push_back(TTransformStage(
         CreatePartialTypeAnnotationTransformer(std::move(callableTypeAnnTransformer), typeCtx),
         "PartialTypeAnn", TIssuesIds::CORE_PARTIAL_TYPE_ANN));

@@ -60,7 +60,7 @@ void Ref(TFutureState<T>* state);
 template <class T>
 void Unref(TFutureState<T>* state);
 
-//! Constructs a well-known pre-set future like #VoidFuture.
+//! Constructs a well-known pre-set future like #OKFuture.
 //! For such futures ref-counting is essentially disabled.
 template <class T>
 TFuture<T> MakeWellKnownFuture(TErrorOr<T> value);
@@ -114,7 +114,11 @@ void swap(TPromise<T>& lhs, TPromise<T>& rhs);
 // A bunch of widely-used preset futures.
 
 //! A pre-set successful |void| future.
-extern const TFuture<void> VoidFuture;
+extern const TFuture<void> OKFuture;
+
+// COMPAT(babenko): YT-27014; deprecated, don't use!
+// Will be dropped after contrib/ydb migration.
+static constexpr const auto& VoidFuture = OKFuture;
 
 //! A pre-set successful |bool| future with |true| value.
 extern const TFuture<bool> TrueFuture;

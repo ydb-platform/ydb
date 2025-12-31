@@ -11,7 +11,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TFuture<void> VoidFuture = NDetail::MakeWellKnownFuture(TError());
+const TFuture<void> OKFuture = NDetail::MakeWellKnownFuture(TError());
 const TFuture<bool> TrueFuture = NDetail::MakeWellKnownFuture(TErrorOr<bool>(true));
 const TFuture<bool> FalseFuture = NDetail::MakeWellKnownFuture(TErrorOr<bool>(false));
 

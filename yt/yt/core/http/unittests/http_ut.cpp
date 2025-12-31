@@ -187,7 +187,7 @@ struct TFakeConnection
     TFuture<void> Write(const TSharedRef& ref) override
     {
         Output += TString(ref.Begin(), ref.Size());
-        return VoidFuture;
+        return OKFuture;
     }
 
     TFuture<void> WriteV(const TSharedRefArray& refs) override
@@ -195,7 +195,7 @@ struct TFakeConnection
         for (const auto& ref : refs) {
             Output += TString(ref.Begin(), ref.Size());
         }
-        return VoidFuture;
+        return OKFuture;
     }
 
     TFuture<void> Close() override
@@ -436,7 +436,7 @@ TEST(THttpOutputTest, LargeResponse)
                     Output += TString(ref.Begin(), ref.Size());
                 }
             }
-            return VoidFuture;
+            return OKFuture;
         }
 
         TSharedRef LargeRef;

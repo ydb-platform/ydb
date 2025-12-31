@@ -1,5 +1,6 @@
 #pragma once
 
+#include "api_service_proxy.h"
 #include "public.h"
 
 #include <yt/yt/library/re2/re2.h>
@@ -13,6 +14,10 @@
 #include <library/cpp/yt/memory/ref.h>
 
 namespace NYT::NApi::NRpcProxy {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void PatchProxyForStallRequests(TApiServiceProxy* proxy);
 
 ////////////////////////////////////////////////////////////////////////////////
 

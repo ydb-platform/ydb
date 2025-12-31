@@ -34,6 +34,21 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void PatchProxyForStallRequests(TApiServiceProxy* proxy)
+{
+    /// NB(achains): Some reads may be stall by default (e.g. reconstructing erasure-coded chunks).
+    ///              Increase default timeout until ping mechanism is designed in YT-26196.
+    static const auto StallTimeout = TDuration::Minutes(15);
+    static const NRpc::TStreamingParameters StallStreamParameters{
+        .ReadTimeout = StallTimeout,
+        .WriteTimeout = StallTimeout};
+
+    proxy->DefaultClientAttachmentsStreamingParameters() = StallStreamParameters;
+    proxy->DefaultServerAttachmentsStreamingParameters() = StallStreamParameters;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void ThrowUnimplemented(const TString& method)
 {
     THROW_ERROR_EXCEPTION("%Qv method is not implemented in RPC proxy",

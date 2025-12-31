@@ -21,6 +21,7 @@ struct TTestEnvSettings {
     ui32 PqTabletsN = 0;
     bool EnableSVP = false;
     bool EnableForceFollowers = false;
+    TMaybe<ui32> DataShardStatsReportIntervalSeconds;
 };
 
 class TTestEnv {
@@ -30,6 +31,10 @@ public:
 
 public:
     TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, const TTestEnvSettings& settings = {});
+
+    TTestEnv(const TTestEnvSettings& settings) : TTestEnv(1, 4, settings)
+    {
+    }
 
     ~TTestEnv();
 

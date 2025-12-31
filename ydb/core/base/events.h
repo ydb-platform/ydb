@@ -189,6 +189,9 @@ struct TKikimrEvents : TEvents {
         ES_GENERAL_CACHE_PUBLIC = 4266,
         ES_GENERAL_CACHE_SOURCE = 4267,
         ES_TRANSFER = 4268, 
+        ES_TOKEN_MANAGER = 4269,
+        ES_TOKEN_AGENT = 4270,
+        ES_OVERLOAD_MANAGER = 4271
     };
 };
 

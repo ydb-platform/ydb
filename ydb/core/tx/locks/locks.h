@@ -512,6 +512,7 @@ public:
     void ForEachRangeLock(TCallback&& callback) {
         Ranges.EachRange([&callback](const TRangeTreeBase::TRange&, TLockInfo* lock) {
             callback(lock);
+            return true;
         });
     }
 

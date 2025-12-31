@@ -43,7 +43,14 @@ void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
 }
 
 void TKafkaProduceActor::SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx) {
-    auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, topicName);
+    TString topic = "unknown";
+
+    auto it = Topics.find(topicName);
+    if (it != Topics.end() && it->second.Status != ETopicStatus::NOT_FOUND) {
+        topic = it->first;
+    }
+
+    auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, topic);
     ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicWithoutDb, TStringBuilder() << "api.kafka.produce." << name, "")));
     ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicWithoutDb, "api.kafka.produce.total_messages", "")));
 }
@@ -300,7 +307,6 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
                 res->set_value(static_cast<const char*>(h.Value->data()), h.Value->size());
             }
         }
-        auto w = partitionRequest->AddCmdWrite();
 
         if (record.Key) {
             auto res = proto.AddMessageMeta();
@@ -315,7 +321,8 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         bool res = proto.SerializeToString(&str);
         Y_ABORT_UNLESS(res);
 
-        w->SetSourceId(sourceId);
+        auto w = partitionRequest->AddCmdWrite();
+        w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
 
         bool enableKafkaDeduplication = batch->ProducerId >= 0;
         w->SetEnableKafkaDeduplication(enableKafkaDeduplication);

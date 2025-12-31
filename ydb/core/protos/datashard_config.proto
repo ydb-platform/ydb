@@ -6,6 +6,7 @@ message TDataShardConfig {
     optional uint32 BackupTaskPriority = 2 [default = 10];
     optional uint64 BackupReadAheadLo = 3 [default = 524288];
     optional uint64 BackupReadAheadHi = 4 [default = 1048576];
+    optional uint64 BackupBytesBatchSize = 30 [default = 33554432]; // 32 MB
     optional uint64 KeepSnapshotTimeout = 5 [default = 300000]; // milliseconds
     optional uint64 ChangesQueueItemsLimit = 6 [default = 10000];
     optional uint64 ChangesQueueBytesLimit = 7 [default = 131072000]; // 125 MB
@@ -26,4 +27,6 @@ message TDataShardConfig {
     optional uint64 IncrementalRestoreReadAheadLo = 20 [default = 524288];
     optional uint64 IncrementalRestoreReadAheadHi = 21 [default = 1048576];
     optional uint64 InMemoryStateMigrationTimeoutMs = 24 [default = 1000];
+    optional uint32 StatsReportIntervalSeconds = 25 [default = 10];
+    optional uint32 BackupTableStatsReportIntervalSeconds = 26 [default = 30];
 }

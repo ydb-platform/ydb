@@ -2069,6 +2069,53 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT(HasTabletIssue(result));
     }
 
+    Y_UNIT_TEST(TestStoppedTabletIsNotDead) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+        runtime->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_TRACE);
+
+        // kill local so that tablet cannot start
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(0)), sender, new TEvents::TEvPoisonPill()));
+
+        ui64 tabletId = server.StartPQTablets(1, false).front();
+        runtime->DispatchEvents({}, TDuration::MilliSeconds(50));
+        runtime->AdvanceCurrentTime(TDuration::Minutes(5));
+
+        {
+            TAutoPtr<IEventHandle> handle;
+            runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+            auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+            Cerr << result.ShortDebugString() << Endl;
+
+            UNIT_ASSERT(HasTabletIssue(result));
+        }
+
+        runtime->SendToPipe(72057594037968897, sender, new TEvHive::TEvStopTablet(tabletId, sender), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        runtime->GrabEdgeEvent<TEvHive::TEvStopTabletResult>(handle);
+
+        {
+            TAutoPtr<IEventHandle> handle;
+            runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+            auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+            Cerr << result.ShortDebugString() << Endl;
+
+            UNIT_ASSERT(!HasTabletIssue(result));
+        }
+    }
+
     void SendHealthCheckConfigUpdate(TTestActorRuntime &runtime, const TActorId& sender, const NKikimrConfig::THealthCheckConfig &cfg) {
         auto *event = new NConsole::TEvConsole::TEvConfigureRequest;
 

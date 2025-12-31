@@ -814,6 +814,8 @@ message Consumer {
         google.protobuf.Duration max_read_time_lag = 2;
         // Maximum of differences between write timestamp and create timestamp for all messages, read during last minute.
         google.protobuf.Duration max_write_time_lag = 3;
+        // The difference between the write timestamp of the last commited message and the current time.
+        google.protobuf.Duration max_committed_time_lag = 5;
         // Bytes read statistics.
         MultipleWindowsStat bytes_read = 4;
     }
@@ -1218,6 +1220,8 @@ message DescribeConsumerResult {
         google.protobuf.Duration max_read_time_lag = 6;
         // Maximum of differences between write timestamp and create timestamp for all messages, read during last minute.
         google.protobuf.Duration max_write_time_lag = 7;
+        // The difference between the write timestamp of the last commited message and the current time.
+        google.protobuf.Duration max_committed_time_lag = 13;
 
         // How much bytes were read during several windows statistics from this partition.
         MultipleWindowsStat bytes_read = 8;

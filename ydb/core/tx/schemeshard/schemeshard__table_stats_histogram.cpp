@@ -346,6 +346,22 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     ui64 dataSize = rec.GetTableStats().GetDataSize();
     ui64 rowCount = rec.GetTableStats().GetRowCount();
 
+    // Save CPU resources when potential split will certainly be immediately rejected by Self->IgniteOperation()
+    TString inflightLimitErrStr;
+    if (!Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxPartitionHistogram Do not process detailed partition statistics: " << inflightLimitErrStr
+            << " at tablet " << Self->SelfTabletId()
+            << " from datashard " << datashardId
+            << " for pathId " << tableId
+                    << " state '" << DatashardStateName(rec.GetShardState()).data() << "'"
+                    << " dataSize " << dataSize
+                    << " rowCount " << rowCount
+                    << " dataSizeHistogram buckets " << rec.GetTableStats().GetDataSizeHistogram().BucketsSize()
+        );
+        return true;
+    }
+
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TTxPartitionHistogram::Execute partition histogram"
                     << " at tablet " << Self->SelfTabletId()

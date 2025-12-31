@@ -583,8 +583,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows")), 20000);
+            UNIT_ASSERT_LE(rows.size(), 2);
+            int totalRows = 0;
+            for (const auto& row : rows) {
+                totalRows += GetUint64(row.at("Rows"));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(totalRows, 20000);
         }
     }
 

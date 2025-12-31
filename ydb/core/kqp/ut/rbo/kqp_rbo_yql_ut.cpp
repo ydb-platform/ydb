@@ -289,7 +289,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 select count(*) from `/Root/t1` as t1;
             )",
             // non optional, optional coumn
-            /*
             R"(
                 PRAGMA YqlSelect = 'force';
                 select count(t1.a), count(t1.b) from `/Root/t1` as t1;
@@ -306,9 +305,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select avg(t1.a), avg(t1.b) from `/Root/t1` as t1;
             )",
-            */
         };
-        std::vector<std::string> resultsEmptyColumns = {R"([[0u]])"};
+        std::vector<std::string> resultsEmptyColumns = {
+            R"([[0u]])",
+            R"([[0u;0u]])",
+            R"([[#;#]])",
+            R"([[#;#]])",
+            R"([[#;#]])"
+        };
 
         for (ui32 i = 0; i < queriesOnEmptyColumns.size(); ++i) {
             const auto& query = queriesOnEmptyColumns[i];

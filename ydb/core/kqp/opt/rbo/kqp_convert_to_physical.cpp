@@ -876,7 +876,7 @@ TExprNode::TPtr BuildInitHandlerLambda(const TVector<TString>& keyFields, const 
     for (const auto& aggTraits : aggTraitsList) {
         const auto& aggFunction = aggTraits.AggFunc;
         const auto& aggName = aggTraits.AggFieldName;
-        const auto isOptional = aggTraits.OutputItemType->IsOptionalOrNull();
+        const auto isOptional = aggTraits.InputItemType->IsOptionalOrNull();
 
         TExprNode::TPtr initState;
         if (aggFunction == "count") {
@@ -961,7 +961,7 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
         const auto& aggFunction = aggTraits.AggFunc;
         const auto& columnName = aggTraits.AggFieldName;
         const auto& stateName = aggTraits.StateFieldName;
-        const bool isOptional = aggTraits.OutputItemType->IsOptionalOrNull();
+        const bool isOptional = aggTraits.InputItemType->IsOptionalOrNull();
         TExprNode::TPtr aggFunc;
 
         if (aggFunction == "count") {
@@ -1066,7 +1066,7 @@ TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, cons
     for (const auto& aggTraits : aggTraitsList) {
         const TString& aggFuncName = aggTraits.AggFunc;
         const TString& stateName = aggTraits.StateFieldName;
-        const bool isOptional = aggTraits.OutputItemType->IsOptionalOrNull();
+        const bool isOptional = aggTraits.InputItemType->IsOptionalOrNull();
         TExprNode::TPtr result;
 
         if (aggFuncName == "avg") {
@@ -1088,16 +1088,7 @@ TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields, cons
     return ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(lambdaKeyArgs)), std::move(lambdaResults));
 }
 
-TExprNode::TPtr BuildExpandMapForWideCombinerInput(TExprNode::TPtr input, const TVector<TString>& inputColumns,
-                                                   const TVector<TPhysicalAggregationTraits>& aggTraitsList, TExprContext& ctx, const TPositionHandle pos) {
-    // This is a workaround, we will eliminate it once we will move from yql callables.
-    THashSet<TString> forceOptional;
-    for (const auto& aggTraits : aggTraitsList) {
-        if (!aggTraits.InputItemType->IsOptionalOrNull() && aggTraits.OutputItemType->IsOptionalOrNull()) {
-            forceOptional.insert(aggTraits.InputColName);
-        }
-    }
-
+TExprNode::TPtr BuildExpandMapForWideCombinerInput(TExprNode::TPtr input, const TVector<TString>& inputColumns, TExprContext& ctx, const TPositionHandle pos) {
     // clang-format off
     return ctx.Builder(pos)
         .Callable("ExpandMap")
@@ -1108,21 +1099,11 @@ TExprNode::TPtr BuildExpandMapForWideCombinerInput(TExprNode::TPtr input, const 
                 .Param("narrow_input_param")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     for (ui32 i = 0; i < inputColumns.size(); ++i) {
-                        if (forceOptional.contains(inputColumns[i])) {
-                            parent
-                                .Callable(i, "Just")
-                                    .Callable(0, "Member")
-                                        .Arg(0, "narrow_input_param")
-                                        .Atom(1, inputColumns[i])
-                                    .Seal()
-                                .Seal();
-                        } else {
-                            parent
-                                .Callable(i, "Member")
-                                    .Arg(0, "narrow_input_param")
-                                    .Atom(1, inputColumns[i])
-                                .Seal();
-                        }
+                        parent
+                            .Callable(i, "Member")
+                                .Arg(0, "narrow_input_param")
+                                .Atom(1, inputColumns[i])
+                            .Seal();
                     }
                     return parent;
                 })
@@ -1226,16 +1207,16 @@ TVector<TString> GetInputColumns(const TVector<TOpAggregationTraits>& aggregatio
 
 void GetPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TOpAggregationTraits>& aggregationTraitsList,
                                   TVector<TString>& inputFields, TVector<TPhysicalAggregationTraits>& aggTraits, THashMap<TString, TString>& projectionMap,
-                                  const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* aggType) {
-    Y_ENSURE(aggType && inputType);
+                                  const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* outputType) {
+    Y_ENSURE(inputType && outputType);
     const auto* inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    const auto* aggStructType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto* outputStructType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
     THashMap<TString, std::tuple<TString, const TTypeAnnotationNode*, const TTypeAnnotationNode*>> aggColumns;
     for (const auto& aggregationTraits : aggregationTraitsList) {
         const TString colName = aggregationTraits.OriginalColName.GetFullName();
         const auto *inputItemType = inputStructType->FindItemType(colName);
-        const auto *outputItemType = aggStructType->FindItemType(colName);
+        const auto *outputItemType = outputStructType->FindItemType(colName);
         Y_ENSURE(inputItemType && outputItemType, "Cannot find type for item");
         aggColumns[colName] = std::make_tuple(aggregationTraits.AggFunction, inputItemType, outputItemType);
     }
@@ -1284,22 +1265,6 @@ TExprNode::TPtr CreateNothingForEmptyInput(const TTypeAnnotationNode* aggType, T
         .Build()
     .Done().Ptr();
     // clang-format on
-}
-
-bool IsSuitableToWrapWithCondense(const TTypeAnnotationNode* aggType, const TVector<TString>& keyFields) {
-    if (!keyFields.empty()) {
-        return false;
-    }
-
-    Y_ENSURE(aggType);
-    const auto* aggStructType = aggType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    for (const auto* itemType : aggStructType->GetItems()) {
-        // FIXME: Need to update RBO TypeAnnotation to proper handle this case.
-        if (itemType->IsOptionalOrNull()) {
-            return false;
-        }
-    }
-    return true;
 }
 
 TExprNode::TPtr MapCondenseOutput(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits, const THashMap<TString, TString>& projectionMap,
@@ -1738,7 +1703,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
             YQL_CLOG(TRACE, CoreDq) << "Converted UnionAll " << opStageId;
         } else if (op->Kind == EOperator::Aggregate) {
             auto aggregate = CastOperator<TOpAggregate>(op);
-            const bool distinctAll = aggregate->DistinctAll;
 
             auto [stageArg, stageInput] =
                 graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *aggregate->GetInput()->Props.StageId);
@@ -1748,39 +1712,45 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
             const auto& keyColumns = aggregate->KeyColumns;
             const TVector<TString> inputColumns = GetInputColumns(aggregationTraitsList, keyColumns);
             const TVector<TString> keyFields = GetKeyFields(keyColumns);
+            const auto *inputType = aggregate->GetInput()->Type;
+            const auto *outputType = aggregate->Type;
+            const bool scalarAggregationResult = keyColumns.empty();
+            const bool distinctAll = aggregate->DistinctAll;
 
             TVector<TString> inputFields;
             TVector<TPhysicalAggregationTraits> phyAggregationTraitsList;
             THashMap<TString, TString> projectionMap;
-            GetPhysicalAggregationTraits(inputColumns, aggregationTraitsList, inputFields, phyAggregationTraitsList, projectionMap, aggregate->GetInput()->Type,
-                                         aggregate->Type);
+            GetPhysicalAggregationTraits(inputColumns, aggregationTraitsList, inputFields, phyAggregationTraitsList, projectionMap, inputType, outputType);
 
             // clang-format off
             auto wideCombiner = ctx.Builder(op->Pos)
                 .Callable("WideCombiner")
-                    .Add(0, BuildExpandMapForWideCombinerInput(stageInput, inputColumns, phyAggregationTraitsList, ctx, op->Pos))
+                    .Add(0, BuildExpandMapForWideCombinerInput(stageInput, inputColumns, ctx, op->Pos))
                     .Add(1, ctx.NewAtom(op->Pos, ""))
                     .Add(2, BuildKeyExtractorLambda(keyFields, inputFields, ctx, op->Pos))
                     .Add(3, BuildInitHandlerLambda(keyFields, inputFields, phyAggregationTraitsList, ctx, op->Pos))
                     .Add(4, BuildUpdateHandlerLambda(keyFields, inputFields, phyAggregationTraitsList, ctx, op->Pos))
                     .Add(5, BuildFinishHandlerLambda(keyFields, phyAggregationTraitsList, distinctAll, ctx, op->Pos))
-                .Seal().Build();
+                .Seal()
+            .Build();
             // clang-format on
 
             auto physicalAggregation =
                 BuildNarrowMapForWideCombinerOutput(wideCombiner, keyFields, phyAggregationTraitsList, projectionMap, distinctAll, ctx, op->Pos);
 
-            if (IsSuitableToWrapWithCondense(aggregate->Type, keyFields)) {
+            // For scalar aggregation result we need to wrap it with Condense.
+            if (scalarAggregationResult) {
                 physicalAggregation =
-                    BuildCondenseForAggregationOutputWithEmptyKeys(physicalAggregation, phyAggregationTraitsList, projectionMap, aggregate->Type, ctx, op->Pos);
+                    BuildCondenseForAggregationOutputWithEmptyKeys(physicalAggregation, phyAggregationTraitsList, projectionMap, outputType, ctx, op->Pos);
             }
 
-            YQL_CLOG(TRACE, CoreDq) << "[KQP RBO Aggregate convert to physical] " << KqpExprToPrettyString(TExprBase(physicalAggregation), ctx);
+            YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical aggregation] " << KqpExprToPrettyString(TExprBase(physicalAggregation), ctx);
             // clang-format off
             currentStageBody = ctx.Builder(op->Pos)
                 .Callable("FromFlow")
                     .Add(0, physicalAggregation)
-                .Seal().Build();
+                .Seal()
+            .Build();
             // clang-format on
 
             stages[opStageId] = currentStageBody;

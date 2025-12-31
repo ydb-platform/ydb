@@ -349,7 +349,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&MinActivePartitions_)
             .DefaultValue(1);
         config.Opts->AddLongOption("retention-period-hours", TStringBuilder()
-                << "Duration in hours for which data in topic is stored (supports time units like '72h', '1440m') "
+                << "Duration in hours for which data in topic is stored. Supports time units (e.g., '72h', '1440m'). Plain number interpreted as hours "
                 << "(default: " << NColorizer::StdOut().CyanColor() << RetentionPeriod_.Hours() << NColorizer::StdOut().OldColor() << ")")
             .Hidden()
             .Optional()
@@ -449,7 +449,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partitions-count", "Initial and minimum number of partitions for topic")
             .Optional()
             .StoreResult(&MinActivePartitions_);
-        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored (supports time units like '72h', '1440m')")
+        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored. Supports time units (e.g., '72h', '1440m'). Plain number interpreted as hours.")
             .Hidden()
             .Optional()
             .RequiredArgument("HOURS")
@@ -934,7 +934,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
             .StoreResult(&File_);
-        config.Opts->AddLongOption("idle-timeout", "Max wait duration for the first message. Topic is considered empty if no new messages arrive within this period. Supports time units (e.g., '5s', '1m').")
+        config.Opts->AddLongOption("idle-timeout", "Max wait duration for the first message. Topic is considered empty if no new messages arrive within this period. Value must include a time unit suffix (e.g., '5s', '1m').")
             .Optional()
             .DefaultValue(DefaultIdleTimeout)
             .StoreResult(&IdleTimeout_);

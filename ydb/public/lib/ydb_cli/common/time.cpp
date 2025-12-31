@@ -4,7 +4,10 @@ namespace NYdb::NConsoleClient {
 
 TDuration ParseDuration(TStringBuf str) {
     StripInPlace(str);
-    if (!str.empty() && !IsAsciiAlpha(str.back())) {
+    if (str.empty()) {
+        throw TMisuseException() << "Duration cannot be empty";
+    }
+    if (!IsAsciiAlpha(str.back())) {
         throw TMisuseException() << "Duration must end with a unit name (ex. 'h' for hours, 's' for seconds)";
     }
     return TDuration::Parse(str);

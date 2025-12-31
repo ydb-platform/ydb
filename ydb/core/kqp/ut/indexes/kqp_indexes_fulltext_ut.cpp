@@ -2924,6 +2924,174 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardBoundaries) {
     }
 }
 
+Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    NYdb::NQuery::TExecuteQuerySettings querySettings;
+    querySettings.ClientTimeout(TDuration::Minutes(1));
+
+    {
+        const TString query = R"sql(
+            CREATE TABLE `/Root/Texts` (
+                Key Uint64,
+                Text Utf8,
+                PRIMARY KEY (Key)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+                (0, "👾🧪 experiment 4️⃣②፳"),
+                (1, "🙈 🎶 4️⃣"),
+                (2, "سنة جديدة سعيدة!"),
+                (3, "Gleðilegt Nýtt Ár!"),
+                (4, "新年快乐！"),
+                (5, "꫞"),
+                (6, "﷽ that's one character")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext
+                ON (Text)
+                WITH (
+                    layout=flat,
+                    tokenizer=whitespace,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=2,  -- to check that single emoji or multi-byte character is ignored
+                    filter_ngram_max_length=5
+                );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "🙈")
+            ORDER BY `Key`;
+            
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "🎶")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "4")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "꫞")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "﷽")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "4️⃣") -- that's grapheme cluster that consists of three utf8 runes
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        for (const auto i : xrange(5)) {
+            CompareYson("[]", NYdb::FormatResultSetYson(result.GetResultSet(i)));
+        }
+        CompareYson(R"([
+            [[1u];["🙈 🎶 4️⃣"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
+    }
+
+
+    DropIndex(db);
+
+    {
+        const TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext
+                ON (Text)
+                WITH (
+                    layout=flat,
+                    tokenizer=whitespace,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=1,
+                    filter_ngram_max_length=5
+                );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "*🧪* *②፳")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "🙈 🎶 4️⃣")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "*4*") -- 4️⃣ is grapheme cluster with first rune "4"
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "*Ár!")
+            ORDER BY `Key`;
+            
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "*年*！")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "꫞")
+            ORDER BY `Key`;
+
+            SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::ContainsUtf8(`Text`, "﷽*")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[0u];["👾🧪 experiment 4️⃣②፳"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[1u];["🙈 🎶 4️⃣"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(R"([
+            [[0u];["👾🧪 experiment 4️⃣②፳"]];
+            [[1u];["🙈 🎶 4️⃣"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(2)));
+        CompareYson(R"([
+            [[3u];["Gleðilegt Nýtt Ár!"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
+        CompareYson(R"([
+            [[4u];["新年快乐！"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(4)));
+        CompareYson(R"([
+            [[5u];["꫞"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(5)));
+        CompareYson(R"([
+            [[6u];["﷽ that's one character"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(6)));
+    }
+}
+
 }
 
 }

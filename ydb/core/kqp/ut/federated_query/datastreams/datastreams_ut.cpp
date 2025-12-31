@@ -1663,6 +1663,34 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n{\"data\": \"x\"}");
     }
 
+    Y_UNIT_TEST_F(S3AtomicUploadCommitDisabledForStreamingQueries, TStreamingTestFixture) {
+        constexpr char sourceBucket[] = "test_bucket_disable_atomic_upload_commit";
+        constexpr char objectPath[] = "test_bucket_object.json";
+        constexpr char objectContent[] = R"({"data": "x"})";
+        CreateBucketWithObject(sourceBucket, objectPath, objectContent);
+
+        constexpr char s3SourceName[] = "s3Source";
+        CreateS3Source(sourceBucket, s3SourceName);
+
+        const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
+            PRAGMA s3.AtomicUploadCommit = "true";
+            INSERT INTO `{s3_source}`.`path/` WITH (
+                FORMAT = "json_each_row"
+            ) SELECT * FROM `{s3_source}`.`{object_path}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    data String NOT NULL
+                )
+            )
+        )", "s3_source"_a = s3SourceName, "object_path"_a = objectPath), {
+            .SaveState = true
+        }, /* waitRunning */ false);
+
+        const auto& readyOp = WaitScriptExecution(operationId);
+        UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n{\"data\": \"x\"}");
+    }
+
     Y_UNIT_TEST_F(CrossJoinWithNotExistingDataSource, TStreamingTestFixture) {
         const auto connectorClient = SetupMockConnectorClient();
 
@@ -2159,7 +2187,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryWithSolomonInsert, TStreamingTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
+        constexpr char inputTopicName[] = "streamingQuerySolomonInsertInputTopic";
         CreateTopic(inputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -2252,6 +2280,51 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
   }
 ])";
         UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithS3Insert, TStreamingTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopicName[] = "streamingQueryS3InsertInputTopic";
+        constexpr char pqSourceName[] = "sourceName";
+        CreateTopic(inputTopicName);
+        CreatePqSource(pqSourceName);
+
+        constexpr char sourceBucket[] = "test_bucket_streaming_query_s3_insert";
+        constexpr char s3SinkName[] = "sinkName";
+        CreateBucket(sourceBucket);
+        CreateS3Source(sourceBucket, s3SinkName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{s3_sink}`.`test/` WITH (
+                    FORMAT = raw
+                ) SELECT
+                    Data
+                FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "s3_sink"_a = s3SinkName,
+            "input_topic"_a = inputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        readSession->AddDataReceivedEvent(0, "1234");
+        Sleep(TDuration::Seconds(2));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "1234");
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, "4321");
+        Sleep(TDuration::Seconds(2));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "1234\n4321");
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithS3Join, TStreamingTestFixture) {

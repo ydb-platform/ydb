@@ -19,6 +19,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
+#include <library/cpp/regex/pire/pire.h>
 #include <library/cpp/threading/hot_swap/hot_swap.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -51,6 +52,24 @@ constexpr double K1_FACTOR = 1.2;
 constexpr double B_FACTOR = 0.75;
 
 class TDocumentIdPointer;
+
+namespace {
+
+TString WildcardToRegex(const TStringBuf wildcardPattern) {
+    static const TStringBuf special = R"(^$.\+?()|{}[])";
+    TStringBuilder builder;
+    for (char c : wildcardPattern) {
+        if (c == '*') {
+            builder << '.';
+        } else if (special.find(c) != TStringBuf::npos) {
+            builder << '\\';
+        }
+        builder << c;
+    }
+    return builder;
+}
+
+}
 
 class TTableReader : public TAtomicRefCount<TTableReader> {
     TIntrusivePtr<TKqpCounters> Counters;
@@ -303,6 +322,10 @@ public:
 
     void AddRow(const TConstArrayRef<TCell>& row) {
         RowCells = TOwnedCellVec(row);
+    }
+
+    TCell GetResultCell(const size_t idx) const {
+        return RowCells.at(idx);
     }
 
     std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> GetReadDocumentStatsRequest(ui64 readId) {
@@ -949,6 +972,9 @@ private:
     bool NavigateIndexInProgress = false;
     bool PendingNotify = false;
 
+    i32 SearchColumnIdx = -1;
+    TVector<std::function<bool(TStringBuf)>> PostfilterMatchers;
+
     std::priority_queue<TDocumentIdPointer, TVector<TDocumentIdPointer>> MergeQueue;
     std::deque<TIntrusivePtr<TDocumentInfo>> ResultQueue;
     TActorId PipeCacheId;
@@ -959,6 +985,31 @@ private:
     // Helper to bind allocator
     TGuard<NMiniKQL::TScopedAlloc> BindAllocator() {
         return TGuard<NMiniKQL::TScopedAlloc>(*Alloc);
+    }
+
+    void GeneratePostfilterMatchers(const Ydb::Table::FulltextIndexSettings::Analyzers& analyzers, const TStringBuf query) {
+        if (!analyzers.use_filter_ngram() && !analyzers.use_filter_edge_ngram()) {
+            return;
+        }
+
+        const auto analyzersForQuery = NFulltext::GetAnalyzersForQuery(analyzers);
+
+        for (const TString& queryToken : NFulltext::Analyze(TString(query), analyzersForQuery, '*')) {
+            const TString pattern = WildcardToRegex(queryToken);
+            TVector<wchar32> ucs4Pattern;
+            NPire::NEncodings::Utf8().FromLocal(
+                pattern.data(),
+                pattern.data() + pattern.size(),
+                std::back_inserter(ucs4Pattern));
+
+            auto regex = NPire::TLexer(ucs4Pattern.begin(), ucs4Pattern.end())
+                .SetEncoding(NPire::NEncodings::Utf8())
+                .Parse().Compile<NPire::TScanner>();
+
+            PostfilterMatchers.push_back([regex=std::move(regex)](const TStringBuf str) {
+                return Pire::Matches(regex, str);
+            });
+        }
     }
 
     void ExtractAndTokenizeExpression() {
@@ -974,15 +1025,19 @@ private:
 
                 if (analyzer.column() == column.GetName()) {
                     size_t wordIndex = 0;
-                    for(TString query: NFulltext::Analyze(expr, analyzer.analyzers())) {
+                    for (const TString& query: NFulltext::BuildSearchTerms(expr, analyzer.analyzers())) {
                         YQL_ENSURE(IndexTableReader);
                         Words.emplace_back(TWordReadState(wordIndex++, query, IndexTableReader));
                     }
+
+                    GeneratePostfilterMatchers(analyzer.analyzers(), expr);
                 }
             }
         }
 
-        YQL_ENSURE(!Words.empty(), "Expression must produce at least one word after tokenization");
+        if (Words.empty()) {
+            NotifyCA();
+        }
     }
 
     void FetchDocumentStats(TIntrusivePtr<TDocumentInfo> docInfo) {
@@ -1095,7 +1150,11 @@ private:
             }
         }
 
+        YQL_ENSURE(Settings->GetQuerySettings().ColumnsSize() == 1);
+        const TStringBuf searchColumnName = Settings->GetQuerySettings().GetColumns(0).GetName();
+
         i32 relevanceIndex = 0;
+        i32 searchColumnIndex = 0;
         for(const auto& column : Settings->GetColumns()) {
             const auto it = columnNameToIndex.find(column.GetName());
 
@@ -1104,13 +1163,19 @@ private:
                 continue;
             }
 
+            if (column.GetName() == searchColumnName) {
+                SearchColumnIdx = searchColumnIndex;
+            }
+
             YQL_ENSURE(it != columnNameToIndex.end(), "Column " << column.GetName() << " not found in table " << tablePath);
             const auto columnInfo = entry.Columns.FindPtr(it->second);
             YQL_ENSURE(columnInfo);
             resultKeyColumnTypes.push_back(columnInfo->PType);
             resultKeyColumnIds.push_back(columnInfo->Id);
             relevanceIndex++;
+            searchColumnIndex++;
         }
+        YQL_ENSURE(SearchColumnIdx != -1);
 
         for (const auto& [_, index] : keyPositionToIndex) {
             const auto columnInfo = entry.Columns.FindPtr(index);
@@ -1436,6 +1501,31 @@ public:
         SendEvRead(shardId, request);
     }
 
+    bool Postfilter(const TDocumentInfo& documentInfo) const {
+        auto analyzers = IndexDescription.GetSettings().columns(0).analyzers();
+        // Prevent splitting tokens into ngrams
+        analyzers.set_use_filter_ngram(false);
+        analyzers.set_use_filter_edge_ngram(false);
+
+        for (const auto& matcher : PostfilterMatchers) {
+            const TString searchColumnValue(documentInfo.GetResultCell(SearchColumnIdx).AsBuf()); // TODO: don't copy
+
+            bool found = false;
+            for (const auto& valueToken : NFulltext::Analyze(searchColumnValue, analyzers)) {
+                if (matcher(valueToken)) {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     void DocumentDetailsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64 docNumId) {
         for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
@@ -1443,9 +1533,13 @@ public:
             if (it == DocumentById.end()) {
                 continue;
             }
-            CA_LOG_E("Adding row info about docnumid: " << it->second->DocumentNumId);
-            it->second->AddRow(row);
-            ResultQueue.push_back(it->second);
+
+            const TIntrusivePtr<NKikimr::NKqp::TDocumentInfo> documentInfoPtr = it->second;
+            CA_LOG_E("Adding row info about docnumid: " << documentInfoPtr->DocumentNumId);
+            documentInfoPtr->AddRow(row);
+            if (PostfilterMatchers.empty() || Postfilter(*documentInfoPtr)) {
+                ResultQueue.push_back(documentInfoPtr);
+            }
         }
 
         NotifyCA();

@@ -2327,6 +2327,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         if (const auto& s3Data = GetAllObjects(sourceBucket); !IsIn({"12344321", "43211234"}, s3Data)) {
             UNIT_FAIL("Unexpected S3 data: " << s3Data);
         }
+
+        const auto& keys = GetObjectKeys(sourceBucket);
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+        for (const auto& key : keys) {
+            UNIT_ASSERT_STRING_CONTAINS(key, "test/");
+            UNIT_ASSERT_C(!key.substr(5).Contains("/"), key);
+        }
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithS3Join, TStreamingTestFixture) {

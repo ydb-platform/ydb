@@ -1818,7 +1818,6 @@ private:
         } else {
             configuration.AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
         }
-
         configuration.WriteThroughDqIntegration = true;
         configuration.Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
 

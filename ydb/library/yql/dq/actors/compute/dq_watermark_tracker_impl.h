@@ -171,21 +171,27 @@ public:
     }
 
     void Out(IOutputStream& str) const {
-        str << "Watermarks: {";
-        for (auto it = Data_.cbegin(); it != Data_.cend(); ++it) {
-            const auto& [key, data] = *it;
-            str << "\n    " << key << ": {" << " watermark: " << data.Watermark;
-            if (data.IdleTimeout != TDuration::Max()) {
-                str << ", expires: " << data.ExpiresAt << ", timeout: " << data.IdleTimeout;
-                if (!WatermarksQueue_.contains(TWatermarksQueueItem { data.Watermark, it })) {
-                    str << ", expired";
+        if (!Data_.empty()) {
+            str << "Watermarks: {";
+            for (auto it = Data_.cbegin(); it != Data_.cend(); ++it) {
+                const auto& [key, data] = *it;
+                str << "\n    " << key << ": {" << " watermark: " << data.Watermark;
+                if (data.IdleTimeout != TDuration::Max()) {
+                    str << ", expires: " << data.ExpiresAt << ", timeout: " << data.IdleTimeout;
+                    if (!WatermarksQueue_.contains(TWatermarksQueueItem { data.Watermark, it })) {
+                        str << ", expired";
+                    }
                 }
+                str << " },";
             }
-            str << " },";
+            str << "};\n";
         }
-        str << "};\n";
-        str << "LastWatermark: " << Watermark_ << ";\n";
-        str << "IdleChecks: [ " << JoinSeq(", ", InflyIdlenessChecks_) << " ];\n";
+        if (Watermark_) {
+            str << "Watermark: " << Watermark_ << ";\n";
+        }
+        if (!InflyIdlenessChecks_.empty()) {
+            str << "InflyIdlenessChecks: [ " << JoinSeq(", ", InflyIdlenessChecks_) << " ];\n";
+        }
     }
 
 private:

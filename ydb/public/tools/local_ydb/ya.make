@@ -2,11 +2,11 @@ PY3_PROGRAM(local_ydb)
 
 PY_SRCS(
     __main__.py
-    resources/__init__.py
 )
 
-RESOURCE(
-    resources/minimal_yaml.yml /minimal_yaml.yml
+RESOURCE_FILES(
+    PREFIX ydb/public/tools/local_ydb/
+    resources/minimal_yaml.yml
 )
 
 PEERDIR(

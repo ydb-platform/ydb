@@ -2,6 +2,28 @@
 
 This section describes the parameters of limits set in {{ ydb-short-name }}.
 
+## Configuring Schema Object Limits {#configure-limits}
+
+Database administrators can configure schema object limits via the `config.yaml` file in the `domains_config.domain.scheme_limits` section. When not specified, the default values shown in the table below are used.
+
+Example configuration:
+
+```yaml
+domains_config:
+  domain:
+    - name: Root
+      scheme_limits:
+        max_paths: 50000              # Maximum number of schema objects (tables, directories)
+        max_table_columns: 500        # Maximum columns per table
+        max_table_indices: 50         # Maximum indexes per table
+        max_shards: 300000            # Maximum shards in database
+      storage_pool_types:
+        - kind: ssd
+          # ... rest of configuration
+```
+
+All fields in `scheme_limits` are optional. Available parameters correspond to the internal names shown in the table below.
+
 ## Schema Object Limits {#schema-object}
 
 The table below shows the limits that apply to schema objects: tables, databases, and columns. The "Object" column specifies the type of schema object that the limit applies to.

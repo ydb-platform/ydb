@@ -387,7 +387,7 @@ std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> TDbReque
     auto resultSet = std::make_shared<std::vector<NYdb::TResultSet>>();
 
     std::shared_ptr<int> retryCount = std::make_shared<int>();
-    auto handler = [=, requestCounters=requestCounters](TSession& session) mutable {
+    auto handler = [retryCount, query, params, debugInfo, transactionMode, retryOnTli, resultSet, actorSystem, requestCounters=requestCounters](TSession& session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }
@@ -489,7 +489,7 @@ TAsyncStatus TDbRequester::Write(
         }
         ++(*retryCount);
         std::shared_ptr<bool> successFinish = std::make_shared<bool>();
-        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
+        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([successFinish, writeHandler, session, actorSystem](const auto& future) {
             try {
                 auto status = future.GetValue();
                 if (!status.IsSuccess()) {
@@ -530,7 +530,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
 {
     return ReadModifyWrite(taskParams.ReadQuery, taskParams.ReadParams,
         taskParams.PrepareParams, requestCounters, debugInfo, validators, transactionMode, taskParams.RetryOnTli)
-            .Apply([=, responseTasks=responseTasks, queryId=taskParams.QueryId](const auto& future) {
+            .Apply([responseTasks=responseTasks, queryId=taskParams.QueryId](const auto& future) {
                 const auto status = future.GetValue();
                 if (responseTasks && !status.IsSuccess()) {
                     responseTasks->SafeEraseTaskBlocking(queryId);
@@ -553,7 +553,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
     auto resultSets = std::make_shared<std::vector<NYdb::TResultSet>>();
     auto transaction = std::make_shared<std::optional<TTransaction>>();
 
-    auto readModifyWriteHandler = [=](TSession session) {
+    auto readModifyWriteHandler = [readQuery, readParams, debugInfo, resultSets, transaction, transactionMode, validators, actorSystem, retryCount, retryOnTli, prepare](TSession session) {
         CollectDebugInfo(readQuery, readParams, session, debugInfo);
         auto readResult = session.ExecuteDataQuery(readQuery, validators ? TTxControl::Tx(**transaction) : TTxControl::BeginTx(transactionMode), readParams, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
         auto readResultStatus = readResult.Apply([resultSets, transaction, actorSystem, readQuery] (const TFuture<TDataQueryResult>& future) {
@@ -570,11 +570,11 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
             return status;
         });
 
-        TFuture<std::pair<TString, NYdb::TParams>> resultPrepare = readResultStatus.Apply([=](const auto& future) {
+        TFuture<std::pair<TString, NYdb::TParams>> resultPrepare = readResultStatus.Apply([prepare, resultSets](const auto& future) {
             return future.GetValue().IsSuccess() ? prepare(*resultSets) : make_pair(TString(""), NYdb::TParamsBuilder{}.Build());
         });
 
-        return resultPrepare.Apply([=, actorSystem=actorSystem](const auto& future) mutable {
+        return resultPrepare.Apply([readResultStatus, transaction, session, debugInfo, retryOnTli, actorSystem=actorSystem](const auto& future) mutable {
             if (!readResultStatus.GetValue().IsSuccess()) {
                 return readResultStatus;
             }
@@ -634,7 +634,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
         ++(*retryCount);
 
         std::shared_ptr<bool> successFinish = std::make_shared<bool>();
-        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([actorSystem, successFinish, session](const auto& future) {
+        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([actorSystem, successFinish, session, readModifyWriteHandler](const auto& future) {
             try {
                 auto status = future.GetValue();
                 if (!status.IsSuccess()) {

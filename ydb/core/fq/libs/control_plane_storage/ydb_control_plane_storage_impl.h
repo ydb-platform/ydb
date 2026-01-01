@@ -983,7 +983,7 @@ private:
         const std::function<Result()>& prepare,
         TDebugInfoPtr debugInfo)
     {
-        return status.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
+        return status.Apply([prepare, actorSystem, name, debugInfo, startTime, self, sender=ev->Sender, cookie=ev->Cookie, requestCounters=requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;
@@ -1018,7 +1018,7 @@ private:
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(issues));
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
+                actorSystem->Send(new IEventHandle(sender, self, event.release(), 0, cookie));
                 requestCounters.IncError();
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
@@ -1031,7 +1031,7 @@ private:
                 std::unique_ptr<ResponseEvent> event(new ResponseEvent(std::make_from_tuple<ResponseEvent>(result)));
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                actorSystem->Send(new IEventHandle(ev->Sender, self, event.release(), 0, ev->Cookie));
+                actorSystem->Send(new IEventHandle(sender, self, event.release(), 0, cookie));
                 requestCounters.IncOk();
             }
             requestCounters.DecInFly();

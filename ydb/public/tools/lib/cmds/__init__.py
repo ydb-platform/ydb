@@ -371,6 +371,9 @@ def deploy(arguments):
     if is_tiny_mode():
         optionals['tiny_mode'] = True
 
+    # Check if custom config is provided
+    config_path = getattr(arguments, 'config_path', None)
+    
     # Use minimal config for local_ydb by default (unless custom config provided)
     if not config_path:
         optionals['use_minimal_config'] = True
@@ -400,7 +403,6 @@ def deploy(arguments):
         **optionals
     )
 
-    config_path = getattr(arguments, 'config_path', None)
     if config_path:
         def _write_proto_configs(self, configs_path):
             # This override only triggers on the very first deploy before the recipe metafile exists.

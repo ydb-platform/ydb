@@ -467,7 +467,7 @@ TAsyncStatus TDbRequester::Write(
     auto writeHandler = [query, transaction, params, debugInfo, hasValidators=!validators.empty(), transactionMode, actorSystem, retryOnTli=retryOnTli] (TSession session) {
         CollectDebugInfo(query, params, session, debugInfo);
         auto result = session.ExecuteDataQuery(query, hasValidators ? TTxControl::Tx(**transaction).CommitTx() : TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-        return result.Apply([=] (const TFuture<TDataQueryResult>& future) {
+        return result.Apply([query, actorSystem, retryOnTli] (const TFuture<TDataQueryResult>& future) {
             NYdb::NTable::TDataQueryResult result = future.GetValue();
             auto status = static_cast<TStatus>(result);
             if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
@@ -634,7 +634,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
         ++(*retryCount);
 
         std::shared_ptr<bool> successFinish = std::make_shared<bool>();
-        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
+        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([actorSystem, successFinish, session](const auto& future) {
             try {
                 auto status = future.GetValue();
                 if (!status.IsSuccess()) {

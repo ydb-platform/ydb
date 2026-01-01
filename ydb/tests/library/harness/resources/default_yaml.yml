@@ -95,7 +95,6 @@ system_tablets:
 actor_system_config:
   use_auto_config: true
   node_type: COMPUTE
-  cpu_count: 4
 log_config:
   sys_log: false
   default_level: {ydb_default_log_level}

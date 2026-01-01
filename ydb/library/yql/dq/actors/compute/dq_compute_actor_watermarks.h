@@ -11,7 +11,7 @@ namespace NYql::NDq::NDqComputeActorWatermarksImpl {
 
         constexpr auto operator<=> (const TInputKey&) const = default;
     };
-} // namespace NYql::NDq:: NDqComputeActorWatermarksImpl
+} // namespace NYql::NDq::NDqComputeActorWatermarksImpl
 
 template<>
 struct THash<NYql::NDq::NDqComputeActorWatermarksImpl::TInputKey> {

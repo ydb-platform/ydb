@@ -83,9 +83,10 @@ private:
     TDqWatermarkTrackerImpl<TPartitionKey> Impl_;
 };
 
+} // namespace NYql::NDq
+
 template<typename TPartitionKey>
 IOutputStream& operator<< (IOutputStream& str, const NYql::NDq::TDqSourceWatermarkTracker<TPartitionKey>& x) {
     x.Out(str);
+    return str;
 }
-
-} // namespace NYql::NDq

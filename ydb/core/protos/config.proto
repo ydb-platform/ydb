@@ -33,6 +33,7 @@ import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
 import "ydb/core/protos/stream.proto";
+import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/table_service_config.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tenant_pool.proto";
@@ -258,6 +259,7 @@ message TDomainsConfig {
         repeated fixed64 ExplicitCoordinators = 13;
         repeated fixed64 ExplicitAllocators = 14;
         optional uint32 SchemeBoardSSId = 15;
+        optional NKikimrSubDomains.TSchemeLimits SchemeLimits = 16;
     }
 
     message THiveConfig { // look for another THiveConfig later in this file

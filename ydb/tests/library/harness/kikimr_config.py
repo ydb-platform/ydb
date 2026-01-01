@@ -70,33 +70,95 @@ def _get_grpc_host():
     return "[::]"
 
 
-def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs):
-    data = read_binary(__name__, "resources/default_yaml.yml")
+def _load_yaml_template(template_name, default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs):
+    """
+    Load a YAML configuration template.
+    
+    Args:
+        template_name: Name of the template file (e.g., 'default_yaml.yml' or 'minimal_yaml.yml')
+        default_tablet_node_ids: Default node IDs for tablets
+        ydb_domain_name: Domain name
+        static_erasure: Erasure type
+        log_configs: Log configuration dictionary
+    
+    Returns:
+        Loaded and processed YAML configuration as a dictionary
+    """
+    # Try to load the template - for minimal_yaml.yml, look in local_ydb resources
+    if template_name == "minimal_yaml.yml":
+        try:
+            import ydb.public.tools.local_ydb.resources as local_ydb_resources
+            data = read_binary(local_ydb_resources, template_name)
+        except (ImportError, FileNotFoundError):
+            # If not found, fall back to the harness resources directory
+            data = read_binary(__name__, "resources/" + template_name)
+    else:
+        # For default_yaml.yml and others, use harness resources
+        data = read_binary(__name__, "resources/" + template_name)
+    
     if isinstance(data, bytes):
         data = data.decode('utf-8')
-    data = data.format(
-        ydb_result_rows_limit=os.getenv("YDB_KQP_RESULT_ROWS_LIMIT", 1000),
-        ydb_yql_syntax_version=os.getenv("YDB_YQL_SYNTAX_VERSION", "1"),
-        ydb_defaut_tablet_node_ids=str(default_tablet_node_ids),
-        ydb_default_log_level=int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE"))),
-        ydb_domain_name=ydb_domain_name,
-        ydb_static_erasure=static_erasure,
-        ydb_grpc_host=_get_grpc_host(),
-        ydb_pq_topics_are_first_class_citizen=bool(os.getenv("YDB_PQ_TOPICS_ARE_FIRST_CLASS_CITIZEN", "true")),
-        ydb_pq_cluster_table_path=str(os.getenv("YDB_PQ_CLUSTER_TABLE_PATH", "")),
-        ydb_pq_version_table_path=str(os.getenv("YDB_PQ_VERSION_TABLE_PATH", "")),
-        ydb_pq_root=str(os.getenv("YDB_PQ_ROOT", "")),
-    )
+    
+    # Format placeholders
+    format_params = {
+        'ydb_defaut_tablet_node_ids': str(default_tablet_node_ids),
+        'ydb_default_log_level': int(LogLevels.from_string(os.getenv("YDB_DEFAULT_LOG_LEVEL", "NOTICE"))),
+        'ydb_domain_name': ydb_domain_name,
+        'ydb_static_erasure': static_erasure,
+        'ydb_grpc_host': _get_grpc_host(),
+    }
+    
+    # Add PQ-related parameters only if they're used in the template
+    if '{ydb_result_rows_limit}' in data:
+        format_params['ydb_result_rows_limit'] = os.getenv("YDB_KQP_RESULT_ROWS_LIMIT", 1000)
+    if '{ydb_yql_syntax_version}' in data:
+        format_params['ydb_yql_syntax_version'] = os.getenv("YDB_YQL_SYNTAX_VERSION", "1")
+    if '{ydb_pq_topics_are_first_class_citizen}' in data:
+        format_params['ydb_pq_topics_are_first_class_citizen'] = bool(os.getenv("YDB_PQ_TOPICS_ARE_FIRST_CLASS_CITIZEN", "true"))
+    if '{ydb_pq_cluster_table_path}' in data:
+        format_params['ydb_pq_cluster_table_path'] = str(os.getenv("YDB_PQ_CLUSTER_TABLE_PATH", ""))
+    if '{ydb_pq_version_table_path}' in data:
+        format_params['ydb_pq_version_table_path'] = str(os.getenv("YDB_PQ_VERSION_TABLE_PATH", ""))
+    if '{ydb_pq_root}' in data:
+        format_params['ydb_pq_root'] = str(os.getenv("YDB_PQ_ROOT", ""))
+    
+    data = data.format(**format_params)
     yaml_dict = yaml.safe_load(data)
+    
+    # Add log entries
+    if "log_config" not in yaml_dict:
+        yaml_dict["log_config"] = {}
     yaml_dict["log_config"]["entry"] = []
     for log, level in six.iteritems(log_configs):
         yaml_dict["log_config"]["entry"].append({"component": log, "level": int(level)})
+    
+    # Add column tables support if enabled
     if os.getenv("YDB_ENABLE_COLUMN_TABLES", "") == "true":
         yaml_dict |= {"column_shard_config": {"disabled_on_scheme_shard": False}}
+        if "table_service_config" not in yaml_dict:
+            yaml_dict["table_service_config"] = {}
         yaml_dict["table_service_config"]["enable_htap_tx"] = True
         yaml_dict["table_service_config"]["enable_olap_sink"] = True
         yaml_dict["table_service_config"]["enable_create_table_as"] = True
+    
     return yaml_dict
+
+
+def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs):
+    """Load the default (full) YAML configuration template."""
+    return _load_yaml_template("default_yaml.yml", default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs)
+
+
+def _load_minimal_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs):
+    """
+    Load the minimal YAML configuration template for local_ydb.
+    
+    This minimal template:
+    - Uses auto-configuration for actor system (no explicit actor_system_config)
+    - Only includes essential sections
+    - Excludes PQ, SQS, Federated Query, and other advanced features
+    """
+    return _load_yaml_template("minimal_yaml.yml", default_tablet_node_ids, ydb_domain_name, static_erasure, log_configs)
 
 
 def _load_yaml_config(filename):
@@ -198,6 +260,7 @@ class KikimrConfigGenerator(object):
             enable_pool_encryption=False,
             tiny_mode=False,
             module=None,
+            use_minimal_config=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -213,6 +276,7 @@ class KikimrConfigGenerator(object):
         self.use_log_files = use_log_files
         self.use_self_management = use_self_management
         self.simple_config = simple_config
+        self.use_minimal_config = use_minimal_config
         self.bridge_config = bridge_config
         self.suppress_version_check = suppress_version_check
         self.explicit_hosts_and_host_configs = explicit_hosts_and_host_configs
@@ -292,7 +356,10 @@ class KikimrConfigGenerator(object):
 
         self.__bs_cache_file_path = bs_cache_file_path
 
-        self.yaml_config = _load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
+        if self.use_minimal_config:
+            self.yaml_config = _load_minimal_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
+        else:
+            self.yaml_config = _load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
 
         security_config_root = self.yaml_config["domains_config"]
         if self.use_self_management:

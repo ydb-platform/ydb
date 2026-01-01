@@ -371,6 +371,10 @@ def deploy(arguments):
     if is_tiny_mode():
         optionals['tiny_mode'] = True
 
+    # Use minimal config for local_ydb by default (unless custom config provided)
+    if not config_path:
+        optionals['use_minimal_config'] = True
+
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),
         binary_paths=[arguments.ydb_binary_path] if arguments.ydb_binary_path else None,

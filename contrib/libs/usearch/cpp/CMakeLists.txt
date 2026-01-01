@@ -1,0 +1,20 @@
+if (USEARCH_BUILD_TEST_CPP)
+    add_executable(test_cpp test.cpp)
+    setup_target(test_cpp)
+    include(CTest)
+    enable_testing()
+    add_test(NAME test_cpp COMMAND test_cpp)
+
+    target_include_directories(test_cpp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../stringzilla/include)
+
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(test_cpp PRIVATE -Wno-vla -Wno-unused-function -Wno-cast-function-type)
+    endif ()
+endif ()
+
+if (USEARCH_BUILD_BENCH_CPP)
+    include(clipp)
+    add_executable(bench_cpp bench.cpp)
+    setup_target(bench_cpp)
+    target_include_directories(bench_cpp PRIVATE ${clipp_SOURCE_DIR}/include)
+endif ()

@@ -148,7 +148,7 @@ void TDqComputeActorWatermarks::Out(IOutputStream& str) const {
 } // namespace NYql::NDq
 
 template<>
-void Out<NYql::NDq::NImpl::TInputKey>(IOutputStream& str, const NYql::NDq::NImpl::TInputKey& x) {
+void Out<NYql::NDq::NDqComputeActorWatermarksImpl::TInputKey>(IOutputStream& str, const NYql::NDq::NDqComputeActorWatermarksImpl::TInputKey& x) {
     str << "[" << (x.IsChannel ? "Channel " : "Input ") << x.InputId << "]";
 }
 

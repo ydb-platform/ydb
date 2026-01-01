@@ -4,21 +4,19 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/compute/dq_watermark_tracker_impl.h>
 
-namespace NYql::NDq {
-namespace NImpl {
+namespace NYql::NDq::NDqComputeActorWatermarksImpl {
     struct TInputKey {
         ui64 InputId;
         bool IsChannel;
 
         constexpr auto operator<=> (const TInputKey&) const = default;
     };
-}
-}
+} // namespace NYql::NDq:: NDqComputeActorWatermarksImpl
 
 template<>
-struct THash<NYql::NDq::NImpl::TInputKey> {
-    inline constexpr size_t operator() (const NYql::NDq::NImpl::TInputKey& x) const noexcept {
-        return (x.InputId << 1) ^ x.IsChannel;
+struct THash<NYql::NDq::NDqComputeActorWatermarksImpl::TInputKey> {
+    constexpr size_t operator() (const auto& x) const noexcept {
+        return (x.InputId << 1) ^ x.IsChannel; // better than CombineHashes for this particular purpose
     }
 };
 
@@ -68,7 +66,7 @@ public:
 private:
     TString LogPrefix;
 
-    using TInputKey = NImpl::TInputKey;
+    using TInputKey = NDqComputeActorWatermarksImpl::TInputKey;
     TDqWatermarkTrackerImpl<TInputKey> Impl;
 
     TMaybe<TInstant> PendingWatermark;

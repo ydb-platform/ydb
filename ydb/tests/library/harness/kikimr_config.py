@@ -125,16 +125,19 @@ def _load_yaml_template(template_name, default_tablet_node_ids, ydb_domain_name,
     data = data.format(**format_params)
     yaml_dict = yaml.safe_load(data)
     
-    # Add log entries
+    # Add log entries (preserve existing entries if any)
     if "log_config" not in yaml_dict:
         yaml_dict["log_config"] = {}
-    yaml_dict["log_config"]["entry"] = []
+    if "entry" not in yaml_dict["log_config"]:
+        yaml_dict["log_config"]["entry"] = []
     for log, level in six.iteritems(log_configs):
         yaml_dict["log_config"]["entry"].append({"component": log, "level": int(level)})
     
     # Add column tables support if enabled
     if os.getenv("YDB_ENABLE_COLUMN_TABLES", "") == "true":
-        yaml_dict |= {"column_shard_config": {"disabled_on_scheme_shard": False}}
+        if "column_shard_config" not in yaml_dict:
+            yaml_dict["column_shard_config"] = {}
+        yaml_dict["column_shard_config"]["disabled_on_scheme_shard"] = False
         if "table_service_config" not in yaml_dict:
             yaml_dict["table_service_config"] = {}
         yaml_dict["table_service_config"]["enable_htap_tx"] = True

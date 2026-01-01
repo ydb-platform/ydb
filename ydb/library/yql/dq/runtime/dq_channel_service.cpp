@@ -17,6 +17,7 @@
 #define LOG_E(stream) LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
 
 #define LOGA_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, stream)
+#define LOGA_N(stream) LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, stream)
 #define LOGA_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, stream)
 
 namespace NYql::NDq {
@@ -721,6 +722,10 @@ void TLocalBufferRegistry::DeleteLocalBufferInfo(const TChannelInfo& info) {
     LocalBuffers.erase(info);
 }
 
+void TNodeSessionActor::PassAway() {
+    LOGA_N("TNodeSessionActor::PassAway SelfId=" << SelfId() << "to NodeId=" << NodeState->NodeId << ", PeerActorId=" <<  NodeState->PeerActorId);
+}
+
 TNodeState::~TNodeState() {
     *OutputBufferCount -= OutputDescriptors.size();
     *InputBufferCount -= InputDescriptors.size();
@@ -946,10 +951,10 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
     if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
-        if (Reconciliation.load() == 0) {
+        // if (Reconciliation.load() == 0) {
             // ignore errors in recovery
-            LOG_W("DATA UNDELIVERED, UNKNOWN ActorId to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId);
-        }
+            LOG_W("DATA UNDELIVERED, UNKNOWN ActorId to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId << ", Sender=" << ev->Sender);
+        // }
         std::lock_guard lock(Mutex);
         StartReconciliation(true);
         return;
@@ -973,7 +978,7 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     }
 }
 
-void TNodeState::Connect(NActors::TActorId& sender, ui64 genMajor) {
+void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor) {
     std::lock_guard lock(Mutex);
     if (!Connected) {
         PeerActorId = sender;
@@ -994,7 +999,7 @@ void TNodeState::Connect(NActors::TActorId& sender, ui64 genMajor) {
 void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
 
     auto& record = ev->Get()->Record;
-    Connect(ev->Sender, record.GetGenMajor());
+    ConnectSession(ev->Sender, record.GetGenMajor());
 
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
@@ -1014,7 +1019,7 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
 void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto& record = ev->Get()->Record;
-    Connect(ev->Sender, record.GetGenMajor());
+    ConnectSession(ev->Sender, record.GetGenMajor());
 
     PeerGenMinor = std::max<ui64>(record.GetGenMinor(), PeerGenMinor);
 
@@ -1072,6 +1077,11 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 }
 
 void TNodeState::SendFromWaiters(ui64 deltaBytes) {
+
+    if (PeerActorId == NActors::TActorId{}) {
+        return;
+    }
+
     ui64 inflightBytes = 0;
     {
         std::lock_guard lock(Mutex); // ???
@@ -1192,6 +1202,11 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
     {
         std::lock_guard lock(Mutex);
 
+        if (!Connected && PeerActorId == NActors::TActorId{}) {
+            PeerActorId = ev->Sender;
+            LOG_D("NODE PEER SET BY ACK, " << NodeActorId << " to " << PeerActorId);
+        }
+
         auto status = record.GetStatus();
         auto seqNo = record.GetSeqNo();
 
@@ -1227,39 +1242,42 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             auto& item = Queue.front();
 
             if (item->SeqNo != seqNo) {
-                LOG_W("SEQ_NO DESYNC, SeqNo=" << SeqNo << ", item.SeqNo=" << item->SeqNo << ", " << NodeActorId << " from peer " << ev->Sender);
-                StartReconciliation(true);
-                return;
-            }
-
-            if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
-                // if we're reconcilating, ignore next RESENDs
-                if (record.GetGenMinor() == GenMinor) {
-                    LOG_W("RESEND DATA, SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << PeerActorId);
-                    StartReconciliation(false);
+                // allow outdates/old acks
+                if (seqNo > item->SeqNo) {
+                    LOG_W("SEQ_NO DESYNC, SeqNo=" << seqNo << ", item.SeqNo=" << item->SeqNo << ", " << NodeActorId << " from peer " << ev->Sender);
+                    StartReconciliation(true);
+                    return;
                 }
-                return;
-            }
+            } else {
+                if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
+                    // if we're reconcilating, ignore next RESENDs
+                    if (record.GetGenMinor() == GenMinor) {
+                        LOG_W("RESEND DATA, SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << PeerActorId);
+                        StartReconciliation(false);
+                    }
+                    return;
+                }
 
-            if (!item->Descriptor->IsTerminatedOrAborted()) {
-                if (item->Descriptor->CheckGenMajor(GenMajor, "by Ack")) {
-                    if (status == NYql::NDqProto::TEvChannelAckV2::ERROR) {
-                        item->Descriptor->AbortChannel("By Remote Side");
-                    } else {
-                        auto flushed = item->Data.Finished;
-                        auto earlyFinished = record.GetEarlyFinished();
-                        auto popBytes = record.GetPopBytes();
-                        if (flushed || earlyFinished || popBytes) {
-                            item->Descriptor->HandleUpdate(flushed, earlyFinished, popBytes, this, item->Descriptor);
+                if (!item->Descriptor->IsTerminatedOrAborted()) {
+                    if (item->Descriptor->CheckGenMajor(GenMajor, "by Ack")) {
+                        if (status == NYql::NDqProto::TEvChannelAckV2::ERROR) {
+                            item->Descriptor->AbortChannel("By Remote Side");
+                        } else {
+                            auto flushed = item->Data.Finished;
+                            auto earlyFinished = record.GetEarlyFinished();
+                            auto popBytes = record.GetPopBytes();
+                            if (flushed || earlyFinished || popBytes) {
+                                item->Descriptor->HandleUpdate(flushed, earlyFinished, popBytes, this, item->Descriptor);
+                            }
                         }
                     }
                 }
-            }
 
-            deltaBytes += item->Data.Bytes;
-            *OutputBufferInflightBytes -= item->Data.Bytes;
-            (*OutputBufferInflightMessages)--;
-            Queue.pop_front();
+                deltaBytes += item->Data.Bytes;
+                *OutputBufferInflightBytes -= item->Data.Bytes;
+                (*OutputBufferInflightMessages)--;
+                Queue.pop_front();
+            }
         }
 
         if (Reconciliation.exchange(0) > 0) {
@@ -1442,6 +1460,7 @@ void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
             GenMajor++;
             GenMinor = 1;
         }
+        UpdateReconciliationDelay();
         DoReconciliation();
         ScheduleReconciliation();
     }
@@ -1459,22 +1478,26 @@ void TNodeState::StartReconciliation(bool major) {
         ReReconciliation = false;
         Reconciliation.store(GenMajor);
 
-        if (!ReconciliationDelay) {
+        if (!UpdateReconciliationDelay()) {
             DoReconciliation();
         }
         ScheduleReconciliation();
     }
 }
 
-void TNodeState::ScheduleReconciliation() {
+bool TNodeState::UpdateReconciliationDelay() {
     if (ReconciliationDelay) {
         if (ReconciliationDelay < MaxReconciliationDelay) {
             ReconciliationDelay *= 2;
         }
+        return true;
     } else {
         ReconciliationDelay = MinReconciliationDelay;
+        return false;
     }
+}
 
+void TNodeState::ScheduleReconciliation() {
     ActorSystem->Schedule(ReconciliationDelay, new NActors::IEventHandle(NodeActorId, NodeActorId, new TEvPrivate::TEvReconciliation(GenMajor, GenMinor)));
 }
 
@@ -1550,7 +1573,7 @@ TString TNodeState::GetDebugInfo() {
 void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto& record = ev->Get()->Record;
-    Connect(ev->Sender, record.GetGenMajor());
+    ConnectSession(ev->Sender, record.GetGenMajor());
 
     PeerGenMinor = std::max<ui64>(record.GetGenMinor(), PeerGenMinor);
 

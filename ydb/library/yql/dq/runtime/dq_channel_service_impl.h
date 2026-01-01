@@ -548,12 +548,13 @@ public:
     void SendAckWithError(ui64 cookie);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters(ui64 deltaBytes);
-    void Connect(NActors::TActorId& sender, ui64 genMajor);
+    void ConnectSession(NActors::TActorId& sender, ui64 genMajor);
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor, ui64 popBytes);
 
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
     void StartReconciliation(bool major);
+    bool UpdateReconciliationDelay();
     void ScheduleReconciliation();
     void DoReconciliation();
     void SendDiscovery(NActors::TActorId actorId);
@@ -604,7 +605,7 @@ public:
     TDuration ReconciliationDelay = TDuration::Zero();
     bool ReReconciliation = false;
     ui64 ReconciliationCount = 0;
-    const TDuration MinReconciliationDelay = TDuration::MilliSeconds(100);
+    const TDuration MinReconciliationDelay = TDuration::MilliSeconds(200);
     const TDuration MaxReconciliationDelay = TDuration::Seconds(10);
 };
 
@@ -1017,10 +1018,12 @@ public:
 
 class TNodeSessionActor : public NActors::TActor<TNodeSessionActor> {
 public:
-    TNodeSessionActor(std::shared_ptr<TNodeState> nodeState)
+    TNodeSessionActor(std::shared_ptr<TNodeState>& nodeState)
         : TActor(&TThis::StateFunc)
         , NodeState(nodeState)
     {}
+
+    void PassAway() override;
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -1072,7 +1075,7 @@ public:
 
 class TDebugNodeSessionActor : public NActors::TActor<TDebugNodeSessionActor> {
 public:
-    TDebugNodeSessionActor(std::shared_ptr<TDebugNodeState> nodeState)
+    TDebugNodeSessionActor(std::shared_ptr<TDebugNodeState>& nodeState)
         : TActor(&TThis::StateFunc)
         , NodeState(nodeState)
     {}

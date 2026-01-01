@@ -113,6 +113,7 @@ public:
 
         BacklogPeers_.Clear();
         HashToActiveChannel_.clear();
+        PriorityToHashToActiveChannel_.clear();
         ActivePeerToPriority_.Clear();
         PriorityToActivePeers_.clear();
 
@@ -177,18 +178,28 @@ public:
             return nullptr;
         }
 
-        auto it = HashToActiveChannel_.lower_bound(std::pair(hash, std::string()));
+        int minPeersToPickFrom = std::max(Config_->MinPeerCountForPriorityAwareness, stickyGroupSize);
+
+        auto smallestPriorityEntryIt = PriorityToActivePeers_.begin();
+        int smallestPriorityActivePeerCount = smallestPriorityEntryIt->second.Size();
+        bool usePriority = smallestPriorityActivePeerCount >= minPeersToPickFrom;
+        const auto& hashToActiveChannel = usePriority
+            ? GetOrCrash(PriorityToHashToActiveChannel_, smallestPriorityEntryIt->first)
+            : HashToActiveChannel_;
+
+        auto channelIt = hashToActiveChannel.lower_bound(std::pair(hash, std::string()));
         auto rebaseIt = [&] {
-            if (it == HashToActiveChannel_.end()) {
-                it = HashToActiveChannel_.begin();
+            if (channelIt == hashToActiveChannel.end()) {
+                channelIt = hashToActiveChannel.begin();
             }
         };
 
         TCompactSet<std::string, 16> seenAddresses;
-        auto currentRandomIndex = randomIndex % ActivePeerToPriority_.Size();
+
+        auto currentRandomIndex = usePriority ? randomIndex : (randomIndex % ActivePeerToPriority_.Size());
         while (true) {
             rebaseIt();
-            const auto& address = it->first.second;
+            const auto& address = channelIt->first.second;
             if (seenAddresses.count(address) == 0) {
                 if (currentRandomIndex == 0) {
                     break;
@@ -196,7 +207,7 @@ public:
                 seenAddresses.insert(address);
                 --currentRandomIndex;
             } else {
-                ++it;
+                ++channelIt;
             }
         }
 
@@ -206,9 +217,9 @@ public:
             hash,
             randomIndex,
             stickyGroupSize,
-            it->first.second);
+            channelIt->first.second);
 
-        return it->second;
+        return channelIt->second;
     }
 
     // We only use this method for small counts, so this approach should work fine.
@@ -351,6 +362,7 @@ private:
     TIndexedHashMap<std::string, int> ActivePeerToPriority_;
     // A consistent-hashing storage for serving sticky requests.
     std::map<std::pair<size_t, std::string>, IChannelPtr> HashToActiveChannel_;
+    THashMap<int, std::map<std::pair<size_t, std::string>, IChannelPtr>> PriorityToHashToActiveChannel_;
 
     // Information for non-active peers which go over the max peer count limit.
     TIndexedHashMap<std::string, int> BacklogPeers_;
@@ -529,8 +541,10 @@ private:
         auto channel = CreateChannel_(address);
 
         // Save the created channel for the given address for sticky requests.
+        auto& priorityHashToActiveChannel = PriorityToHashToActiveChannel_[priority];
         GeneratePeerHashes(address, [&] (size_t hash) {
             HashToActiveChannel_[std::pair(hash, address)] = channel;
+            priorityHashToActiveChannel[std::pair(hash, address)] = channel;
         });
 
         // Save the channel for the given address at its priority.
@@ -555,8 +569,10 @@ private:
             return false;
         }
 
+        auto priorityHashToActiveChannelIt = GetIteratorOrCrash(PriorityToHashToActiveChannel_, activePeerIt->second);
         GeneratePeerHashes(address, [&] (size_t hash) {
             HashToActiveChannel_.erase(std::pair(hash, address));
+            priorityHashToActiveChannelIt->second.erase(std::pair(hash, address));
         });
 
         auto activePeersForPriorityIt = PriorityToActivePeers_.find(activePeerIt->second);
@@ -564,6 +580,7 @@ private:
         activePeersForPriorityIt->second.Erase(address);
         if (activePeersForPriorityIt->second.Size() == 0) {
             PriorityToActivePeers_.erase(activePeersForPriorityIt);
+            PriorityToHashToActiveChannel_.erase(priorityHashToActiveChannelIt);
         }
 
         ActivePeerToPriority_.Erase(address);

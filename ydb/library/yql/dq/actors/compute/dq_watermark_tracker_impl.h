@@ -253,4 +253,4 @@ private:
 #undef WATERMARK_LOG_T
 #undef WATERMARK_LOG_D
 
-}
+} // namespace NYql::NDq

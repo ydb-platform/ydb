@@ -88,4 +88,4 @@ IOutputStream& operator<< (IOutputStream& str, const NYql::NDq::TDqSourceWaterma
     x.Out(str);
 }
 
-}
+} // namespace NYql::NDq

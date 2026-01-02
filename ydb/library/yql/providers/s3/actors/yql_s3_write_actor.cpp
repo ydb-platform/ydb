@@ -792,7 +792,7 @@ private:
 
     std::queue<NDqProto::TCheckpoint> PendingCheckpoints;
     std::optional<NDqProto::TCheckpoint> CheckpointInProgress;
-    std::unordered_set<TS3FileWriteActor*> FileWritesInProgress; // All in progress file writes, which are created before CheckpointInProgress
+    std::unordered_set<TS3FileWriteActor*> FileWritesInProgress; // File writes that must complete before CheckpointInProgress can be acknowledged
 };
 
 class TS3ScalarWriteActor : public TS3WriteActorBase {

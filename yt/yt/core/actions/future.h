@@ -120,12 +120,6 @@ extern const TFuture<void> OKFuture;
 // Will be dropped after contrib/ydb migration.
 static constexpr const auto& VoidFuture = OKFuture;
 
-//! A pre-set successful |bool| future with |true| value.
-extern const TFuture<bool> TrueFuture;
-
-//! A pre-set successful |bool| future with |false| value.
-extern const TFuture<bool> FalseFuture;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>

@@ -1,0 +1,62 @@
+actor_system_config:
+  use_auto_config: true
+channel_profile_config:
+  profile:
+  - profile_id: 0
+    channel:
+    - erasure_species: "{ydb_static_erasure}"
+      pdisk_category: 0
+      storage_pool_kind: "hdd"
+    - erasure_species: "{ydb_static_erasure}"
+      pdisk_category: 0
+      storage_pool_kind: "hdd"
+    - erasure_species: "{ydb_static_erasure}"
+      pdisk_category: 0
+      storage_pool_kind: "hdd"
+domains_config:
+  domain:
+  - name: "{ydb_domain_name}"
+    domain_id: 1
+    storage_pool_types:
+    - kind: "hdd"
+      pool_config:
+        box_id: 1
+        erasure_species: "none"
+        vdisk_kind: "Default"
+        kind: "hdd"
+        pdisk_filter:
+        - property:
+          - type: ROT
+  security_config:
+    default_users:
+    - name: "root"
+      password: "1234"
+static_erasure: "{ydb_static_erasure}"
+system_tablets:
+  default_node: {ydb_defaut_tablet_node_ids}
+  flat_tx_coordinator:
+  - node: {ydb_defaut_tablet_node_ids}
+  tx_allocator:
+  - node: {ydb_defaut_tablet_node_ids}
+  tx_mediator:
+  - node: {ydb_defaut_tablet_node_ids}
+  flat_schemeshard:
+  - info:
+      tablet_id: 72057594046678944
+log_config:
+  sys_log: false
+  default_level: {ydb_default_log_level}
+grpc_config:
+  host: "{ydb_grpc_host}"
+  services:
+  - "legacy"
+  - "discovery"
+  - "scripting"
+  - "monitoring"
+  - "auth"
+  - "query_service"
+feature_flags:
+  enable_persistent_query_stats: true
+  enable_scheme_transactions_at_scheme_shard: true
+interconnect_config:
+  start_tcp: true

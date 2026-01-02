@@ -60,6 +60,7 @@ RESOURCE_FILES(
     harness/resources/default_profile.txt
     harness/resources/default_yaml.yml
     harness/resources/default_domains.txt
+    harness/resources/minimal_yaml.yml
 )
 
 IF (NOT PYTHON3)

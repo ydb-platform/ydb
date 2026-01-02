@@ -84,17 +84,8 @@ def _load_yaml_template(template_name, default_tablet_node_ids, ydb_domain_name,
     Returns:
         Loaded and processed YAML configuration as a dictionary
     """
-    # Try to load the template - for minimal_yaml.yml, look in local_ydb resources
-    if template_name == "minimal_yaml.yml":
-        try:
-            import ydb.public.tools.local_ydb as local_ydb_module
-            data = read_binary(local_ydb_module, "resources/" + template_name)
-        except (ImportError, FileNotFoundError):
-            # If not found, fall back to the harness resources directory
-            data = read_binary(__name__, "resources/" + template_name)
-    else:
-        # For default_yaml.yml and others, use harness resources
-        data = read_binary(__name__, "resources/" + template_name)
+    # Load template from harness resources
+    data = read_binary(__name__, "resources/" + template_name)
     
     if isinstance(data, bytes):
         data = data.decode('utf-8')

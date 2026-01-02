@@ -604,7 +604,7 @@ public:
             }
 
             sinkDesc.SetMultipart(GetMultipart(settings.Settings().Ref()));
-            sinkDesc.SetAtomicUploadCommit(State_->Configuration->AllowAtomicUploadCommit && State_->Configuration->AtomicUploadCommit.GetOrDefault());
+            sinkDesc.SetAtomicUploadCommit(State_->Configuration->AtomicUploadCommit.GetOrDefault());
 
             if (GetBlockOutput(settings.Settings().Ref())) {
                 auto& arrowSettings = *sinkDesc.MutableArrowSettings();

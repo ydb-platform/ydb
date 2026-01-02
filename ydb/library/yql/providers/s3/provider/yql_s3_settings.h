@@ -125,7 +125,6 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     ui64 GeneratorPathsLimit = 0;
     bool WriteThroughDqIntegration = false;
     ui64 MaxListingResultSizePerPhysicalPartition;
-    bool AllowAtomicUploadCommit = true;
     NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
 
 private:

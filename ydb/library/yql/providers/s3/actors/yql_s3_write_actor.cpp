@@ -640,7 +640,7 @@ private:
         data.clear();
 
         if (checkpoint) {
-            PendingCheckpoints.emplace(std::move(*checkpoint));
+            PendingCheckpoints.emplace(*checkpoint);
             AdvanceCheckpoints();
         }
     }

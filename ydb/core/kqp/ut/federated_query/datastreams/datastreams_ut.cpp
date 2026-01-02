@@ -3472,6 +3472,61 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName, "B-P3", readDisposition);
     }
 
+    Y_UNIT_TEST_F(CheckpointPropagationWithS3Insert, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "s3InsertCheckpointsInputTopicName";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(inputTopicName);
+        CreatePqSource(pqSourceName);
+
+        constexpr char sourceBucket[] = "test_bucket_streaming_query_s3_insert_checkpoint_propagation";
+        constexpr char s3SinkName[] = "sinkName";
+        CreateBucket(sourceBucket);
+        CreateS3Source(sourceBucket, s3SinkName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{s3_sink}`.`test/` WITH (
+                    FORMAT = raw
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "s3_sink"_a = s3SinkName,
+            "input_topic"_a = inputTopicName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "data-1");
+        Sleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "data-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        WriteTopicMessage(inputTopicName, "data-2");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        Sleep(TDuration::Seconds(2));
+        if (const auto& s3Data = GetAllObjects(sourceBucket); !IsIn({"data-1data-2", "data-2data-1"}, s3Data)) {
+            UNIT_FAIL("Unexpected S3 data: " << s3Data);
+        }
+    }
+
     void CheckTable(TStreamingTestFixture& self, const TString& tableName, const std::map<TString, TString>& rows) {
         const auto results = self.ExecQuery(fmt::format(
             "SELECT * FROM `{table}` ORDER BY Key",

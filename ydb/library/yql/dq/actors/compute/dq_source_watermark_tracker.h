@@ -62,7 +62,7 @@ public:
     }
 
     void Out(IOutputStream& str) const {
-        str << Impl_;
+        Impl_.Out(str);
     }
 
 private:
@@ -84,9 +84,3 @@ private:
 };
 
 } // namespace NYql::NDq
-
-template<typename TPartitionKey>
-IOutputStream& operator<< (IOutputStream& str, const NYql::NDq::TDqSourceWatermarkTracker<TPartitionKey>& x) {
-    x.Out(str);
-    return str;
-}

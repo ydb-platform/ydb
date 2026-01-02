@@ -17,6 +17,14 @@ message ESidType {
     }
 }
 
+message ESaslAuthMech {
+    enum SaslAuthMech {
+        Unknown = 0;
+        Plain = 1;
+        Scram = 2;
+    }
+}
+
 message EHashType {
     enum HashType {
         Unknown = 0;

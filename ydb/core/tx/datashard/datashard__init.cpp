@@ -1,5 +1,6 @@
 #include "datashard_txs.h"
 #include "datashard_locks_db.h"
+#include "hnsw_index.h"
 #include "memory_state_migration.h"
 
 #include <ydb/core/base/feature_flags.h>
@@ -98,8 +99,141 @@ void TDataShard::OnInMemoryStateRestored(THashMap<ui64, TOperation::TPtr> migrat
     Execute(CreateTxInitRestored(std::move(migratedTxs)));
 }
 
+namespace {
+
+// Helper to build HNSW index for vector columns on restart
+// Returns true if all indexes were built successfully, false if a retry is needed
+bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
+                               ui64 tableId, const TUserTable& tableInfo,
+                               const TActorContext& ctx) {
+    // Find vector columns (named "emb", "embedding", or "vector" with String type)
+    for (const auto& [colId, colInfo] : tableInfo.Columns) {
+        if (!THnswIndexManager::IsVectorColumn(colInfo.Name)) {
+            continue;
+        }
+
+        // Check if column type is String (embeddings are stored as serialized strings)
+        if (colInfo.Type.GetTypeId() != NScheme::NTypeIds::String) {
+            continue;
+        }
+
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+            "DataShard " << self->TabletID() << " building HNSW index for table "
+            << tableId << " column " << colInfo.Name);
+
+        // Collect all vectors from the table
+        THashMap<ui64, TString> vectors;
+        size_t vectorSize = 0;
+
+        // Get all columns including the vector column and primary key
+        std::vector<NTable::TTag> columns;
+        columns.push_back(colId);
+
+        // Add primary key columns
+        for (ui32 keyColId : tableInfo.KeyColumnIds) {
+            if (keyColId != colId) {
+                columns.push_back(keyColId);
+            }
+        }
+
+        // Prefetch the table to reduce page faults during iteration
+        auto prefetchResult = txc.DB.Precharge(
+            tableInfo.LocalTid, {}, {}, // minKey, maxKey
+            columns,
+            0, // readFlags
+            0, // itemsLimit
+            0, // bytesLimit
+            NTable::EDirection::Forward,
+            TRowVersion::Max()
+        );
+        if (!prefetchResult.Ready) {
+            // Prefetch failed, signal that we need to retry
+            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+                "DataShard " << self->TabletID() << " HNSW index building for table "
+                << tableId << " column " << colInfo.Name << " needs retry due to prefetch failure");
+            return false;
+        }
+
+        // Scan the table
+        auto iter = txc.DB.IterateRange(tableInfo.LocalTid, {}, columns, TRowVersion::Max(), nullptr, nullptr);
+
+        while (true) {
+            auto ready = iter->Next(NTable::ENext::All);
+            if (ready == NTable::EReady::Page) {
+                // Need to load more pages, signal that we need to retry
+                LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "DataShard " << self->TabletID() << " HNSW index building for table "
+                    << tableId << " column " << colInfo.Name << " needs retry due to page fault");
+                return false;
+            } else if (ready == NTable::EReady::Gone) {
+                // No more data
+                break;
+            }
+
+            // Process data when ready == NTable::EReady::Data
+            // Get the primary key (first key column, assuming Uint64)
+            TDbTupleRef keyData = iter->GetKey();
+            if (keyData.Cells().size() == 0 || keyData.Cells()[0].IsNull()) {
+                continue;
+            }
+            ui64 rowKey = keyData.Cells()[0].AsValue<ui64>();
+
+            // Get the vector column value
+            TDbTupleRef rowData = iter->GetValues();
+            if (rowData.Cells().size() > 0 && !rowData.Cells()[0].IsNull()) {
+                TString vectorData(rowData.Cells()[0].AsBuf());
+
+                // The last byte is the format marker
+                // For prototype: accept any vector format with at least 2 bytes (1 data + 1 format)
+                if (vectorData.size() >= 2) {
+                    // Determine dimension from first vector (data bytes excluding format marker)
+                    if (vectorSize == 0) {
+                        vectorSize = vectorData.size() - 1;  // Exclude format byte
+                    }
+
+                    if (vectorData.size() == vectorSize + 1) {  // data + format byte
+                        vectors[rowKey] = vectorData;
+                    }
+                }
+            }
+        }
+
+        if (vectors.empty() || vectorSize == 0) {
+            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+                "DataShard " << self->TabletID() << " no vectors found for table "
+                << tableId << " column " << colInfo.Name << " to build HNSW index");
+            continue;
+        }
+
+        // Build the HNSW index
+        if (self->GetHnswIndexManager().BuildIndex(tableId, colInfo.Name, vectors)) {
+            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+                "DataShard " << self->TabletID() << " built HNSW index for table "
+                << tableId << " column " << colInfo.Name
+                << " with " << vectors.size() << " vectors");
+        } else {
+            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                "DataShard " << self->TabletID() << " failed to build HNSW index for table "
+                << tableId << " column " << colInfo.Name);
+        }
+    }
+
+    return true;  // All indexes built successfully
+}
+
+} // anonymous namespace
+
 bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute");
+
+    // Build HNSW indexes for vector columns
+    for (const auto& [tableId, tableInfo] : Self->TableInfos) {
+        if (!BuildHnswIndexesForTable(Self, txc, tableId, *tableInfo, ctx)) {
+            // If BuildHnswIndexesForTable returns false, it means we hit a page fault
+            // and need to retry. Return false to indicate the transaction should be retried.
+            return false;
+        }
+    }
 
     if (!MigratedTxs.empty()) {
         bool wasEmpty = Self->TransQueue.GetPlan().empty();

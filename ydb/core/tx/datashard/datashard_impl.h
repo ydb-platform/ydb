@@ -7,6 +7,7 @@
 #include "change_record.h"
 #include "change_record_cdc_serializer.h"
 #include "conflicts_cache.h"
+#include "hnsw_index.h"
 #include "datashard_outreadset.h"
 #include "datashard_pipeline.h"
 #include "datashard_repl_offsets.h"
@@ -1702,6 +1703,14 @@ public:
 
     const THashMap<ui64, TUserTable::TCPtr> &GetUserTables() const { return TableInfos; }
 
+    // Get HNSW index for vector search (returns nullptr if not available)
+    const THnswIndex* GetHnswIndex(ui64 tableId, const TString& columnName) const {
+        return HnswIndexes.GetIndex(tableId, columnName);
+    }
+
+    // Get HNSW index manager for building indexes
+    THnswIndexManager& GetHnswIndexManager() { return HnswIndexes; }
+
     ui64 GetLocalTableId(const TTableId& tableId) const {
         Y_ENSURE(!TSysTables::IsSystemTable(tableId));
         auto it = TableInfos.find(tableId.PathId.LocalPathId);
@@ -2746,6 +2755,9 @@ private:
     TConflictsCache ConflictsCache;
     TCdcStreamScanManager CdcStreamScanManager;
     TCdcStreamHeartbeatManager CdcStreamHeartbeatManager;
+
+    // HNSW index for vector search acceleration
+    THnswIndexManager HnswIndexes;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 

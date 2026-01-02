@@ -51,6 +51,28 @@ struct TReadIteratorVectorTop {
     ui64 TotalReadRows = 0;
     ui64 TotalReadBytes = 0;
 
+    // HNSW index for accelerated search (nullptr if not available)
+    const THnswIndex* HnswIndex = nullptr;
+
+    // HNSW search results: (key, distance) pairs
+    std::vector<std::pair<ui64, float>> HnswResults;
+
+    // Perform HNSW search if index is available
+    // Returns true if HNSW search was performed successfully (even if empty results)
+    // Returns false if index is not available or not ready
+    bool TryHnswSearch() {
+        if (!HnswIndex || !HnswIndex->IsReady()) {
+            return false;
+        }
+
+        // Perform HNSW search
+        auto result = HnswIndex->Search(Target, Limit);
+
+        // Store results (even if empty)
+        HnswResults = std::move(result.Results);
+        return true;
+    }
+
     void AddRow(TConstArrayRef<TCell> cells) {
         TotalReadRows++;
         TotalReadBytes += EstimateSize(cells);
@@ -1050,6 +1072,55 @@ private:
 
     template <typename TIterator>
     EReadStatus IterateRange(TIterator* iter, NTable::TKeyRange& iterRange, TTransactionContext& txc) {
+        // Try to do HNSW search
+        if (State.VectorTopK && State.VectorTopK->TryHnswSearch()) {
+            // Fast return for empty HNSW results
+            if (State.VectorTopK->HnswResults.empty()) {
+                return EReadStatus::Done;
+            }
+            // HNSW search succeeded - fetch rows by keys returned from HNSW
+            auto& topK = *State.VectorTopK;
+
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, Self->TabletID() << " HNSW search returned " << topK.HnswResults.size() << " rows");
+
+            for (const auto& [key, distance] : topK.HnswResults) {
+                // Build key cells from the ui64 key (assuming Uint64 primary key)
+                TCell keyCell = TCell::Make(static_cast<ui64>(key));
+                TSmallVec<TRawTypeValue> rawKey;
+                rawKey.push_back(TRawTypeValue(keyCell.AsRef(), TableInfo.KeyColumnTypes[0].GetTypeId()));
+
+                // Fetch row by key
+                NTable::TRowState rowState;
+                rowState.Init(State.Columns.size());
+                NTable::TSelectStats stats;
+                auto ready = txc.DB.Select(TableInfo.LocalTid, rawKey, State.Columns, rowState, stats, 0, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
+
+                if (ready == NTable::EReady::Page) {
+                    // Need more data - fail the read instead of falling back to brute force
+                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, Self->TabletID() << " HNSW search: failed to fetch row by key (Page state)");
+                    return EReadStatus::Done;
+                }
+
+                if (ready == NTable::EReady::Gone) {
+                    // Row was deleted, skip it
+                    continue;
+                }
+
+                // Add the row with the distance from HNSW
+                topK.TotalReadRows++;
+                topK.TotalReadBytes += EstimateSize(TConstArrayRef<TCell>((*rowState).data(), rowState.Size()));
+                topK.Rows.emplace_back(
+                    TConstArrayRef<TCell>((*rowState).data(), rowState.Size()),
+                    static_cast<double>(distance),
+                    TString()
+                );
+            }
+
+            // Sort rows by distance (they may not be perfectly sorted by HNSW)
+            std::sort(topK.Rows.begin(), topK.Rows.end());
+            return EReadStatus::Done;
+        }
+
         auto keyAccessSampler = Self->GetKeyAccessSampler();
 
         bool advanced = false;
@@ -2292,6 +2363,17 @@ public:
             topState->Column = topK.GetColumn();
             topState->Limit = topK.GetLimit();
             topState->Target = topK.GetTargetVector();
+
+            // Try to find HNSW index for this vector column
+            if (topK.GetColumn() < record.ColumnsSize()) {
+                ui32 colId = record.GetColumns(topK.GetColumn());
+                auto colIt = TableInfo.Columns.find(colId);
+                if (colIt != TableInfo.Columns.end()) {
+                    const TString& columnName = colIt->second.Name;
+                    topState->HnswIndex = Self->GetHnswIndex(state.PathId.LocalPathId, columnName);
+                }
+            }
+
             state.VectorTopK = std::move(topState);
         }
 

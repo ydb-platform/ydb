@@ -59,6 +59,7 @@ SRCS(
     datashard__engine_host.h
     datashard__get_state_tx.cpp
     datashard__init.cpp
+    hnsw_index.cpp
     datashard__kqp_scan.cpp
     datashard__migrate_schemeshard.cpp
     datashard__mon_reset_schema_version.cpp
@@ -246,6 +247,12 @@ GENERATE_ENUM_SERIALIZATION(volatile_tx.h)
 
 RESOURCE(
     ui/index.html datashard/index.html
+)
+
+ADDINCL(
+    contrib/libs/usearch/include
+    contrib/libs/usearch/fp16/include
+    contrib/libs/usearch/simsimd/include
 )
 
 PEERDIR(

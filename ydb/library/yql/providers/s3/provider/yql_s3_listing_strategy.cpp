@@ -834,13 +834,13 @@ public:
             YQL_CLOG(TRACE, ProviderS3) << "[TConcurrentBFSDirectoryResolverIterator] ScheduleNextListing next listing for prefix: '" << prefix << "'";
             const auto& listingRequest = ListingRequestFactory(DefaultParams, prefix);
 
-            const auto& feature = DirectoryListingStrategy.List(listingRequest, Options);
-            if (feature.IsReady()) {
-                // Avoid deadlock if feature already resolved and do not continue listing in this case
-                ListingCallback(This, feature, prefix, /* continueListing */ false);
+            const auto& future = DirectoryListingStrategy.List(listingRequest, Options);
+            if (future.IsReady()) {
+                // Avoid deadlock if future already resolved and do not continue listing in this case
+                ListingCallback(This, future, prefix, /* continueListing */ false);
             } else {
-                feature.Subscribe([prefix, self = This](const TFuture<TListResult>& future) {
-                    ListingCallback(self, future, prefix, /* continueListing */ true);
+                future.Subscribe([prefix, self = This](const TFuture<TListResult>& listingFuture) {
+                    ListingCallback(self, listingFuture, prefix, /* continueListing */ true);
                 });
             }
         }

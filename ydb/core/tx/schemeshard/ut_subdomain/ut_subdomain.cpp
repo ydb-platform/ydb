@@ -4367,4 +4367,48 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
 #undef DEBUG_HINT
 
+    Y_UNIT_TEST(DomainSchemeLimitsFromYamlConfig) {
+        // This test verifies that scheme limits specified in domains_config YAML
+        // are properly read and applied during root domain initialization
+        
+        TTestBasicRuntime runtime;
+        
+        // Create custom app config with domain scheme limits
+        auto appConfig = MakeHolder<NKikimrConfig::TAppConfig>();
+        auto* domainsConfig = appConfig->MutableDomainsConfig();
+        auto* domain = domainsConfig->AddDomain();
+        domain->SetName("MyRoot");
+        domain->SetDomainId(1);
+        domain->SetSchemeRoot(TTestTxConfig::SchemeShard);
+        
+        // Set custom scheme limits
+        auto* limits = domain->MutableSchemeLimits();
+        limits->SetMaxPaths(50000);
+        limits->SetMaxTableColumns(500);
+        limits->SetMaxTableIndices(50);
+        limits->SetMaxShards(300000);
+        limits->SetMaxDepth(64);
+        limits->SetMaxChildrenInDir(200000);
+        
+        // Initialize test environment with custom config
+        runtime.SetAppData(appConfig.Release());
+        
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        
+        // Verify that the limits were applied to the root domain
+        auto description = DescribePath(runtime, "/MyRoot");
+        UNIT_ASSERT(description.GetPathDescription().HasDomainDescription());
+        auto& domainDesc = description.GetPathDescription().GetDomainDescription();
+        UNIT_ASSERT(domainDesc.HasSchemeLimits());
+        auto& appliedLimits = domainDesc.GetSchemeLimits();
+        
+        // Check that the limits match what we set in the config
+        UNIT_ASSERT_VALUES_EQUAL(appliedLimits.GetMaxPaths(), 50000);
+        UNIT_ASSERT_VALUES_EQUAL(appliedLimits.GetMaxTableColumns(), 500);
+        UNIT_ASSERT_VALUES_EQUAL(appliedLimits.GetMaxTableIndices(), 50);
+        UNIT_ASSERT_VALUES_EQUAL(appliedLimits.GetMaxShards(), 300000);
+        UNIT_ASSERT_VALUES_EQUAL(appliedLimits.GetMaxDepth(), 64);
+        UNIT_ASSERT_VALUES_EQUAL(appliedLimits.GetMaxChildrenInDir(), 200000);
+    }
+
 }

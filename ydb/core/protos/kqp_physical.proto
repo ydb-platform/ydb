@@ -7,6 +7,7 @@ option java_package = "ru.yandex.kikimr.proto";
 import "google/protobuf/any.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 
+import "ydb/core/protos/kqp_tablemetadata.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_table.proto";
@@ -416,21 +417,32 @@ message TKqpPhyConnection {
 
 message TKqpFullTextSource {
     message TKqpQuerySettings {
-        repeated TKqpPhyColumnId Columns = 4;
-        optional string Query = 1;
-        TKqpPhyValue QueryValue = 5;
+        repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 1;
+        TKqpPhyValue QueryValue = 2;
     }
 
-    optional TKqpPhyTableId Table = 1;
+    message TIndexTable {
+        optional NKqpProto.TKqpPhyTableId Table = 1;
+        repeated NKikimrKqp.TKqpColumnMetadataProto KeyColumns = 2;
+        repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 3;
+    }
+
+    optional NKqpProto.TKqpPhyTableId Table = 1;
     optional string Index = 2;
+    optional NKikimrSchemeOp.TFulltextIndexDescription IndexDescription = 3;
 
-    repeated TKqpPhyColumnId Columns = 3;
+    repeated NKikimrKqp.TKqpColumnMetadataProto KeyColumns = 4;
+    repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 5;
 
-    optional TKqpQuerySettings QuerySettings = 4;
+    repeated TIndexTable IndexTables = 6;
 
-    TKqpPhyValue SkipLimit = 5;
-    TKqpPhyValue TakeLimit = 6;
+    optional TKqpQuerySettings QuerySettings = 7;
 
+    TKqpPhyValue SkipLimit = 8;
+    TKqpPhyValue TakeLimit = 9;
+
+    TKqpPhyValue K1Factor = 10;
+    TKqpPhyValue BFactor = 11;
 }
 
 message TKqpReadRangesSource {

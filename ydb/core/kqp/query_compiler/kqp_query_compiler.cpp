@@ -1347,19 +1347,63 @@ private:
 
             FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
             FillTableId(settings.Table().Cast(), *fullTextProto.MutableTable());
+
+            TString indexName = TString(settings.Index().Cast().StringValue());
             fullTextProto.SetIndex(settings.Index().Cast().StringValue());
 
-            THashMap<TString, const TExprNode*> columnsMap;
-            for (auto item : settings.ResultColumns().Cast()) {
-                columnsMap[item.StringValue()] = item.Raw();
-            }
-            TVector<TCoAtom> columns;
             auto type = settings.Raw()->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
-            for (auto item : type->GetItems()) {
-                columns.push_back(TCoAtom(columnsMap.at(item->GetName())));
+
+            auto [indexMeta, index] = tableMeta->GetIndex(indexName);
+
+            auto* desc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
+            YQL_ENSURE(desc, "unexpected index description type");
+            fullTextProto.MutableIndexDescription()->MutableSettings()->CopyFrom(desc->GetSettings());
+
+            auto fillCol = [&](const NYql::TKikimrColumnMetadata* columnMeta, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
+                columnProto->SetName(columnMeta->Name);
+                columnProto->SetId(columnMeta->Id);
+                columnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
+                if (NScheme::NTypeIds::IsParametrizedType(columnMeta->TypeInfo.GetTypeId())) {
+                    ProtoFromTypeInfo(columnMeta->TypeInfo, columnMeta->TypeMod, *columnProto->MutableTypeInfo());
+                }
+            };
+
+            for(auto& implTable : index->GetImplTables()) {
+                auto indexProto = fullTextProto.AddIndexTables();
+                TVector<TString> pathParts = {TString(settings.Table().Cast().Path()), indexName, TString(implTable)};
+                TString tablePath = NKikimr::JoinPath(pathParts);
+                FillTablesMap(tablePath, tablesMap);
+
+                auto implTableMeta = TablesData->ExistingTable(Cluster, tablePath).Metadata;
+                indexProto->MutableTable()->SetOwnerId(implTableMeta->PathId.OwnerId());
+                indexProto->MutableTable()->SetTableId(implTableMeta->PathId.TableId());
+                indexProto->MutableTable()->SetPath(tablePath);
+                indexProto->MutableTable()->SetSysView(implTableMeta->SysView);
+                indexProto->MutableTable()->SetVersion(implTableMeta->SchemaVersion);
+
+                for(auto& keyColumn: implTableMeta->KeyColumnNames) {
+                    fillCol(implTableMeta->Columns.FindPtr(keyColumn), indexProto->AddKeyColumns());
+                }
+
+                for(auto& column: implTableMeta->Columns) {
+                    fillCol(implTableMeta->Columns.FindPtr(column.first), indexProto->AddColumns());
+                }
             }
 
-            FillColumns(columns, *tableMeta, fullTextProto, false);
+            for (auto& keyColumn: tableMeta->KeyColumnNames) {
+                fillCol(tableMeta->Columns.FindPtr(keyColumn), fullTextProto.AddKeyColumns());
+            }
+
+            for (auto item : type->GetItems()) {
+                auto* columnProto = fullTextProto.AddColumns();
+                columnProto->SetName(TString(item->GetName()));
+                if (item->GetName() == "_yql_full_text_relevance") {
+                    continue;
+                }
+
+                fillCol(tableMeta->Columns.FindPtr(item->GetName()), columnProto);
+            }
+
             {
                 TExprBase expr(settings.Query().Raw());
                 if (expr.Maybe<TCoString>()) {

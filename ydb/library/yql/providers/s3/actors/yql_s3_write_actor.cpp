@@ -988,7 +988,10 @@ std::pair<IDqComputeActorAsyncOutput*, IActor*> CreateS3WriteActor(
     const auto& arrowSettings = params.GetArrowSettings();
 
     const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
-    const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(arrowSettings.GetRowType()), *programBuilder, Cerr);
+    const TStringBuf outputTypeYson(arrowSettings.GetRowType());
+    TStringStream error;
+    const auto outputItemType = NCommon::ParseTypeFromYson(outputTypeYson, *programBuilder, error);
+    YQL_ENSURE(outputItemType, "Failed to parse output type: " << outputTypeYson << ", reason: " << error.Str());
     YQL_ENSURE(outputItemType->IsStruct(), "Row type is not struct");
     const auto structType = static_cast<TStructType*>(outputItemType);
 

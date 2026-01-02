@@ -111,6 +111,11 @@ public:
     }
 
     void Bootstrap() {
+        if (Url.StartsWith("file://")) {
+            OnFatalError({TIssue("Reading from files is not supported in raw read actor, please contact internal support")}, NDqProto::StatusIds::INTERNAL_ERROR);
+            return;
+        }
+
         if (!UseRuntimeListing) {
             FileQueueActor = RegisterWithSameMailbox(CreateS3FileQueueActor(
                 TxId,

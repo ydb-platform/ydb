@@ -103,12 +103,9 @@ public:
         , ResultColumnIds(resultColumnIds)
     {}
 
-    bool HasPartitioning() const {
-        return (bool)PartitionInfo;
-    }
-
-    void SetPartitionInfo(std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> partitionInfo) {
-        PartitionInfo = partitionInfo;
+    void SetPartitionInfo(const THolder<TKeyDesc>& keyDesc) {
+        YQL_ENSURE(keyDesc->TableId == TableId, "Table ID mismatch");
+        PartitionInfo = keyDesc->Partitioning;
     }
 
     const TTableId GetTableId() const {
@@ -173,10 +170,7 @@ public:
         return request;
     }
 
-    std::unique_ptr<TEvTxProxySchemeCache::TEvResolveKeySet> GetResolvePartitioningRequest() {
-        auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
-        request->DatabaseName = Database;
-
+    void AddResolvePartitioningRequest(std::unique_ptr<NSchemeCache::TSchemeCacheRequest>& request) {
         auto keyColumnTypes = KeyColumnTypes;
 
         TVector<TCell> minusInf(keyColumnTypes.size());
@@ -188,7 +182,6 @@ public:
             keyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
 
         Counters->IteratorsShardResolve->Inc();
-        return std::make_unique<TEvTxProxySchemeCache::TEvResolveKeySet>(request.release());
     }
 
     std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TOwnedTableRange& range) {
@@ -300,6 +293,14 @@ public:
     }
 };
 
+TTableId FromProto(const ::NKqpProto::TKqpPhyTableId & proto) {
+    return TTableId(
+        (ui64)proto.GetOwnerId(),
+        (ui64)proto.GetTableId(),
+        proto.GetSysView(),
+        (ui64)proto.GetVersion()
+    );
+}
 
 class TDocumentInfo : public TAtomicRefCount<TDocumentInfo> {
     friend class TDocumentIdPointer;
@@ -553,21 +554,18 @@ public:
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
         const NKikimrSchemeOp::TFulltextIndexDescription& indexDescription,
-        const NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry& entry)
+        const TTableId& tableId,
+        const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns,
+        const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& columns)
     {
-        TMap<i32, ui32> keyPositionToIndex;
 
         i32 freqColumnIndex = -1;
         NScheme::TTypeInfo freqColumnType;
-        for (const auto& [index, columnInfo] : entry.Columns) {
-            if (columnInfo.KeyOrder != -1) {
-                AFL_ENSURE(columnInfo.KeyOrder >= 0);
-                keyPositionToIndex[columnInfo.KeyOrder] = index;
-            }
-
-            if (columnInfo.Name == FreqColumn) {
-                freqColumnIndex = index;
-                freqColumnType = columnInfo.PType;
+        for (const auto& column: columns) {
+            if (column.GetName() == FreqColumn) {
+                freqColumnIndex = column.GetId();
+                freqColumnType = NScheme::TypeInfoFromProto(
+                    column.GetTypeId(), column.GetTypeInfo());
             }
         }
 
@@ -575,18 +573,17 @@ public:
         TVector<NScheme::TTypeInfo> resultKeyColumnTypes;
         TVector<i32> resultKeyColumnIds;
 
-        for (const auto& [_, index] : keyPositionToIndex) {
-            const auto columnInfo = entry.Columns.FindPtr(index);
-            YQL_ENSURE(columnInfo);
+        for (const auto& keyColumn : keyColumns) {
+            keyColumnTypes.push_back(NScheme::TypeInfoFromProto(
+                keyColumn.GetTypeId(), keyColumn.GetTypeInfo()));
 
-            keyColumnTypes.push_back(columnInfo->PType);
-            if (columnInfo->Name == TokenColumn) {
+            if (keyColumn.GetName() == TokenColumn) {
                 // dont request token column because it's not a part of document id
                 continue;
             }
 
-            resultKeyColumnTypes.push_back(columnInfo->PType);
-            resultKeyColumnIds.push_back(columnInfo->Id);
+            resultKeyColumnTypes.push_back(keyColumnTypes.back());
+            resultKeyColumnIds.push_back(keyColumn.GetId());
         }
 
         if (indexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
@@ -595,10 +592,8 @@ public:
             resultKeyColumnIds.push_back(freqColumnIndex);
         }
 
-        AFL_ENSURE(!keyPositionToIndex.empty());
-
         return MakeIntrusive<TIndexTableImplReader>(
-            indexDescription.GetSettings().layout(), counters, database, entry.TableId, snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+            indexDescription.GetSettings().layout(), counters, database, tableId, snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
     const TConstArrayRef<TCell> GetDocumentId(const TConstArrayRef<TCell>& row) const {
@@ -668,33 +663,29 @@ public:
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
         const NKikimrSchemeOp::TFulltextIndexDescription& indexDescription,
-        const NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry& entry)
+        const TTableId& tableId,
+        const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns,
+        const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& columns)
     {
         TVector<NScheme::TTypeInfo> keyColumnTypes;
         TVector<NScheme::TTypeInfo> resultKeyColumnTypes;
         TVector<i32> resultKeyColumnIds;
 
-        TMap<i32, ui32> keyPositionToIndex;
         i32 docLengthColumnIndex = -1;
         NScheme::TTypeInfo docLengthColumnType;
-        for (const auto& [index, columnInfo] : entry.Columns) {
-            if (columnInfo.KeyOrder != -1) {
-                AFL_ENSURE(columnInfo.KeyOrder >= 0);
-                keyPositionToIndex[columnInfo.KeyOrder] = index;
-            }
-
-            if (columnInfo.Name == DocLengthColumn) {
-                docLengthColumnIndex = index;
-                docLengthColumnType = columnInfo.PType;
+        for (const auto& column : columns) {
+            if (column.GetName() == DocLengthColumn) {
+                docLengthColumnIndex = column.GetId();
+                docLengthColumnType = NScheme::TypeInfoFromProto(
+                    column.GetTypeId(), column.GetTypeInfo());
             }
         }
 
-        for (const auto& [_, index] : keyPositionToIndex) {
-            const auto columnInfo = entry.Columns.FindPtr(index);
-            YQL_ENSURE(columnInfo);
-            keyColumnTypes.push_back(columnInfo->PType);
-            resultKeyColumnTypes.push_back(columnInfo->PType);
-            resultKeyColumnIds.push_back(columnInfo->Id);
+        for (const auto& column : keyColumns) {
+            keyColumnTypes.push_back(NScheme::TypeInfoFromProto(
+                column.GetTypeId(), column.GetTypeInfo()));
+            resultKeyColumnTypes.push_back(keyColumnTypes.back());
+            resultKeyColumnIds.push_back(column.GetId());
         }
 
         YQL_ENSURE(docLengthColumnIndex != -1);
@@ -703,7 +694,7 @@ public:
 
         return MakeIntrusive<TDocsTableReader>(
             indexDescription.GetSettings().layout(), counters, database,
-            entry.TableId, snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+            tableId, snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
     ui64 GetDocumentLength(const TConstArrayRef<TCell>& row) const {
@@ -746,13 +737,13 @@ public:
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
         const NKikimrSchemeOp::TFulltextIndexDescription& indexDescription,
-        const NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry& entry)
+        const TTableId& tableId,
+        const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns,
+        const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& columns)
     {
         TVector<NScheme::TTypeInfo> keyColumnTypes;
         TVector<NScheme::TTypeInfo> resultKeyColumnTypes;
         TVector<i32> resultKeyColumnIds;
-
-        TMap<i32, ui32> keyPositionToIndex;
 
         i32 statsColumnIndex = -1;
         NScheme::TTypeInfo statsColumnType;
@@ -760,30 +751,26 @@ public:
         i32 sumDocLengthColumnIndex = -1;
         NScheme::TTypeInfo sumDocLengthColumnType;
 
-        for (const auto& [index, columnInfo] : entry.Columns) {
-            if (columnInfo.KeyOrder != -1) {
-                AFL_ENSURE(columnInfo.KeyOrder >= 0);
-                keyPositionToIndex[columnInfo.KeyOrder] = index;
+        for (const auto& column : columns) {
+
+            if (column.GetName() == DocCountColumn) {
+                statsColumnIndex = column.GetId();
+                statsColumnType = NScheme::TypeInfoFromProto(
+                    column.GetTypeId(), column.GetTypeInfo());
             }
 
-            if (columnInfo.Name == DocCountColumn) {
-                statsColumnIndex = index;
-                statsColumnType = columnInfo.PType;
-            }
-
-            if (columnInfo.Name == SumDocLengthColumn) {
-                sumDocLengthColumnIndex = index;
-                sumDocLengthColumnType = columnInfo.PType;
+            if (column.GetName() == SumDocLengthColumn) {
+                sumDocLengthColumnIndex = column.GetId();
+                sumDocLengthColumnType = NScheme::TypeInfoFromProto(
+                    column.GetTypeId(), column.GetTypeInfo());
             }
         }
 
-        for (const auto& [_, index] : keyPositionToIndex) {
-            const auto columnInfo = entry.Columns.FindPtr(index);
-            YQL_ENSURE(columnInfo);
-            keyColumnTypes.push_back(columnInfo->PType);
+        for (const auto& column : keyColumns) {
+            NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(
+                column.GetTypeId(), column.GetTypeInfo());
+            keyColumnTypes.push_back(typeInfo);
         }
-
-
 
         YQL_ENSURE(statsColumnIndex != -1);
         resultKeyColumnTypes.push_back(statsColumnType);
@@ -795,7 +782,7 @@ public:
 
         return MakeIntrusive<TStatsTableReader>(
             indexDescription.GetSettings().layout(), counters, database,
-            entry.TableId, snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+            tableId, snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
     ui64 GetDocCount(const TConstArrayRef<TCell>& row) const {
@@ -858,33 +845,29 @@ public:
         const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& logPrefix,
         const NKikimrSchemeOp::TFulltextIndexDescription& indexDescription,
-        const NKikimr::NSchemeCache::TSchemeCacheNavigate::TEntry& entry)
+        const TTableId& tableId,
+        const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns,
+        const google::protobuf::RepeatedPtrField<NKikimrKqp::TKqpColumnMetadataProto>& columns)
     {
         TVector<NScheme::TTypeInfo> keyColumnTypes;
         TVector<NScheme::TTypeInfo> resultKeyColumnTypes;
         TVector<i32> resultKeyColumnIds;
 
-        TMap<i32, ui32> keyPositionToIndex;
         i32 freqColumnIndex = -1;
         NScheme::TTypeInfo freqColumnType;
-        for (const auto& [index, columnInfo] : entry.Columns) {
-            if (columnInfo.KeyOrder != -1) {
-                AFL_ENSURE(columnInfo.KeyOrder >= 0);
-                keyPositionToIndex[columnInfo.KeyOrder] = index;
-            }
-
-            if (columnInfo.Name == FreqColumn) {
-                freqColumnIndex = index;
-                freqColumnType = columnInfo.PType;
+        for (const auto& column :columns) {
+            if (column.GetName() == FreqColumn) {
+                freqColumnIndex = column.GetId();
+                freqColumnType = NScheme::TypeInfoFromProto(
+                    column.GetTypeId(), column.GetTypeInfo());
             }
         }
 
-        for (const auto& [_, index] : keyPositionToIndex) {
-            const auto columnInfo = entry.Columns.FindPtr(index);
-            YQL_ENSURE(columnInfo);
-            keyColumnTypes.push_back(columnInfo->PType);
-            resultKeyColumnTypes.push_back(columnInfo->PType);
-            resultKeyColumnIds.push_back(columnInfo->Id);
+        for (const auto& keyColumn : keyColumns) {
+            keyColumnTypes.push_back(NScheme::TypeInfoFromProto(
+                keyColumn.GetTypeId(), keyColumn.GetTypeInfo()));
+            resultKeyColumnTypes.push_back(keyColumnTypes.back());
+            resultKeyColumnIds.push_back(keyColumn.GetId());
         }
 
         YQL_ENSURE(freqColumnIndex != -1);
@@ -893,7 +876,7 @@ public:
 
         return MakeIntrusive<TDictTableReader>(
             indexDescription.GetSettings().layout(), counters, database,
-            entry.TableId, snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+            tableId, snapshot, logPrefix, keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
     }
 
     std::pair<ui64, std::unique_ptr<TEvDataShard::TEvRead>> GetWordReadRequest(ui64 readId, TString token) {
@@ -964,7 +947,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
     absl::flat_hash_set<ui64> PipesCreated;
 
-    NKikimrSchemeOp::TFulltextIndexDescription IndexDescription;
+    const NKikimrSchemeOp::TFulltextIndexDescription& IndexDescription;
 
     ui64 ReadBytes = 0;
     ui64 ReadRows = 0;
@@ -1014,7 +997,6 @@ private:
     > TopKQueue;
 
     bool ResolveInProgress = true;
-    bool NavigateIndexInProgress = false;
     bool PendingNotify = false;
 
     i32 SearchColumnIdx = -1;
@@ -1130,72 +1112,10 @@ private:
         }
     }
 
-    void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        if (ev->Get()->Request->ErrorCount > 0) {
-            TString errorMsg = TStringBuilder() << "Failed to get partitioning for table. ";
-            RuntimeError(errorMsg, NYql::NDqProto::StatusIds::SCHEME_ERROR);
-            return;
-        }
-
-        if (NavigateIndexInProgress) {
-            auto& resultSet = ev->Get()->Request->ResultSet;
-            YQL_ENSURE(resultSet.size() >= 1);
-
-            {
-                const auto& entry = resultSet[0];
-                IndexTableReader = TIndexTableImplReader::FromNavigateRequest(Counters, Database, Snapshot, LogPrefix, IndexDescription, entry);
-                ResolveTablePartitioning(IndexTableReader);
-            }
-
-            if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-                YQL_ENSURE(resultSet.size() >= 4);
-
-                {
-                    const auto& entry = resultSet[1];
-                    DictTableReader = TDictTableReader::FromNavigateRequest(Counters, Database, Snapshot, LogPrefix, IndexDescription, entry);
-                    ResolveTablePartitioning(DictTableReader);
-                }
-
-                {
-                    const auto& entry = resultSet[2];
-                    DocsTableReader = TDocsTableReader::FromNavigateRequest(Counters, Database, Snapshot, LogPrefix, IndexDescription, entry);
-                    ResolveTablePartitioning(DocsTableReader);
-                }
-
-                {
-                    const auto& entry = resultSet[3];
-                    StatsTableReader = TStatsTableReader::FromNavigateRequest(Counters, Database, Snapshot, LogPrefix, IndexDescription, entry);
-                    ResolveTablePartitioning(StatsTableReader);
-                }
-
-            }
-
-            return;
-        }
-
-        auto& resultSet = ev->Get()->Request->ResultSet;
-        YQL_ENSURE(resultSet.size() == 1, "Expected one result for range [NULL, +inf)");
-
-        TString indexImplTable;
-        TString tablePath = NKikimr::JoinPath(resultSet[0].Path);
-
+    void PrepareTableReaders() {
         TVector<NScheme::TTypeInfo> keyColumnTypes;
         TVector<NScheme::TTypeInfo> resultKeyColumnTypes;
         TVector<i32> resultKeyColumnIds;
-
-        const auto& entry = resultSet[0];
-        TMap<i32, ui32> keyPositionToIndex;
-        THashMap<TString, ui32> columnNameToIndex;
-
-
-        for (const auto& [index, columnInfo] : entry.Columns) {
-            columnNameToIndex[columnInfo.Name] = index;
-
-            if (columnInfo.KeyOrder != -1) {
-                AFL_ENSURE(columnInfo.KeyOrder >= 0);
-                keyPositionToIndex[columnInfo.KeyOrder] = index;
-            }
-        }
 
         YQL_ENSURE(Settings->GetQuerySettings().ColumnsSize() == 1);
         const TStringBuf searchColumnName = Settings->GetQuerySettings().GetColumns(0).GetName();
@@ -1203,8 +1123,6 @@ private:
         i32 relevanceIndex = 0;
         i32 searchColumnIndex = 0;
         for(const auto& column : Settings->GetColumns()) {
-            const auto it = columnNameToIndex.find(column.GetName());
-
             if (column.GetName() == "_yql_full_text_relevance") {
                 RelevanceColumnIdx = relevanceIndex;
                 continue;
@@ -1214,88 +1132,68 @@ private:
                 SearchColumnIdx = searchColumnIndex;
             }
 
-            YQL_ENSURE(it != columnNameToIndex.end(), "Column " << column.GetName() << " not found in table " << tablePath);
-            const auto columnInfo = entry.Columns.FindPtr(it->second);
-            YQL_ENSURE(columnInfo);
-            resultKeyColumnTypes.push_back(columnInfo->PType);
-            resultKeyColumnIds.push_back(columnInfo->Id);
+            resultKeyColumnTypes.push_back(NScheme::TypeInfoFromProto(
+                column.GetTypeId(), column.GetTypeInfo()));
+            resultKeyColumnIds.push_back(column.GetId());
             relevanceIndex++;
             searchColumnIndex++;
         }
         YQL_ENSURE(SearchColumnIdx != -1);
 
-        for (const auto& [_, index] : keyPositionToIndex) {
-            const auto columnInfo = entry.Columns.FindPtr(index);
-            YQL_ENSURE(columnInfo);
-            keyColumnTypes.push_back(columnInfo->PType);
+        for (const auto& column : Settings->GetKeyColumns()) {
+            keyColumnTypes.push_back( NScheme::TypeInfoFromProto(
+                column.GetTypeId(), column.GetTypeInfo()));
         }
 
+        auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = Database;
+
         MainTableReader = MakeIntrusive<TTableReader>(
-            Counters, Database, resultSet[0].TableId, Snapshot, LogPrefix,
+            Counters, Database, TableId, Snapshot, LogPrefix,
             keyColumnTypes, resultKeyColumnTypes, resultKeyColumnIds);
+        MainTableReader->AddResolvePartitioningRequest(request);
 
-        ResolveTablePartitioning(MainTableReader);
+        YQL_ENSURE(Settings->GetIndexTables().size() >= 1);
 
-        for(const auto& entry : resultSet) {
-            for(const auto& index : entry.Indexes) {
-                if (index.GetName() == Settings->GetIndex()) {
+        {
+            auto& info = Settings->GetIndexTables(Settings->GetIndexTables().size() - 1);
+            YQL_ENSURE(info.GetTable().GetPath().EndsWith(NTableIndex::ImplTable));
+            IndexTableReader = TIndexTableImplReader::FromNavigateRequest(Counters, Database, Snapshot, LogPrefix, IndexDescription, FromProto(info.GetTable()), info.GetKeyColumns(), info.GetColumns());
+            IndexTableReader->AddResolvePartitioningRequest(request);
+        }
 
-                    IndexDescription.CopyFrom(index.GetFulltextIndexDescription());
-                    NYql::TIndexDescription indexDescription(index);
-                    indexImplTable = index.GetName();
+        if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+            YQL_ENSURE(Settings->GetIndexTables().size() >= 4);
+            {
+                auto&info = Settings->GetIndexTables(0);
+                YQL_ENSURE(info.GetTable().GetPath().EndsWith(DictTable));
+                DictTableReader = TDictTableReader::FromNavigateRequest(Counters, Database, Snapshot, LogPrefix, IndexDescription, FromProto(info.GetTable()), info.GetKeyColumns(), info.GetColumns());
+                DictTableReader->AddResolvePartitioningRequest(request);
+            }
 
-                    auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-                    request->DatabaseName = Database;
-                    auto& entry = request->ResultSet.emplace_back();
-                    entry.Path = {tablePath, index.GetName(), NKikimr::NTableIndex::ImplTable};
-                    entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
-                    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
-                    entry.SyncVersion = false;
-                    entry.ShowPrivatePath = true;
+            {
+                auto& info = Settings->GetIndexTables(1);
+                YQL_ENSURE(info.GetTable().GetPath().EndsWith(DocsTable));
+                DocsTableReader = TDocsTableReader::FromNavigateRequest(Counters, Database, Snapshot, LogPrefix, IndexDescription, FromProto(info.GetTable()), info.GetKeyColumns(), info.GetColumns());
+                DocsTableReader->AddResolvePartitioningRequest(request);
+            }
 
-                    if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-                        for(const auto& table: {DictTable, DocsTable, StatsTable}) {
-                            auto& entry = request->ResultSet.emplace_back();
-                            entry.Path = {tablePath, index.GetName(), table};
-                            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
-                            entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
-                            entry.SyncVersion = false;
-                            entry.ShowPrivatePath = true;
-                        }
-                    }
-
-                    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
-                    NavigateIndexInProgress = true;
-                }
+            {
+                auto& info = Settings->GetIndexTables(2);
+                YQL_ENSURE(info.GetTable().GetPath().EndsWith(StatsTable));
+                StatsTableReader = TStatsTableReader::FromNavigateRequest(
+                    Counters, Database, Snapshot, LogPrefix, IndexDescription, FromProto(info.GetTable()), info.GetKeyColumns(), info.GetColumns());
+                StatsTableReader->AddResolvePartitioningRequest(request);
             }
         }
 
-        if (indexImplTable.empty()) {
-            RuntimeError(TStringBuilder() << "Expected index " << Settings->GetIndex() << " for table " << tablePath, NYql::NDqProto::StatusIds::SCHEME_ERROR);
-            return;
-        }
+        YQL_ENSURE(request->ResultSet.size() >= 1, "Expected at least one table to resolve partitioning");
+        ResolveTablePartitioning(std::move(request));
     }
 
-    void NavigateIndexTable() {
-
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-
-        auto& entry = request->ResultSet.emplace_back();
-        entry.TableId = TableId;
-        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
-        entry.SyncVersion = false;
-        entry.ShowPrivatePath = true;
-
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
-       // SchemeCacheRequestTimeoutTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), SchemeCacheRequestTimeout,
-       //     new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvSchemeCacheRequestTimeout()));
-    }
-
-    void ResolveTablePartitioning(const TIntrusivePtr<TTableReader>& reader) {
-        YQL_ENSURE(reader);
-        auto request = reader->GetResolvePartitioningRequest();
-        Send(MakeSchemeCacheID(), request.release());
+    void ResolveTablePartitioning(std::unique_ptr<NSchemeCache::TSchemeCacheRequest>&& request) {
+        auto resolveRequest = std::make_unique<TEvTxProxySchemeCache::TEvResolveKeySet>(request.release());
+        Send(MakeSchemeCacheID(), resolveRequest.release());
         // SchemeCacheRequestTimeoutTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), SchemeCacheRequestTimeout,
         //    new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvSchemeCacheRequestTimeout()));
     }
@@ -1352,6 +1250,7 @@ public:
         , HolderFactory(holderFactory)
         , Alloc(alloc)
         , Counters(counters)
+        , IndexDescription(Settings->GetIndexDescription())
         , Database(Settings->GetDatabase())
         , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
@@ -1366,13 +1265,7 @@ public:
             Limit = Settings->GetLimit();
         }
 
-        TableId = TTableId(
-            (ui64)Settings->GetTable().GetOwnerId(),
-            (ui64)Settings->GetTable().GetTableId(),
-            Settings->GetTable().GetSysView(),
-            (ui64)Settings->GetTable().GetVersion()
-        );
-
+        TableId = FromProto(Settings->GetTable());
         if (Settings->HasSnapshot()) {
             Snapshot = IKqpGateway::TKqpSnapshot(
                 Settings->GetSnapshot().GetStep(),
@@ -1383,8 +1276,7 @@ public:
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         Become(&TFullTextContainsSource::StateWork);
-        // ResolveIndexTable();
-        NavigateIndexTable();
+        PrepareTableReaders();
     }
 
     ui64 GetInputIndex() const override {
@@ -1456,7 +1348,6 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDataShard::TEvReadResult, HandleReadResult);
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleResolve);
             hFunc(TEvPipeCache::TEvDeliveryProblem, HandleError);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
@@ -1475,69 +1366,28 @@ public:
         ResolveInProgress = false;
 
         if (ev->Get()->Request->ErrorCount > 0) {
+            for(const auto& entry : ev->Get()->Request->ResultSet) {
+                CA_LOG_E("Table " << entry.KeyDescription->TableId << " error status: " << entry.Status);
+            }
+
             TString errorMsg = TStringBuilder() << "Failed to get partitioning for table. ";
             return RuntimeError(errorMsg, NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
 
         auto& resultSet = ev->Get()->Request->ResultSet;
-        YQL_ENSURE(resultSet.size() == 1, "Expected one result for range [NULL, +inf)");
-
-        int mask = 0;
-        for (const auto& entry : resultSet) {
-            if (IndexTableReader && entry.KeyDescription->TableId == IndexTableReader->GetTableId()) {
-                IndexTableReader->SetPartitionInfo(entry.KeyDescription->Partitioning);
-            }
-
-            if (MainTableReader && entry.KeyDescription->TableId == MainTableReader->GetTableId()) {
-                MainTableReader->SetPartitionInfo(entry.KeyDescription->Partitioning);
-            }
-
-            if (DocsTableReader && entry.KeyDescription->TableId == DocsTableReader->GetTableId()) {
-                DocsTableReader->SetPartitionInfo(entry.KeyDescription->Partitioning);
-            }
-
-            if (DictTableReader && entry.KeyDescription->TableId == DictTableReader->GetTableId()) {
-                DictTableReader->SetPartitionInfo(entry.KeyDescription->Partitioning);
-            }
-
-            if (StatsTableReader && entry.KeyDescription->TableId == StatsTableReader->GetTableId()) {
-                StatsTableReader->SetPartitionInfo(entry.KeyDescription->Partitioning);
-            }
-
-            if (IndexTableReader && IndexTableReader->HasPartitioning()) {
-                mask |= 1;
-            }
-
-            if (MainTableReader && MainTableReader->HasPartitioning()) {
-                mask |= 2;
-            }
-
-            if (DictTableReader && DictTableReader->HasPartitioning()) {
-                mask |= 4;
-            }
-
-            if (DocsTableReader && DocsTableReader->HasPartitioning()) {
-                mask |= 8;
-            }
-
-            if (StatsTableReader && StatsTableReader->HasPartitioning()) {
-                mask |= 16;
-            }
-        }
-
-        CA_LOG_E("Mask: " << mask);
-
+        YQL_ENSURE(resultSet.size() >= 2, "Expected at least 2 tables for fulltext index");
+        MainTableReader->SetPartitionInfo(resultSet[0].KeyDescription);
+        IndexTableReader->SetPartitionInfo(resultSet[1].KeyDescription);
         if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-            if (mask == 31) {
-                // only if all tables are resolved and we have partitioning of all tables
-                ExtractAndTokenizeExpression();
-                ReadTotalStats();
-            }
+            YQL_ENSURE(resultSet.size() == 5, "Expected 5 tables for flat relevance index");
+            DictTableReader->SetPartitionInfo(resultSet[2].KeyDescription);
+            DocsTableReader->SetPartitionInfo(resultSet[3].KeyDescription);
+            StatsTableReader->SetPartitionInfo(resultSet[4].KeyDescription);
+            ExtractAndTokenizeExpression();
+            ReadTotalStats();
         } else {
-            if ((mask & 3) == 3) {
-                ExtractAndTokenizeExpression();
-                StartWordReads();
-            }
+            ExtractAndTokenizeExpression();
+            StartWordReads();
         }
     }
 

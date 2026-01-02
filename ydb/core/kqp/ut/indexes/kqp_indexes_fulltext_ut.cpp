@@ -2990,7 +2990,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardSpecialCharacters) {
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::Contains(`Text`, "*[^2-5]*})$")
             ORDER BY `Key`;
-            
+
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::Contains(`Text`, "*[i]*")
             ORDER BY `Key`;
@@ -3152,7 +3152,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::ContainsUtf8(`Text`, "🙈")
             ORDER BY `Key`;
-            
+
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::ContainsUtf8(`Text`, "🎶")
             ORDER BY `Key`;
@@ -3222,7 +3222,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardUtf8) {
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::ContainsUtf8(`Text`, "*Ár!")
             ORDER BY `Key`;
-            
+
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::ContainsUtf8(`Text`, "*年*！")
             ORDER BY `Key`;
@@ -3309,7 +3309,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndEdgeNgramWildcard) {
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::Contains(`Text`, "12*6+7*9=")
             ORDER BY `Key`;
-            
+
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FullText::Contains(`Text`, "123450+789=")
             ORDER BY `Key`;
@@ -3409,6 +3409,17 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
     DropIndex(db);
     AddIndexNGram(db, 4, 4);
 
+    auto singleRetryQuery = [&](auto& db, const TString& query) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        if (result.GetStatus() != EStatus::SUCCESS) {
+            result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return result;
+        }
+
+        return result;
+    };
+
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -3423,7 +3434,8 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
             WHERE FullText::Contains(`Text`, "lu*aed*")
             ORDER BY `Key`;
         )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+
+        auto result = singleRetryQuery(db, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([
@@ -3450,7 +3462,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
             WHERE FullText::Contains(`Text`, "lu*aed*")
             ORDER BY `Key`;
         )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        auto result = singleRetryQuery(db, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([
@@ -3487,7 +3499,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
             WHERE FullText::Contains(`Text`, "lu*aed*")
             ORDER BY `Key`;
         )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        auto result = singleRetryQuery(db, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([

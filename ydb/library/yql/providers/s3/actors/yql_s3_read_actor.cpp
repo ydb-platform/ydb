@@ -355,7 +355,7 @@ public:
     class TCoroReadBuffer : public NDB::ReadBuffer {
     public:
         explicit TCoroReadBuffer(TS3ReadCoroImpl* coro)
-            : NDB::ReadBuffer(nullptr, 0ULL)
+            : NDB::ReadBuffer(nullptr, 0)
             , Coro(coro)
         {}
 
@@ -383,7 +383,7 @@ public:
     class TCoroDecompressorBuffer : public NDB::ReadBuffer {
     public:
         explicit TCoroDecompressorBuffer(TS3ReadCoroImpl* coro)
-            : NDB::ReadBuffer(nullptr, 0ULL)
+            : NDB::ReadBuffer(nullptr, 0)
             , Coro(coro)
         {}
 
@@ -505,8 +505,7 @@ public:
     };
 
     struct TReadRangeCompare {
-        bool operator() (const TEvS3Provider::TReadRange& lhs, const TEvS3Provider::TReadRange& rhs) const
-        {
+        bool operator() (const TEvS3Provider::TReadRange& lhs, const TEvS3Provider::TReadRange& rhs) const {
             return (lhs.Offset < rhs.Offset) || (lhs.Offset == rhs.Offset && lhs.Length < rhs.Length);
         }
     };
@@ -892,7 +891,7 @@ public:
             }
 
             if (!DeferredDataParts.empty()) {
-                ExtractDataPart(*DeferredDataParts.front(), true);
+                ExtractDataPart(*DeferredDataParts.front(), /* deferred */ true);
                 DeferredDataParts.pop();
                 if (DeferredQueueSize) {
                     DeferredQueueSize->Dec();
@@ -1205,11 +1204,11 @@ private:
             FatalCode = static_cast<NYql::NDqProto::StatusIds::StatusCode>(err.Code);
             RetryStuff->Cancel();
         } catch (const std::exception& err) {
-            Issues.AddIssue(TIssue(err.what()));
+            Issues.AddIssue(err.what());
             FatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             RetryStuff->Cancel();
         } catch (...) {
-            Issues.AddIssue(TIssue("Got unknown exception, please contact internal support"));
+            Issues.AddIssue("Got unknown exception, please contact internal support");
             FatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             RetryStuff->Cancel();
         }

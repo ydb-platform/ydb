@@ -31,7 +31,7 @@ private:
     class TCoroReadBuffer : public NDB::ReadBuffer {
     public:
         explicit TCoroReadBuffer(TS3DecompressorCoroImpl* coro)
-            : NDB::ReadBuffer(nullptr, 0ULL)
+            : NDB::ReadBuffer(nullptr, 0)
             , Coro(coro)
         {}
 

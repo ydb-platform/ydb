@@ -281,7 +281,8 @@ protected:
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
         bool retryTli = true);
 
-    TAsyncStatus ReadModifyWrite(
+    static TAsyncStatus ReadModifyWrite(
+        TDbPool::TPtr dbPool,
         const TString& readQuery,
         const NYdb::TParams& readParams,
         const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
@@ -290,6 +291,18 @@ protected:
         const TVector<TValidationQuery>& validators = {},
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
         bool retryOnTli = true);
+
+    TAsyncStatus ReadModifyWrite(
+        const TString& readQuery,
+        const NYdb::TParams& readParams,
+        const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
+        const TRequestCounters& requestCounters,
+        TDebugInfoPtr debugInfo = {},
+        const TVector<TValidationQuery>& validators = {},
+        TTxSettings transactionMode = TTxSettings::SerializableRW(),
+        bool retryOnTli = true) {
+        return ReadModifyWrite(DbPool, readQuery, readParams, prepare, requestCounters, debugInfo, validators, transactionMode, retryOnTli);
+    }
 
 protected:
     TDbPool::TPtr DbPool;
@@ -1050,7 +1063,8 @@ private:
         bool RetryOnTli = false;
     };
 
-    NThreading::TFuture<void> PickTask(
+    static NThreading::TFuture<void> PickTask(
+        TDbPool::TPtr dbPool,
         const TPickTaskParams& taskParams,
         const TRequestCounters& requestCounters,
         TDebugInfoPtr debugInfo,

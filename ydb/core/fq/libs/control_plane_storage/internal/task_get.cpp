@@ -492,7 +492,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     const auto query = queryBuilder.Build();
     auto [readStatus, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo, TTxSettings::StaleRO());
     auto result = readStatus.Apply(
-        [this, // TODO used for PickTasks, try to avoid
+        [dbPool=DbPool,
         prepareParams, Config=Config, response, owner,
         resultSets=resultSets,
         requestCounters=requestCounters,
@@ -521,7 +521,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
         TVector<TFuture<void>> futures;
         for (size_t i = 0; i < pickTaskParams.size(); ++i) {
-            futures.emplace_back(PickTask(pickTaskParams[i], requestCounters, (*debugInfos)[i], responseTasks));
+            futures.emplace_back(PickTask(dbPool, pickTaskParams[i], requestCounters, (*debugInfos)[i], responseTasks));
         }
 
         auto allFuture = NThreading::WaitExceptionOrAll(futures);

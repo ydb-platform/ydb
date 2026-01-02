@@ -521,6 +521,7 @@ TAsyncStatus TDbRequester::Write(
 }
 
 NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
+    TDbPool::TPtr dbPool,
     const TPickTaskParams& taskParams,
     const TRequestCounters& requestCounters,
     TDebugInfoPtr debugInfo,
@@ -528,7 +529,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
     const TVector<TValidationQuery>& validators,
     TTxSettings transactionMode)
 {
-    return ReadModifyWrite(taskParams.ReadQuery, taskParams.ReadParams,
+    return ReadModifyWrite(dbPool, taskParams.ReadQuery, taskParams.ReadParams,
         taskParams.PrepareParams, requestCounters, debugInfo, validators, transactionMode, taskParams.RetryOnTli)
             .Apply([responseTasks=responseTasks, queryId=taskParams.QueryId](const auto& future) {
                 const auto status = future.GetValue();
@@ -539,6 +540,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
 }
 
 TAsyncStatus TDbRequester::ReadModifyWrite(
+    TDbPool::TPtr dbPool,
     const TString& readQuery,
     const NYdb::TParams& readParams,
     const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
@@ -661,7 +663,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
         });
     };
     TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    TActivationContext::AsActorContext().Register(new TDbRequest(DbPool, promise, handler));
+    TActivationContext::AsActorContext().Register(new TDbRequest(dbPool, promise, handler));
     return promise.GetFuture();
 }
 

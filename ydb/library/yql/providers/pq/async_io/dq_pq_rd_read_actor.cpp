@@ -1279,6 +1279,11 @@ TString TDqPqRdReadActor::GetInternalState() {
         }
         str << "\n";
     }
+    if (Parent->WatermarkTracker) {
+        str << "WatermarksTracker:";
+        Parent->WatermarkTracker->Out(str);
+        str << "\n";
+    }
     return str.Str();
 }
 

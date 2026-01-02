@@ -42,6 +42,9 @@ namespace NYT {
 
 namespace NDetail {
 
+struct TOKFutureTag
+{ };
+
 template <class T>
 class TPromiseState;
 template <class T>
@@ -59,11 +62,6 @@ template <class T>
 void Ref(TFutureState<T>* state);
 template <class T>
 void Unref(TFutureState<T>* state);
-
-//! Constructs a well-known pre-set future like #OKFuture.
-//! For such futures ref-counting is essentially disabled.
-template <class T>
-TFuture<T> MakeWellKnownFuture(TErrorOr<T> value);
 
 template <class T>
 constexpr bool IsFuture = false;
@@ -308,6 +306,7 @@ public:
 
 protected:
     explicit TFutureBase(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
+    constexpr TFutureBase(NDetail::TOKFutureTag, NYT::NDetail::TFutureState<T>* impl);
 
     TIntrusivePtr<NYT::NDetail::TFutureState<T>> Impl_;
 
@@ -352,8 +351,6 @@ private:
     template <class U>
     friend TFuture<U> MakeFuture(TErrorOr<U> value);
     template <class U>
-    friend TFuture<U> NDetail::MakeWellKnownFuture(TErrorOr<U> value);
-    template <class U>
     friend TFuture<U> MakeFuture(U value);
     template <class U>
     friend class TFutureBase;
@@ -371,6 +368,8 @@ public:
     TFuture() = default;
     TFuture(std::nullopt_t);
 
+    constexpr TFuture(NDetail::TOKFutureTag, NDetail::TFutureState<void>* impl);
+
     //! Chains the asynchronous computation with another one.
     template <class R>
     TFuture<R> Apply(TCallback<R()> callback) const;
@@ -386,8 +385,6 @@ private:
 
     template <class U>
     friend TFuture<U> MakeFuture(TErrorOr<U> value);
-    template <class U>
-    friend TFuture<U> NDetail::MakeWellKnownFuture(TErrorOr<U> value);
     template <class U>
     // XXX(babenko): 'NYT::' is a workaround; cf. https://gcc.gnu.org/bugzilla/show_bug.cgi?id=52625
     friend class NYT::TFutureBase;

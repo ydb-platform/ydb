@@ -80,7 +80,7 @@ public:
     TS3ConfSettingDefault<bool, false> AsyncDecoding;                 // Parse and decode input data at separate mailbox/thread of TaskRunner
     TS3ConfSettingDefault<bool, false> UsePredicatePushdown;
     TS3ConfSettingDefault<bool, false> AsyncDecompressing;            // Decompression and parsing input data in different mailbox/thread
-    TS3ConfSettingOptional<TDuration> OuputKeyFlushTimeout;
+    TS3ConfSettingOptional<TDuration> OutputKeyFlushTimeout;
 };
 
 struct TS3ClusterSettings {
@@ -127,7 +127,7 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     bool WriteThroughDqIntegration = false;
     ui64 MaxListingResultSizePerPhysicalPartition;
     NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
-    TDuration DefaultOuputKeyFlushTimeout;
+    TDuration DefaultOutputKeyFlushTimeout;
 
 private:
     std::vector<IS3ConfSettingWithDisableCheck*> DisabledPragmas;

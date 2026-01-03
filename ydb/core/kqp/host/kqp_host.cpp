@@ -1814,7 +1814,7 @@ private:
         if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->IsStreamingQuery) {
             configuration.DisablePragma(configuration.UseRuntimeListing, false, "Runtime listing is not supported for streaming queries, pragma value was ignored");
             configuration.DisablePragma(configuration.AtomicUploadCommit, false, "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
-            configuration.DefaultOuputKeyFlushTimeout = TDuration::Minutes(1);
+            configuration.DefaultOutputKeyFlushTimeout = TDuration::Minutes(1);
         } else if (queryType != EKikimrQueryType::Script) {
             configuration.DisablePragma(configuration.AtomicUploadCommit, false, "Atomic upload commit is supported only for script execution operations, pragma value was ignored");
         }

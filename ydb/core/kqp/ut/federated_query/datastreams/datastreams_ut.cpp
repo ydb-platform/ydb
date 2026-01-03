@@ -1704,7 +1704,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreatePqSource(pqSourceName);
 
         const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
-            PRAGMA s3.OuputKeyFlushTimeout = "1s";
+            PRAGMA s3.OutputKeyFlushTimeout = "1s";
             PRAGMA ydb.DisableCheckpoints = "TRUE";
             PRAGMA ydb.MaxTasksPerStage = "1";
 

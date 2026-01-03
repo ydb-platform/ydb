@@ -1,5 +1,3 @@
-actor_system_config:
-  use_auto_config: true
 channel_profile_config:
   profile:
   - profile_id: 0

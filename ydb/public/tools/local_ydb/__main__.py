@@ -158,7 +158,7 @@ To update cluster (stop + start):
             help='Don\'t use log files (only STDOUT and STDERR output)'
         )
         sub_parser.add_argument(
-            '--use-minimal-config', default=True, action='store_true',
+            '--use-minimal-config', action='store_true',
             help='Use minimal configuration template (default: True)'
         )
         sub_parser.add_argument(

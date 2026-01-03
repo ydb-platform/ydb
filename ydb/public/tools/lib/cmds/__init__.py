@@ -41,6 +41,7 @@ class EmptyArguments(object):
         self.dont_use_log_files = False
         self.enabled_feature_flags = []
         self.enabled_grpc_services = []
+        self.use_minimal_config = False
 
 
 def _get_build_path(path):
@@ -371,11 +372,8 @@ def deploy(arguments):
     if is_tiny_mode():
         optionals['tiny_mode'] = True
 
-    # Check if custom config is provided
-    config_path = getattr(arguments, 'config_path', None)
-    
-    # Use minimal config for local_ydb by default (unless custom config provided)
-    if not config_path:
+    # Use minimal config if explicitly requested via arguments
+    if getattr(arguments, 'use_minimal_config', False):
         optionals['use_minimal_config'] = True
 
     configuration = KikimrConfigGenerator(
@@ -403,6 +401,7 @@ def deploy(arguments):
         **optionals
     )
 
+    config_path = getattr(arguments, 'config_path', None)
     if config_path:
         def _write_proto_configs(self, configs_path):
             # This override only triggers on the very first deploy before the recipe metafile exists.

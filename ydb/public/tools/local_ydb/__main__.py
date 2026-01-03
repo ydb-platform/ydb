@@ -157,6 +157,14 @@ To update cluster (stop + start):
             '--dont-use-log-files', default=False, action='store_true',
             help='Don\'t use log files (only STDOUT and STDERR output)'
         )
+        sub_parser.add_argument(
+            '--use-minimal-config', default=True, action='store_true',
+            help='Use minimal configuration template (default: True)'
+        )
+        sub_parser.add_argument(
+            '--no-use-minimal-config', dest='use_minimal_config', action='store_false',
+            help='Use full configuration template instead of minimal'
+        )
 
     arguments = parser.parse_args()
     arguments.ydb_working_dir = cmds.wrap_path(arguments.ydb_working_dir)

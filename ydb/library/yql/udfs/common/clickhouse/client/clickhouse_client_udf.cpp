@@ -1106,6 +1106,13 @@ class TSerializeFormat : public TBoxedValue {
         {}
 
     private:
+        void EraseKey(const TPartitionsMap::iterator it) {
+            if (KeyFlushTimeout) {
+                PartitionCreationTimes.erase(TPartitionCreationTime(it->second.CreatedAt, it));
+            }
+            PartitionsMap.erase(it);
+        }
+
         bool FlushKey(const TPartitionsMap::iterator it, TUnboxedValue& result, bool finishFile = false) {
             auto& payload = it->second;
             auto& block = payload.Block;
@@ -1114,6 +1121,7 @@ class TSerializeFormat : public TBoxedValue {
             auto& hasDataInBlock = payload.HasDataInBlock;
             auto& outputStream = payload.OutputStream;
             if (!hasDataInBlock && !outputStream) {
+                EraseKey(it);
                 return false;
             }
 
@@ -1159,17 +1167,12 @@ class TSerializeFormat : public TBoxedValue {
                     *tupleItems++ = TUnboxedValue(); // Empty optional as finishing mark of current file.
                     std::copy(it->first.cbegin(), it->first.cend(), tupleItems);
                 }
-
                 if (!hasResult) {
                     FinishCurrentFileFlag = false;
                     result = FinishCurrentFileValue;
                     hasResult = true;
                 }
-
-                if (KeyFlushTimeout) {
-                    PartitionCreationTimes.erase(TPartitionCreationTime(it->second.CreatedAt, it));
-                }
-                PartitionsMap.erase(it);
+                EraseKey(it);
             }
 
             Buffer->restart();

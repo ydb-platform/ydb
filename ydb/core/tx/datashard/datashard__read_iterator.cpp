@@ -1073,7 +1073,10 @@ private:
     template <typename TIterator>
     EReadStatus IterateRange(TIterator* iter, NTable::TKeyRange& iterRange, TTransactionContext& txc) {
         // Try to do HNSW search
-        if (State.VectorTopK && State.VectorTopK->TryHnswSearch()) {
+        if (State.VectorTopK
+            && State.VectorTopK->Limit != 11    // Hack: switch to brute force to measure recall
+            && State.VectorTopK->TryHnswSearch()
+        ) {
             // Fast return for empty HNSW results
             if (State.VectorTopK->HnswResults.empty()) {
                 return EReadStatus::Done;

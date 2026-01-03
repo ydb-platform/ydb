@@ -84,6 +84,8 @@ void TVectorRecallEvaluator::SelectReferenceResults(const TVectorSampler& sample
             lst.OpenList();
             while (lst.TryNextListItem()) {
                 refList.push_back(lst.GetString());
+                if (refList.size() == Params.LimitHardCodedForLocalIndex - 1)
+                    break;
             }
             lst.CloseList();
             References[id] = refList;
@@ -117,7 +119,7 @@ void TVectorRecallEvaluator::MeasureRecall(const TVectorSampler& sampler) {
                 prefixValue = sampler.GetPrefixValue(i);
             }
 
-            NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.Limit);
+            NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.LimitHardCodedForLocalIndex - 1);
 
             // Execute index query for recall measurement
             auto asyncIndexResult = Params.QueryClient->RetryQuery([queryIndex, params](NYdb::NQuery::TSession session) {

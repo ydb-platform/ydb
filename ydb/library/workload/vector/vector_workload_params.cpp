@@ -170,6 +170,7 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
                 case EWorkloadRunType::Upsert:
                     break;
                 case EWorkloadRunType::Select:
+                    Y_ABORT_UNLESS(Limit == LimitHardCodedForLocalIndex, "Limit should be exactly %u for measuring local index recall", LimitHardCodedForLocalIndex);
                     break;
             }
             break;

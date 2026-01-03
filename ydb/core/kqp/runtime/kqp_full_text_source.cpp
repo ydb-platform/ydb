@@ -48,8 +48,9 @@ static constexpr TDuration SCHEME_CACHE_REQUEST_TIMEOUT = TDuration::Seconds(10)
 using TDocumentId = const TConstArrayRef<TCell>;
 
 // replace with parameters from settings
-constexpr double K1_FACTOR = 1.2;
-constexpr double B_FACTOR = 0.75;
+constexpr double K1_FACTOR_DEFAULT = 1.2;
+constexpr double B_FACTOR_DEFAULT = 0.75;
+constexpr double EPSILON = 1e-6;
 
 class TDocumentIdPointer;
 
@@ -247,6 +248,8 @@ class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
     const ui64 DocCount = 0;
     const double AvgDL = 1.0;
     std::vector<double> IDFValues;
+    double K1Factor = K1_FACTOR_DEFAULT;
+    double BFactor = B_FACTOR_DEFAULT;
     const i32 RelevanceColumnIdx = -1;
 
 public:
@@ -258,13 +261,21 @@ public:
     {
     }
 
+    void SetBFactor(double bFactor) {
+        BFactor = bFactor;
+    }
+
+    void SetK1Factor(double k1Factor) {
+        K1Factor = k1Factor;
+    }
+
     void AddIDFValue(size_t wordIndex, ui64 docFreq) {
         YQL_ENSURE(wordIndex < IDFValues.size());
         IDFValues[wordIndex] = std::log((static_cast<double>(DocCount) - static_cast<double>(docFreq) + 0.5) / (static_cast<double>(docFreq) + 0.5) + 1);
     }
 
     double GetK1Factor() const {
-        return K1_FACTOR;
+        return K1Factor;
     }
 
     bool NeedRelevanceColumn() const {
@@ -285,7 +296,7 @@ public:
     }
 
     double GetBFactor() const {
-        return B_FACTOR;
+        return BFactor;
     }
 
     double GetAvgDL() const {
@@ -354,7 +365,9 @@ public:
     double GetBM25Score() const {
         double score = 0;
         const double avgDocLength = QueryCtx->GetAvgDL();
-        const double documentFactor = K1_FACTOR * (1 - B_FACTOR + B_FACTOR * static_cast<double>(DocumentLength) / avgDocLength);
+        const double k1Factor = QueryCtx->GetK1Factor();
+        const double bFactor = QueryCtx->GetBFactor();
+        const double documentFactor = k1Factor * (1 - bFactor + bFactor * static_cast<double>(DocumentLength) / avgDocLength);
         for(size_t i = 0; i < ContainingWords.size(); ++i) {
             double docFreq = static_cast<double>(ContainingWords[i]);
             double idf = QueryCtx->GetIDFValue(i);
@@ -1102,6 +1115,14 @@ private:
     void StartWordReads() {
         QueryCtx = MakeIntrusive<TQueryCtx>(
             Words.size(), SumDocLength, DocCount, RelevanceColumnIdx);
+
+        if (Settings->HasBFactor() && Settings->GetBFactor() > EPSILON) {
+            QueryCtx->SetBFactor(Settings->GetBFactor());
+        }
+
+        if (Settings->HasK1Factor() && Settings->GetK1Factor() > EPSILON) {
+            QueryCtx->SetK1Factor(Settings->GetK1Factor());
+        }
 
         for (auto& word : Words) {
             if (IndexDescription.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {

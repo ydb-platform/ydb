@@ -12,7 +12,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<TString> YPathListSorted(
+std::vector<std::string> YPathListSorted(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit = {})
@@ -101,8 +101,8 @@ TEST(TYPathServiceCombinerTest, Simple)
     EXPECT_TRUE(YPathExists(combinedService, "/key3"));
     EXPECT_FALSE(YPathExists(combinedService, "/key2/subkeyNonExistent"));
     EXPECT_TRUE(YPathExists(combinedService, "/key2/subkey1"));
-    EXPECT_EQ((std::vector<TString>{"key1", "key2", "key3", "key4"}), YPathListSorted(combinedService, ""));
-    EXPECT_EQ((std::vector<TString>{"subkey1", "subkey2"}), YPathListSorted(combinedService, "/key2"));
+    EXPECT_EQ((std::vector<std::string>{"key1", "key2", "key3", "key4"}), YPathListSorted(combinedService, ""));
+    EXPECT_EQ((std::vector<std::string>{"subkey1", "subkey2"}), YPathListSorted(combinedService, "/key2"));
     EXPECT_THROW(YPathListSorted(combinedService, "/keyNonExistent"), std::exception);
     EXPECT_EQ(ConvertToYsonString(-1, EYsonFormat::Binary), YPathGet(combinedService, "/key4/@attribute1"));
     EXPECT_EQ(ConvertToYsonString("abc", EYsonFormat::Binary), YPathGet(combinedService, "/key2/subkey1"));
@@ -126,7 +126,7 @@ TEST(TYPathServiceCombinerTest, DynamicAndStatic)
     EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
     EXPECT_FALSE(YPathExists(combinedService, "/dynamic_key1"));
     EXPECT_TRUE(YPathExists(combinedService, "/error_key"));
-    EXPECT_EQ((std::vector<TString>{"error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
+    EXPECT_EQ((std::vector<std::string>{"error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
 
     YPathSet(dynamicService, "/dynamic_key1", ConvertToYsonString(3.1415926));
     YPathSet(dynamicService, "/dynamic_key2", TYsonString(TStringBuf("#")));
@@ -137,7 +137,7 @@ TEST(TYPathServiceCombinerTest, DynamicAndStatic)
     EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
     EXPECT_TRUE(YPathExists(combinedService, "/dynamic_key1"));
     EXPECT_TRUE(YPathExists(combinedService, "/error_key"));
-    EXPECT_EQ((std::vector<TString>{"dynamic_key1", "dynamic_key2", "error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
+    EXPECT_EQ((std::vector<std::string>{"dynamic_key1", "dynamic_key2", "error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
     EXPECT_EQ(TYsonString(TStringBuf("#")), YPathGet(combinedService, "/dynamic_key2"));
 
     YPathSet(dynamicService, "/error_key", ConvertToYsonString(42));
@@ -160,7 +160,7 @@ TEST(TYPathServiceCombinerTest, DynamicAndStatic)
     EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
     EXPECT_TRUE(YPathExists(combinedService, "/dynamic_key1"));
     EXPECT_TRUE(YPathExists(combinedService, "/error_key"));
-    EXPECT_EQ((std::vector<TString>{"dynamic_key1", "dynamic_key2", "error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
+    EXPECT_EQ((std::vector<std::string>{"dynamic_key1", "dynamic_key2", "error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
     EXPECT_EQ(TYsonString(TStringBuf(TStringBuf("#"))), YPathGet(combinedService, "/dynamic_key2"));
 }
 
@@ -183,7 +183,7 @@ TEST(TYPathServiceCombinerTest, UpdateKeysOnMissingKey)
     EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
     EXPECT_FALSE(YPathExists(combinedService, "/dynamic_key1"));
     EXPECT_TRUE(YPathExists(combinedService, "/error_key"));
-    EXPECT_EQ((std::vector<TString>{"error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
+    EXPECT_EQ((std::vector<std::string>{"error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
 
     YPathSet(dynamicService, "/dynamic_key1", ConvertToYsonString(3.1415926));
     YPathSet(dynamicService, "/dynamic_key2", TYsonString(TStringBuf("#")));
@@ -191,7 +191,7 @@ TEST(TYPathServiceCombinerTest, UpdateKeysOnMissingKey)
     EXPECT_TRUE(YPathExists(combinedService, "/static_key1"));
     EXPECT_TRUE(YPathExists(combinedService, "/dynamic_key1"));
     EXPECT_TRUE(YPathExists(combinedService, "/error_key"));
-    EXPECT_EQ((std::vector<TString>{"dynamic_key1", "dynamic_key2", "error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
+    EXPECT_EQ((std::vector<std::string>{"dynamic_key1", "dynamic_key2", "error_key", "static_key1", "static_key2"}), YPathListSorted(combinedService, ""));
     EXPECT_EQ(TYsonString(TStringBuf("#")), YPathGet(combinedService, "/dynamic_key2"));
 }
 

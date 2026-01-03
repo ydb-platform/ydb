@@ -1,5 +1,6 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>

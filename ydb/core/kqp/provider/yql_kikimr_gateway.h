@@ -93,7 +93,7 @@ struct TIndexDescription {
     const ui64 LocalPathId;
     const ui64 PathOwnerId;
 
-    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription, NKikimrKqp::TFulltextIndexDescription>;
+    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription, NKikimrSchemeOp::TFulltextIndexDescription>;
     TSpecializedIndexDescription SpecializedIndexDescription;
 
     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
@@ -134,7 +134,7 @@ struct TIndexDescription {
                 break;
             }
             case EType::GlobalFulltext: {
-                NKikimrKqp::TFulltextIndexDescription fulltextIndexDescription;
+                NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
                 *fulltextIndexDescription.MutableSettings() = index.GetFulltextIndexDescription().GetSettings();
                 SpecializedIndexDescription = std::move(fulltextIndexDescription);
                 break;
@@ -237,7 +237,7 @@ struct TIndexDescription {
                 *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
                 break;
             case EType::GlobalFulltext:
-                *message->MutableFulltextIndexDescription() = std::get<NKikimrKqp::TFulltextIndexDescription>(SpecializedIndexDescription);
+                *message->MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
                 break;
         }
     }
@@ -264,7 +264,7 @@ struct TIndexDescription {
                 }
                 return true;
             case EType::GlobalFulltext:
-                const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
                 YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
                 const auto& settings = fulltextDesc->GetSettings();
                 if (settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT) {
@@ -283,7 +283,7 @@ struct TIndexDescription {
             case EType::GlobalSyncVectorKMeansTree:
                 return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
             case EType::GlobalFulltext:
-                const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
                 YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
                 const auto& settings = fulltextDesc->GetSettings();
                 return NKikimr::NTableIndex::GetFulltextImplTables(settings.layout());

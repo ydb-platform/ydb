@@ -840,7 +840,7 @@ public:
                                 *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                             case TIndexDescription::EType::GlobalFulltext:
-                                *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrKqp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
+                                *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                         }
                     }

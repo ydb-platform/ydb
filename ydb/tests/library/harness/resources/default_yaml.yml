@@ -94,6 +94,7 @@ system_tablets:
       tablet_id: 72057594046678944
 actor_system_config:
   use_auto_config: true
+  cpu_count: 8
 log_config:
   sys_log: false
   default_level: {ydb_default_log_level}

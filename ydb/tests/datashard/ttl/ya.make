@@ -7,6 +7,8 @@ SPLIT_FACTOR(36)
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
+
 TEST_SRCS(
     test_ttl.py
 

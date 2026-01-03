@@ -11,11 +11,27 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TFuture<void> OKFuture = NDetail::MakeWellKnownFuture(TError());
+namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NDetail {
+class TOKPromiseState
+    : public TPromiseState<void>
+{
+public:
+    constexpr TOKPromiseState()
+        : TPromiseState(TOKFutureTag())
+    { }
+
+    void DestroyRefCounted() final
+    {
+        YT_ABORT();
+    }
+};
+
+constinit NDetail::TOKPromiseState OKPromiseState;
+
+////////////////////////////////////////////////////////////////////////////////
 
 TFutureCallbackCookie TFutureState<void>::Subscribe(TVoidResultHandler handler)
 {
@@ -284,7 +300,13 @@ void TFutureState<void>::OnLastPromiseRefLost()
     }));
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+constinit const TFuture<void> OKFuture(NDetail::TOKFutureTag(), &NDetail::OKPromiseState);
 
 ////////////////////////////////////////////////////////////////////////////////
 

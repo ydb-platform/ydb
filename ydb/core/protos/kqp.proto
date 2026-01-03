@@ -175,9 +175,6 @@ message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
 }
 
-message TFulltextIndexDescription {
-    optional Ydb.Table.FulltextIndexSettings Settings = 1;
-}
 
 message TIndexDescriptionProto {
     optional string Name = 1;
@@ -190,7 +187,7 @@ message TIndexDescriptionProto {
     repeated string DataColumns = 8;
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
-        TFulltextIndexDescription FulltextIndexDescription = 10;
+        NKikimrSchemeOp.TFulltextIndexDescription FulltextIndexDescription = 10;
     }
 };
 
@@ -898,6 +895,9 @@ message TKqpFullTextSourceSettings {
     optional TKqpSnapshot Snapshot = 10;
 
     optional string Database = 11;
+
+    optional double K1Factor = 12;
+    optional double BFactor = 13;
 };
 
 message TKqpSequencerSettings {

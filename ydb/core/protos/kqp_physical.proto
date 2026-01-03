@@ -357,7 +357,7 @@ message TKqpPhyCnVectorResolve {
 
 message TKqpPhyCnSequencer {
     TKqpPhyTableId Table = 1;
-    repeated string Columns = 2;
+    repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 2;
     repeated string AutoIncrementColumns = 3;
     bytes InputType = 4;
     bytes OutputType = 5;

@@ -124,28 +124,23 @@ pdisk_key_config:
 
     Y_UNIT_TEST(DomainSchemeLimits) {
         TString config = R"(
-domains_config:
-  domain:
-    - name: Root
-      scheme_limits:
-        max_paths: 50000
-        max_table_columns: 500
-        max_table_indices: 50
-        max_shards: 300000
-        max_depth: 64
-        max_children_in_dir: 200000
-        max_table_key_columns: 30
-        max_shards_in_path: 40000
+scheme_shard_config:
+  scheme_limits:
+    max_paths: 50000
+    max_table_columns: 500
+    max_table_indices: 50
+    max_shards: 300000
+    max_depth: 64
+    max_children_in_dir: 200000
+    max_table_key_columns: 30
+    max_shards_in_path: 40000
 )";
         NKikimrConfig::TAppConfig cfg = Parse(config, false);
-        UNIT_ASSERT(cfg.HasDomainsConfig());
-        auto& domainsConfig = cfg.GetDomainsConfig();
-        UNIT_ASSERT_VALUES_EQUAL(domainsConfig.DomainSize(), 1);
-        auto& domain = domainsConfig.GetDomain(0);
-        UNIT_ASSERT_VALUES_EQUAL(domain.GetName(), "Root");
-        UNIT_ASSERT(domain.HasSchemeLimits());
+        UNIT_ASSERT(cfg.HasSchemeShardConfig());
+        auto& schemeShardConfig = cfg.GetSchemeShardConfig();
+        UNIT_ASSERT(schemeShardConfig.HasSchemeLimits());
         
-        auto& limits = domain.GetSchemeLimits();
+        auto& limits = schemeShardConfig.GetSchemeLimits();
         UNIT_ASSERT(limits.HasMaxPaths());
         UNIT_ASSERT_VALUES_EQUAL(limits.GetMaxPaths(), 50000);
         UNIT_ASSERT(limits.HasMaxTableColumns());

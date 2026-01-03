@@ -124,19 +124,15 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         newDomain->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
         Self->SubDomains[Self->RootPathId()] = newDomain;
 
-        // Apply scheme limits from domain config if specified
-        const NKikimrConfig::TDomainsConfig& domainsConfig = Self->GetDomainsConfig();
-        if (domainsConfig.DomainSize() > 0) {
-            const auto& domain = domainsConfig.GetDomain(0);
-            if (domain.HasSchemeLimits()) {
-                TSchemeLimits limits = TSchemeLimits::FromProto(domain.GetSchemeLimits());
-                newDomain->SetSchemeLimits(limits, Self);
-                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                             "TTxInitRoot: Applied scheme limits from domain config"
-                                 << ", MaxPaths: " << limits.MaxPaths
-                                 << ", MaxTableColumns: " << limits.MaxTableColumns
-                                 << ", MaxTableIndices: " << limits.MaxTableIndices);
-            }
+        // Apply scheme limits from SchemeShardConfig if specified
+        if (AppData(ctx)->SchemeShardConfig.HasSchemeLimits()) {
+            TSchemeLimits limits = TSchemeLimits::FromProto(AppData(ctx)->SchemeShardConfig.GetSchemeLimits());
+            newDomain->SetSchemeLimits(limits, Self);
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                         "TTxInitRoot: Applied scheme limits from SchemeShardConfig"
+                             << ", MaxPaths: " << limits.MaxPaths
+                             << ", MaxTableColumns: " << limits.MaxTableColumns
+                             << ", MaxTableIndices: " << limits.MaxTableIndices);
         }
 
         NACLib::TDiffACL diffAcl;

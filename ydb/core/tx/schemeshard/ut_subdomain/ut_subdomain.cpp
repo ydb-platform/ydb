@@ -4368,21 +4368,17 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 #undef DEBUG_HINT
 
     Y_UNIT_TEST(DomainSchemeLimitsFromYamlConfig) {
-        // This test verifies that scheme limits specified in domains_config YAML
+        // This test verifies that scheme limits specified in SchemeShardConfig
         // are properly read and applied during root domain initialization
         
         TTestBasicRuntime runtime;
         
-        // Create custom app config with domain scheme limits
+        // Create custom app config with scheme limits in SchemeShardConfig
         auto appConfig = MakeHolder<NKikimrConfig::TAppConfig>();
-        auto* domainsConfig = appConfig->MutableDomainsConfig();
-        auto* domain = domainsConfig->AddDomain();
-        domain->SetName("MyRoot");
-        domain->SetDomainId(1);
-        domain->SetSchemeRoot(TTestTxConfig::SchemeShard);
+        auto* schemeShardConfig = appConfig->MutableSchemeShardConfig();
         
         // Set custom scheme limits
-        auto* limits = domain->MutableSchemeLimits();
+        auto* limits = schemeShardConfig->MutableSchemeLimits();
         limits->SetMaxPaths(50000);
         limits->SetMaxTableColumns(500);
         limits->SetMaxTableIndices(50);

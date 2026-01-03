@@ -802,6 +802,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
 }
 
 void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
+    Y_ENSURE(PeerActorId);
     auto ev = MakeHolder<TEvDqCompute::TEvChannelDataV2>();
 
     ev->Record.SetGenMajor(GenMajor);

@@ -722,10 +722,6 @@ void TLocalBufferRegistry::DeleteLocalBufferInfo(const TChannelInfo& info) {
     LocalBuffers.erase(info);
 }
 
-void TNodeSessionActor::PassAway() {
-    LOGA_N("TNodeSessionActor::PassAway SelfId=" << SelfId() << "to NodeId=" << NodeState->NodeId << ", PeerActorId=" <<  NodeState->PeerActorId);
-}
-
 TNodeState::~TNodeState() {
     *OutputBufferCount -= OutputDescriptors.size();
     *InputBufferCount -= InputDescriptors.size();
@@ -951,10 +947,10 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
     if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
-        // if (Reconciliation.load() == 0) {
+        if (Reconciliation.load() == 0) {
             // ignore errors in recovery
             LOG_W("DATA UNDELIVERED, UNKNOWN ActorId to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId << ", Sender=" << ev->Sender);
-        // }
+        }
         std::lock_guard lock(Mutex);
         StartReconciliation(true);
         return;
@@ -1078,13 +1074,12 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
 void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 
-    if (PeerActorId == NActors::TActorId{}) {
-        return;
-    }
-
     ui64 inflightBytes = 0;
     {
         std::lock_guard lock(Mutex); // ???
+        if (Reconciliation.load() > 0) {
+            return;
+        }
         inflightBytes = InflightBytes;
     }
 

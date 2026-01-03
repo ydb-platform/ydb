@@ -605,7 +605,7 @@ public:
     TDuration ReconciliationDelay = TDuration::Zero();
     bool ReReconciliation = false;
     ui64 ReconciliationCount = 0;
-    const TDuration MinReconciliationDelay = TDuration::MilliSeconds(200);
+    const TDuration MinReconciliationDelay = TDuration::MilliSeconds(100);
     const TDuration MaxReconciliationDelay = TDuration::Seconds(10);
 };
 
@@ -1022,8 +1022,6 @@ public:
         : TActor(&TThis::StateFunc)
         , NodeState(nodeState)
     {}
-
-    void PassAway() override;
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {

@@ -105,21 +105,6 @@ public:
                 return std::nullopt;
             }
         }
-        {
-            auto rowset = db.Table<Schema::InsertTable>().Select();
-            if (rowset.IsReady()) {
-                while (!rowset.EndOfSet()) {
-                    if (rowset.HaveValue<Schema::InsertTable::SchemaVersion>()) {
-                        usedSchemaVersions.insert(rowset.GetValue<Schema::InsertTable::SchemaVersion>());
-                        if (!rowset.Next()) {
-                            return std::nullopt;
-                        }
-                    }
-                }
-            } else {
-                return std::nullopt;
-            }
-        }
 
         std::map<TKey, bool> schemaIdUsability;
         std::vector<TTableKey> unusedTableSchemaIds;

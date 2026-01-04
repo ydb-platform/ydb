@@ -593,7 +593,7 @@ void TConsumerActor::Persist() {
     };
 
     auto withWAL = HasSnapshot && Storage->GetMessageCount() > 32;
-    if (withWAL) {
+    if (withWAL && LastWALIndex % MaxWALCount != 0) {
         auto key = MakeWALKey(PartitionId, Config.GetName(), ++LastWALIndex);
 
         NKikimrPQ::TMLPStorageWAL wal;

@@ -64,7 +64,7 @@ public:
         return TextifyYson(SyncYPathGet(RootService, path));
     }
 
-    std::vector<TString> List(const TYPath& path)
+    std::vector<std::string> List(const TYPath& path)
     {
         return SyncYPathList(RootService, path);
     }
@@ -184,7 +184,7 @@ TEST_F(TYPathTest, Ls)
     auto result = List("");
     std::sort(result.begin(), result.end());
 
-    std::vector<TString> expected;
+    std::vector<std::string> expected;
     expected.push_back("a");
     expected.push_back("c");
     expected.push_back("d");

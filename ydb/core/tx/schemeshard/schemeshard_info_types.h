@@ -3240,7 +3240,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     ui64 Id;  // TxId from the original TEvCreateImportRequest
     TString Uid;
     EKind Kind;
-    const TString SettingsSerialized;
+    TString SettingsSerialized;
     std::variant<Ydb::Import::ImportFromS3Settings,
                  Ydb::Import::ImportFromFsSettings> Settings;
     TPathId DomainPathId;
@@ -3378,6 +3378,19 @@ public:
 
         void AddError(const TString& err);
     };
+
+    // Erases encryption key and syncronize it with SettingsSerialized
+    // Returns true if settings changed
+    bool EraseEncryptionKey() {
+        return std::visit([this](auto& settings) {
+            if (settings.encryption_settings().has_symmetric_key()) {
+                settings.mutable_encryption_settings()->clear_symmetric_key();
+                Y_ABORT_UNLESS(settings.SerializeToString(&SettingsSerialized));
+                return true;
+            }
+            return false;
+        }, Settings);
+    }
 
     // Fills items from schema mapping:
     // - if user specified no items, fills all from schema mapping;

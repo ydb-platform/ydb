@@ -1379,6 +1379,7 @@ public:
     static void PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
     static void PersistExportMetadata(NIceDb::TNiceDb& db, const TExportInfo& exportInfo);
     static void PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo& exportInfo, ui32 targetIdx);
+    static void EraseEncryptionKey(NIceDb::TNiceDb& db, TExportInfo& exportInfo); // Erases encryption key (if any) for the export after moving to the final state and persists it in the database
 
     struct TExport {
         struct TTxCreate;
@@ -1433,10 +1434,12 @@ public:
     static void PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     void PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
+    static void PersistImportSettings(NIceDb::TNiceDb& db, const TImportInfo& importInfo);
     static void PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
     static void PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
     static void PersistImportItemPreparedCreationQuery(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
     static void PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx);
+    static void EraseEncryptionKey(NIceDb::TNiceDb& db, TImportInfo& importInfo); // Erases encryption key (if any) for the import after moving to the final state and persists it in the database
 
     struct TImport {
         struct TTxCreate;

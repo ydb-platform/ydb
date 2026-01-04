@@ -6,6 +6,8 @@ SPLIT_FACTOR(23)
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
+
 TEST_SRCS(
     test_partitioning.py
 

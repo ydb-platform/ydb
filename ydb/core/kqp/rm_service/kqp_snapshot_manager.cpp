@@ -300,7 +300,9 @@ private:
     const TDuration MaxRefreshDuration = TDuration::Seconds(10);
 
     TDuration RequestTimeout;
-    TDuration SnapshotTimeout = RequestTimeout * SnapshotToRequestTimeoutRatio;
+    TDuration SnapshotTimeout = TDuration::FromValue(
+        Min(RequestTimeout.GetValue() * SnapshotToRequestTimeoutRatio, MaxFloor<TDuration::TValue>())
+    ); // Multiply with saturation
     TDuration RefreshInterval = Min(RequestTimeout * RefreshToRequestTimeoutRatio, MaxRefreshDuration);
 };
 

@@ -98,10 +98,13 @@ public:
             return false;
         }
 
-        builder.Args()
-            ->Add(builder.Optional()->Item<TInputType>().Build())
-            .template Add<const char*>()
-            .Done()
+        auto argsBuilder = builder.Args(4);
+        argsBuilder->Add<TOptional<TInputType>>();
+        argsBuilder->Add<const char*>();
+        argsBuilder->Add<TOptional<double>>().Name(TStringRef::Of("B"));
+        argsBuilder->Add<TOptional<double>>().Name(TStringRef::Of("K1"));
+        builder.OptionalArgs(2);
+        builder
             .Returns(builder.SimpleType<double>());
 
         if (!typesOnly) {

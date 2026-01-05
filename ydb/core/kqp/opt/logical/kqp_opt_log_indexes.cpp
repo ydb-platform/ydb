@@ -1136,38 +1136,210 @@ TReadMatch ExtractFullTextRead(const TExprBase& node, const TKqpOptimizeContext&
     return read;
 }
 
-TMaybeNode<TCoApply> FindMatchingApply(const TExprBase& node) {
-    TMaybeNode<TCoApply> matchingApply;
+struct TFullTextApplyParseResult {
+    TExprNode::TPtr Apply;
+    TExprNode::TPtr SearchColumn;
+    TExprNode::TPtr SearchQuery;
+    TExprNode::TPtr BFactor;
+    TExprNode::TPtr K1Factor;
+    TStringBuf MethodName;
+
+    TFullTextApplyParseResult()
+    {}
+
+    bool IsFullTextApply() {
+        return IsIn({"FullText.Contains", "FullText.Relevance", "FullText.ContainsUtf8", "FullText.RelevanceUtf8"}, MethodName);
+    }
+
+    bool IsRelevanceApply() {
+        return IsIn({"FullText.Relevance", "FullText.RelevanceUtf8"}, MethodName);
+    }
+
+    bool ValidateBFactor()  {
+        if (!BFactor) {
+            return true;
+        }
+
+        if (!TExprBase(BFactor).Maybe<TCoJust>()) {
+            return false;
+        }
+
+        auto just = TExprBase(BFactor).Maybe<TCoJust>().Cast();
+        if (!just.Input().Maybe<TCoDouble>() && !just.Input().Maybe<TCoParameter>() && !just.Input().Maybe<TCoFloat>()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ValidateK1Factor() {
+        if (!K1Factor) {
+            return true;
+        }
+
+        if (!TExprBase(K1Factor).Maybe<TCoJust>()) {
+            return false;
+        }
+
+        auto just = TExprBase(K1Factor).Maybe<TCoJust>().Cast();
+        if (!just.Input().Maybe<TCoDouble>() && !just.Input().Maybe<TCoParameter>() && !just.Input().Maybe<TCoFloat>()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ValidateRequiredSettings() {
+        if (!TExprBase(SearchColumn).Maybe<TCoMember>()) {
+            return false;
+        }
+
+
+        if (!TExprBase(SearchQuery).Maybe<TCoString>() &&
+            !TExprBase(SearchQuery).Maybe<TCoAtom>() &&
+            !TExprBase(SearchQuery).Maybe<TCoParameter>())
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    TVector<TCoNameValueTuple> Settings(TExprContext& ctx, TPositionHandle pos) {
+        TVector<TCoNameValueTuple> settings;
+        if (BFactor) {
+            settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name<TCoAtom>()
+                    .Value(TKqpReadTableFullTextIndexSettings::BFactorSettingName)
+                    .Build()
+                .Value(BFactor)
+                .Done());
+        }
+        if (K1Factor) {
+            settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name<TCoAtom>()
+                    .Value(TKqpReadTableFullTextIndexSettings::K1FactorSettingName)
+                    .Build()
+                .Value(K1Factor)
+                .Done());
+        }
+        return settings;
+    }
+};
+
+TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext& ctx) {
+
+    TFullTextApplyParseResult result;
+
     VisitExpr(node.Ptr(), [&] (const TExprNode::TPtr& expr) {
+        if (expr->Content() == "NamedApply") {
+            if (!EnsureMinArgsCount(*expr, 3, ctx)) {
+                return false;
+            }
+
+            auto callable = expr->Child(0);
+            if (!EnsureCallable(*callable, ctx)) {
+                return false;
+            }
+
+            if (TCoUdf::Match(callable)) {
+                auto udf = TExprBase(callable).Cast<TCoUdf>();
+                result.MethodName = udf.MethodName().Value();
+                if (!result.IsFullTextApply()) {
+                    return false;
+                }
+            }
+
+            if (!EnsureTuple(*expr->Child(1), ctx)) {
+                return false;
+            }
+
+            auto args = expr->Child(1);
+            if (args->ChildrenSize() != 2) {
+                return false;
+            }
+
+            result.SearchColumn = args->Child(0);
+            result.SearchQuery = args->Child(1);
+            if (!result.ValidateRequiredSettings()) {
+                return false;
+            }
+
+            if (expr->Child(2)->Content() != "AsStruct") {
+                return false;
+            }
+
+            auto namedApplyArgs = expr->Child(2);
+            for(auto& arg : namedApplyArgs->Children()) {
+                if (!TExprBase(arg).Maybe<TCoNameValueTuple>()) {
+                    return false;
+                }
+
+                auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
+                if (nameValueTuple.Name().StringValue() == "B") {
+                    result.BFactor = nameValueTuple.Value().Cast().Ptr();
+                }
+
+                if (nameValueTuple.Name().StringValue() == "K1") {
+                    result.K1Factor = nameValueTuple.Value().Cast().Ptr();
+                }
+            }
+
+            if (!result.ValidateBFactor()) {
+                return false;
+            }
+
+            if (!result.ValidateK1Factor()) {
+                return false;
+            }
+
+            result.Apply = expr;
+            return false;
+        }
+
         if (TCoApply::Match(expr.Get())) {
             auto apply = TExprBase(expr).Cast<TCoApply>();
-            if (!apply.Callable().Maybe<TCoUdf>() || apply.Args().Count() != 3) {
+            if (!apply.Callable().Maybe<TCoUdf>()) {
                 return false;
             }
 
-            if (!apply.Args().Get(1).Maybe<TCoMember>()) {
+            if (apply.Args().Count() < 3 || apply.Args().Count() > 5) {
                 return false;
             }
 
-            if (!apply.Args().Get(2).Maybe<TCoString>() &&
-                !apply.Args().Get(2).Maybe<TCoAtom>() &&
-                !apply.Args().Get(2).Maybe<TCoParameter>())
-            {
+            result.SearchQuery = apply.Args().Get(2).Ptr();
+            result.SearchColumn = apply.Args().Get(1).Ptr();
+            if (!result.ValidateRequiredSettings()) {
                 return false;
+            }
+
+            if (apply.Args().Count() >= 4) {
+                result.BFactor = apply.Args().Get(3).Ptr();
+                if (!result.ValidateBFactor()) {
+                    return false;
+                }
+            }
+
+            if (apply.Args().Count() == 5) {
+                result.K1Factor = apply.Args().Get(4).Ptr();
+                if (!result.ValidateK1Factor()) {
+                    return false;
+                }
             }
 
             auto udf = apply.Callable().Maybe<TCoUdf>().Cast();
-            if (IsIn({"FullText.Contains", "FullText.Relevance", "FullText.ContainsUtf8", "FullText.RelevanceUtf8"}, udf.MethodName().Value())) {
-                matchingApply = apply;
+            result.MethodName = udf.MethodName().Value();
+            if (!result.IsFullTextApply()) {
                 return false;
             }
-
+            result.Apply = apply.Ptr();
+            return false;
         }
 
         return true;
     });
 
-    return matchingApply;
+    return result;
 }
 
 
@@ -1195,15 +1367,13 @@ TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& 
         return node;
     }
 
-    auto maybeApply = FindMatchingApply(topSort.KeySelectorLambda().Body());
-    if (!maybeApply.IsValid()) {
+    auto result = FindMatchingApply(topSort.KeySelectorLambda().Body(), ctx);
+    if (!result.Apply) {
         return node;
     }
-    auto apply = maybeApply.Cast();
 
-    auto args = apply.Args();
-    auto searchQuery = args.Get(2);
-    auto searchColumn = args.Get(1).Maybe<TCoMember>().Cast();
+    auto searchQuery = TExprBase(result.SearchQuery);
+    auto searchColumn = TExprBase(result.SearchColumn).Maybe<TCoMember>().Cast();
 
     auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
         .Add(Build<TCoAtom>(ctx, node.Pos())
@@ -1224,10 +1394,10 @@ TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& 
         .Add(resultColumnsVector)
         .Done();
 
-    TVector<TCoNameValueTuple> settings;
+    auto settings = result.Settings(ctx, node.Pos());
     settings.push_back(Build<TCoNameValueTuple>(ctx, node.Pos())
         .Name<TCoAtom>()
-            .Value("ItemsLimit")
+            .Value(TKqpReadTableFullTextIndexSettings::ItemsLimitSettingName)
             .Build()
         .Value(topSort.Count())
         .Done());
@@ -1247,7 +1417,7 @@ TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& 
             .Struct(searchColumn.Struct())
         .Done();
 
-    replaces.emplace(apply.Raw(), newMember.Ptr());
+    replaces.emplace(result.Apply.Get(), newMember.Ptr());
     auto newLambda = TCoLambda{ctx.NewLambda(
         topSort.KeySelectorLambda().Pos(),
         std::move(topSort.KeySelectorLambda().Args().Ptr()),
@@ -1291,17 +1461,15 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
         return node;
     }
 
-    auto maybeApply = FindMatchingApply(flatMap.Lambda().Body());
-    if (!maybeApply.IsValid()) {
+    auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx);
+    if (!result.Apply) {
         return node;
     }
 
-    auto apply = maybeApply.Cast();
-    auto args = apply.Args();
-    auto searchQuery = args.Get(2);
-    auto searchColumn = args.Get(1).Maybe<TCoMember>().Cast();
+    auto searchQuery = TExprBase(result.SearchQuery);
+    auto searchColumn = TExprBase(result.SearchColumn).Maybe<TCoMember>().Cast();
 
-    bool isRelevance = IsIn({"FullText.Relevance", "FullText.RelevanceUtf8"}, apply.Callable().Maybe<TCoUdf>().Cast().MethodName().Value());
+    bool isRelevance = IsIn({"FullText.Relevance", "FullText.RelevanceUtf8"}, result.MethodName);
 
     auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
         .Add(Build<TCoAtom>(ctx, node.Pos())
@@ -1320,6 +1488,8 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
             .Done());
     }
 
+    auto settings = result.Settings(ctx, node.Pos());
+
     auto resultColumns = Build<TCoAtomList>(ctx, node.Pos())
         .Add(resultColumnsVector)
         .Done();
@@ -1330,7 +1500,7 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
         .Columns(searchColumns.Ptr())
         .Query(searchQuery.Ptr())
         .ResultColumns(resultColumns.Ptr())
-        .Settings<TCoNameValueTupleList>().Build()
+        .Settings<TCoNameValueTupleList>().Add(settings).Build()
         .Done();
 
     TNodeOnNodeOwnedMap replaces;
@@ -1340,10 +1510,10 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
         .Name().Build("_yql_full_text_relevance")
             .Struct(searchColumn.Struct())
         .Done();
-        replaces.emplace(apply.Raw(), newMember.Ptr());
+        replaces.emplace(result.Apply.Get(), newMember.Ptr());
     } else {
         auto newMember = Build<TCoBool>(ctx, searchColumn.Pos()).Literal().Build("true").Done().Ptr();
-        replaces.emplace(apply.Raw(), newMember);
+        replaces.emplace(result.Apply.Get(), newMember);
     }
 
     auto newLambdaBody = TCoLambda{ctx.NewLambda(

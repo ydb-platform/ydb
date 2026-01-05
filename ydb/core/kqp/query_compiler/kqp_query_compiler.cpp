@@ -1436,6 +1436,27 @@ private:
                     YQL_ENSURE(false, "Unexpected ItemsLimit callable " << itemsLimit.Ref().Content());
                 }
             }
+
+            if (settingsObj.BFactor) {
+                auto bFactor = TExprBase(settingsObj.BFactor);
+                auto just = bFactor.Cast<TCoJust>().Input();
+                if (just.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableBFactor()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    FillLiteralProto(just.Cast<TCoDataCtor>(), *fullTextProto.MutableBFactor()->MutableLiteralValue());
+                }
+            }
+
+            if (settingsObj.K1Factor) {
+                auto k1Factor = TExprBase(settingsObj.K1Factor);
+                auto just = k1Factor.Cast<TCoJust>().Input();
+                if (just.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableK1Factor()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    FillLiteralProto(just.Cast<TCoDataCtor>(), *fullTextProto.MutableK1Factor()->MutableLiteralValue());
+                }
+            }
+
             FillColumns(settings.Columns().Cast(), *tableMeta, *fullTextProto.MutableQuerySettings(), false);
         } else {
             YQL_ENSURE(false, "Unsupported source type");

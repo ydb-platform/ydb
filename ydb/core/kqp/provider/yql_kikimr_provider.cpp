@@ -653,7 +653,6 @@ void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
     YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId));
-    YQL_ENSURE(typeId == NKikimr::NScheme::NTypeIds::Decimal || NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
 
     auto& protoType = *proto.MutableType();
     auto& protoValue = *proto.MutableValue();

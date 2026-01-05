@@ -2393,6 +2393,176 @@ Y_UNIT_TEST(SelectWithFulltextContainsWithoutTextField) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
+Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    { // Create table with fulltext index
+        TString query = Sprintf(R"sql(
+            CREATE TABLE `/Root/Texts` (
+                Key Uint64,
+                Text String,
+                PRIMARY KEY (Key)
+            );
+        )sql");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    { // Insert data with Russian text about machine learning
+        TString query = Sprintf(R"sql(
+            UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+                (1, "Машинное обучение - это важная область искусственного интеллекта"),
+                (2, "Глубокое обучение является подмножеством машинного обучения"),
+                (3, "Нейронные сети используются в машинном обучении"),
+                (4, "Машинное обучение помогает решать сложные задачи"),
+                (5, "Алгоритмы машинного обучения обрабатывают большие данные"),
+                (6, "Обучение моделей требует много вычислительных ресурсов"),
+                (7, "Машинное обучение применяется в различных областях"),
+                (8, "Современные методы машинного обучения очень эффективны"),
+                (9, "Исследования в области машинного обучения продолжаются"),
+                (10, "Практическое применение машинного обучения растет"),
+                (11, "Коты любят играть"),
+                (12, "Собаки любят бегать")
+        )sql");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = Sprintf(R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext
+                ON (Text)
+                WITH (layout=flat_relevance, tokenizer=standard, use_filter_lowercase=true)
+        )sql");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    std::vector<std::tuple<std::string, double, ui64, double>> searchingTerms = {
+        {"собаки любят ", 1.2, 12, 2.464092448},
+        {"собаки любят ", 1.0, 12, 2.301624815},
+        {"собаки любят ", 0.8, 12, 2.159256269},
+    };
+
+    for(const auto& [term, bfactor, expecteddoc, expectedRelevance] : searchingTerms) {
+        // Query with WHERE clause using FulltextContains UDF
+        TString query = Sprintf(R"sql(
+            SELECT Key, Text, FullText::Relevance(Text, "%s", %f) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql", term.c_str(), bfactor);
+
+        Cerr << "Query: " << query << Endl;
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_C(resultSet.RowsCount() == 1, "Expected 1 row with " + term + " content");
+
+        // Verify that all returned rows actually contain the search term
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
+            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+            double relevance = parser.ColumnParser("Relevance").GetDouble();
+            UNIT_ASSERT_C(bodyValue, "Body should not be null");
+            Cerr << "Key: " << key << ", Relevance: " << relevance << Endl;
+            UNIT_ASSERT_C(
+                expecteddoc == key,
+                "All returned rows should contain search term related text"
+            );
+            UNIT_ASSERT_C(abs(relevance - expectedRelevance) < 1e-4,
+                "Relevance should be close to " + std::to_string(expectedRelevance));
+        }
+    }
+
+    std::vector<std::tuple<std::string, double, double, ui64, double>> searchingTermsK1Factor = {
+        {"собаки любят ", 0.75, 1.2, 12, 2.839970958},
+        {"собаки любят ", 0.8, 1.0, 12, 2.65123871},
+        {"собаки любят ", 0.9, 0.8, 12, 2.421362522},
+    };
+
+    for(const auto& [term, bfactor, k1factor, expecteddoc, expectedRelevance] : searchingTermsK1Factor) {
+        // Query with WHERE clause using FulltextContains UDF
+        TString query = Sprintf(R"sql(
+            SELECT Key, Text, FullText::Relevance(Text, "%s", %f as K1, %f as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql", term.c_str(), bfactor, k1factor);
+
+        Cerr << "Query: " << query << Endl;
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_C(resultSet.RowsCount() == 1, "Expected 1 row with " + term + " content");
+
+        // Verify that all returned rows actually contain the search term
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
+            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+            double relevance = parser.ColumnParser("Relevance").GetDouble();
+            UNIT_ASSERT_C(bodyValue, "Body should not be null");
+            Cerr << "Key: " << key << ", Relevance: " << relevance << Endl;
+            UNIT_ASSERT_C(
+                expecteddoc == key,
+                "All returned rows should contain search term related text"
+            );
+            UNIT_ASSERT_C(abs(relevance - expectedRelevance) < 1e-4,
+                "Relevance should be close to " + std::to_string(expectedRelevance));
+        }
+    }
+
+    {
+        // Query with WHERE clause using FulltextContains UDF
+        TString query = Sprintf(R"sql(
+            DECLARE $bfactor as Double;
+            DECLARE $k1factor as Double;
+            SELECT Key, Text, FullText::Relevance(Text, "собаки любят", $bfactor, $k1factor) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql");
+
+        auto params = NYdb::TParamsBuilder();
+        params
+            .AddParam("$bfactor")
+                .Double(1.2)
+                .Build()
+            .AddParam("$k1factor")
+                .Double(0.75)
+                .Build();
+
+        Cerr << "Query: " << query << Endl;
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params.Build()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_C(resultSet.RowsCount() == 1, "Expected 1 row with content");
+
+        // Verify that all returned rows actually contain the search term
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
+            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+            double relevance = parser.ColumnParser("Relevance").GetDouble();
+            UNIT_ASSERT_C(bodyValue, "Body should not be null");
+            Cerr << "Key: " << key << ", Relevance: " << relevance << Endl;
+            UNIT_ASSERT_C(
+                12 == key,
+                "All returned rows should contain search term related text"
+            );
+            UNIT_ASSERT_C(abs(relevance - 2.839970958) < 1e-4,
+                "Relevance should be close to 2.839970958");
+        }
+    }
+}
+
 Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
     // If UTF8 is true, the column order produced by full text source
     // is the "Text", "_yql_fulltext_relevance"

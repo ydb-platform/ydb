@@ -230,7 +230,6 @@ python3 = NixSourceProject(
     nixattr="python3",
     owners=["g:python-contrib"],
     keep_paths=[
-        "a.yaml",
         "lib2",
         "Lib/_sysconfigdata_arcadia.py",
         "Modules/config.c",

@@ -162,8 +162,15 @@ public:
     TEqWidthHistogram(const char* str, size_t size);
 
     // Adds the given `val` to a histogram.
+    // Values which exceed the domain min/max are ignored.
     template <typename T>
     void AddElement(T val) {
+        const T domainStart = LoadFrom<T>(GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(GetDomainRange().End);
+        if (CmpLess<T>(val, domainStart) || CmpLess<T>(domainEnd, val)) {
+            return;
+        }
+
         const auto index = FindBucketIndex(val);
         Buckets_[index]++;
     }
@@ -225,6 +232,19 @@ public:
         return returnValue;
     }
 
+    // Returns border value of targeted bucket.
+    template <typename T>
+    T GetBorderValue(i64 index) const {
+        Y_ENSURE(CmpLess<i64>(-1, index));
+        Y_ENSURE(CmpLess<i64>(index, GetNumBuckets()));
+
+        const TEqWidthHistogram::THistValue bucketWidth = GetBucketWidth<T>();
+        const T width = LoadFrom<T>(bucketWidth.Value);
+        const T domainStart = LoadFrom<T>(GetDomainRange().Start);
+        const T border = domainStart + static_cast<T>(index) * width;
+        return border;
+    }
+
     // Initializes buckets with a given `range`.
     // NOTE: buckets can be less than range (i.e. end - start)
     template <typename T>
@@ -281,9 +301,9 @@ public:
     }
 
     // Returns a number of elements in a bucket by the given `index`.
-    ui64 GetNumElementsInBucket(ui32 index) const {
-        // NOTE: index can be large positive value due to e.g. GetNumElementsInBucket(-1).
-        Y_ENSURE(index < GetNumBuckets());
+    ui64 GetNumElementsInBucket(i64 index) const {
+        Y_ENSURE(CmpLess<i64>(-1, index));
+        Y_ENSURE(CmpLess<i64>(index, GetNumBuckets()));
         return Buckets_[index];
     }
 
@@ -307,25 +327,99 @@ class TEqWidthHistogramEstimator {
 public:
     TEqWidthHistogramEstimator(std::shared_ptr<TEqWidthHistogram> histogram);
 
-    // Methods to estimate values.
+    // all values <= `val`.
     template <typename T>
     ui64 EstimateLessOrEqual(T val) const {
-        return EstimateOrEqual<T>(val, PrefixSum_);
+        // Due to values which exceed the domain min/max.
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        if (CmpLess<T>(val, domainStart)) {
+            return 0;
+        } else if (CmpLess<T>(domainEnd, val)) {
+            return PrefixSum_.back();
+        }
+
+        const auto index = Histogram_->FindBucketIndex(val);
+        if (!index) {
+            return EstimateEqual(val);
+        }
+        return PrefixSum_[index - 1] + EstimateEqual(val);
     }
 
+    // all values >= `val`.
     template <typename T>
     ui64 EstimateGreaterOrEqual(T val) const {
-        return EstimateOrEqual<T>(val, SuffixSum_);
+        // Due to values which exceed the domain min/max.
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        if (CmpLess<T>(domainEnd, val)) {
+            return 0;
+        } else if (CmpLess<T>(val, domainStart)) {
+            return SuffixSum_.front();
+        }
+
+        const auto index = Histogram_->FindBucketIndex(val);
+        const auto numBuckets = Histogram_->GetNumBuckets();
+        if (index + 1 == numBuckets) {
+            return EstimateEqual(val);
+        }
+        return SuffixSum_[index + 1] + EstimateEqual(val);
     }
 
+    // all values < `val`.
     template <typename T>
     ui64 EstimateLess(T val) const {
-        return EstimateNotEqual<T>(val, PrefixSum_);
+        // Due to values which exceed the domain min/max.
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        if (CmpLess<T>(val, domainStart)) {
+            return 0;
+        } else if (CmpLess<T>(domainEnd, val)) {
+            return PrefixSum_.back();
+        }
+
+        const auto index = Histogram_->FindBucketIndex(val);
+        const auto border = Histogram_->GetBorderValue<T>(index);
+        if (val == border) {
+            if (!index) {
+                return 0;
+            }
+            return PrefixSum_[index - 1];
+        }
+
+        if (!index) {
+            return EstimateEqual(val);
+        }
+        return PrefixSum_[index - 1] + EstimateEqual(val);
     }
 
+    // all values > `val`.
     template <typename T>
     ui64 EstimateGreater(T val) const {
-        return EstimateNotEqual<T>(val, SuffixSum_);
+        // Due to values which exceed the domain min/max.
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+        if (CmpLess<T>(domainEnd, val)) {
+            return 0;
+        } else if (CmpLess<T>(val, domainStart)) {
+            return SuffixSum_.front();
+        }
+
+        const auto index = Histogram_->FindBucketIndex(val);
+        const auto numBuckets = Histogram_->GetNumBuckets();
+        // TODO: handle the case at the border
+        // const auto border = Histogram_->GetBorderValue<T>(index);
+        // if (val == border) {
+        //     if (index + 1 == numBuckets) {
+        //         return 0;
+        //     }
+        //     return SuffixSum_[index + 1];
+        // }
+
+        if (index + 1 == numBuckets) {
+            return EstimateEqual(val);
+        }
+        return SuffixSum_[index + 1] + EstimateEqual(val);
     }
 
     template <typename T>
@@ -352,22 +446,6 @@ public:
     }
 
 private:
-    template <typename T>
-    ui64 EstimateOrEqual(T val, const TVector<ui64>& sumArray) const {
-        const auto index = Histogram_->FindBucketIndex(val);
-        return sumArray[index];
-    }
-
-    template <typename T>
-    ui64 EstimateNotEqual(T val, const TVector<ui64>& sumArray) const {
-        const auto index = Histogram_->FindBucketIndex(val);
-        // Take the previous backet if it's not the first one.
-        if (!index) {
-            return sumArray[index];
-        }
-        return sumArray[index - 1];
-    }
-
     void CreatePrefixSum(ui32 numBuckets);
     void CreateSuffixSum(ui32 numBuckets);
     std::shared_ptr<TEqWidthHistogram> Histogram_;

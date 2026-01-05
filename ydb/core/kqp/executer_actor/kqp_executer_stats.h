@@ -13,6 +13,7 @@ namespace NKqp {
 NYql::NDqProto::EDqStatsMode GetDqStatsMode(Ydb::Table::QueryStatsCollection::Mode mode);
 NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollection::Mode mode);
 
+bool CollectBasicStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 bool CollectFullStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 
@@ -32,10 +33,16 @@ struct TMaxStats {
     void Set(ui32 index, ui64 value);
 };
 
-struct TTimeSeriesStats {
+struct TSumStats {
     std::vector<ui64> Values;
-    ui32 HistorySampleCount = 0;
     ui64 Sum = 0;
+
+    void Resize(ui32 count);
+    void Set(ui32 index, ui64 value);
+};
+
+struct TTimeSeriesStats : public TSumStats {
+    ui32 HistorySampleCount = 0;
     std::vector<std::pair<ui64, ui64>> History;
 
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
@@ -254,7 +261,7 @@ struct TStageExecutionStats {
     TTimeSeriesStats MaxMemoryUsage;
 
     ui32 HistorySampleCount = 0;
-    ui32 TaskCount = 0; // rounded to 4 value of Task2Index.size(), which is actual
+    ui32 TaskCount = 0; // up rounded to multiple of 4, actual is Task2Index.size()
     std::vector<bool> Finished;
     ui32 FinishedCount = 0;
     std::vector<TStageExecutionStats*> InputStages;
@@ -298,6 +305,24 @@ struct TIngressExternalPartitionStat {
     TIngressExternalPartitionStat(const TString& name) : Name(name) {}
 };
 
+struct TQueryTableStats {
+
+    TQueryTableStats() = default;
+    TQueryTableStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    TSumStats ReadRows;
+    TSumStats ReadBytes;
+    TSumStats WriteRows;
+    TSumStats WriteBytes;
+    TSumStats EraseRows;
+    TSumStats EraseBytes;
+    TSumStats AffectedPartitions;
+
+    void Resize(ui32 taskCount);
+};
+
 struct TQueryExecutionStats {
 private:
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
@@ -320,9 +345,12 @@ public:
     std::optional<ui32> DeadlockedStageId;
 
     // basic stats
+    ui32 TaskCount = 0;
+    ui32 TaskCount4 = 0;
+    TSumStats CpuTimeUs;
+    std::map<TString, TQueryTableStats> Tables;
+
     std::unordered_set<ui64> AffectedShards;
-    ui32 HistorySampleCount = 0;
-    ui32 TotalTasks = 0;
     ui64 ResultBytes = 0;
     ui64 ResultRows = 0;
     TDuration ExecuterCpuTime;
@@ -334,6 +362,9 @@ public:
     std::unordered_map<TString, std::unordered_set<ui64>> TableShards;
 
     NKqpProto::TKqpExecutionExtraStats ExtraStats;
+
+    // full stats
+    ui32 HistorySampleCount = 0;
 
     // profile stats
     TDuration ResolveCpuTime;

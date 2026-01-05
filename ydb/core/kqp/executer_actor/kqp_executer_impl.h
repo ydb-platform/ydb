@@ -571,7 +571,7 @@ protected:
 
         YQL_ENSURE(Stats);
 
-        if (state.HasStats()) {
+        if (CollectBasicStats(Request.StatsMode) && state.HasStats()) {
             ui64 cycleCount = GetCycleCountFast();
 
             Stats->UpdateTaskStats(taskId, state.GetStats(), (NYql::NDqProto::EComputeState) state.GetState());
@@ -621,14 +621,14 @@ protected:
                     auto& extraData = ExtraData[computeActor];
                     extraData.TaskId = taskId;
                     extraData.Data.Swap(state.MutableExtraData());
-
+/*
                     Stats->AddComputeActorStats(
                         computeActor.NodeId(),
                         std::move(*state.MutableStats()),
                         (NYql::NDqProto::EComputeState) state.GetState(),
                         TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
                     );
-
+*/
                     LastTaskId = taskId;
                     LastComputeActorId = computeActor.ToString();
 
@@ -1417,33 +1417,37 @@ protected:
 
             Stats->FinishTs = TInstant::Now();
 
-            Stats->Finish();
+            // Stats->Finish();
 
-            if (Stats->CollectStatsByLongTasks || CollectFullStats(Request.StatsMode)) {
-
-                ui64 jsonSize = 0;
+            if (CollectBasicStats(Request.StatsMode)) {
                 ui64 cycleCount = GetCycleCountFast();
+                Stats->ExportExecStats(*response.MutableResult()->MutableStats());
 
-                response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
-                for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
-                    const auto& tx = Request.Transactions[txId].Body;
-                    auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
-                    jsonSize += planWithStats.size();
-                    response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
+                if (CollectFullStats(Request.StatsMode)) {
+                    ui64 jsonSize = 0;
+
+                    response.MutableResult()->MutableStats()->ClearTxPlansWithStats();
+                    for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
+                        const auto& tx = Request.Transactions[txId].Body;
+                        auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());
+                        jsonSize += planWithStats.size();
+                        response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);
+                    }
+
+                    Counters->Counters->QueryStatMemConvertBytes->Add(jsonSize);
+                    response.MutableResult()->MutableStats()->SetStatConvertBytes(jsonSize);
+
+                    if (Stats->CollectStatsByLongTasks) {
+                        const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
+                        if (!txPlansWithStats.empty()) {
+                            KQP_STLOG_I(KQPEX, "Full stats: " << response.GetResult().GetStats(),
+                                (trace_id, TraceId()));
+                        }
+                    }
                 }
 
                 auto deltaCpuTime = NHPTimer::GetSeconds(GetCycleCountFast() - cycleCount);
                 Counters->Counters->QueryStatCpuConvertUs->Add(deltaCpuTime * 1'000'000);
-                Counters->Counters->QueryStatMemConvertBytes->Add(jsonSize);
-                response.MutableResult()->MutableStats()->SetStatConvertBytes(jsonSize);
-            }
-
-            if (Stats->CollectStatsByLongTasks) {
-                const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
-                if (!txPlansWithStats.empty()) {
-                    KQP_STLOG_I(KQPEX, "Full stats: " << response.GetResult().GetStats(),
-                        (trace_id, TraceId()));
-                }
             }
 
             if (!BatchOperationSettings.Empty() && !Stats->TableStats.empty()) {

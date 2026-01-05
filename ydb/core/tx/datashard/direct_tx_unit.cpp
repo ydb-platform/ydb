@@ -1,4 +1,5 @@
 #include "datashard_direct_transaction.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
@@ -70,7 +71,8 @@ public:
 
         op->ChangeRecords() = std::move(tx->GetCollectedChanges());
 
-        DataShard.SysLocksTable().ApplyLocks();
+        auto [_, locksBrokenByDirectTx] = DataShard.SysLocksTable().ApplyLocks();
+        NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Direct transaction (upload/erase) broke locks", locksBrokenByDirectTx, op->GetTxId());
         DataShard.SubscribeNewLocks(ctx);
         Pipeline.AddCommittingOp(op);
 

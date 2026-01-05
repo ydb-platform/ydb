@@ -105,7 +105,7 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
                         case NKikimr::TKeyDesc::ERowOperation::Erase:
                             rowOp = "Erase";
                             break;
-                        default:                   
+                        default:
                             rowOp = "Invalid operation";
                             break;
                     }
@@ -126,29 +126,53 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
     }
 }
 
-inline void LogIntegrityTrailsLocks(const TActorContext& ctx, const ui64 tabletId, const ui64 txId, const TVector<ui64>& locks) {
-    if (locks.empty()) {
+// Unified function that logs lock breaking events to both integrity trails and TLI systems
+inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletId, const TString& message,
+                           const TVector<ui64>& brokenLocks, TMaybe<ui64> txId = Nothing()) {
+    if (brokenLocks.empty()) {
         return;
     }
 
-    auto logFn = [&]() {
-        TStringStream ss;
+    // Check if logging is enabled before formatting (performance optimization)
+    const bool tliEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::TLI);
+    const bool integrityEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY);
+    if (!tliEnabled && !integrityEnabled) {
+        return;
+    }
 
+    // Build message body once (everything except Component and Type)
+    TStringStream bodySs;
+    LogKeyValue("TabletId", ToString(tabletId), bodySs);
+    if (txId) {
+        LogKeyValue("PhyTxId", ToString(*txId), bodySs);
+    }
+    LogKeyValue("Message", message, bodySs);
+    bodySs << "BrokenLocks: [";
+    for (size_t i = 0; i < brokenLocks.size(); ++i) {
+        bodySs << brokenLocks[i];
+        if (i + 1 < brokenLocks.size()) {
+            bodySs << " ";
+        }
+    }
+    bodySs << "]";
+    TString messageBody = bodySs.Str();
+
+    // Log to TLI service
+    if (tliEnabled) {
+        TStringStream ss;
+        LogKeyValue("Component", "DataShard", ss);
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
+    }
+
+    // Log to DATA_INTEGRITY service
+    if (integrityEnabled) {
+        TStringStream ss;
         LogKeyValue("Component", "DataShard", ss);
         LogKeyValue("Type", "Locks", ss);
-        LogKeyValue("TabletId", ToString(tabletId), ss);
-        LogKeyValue("PhyTxId", ToString(txId), ss);
-
-        ss << "BreakLocks: [";
-        for (const auto& lock : locks) {
-            ss << lock << " ";
-        }
-        ss << "]";
-
-        return ss.Str();
-    };
-
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, logFn());
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+    }
 
 }
 

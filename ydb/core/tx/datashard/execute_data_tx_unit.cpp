@@ -358,7 +358,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx) {
     auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
     op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
-    NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), op->GetTxId(), locksBrokenByTx);
+    NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Data transaction broke other locks", locksBrokenByTx, op->GetTxId());
 
     for (const auto& lock : locks) {
         if (lock.IsError()) {

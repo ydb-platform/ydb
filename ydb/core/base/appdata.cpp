@@ -76,6 +76,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TMemoryControllerConfig MemoryControllerConfig;
     NKikimrReplication::TReplicationDefaults ReplicationConfig;
     NKikimrProto::TDataIntegrityTrailsConfig DataIntegrityTrailsConfig;
+    NKikimrProto::TLogTliConfig LogTliConfig;
     NKikimrConfig::TDataErasureConfig ShredConfig;
     NKikimrConfig::THealthCheckConfig HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
@@ -145,6 +146,7 @@ TAppData::TAppData(
     , MemoryControllerConfig(Impl->MemoryControllerConfig)
     , ReplicationConfig(Impl->ReplicationConfig)
     , DataIntegrityTrailsConfig(Impl->DataIntegrityTrailsConfig)
+    , LogTliConfig(Impl->LogTliConfig)
     , ShredConfig(Impl->ShredConfig)
     , HealthCheckConfig(Impl->HealthCheckConfig)
     , WorkloadManagerConfig(Impl->WorkloadManagerConfig)

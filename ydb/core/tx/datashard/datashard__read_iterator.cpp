@@ -1,5 +1,6 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_read_operation.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
@@ -2647,7 +2648,8 @@ private:
             break;
         }
 
-        auto [locks, _] = sysLocks.ApplyLocks();
+        auto [locks, locksBrokenByRead] = sysLocks.ApplyLocks();
+        NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Read operation detected inconsistent data and broke lock", locksBrokenByRead);
 
         for (auto& lock : locks) {
             NKikimrDataEvents::TLock* addLock;
@@ -3258,8 +3260,10 @@ public:
 
             bool isBroken = state.Lock->IsBroken();
             if (!isBroken && MustBreakLock(state)) {
-                sysLocks.BreakLock(state.Lock->GetLockId());
-                sysLocks.ApplyLocks();
+                ui64 lockIdToBreak = state.Lock->GetLockId();
+                sysLocks.BreakLock(lockIdToBreak);
+                auto [_, locksBroken] = sysLocks.ApplyLocks();
+                NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Read continuation detected inconsistent data and broke locks", locksBroken);
                 Y_ENSURE(state.Lock->IsBroken());
                 isBroken = true;
             }

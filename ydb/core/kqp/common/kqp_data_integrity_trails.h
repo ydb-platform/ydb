@@ -4,6 +4,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -11,6 +13,92 @@
 
 namespace NKikimr {
 namespace NDataIntegrity {
+
+// Class for collecting and managing query texts for TLI logging
+class TQueryTextCollector {
+public:
+    // Add query text to the collection while avoiding duplicates and limiting size
+    void AddQueryText(const TString& queryText) {
+        if (!queryText.empty() && IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            // Only add if it's different from the previous query to avoid duplicates
+            if (QueryTexts.empty() || QueryTexts.back() != queryText) {
+                QueryTexts.push_back(queryText);
+                // Keep only the last N queries to prevent unbounded memory growth
+                constexpr size_t MAX_QUERY_TEXTS = 100;
+                if (QueryTexts.size() > MAX_QUERY_TEXTS) {
+                    QueryTexts.erase(QueryTexts.begin(), QueryTexts.begin() + (QueryTexts.size() - MAX_QUERY_TEXTS));
+                }
+            }
+        }
+    }
+
+    // Combine all query texts into a single string for logging
+    TString CombineQueryTexts() const {
+        if (QueryTexts.empty()) {
+            return "";
+        }
+
+        TStringBuilder builder;
+        builder << std::accumulate(QueryTexts.begin() + 1, QueryTexts.end(), QueryTexts[0],
+            [](const TString& acc, const TString& query) {
+                return acc + "; " + query;
+            });
+        return builder;
+    }
+
+    // Check if there are any query texts
+    bool Empty() const {
+        return QueryTexts.empty();
+    }
+
+    // Clear all query texts
+    void Clear() {
+        QueryTexts.clear();
+    }
+
+private:
+    TVector<TString> QueryTexts;
+};
+
+inline void LogQueryTextImpl(TStringStream& ss, const TString& queryText, bool hashed) {
+    if (!hashed) {
+        LogKeyValue("QueryText", EscapeC(queryText), ss);
+        return;
+    }
+
+    // Hash the query text
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    if (SHA256_Init(&sha256) != 1) {
+        return;
+    }
+    if (SHA256_Update(&sha256, queryText.data(), queryText.size()) != 1) {
+        return;
+    }
+    if (SHA256_Final(hash, &sha256) != 1) {
+        return;
+    }
+    std::string hashedQueryText(reinterpret_cast<char*>(hash), SHA256_DIGEST_LENGTH);
+    LogKeyValue("QueryText", Base64Encode(hashedQueryText), ss);
+}
+
+inline void LogQueryText(TStringStream& ss, const TString& queryText) {
+    const auto& config = AppData()->DataIntegrityTrailsConfig;
+    const auto queryTextLogMode = config.HasQueryTextLogMode()
+        ? config.GetQueryTextLogMode()
+        : NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED;
+
+    LogQueryTextImpl(ss, queryText, queryTextLogMode == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED);
+}
+
+inline void LogQueryTextTli(TStringStream& ss, const TString& queryText) {
+    const auto& config = AppData()->LogTliConfig;
+    const auto queryTextLogMode = config.HasQueryTextLogMode()
+        ? config.GetQueryTextLogMode()
+        : NKikimrProto::TLogTliConfig_ELogMode_HASHED;
+
+    LogQueryTextImpl(ss, queryText, queryTextLogMode == NKikimrProto::TLogTliConfig_ELogMode_HASHED);
+}
 
 inline bool ShouldBeLogged(NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type) {
     switch (type) {
@@ -49,21 +137,7 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         LogKeyValue("QueryAction", ToString(request->Get()->GetAction()), ss);
         LogKeyValue("QueryType", ToString(request->Get()->GetType()), ss);
 
-        const auto queryTextLogMode = AppData()->DataIntegrityTrailsConfig.HasQueryTextLogMode()
-            ? AppData()->DataIntegrityTrailsConfig.GetQueryTextLogMode()
-            : NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED;
-        if (queryTextLogMode == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_ORIGINAL) {
-            LogKeyValue("QueryText", EscapeC(request->Get()->GetQuery()), ss);
-        } else {
-            std::string hashedQueryText;
-            hashedQueryText.resize(SHA256_DIGEST_LENGTH);
-
-            SHA256_CTX sha256;
-            SHA256_Init(&sha256);
-            SHA256_Update(&sha256, request->Get()->GetQuery().data(), request->Get()->GetQuery().size());
-            SHA256_Final(reinterpret_cast<unsigned char*>(&hashedQueryText[0]), &sha256);
-            LogKeyValue("QueryText", Base64Encode(hashedQueryText), ss);
-        }
+        LogQueryText(ss, request->Get()->GetQuery());
 
         if (request->Get()->HasTxControl()) {
             LogTxControl(request->Get()->GetTxControl(), ss);
@@ -96,6 +170,20 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
     };
 
     LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
+}
+
+inline void LogTli(const TString& component, const TString& message, const TString& queryText, const TActorContext& ctx) {
+    if (!IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+        return;
+    }
+
+    TStringStream ss;
+    LogKeyValue("Component", component, ss);
+    LogKeyValue("Message", message, ss);
+
+    LogQueryTextTli(ss, queryText);
+
+    LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
 }
 
 // DataExecuter

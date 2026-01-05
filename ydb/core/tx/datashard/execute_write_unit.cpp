@@ -46,7 +46,7 @@ public:
 
         auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
         writeResult.Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
-        NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), writeOp->GetTxId(), locksBrokenByTx);
+        NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Write transaction broke other locks", locksBrokenByTx, writeOp->GetTxId());
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
         for (const auto& lock : locks) {
             if (lock.IsError()) {
@@ -448,7 +448,7 @@ public:
                 KqpEraseLocks(tabletId, kqpLocks, sysLocks);
                 auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
                 writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
-                NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
+                NDataIntegrity::LogLocksBroken(ctx, tabletId, "Write transaction aborted, broke other transaction locks during cleanup", locksBrokenByTx, txId);
                 DataShard.SubscribeNewLocks(ctx);
 
                 if (auto status = ensureAbortOutReadSets()) {

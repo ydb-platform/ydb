@@ -244,7 +244,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             KqpEraseLocks(tabletId, kqpLocks, sysLocks);
             auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
             tx->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
-            NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
+            NDataIntegrity::LogLocksBroken(ctx, tabletId, "KQP data transaction aborted, broke other transaction locks during cleanup", locksBrokenByTx, txId);
             DataShard.SubscribeNewLocks(ctx);
 
             if (auto status = ensureAbortOutReadSets()) {
@@ -502,7 +502,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
 void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx) {
     auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
-    NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), op->GetTxId(), locksBrokenByTx);
+    NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "KQP data transaction broke other locks", locksBrokenByTx, op->GetTxId());
 
     // Set the count of locks broken by this transaction
     op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());

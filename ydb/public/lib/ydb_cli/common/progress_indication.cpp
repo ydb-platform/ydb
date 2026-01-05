@@ -13,8 +13,7 @@ TProgressIndication::TProgressIndication() {
 
 void TProgressIndication::UpdateProgress(const TCurrentStats& stats)
 {
-    CurrentStats.ReadRows += stats.ReadRows;
-    CurrentStats.ReadBytes += stats.ReadBytes;
+    CurrentStats = stats;
 }
 
 void TProgressIndication::SetDurationUs(ui64 durationUs) {
@@ -47,21 +46,19 @@ void TProgressIndication::Render()
         case 2: Cerr << "-"; break;
         case 3: Cerr << "\\"; break;
     }
-    Cerr << colors.Default() << "Progress: " << colors.Default();
+    Cerr << colors.Default() << "Progress: ";
 
-    Cerr << colors.Default() << PrettyNumber(CurrentStats.ReadRows) << " rows read, " << PrettySize(CurrentStats.ReadBytes) << " read";
+    Cerr << PrettyNumber(CurrentStats.ReadRows) << " rows read, " << PrettySize(CurrentStats.ReadBytes) << " read";
     if (DurationUs) {
-        Cerr << colors.Default() << " (" << PrettyNumber(CurrentStats.ReadRows * 1000000.0 / DurationUs) << "/s" << ", " <<
+        Cerr << " (" << PrettyNumber(CurrentStats.ReadRows * 1000000.0 / DurationUs) << "/s" << ", " <<
             PrettySize(CurrentStats.ReadBytes * 1000000.0 / DurationUs) << "/s" << ")";
     }
 
-    Cerr << colors.Default() << ".";
+    Cerr << ".";
 
     Cerr.Flush();
 
     RendersCount++;
-
-    CurrentStats = TCurrentStats();
 }
 
 } // namespace NConsoleClient

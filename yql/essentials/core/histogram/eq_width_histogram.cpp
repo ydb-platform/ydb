@@ -60,6 +60,7 @@ ui64 TEqWidthHistogram::GetBinarySize(ui32 nBuckets) const {
 }
 
 // Binary layout:
+// [1 byte: version number]
 // [4 byte: number of buckets][1 byte: value type]
 // [8 byte: min value][8 byte: max value]
 // [sizeof(ui64)[0]... sizeof(ui64)[n]].

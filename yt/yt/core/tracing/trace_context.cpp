@@ -246,6 +246,7 @@ TTraceContext::TTraceContext(
     , StartTime_(startTime.value_or(GetCpuInstant()))
     , Baggage_(ParentContext_ ? ParentContext_->GetBaggage() : TYsonString{})
 {
+    YT_VERIFY(TraceId_ != InvalidTraceId && SpanId_ != InvalidSpanId);
     NDetail::InitializeTraceContexts();
 }
 
@@ -636,6 +637,10 @@ TTraceContextPtr TTraceContext::NewChildFromSpan(
     std::optional<std::string> endpoint,
     TYsonString baggage)
 {
+    if (parentSpanContext.TraceId == InvalidTraceId) {
+        return nullptr;
+    }
+
     auto result = New<TTraceContext>(
         parentSpanContext,
         spanName);

@@ -930,7 +930,7 @@ public:
 
         Become(&TKqpSessionActor::ExecuteState);
 
-        QueryState->TxCtx->OnBeginQuery();
+        QueryState->TxCtx->OnBeginQuery(QueryState->ExtractQueryText());
 
         if (!CheckScriptExecutionState()) {
             co_return;
@@ -1055,7 +1055,7 @@ public:
 
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxCtx->SetIsolationLevel(settings);
-        QueryState->TxCtx->OnBeginQuery();
+        QueryState->TxCtx->OnBeginQuery(QueryState->ExtractQueryText());
 
         if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && !Settings.TableService.GetEnableSnapshotIsolationRW()) {
@@ -2210,6 +2210,23 @@ public:
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
         QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
+
+        if (ev->LocksBrokenAsBreaker > 0 && IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            // For commit operations that break locks, report them (both successful and aborted)
+            const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
+                                       QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
+            
+            const TString& message = isCommitAction
+                ? "Commit had broken other locks"
+                : "Query had broken other locks";
+
+            // Use the query text collector from the transaction context
+            const TString combinedQueryText = QueryState->TxCtx->QueryTextCollector.Empty()
+                ? QueryState->ExtractQueryText()
+                : QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
+            
+            NDataIntegrity::LogTli("SessionActor", message, combinedQueryText, TlsActivationContext->AsActorContext());
+        }
 
         if (QueryState->TxCtx->TxManager) {
             QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();

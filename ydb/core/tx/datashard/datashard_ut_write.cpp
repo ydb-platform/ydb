@@ -3,8 +3,10 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/test_tli.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+#include <ydb/library/services/services.pb.h>
 #include "datashard_ut_common_kqp.h"
 
 namespace NKikimr {
@@ -4096,6 +4098,61 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         auto tableState = ReadTable(server, shards, tableId);
         UNIT_ASSERT(tableState.find("key = 1, value = 200") != TString::npos);
+    }
+
+    Y_UNIT_TEST(TliLocksBrokenByWrite) {
+        TStringStream ss;
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetLogBackend(new TStreamLogBackend(&ss));
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TLI, NLog::PRI_INFO);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+
+        // Insert initial data
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100);"));
+
+        TString sessionId, txId;
+        KqpSimpleBegin(runtime, sessionId, txId, Q_("SELECT * FROM `/Root/table-1` WHERE key = 1;"));
+        UNIT_ASSERT(!txId.empty());
+
+        // Breaker write - breaks the locks established by the SELECT above
+        auto writeRequest = MakeWriteRequestOneKeyValue(
+            std::nullopt,  // No lock context - this will break locks
+            NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            tableId,
+            opts.Columns_,
+            1,  // key
+            200 // value
+        );
+
+        auto writeResult = Write(runtime, sender, shard, std::move(writeRequest), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        // Verify breaker stats
+        UNIT_ASSERT(writeResult.HasTxStats());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxStats().GetLocksBrokenAsBreaker(), 1u);
+
+        // Verify TLI logs contain the lock breaking information
+        // The log should contain: Component: DataShard, TabletId, TxId, Message: "Write transaction broke other locks", BrokenLocks: [...]
+        TVector<std::pair<TString, ui64>> regexToMatchCount{
+            {NTestTli::ConstructRegexToCheckLogs("INFO", "DataShard", "Write transaction broke other locks"), 1},
+        };
+
+        NTestTli::CheckRegexMatch(ss.Str(), regexToMatchCount);
     }
 
     Y_UNIT_TEST(ImmediateWriteVolatileTxIdOnPageFault) {

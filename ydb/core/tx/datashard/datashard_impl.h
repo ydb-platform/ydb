@@ -20,6 +20,7 @@
 #include "datashard_user_table.h"
 #include "datashard_write.h"
 #include "incr_restore_scan.h"
+#include "datashard_integrity_trails.h"
 #include "progress_queue.h"
 #include "read_iterator.h"
 #include "reject_reason.h"
@@ -1680,7 +1681,19 @@ public:
         return nullptr;
     }
 
-    void RemoveUserTable(const TPathId& tableId, ILocksDb* locksDb) {
+    void RemoveUserTable(const TPathId& tableId, ILocksDb* locksDb, const TActorContext& ctx) {
+        // Collect lock IDs before removal for TLI logging
+        TVector<ui64> locksToInvalidate;
+        const auto& allLocks = SysLocks.GetLocks();
+        for (const auto& [lockId, lockInfo] : allLocks) {
+            if (lockInfo->GetReadTables().contains(tableId) || lockInfo->GetWriteTables().contains(tableId)) {
+                locksToInvalidate.push_back(lockId);
+            }
+        }
+        if (!locksToInvalidate.empty()) {
+            NKikimr::NDataIntegrity::LogLocksBroken(ctx, TabletID(), "Schema change: table removed invalidated locks", locksToInvalidate);
+        }
+
         SysLocks.RemoveSchema(tableId, locksDb);
         Pipeline.GetDepTracker().RemoveSchema(tableId);
         TableInfos.erase(tableId.LocalPathId);

@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_locks_db.h"
 #include "setup_sys_locks.h"
 
@@ -150,7 +151,8 @@ public:
                     break;
                 }
             }
-            Self->SysLocksTable().ApplyLocks();
+            auto [_, locksBrokenBySplit] = Self->SysLocksTable().ApplyLocks();
+            NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Tablet split operation invalidated locks", locksBrokenBySplit);
             auto countAfter = Self->SysLocksTable().GetLocks().size();
             Y_ENSURE(countAfter < countBefore, "Expected to erase at least one lock");
             Self->Execute(Self->CreateTxStartSplit(), ctx);

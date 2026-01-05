@@ -441,6 +441,7 @@ enum EServiceKikimr {
     GROUPED_MEMORY_LIMITER = 2700;
 
     DATA_INTEGRITY = 3000;
+    TLI = 3001;
 
     TX_PRIORITIES_QUEUE = 3100;
 

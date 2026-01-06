@@ -1314,28 +1314,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
     NYql::NDqProto::TDqTaskStats* longTask = nullptr;
 
     for (auto& task : *stats.MutableTasks()) {
-        for (auto& table : task.GetTables()) {
-            NYql::NDqProto::TDqTableStats* tableAggr = nullptr;
-            if (auto it = TableStats.find(table.GetTablePath()); it != TableStats.end()) {
-                tableAggr = it->second;
-            } else {
-                tableAggr = Result->AddTables();
-                tableAggr->SetTablePath(table.GetTablePath());
-                TableStats.emplace(table.GetTablePath(), tableAggr);
-            }
-
-            tableAggr->SetReadRows(tableAggr->GetReadRows() + table.GetReadRows());
-            tableAggr->SetReadBytes(tableAggr->GetReadBytes() + table.GetReadBytes());
-            tableAggr->SetWriteRows(tableAggr->GetWriteRows() + table.GetWriteRows());
-            tableAggr->SetWriteBytes(tableAggr->GetWriteBytes() + table.GetWriteBytes());
-            tableAggr->SetEraseRows(tableAggr->GetEraseRows() + table.GetEraseRows());
-
-            auto& shards = TableShards[table.GetTablePath()];
-            for (const auto& perShard : txStats.GetPerShardStats()) {
-                shards.insert(perShard.GetShardId());
-            }
-            tableAggr->SetAffectedPartitions(shards.size());
-        }
+        UpdateStorageTables(task, &txStats);
 
         // checking whether the task is long
 
@@ -1398,23 +1377,46 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
         LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
         LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
     }
+    UpdateStorageTables(taskStats, nullptr);
+}
 
-    for (auto& table : taskStats.GetTables()) {
-        NYql::NDqProto::TDqTableStats* tableAggr = nullptr;
-        if (auto it = TableStats.find(table.GetTablePath()); it != TableStats.end()) {
-            tableAggr = it->second;
+void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats) {
+    auto index = taskStats.GetTaskId() - 1;
+    AFL_ENSURE(index < TaskCount);
+    for (auto& tableStat : taskStats.GetTables()) {
+        auto tablePath = tableStat.GetTablePath();
+        auto [it, _] = Tables.try_emplace(tablePath, TaskCount4);
+        auto& queryTableStats = it->second;
+        queryTableStats.ReadRows.Set(index, tableStat.GetReadRows());
+        queryTableStats.ReadBytes.Set(index, tableStat.GetReadBytes());
+        queryTableStats.WriteRows.Set(index, tableStat.GetWriteRows());
+        queryTableStats.WriteBytes.Set(index, tableStat.GetWriteBytes());
+        queryTableStats.EraseRows.Set(index, tableStat.GetEraseRows());
+        queryTableStats.EraseBytes.Set(index, tableStat.GetEraseBytes());
+        queryTableStats.AffectedPartitions.Set(index, tableStat.GetAffectedPartitions());
+    }
+}
+
+void TQueryExecutionStats::UpdateStorageTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats) {
+    for (auto& tableStat : taskStats.GetTables()) {
+        auto tablePath = tableStat.GetTablePath();
+        auto [it, _] = Tables.try_emplace(tablePath, TaskCount4);
+        auto& queryTableStats = it->second;
+        queryTableStats.StorageStats.ReadRows += tableStat.GetReadRows();
+        queryTableStats.StorageStats.ReadBytes += tableStat.GetReadBytes();
+        queryTableStats.StorageStats.WriteRows += tableStat.GetWriteRows();
+        queryTableStats.StorageStats.WriteBytes += tableStat.GetWriteBytes();
+        queryTableStats.StorageStats.EraseRows += tableStat.GetEraseRows();
+        queryTableStats.StorageStats.EraseBytes += tableStat.GetEraseBytes();
+        if (txStats) {
+            auto& tableShards = TableShards[tablePath];
+            for (const auto& perShard : txStats->GetPerShardStats()) {
+                tableShards.insert(perShard.GetShardId());
+            }
+            queryTableStats.StorageStats.AffectedPartitions = tableShards.size();
         } else {
-            tableAggr = Result->AddTables();
-            tableAggr->SetTablePath(table.GetTablePath());
-            TableStats.emplace(table.GetTablePath(), tableAggr);
+            queryTableStats.StorageStats.AffectedPartitions += tableStat.GetAffectedPartitions();
         }
-
-        tableAggr->SetReadRows(tableAggr->GetReadRows() + table.GetReadRows());
-        tableAggr->SetReadBytes(tableAggr->GetReadBytes() + table.GetReadBytes());
-        tableAggr->SetWriteRows(tableAggr->GetWriteRows() + table.GetWriteRows());
-        tableAggr->SetWriteBytes(tableAggr->GetWriteBytes() + table.GetWriteBytes());
-        tableAggr->SetEraseRows(tableAggr->GetEraseRows() + table.GetEraseRows());
-        tableAggr->SetAffectedPartitions(tableAggr->GetAffectedPartitions() + table.GetAffectedPartitions());
     }
 }
 
@@ -1436,6 +1438,7 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
                 it->second.SetHistorySampleCount(HistorySampleCount);
             }
             BaseTimeMs = NonZeroMin(BaseTimeMs, it->second.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
+            UpdateQueryTables(taskStats);
 
             constexpr ui64 deadline = 600'000'000; // 10m
             if (it->second.CurrentWaitOutputTimeUs.MinValue > deadline) {
@@ -1452,25 +1455,12 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
         }
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC: {
             CpuTimeUs.Set(index, taskStats.GetCpuTimeUs());
+            UpdateQueryTables(taskStats);
             break;
         }
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
         default:
-            return;
-    }
-
-    // basic + full
-    for (auto& tableStat : taskStats.GetTables()) {
-        auto tablePath = tableStat.GetTablePath();
-        auto [it, _] = Tables.try_emplace(tablePath, TaskCount4);
-        auto& queryTableStats = it->second;
-        queryTableStats.ReadRows.Set(index, tableStat.GetReadRows());
-        queryTableStats.ReadBytes.Set(index, tableStat.GetReadBytes());
-        queryTableStats.WriteRows.Set(index, tableStat.GetWriteRows());
-        queryTableStats.WriteBytes.Set(index, tableStat.GetWriteBytes());
-        queryTableStats.EraseRows.Set(index, tableStat.GetEraseRows());
-        queryTableStats.EraseBytes.Set(index, tableStat.GetEraseBytes());
-        queryTableStats.AffectedPartitions.Set(index, tableStat.GetAffectedPartitions());
+            break;
     }
 }
 
@@ -1768,6 +1758,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         }
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC: {
             stats.SetCpuTimeUs(CpuTimeUs.Sum);
+            stats.SetDurationUs(TInstant::Now().MicroSeconds() - StartTs.MicroSeconds());
             break;
         }
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
@@ -1778,14 +1769,17 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
     for (auto& [path, t] : Tables) {
         auto& tableAggr = *stats.AddTables();
         tableAggr.SetTablePath(path);
-        tableAggr.SetReadRows(t.ReadRows.Sum);
-        tableAggr.SetReadBytes(t.ReadBytes.Sum);
-        tableAggr.SetWriteRows(t.WriteRows.Sum);
-        tableAggr.SetWriteBytes(t.WriteBytes.Sum);
-        tableAggr.SetEraseRows(t.EraseRows.Sum);
-        tableAggr.SetEraseBytes(t.EraseBytes.Sum);
-        tableAggr.SetAffectedPartitions(t.AffectedPartitions.Sum);
+        tableAggr.SetReadRows(t.StorageStats.ReadRows + t.ReadRows.Sum);
+        tableAggr.SetReadBytes(t.StorageStats.ReadBytes + t.ReadBytes.Sum);
+        tableAggr.SetWriteRows(t.StorageStats.WriteRows + t.WriteRows.Sum);
+        tableAggr.SetWriteBytes(t.StorageStats.WriteBytes + t.WriteBytes.Sum);
+        tableAggr.SetEraseRows(t.StorageStats.EraseRows + t.EraseRows.Sum);
+        tableAggr.SetEraseBytes(t.StorageStats.EraseBytes + t.EraseBytes.Sum);
+        tableAggr.SetAffectedPartitions(t.StorageStats.AffectedPartitions + t.AffectedPartitions.Sum);
     }
+
+    ExtraStats.SetAffectedShards(AffectedShards.size());
+    stats.MutableExtra()->PackFrom(ExtraStats);
 }
 
 void TQueryExecutionStats::AdjustExternalAggr(NYql::NDqProto::TDqExternalAggrStats& stats) {

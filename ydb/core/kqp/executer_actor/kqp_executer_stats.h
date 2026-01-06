@@ -305,6 +305,16 @@ struct TIngressExternalPartitionStat {
     TIngressExternalPartitionStat(const TString& name) : Name(name) {}
 };
 
+struct TStorageTableStats {
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
+    ui64 WriteRows = 0;
+    ui64 WriteBytes = 0;
+    ui64 EraseRows = 0;
+    ui64 EraseBytes = 0;
+    ui64 AffectedPartitions = 0;
+};
+
 struct TQueryTableStats {
 
     TQueryTableStats() = default;
@@ -319,6 +329,7 @@ struct TQueryTableStats {
     TSumStats EraseRows;
     TSumStats EraseBytes;
     TSumStats AffectedPartitions;
+    TStorageTableStats StorageStats;
 
     void Resize(ui32 taskCount);
 };
@@ -409,6 +420,8 @@ public:
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
 
+    void UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats);
+    void UpdateStorageTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
     void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);

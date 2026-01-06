@@ -7,6 +7,7 @@
 namespace NYql {
 
 namespace {
+
 NPq::NConfigurationManager::TClientOptions GetCmClientOptions(const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
     NPq::NConfigurationManager::TClientOptions opts;
     opts
@@ -49,7 +50,8 @@ NYdb::TCommonClientSettings GetDsClientOptions(const TString& database, const NY
 
     return opts;
 }
-}
+
+} // anonymous namespace
 
 const NPq::NConfigurationManager::IClient::TPtr& TPqSession::GetConfigManagerClient(const TString& cluster, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
     auto& client = ClusterCmClients[cluster];
@@ -118,7 +120,7 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                 futures.reserve(allClustersInfo.size());
                 std::vector<std::string> paths;
                 paths.reserve(allClustersInfo.size());
-                for (auto& clusterInfo: allClustersInfo) {
+                for (auto& clusterInfo : allClustersInfo) {
                     auto& clusterTopicPath = paths.emplace_back(path);
                     clusterInfo.AdjustTopicPath(clusterTopicPath);
                     if (!clusterInfo.IsAvailableForRead()) {
@@ -173,9 +175,9 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                         throw yexception() << ex;
                     }
                     return results;
-              });
-         });
-     }
+                });
+            });
+    }
 }
 
 NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(const TString& cluster, const TString& database, const TString& path, const TString& token) {

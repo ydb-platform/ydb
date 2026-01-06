@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
 namespace NYql {
+
 class ITopicClient : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<ITopicClient>;
@@ -42,8 +43,10 @@ public:
 
 class TNativeTopicClient : public ITopicClient {
 public:
-    TNativeTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings = {}):
-        Driver_(driver), Client_(Driver_, settings) {}
+    TNativeTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings = {})
+        : Driver_(driver)
+        , Client_(Driver_, settings)\
+    {}
 
     NYdb::TAsyncStatus CreateTopic(const TString& path, const NYdb::NTopic::TCreateTopicSettings& settings = {}) override {
         return Client_.CreateTopic(path, settings);
@@ -90,7 +93,8 @@ public:
         return Client_.CommitOffset(path, partitionId, consumerName, offset, settings);
     }
 
-    ~TNativeTopicClient() {}
+    ~TNativeTopicClient() = default;
+
 private:
     NYdb::TDriver Driver_;
     NYdb::NTopic::TTopicClient Client_;
@@ -98,19 +102,24 @@ private:
 
 class TNativeFederatedTopicClient : public IFederatedTopicClient {
 public:
-    TNativeFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TFederatedTopicClientSettings& settings = {}):
-        Driver_(driver), FederatedClient_(Driver_, settings) {}
+    TNativeFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TFederatedTopicClientSettings& settings = {})
+        : Driver_(driver)
+        , FederatedClient_(Driver_, settings)
+    {}
 
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() override {
         return FederatedClient_.GetAllClusterInfo();
     }
+
     std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NFederatedTopic::TFederatedWriteSessionSettings& settings) override {
         return FederatedClient_.CreateWriteSession(settings);
     }
 
-    ~TNativeFederatedTopicClient() {}
+    ~TNativeFederatedTopicClient() = default;
+
 private:
     NYdb::TDriver Driver_;
     NYdb::NFederatedTopic::TFederatedTopicClient FederatedClient_;
 };
-}
+
+} // namespace NYql 

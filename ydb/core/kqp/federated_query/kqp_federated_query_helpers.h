@@ -1,24 +1,22 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/logger/actor.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
-
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
-#include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
-#include <ydb/library/logger/actor.h>
 
 namespace NKikimrConfig {
     class TQueryServiceConfig;

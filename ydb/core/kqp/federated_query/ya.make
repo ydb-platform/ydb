@@ -14,10 +14,11 @@ PEERDIR(
     ydb/library/logger
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/generic/connector/libcpp
+    ydb/library/yql/providers/pq/gateway/abstract
+    ydb/library/yql/providers/pq/gateway/native
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/solomon/gateway
-    ydb/library/yql/providers/pq/gateway/native
     ydb/public/api/protos
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/extensions/discovery_mutator

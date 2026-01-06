@@ -9,7 +9,6 @@
 #include <util/datetime/base.h>
 #include <util/string/join.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include <library/cpp/monlib/metrics/histogram_snapshot.h>
 
 namespace NKikimr {
     struct TCompBrokerMon : public TThrRefBase {
@@ -23,9 +22,6 @@ namespace NKikimr {
         NMonitoring::TDynamicCounters::TCounterPtr TokenReleases;
         NMonitoring::TDynamicCounters::TCounterPtr TokenUpdates;
         
-        NMonitoring::THistogramPtr WaitTimeSeconds;
-        NMonitoring::THistogramPtr WorkTimeSeconds;
-        
         TCompBrokerMon(TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
             : Group(GetServiceCounters(counters, "utils|comp_broker"))
         {
@@ -36,34 +32,6 @@ namespace NKikimr {
             TokenGrants = Group->GetCounter("TokenGrants", true);
             TokenReleases = Group->GetCounter("TokenReleases", true);
             TokenUpdates = Group->GetCounter("TokenUpdates", true);
-            
-            NMonitoring::TBucketBounds waitBounds{
-                10,      // 10 seconds
-                30,      // 30 seconds
-                60,      // 1 minute
-                300,     // 5 minutes
-                600,     // 10 minutes
-                1800,    // 30 minutes
-                3600,    // 1 hour
-                7200,    // 2 hours
-                21600    // 6 hours
-            };
-            WaitTimeSeconds = Group->GetHistogram("WaitTimeSeconds", 
-                NMonitoring::ExplicitHistogram(waitBounds));
-            
-            NMonitoring::TBucketBounds workBounds{
-                60,      // 1 minute
-                300,     // 5 minutes
-                600,     // 10 minutes
-                1800,    // 30 minutes
-                3600,    // 1 hour
-                7200,    // 2 hours
-                21600,   // 6 hours
-                43200,   // 12 hours
-                86400    // 24 hours
-            };
-            WorkTimeSeconds = Group->GetHistogram("WorkTimeSeconds", 
-                NMonitoring::ExplicitHistogram(workBounds));
         }
     };
 
@@ -380,16 +348,10 @@ namespace NKikimr {
             TVector<TString> longWaitingCompactions;
             TVector<TString> longWorkingCompactions;
             
-            NMonitoring::TBucketBounds waitBounds{10, 30, 60, 300, 600, 1800, 3600, 7200, 21600};
-            auto waitCollector = NMonitoring::ExplicitHistogram(waitBounds);
-            NMonitoring::TBucketBounds workBounds{60, 300, 600, 1800, 3600, 7200, 21600, 43200, 86400};
-            auto workCollector = NMonitoring::ExplicitHistogram(workBounds);
-            
             for (const auto& [pdiskId, queue] : CompactionsPerPDisk.CompactionsPerPDisk) {
                 for (const auto& [key, request] : queue.PendingCompactions) {
                     double waitTimeSeconds = (now - request.RequestTime).SecondsFloat();
-                    waitCollector->Collect(waitTimeSeconds);
-                    
+
                     if (longWaitingThreshold > 0 && waitTimeSeconds >= longWaitingThreshold) {
                         TStringStream ss;
                         ss << "{PDiskId# " << pdiskId 
@@ -403,7 +365,6 @@ namespace NKikimr {
                 
                 for (const auto& [key, info] : queue.CompactionsInfo) {
                     double workTimeSeconds = (now - info.StartTime).SecondsFloat();
-                    workCollector->Collect(workTimeSeconds);
                     
                     if (longWorkingThreshold > 0 && workTimeSeconds >= longWorkingThreshold) {
                         TStringStream ss;
@@ -417,14 +378,6 @@ namespace NKikimr {
                     }
                 }
             }
-            
-            auto waitSnapshot = waitCollector->Snapshot();
-            Mon->WaitTimeSeconds->Reset();
-            Mon->WaitTimeSeconds->Collect(*waitSnapshot);
-            
-            auto workSnapshot = workCollector->Snapshot();
-            Mon->WorkTimeSeconds->Reset();
-            Mon->WorkTimeSeconds->Collect(*workSnapshot);
             
             if (!longWaitingCompactions.empty()) {
                 LOG_WARN_S(ctx, NKikimrServices::BS_COMP_BROKER, 

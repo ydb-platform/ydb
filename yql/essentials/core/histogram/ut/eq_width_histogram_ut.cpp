@@ -106,8 +106,9 @@ void TestHistogramCardinality(EHistogramValueType valueType, std::pair<ui64, ui6
     UNIT_ASSERT(estimator.GetNumElements() == resultCounts.first);
     UNIT_ASSERT(otherEstimator.GetNumElements() == resultCounts.second);
 
-    auto cardinality = estimator.GetOverlappingCardinality<TDomain>(otherEstimator);
-    UNIT_ASSERT(cardinality == resultCardinality);
+    auto cardinality = estimator.GetOverlappingCardinality(otherEstimator);
+    UNIT_ASSERT(cardinality);
+    UNIT_ASSERT(*cardinality == resultCardinality);
 }
 
 Y_UNIT_TEST_SUITE(EqWidthHistogram) {

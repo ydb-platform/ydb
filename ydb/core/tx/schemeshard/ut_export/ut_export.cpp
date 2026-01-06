@@ -3731,6 +3731,11 @@ WITH (
 
         UNIT_ASSERT_VALUES_EQUAL(topicDescription.partition_write_burst_bytes(), 2048);
 
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(topicDescription.metering_mode()),
+            static_cast<int>(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY)
+        );
+
         UNIT_ASSERT_VALUES_EQUAL(topicDescription.consumers_size(), 2);
 
         const auto& consumer1 = topicDescription.consumers(0);

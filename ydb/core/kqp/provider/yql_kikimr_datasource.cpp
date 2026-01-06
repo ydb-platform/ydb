@@ -279,6 +279,7 @@ public:
                             .WithExternalSourceFactory(ExternalSourceFactory)
                             .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
                             .WithSysViewRewritten(table.GetSysViewRewritten())
+                            .WithTopicsIo(SessionCtx->Config().FeatureFlags.GetEnableTopicsSqlIoOperations())
             );
 
             futures.push_back(future.Apply([result, queryType]

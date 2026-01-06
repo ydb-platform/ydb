@@ -324,7 +324,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
 template <bool UseMigrationProtocol>
 bool TWriteSessionActor<UseMigrationProtocol>::OnUnhandledException(const std::exception& exc) {
     auto ctx = *NActors::TlsActivationContext;
-    LOG_CRIT_S(ctx, NKikimrServices::PQ_READ_PROXY,
+    LOG_CRIT_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
         TStringBuilder() << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
             << TBackTrace::FromCurrentException().PrintToString());
 

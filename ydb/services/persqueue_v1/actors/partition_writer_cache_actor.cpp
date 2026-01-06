@@ -23,7 +23,7 @@ void TPartitionWriterCacheActor::Bootstrap(const TActorContext& ctx)
 
 bool TPartitionWriterCacheActor::OnUnhandledException(const std::exception& exc) {
     auto ctx = *NActors::TlsActivationContext;
-    LOG_CRIT_S(ctx, NKikimrServices::PQ_READ_PROXY,
+    LOG_CRIT_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
         TStringBuilder() << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
             << TBackTrace::FromCurrentException().PrintToString());
 

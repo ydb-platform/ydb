@@ -445,6 +445,38 @@ public:
         return PrefixSum_.back();
     }
 
+    // Returns the cardinality based on overlapping bucket counts.
+    // NOTE: bucket ranges may differ (e.g. PK-FK) due to different min/max values
+    // thus different bucket widths. Also, max value can be large than the last
+    // bucket border value.
+    template <typename T>
+    ui64 GetOverlappingCardinality(const TEqWidthHistogramEstimator& other) const {
+        const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
+        const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
+
+        const T otherDomainStart = LoadFrom<T>(other.Histogram_->GetDomainRange().Start);
+        const T otherDomainEnd = LoadFrom<T>(other.Histogram_->GetDomainRange().End);
+
+        ui32 leftIndex, rightIndex;
+        if (CmpLess<T>(domainStart, otherDomainStart)) {
+            leftIndex = Histogram_->FindBucketIndex(otherDomainStart);
+        } else {
+            leftIndex = other.Histogram_->FindBucketIndex(domainStart);
+        }
+
+        if (CmpLess<T>(domainEnd, otherDomainEnd)) {
+            rightIndex = other.Histogram_->FindBucketIndex(domainEnd);
+        } else {
+            rightIndex = Histogram_->FindBucketIndex(otherDomainEnd);
+        }
+        
+        ui64 cardinality = 0;
+        for (size_t i = leftIndex; i < rightIndex + 1; ++i) {
+            cardinality += Histogram_->GetNumElementsInBucket(i) * other.Histogram_->GetNumElementsInBucket(i);
+        }
+        return cardinality;
+    }
+
 private:
     void CreatePrefixSum(ui32 numBuckets);
     void CreateSuffixSum(ui32 numBuckets);

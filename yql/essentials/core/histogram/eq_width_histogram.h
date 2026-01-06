@@ -449,8 +449,23 @@ public:
     // NOTE: bucket ranges may differ (e.g. PK-FK) due to different min/max values
     // thus different bucket widths. Also, max value can be large than the last
     // bucket border value.
+    TMaybe<ui64> GetOverlappingCardinality(const TEqWidthHistogramEstimator& other) const {
+        Y_ENSURE(Histogram_->GetType() == other.Histogram_->GetType(), "Histogram value types must match");
+        switch (Histogram_->GetType()) {
+#define HIST_TYPE_CHECK(type, layout)                          \
+    case EHistogramValueType::type: {                          \
+        return GetOverlappingCardinalityHelper<layout>(other); \
+    }
+            KNOWN_FIXED_HISTOGRAM_TYPES(HIST_TYPE_CHECK)
+#undef HIST_TYPE_CHECK
+            default:
+                Y_ENSURE(false, "Unsupported histogram data type");
+                return Nothing();
+        }
+    }
+
     template <typename T>
-    ui64 GetOverlappingCardinality(const TEqWidthHistogramEstimator& other) const {
+    ui64 GetOverlappingCardinalityHelper(const TEqWidthHistogramEstimator& other) const {
         const T domainStart = LoadFrom<T>(Histogram_->GetDomainRange().Start);
         const T domainEnd = LoadFrom<T>(Histogram_->GetDomainRange().End);
 
@@ -469,7 +484,7 @@ public:
         } else {
             rightIndex = Histogram_->FindBucketIndex(otherDomainEnd);
         }
-        
+
         ui64 cardinality = 0;
         for (size_t i = leftIndex; i < rightIndex + 1; ++i) {
             cardinality += Histogram_->GetNumElementsInBucket(i) * other.Histogram_->GetNumElementsInBucket(i);

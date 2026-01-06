@@ -251,47 +251,77 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 if (childPath->Dropped()) {
                     continue;
                 }
+                
+                // // Destination: {backup_collection}/{timestamp}_inc/__ydb_backup_meta/indexes/{table_path}/{index_name}
+                // TString dstPath = JoinPath({
+                //     tx.GetBackupIncrementalBackupCollection().GetName(),
+                //     tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
+                //     "__ydb_backup_meta",
+                //     "indexes",
+                //     relativeItemPath,  // Relative table path (e.g., "table1")
+                //     childName          // Index name (e.g., "index1")
+                // });
 
                 // Get index info and filter for global sync only
                 auto indexInfo = context.SS->Indexes.at(childPathId);
-                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
+                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal && indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
                     continue;
                 }
 
+
                 // Get index implementation table (single child of index)
                 auto indexPath = TPath::Init(childPathId, context.SS);
-                Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
-                auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
+                for (const auto& [implTableName, implTablePathId]: indexPath.Base()->GetChildren()) {
 
-                // Build relative path to index impl table (relative to working dir)
-                TString indexImplTableRelPath = JoinPath({relativeItemPath, childName, implTableName});
+                    // Build relative path to index impl table (relative to working dir)
+                    TString indexImplTableRelPath = JoinPath({relativeItemPath, childName, implTableName});
 
-                // Create AlterContinuousBackup for index impl table
-                NKikimrSchemeOp::TModifyScheme modifyScheme;
-                modifyScheme.SetWorkingDir(tx.GetWorkingDir());
-                modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup);
-                modifyScheme.SetInternal(true);
+                    // Create AlterContinuousBackup for index impl table
+                    NKikimrSchemeOp::TModifyScheme modifyScheme;
+                    modifyScheme.SetWorkingDir(tx.GetWorkingDir());
+                    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup);
+                    modifyScheme.SetInternal(true);
 
-                auto& cb = *modifyScheme.MutableAlterContinuousBackup();
-                cb.SetTableName(indexImplTableRelPath);  // Relative path: table1/index1/indexImplTable
+                    auto& cb = *modifyScheme.MutableAlterContinuousBackup();
+                    cb.SetTableName(indexImplTableRelPath);  // Relative path: table1/index1/indexImplTable
 
-                auto& ib = *cb.MutableTakeIncrementalBackup();
-                // Destination: {backup_collection}/{timestamp}_inc/__ydb_backup_meta/indexes/{table_path}/{index_name}
-                TString dstPath = JoinPath({
-                    tx.GetBackupIncrementalBackupCollection().GetName(),
-                    tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
-                    "__ydb_backup_meta",
-                    "indexes",
-                    relativeItemPath,  // Relative table path (e.g., "table1")
-                    childName          // Index name (e.g., "index1")
-                });
-                ib.SetDstPath(dstPath);
+                    auto& ib = *cb.MutableTakeIncrementalBackup();
 
-                TPathId stream;
-                if (!CreateAlterContinuousBackup(opId, modifyScheme, context, result, stream)) {
-                    return result;
+                    TString dstPath;
+
+                    if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                        // Создаем структуру: .../indexes/TableName/IndexName/ImplTableName
+                        // IndexName здесь выступает как директория
+                        dstPath = JoinPath({
+                            tx.GetBackupIncrementalBackupCollection().GetName(),
+                            tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
+                            "__ydb_backup_meta",
+                            "indexes",
+                            relativeItemPath,  // Имя таблицы
+                            childName,         // Имя индекса (станет директорией)
+                            implTableName      // Имя конкретной под-таблицы (levelTable, postingTable...)
+                        });
+                    } else {
+                        // Сохраняем старую логику: .../indexes/TableName/IndexName
+                        // IndexName здесь выступает как файл таблицы (содержимое indexImplTable)
+                        dstPath = JoinPath({
+                            tx.GetBackupIncrementalBackupCollection().GetName(),
+                            tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
+                            "__ydb_backup_meta",
+                            "indexes",
+                            relativeItemPath,
+                            childName
+                        });
+                    }
+
+                    ib.SetDstPath(dstPath);
+
+                    TPathId stream;
+                    if (!CreateAlterContinuousBackup(opId, modifyScheme, context, result, stream)) {
+                        return result;
+                    }
+                    streams.push_back(stream);
                 }
-                streams.push_back(stream);
             }
         }
     }

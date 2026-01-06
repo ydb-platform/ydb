@@ -171,7 +171,7 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
                 }
 
                 auto indexInfo = context.SS->Indexes.at(childPathId);
-                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
+                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal && indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
                     continue;
                 }
 
@@ -185,6 +185,16 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
                     relativeItemPath
                 });
                 collectionPaths.emplace(indexBackupParentPath);
+                if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                    TString vectorIndexDir = JoinPath({
+                        targetDir,
+                        "__ydb_backup_meta",
+                        "indexes",
+                        relativeItemPath,
+                        childName
+                    });
+                    collectionPaths.emplace(vectorIndexDir);
+                }
             }
         }
     }

@@ -155,15 +155,16 @@ void HelpSyncSiblingVersions(
         allIndexPathIds.push_back(childPathId);
         
         auto indexPath = context.SS->PathsById.at(childPathId);
-        Y_ABORT_UNLESS(indexPath->GetChildren().size() == 1);
-        auto [implTableName, implTablePathId] = *indexPath->GetChildren().begin();
-        allImplTablePathIds.push_back(implTablePathId);
-        
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Found index and impl table"
-                    << ", indexPathId: " << childPathId
-                    << ", implTablePathId: " << implTablePathId
-                    << ", at schemeshard: " << context.SS->SelfTabletId());
+        for (const auto& [implTableName, implTablePathId] : indexPath->GetChildren()) {
+            allImplTablePathIds.push_back(implTablePathId);
+            
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Found index child/impl table"
+                        << ", indexPathId: " << childPathId
+                        << ", implTablePathId: " << implTablePathId
+                        << ", implTableName: " << implTableName
+                        << ", at schemeshard: " << context.SS->SelfTabletId());
+        }
     }
     
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

@@ -106,7 +106,6 @@ public:
     {
         auto guard = WriterGuard(SpinLock_);
 
-        BacklogPeers_.Clear();
         HashToActiveChannel_.clear();
         PriorityToHashToActiveChannel_.clear();
         ActivePeerToPriority_.Clear();
@@ -152,14 +151,6 @@ public:
     IChannelPtr PickStickyChannel(const IClientRequestPtr& request) const override
     {
         auto guard = ReaderGuard(SpinLock_);
-
-        if (BacklogPeers_.Size() > 0) {
-            YT_LOG_WARNING(
-                "Sticky channels are used with non-empty peer backlog, random peer rotations might hurt stickiness (MaxPeerCount: %v, ViablePeerCount: %v, BacklogPeerCount: %v)",
-                Config_->MaxPeerCount,
-                ActivePeerToPriority_.Size(),
-                BacklogPeers_.Size());
-        }
 
         const auto& balancingExt = request->Header().GetExtension(NProto::TBalancingExt::balancing_ext);
         auto hash = balancingExt.has_balancing_hint()
@@ -359,9 +350,6 @@ private:
     // A consistent-hashing storage for serving sticky requests.
     std::map<std::pair<size_t, std::string>, IChannelPtr> HashToActiveChannel_;
     THashMap<EPeerPriority, std::map<std::pair<size_t, std::string>, IChannelPtr>> PriorityToHashToActiveChannel_;
-
-    // Information for non-active peers which go over the max peer count limit.
-    TIndexedHashMap<std::string, int> BacklogPeers_;
 
     THashMap<std::string, EPeerPriority> BacklogPeerToPriority_;
     std::map<EPeerPriority, TIndexedHashMap<std::string, std::monostate>> PriorityToBacklogPeers_;

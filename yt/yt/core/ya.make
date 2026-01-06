@@ -212,6 +212,7 @@ SRCS(
     rpc/overload_controller.cpp
     rpc/overload_controlling_service_base.cpp
     rpc/peer_discovery.cpp
+    rpc/peer_priority_provider.cpp
     rpc/per_key_request_queue_provider.cpp
     rpc/protocol_version.cpp
     rpc/public.cpp

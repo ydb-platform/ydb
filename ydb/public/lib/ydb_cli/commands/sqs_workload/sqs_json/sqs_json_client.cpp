@@ -5,13 +5,13 @@
 #include <aws/core/http/HttpClientFactory.h>
 #include <aws/core/utils/Array.h>
 #include <aws/core/utils/HashingUtils.h>
-#include <aws/core/utils/UUID.h>
 #include <aws/core/utils/memory/stl/SimpleStringStream.h>
 #include <aws/sqs/model/DeleteMessageBatchRequest.h>
 #include <aws/sqs/model/MessageSystemAttributeNameForSends.h>
 #include <aws/sqs/model/ReceiveMessageRequest.h>
 #include <aws/sqs/model/SendMessageBatchRequest.h>
 #include <library/cpp/string_utils/url/url.h>
+#include <util/generic/guid.h>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 
@@ -119,10 +119,14 @@ namespace NYdb::NConsoleClient {
         auto credentialsProvider =
             Aws::MakeShared<Aws::Auth::SimpleAWSCredentialsProvider>(
                 "credentials-provider", credentials);
+        const Aws::String signingRegion = clientConfiguration.region.empty()
+            ? Aws::String("ru-central1")
+            : clientConfiguration.region;
+
         Signer = Aws::MakeShared<Aws::Client::AWSAuthV4Signer>(
-            "aws-auth-v4-signer", credentialsProvider, kServiceName, clientConfiguration.region,
+            "aws-auth-v4-signer", credentialsProvider, kServiceName, signingRegion,
             Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Always, true,
-            Aws::Auth::AWSSigningAlgorithm::ASYMMETRIC_SIGV4);
+            Aws::Auth::AWSSigningAlgorithm::SIGV4);
     }
 
     void TSQSJsonClient::AddHeaders(
@@ -135,8 +139,10 @@ namespace NYdb::NConsoleClient {
         request->SetHeaderValue(kContentTypeHeader, kContentTypeValue);
         request->SetHeaderValue(kAmzSdkRequestHeader, kAmzSdkRequestValue);
         request->SetHeaderValue(kXAmzAPIVersionHeader, kXAmzAPIVersionValue);
-        request->SetHeaderValue(kAmzSdkInvocationIdHeader,
-                                Aws::Utils::UUID::RandomUUID());
+        const TString invocationId = CreateGuidAsString();
+        request->SetHeaderValue(
+            kAmzSdkInvocationIdHeader,
+            Aws::String(invocationId.c_str(), invocationId.size()));
     }
 
     Aws::Utils::Json::JsonValue TSQSJsonClient::ReadResponseBody(

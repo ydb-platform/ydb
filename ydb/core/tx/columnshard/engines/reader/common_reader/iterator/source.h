@@ -74,12 +74,6 @@ public:
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& GetExecutionVisitorVerified() const;
 };
 
-class IPortionDataSource {
-public:
-    virtual ui64 GetPortionId() const = 0;
-    virtual ~IPortionDataSource() = default;
-};
-
 class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
 public:
     enum class EType {
@@ -301,6 +295,8 @@ public:
     const TFetchedResult& GetStageResult() const;
 
     TFetchedResult& MutableStageResult();
+
+    virtual std::optional<ui64> GetPortionIdOptional() const = 0;
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

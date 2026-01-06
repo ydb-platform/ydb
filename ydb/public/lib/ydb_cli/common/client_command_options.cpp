@@ -621,7 +621,7 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             for (const auto& envInfo : opt.Opt->EnvInfo) {
                 if (TMaybe<TString> mbValue = TryGetEnv(envInfo.EnvName)) {
                     TStringBuilder txt;
-                    Cerr << " from " << envInfo.EnvName << " enviroment variable";
+                    Cerr << " from " << envInfo.EnvName << " environment variable";
                     break;
                 }
             }

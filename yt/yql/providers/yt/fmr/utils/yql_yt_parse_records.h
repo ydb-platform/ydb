@@ -15,4 +15,11 @@ void ParseRecords(
     std::shared_ptr<std::atomic<bool>> cancelFlag,
     const TMaybe<TMutex>& writeMutex = Nothing());
 
+void ParseRecordsToYtDistributed(
+    NYT::TRawTableReaderPtr reader,
+    IOutputStream& writer,
+    ui64 blockCount,
+    ui64 blockSize,
+    std::shared_ptr<std::atomic<bool>> cancelFlag);
+
 } // namespace NYql::NFmr

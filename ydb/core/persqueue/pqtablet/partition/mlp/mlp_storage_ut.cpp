@@ -98,13 +98,14 @@ struct TUtils {
             TUtils utils;
             utils.LoadSnapshot(BeginSnapshot);
             utils.LoadWAL(WAL);
+            utils.Storage.InitMetrics();
 
             utils.AssertEquals(*this);
         }
         {
             TUtils utils;
             utils.LoadSnapshot(EndSnapshot);
-
+            utils.Storage.InitMetrics();
             utils.AssertEquals(*this);
         }
     }
@@ -1294,6 +1295,7 @@ Y_UNIT_TEST(StorageSerialization) {
         storage.SetKeepMessageOrder(true);
 
         storage.Initialize(snapshot);
+        storage.InitMetrics();
         Cerr << "DUMP 2: " << storage.DebugString() << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
@@ -1479,6 +1481,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
 
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
+        storage.InitMetrics();
 
         auto it = storage.begin();
         {
@@ -1604,6 +1607,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
 
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
+        storage.InitMetrics();
 
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 7);
 
@@ -1700,6 +1704,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
 
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
+        storage.InitMetrics();
 
         UNIT_ASSERT_VALUES_EQUAL(storage.GetBaseDeadline(), timeProvider->Now() - TDuration::Seconds(7));
 

@@ -255,6 +255,81 @@ namespace NKikimr::NBsController {
         group->NeedAlter = true;
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRecommissionGroups& cmd, TStatus& /*status*/) {
+        for (const ui32 groupId : cmd.GetGroupIds()) {
+            TGroupInfo *group = Groups.FindForUpdate(TGroupId::FromValue(groupId));
+            if (!group) {
+                throw TExGroupNotFound(groupId);
+            }
+
+            if (TGroupID(groupId).ConfigurationType() != EGroupConfigurationType::Dynamic) {
+                // group can't be recommissioned, it could never have physical slots
+                throw TExError() << "group is not dynamic one" << TErrorParams::GroupId(groupId);
+            }
+
+            if (!group->VirtualGroupState) {
+                continue; // recommissioning is not required -- group has no virtual part in it
+            }
+
+            if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING) {
+                continue; // recommissioning is already underway
+            }
+
+            if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE &&
+                    group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::DELETING) {
+                continue; // tablet is already being deleted
+            }
+
+            if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING &&
+                    (group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW ||
+                     group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED)) {
+                // the new tablet is in the process of creation, just cancel it
+                group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
+                group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::DELETING;
+            } else {
+                Y_DEBUG_ABORT_UNLESS(group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING);
+                if (group->VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::WORKING) {
+                    throw TExError() << "virtual group is not in WORKING state" << TErrorParams::GroupId(groupId);
+                }
+
+                switch (group->DecommitStatus) {
+                    case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
+                        Y_DEBUG_ABORT_UNLESS(!group->VDisksInGroup.empty());
+                        if (!group->VDisksInGroup) {
+                            throw TExError() << "group contains no VDisks despite IN_PROGRESS decommission state"
+                                << TErrorParams::GroupId(groupId);
+                        }
+                        break;
+
+                    case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
+                        Y_DEBUG_ABORT_UNLESS(group->VDisksInGroup.empty());
+                        if (group->VDisksInGroup) {
+                            throw TExError() << "group contains VDisks despite DONE decommission state"
+                                << TErrorParams::GroupId(groupId);
+                        }
+                        // kindly ask futher logic to allocate a group here
+                        Fit.PoolsAndGroups.emplace(group->StoragePoolId, group->ID);
+                        Fit.GroupsToAllocate.insert(group->ID);
+                        break;
+
+                    default:
+                        Y_DEBUG_ABORT("group is not in IN_PROGRESS/DONE decommission state");
+                        throw TExError() << "group is not in IN_PROGRESS/DONE decommission state"
+                            << TErrorParams::GroupId(groupId);
+                }
+
+                // switch group to recommissioning state, start machinery accordingly
+                group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING;
+            }
+
+            // update state with the agents
+            group->NeedAlter = true;
+
+            // spin generation to deliver decommissioning state change to proxies
+            GroupContentChanged.insert(group->ID);
+        }
+    }
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     class TBlobStorageController::TVirtualGroupSetupMachine : public TActorBootstrapped<TVirtualGroupSetupMachine> {
@@ -828,8 +903,8 @@ namespace NKikimr::NBsController {
                 TNodeInfo& node = Self->GetNode(nodeId);
                 node.WaitingForGroups.erase(group->ID);
                 auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
-                TSet<ui32> groups;
-                groups.insert(group->ID.GetRawId());
+                TSet<TGroupId> groups;
+                groups.insert(group->ID);
                 Self->ReadGroups(groups, false, ev.get(), nodeId);
                 Send(MakeBlobStorageNodeWardenID(nodeId), ev.release());
             }

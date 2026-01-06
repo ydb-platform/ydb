@@ -454,8 +454,9 @@ class TestTenants():
             logger.debug("From root: list above database <%s> is %s", dirname, convert(result))
             assert len(result.children) > 1
             assert result.children[0].name == ".metadata"
-            assert result.children[1].name == basename
-            assert result.children[1].type == ydb.scheme.SchemeEntryType.DATABASE
+            assert result.children[1].name == ".sys"
+            assert result.children[2].name == basename
+            assert result.children[2].type == ydb.scheme.SchemeEntryType.DATABASE
 
 
 def _initial_credit(pool):

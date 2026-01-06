@@ -334,8 +334,8 @@ Y_UNIT_TEST(ProposeErrorEvWrite) {
          "Constraint violated.");
 
     test(NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE,
-         Ydb::StatusIds::OVERLOADED,
-         NYql::TIssuesIds::KIKIMR_OVERLOADED,
+         Ydb::StatusIds::UNAVAILABLE,
+         NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
          "out of space.");
 }
 

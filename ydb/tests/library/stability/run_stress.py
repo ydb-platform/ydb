@@ -172,7 +172,7 @@ class StressRunExecutor:
                         while time_module.time() < planned_end_time:
                             with self.run_counter_lock:
                                 self.run_counter += 1
-                            
+
                             # Use iter_N format without adding iter_ prefix in _execute_single_workload_run
                             # since it will be added there
                             run_name = f"{stress_name}_{node_host}_iter_{current_iteration}"
@@ -222,7 +222,8 @@ class StressRunExecutor:
                                 )
                             else:
                                 logging.warning(
-                                    f"Run {current_iteration} on {node_host} failed")
+                                    f"Run {current_iteration} on {node_host} failed. Continuing after 120s delay")
+                                time_module.sleep(120)
                             current_iteration += 1
                             run_duration = planned_end_time - time_module.time()
 

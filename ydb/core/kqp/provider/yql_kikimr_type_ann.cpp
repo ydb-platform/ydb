@@ -1058,7 +1058,7 @@ private:
             }
 
             NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
-            NKikimrKqp::TFulltextIndexDescription fulltextIndexDescription;
+            NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
             // fulltext index has per-column analyzers settings, single value for now
             fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
                 indexColums.empty() ? "<none>" : indexColums.back()

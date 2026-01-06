@@ -38,7 +38,7 @@ private:
             : Key(key)
             , File(key, CreateAlways | WrOnly | ForAppend)
         {
-            File.Flock(LOCK_EX);
+            File.Flock(LOCK_EX | LOCK_NB);
         }
     };
 
@@ -74,13 +74,18 @@ private:
     }
 
     template<typename TEvResponse>
-    void ReplyError(const NActors::TActorId& sender, const std::optional<TString>& key, const TString& errorMessage,
-                    Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE) {
+    void ReplyError(
+            const NActors::TActorId& sender,
+            const std::optional<TString>& key,
+            const TString& errorMessage,
+            Aws::S3::S3Errors errorType = Aws::S3::S3Errors::INTERNAL_FAILURE,
+            bool retryable = false)
+    {
         Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
             errorType,
             "FsStorageError",
             errorMessage,
-            false // not retryable for FS errors
+            retryable
         );
         Aws::S3::S3Error error(std::move(awsError));
         Aws::Utils::Outcome<typename TEvResponse::TAwsResult, Aws::S3::S3Error> outcome(std::move(error));
@@ -93,6 +98,23 @@ private:
             response = std::make_unique<TEvResponse>(std::move(outcome));
         }
         this->Send(sender, response.release());
+    }
+
+    template<typename TEvResponse>
+    bool HandleFileLockError(
+            const TSystemError& ex,
+            const NActors::TActorId& sender,
+            const TString& key,
+            const TString& operation)
+    {
+        if (ex.Status() == EWOULDBLOCK) {
+            FS_LOG_W(operation << ": failed to acquire lock (file is busy)"
+                << ": key# " << key);
+            ReplyError<TEvResponse>(sender, key, "File is locked by another process",
+                Aws::S3::S3Errors::SLOW_DOWN, true /* retryable */);
+            return true;
+        }
+        return false;
     }
 
 public:
@@ -162,7 +184,7 @@ public:
         }
     }
 
-    TString GetIncompletePath(const TString& key) {
+    TString GetIncompletePath(const char* key) {
         return TStringBuilder() << key << ".incomplete";
     }
 
@@ -180,11 +202,15 @@ public:
             fsPath.Parent().MkDirs();
 
             TFile file(fsPath.GetPath(), CreateAlways | WrOnly);
-            file.Flock(LOCK_EX);
+            file.Flock(LOCK_EX | LOCK_NB);
             file.Write(body.data(), body.size());
             file.Flush();
             file.Close();
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
+        } catch (const TSystemError& ex) {
+            if (!HandleFileLockError<TEvPutObjectResponse>(ex, ev->Sender, key, "PutObject")) {
+                throw;
+            }
         } catch (const std::exception& ex) {
             FS_LOG_E("PutObject failed"
                 << ": key# " << key
@@ -324,7 +350,7 @@ public:
 
     void Handle(TEvCreateMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-        const TString key = GetIncompletePath(TString(request.GetKey().data(), request.GetKey().size()));
+        const TString key = GetIncompletePath(request.GetKey().c_str());
 
         FS_LOG_D("CreateMultipartUpload"
             << ": key# " << key);
@@ -334,7 +360,7 @@ public:
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
 
-            ActiveUploads.emplace(uploadId, key);
+            ActiveUploads.emplace(uploadId, TMultipartUploadSession(key));
 
             FS_LOG_I("CreateMultipartUpload"
                 << ": key# " << key
@@ -348,6 +374,10 @@ public:
             Aws::Utils::Outcome<Aws::S3::Model::CreateMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvCreateMultipartUploadResponse>(key, std::move(outcome));
             this->Send(ev->Sender, response.release());
+        } catch (const TSystemError& ex) {
+            if (!HandleFileLockError<TEvCreateMultipartUploadResponse>(ex, ev->Sender, key, "CreateMultipartUpload")) {
+                throw;
+            }
         } catch (const std::exception& ex) {
             FS_LOG_E("CreateMultipartUpload failed"
                 << ": key# " << key
@@ -359,7 +389,7 @@ public:
     void Handle(TEvUploadPartRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const auto& body = ev->Get()->Body;
-        const TString key = GetIncompletePath(TString(request.GetKey().data(), request.GetKey().size()));
+        const TString key = GetIncompletePath(request.GetKey().c_str());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
         const int partNumber = request.GetPartNumber();
 
@@ -376,11 +406,10 @@ public:
                 // it means that a restart has occurred and all parts have started being written again
                 // so we can simply create a new session.
                 if (partNumber != 1) {
-                    throw yexception() << TStringBuilder()
-                        << "Cannot create new upload session for part " << partNumber
+                    throw yexception() << "Cannot create new upload session for part " << partNumber
                         << " (uploadId: " << uploadId << "). Session must start with part 1.";
                 }
-                it = ActiveUploads.emplace(uploadId, key).first;
+                it = ActiveUploads.emplace(uploadId, TMultipartUploadSession(key)).first;
             }
 
             auto& session = it->second;
@@ -401,6 +430,10 @@ public:
             Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
             this->Send(ev->Sender, response.release());
+        } catch (const TSystemError& ex) {
+            if (!HandleFileLockError<TEvUploadPartResponse>(ex, ev->Sender, key, "UploadPart")) {
+                throw;
+            }
         } catch (const std::exception& ex) {
             FS_LOG_E("UploadPart failed"
                 << ": key# " << key
@@ -413,7 +446,7 @@ public:
     void Handle(TEvCompleteMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        const TString incompleteKey = GetIncompletePath(key);
+        const TString incompleteKey = GetIncompletePath(key.c_str());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
         FS_LOG_D("CompleteMultipartUpload"

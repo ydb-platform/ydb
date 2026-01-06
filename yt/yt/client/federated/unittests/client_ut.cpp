@@ -113,11 +113,11 @@ TEST(TFederatedClientTest, Basic)
     NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillOnce(Return(VoidFuture))
+        .WillOnce(Return(OKFuture))
         .WillRepeatedly(Return(MakeFuture(TError("Failure"))));
 
     EXPECT_CALL(*mockClientSas, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     // Creation of federated client.
     std::vector<IClientPtr> clients{mockClientVla, mockClientSas};
@@ -206,12 +206,12 @@ TEST(TFederatedClientTest, CheckHealth)
     checkLivenessOptions.CheckCypressRoot = true;
     checkLivenessOptions.CheckTabletCellBundle = config->BundleName;
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(checkLivenessOptions))
-        .WillOnce(Return(VoidFuture))
+        .WillOnce(Return(OKFuture))
         .WillOnce(Return(MakeFuture(TError("Failure"))))
-        .WillOnce(Return(VoidFuture));
+        .WillOnce(Return(OKFuture));
 
     EXPECT_CALL(*mockClientSas, CheckClusterLiveness(checkLivenessOptions))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     auto federatedClient = CreateClient(clients, config);
 
@@ -283,11 +283,11 @@ TEST(TFederatedClientTest, Transactions)
     NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillOnce(Return(VoidFuture))
+        .WillOnce(Return(OKFuture))
         .WillRepeatedly(Return(MakeFuture(TError("Failure"))));
 
     EXPECT_CALL(*mockClientSas, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     // Creation of federated client.
     std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
@@ -374,12 +374,12 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
     NNet::SetLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillOnce(Return(VoidFuture))
-        .WillOnce(Return(VoidFuture))
+        .WillOnce(Return(OKFuture))
+        .WillOnce(Return(OKFuture))
         .WillRepeatedly(Return(MakeFuture(TError("Failure"))));
 
     EXPECT_CALL(*mockClientSas, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     // Creation of federated client.
     std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
@@ -463,7 +463,7 @@ TEST(TFederatedClientTest, AttachTransaction)
         .WillRepeatedly(Return(MakeFuture(TError("Failure"))));
 
     EXPECT_CALL(*mockClientSas, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     auto mockConnectionSas = New<TStrictMockConnection>();
     EXPECT_CALL(*mockConnectionSas, GetClusterTag())

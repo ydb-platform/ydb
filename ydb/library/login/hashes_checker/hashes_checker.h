@@ -28,6 +28,7 @@ struct THashes {
 };
 
 TMaybe<TString> ArgonHashToNewFormat(const TStringBuf oldArgonHash);
+TString HashedPasswordFromNewArgonHashFormat(const TString& argonHash);
 TMaybe<TString> ArgonHashToOldFormat(const TStringBuf newArgonHash);
 TMaybe<THashes> ConvertHashes(const TString& hash);
 
@@ -41,8 +42,9 @@ public:
         TString Error;
     };
 
-    TResult OldFormatCheck(const TString& hash) const;
-    TResult NewFormatCheck(const TString& hashes) const;
+static TResult OldFormatCheck(const TString& hash);
+static TResult NewFormatCheck(const TString& hashes);
+
 };
 
 } // NLogin

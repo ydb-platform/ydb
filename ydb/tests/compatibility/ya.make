@@ -26,6 +26,7 @@ TEST_SRCS(
     test_transfer.py
     test_node_broker_delta_protocol.py
     test_table_schema_compatibility.py
+    test_user_management.py
     test_workload_manager.py
     test_default_columns.py
     test_infer_pdisk_expected_slot_count.py

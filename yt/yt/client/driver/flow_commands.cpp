@@ -354,18 +354,44 @@ void TGetFlowViewCommand::DoExecute(ICommandContextPtr context)
 
 void TFlowExecuteCommand::Register(TRegistrar registrar)
 {
-    registrar.Parameter("flow_command", &TThis::Command)
+    registrar.Parameter("flow_command", &TThis::FlowCommand)
         .Default();
+}
+
+TYsonString TFlowExecuteCommand::DoFlowExecute(ICommandContextPtr context, const TYsonString& argument)
+{
+    auto client = context->GetClient();
+    return WaitFor(client->FlowExecute(PipelinePath, FlowCommand, argument, Options))
+        .ValueOrThrow()
+        .Result;
 }
 
 void TFlowExecuteCommand::DoExecute(ICommandContextPtr context)
 {
-    auto argument = context->ConsumeInputValue();
-    auto client = context->GetClient();
-    auto result = WaitFor(client->FlowExecute(PipelinePath, Command, argument, Options))
-        .ValueOrThrow();
+    context->ProduceOutputValue(DoFlowExecute(context, context->ConsumeInputValue()));
+}
 
-    context->ProduceOutputValue(result.Result);
+////////////////////////////////////////////////////////////////////////////////
+
+void TFlowExecutePlaintextCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("flow_argument", &TThis::FlowArgument)
+        .Default();
+    registrar.Parameter("field", &TThis::Field)
+        .Default();
+}
+
+void TFlowExecutePlaintextCommand::DoExecute(ICommandContextPtr context)
+{
+    auto node = ConvertTo<NYTree::IMapNodePtr>(DoFlowExecute(context, TYsonString(FlowArgument, EYsonType::Node)));
+    std::string result;
+    if (Field.empty()) {
+        result = ConvertToYsonString(node, EYsonFormat::Pretty).ToString();
+    } else {
+        result = node->GetChildValueOrThrow<std::string>(Field);
+    }
+    WaitFor(context->Request().OutputStream->Write(TSharedRef::FromString(result)))
+        .ThrowOnError();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -26,9 +26,7 @@ TFmrTableDataServiceBaseWriter::TFmrTableDataServiceBaseWriter(
 }
 
 void TFmrTableDataServiceBaseWriter::DoWrite(const void* buf, size_t len) {
-    Cerr << "DoWrite: " << len << Endl;
     TableContent_.Append(static_cast<const char*>(buf), len);
-    Cerr << "DoWrite: table size = " << TableContent_.size() << Endl;
 }
 
 void TFmrTableDataServiceBaseWriter::NotifyRowEnd()  {

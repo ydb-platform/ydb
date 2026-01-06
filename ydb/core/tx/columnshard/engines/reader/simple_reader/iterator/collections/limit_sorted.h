@@ -45,7 +45,7 @@ private:
 
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(
         const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
-        return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceIdx(), readyRecords);
+        return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceIdx(), readyRecords, source->GetPortionIdOptional());
     }
     virtual void DoClear() override {
         Cleared = true;

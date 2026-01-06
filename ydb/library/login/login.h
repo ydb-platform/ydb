@@ -5,10 +5,11 @@
 #include <vector>
 #include <deque>
 #include <util/generic/string.h>
-#include <ydb/library/login/protos/login.pb.h>
-#include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
 #include <ydb/library/login/cache/lru.h>
+#include <ydb/library/login/hashes_checker/hash_types.h>
+#include <ydb/library/login/protos/login.pb.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 
 namespace NLogin {
 
@@ -115,6 +116,7 @@ public:
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
+        TString HashedPassword;
         bool IsHashedPassword = false;
         bool CanLogin = true;
     };
@@ -122,6 +124,7 @@ public:
     struct TModifyUserRequest : TBasicRequest {
         TString User;
         std::optional<TString> Password;
+        std::optional<TString> HashedPassword;
         bool IsHashedPassword = false;
         std::optional<bool> CanLogin;
     };
@@ -180,7 +183,10 @@ public:
     struct TSidRecord {
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
-        TString PasswordHash;
+
+        TString ArgonHash;
+        TString PasswordHashes;
+
         bool IsEnabled;
         std::unordered_set<TString> Members;
         std::chrono::system_clock::time_point CreatedAt;
@@ -267,7 +273,8 @@ private:
     static void UnlockAccount(TSidRecord* sid);
     bool ShouldResetFailedAttemptCount(const TSidRecord& sid) const;
     bool ShouldUnlockAccount(const TSidRecord& sid) const;
-    bool CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
+    bool CheckHashes(const TString& hashedPassword, TString& error) const;
+    bool CheckPasswordOrArgonHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
     TSidRecord* GetUserSid(const TString& user);
     bool FillUnavailableKey(TPasswordCheckResult* checkResult) const;
     bool FillInvalidUser(const TSidRecord* sid, TPasswordCheckResult* checkResult) const;

@@ -6,6 +6,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_dynamic_config_v1.grpc.pb.h>
@@ -347,6 +348,8 @@ config:
     }
 
     Y_UNIT_TEST(CheckV1IsBlocked) {
+        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
+
         TKikimrWithGrpcAndRootSchema server;
         TString yamlConfig = R"(
 metadata:

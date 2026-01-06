@@ -537,9 +537,9 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.ContinuationToken; })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<TJobId>(
-        "distributed_group_main_job_id",
-        [] (TThis* command) -> auto& { return command->Options.DistributedGroupMainJobId; })
+    registrar.ParameterWithUniversalAccessor<TGuid>(
+        "collective_id",
+        [] (TThis* command) -> auto& { return command->Options.CollectiveId; })
         .Optional(/*init*/ false);
 
     registrar.ParameterWithUniversalAccessor<TJobId>(
@@ -784,6 +784,25 @@ void TPollJobShellCommand::DoExecute(ICommandContextPtr context)
     }
 
     ProduceSingleOutputValue(context, "result", response.Result);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRunJobShellCommandCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("job_id", &TThis::JobId);
+    registrar.Parameter("command", &TThis::Command);
+    registrar.Parameter("shell_name", &TThis::ShellName)
+        .Default();
+}
+
+void TRunJobShellCommandCommand::DoExecute(ICommandContextPtr context)
+{
+    auto reader = WaitFor(context->GetClient()->RunJobShellCommand(JobId, ShellName, Command, Options))
+        .ValueOrThrow();
+
+    auto output = context->Request().OutputStream;
+    PipeInputToOutput(reader, output);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

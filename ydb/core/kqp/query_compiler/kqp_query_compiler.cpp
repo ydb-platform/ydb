@@ -181,6 +181,8 @@ NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(EStreamLookupStrategyTy
             break;
         case EStreamLookupStrategyType::LookupRows:
             return NKqpProto::EStreamLookupStrategy::LOOKUP;
+        case EStreamLookupStrategyType::LookupUniqueRows:
+            return NKqpProto::EStreamLookupStrategy::UNIQUE;
         case EStreamLookupStrategyType::LookupJoinRows:
             return NKqpProto::EStreamLookupStrategy::JOIN;
         case EStreamLookupStrategyType::LookupSemiJoinRows:
@@ -341,6 +343,14 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
             auto systemColumn = GetSystemColumns().find(columnName);
             YQL_ENSURE(systemColumn != GetSystemColumns().end());
             columnId = systemColumn->second.ColumnId;
+        }
+
+
+        if (columnName == "_yql_full_text_relevance") {
+            auto& columnProto = *opProto.AddColumns();
+            // columnProto.SetId(columnId);
+            columnProto.SetName(columnName);
+            continue;
         }
 
         YQL_ENSURE(columnId, "Unknown column: " << columnName);
@@ -1157,7 +1167,7 @@ private:
 
         txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination));
         txProto.SetHasEffects(hasEffectStage);
-        txProto.SetEnableFastChannels(Config->UseFastChannels.Get().GetOrElse(Config->DefaultUseFastChannels));
+        txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->DefaultDqChannelVersion));
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
             const auto& binding = paramBinding.Binding();
@@ -1337,9 +1347,116 @@ private:
 
             FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);
             FillTableId(settings.Table().Cast(), *fullTextProto.MutableTable());
+
+            TString indexName = TString(settings.Index().Cast().StringValue());
             fullTextProto.SetIndex(settings.Index().Cast().StringValue());
-            FillColumns(settings.ResultColumns().Cast(), *tableMeta, fullTextProto, false);
-            fullTextProto.MutableQuerySettings()->SetQuery(TString(settings.Query().Cast().Ptr()->Content()));
+
+            auto type = settings.Raw()->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
+
+            auto [indexMeta, index] = tableMeta->GetIndex(indexName);
+
+            auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
+            YQL_ENSURE(desc, "unexpected index description type");
+            fullTextProto.MutableIndexDescription()->MutableSettings()->CopyFrom(desc->GetSettings());
+
+            auto fillCol = [&](const NYql::TKikimrColumnMetadata* columnMeta, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
+                columnProto->SetName(columnMeta->Name);
+                columnProto->SetId(columnMeta->Id);
+                columnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
+                if (NScheme::NTypeIds::IsParametrizedType(columnMeta->TypeInfo.GetTypeId())) {
+                    ProtoFromTypeInfo(columnMeta->TypeInfo, columnMeta->TypeMod, *columnProto->MutableTypeInfo());
+                }
+            };
+
+            for(auto& implTable : index->GetImplTables()) {
+                auto indexProto = fullTextProto.AddIndexTables();
+                TVector<TString> pathParts = {TString(settings.Table().Cast().Path()), indexName, TString(implTable)};
+                TString tablePath = NKikimr::JoinPath(pathParts);
+                FillTablesMap(tablePath, tablesMap);
+
+                auto implTableMeta = TablesData->ExistingTable(Cluster, tablePath).Metadata;
+                indexProto->MutableTable()->SetOwnerId(implTableMeta->PathId.OwnerId());
+                indexProto->MutableTable()->SetTableId(implTableMeta->PathId.TableId());
+                indexProto->MutableTable()->SetPath(tablePath);
+                indexProto->MutableTable()->SetSysView(implTableMeta->SysView);
+                indexProto->MutableTable()->SetVersion(implTableMeta->SchemaVersion);
+
+                for(auto& keyColumn: implTableMeta->KeyColumnNames) {
+                    fillCol(implTableMeta->Columns.FindPtr(keyColumn), indexProto->AddKeyColumns());
+                }
+
+                for(auto& column: implTableMeta->Columns) {
+                    fillCol(implTableMeta->Columns.FindPtr(column.first), indexProto->AddColumns());
+                }
+            }
+
+            for (auto& keyColumn: tableMeta->KeyColumnNames) {
+                fillCol(tableMeta->Columns.FindPtr(keyColumn), fullTextProto.AddKeyColumns());
+            }
+
+            for (auto item : type->GetItems()) {
+                auto* columnProto = fullTextProto.AddColumns();
+                columnProto->SetName(TString(item->GetName()));
+                if (item->GetName() == "_yql_full_text_relevance") {
+                    continue;
+                }
+
+                fillCol(tableMeta->Columns.FindPtr(item->GetName()), columnProto);
+            }
+
+            {
+                TExprBase expr(settings.Query().Raw());
+                if (expr.Maybe<TCoString>()) {
+                    auto* literal = fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableLiteralValue();
+                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
+                    literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+                } else if (expr.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    YQL_ENSURE(false, "Unexpected VectorTopKTarget callable '" << expr.Ref().Content()
+                        << "'. Expected TCoString or TCoParameter.");
+                }
+            }
+
+            TKqpReadTableFullTextIndexSettings settingsObj = TKqpReadTableFullTextIndexSettings::Parse(settings.Settings().Cast());
+            if (settingsObj.ItemsLimit) {
+
+                auto itemsLimit = TExprBase(settingsObj.ItemsLimit);
+                if (itemsLimit.Maybe<TCoUint64>()) {
+                    auto* literal = fullTextProto.MutableTakeLimit()->MutableLiteralValue();
+
+                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+
+                    literal->MutableValue()->SetUint64(FromString<ui64>(itemsLimit.Cast<TCoUint64>().Literal().Value()));
+                } else if (itemsLimit.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableTakeLimit()->MutableParamValue()->SetParamName(itemsLimit.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    YQL_ENSURE(false, "Unexpected ItemsLimit callable " << itemsLimit.Ref().Content());
+                }
+            }
+
+            if (settingsObj.BFactor) {
+                auto bFactor = TExprBase(settingsObj.BFactor);
+                auto just = bFactor.Cast<TCoJust>().Input();
+                if (just.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableBFactor()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    FillLiteralProto(just.Cast<TCoDataCtor>(), *fullTextProto.MutableBFactor()->MutableLiteralValue());
+                }
+            }
+
+            if (settingsObj.K1Factor) {
+                auto k1Factor = TExprBase(settingsObj.K1Factor);
+                auto just = k1Factor.Cast<TCoJust>().Input();
+                if (just.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableK1Factor()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    FillLiteralProto(just.Cast<TCoDataCtor>(), *fullTextProto.MutableK1Factor()->MutableLiteralValue());
+                }
+            }
+
             FillColumns(settings.Columns().Cast(), *tableMeta, *fullTextProto.MutableQuerySettings(), false);
         } else {
             YQL_ENSURE(false, "Unsupported source type");
@@ -1945,14 +2062,36 @@ private:
             const auto inputItemType = inputNodeType->Cast<TListExprType>()->GetItemType();
             sequencerProto.SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputItemType), TypeEnv));
 
-            auto autoIncrementColumns = sequencer.DefaultConstraintColumns();
-            for(const auto& column : autoIncrementColumns) {
-                sequencerProto.AddAutoIncrementColumns(column.StringValue());
+            THashSet<TString> autoIncrementColumns;
+            for(const auto& column : sequencer.DefaultConstraintColumns()) {
+                autoIncrementColumns.insert(column.StringValue());
             }
 
             YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Struct);
             for(const auto* column: resultItemType->Cast<TStructExprType>()->GetItems()) {
-                sequencerProto.AddColumns(TString(column->GetName()));
+                auto columnMeta = tableMeta->Columns.FindPtr(TString(column->GetName()));
+                YQL_ENSURE(columnMeta);
+                auto* columnProto = sequencerProto.AddColumns();
+                columnProto->SetName(columnMeta->Name);
+                columnProto->SetId(columnMeta->Id);
+                columnProto->SetTypeId(columnMeta->TypeInfo.GetTypeId());
+                if (NScheme::NTypeIds::IsParametrizedType(columnMeta->TypeInfo.GetTypeId())) {
+                    ProtoFromTypeInfo(columnMeta->TypeInfo, columnMeta->TypeMod, *columnProto->MutableTypeInfo());
+                }
+
+                if (autoIncrementColumns.contains(columnMeta->Name)) {
+                    // it means, that column is a generated column
+                    // so it means we should set default value for this column
+                    YQL_ENSURE(columnMeta->IsDefaultFromLiteral() || columnMeta->IsDefaultFromSequence());
+                    columnProto->SetDefaultKind(columnMeta->DefaultKind);
+                    if (columnMeta->IsDefaultFromLiteral()) {
+                        columnProto->MutableDefaultFromLiteral()->CopyFrom(columnMeta->DefaultFromLiteral);
+                    } else if (columnMeta->IsDefaultFromSequence()) {
+                        columnProto->SetDefaultFromSequence(columnMeta->DefaultFromSequence);
+                        columnMeta->DefaultFromSequencePathId.ToMessage(columnProto->MutableDefaultFromSequencePathId());
+                    }
+                }
+
             }
 
             return;
@@ -1990,7 +2129,8 @@ private:
             }
 
             switch (streamLookupProto.GetLookupStrategy()) {
-                case NKqpProto::EStreamLookupStrategy::LOOKUP: {
+                case NKqpProto::EStreamLookupStrategy::LOOKUP:
+                case NKqpProto::EStreamLookupStrategy::UNIQUE: {
                     YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Struct);
                     const auto& lookupKeyColumns = inputItemType->Cast<TStructExprType>()->GetItems();
                     for (const auto keyColumn : lookupKeyColumns) {
@@ -2215,6 +2355,10 @@ private:
 
             if (const auto maybeMultiget = streamLookup.IsMultiget()) {
                 dqSourceLookupCn.SetIsMultiGet(FromString<bool>(maybeMultiget.Cast()));
+            }
+
+            if (const auto maybeIsMultiMatches = streamLookup.IsMultiMatches()) {
+                dqSourceLookupCn.SetIsMultiMatches(FromString<bool>(maybeIsMultiMatches.Cast()));
             }
 
             for (const auto& key : streamLookup.LeftJoinKeyNames()) {

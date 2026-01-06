@@ -462,7 +462,7 @@ TFuture<TYsonString> AsyncYPathGet(
         }));
 }
 
-TString SyncYPathGetKey(const IYPathServicePtr& service, const TYPath& path)
+std::string SyncYPathGetKey(const IYPathServicePtr& service, const TYPath& path)
 {
     auto request = TYPathProxy::GetKey(path);
     auto future = ExecuteVerb(service, request);
@@ -552,7 +552,7 @@ void SyncYPathRemove(
     optionalResult->ThrowOnError();
 }
 
-std::vector<TString> SyncYPathList(
+std::vector<std::string> SyncYPathList(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit)
@@ -563,7 +563,7 @@ std::vector<TString> SyncYPathList(
     return optionalResult->ValueOrThrow();
 }
 
-TFuture<std::vector<TString>> AsyncYPathList(
+TFuture<std::vector<std::string>> AsyncYPathList(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit)
@@ -574,7 +574,13 @@ TFuture<std::vector<TString>> AsyncYPathList(
     }
     return ExecuteVerb(service, request)
         .Apply(BIND([] (TYPathProxy::TRspListPtr response) {
-            return ConvertTo<std::vector<TString>>(TYsonString(response->value()));
+            auto tstringResult = ConvertTo<std::vector<TString>>(TYsonString(response->value()));
+            std::vector<std::string> result;
+            result.reserve(tstringResult.size());
+            for (const auto& str : tstringResult) {
+                result.push_back(str);
+            }
+            return result;
         }));
 }
 
@@ -934,11 +940,11 @@ bool AreNodesEqual(
 ////////////////////////////////////////////////////////////////////////////////
 
 TNodeWalkOptions GetNodeByYPathOptions {
-    .MissingAttributeHandler = [] (const TString& key) {
+    .MissingAttributeHandler = [] (const std::string& key) {
         ThrowNoSuchAttribute(key);
         return nullptr;
     },
-    .MissingChildKeyHandler = [] (const IMapNodePtr& node, const TString& key) {
+    .MissingChildKeyHandler = [] (const IMapNodePtr& node, const std::string& key) {
         ThrowNoSuchChildKey(node, key);
         return nullptr;
     },
@@ -953,10 +959,10 @@ TNodeWalkOptions GetNodeByYPathOptions {
 };
 
 TNodeWalkOptions FindNodeByYPathOptions {
-    .MissingAttributeHandler = [] (const TString& /*key*/) {
+    .MissingAttributeHandler = [] (const std::string& /*key*/) {
         return nullptr;
     },
-    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const TString& /*key*/) {
+    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const std::string& /*key*/) {
         return nullptr;
     },
     .MissingChildIndexHandler = [] (const IListNodePtr& /*node*/, int /*index*/) {
@@ -966,10 +972,10 @@ TNodeWalkOptions FindNodeByYPathOptions {
 };
 
 TNodeWalkOptions FindNodeByYPathNoThrowOptions {
-    .MissingAttributeHandler = [] (const TString& /*key*/) {
+    .MissingAttributeHandler = [] (const std::string& /*key*/) {
         return nullptr;
     },
-    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const TString& /*key*/) {
+    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const std::string& /*key*/) {
         return nullptr;
     },
     .MissingChildIndexHandler = [] (const IListNodePtr& /*node*/, int /*index*/) {

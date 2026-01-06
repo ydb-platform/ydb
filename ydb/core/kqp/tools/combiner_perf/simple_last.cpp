@@ -4,9 +4,9 @@
 #include "subprocess.h"
 #include "streams.h"
 #include "printout.h"
-#include "preallocated_spiller.h"
 #include "kqp_setup.h"
 
+#include <ydb/library/yql/dq/comp_nodes/ut/utils/preallocated_spiller.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>

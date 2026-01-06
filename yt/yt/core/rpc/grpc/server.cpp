@@ -275,7 +275,7 @@ private:
 
         TFuture<void> GetReadyFuture() const override
         {
-            return VoidFuture;
+            return OKFuture;
         }
 
         TFuture<void> Send(TSharedRefArray message, const NBus::TSendOptions& /*options*/) override

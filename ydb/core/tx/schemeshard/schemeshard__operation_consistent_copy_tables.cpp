@@ -284,18 +284,26 @@ bool CreateConsistentCopyTables(
                     << ", srcImplTable: " << srcImplTable.PathString()
                     << ", dstImplTable: " << dstImplTable.PathString());
 
-                // Check if we have CDC stream info for this index impl table in the descriptor
                 NKikimrSchemeOp::TCopyTableConfig indexDescr;
-                indexDescr.CopyFrom(descr);
 
-                auto it = descr.GetIndexImplTableCdcStreams().find(name);
-                if (it != descr.GetIndexImplTableCdcStreams().end()) {
-                    // CDC stream Impl was already created in the backup operation before copying
-                    // Store the CDC info so the copy operation creates AtTable and PQ parts
-                    indexDescr.MutableCreateSrcCdcStream()->CopyFrom(it->second);
-                } else {
-                    // No CDC stream for this index impl table, clear it
-                    indexDescr.ClearCreateSrcCdcStream();
+                indexDescr.SetOmitFollowers(descr.GetOmitFollowers());
+                indexDescr.SetIsBackup(descr.GetIsBackup());
+                indexDescr.SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
+
+                if (descr.HasTargetPathTargetState()) {
+                    indexDescr.SetTargetPathTargetState(descr.GetTargetPathTargetState());
+                }
+
+                indexDescr.SetOmitIndexes(true); 
+
+                auto itCreate = descr.GetIndexImplTableCdcStreams().find(name);
+                if (itCreate != descr.GetIndexImplTableCdcStreams().end()) {
+                    indexDescr.MutableCreateSrcCdcStream()->CopyFrom(itCreate->second);
+                }
+
+                auto itDrop = descr.GetIndexImplTableDropCdcStreams().find(name);
+                if (itDrop != descr.GetIndexImplTableDropCdcStreams().end()) {
+                    indexDescr.MutableDropSrcCdcStream()->CopyFrom(itDrop->second);
                 }
 
                 result.push_back(CreateCopyTable(NextPartId(nextId, result),

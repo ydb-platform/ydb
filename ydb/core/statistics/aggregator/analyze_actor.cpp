@@ -2,89 +2,14 @@
 #include "select_builder.h"
 
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 #include <util/generic/size_literals.h>
 #include <util/string/vector.h>
 
-#include <numbers>
-
 namespace NKikimr::NStat {
 
-class TCMSEval : public IColumnStatisticEval {
-    ui64 Width;
-    ui64 Depth = DEFAULT_DEPTH;
-    std::optional<ui32> Seq;
-
-    static constexpr ui64 MIN_WIDTH = 256;
-    static constexpr ui64 DEFAULT_DEPTH = 8;
-
-    TCMSEval(ui64 width) : Width(width) {}
-public:
-    static std::optional<TCMSEval> MaybeCreate(
-            const NKikimrStat::TSimpleColumnStatistics& simpleStats,
-            const NScheme::TTypeInfo&) {
-        if (simpleStats.GetCount() == 0 || simpleStats.GetCountDistinct() == 0) {
-            // Empty table
-            return std::nullopt;
-        }
-
-        const double n = simpleStats.GetCount();
-        const double ndv = simpleStats.GetCountDistinct();
-
-        if (ndv >= 0.8 * n) {
-            return std::nullopt;
-        }
-
-        const double c = 10;
-        const double eps = (c - 1) * (1 + std::log10(n / ndv)) / ndv;
-        const ui64 cmsWidth = std::max((ui64)MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
-        return TCMSEval(cmsWidth);
-    }
-
-    EStatType GetType() const final { return EStatType::COUNT_MIN_SKETCH; }
-
-    size_t EstimateSize() const final { return Width * Depth * sizeof(ui32); }
-
-    void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
-        Seq = builder.AddUDAFAggregation(columnName, "CountMinSketch", Width, Depth);
-    }
-
-    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) const final {
-        NYdb::TValueParser val(aggColumns.at(Seq.value()));
-        val.OpenOptional();
-        if (!val.IsNull()) {
-            const auto& bytes = val.GetBytes();
-            return TString(bytes.data(), bytes.size());
-        } else {
-            auto defaultVal = std::unique_ptr<TCountMinSketch>(
-                TCountMinSketch::Create(Width, Depth));
-            auto bytes = defaultVal->AsStringBuf();
-            return TString(bytes.data(), bytes.size());
-        }
-    }
-};
-
-TVector<EStatType> IColumnStatisticEval::SupportedTypes() {
-    return { EStatType::COUNT_MIN_SKETCH };
-}
-
-IColumnStatisticEval::TPtr IColumnStatisticEval::MaybeCreate(
-        EStatType statType,
-        const NKikimrStat::TSimpleColumnStatistics& simpleStats,
-        const NScheme::TTypeInfo& columnType) {
-    switch (statType) {
-    case EStatType::COUNT_MIN_SKETCH: {
-        auto maybeEval = TCMSEval::MaybeCreate(simpleStats, columnType);
-        if (!maybeEval) {
-            return TPtr{};
-        }
-        return std::make_unique<TCMSEval>(std::move(*maybeEval));
-    }
-    default:
-        return TPtr{};
-    }
-}
 
 class TAnalyzeActor::TScanActor : public TQueryBase {
 public:
@@ -201,10 +126,13 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     CountSeq = stage1Builder.AddBuiltinAggregation({}, "count");
 
     auto addColumn = [&](const TSysTables::TTableColumnInfo& colInfo) {
-        Columns.emplace_back(colInfo.Id, colInfo.PType, colInfo.Name);
+        auto& col = Columns.emplace_back(colInfo.Id, colInfo.PType, colInfo.PTypeMod, colInfo.Name);
         // TODO: escape column names
-        Columns.back().CountDistinctSeq = stage1Builder.AddBuiltinAggregation(
-            colInfo.Name, "HLL");
+        col.CountDistinctSeq = stage1Builder.AddBuiltinAggregation(colInfo.Name, "HLL");
+        if (IColumnStatisticEval::AreMinMaxNeeded(col.Type)) {
+            col.MinSeq = stage1Builder.AddBuiltinAggregation(colInfo.Name, "min");
+            col.MaxSeq = stage1Builder.AddBuiltinAggregation(colInfo.Name, "max");
+        }
     };
     if (!RequestedColumnTags.empty()) {
         for (const auto& colTag : RequestedColumnTags) {
@@ -243,6 +171,18 @@ NKikimrStat::TSimpleColumnStatistics TAnalyzeActor::TColumnDesc::ExtractSimpleSt
     NYdb::TValueParser hllVal(aggColumns.at(CountDistinctSeq.value()));
     ui64 countDistinct = hllVal.GetOptionalUint64().value_or(0);
     result.SetCountDistinct(countDistinct);
+
+    result.SetTypeId(Type.GetTypeId());
+    if (NScheme::NTypeIds::IsParametrizedType(Type.GetTypeId())) {
+        NScheme::ProtoFromTypeInfo(Type, PgTypeMod, *result.MutableTypeInfo());
+    }
+
+    if (MinSeq) {
+        result.MutableMin()->CopyFrom(aggColumns.at(*MinSeq).GetProto());
+    }
+    if (MaxSeq) {
+        result.MutableMax()->CopyFrom(aggColumns.at(*MaxSeq).GetProto());
+    }
 
     return result;
 }

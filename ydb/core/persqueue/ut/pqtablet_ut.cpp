@@ -2,7 +2,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
-#include <ydb/core/persqueue/pqtablet/partition/read_quoter.h>
+#include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -3058,7 +3058,7 @@ void TPQTabletFixture::SendReadQuotaConsumed(ui64 cookie)
 
     Ctx->Runtime->Send(ReadQuoter->Quoter,
                        Ctx->Edge,
-                       new TEvPQ::TEvConsumed(1024, cookie, "client"));
+                       new TEvPQ::TEvConsumed(1024, 0, cookie, "client"));
 }
 
 void TPQTabletFixture::SendReleaseExclusiveLock()

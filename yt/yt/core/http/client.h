@@ -20,6 +20,7 @@ struct IActiveRequest
     : public virtual TRefCounted
 {
     virtual TFuture<IResponsePtr> Finish() = 0;
+    virtual TFuture<void> Abort() = 0;
     virtual NConcurrency::IAsyncOutputStreamPtr GetRequestStream() = 0;
     virtual IResponsePtr GetResponse() = 0;
 };

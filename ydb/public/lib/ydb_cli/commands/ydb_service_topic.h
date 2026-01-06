@@ -3,7 +3,7 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -211,7 +211,7 @@ namespace NYdb::NConsoleClient {
 
     class TCommandTopicRead: public TYdbCommand,
                              public TCommandWithMessagingFormat,
-                             public TInterruptibleCommand,
+                             public TInterruptableCommand,
                              public TCommandWithTopicName,
                              public TCommandWithTransformBody {
     public:
@@ -269,7 +269,7 @@ namespace NYdb::NConsoleClient {
 
     class TCommandTopicWrite: public TYdbCommand,
                               public TCommandWithMessagingFormat,
-                              public TInterruptibleCommand,
+                              public TInterruptableCommand,
                               public TCommandWithTopicName,
                               public TCommandWithCodec,
                               public TCommandWithTransformBody {

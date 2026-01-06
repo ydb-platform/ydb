@@ -8,11 +8,9 @@
 #include <ydb/library/arrow_parquet/result_set_parquet_printer.h>
 
 #include <iomanip>
-#include <strstream>
 #include <regex>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 namespace {
     THashMap<EDataFormat, TString> DefaultInputFormatDescriptions = {
@@ -65,11 +63,12 @@ namespace {
         { EMessagingFormat::JsonStreamConcat, "Concatenated Json stream of envelopes with metadata and messages in the ""body"" attribute." }, // TODO(shmel1k@): improve,
         { EMessagingFormat::JsonArray, "Json array of envelopes with metadata and messages in the ""body"" attribute." }, // TODO(shmel1k@): improve,
     };
-}
+} // anonymous namespace
 
 void TCommandWithResponseHeaders::PrintResponseHeader(const TStatus& status) {
-    if (!ShowHeaders)
+    if (!ShowHeaders) {
         return;
+    }
 
     PrintResponseHeaderPretty(status);
 }
@@ -695,9 +694,9 @@ TResultSetPrinter::TResultSetPrinter(const TSettings& settings)
 
 TResultSetPrinter::TResultSetPrinter(EDataFormat format, std::function<bool()> isInterrupted)
     : TResultSetPrinter(TSettings()
-            .SetFormat(format)
-            .SetIsInterrupted(isInterrupted)
-       )
+        .SetFormat(format)
+        .SetIsInterrupted(isInterrupted)
+    )
 {}
 
 TResultSetPrinter::~TResultSetPrinter() {
@@ -866,5 +865,4 @@ void TResultSetPrinter::PrintCsv(const TResultSet& resultSet, const char* delim)
     }
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

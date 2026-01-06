@@ -182,7 +182,7 @@ namespace Tests {
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         bool InitializeFederatedQuerySetupFactory = false;
         TString ServerCertFilePath;
-        bool Verbose = true;
+        bool Verbose = false;
         bool UseSectorMap = false;
         TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
         bool EnableStorage = true;

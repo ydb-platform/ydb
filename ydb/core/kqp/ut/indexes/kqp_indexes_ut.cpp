@@ -789,9 +789,10 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST(UpsertMultipleUniqIndexes) {
+    Y_UNIT_TEST_TWIN(UpsertMultipleUniqIndexes, StreamIndex) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
         TKikimrRunner kikimr(serverSettings);
 
         auto db = kikimr.GetTableClient();

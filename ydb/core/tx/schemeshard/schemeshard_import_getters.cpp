@@ -2,10 +2,12 @@
 
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
@@ -330,6 +332,15 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTopic().FileName);
     }
 
+    static bool IsReplication(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateAsyncReplication().FileName);
+    }
+
+    static bool IsCreatedByQuery(TStringBuf schemeKey) {
+        return IsView(schemeKey)
+            || IsReplication(schemeKey);
+    }
+
     static bool NoObjectFound(Aws::S3::S3Errors errorType) {
         return errorType == S3Errors::RESOURCE_NOT_FOUND || errorType == S3Errors::NO_SUCH_KEY;
     }
@@ -348,6 +359,16 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         GetObject(MetadataKey, result.GetResult().GetContentLength());
     }
 
+    void HeadNextScheme() {
+        if (++SchemePropertiesIdx >= GetXxportProperties().size()) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
+        }
+
+        SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, GetXxportProperties()[SchemePropertiesIdx].FileName);
+        SchemeFileType = GetXxportProperties()[SchemePropertiesIdx].FileType;
+        HeadObject(SchemeKey);
+    }
+
     void HandleScheme(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
@@ -356,19 +377,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", result# " << result);
 
         if (NoObjectFound(result.GetError().GetErrorType())) {
-            if (IsTable(SchemeKey)) {
-                // try search for a view
-                SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
-                SchemeFileType = NBackup::EBackupFileType::ViewCreate;
-                HeadObject(SchemeKey);
-            } else if (IsView(SchemeKey)) {
-                // try search for a topic
-                SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
-                SchemeFileType = NBackup::EBackupFileType::TopicCreate;
-                HeadObject(SchemeKey);
-            } else {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
-            }
+            HeadNextScheme();
             return;
         }
 
@@ -409,7 +418,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ": self# " << SelfId()
             << ", result# " << result);
 
-        const bool canSkip = IndexFillingMode != Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT;
+        const bool canSkip = IndexPopulationMode != Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
         if (canSkip && NoObjectFound(result.GetError().GetErrorType())) {
             Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
             auto& item = ImportInfo->Items.at(ItemIdx);
@@ -527,7 +536,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", schemeKey# " << SchemeKey
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
-        if (IsView(SchemeKey)) {
+        if (IsCreatedByQuery(SchemeKey)) {
             item.CreationQuery = content;
         } else if (IsTopic(SchemeKey)) {
             Ydb::Topic::CreateTopicRequest request;
@@ -798,10 +807,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Download(PermissionsKey);
     }
 
-    static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexFillingMode mode) {
+    static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode) {
         switch (mode) {
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
             return true;
         default:
             return false;
@@ -915,7 +924,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void StartCheckingMaterializedIndexes() {
         ResetRetries();
-        if (NeedToCheckMaterializedIndexes(IndexFillingMode)) {
+        if (NeedToCheckMaterializedIndexes(IndexPopulationMode)) {
             CheckMaterializedIndexes();
         } else {
             StartDownloadingChangefeeds();
@@ -936,7 +945,7 @@ public:
         , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(*ImportInfo, itemIdx))
-        , IndexFillingMode(ImportInfo->GetS3Settings().index_filling_mode())
+        , IndexPopulationMode(ImportInfo->GetS3Settings().index_population_mode())
         , NeedDownloadPermissions(!ImportInfo->GetNoAcl())
         , NeedValidateChecksums(!ImportInfo->GetSkipChecksumValidation())
     {
@@ -1017,13 +1026,14 @@ private:
     TString SchemeKey;
     NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
+    ui32 SchemePropertiesIdx = 0;
 
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;
 
     TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
     ui64 IndexCheckedMaterializedIndexImplTable = 0;
-    Ydb::Import::ImportFromS3Settings::IndexFillingMode IndexFillingMode;
+    Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode;
 
     bool NeedDownloadPermissions = true;
     bool NeedValidateChecksums = true;
@@ -1385,8 +1395,16 @@ public:
                 return false;
             }
         }
-        if (NBackup::NormalizeExportPrefix(Request->Get()->Record.GetSettings().prefix()).empty()) {
+        const auto& settings = req.GetSettings();
+        if (NBackup::NormalizeExportPrefix(settings.prefix()).empty()) {
             Reply(Ydb::StatusIds::BAD_REQUEST, "Empty S3 prefix specified");
+            return false;
+        }
+
+        try {
+            ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
+        } catch (const std::exception& ex) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid regexp: " << ex.what());
             return false;
         }
         return true;
@@ -1555,7 +1573,11 @@ public:
                 continue;
             }
 
-            if (PageSize && pos >= StartPos + PageSize) { // Calc only items that suit filter
+            if (IsExcludedFromListing(item.ObjectPath)) {
+                continue;
+            }
+
+            if (PageSize && pos >= StartPos + PageSize) { // Calc only items that suit filters
                 NextPos = pos;
                 break;
             }
@@ -1574,6 +1596,15 @@ public:
         Reply();
     }
 
+    bool IsExcludedFromListing(const TString& path) const {
+        for (const auto& regexp : ExcludeRegexps) {
+            if (regexp.Match(path.c_str())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 private:
     TEvImport::TEvListObjectsInS3ExportRequest::TPtr Request;
     Ydb::Import::ListObjectsInS3ExportResult Result;
@@ -1581,6 +1612,7 @@ private:
     size_t PageSize = 0;
     size_t NextPos = 0;
     TPathFilter PathFilter;
+    std::vector<TRegExMatch> ExcludeRegexps;
 };
 
 class TFSHelper {

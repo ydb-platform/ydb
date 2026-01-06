@@ -20,7 +20,7 @@ enum ERuleProperties: ui32 {
  * Interface for transformation rule:
  *
  * The rule may contain various metadata such as its name and a list of properties it requires to be computed
- * And it currently has a MatchAndAppy method that checks if the rule can be applied and makes in-place modifications
+ * And it currently has a MatchAndApply method that checks if the rule can be applied and makes in-place modifications
  * to the plan.
  */
 class IRule {
@@ -28,7 +28,7 @@ class IRule {
     IRule(TString name) : RuleName(name) {}
     IRule(TString name, ui32 props, bool logRule = false) : RuleName(name), Props(props), LogRule(logRule) {}
 
-    virtual bool MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
+    virtual bool MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;
 
@@ -46,9 +46,9 @@ class ISimplifiedRule : public IRule {
     ISimplifiedRule(TString name) : IRule(name) {}
     ISimplifiedRule(TString name, ui32 props, bool logRule = false) : IRule(name, props, logRule) {}
 
-    virtual std::shared_ptr<IOperator> SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
+    virtual std::shared_ptr<IOperator> SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
-    virtual bool MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+    virtual bool MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
 /**
@@ -84,25 +84,23 @@ class TRuleBasedStage : public IRBOStage {
  */
 class TRuleBasedOptimizer {
 public:
-    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
-                        TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole, const NMiniKQL::IFunctionRegistry& funcRegistry,
+    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
+                        TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry,
                         TVector<std::shared_ptr<IRBOStage>> stages)
         : KqpCtx(*kqpCtx)
         , TypeCtx(typeCtx)
-        , RBOTypeAnnTransformer(rboTypeAnnTransformer)
-        , TypeAnnTransformer(typeAnnTransformer)
-        , PeepholeTransformer(peephole)
+        , RBOTypeAnnTransformer(std::move(rboTypeAnnTransformer))
+        , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
         , FuncRegistry(funcRegistry)
         , Stages(stages) {
     }
 
-    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
-                        TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole, const NMiniKQL::IFunctionRegistry& funcRegistry)
+    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
+                        TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry)
         : KqpCtx(*kqpCtx)
         , TypeCtx(typeCtx)
-        , RBOTypeAnnTransformer(rboTypeAnnTransformer)
-        , TypeAnnTransformer(typeAnnTransformer)
-        , PeepholeTransformer(peephole)
+        , RBOTypeAnnTransformer(std::move(rboTypeAnnTransformer))
+        , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
         , FuncRegistry(funcRegistry) {
     }
 
@@ -114,8 +112,7 @@ public:
     TKqpOptimizeContext& KqpCtx;
     TTypeAnnotationContext& TypeCtx;
     TAutoPtr<IGraphTransformer> RBOTypeAnnTransformer;
-    TAutoPtr<IGraphTransformer> TypeAnnTransformer;
-    TAutoPtr<IGraphTransformer> PeepholeTransformer;
+    TAutoPtr<IGraphTransformer> PeepholeTypeAnnTransformer;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
     TVector<std::shared_ptr<IRBOStage>> Stages;
 };
@@ -124,8 +121,7 @@ public:
  * After the rule-based optimizer generates a final plan (logical plan with detailed physical properties)
  * we convert it into a final physical representation that directly correpsonds to the exection plan
  */
-TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& ctx, TAutoPtr<IGraphTransformer> typeAnnTransformer, 
-                                  TAutoPtr<IGraphTransformer> peepholeTransformer);
+TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& ctx);
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -27,7 +27,7 @@ TYamrConsumerBase::TYamrConsumerBase(NYson::IYsonConsumer* consumer)
 
 void TYamrConsumerBase::SwitchTable(i64 tableIndex)
 {
-    static const TString Key = FormatEnum(EControlAttribute::TableIndex);
+    static const auto Key = FormatEnum(EControlAttribute::TableIndex);
     Consumer->OnListItem();
     Consumer->OnBeginAttributes();
     Consumer->OnKeyedItem(Key);

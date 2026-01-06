@@ -688,9 +688,9 @@ TEST_F(TSchedulerTest, SerializedDoubleWaitFor)
     auto promise = NewPromise<void>();
 
     BIND([&] {
-        WaitFor(VoidFuture)
+        WaitFor(OKFuture)
             .ThrowOnError();
-        WaitFor(VoidFuture)
+        WaitFor(OKFuture)
             .ThrowOnError();
         promise.Set();
 

@@ -955,7 +955,7 @@ TFuture<void> ReadBuffer(
     }
 
     if (readSize == 0) {
-        return VoidFuture;
+        return OKFuture;
     }
 
     return BIND(&WriteBuffer)
@@ -1005,7 +1005,7 @@ TFuture<void> ReadWriteCopyAsync(
 #else
     Y_UNUSED(existingPath, newPath, chunkSize);
     ThrowNotSupported();
-    return VoidFuture;
+    return OKFuture;
 #endif
 }
 
@@ -1029,7 +1029,7 @@ TFuture<void> ReadWriteCopyAsync(
 #else
     Y_UNUSED(source, destination, chunkSize);
     ThrowNotSupported();
-    return VoidFuture;
+    return OKFuture;
 #endif
 }
 

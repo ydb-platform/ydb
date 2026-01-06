@@ -2626,7 +2626,7 @@ private:
         PrepareRecordBatch();
 
         WritePayload(output);
-        TryFlushBuffer(true);
+        MaybeFlushBuffer(/*force*/ true);
     }
 
     i64 GetEncodedRowBatchCount() const override

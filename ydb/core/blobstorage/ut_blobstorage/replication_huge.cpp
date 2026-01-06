@@ -92,25 +92,25 @@ void DoTestCase(const TReplTestSettings& settings) {
         env.Runtime->Send(detainedEv.release(), nodeId);
     }
 
-    // waiting for replication to complete 
+    // waiting for replication to complete
     env.WaitForSync(env.GetGroupInfo(groupId), id);
-        
+
     UNIT_ASSERT_EQUAL(checkBlob(),  NKikimrProto::OK);
 }
 
 Y_UNIT_TEST_SUITE(MinHugeChangeOnReplication) {
 
     Y_UNIT_TEST(MinHugeDecreased) {
-        DoTestCase(TReplTestSettings{ 
-            .BlobSize = 200u << 10, 
+        DoTestCase(TReplTestSettings{
+            .BlobSize = 200u << 10,
             .MinHugeBlobSize = 64u << 10,
             .MinHugeBlobSizeInRepl = 512u << 10,
         });
     }
 
     Y_UNIT_TEST(MinHugeIncreased) {
-        DoTestCase(TReplTestSettings{ 
-            .BlobSize = 200u << 10, 
+        DoTestCase(TReplTestSettings{
+            .BlobSize = 200u << 10,
             .MinHugeBlobSize = 512u << 10,
             .MinHugeBlobSizeInRepl = 10u << 10,
         });

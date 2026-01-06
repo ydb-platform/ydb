@@ -1,5 +1,6 @@
 #pragma once
 
+#include "api_service_proxy.h"
 #include "public.h"
 
 #include <yt/yt/library/re2/re2.h>
@@ -13,6 +14,10 @@
 #include <library/cpp/yt/memory/ref.h>
 
 namespace NYT::NApi::NRpcProxy {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void PatchProxyForStallRequests(TApiServiceProxy* proxy);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -369,6 +374,22 @@ void ParseRequest(
     ERowsetFormat* mutableArrowFallbackFormat,
     TTableReaderOptions* mutableOptions,
     const TReqReadTable& req);
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqReadTablePartition* req,
+    const TTablePartitionCookiePtr& cookie,
+    const std::optional<NYson::TYsonString>& format,
+    const TReadTablePartitionOptions& options);
+
+void ParseRequest(
+    TTablePartitionCookiePtr* mutableCookie,
+    std::optional<NYson::TYsonStringBuf>* mutableFormat,
+    ERowsetFormat* mutableDesiredRowsetFormat,
+    ERowsetFormat* mutableArrowFallbackFormat,
+    TReadTablePartitionOptions* mutableOptions,
+    const TReqReadTablePartition& req);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -363,7 +363,7 @@ public:
     TFuture<void> Throttle(i64 amount) override
     {
         if (TryAcquire(amount)) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         auto request = New<TBucketThrottleRequest>(amount);

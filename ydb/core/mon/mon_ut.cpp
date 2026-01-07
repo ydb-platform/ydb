@@ -175,8 +175,15 @@ Y_UNIT_TEST_SUITE(ActorPage) {
         });
 
         TStringStream responseStream;
-        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, env.MakeAuthHeaders());
+        THttpHeaders outHeaders;
+        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, env.MakeAuthHeaders(), &outHeaders);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_FORBIDDEN);
+
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Origin"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Methods"));
+        UNIT_ASSERT_VALUES_EQUAL(outHeaders.FindHeader("Access-Control-Allow-Credentials")->Value(), "true");
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
@@ -190,9 +197,16 @@ Y_UNIT_TEST_SUITE(ActorPage) {
         });
 
         TStringStream responseStream;
+        THttpHeaders outHeaders;
         const TString invalidToken = TString("Bearer invalid");
-        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, env.MakeAuthHeaders(invalidToken));
+        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, env.MakeAuthHeaders(invalidToken), &outHeaders);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_FORBIDDEN);
+
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Origin"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Methods"));
+        UNIT_ASSERT_VALUES_EQUAL(outHeaders.FindHeader("Access-Control-Allow-Credentials")->Value(), "true");
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
@@ -223,8 +237,15 @@ Y_UNIT_TEST_SUITE(ActorPage) {
         });
 
         TStringStream responseStream;
-        const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream);
+        THttpHeaders outHeaders;
+        const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream, TKeepAliveHttpClient::THeaders(), &outHeaders);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_NO_CONTENT);
+
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Origin"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Methods"));
+        UNIT_ASSERT_VALUES_EQUAL(outHeaders.FindHeader("Access-Control-Allow-Credentials")->Value(), "true");
     }
 }
 
@@ -257,8 +278,15 @@ Y_UNIT_TEST_SUITE(ActorHandler) {
         });
 
         TStringStream responseStream;
-        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, env.MakeAuthHeaders());
+        THttpHeaders outHeaders;
+        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, env.MakeAuthHeaders(), &outHeaders);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_FORBIDDEN);
+
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Origin"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Methods"));
+        UNIT_ASSERT_VALUES_EQUAL(outHeaders.FindHeader("Access-Control-Allow-Credentials")->Value(), "true");
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
@@ -272,9 +300,16 @@ Y_UNIT_TEST_SUITE(ActorHandler) {
         });
 
         TStringStream responseStream;
+        THttpHeaders outHeaders;
         const TString invalidToken = TString("Bearer invalid");
-        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, env.MakeAuthHeaders(invalidToken));
+        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, env.MakeAuthHeaders(invalidToken), &outHeaders);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_FORBIDDEN);
+
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Origin"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Methods"));
+        UNIT_ASSERT_VALUES_EQUAL(outHeaders.FindHeader("Access-Control-Allow-Credentials")->Value(), "true");
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
@@ -305,8 +340,15 @@ Y_UNIT_TEST_SUITE(ActorHandler) {
         });
 
         TStringStream responseStream;
-        const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream);
+        THttpHeaders outHeaders;
+        const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream, TKeepAliveHttpClient::THeaders(), &outHeaders);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_NO_CONTENT);
+
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Origin"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Methods"));
+        UNIT_ASSERT_VALUES_EQUAL(outHeaders.FindHeader("Access-Control-Allow-Credentials")->Value(), "true");
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 0);
@@ -340,8 +382,15 @@ Y_UNIT_TEST_SUITE(MonPage) {
         });
 
         TStringStream responseStream;
-        const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream);
+        THttpHeaders outHeaders;
+        const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream, TKeepAliveHttpClient::THeaders(), &outHeaders);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_NO_CONTENT);
+
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Origin"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Methods"));
+        UNIT_ASSERT_VALUES_EQUAL(outHeaders.FindHeader("Access-Control-Allow-Credentials")->Value(), "true");
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 0);
@@ -357,6 +406,7 @@ Y_UNIT_TEST_SUITE(Other) {
         TStringStream responseStream;
         const auto status = env.GetHttpClient().DoGet("/wrong_path", &responseStream, env.MakeAuthHeaders());
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_NOT_FOUND);
+        // NOTE: 404 response is generated by monlib
     }
 
     Y_UNIT_TEST(TraceHttpOk) {
@@ -378,8 +428,15 @@ Y_UNIT_TEST_SUITE(Other) {
         THttpMonTestEnv env;
 
         TStringStream responseStream;
-        const auto status = env.GetHttpClient().DoGet("/trace", &responseStream, env.MakeAuthHeaders());
+        THttpHeaders outHeaders;
+        const auto status = env.GetHttpClient().DoGet("/trace", &responseStream, env.MakeAuthHeaders(), &outHeaders);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_FORBIDDEN);
+
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Origin"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Methods"));
+        UNIT_ASSERT_VALUES_EQUAL(outHeaders.FindHeader("Access-Control-Allow-Credentials")->Value(), "true");
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
@@ -391,9 +448,16 @@ Y_UNIT_TEST_SUITE(Other) {
         THttpMonTestEnv env;
 
         TStringStream responseStream;
+        THttpHeaders outHeaders;
         const TString invalidToken = TString("Bearer invalid");
-        const auto status = env.GetHttpClient().DoGet("/trace", &responseStream, env.MakeAuthHeaders(invalidToken));
+        const auto status = env.GetHttpClient().DoGet("/trace", &responseStream, env.MakeAuthHeaders(invalidToken), &outHeaders);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_FORBIDDEN);
+
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Origin"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Credentials"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Headers"));
+        UNIT_ASSERT(outHeaders.HasHeader("Access-Control-Allow-Methods"));
+        UNIT_ASSERT_VALUES_EQUAL(outHeaders.FindHeader("Access-Control-Allow-Credentials")->Value(), "true");
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);

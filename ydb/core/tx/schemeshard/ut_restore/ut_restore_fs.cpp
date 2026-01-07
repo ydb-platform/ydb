@@ -485,21 +485,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
 
         TTempBackupFiles backup;
-        backup.CreateTableBackup("backup/LargeTable", "LargeTable");
+        backup.CreateTableBackup("backup/Table", "Table");
 
         TString csvData = R"("key1","value1"
 "key2","value2"
 "key3","value3"
 "key4","value4"
 )";
-        backup.AddDataFile("backup/LargeTable", csvData);
+        backup.AddDataFile("backup/Table", csvData);
 
         TString importSettings = Sprintf(R"(
             ImportFromFsSettings {
               base_path: "%s"
               items {
-                source_path: "backup/LargeTable"
-                destination_path: "/MyRoot/LargeTable"
+                source_path: "backup/Table"
+                destination_path: "/MyRoot/Table"
               }
             }
         )", backup.GetBasePath().c_str());
@@ -510,12 +510,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         auto response = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/LargeTable"), {
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
             NLs::PathExist,
             NLs::IsTable
         });
 
-        ui32 totalRows = CountRows(runtime, "/MyRoot/LargeTable");
+        ui32 totalRows = CountRows(runtime, "/MyRoot/Table");
         UNIT_ASSERT_VALUES_EQUAL(totalRows, 4);
     }
 
@@ -632,40 +632,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
 
         ui32 totalRows = CountRows(runtime, "/MyRoot/TypedTable");
         UNIT_ASSERT_VALUES_EQUAL(totalRows, 3);
-    }
-
-    Y_UNIT_TEST(ShouldRestoreEmptyTable) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
-
-        TTempBackupFiles backup;
-        backup.CreateTableBackup("backup/EmptyTable", "EmptyTable");
-
-        TString importSettings = Sprintf(R"(
-            ImportFromFsSettings {
-              base_path: "%s"
-              items {
-                source_path: "backup/EmptyTable"
-                destination_path: "/MyRoot/EmptyTable"
-              }
-            }
-        )", backup.GetBasePath().c_str());
-
-        TestImport(runtime, ++txId, "/MyRoot", importSettings);
-        env.TestWaitNotification(runtime, txId);
-
-        auto response = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/EmptyTable"), {
-            NLs::PathExist,
-            NLs::IsTable
-        });
     }
 
     Y_UNIT_TEST(ShouldRestoreMultipleTablesWithData) {

@@ -139,7 +139,7 @@ public:
 
 private:
     void CleanupActiveSessions() {
-        FS_LOG_T("TFsOperationActor: cleaning up"
+        FS_LOG_D("TFsOperationActor: cleaning up"
             << ": active MPU sessions# " << ActiveUploads.size());
         for (auto& [uploadId, session] : ActiveUploads) {
             try {
@@ -162,7 +162,7 @@ private:
 public:
 
     STATEFN(StateWork) {
-        FS_LOG_D("TFsOperationActor StateWork received event type"
+        FS_LOG_T("TFsOperationActor StateWork received event type"
             << ": type# " << ev->GetTypeRewrite());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPutObjectRequest, Handle);
@@ -224,7 +224,7 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         const TString filePath = key;
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "GetObject"
+        FS_LOG_D("GetObject"
             << ": key# " << key
             << ", filePath# " << filePath);
 
@@ -259,7 +259,7 @@ public:
             size_t bytesRead = file.Read((void*)data.data(), length);
             data.resize(bytesRead);
 
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "GetObject"
+            FS_LOG_I("GetObject"
                 << ": read# " << bytesRead
                 << " bytes from# " << filePath);
 
@@ -272,7 +272,7 @@ public:
             TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
 
         } catch (const std::exception& ex) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
+            FS_LOG_E("GetObject error"
                 "GetObject error"
                 << ": key# " << key
                 << ", error# " << ex.what());
@@ -285,7 +285,7 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         const TString filePath = key;
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "HeadObject"
+        FS_LOG_D("HeadObject"
             << ": key# " << key
             << ", filePath# " << filePath);
 
@@ -293,7 +293,7 @@ public:
             TFile file(filePath, RdOnly | Seq);
             i64 fileSize = file.GetLength();
 
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, "HeadObject"
+            FS_LOG_I("HeadObject"
                 << ": file size# " << fileSize
                 << " for# " << filePath);
 
@@ -306,12 +306,11 @@ public:
             TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
 
         } catch (const TFileError& ex) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
-                "HeadObject file not found"
+            FS_LOG_W("HeadObject file not found"
                 << ": key# " << key);
             ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TString("File not found: ") + ex.what(), Aws::S3::S3Errors::NO_SUCH_KEY);
         } catch (const std::exception& ex) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER,
+            FS_LOG_E("HeadObject error"
                 "HeadObject error"
                 << ": key# " << key
                 << ", error# " << ex.what());

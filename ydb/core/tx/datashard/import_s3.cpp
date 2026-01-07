@@ -155,7 +155,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             this->Buffer.Append(portion.data(), portion.size());
         }
 
-        typename IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
+        IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
             Y_ENSURE(Pos == 0);
 
             const ui64 pos = this->AsStringBuf(this->Buffer.Size()).rfind('\n');
@@ -212,7 +212,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             Portion.Assign(portion.data(), portion.size());
         }
 
-        typename IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
+        IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
             Y_ENSURE(ReadyInputBytes == 0 && ReadyOutputPos == 0);
 
             auto input = ZSTD_inBuffer{Portion.Data(), Portion.Size(), 0};
@@ -328,9 +328,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             Deserializer.AddData(TBuffer(portion.data(), portion.size()), last);
         }
 
-        typename IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
+        IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
             if (BytesFedToChild) {
-                typename IReadController::EDataStatus status = TryGetDataFromChildController(data, error);
+                auto status = TryGetDataFromChildController(data, error);
                 if (status != IReadController::NOT_ENOUGH_DATA || !NewData) {
                     return status;
                 }
@@ -371,8 +371,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return IReadController::NOT_ENOUGH_DATA;
         }
 
-        typename IReadController::EDataStatus TryGetDataFromChildController(TStringBuf& data, TString& error) {
-            const typename IReadController::EDataStatus status = DataController->TryGetData(data, error);
+        IReadController::EDataStatus TryGetDataFromChildController(TStringBuf& data, TString& error) {
+            const auto status = DataController->TryGetData(data, error);
             if (status == IReadController::READY_DATA) {
                 if (ui64 ready = DataController->ReadyBytes()) {
                     BytesFedToChild -= ready;

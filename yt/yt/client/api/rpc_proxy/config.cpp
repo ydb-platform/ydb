@@ -82,6 +82,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Default(TDuration::Minutes(15));
     registrar.Parameter("default_streaming_stall_timeout", &TThis::DefaultStreamingStallTimeout)
         .Default(TDuration::Minutes(1));
+    registrar.Parameter("use_total_streaming_timeout_for_heavy_reads", &TThis::UseTotalStreamingTimeoutForHeavyReads)
+        .Default(true);
     registrar.Parameter("default_chaos_lease_timeout", &TThis::DefaultChaosLeaseTimeout)
         .Default(TDuration::Seconds(30));
 

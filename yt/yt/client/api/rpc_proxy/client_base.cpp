@@ -658,7 +658,7 @@ TFuture<IFileReaderPtr> TClientBase::CreateFileReader(
     const TFileReaderOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
-    PatchProxyForStallRequests(&proxy);
+    PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
     auto req = proxy.ReadFile();
     InitStreamingRequest(*req);
 
@@ -752,7 +752,7 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     const TTableReaderOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
-    PatchProxyForStallRequests(&proxy);
+    PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
     auto req = proxy.ReadTable();
     InitStreamingRequest(*req);
 

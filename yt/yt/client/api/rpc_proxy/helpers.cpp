@@ -1,5 +1,7 @@
 #include "helpers.h"
 
+#include "config.h"
+
 #include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/operation_client.h>
 #include <yt/yt/client/api/rowset.h>
@@ -34,17 +36,17 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void PatchProxyForStallRequests(TApiServiceProxy* proxy)
+void PatchProxyForStallRequests(const TConnectionConfigPtr& config, TApiServiceProxy* proxy)
 {
-    /// NB(achains): Some reads may be stall by default (e.g. reconstructing erasure-coded chunks).
-    ///              Increase default timeout until ping mechanism is designed in YT-26196.
-    static const auto StallTimeout = TDuration::Minutes(15);
-    static const NRpc::TStreamingParameters StallStreamParameters{
-        .ReadTimeout = StallTimeout,
-        .WriteTimeout = StallTimeout};
+    if (config->UseTotalStreamingTimeoutForHeavyReads) {
+        auto totalStreamingTimeout = config->DefaultTotalStreamingTimeout;
+        NRpc::TStreamingParameters patchedParameters{
+            .ReadTimeout = totalStreamingTimeout,
+            .WriteTimeout = totalStreamingTimeout};
 
-    proxy->DefaultClientAttachmentsStreamingParameters() = StallStreamParameters;
-    proxy->DefaultServerAttachmentsStreamingParameters() = StallStreamParameters;
+        proxy->DefaultClientAttachmentsStreamingParameters() = patchedParameters;
+        proxy->DefaultServerAttachmentsStreamingParameters() = patchedParameters;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

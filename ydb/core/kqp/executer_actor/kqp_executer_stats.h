@@ -46,8 +46,8 @@ struct TTimeSeriesStats : public TSumStats {
     std::vector<std::pair<ui64, ui64>> History;
 
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
-    void ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats);
-    void ExportAggStats(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
+    ui64 ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats);
+    ui64 ExportAggStats(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
     void Resize(ui32 count);
     void SetNonZero(ui32 index, ui64 value);
     void Pack();
@@ -355,6 +355,7 @@ public:
     NYql::NDqProto::TDqExecutionStats* const Result;
     std::optional<ui32> DeadlockedStageId;
 
+    ui64 StorageCpuTimeUs = 0;
     // basic stats
     ui32 TaskCount = 0;
     ui32 TaskCount4 = 0;

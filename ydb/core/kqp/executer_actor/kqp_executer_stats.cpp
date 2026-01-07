@@ -7,7 +7,7 @@ namespace NKikimr::NKqp {
 using namespace NYql;
 using namespace NYql::NDq;
 
-void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats);
+ui64 ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats);
 
 ui64 NonZeroMin(ui64 a, ui64 b) {
     return (b == 0) ? a : ((a == 0 || a > b) ? b : a);
@@ -51,13 +51,14 @@ void TSumStats::Set(ui32 index, ui64 value) {
     Values[index] = value;
 }
 
-void TTimeSeriesStats::ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats) {
-    NKikimr::NKqp::ExportAggStats(Values, stats);
+ui64 TTimeSeriesStats::ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats) {
+    return NKikimr::NKqp::ExportAggStats(Values, stats);
 }
 
-void TTimeSeriesStats::ExportAggStats(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats) {
-    ExportAggStats(stats);
+ui64 TTimeSeriesStats::ExportAggStats(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats) {
+    auto result = ExportAggStats(stats);
     ExportHistory(baseTimeMs, stats);
+    return result;
 }
 
 void TTimeSeriesStats::ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats) {
@@ -1226,7 +1227,7 @@ void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&
         cpuUs += perShard.GetCpuTimeUsec();
     }
 
-    Result->SetCpuTimeUs(Result->GetCpuTimeUs() + cpuUs);
+    StorageCpuTimeUs += cpuUs;
 }
 
 void TQueryExecutionStats::AddDatashardFullStatsByTask(
@@ -1309,7 +1310,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
         UpdateAggr(ExtraStats.MutableShardsCpuTimeUs(), perShard.GetCpuTimeUsec());
     }
 
-    Result->SetCpuTimeUs(Result->GetCpuTimeUs() + datashardCpuTimeUs);
+    StorageCpuTimeUs += datashardCpuTimeUs;
 
     NYql::NDqProto::TDqTaskStats* longTask = nullptr;
 
@@ -1364,7 +1365,7 @@ void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txSta
         UpdateAggr(ExtraStats.MutableShardsCpuTimeUs(), perShard.GetCpuTimeUsec());
     }
 
-    Result->SetCpuTimeUs(Result->GetCpuTimeUs() + datashardCpuTimeUs);
+    StorageCpuTimeUs += datashardCpuTimeUs;
 
     if (CollectFullStats(StatsMode)) {
         DatashardStats.emplace_back(std::move(txStats));
@@ -1582,7 +1583,7 @@ void ExportOffsetAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr&
     }
 }
 
-void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats) {
+ui64 ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats) {
 
     AFL_ENSURE((data.size() & 3) == 0);
 
@@ -1620,6 +1621,8 @@ void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats
         ui64 max23 = max4[2] > max4[3] ? max4[2] : max4[3];
         stats.SetMax(max01 > max23 ? max01 : max23);
     }
+
+    return sum;
 }
 
 ui64 ExportAggStats(std::vector<ui64>& data) {
@@ -1671,13 +1674,14 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
             }
 
+            ui64 cpuTime = 0;
             for (auto& [stageId, stageStat] : StageStats) {
                 auto& stageStats = *protoStages[stageStat.StageId.StageId];
                 stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
                 stageStats.SetFinishedTasksCount(stageStat.FinishedCount);
 
                 stageStats.SetBaseTimeMs(BaseTimeMs);
-                stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
+                cpuTime += stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
                 ExportAggStats(stageStat.SourceCpuTimeUs, *stageStats.MutableSourceCpuTimeUs());
                 stageStat.MaxMemoryUsage.ExportAggStats(BaseTimeMs, *stageStats.MutableMaxMemoryUsage());
 
@@ -1751,13 +1755,30 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 for (auto& [id, m] : stageStat.Mkql) {
                     ExportAggStats(m, (*stageStats.MutableMkql())[id]);
                 }
+
+                if (CollectProfileStats(StatsMode)) {
+                    auto it = ShardsCountByNode.find(stageId.StageId);
+                    if (it != ShardsCountByNode.end()) {
+                        NKqpProto::TKqpStageExtraStats extraStats;
+                        for (auto&& n : it->second) {
+                            auto& nodeStat = *extraStats.AddNodeStats();
+                            nodeStat.SetNodeId(n.first);
+                            nodeStat.SetShardsCount(n.second);
+                        }
+                        stageStats.MutableExtra()->PackFrom(extraStats);
+                    }
+                }
             }
 
+            stats.SetCpuTimeUs(StorageCpuTimeUs + cpuTime);
             stats.SetDurationUs(TInstant::Now().MicroSeconds() - StartTs.MicroSeconds());
+            stats.SetExecuterCpuTimeUs(ExecuterCpuTime.MicroSeconds());
+            stats.SetStartTimeMs(StartTs.MilliSeconds());
+            stats.SetFinishTimeMs(FinishTs.MilliSeconds());
             break;
         }
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC: {
-            stats.SetCpuTimeUs(CpuTimeUs.Sum);
+            stats.SetCpuTimeUs(StorageCpuTimeUs + CpuTimeUs.Sum);
             stats.SetDurationUs(TInstant::Now().MicroSeconds() - StartTs.MicroSeconds());
             break;
         }

@@ -20,12 +20,14 @@ void TMinStats::Resize(ui32 count) {
     Values.resize(count);
 }
 
-void TMinStats::Set(ui32 index, ui64 value) {
-    AFL_ENSURE(index < Values.size());
-    auto maybeMin = Values[index] == MinValue;
-    Values[index] = value;
-    if (maybeMin) {
-        MinValue = ExportMinStats(Values);
+void TMinStats::SetNonZero(ui32 index, ui64 value) {
+    if (value) {
+        AFL_ENSURE(index < Values.size());
+        auto maybeMin = Values[index] == MinValue;
+        Values[index] = value;
+        if (maybeMin) {
+            MinValue = ExportMinStats(Values);
+        }
     }
 }
 
@@ -33,25 +35,29 @@ void TMaxStats::Resize(ui32 count) {
     Values.resize(count);
 }
 
-void TMaxStats::Set(ui32 index, ui64 value) {
-    AFL_ENSURE(index < Values.size());
-    auto isMonotonic = value >= Values[index];
-    Values[index] = value;
-    MaxValue = isMonotonic ? (value > MaxValue ? value : MaxValue) : ExportMaxStats(Values);
+void TMaxStats::SetNonZero(ui32 index, ui64 value) {
+    if (value) {
+        AFL_ENSURE(index < Values.size());
+        auto isMonotonic = value >= Values[index];
+        Values[index] = value;
+        MaxValue = isMonotonic ? (value > MaxValue ? value : MaxValue) : ExportMaxStats(Values);
+    }
 }
 
 void TSumStats::Resize(ui32 count) {
     Values.resize(count);
 }
 
-void TSumStats::Set(ui32 index, ui64 value) {
-    AFL_ENSURE(index < Values.size());
-    Sum += value;
-    Sum -= Values[index];
-    Values[index] = value;
+void TSumStats::SetNonZero(ui32 index, ui64 value) {
+    if (value) {
+        AFL_ENSURE(index < Values.size());
+        Sum += value;
+        Sum -= Values[index];
+        Values[index] = value;
+    }
 }
 
-ui64 TTimeSeriesStats::ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats) {
+ui64 TSumStats::ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats) {
     return NKikimr::NKqp::ExportAggStats(Values, stats);
 }
 
@@ -72,13 +78,9 @@ void TTimeSeriesStats::ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAg
     }
 }
 
-void TTimeSeriesStats::Resize(ui32 count) {
-    TSumStats::Resize(count);
-}
-
 void TTimeSeriesStats::SetNonZero(ui32 index, ui64 value) {
     if (value) {
-        TSumStats::Set(index, value);
+        TSumStats::SetNonZero(index, value);
         AppendHistory();
     }
 }
@@ -556,8 +558,8 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     SetNonZero(DurationUs, index, durationUs);
     WaitInputTimeUs.SetNonZero(index, taskStats.GetWaitInputTimeUs());
     WaitOutputTimeUs.SetNonZero(index, taskStats.GetWaitOutputTimeUs());
-    CurrentWaitInputTimeUs.Set(index, taskStats.GetCurrentWaitInputTimeUs());
-    CurrentWaitOutputTimeUs.Set(index, taskStats.GetCurrentWaitOutputTimeUs());
+    CurrentWaitInputTimeUs.SetNonZero(index, taskStats.GetCurrentWaitInputTimeUs());
+    CurrentWaitOutputTimeUs.SetNonZero(index, taskStats.GetCurrentWaitOutputTimeUs());
 
     auto updateTimeMs = taskStats.GetUpdateTimeMs();
     UpdateTimeMs = std::max(UpdateTimeMs, updateTimeMs);
@@ -922,7 +924,7 @@ void TQueryExecutionStats::Prepare() {
     TaskCount4 = (TaskCount + 3) & ~3;
     switch (StatsMode) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL: {
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
             // stages
             for (auto& [stageId, info] : TasksGraph->GetStagesInfo()) {
                 auto [it, inserted] = StageStats.try_emplace(stageId);
@@ -955,14 +957,11 @@ void TQueryExecutionStats::Prepare() {
                 stageStats.Resize(stageStats.TaskCount);
                 stageStats.SetHistorySampleCount(HistorySampleCount);
             }
-            break;
-        }
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC: {
-            CpuTimeUs.Resize(TaskCount4);
-            break;
-        }
+            [[fallthrough]];
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
         default:
+            ComputeCpuTimeUs.Resize(TaskCount4);
             break;
     }
 }
@@ -1388,13 +1387,13 @@ void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats&
         auto tablePath = tableStat.GetTablePath();
         auto [it, _] = Tables.try_emplace(tablePath, TaskCount4);
         auto& queryTableStats = it->second;
-        queryTableStats.ReadRows.Set(index, tableStat.GetReadRows());
-        queryTableStats.ReadBytes.Set(index, tableStat.GetReadBytes());
-        queryTableStats.WriteRows.Set(index, tableStat.GetWriteRows());
-        queryTableStats.WriteBytes.Set(index, tableStat.GetWriteBytes());
-        queryTableStats.EraseRows.Set(index, tableStat.GetEraseRows());
-        queryTableStats.EraseBytes.Set(index, tableStat.GetEraseBytes());
-        queryTableStats.AffectedPartitions.Set(index, tableStat.GetAffectedPartitions());
+        queryTableStats.ReadRows.SetNonZero(index, tableStat.GetReadRows());
+        queryTableStats.ReadBytes.SetNonZero(index, tableStat.GetReadBytes());
+        queryTableStats.WriteRows.SetNonZero(index, tableStat.GetWriteRows());
+        queryTableStats.WriteBytes.SetNonZero(index, tableStat.GetWriteBytes());
+        queryTableStats.EraseRows.SetNonZero(index, tableStat.GetEraseRows());
+        queryTableStats.EraseBytes.SetNonZero(index, tableStat.GetEraseBytes());
+        queryTableStats.AffectedPartitions.SetNonZero(index, tableStat.GetAffectedPartitions());
     }
 }
 
@@ -1429,9 +1428,11 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
     auto index = taskId - 1;
     AFL_ENSURE(index < TaskCount);
 
-    switch (StatsMode) {
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL: {
+    ComputeCpuTimeUs.SetNonZero(index, taskStats.GetCpuTimeUs());
+    UpdateQueryTables(taskStats);
+
+    if (CollectBasicStats(StatsMode)) {
+        if (CollectFullStats(StatsMode)) {
             auto stageId = TasksGraph->GetTask(taskId).StageId;
             auto [it, inserted] = StageStats.try_emplace(stageId);
             if (inserted) {
@@ -1439,7 +1440,6 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
                 it->second.SetHistorySampleCount(HistorySampleCount);
             }
             BaseTimeMs = NonZeroMin(BaseTimeMs, it->second.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
-            UpdateQueryTables(taskStats);
 
             constexpr ui64 deadline = 600'000'000; // 10m
             if (it->second.CurrentWaitOutputTimeUs.MinValue > deadline) {
@@ -1452,16 +1452,7 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
             } else if (it->second.IsDeadlocked(deadline)) {
                 DeadlockedStageId = it->second.StageId.StageId;
             }
-            break;
         }
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC: {
-            CpuTimeUs.Set(index, taskStats.GetCpuTimeUs());
-            UpdateQueryTables(taskStats);
-            break;
-        }
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
-        default:
-            break;
     }
 }
 
@@ -1667,6 +1658,7 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
 void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) {
     switch (StatsMode) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
+            [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL: {
             THashMap<ui32, NDqProto::TDqStageStats*> protoStages;
 
@@ -1674,14 +1666,13 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
             }
 
-            ui64 cpuTime = 0;
             for (auto& [stageId, stageStat] : StageStats) {
                 auto& stageStats = *protoStages[stageStat.StageId.StageId];
                 stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
                 stageStats.SetFinishedTasksCount(stageStat.FinishedCount);
 
                 stageStats.SetBaseTimeMs(BaseTimeMs);
-                cpuTime += stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
+                stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
                 ExportAggStats(stageStat.SourceCpuTimeUs, *stageStats.MutableSourceCpuTimeUs());
                 stageStat.MaxMemoryUsage.ExportAggStats(BaseTimeMs, *stageStats.MutableMaxMemoryUsage());
 
@@ -1770,21 +1761,20 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 }
             }
 
-            stats.SetCpuTimeUs(StorageCpuTimeUs + cpuTime);
-            stats.SetDurationUs(TInstant::Now().MicroSeconds() - StartTs.MicroSeconds());
             stats.SetExecuterCpuTimeUs(ExecuterCpuTime.MicroSeconds());
             stats.SetStartTimeMs(StartTs.MilliSeconds());
             stats.SetFinishTimeMs(FinishTs.MilliSeconds());
-            break;
         }
-        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC: {
-            stats.SetCpuTimeUs(StorageCpuTimeUs + CpuTimeUs.Sum);
+            [[fallthrough]];
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
+            stats.SetCpuTimeUs(StorageCpuTimeUs + ComputeCpuTimeUs.Sum);
             stats.SetDurationUs(TInstant::Now().MicroSeconds() - StartTs.MicroSeconds());
-            break;
-        }
+            [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
+            ComputeCpuTimeUs.ExportAggStats(*ExtraStats.MutableComputeCpuTimeUs());
+            break;
         default:
-            return;
+            break;
     }
 
     for (auto& [path, t] : Tables) {

@@ -22,7 +22,7 @@ struct TMinStats {
     ui64 MinValue = 0;
 
     void Resize(ui32 count);
-    void Set(ui32 index, ui64 value);
+    void SetNonZero(ui32 index, ui64 value);
 };
 
 struct TMaxStats {
@@ -30,7 +30,7 @@ struct TMaxStats {
     ui64 MaxValue = 0;
 
     void Resize(ui32 count);
-    void Set(ui32 index, ui64 value);
+    void SetNonZero(ui32 index, ui64 value);
 };
 
 struct TSumStats {
@@ -38,17 +38,18 @@ struct TSumStats {
     ui64 Sum = 0;
 
     void Resize(ui32 count);
-    void Set(ui32 index, ui64 value);
+    void SetNonZero(ui32 index, ui64 value);
+    ui64 ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats);
 };
 
 struct TTimeSeriesStats : public TSumStats {
+    using TSumStats::ExportAggStats;
+
     ui32 HistorySampleCount = 0;
     std::vector<std::pair<ui64, ui64>> History;
 
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
-    ui64 ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats);
     ui64 ExportAggStats(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
-    void Resize(ui32 count);
     void SetNonZero(ui32 index, ui64 value);
     void Pack();
     void AppendHistory();
@@ -355,11 +356,13 @@ public:
     NYql::NDqProto::TDqExecutionStats* const Result;
     std::optional<ui32> DeadlockedStageId;
 
+    // common stats
     ui64 StorageCpuTimeUs = 0;
+    TSumStats ComputeCpuTimeUs;
+
     // basic stats
     ui32 TaskCount = 0;
     ui32 TaskCount4 = 0;
-    TSumStats CpuTimeUs;
     std::map<TString, TQueryTableStats> Tables;
 
     std::unordered_set<ui64> AffectedShards;

@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/fq/libs/grpc
     ydb/core/fq/libs/db_id_async_resolver_impl
+    ydb/core/kqp/federated_query/local_pq_client
     ydb/core/protos
     ydb/library/db_pool/protos
     ydb/library/logger
@@ -32,6 +33,10 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    local_pq_client
+)
 
 RECURSE_FOR_TESTS(
     ut

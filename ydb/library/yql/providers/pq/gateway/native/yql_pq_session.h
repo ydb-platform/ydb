@@ -3,6 +3,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/local/yql_pq_local_topic_client_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
@@ -20,7 +21,8 @@ public:
     using TPtr = TIntrusivePtr<TPqSession>;
 
     TPqSession(const TString& sessionId, const TString& username, const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
-        const NYdb::TDriver& ydbDriver, const TPqClusterConfigsMapPtr& clusterConfigs, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+        const NYdb::TDriver& ydbDriver, const TPqClusterConfigsMapPtr& clusterConfigs, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        IPqLocalClientFactory::TPtr localTopicClientFactory);
 
     NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& cluster, const TString& database, const TString& path, const TString& token);
 
@@ -44,6 +46,7 @@ private:
     const NYdb::TDriver YdbDriver;
     const TPqClusterConfigsMapPtr ClusterConfigs;
     const ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    const IPqLocalClientFactory::TPtr LocalTopicClientFactory;
 
     TMutex Mutex;
     THashMap<TString, NPq::NConfigurationManager::IClient::TPtr> ClusterCmClients; // Cluster -> CM Client.

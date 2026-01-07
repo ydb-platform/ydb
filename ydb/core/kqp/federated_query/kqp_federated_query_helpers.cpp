@@ -7,9 +7,11 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+#include <ydb/core/kqp/federated_query/local_pq_client/local_topic_client_factory.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
@@ -179,7 +181,7 @@ namespace {
         return settings;
     }
 
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver) {
+    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings) {
         auto settings = MakeCommonTopicClientSettings(1, 2);
 
         return CreatePqNativeGateway(NYql::TPqGatewayServices(
@@ -189,7 +191,8 @@ namespace {
             std::make_shared<NYql::TPqGatewayConfig>(),
             nullptr,
             nullptr,
-            settings
+            settings,
+            localTopicClientSettings ? CreateLocalTopicClientFactory(*localTopicClientSettings) : nullptr
         ));
     }
 
@@ -246,7 +249,7 @@ namespace {
 
         ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
         Driver = MakeYdbDriver(ActorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-        PqGateway = MakePqGateway(Driver);
+        ChannelBufferSize = appConfig.GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
@@ -310,7 +313,7 @@ namespace {
             S3ReadActorFactoryConfig,
             DqTaskTransformFactory,
             PqGatewayConfig,
-            PqGateway,
+            MakePqGateway(Driver, TLocalTopicClientSettings{.ActorSystem = actorSystem, .ChannelBufferSize = ChannelBufferSize}),
             ActorSystemPtr,
             Driver};
 
@@ -330,7 +333,6 @@ namespace {
 
     void TKqpFederatedQuerySetupFactoryDefault::Cleanup() {
         HttpGateway.reset();
-        PqGateway.Reset();
     }
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

@@ -405,7 +405,9 @@ TTableMetadataResult GetSysViewMetadataResult(const NSchemeCache::TSchemeCacheNa
     return result;
 }
 
-TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& cluster, const TString& topicName) {
+TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& cluster,
+    const TString& database, const TString& topicName)
+{
     auto metadata = MakeIntrusive<NYql::TKikimrTableMetadata>();
     metadata->DoesExist = true;
     metadata->Cluster = cluster;
@@ -424,6 +426,7 @@ TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavi
     source.TableLocation = topicName;
     source.DataSourcePath = cluster;
     source.DataSourceAuth.MutableNone();
+    source.Properties.mutable_properties()->emplace("database_name", database);
 
     TTableMetadataResult result = {.Metadata = metadata};
     result.SetSuccess();
@@ -431,7 +434,9 @@ TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavi
 }
 
 TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
-        const TString& cluster, const TString& mainCluster, const TString& tableName, std::optional<TString> queryName = std::nullopt) {
+    const TString& cluster, const TString& mainCluster, const TString& database, const TString& tableName,
+    std::optional<TString> queryName = std::nullopt)
+{
     using TResult = NYql::IKikimrGateway::TTableMetadataResult;
     using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
     using EKind = NSchemeCache::TSchemeCacheNavigate::EKind;
@@ -481,7 +486,7 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             result = GetSysViewMetadataResult(entry, cluster, tableName);
             break;
         case EKind::KindTopic:
-            result = GetTopicMetadataResult(entry, cluster, tableName);
+            result = GetTopicMetadataResult(entry, cluster, database, tableName);
             break;
         default:
             result = GetTableMetadataResult(entry, cluster, tableName, queryName);
@@ -982,7 +987,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 auto& entry = InferEntry(navigate.ResultSet);
 
                 if (entry.Status != EStatus::Ok) {
-                    promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table));
+                    promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table));
                     return;
                 }
 
@@ -1020,7 +1025,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                 switch (entry.Kind) {
                     case EKind::KindExternalDataSource: {
-                        auto externalDataSourceMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
+                        auto externalDataSourceMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table);
                         if (!externalDataSourceMetadata.Success() || !settings.RequestAuthInfo_) {
                             promise.SetValue(externalDataSourceMetadata);
                             return;
@@ -1124,7 +1129,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     case EKind::KindExternalTable: {
                         YQL_ENSURE(entry.ExternalTableInfo, "expected external table info");
                         const auto& dataSourcePath = entry.ExternalTableInfo->Description.GetDataSourcePath();
-                        auto externalTableMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
+                        auto externalTableMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table);
                         if (!externalTableMetadata.Success()) {
                             promise.SetValue(externalTableMetadata);
                             return;
@@ -1157,11 +1162,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         break;
                     }
                     case EKind::KindTopic: {
-                        auto topicMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, table);
+                        auto topicMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table);
 
                     }
                     default: {
-                        promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table, queryName));
+                        promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table, queryName));
                     }
                 }
             }

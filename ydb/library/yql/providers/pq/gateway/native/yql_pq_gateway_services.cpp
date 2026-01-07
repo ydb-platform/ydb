@@ -9,7 +9,8 @@ TPqGatewayServices::TPqGatewayServices(
     TPqGatewayConfigPtr config,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     IMetricsRegistryPtr metrics,
-    TMaybe<NYdb::NTopic::TTopicClientSettings> commonTopicClientSettings)
+    TMaybe<NYdb::NTopic::TTopicClientSettings> commonTopicClientSettings,
+    IPqLocalClientFactory::TPtr localTopicClientFactory)
     : FunctionRegistry(functionRegistry)
     , Config(std::move(config))
     , Metrics(std::move(metrics))
@@ -17,6 +18,7 @@ TPqGatewayServices::TPqGatewayServices(
     , CmConnections(std::move(cmConnections))
     , YdbDriver(std::move(driver))
     , CommonTopicClientSettings(std::move(commonTopicClientSettings))
+    , LocalTopicClientFactory(std::move(localTopicClientFactory))
 {}
 
 } // namespace NYql

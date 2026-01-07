@@ -162,6 +162,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
                 "eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc=");
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         }
+
+        {
+            // Test SCRAM-SHA256 authentication
+            // Using pre-computed values from scram_ut.cpp for password "password1"
+            TString authMessage = "n=user,r=clientnonce,r=clientservernonce,s=s0QSrrFVkMTh3k2TTk860A==,i=4096,c=biws,r=clientservernonce";
+            auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Scram, NLoginProto::EHashType::ScramSha256,
+                "AJgthTHWf0jz/bMHwrWDOHk9SQPpPpvGx937mEzFnCQ=", authMessage);
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.serversignature(), "RBEDP7XfP9zTpxx+++HZSiw7kB7MDtfZ5mlBcMSxRQY=");
+        }
     }
 
     Y_UNIT_TEST_FLAG(RemoveUser, StrictAclCheck) {

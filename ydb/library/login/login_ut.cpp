@@ -37,6 +37,14 @@ Y_UNIT_TEST_SUITE(Login) {
         TLoginProvider provider;
         provider.Audience = "test_audience1";
         provider.RotateKeys();
+
+        // Using precomputed SCRAM-SHA-256 values from scram_ut.cpp
+        // Password: "password1"
+        // Salt (base64): "s0QSrrFVkMTh3k2TTk860A=="
+        // Iterations: 4096
+        // StoredKey (base64): "LmCubRpIYV1zHMLucTtu7XjhB+PgWwH8ABCYGyVF1mo="
+        // ServerKey (base64): "eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc="
+
         TString hashes = R"(
             {
                 "version": 1,
@@ -49,6 +57,8 @@ Y_UNIT_TEST_SUITE(Login) {
         request1.HashedPassword = Base64Encode(hashes);
         auto response1 = provider.CreateUser(request1);
         UNIT_ASSERT(!response1.Error);
+
+        // Test Argon2id authentication with Plain mechanism
         TLoginProvider::THashToValidate hashToValidate1;
         hashToValidate1.AuthMech = NLoginProto::ESaslAuthMech::Plain;
         hashToValidate1.HashType = NLoginProto::EHashType::Argon;
@@ -58,6 +68,8 @@ Y_UNIT_TEST_SUITE(Login) {
         request2.HashToValidate = hashToValidate1;
         auto response2 = provider.LoginUser(request2);
         UNIT_ASSERT_VALUES_EQUAL(response2.Error, "");
+
+        // Test SCRAM-SHA-256 authentication with Plain mechanism (ServerKey validation)
         TLoginProvider::THashToValidate hashToValidate2;
         hashToValidate2.AuthMech = NLoginProto::ESaslAuthMech::Plain;
         hashToValidate2.HashType = NLoginProto::EHashType::ScramSha256;
@@ -67,6 +79,26 @@ Y_UNIT_TEST_SUITE(Login) {
         request3.HashToValidate = hashToValidate2;
         auto response3 = provider.LoginUser(request3);
         UNIT_ASSERT_VALUES_EQUAL(response3.Error, "");
+
+        // Test SCRAM-SHA-256 authentication with SCRAM mechanism using precomputed ClientProof
+        TString authMessage = "n=user,r=clientnonce,r=clientservernonce,s=s0QSrrFVkMTh3k2TTk860A==,i=4096,c=biws,r=clientservernonce";
+        TString clientProof = "AJgthTHWf0jz/bMHwrWDOHk9SQPpPpvGx937mEzFnCQ=";
+
+        TLoginProvider::THashToValidate hashToValidate3;
+        hashToValidate3.AuthMech = NLoginProto::ESaslAuthMech::Scram;
+        hashToValidate3.HashType = NLoginProto::EHashType::ScramSha256;
+        hashToValidate3.Hash = clientProof;
+        hashToValidate3.AuthMessage = authMessage;
+
+        TLoginProvider::TLoginUserRequest request4;
+        request4.User = request1.User;
+        request4.HashToValidate = hashToValidate3;
+        auto response4 = provider.LoginUser(request4);
+        UNIT_ASSERT_VALUES_EQUAL(response4.Error, "");
+
+        // Verify server signature is also correct (from scram_ut.cpp)
+        TString expectedServerSignature = "RBEDP7XfP9zTpxx+++HZSiw7kB7MDtfZ5mlBcMSxRQY=";
+        UNIT_ASSERT_VALUES_EQUAL(response4.ServerSignature.value(), expectedServerSignature);
     }
 
     Y_UNIT_TEST(TestSuccessfulLogin3) {
@@ -93,6 +125,56 @@ Y_UNIT_TEST_SUITE(Login) {
         request2.HashToValidate = hashToValidate;
         auto response2 = provider.LoginUser(request2);
         UNIT_ASSERT_VALUES_EQUAL(response2.Error, "");
+    }
+
+    Y_UNIT_TEST(TestSuccessfulLoginScramRFC) {
+        TLoginProvider provider;
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+
+        // Using RFC 5802 test vectors for SCRAM-SHA-256
+        // Password: "pencil"
+        // Salt (base64): "W22ZaJ0SNY7soEsUEjb6gQ=="
+        // Iterations: 4096
+        // StoredKey (base64): "WG5d8oPm3OtcPnkdi4Uo7BkeZkBFzpcXkuLmtbsT4qY="
+        // ServerKey (base64): "wfPLwcE6nTWhTAmQ7tl2KeoiWGPlZqQxSrmfPwDl2dU="
+
+        TString hashes = R"(
+            {
+                "version": 1,
+                "scram-sha-256": "4096:W22ZaJ0SNY7soEsUEjb6gQ==$WG5d8oPm3OtcPnkdi4Uo7BkeZkBFzpcXkuLmtbsT4qY=:wfPLwcE6nTWhTAmQ7tl2KeoiWGPlZqQxSrmfPwDl2dU="
+            }
+        )";
+        TLoginProvider::TCreateUserRequest request1;
+        request1.User = "user";
+        request1.HashedPassword = Base64Encode(hashes);
+        auto response1 = provider.CreateUser(request1);
+        UNIT_ASSERT(!response1.Error);
+
+        // RFC 5802 test vector values
+        // ClientFirstMessageBare: "n=user,r=rOprNGfwEbeRWgbNEkqO"
+        // ServerFirstMessage: "r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096"
+        // ClientFinalMessageWithoutProof: "c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0"
+        // AuthMessage: "n=user,r=rOprNGfwEbeRWgbNEkqO,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096,c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0"
+        // ClientProof (base64): "dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ="
+
+        TString authMessage = "n=user,r=rOprNGfwEbeRWgbNEkqO,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096,c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0";
+        TString clientProof = "dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ=";
+        TLoginProvider::THashToValidate hashToValidate;
+        hashToValidate.AuthMech = NLoginProto::ESaslAuthMech::Scram;
+        hashToValidate.HashType = NLoginProto::EHashType::ScramSha256;
+        hashToValidate.Hash = clientProof;
+        hashToValidate.AuthMessage = authMessage;
+
+        TLoginProvider::TLoginUserRequest request2;
+        request2.User = request1.User;
+        request2.HashToValidate = hashToValidate;
+        auto response2 = provider.LoginUser(request2);
+
+        UNIT_ASSERT_VALUES_EQUAL(response2.Error, "");
+        // Verify server signature is also correct (from RFC 5802)
+        TString expectedServerSignature = "6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=";
+        UNIT_ASSERT_VALUES_EQUAL(response2.ServerSignature.value(), expectedServerSignature);
     }
 
     Y_UNIT_TEST(TestUsernameIsNotAllowed) {
@@ -140,6 +222,7 @@ Y_UNIT_TEST_SUITE(Login) {
         TLoginProvider provider;
         provider.Audience = "test_audience1";
         provider.RotateKeys();
+
         TString hashes1 = R"(
             {
                 "version": 1,
@@ -152,6 +235,8 @@ Y_UNIT_TEST_SUITE(Login) {
         request1.HashedPassword = Base64Encode(hashes1);
         auto response1 = provider.CreateUser(request1);
         UNIT_ASSERT(!response1.Error);
+
+        // Test with wrong Argon hash (using ServerKey instead of Argon hash)
         TLoginProvider::THashToValidate hashToValidate;
         hashToValidate.AuthMech = NLoginProto::ESaslAuthMech::Plain;
         hashToValidate.HashType = NLoginProto::EHashType::Argon;
@@ -161,6 +246,34 @@ Y_UNIT_TEST_SUITE(Login) {
         request2.HashToValidate = hashToValidate;
         auto response2 = provider.LoginUser(request2);
         UNIT_ASSERT(response2.Error == "Invalid password");
+
+        // Test Plain authentication with wrong SCRAM-SHA-256 hash (using StoredKey instead of ServerKey)
+        TLoginProvider::THashToValidate hashToValidate2;
+        hashToValidate2.AuthMech = NLoginProto::ESaslAuthMech::Plain;
+        hashToValidate2.HashType = NLoginProto::EHashType::ScramSha256;
+        hashToValidate2.Hash = "LmCubRpIYV1zHMLucTtu7XjhB+PgWwH8ABCYGyVF1mo=";
+        TLoginProvider::TLoginUserRequest request3;
+        request3.User = request1.User;
+        request3.HashToValidate = hashToValidate2;
+        auto response3 = provider.LoginUser(request3);
+        UNIT_ASSERT(response3.Error == "Invalid password");
+
+        // Test SCRAM authentication with wrong ClientProof
+        // Using ClientProof for "password2" instead of "password1"
+        TString authMessage = "n=user,r=clientnonce,r=clientservernonce,s=s0QSrrFVkMTh3k2TTk860A==,i=4096,c=biws,r=clientservernonce";
+        TString wrongClientProof = "onCT9KAMiTb4vvJzBQM0w1nXLW3hJiZIJuc9Jz71pV8=";
+
+        TLoginProvider::THashToValidate hashToValidate3;
+        hashToValidate3.AuthMech = NLoginProto::ESaslAuthMech::Scram;
+        hashToValidate3.HashType = NLoginProto::EHashType::ScramSha256;
+        hashToValidate3.Hash = wrongClientProof;
+        hashToValidate3.AuthMessage = authMessage;
+
+        TLoginProvider::TLoginUserRequest request4;
+        request4.User = request1.User;
+        request4.HashToValidate = hashToValidate3;
+        auto response4 = provider.LoginUser(request4);
+        UNIT_ASSERT(response4.Error == "Invalid password");
     }
 
     Y_UNIT_TEST(TestInvalidHashType) {
@@ -187,6 +300,17 @@ Y_UNIT_TEST_SUITE(Login) {
         request2.HashToValidate = hashToValidate;
         auto response2 = provider.LoginUser(request2);
         UNIT_ASSERT_VALUES_EQUAL(response2.Error, "Invalid hash type");
+
+        hashToValidate.AuthMech = NLoginProto::ESaslAuthMech::Scram;
+        hashToValidate.HashType = NLoginProto::EHashType::ScramSha256;
+        hashToValidate.Hash = "clientproof";
+        hashToValidate.AuthMessage = "n=user1,r=nonce,r=nonceserver,c=biws,r=nonceserver";
+
+        TLoginProvider::TLoginUserRequest request3;
+        request3.User = request1.User;
+        request3.HashToValidate = hashToValidate;
+        auto loginResponse = provider.LoginUser(request3);
+        UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "Invalid hash type");
     }
 
     Y_UNIT_TEST(TestUnknownUser) {
@@ -984,3 +1108,4 @@ Y_UNIT_TEST_SUITE(Login) {
         UNIT_ASSERT_EQUAL(response.Error, checkResult.Error);
     }
 }
+

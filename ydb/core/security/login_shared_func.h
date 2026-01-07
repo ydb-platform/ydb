@@ -17,5 +17,7 @@ NKikimrScheme::TEvLogin CreatePlainLoginRequestOldFormat(const TString& username
     const TString& peerName, const NKikimrProto::TAuthConfig& config);
 NKikimrScheme::TEvLogin CreatePlainLdapLoginRequest(const TString& username,
      const TString& peerName, const NKikimrProto::TAuthConfig& config);
+NKikimrScheme::TEvLogin CreateScramLoginRequest(const TString& username, NLoginProto::EHashType::HashType hashType,
+    const TString& clientProof, const TString& authMessage,  const TString& peerName, const NKikimrProto::TAuthConfig& config);
 
 } // namespace NKikimr

@@ -171,7 +171,8 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
                 }
 
                 auto indexInfo = context.SS->Indexes.at(childPathId);
-                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal && indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal &&
+                    indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
                     continue;
                 }
 

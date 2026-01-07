@@ -251,20 +251,11 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 if (childPath->Dropped()) {
                     continue;
                 }
-                
-                // // Destination: {backup_collection}/{timestamp}_inc/__ydb_backup_meta/indexes/{table_path}/{index_name}
-                // TString dstPath = JoinPath({
-                //     tx.GetBackupIncrementalBackupCollection().GetName(),
-                //     tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
-                //     "__ydb_backup_meta",
-                //     "indexes",
-                //     relativeItemPath,  // Relative table path (e.g., "table1")
-                //     childName          // Index name (e.g., "index1")
-                // });
 
                 // Get index info and filter for global sync only
                 auto indexInfo = context.SS->Indexes.at(childPathId);
-                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal && indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal &&
+                    indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
                     continue;
                 }
 
@@ -290,20 +281,16 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                     TString dstPath;
 
                     if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-                        // Создаем структуру: .../indexes/TableName/IndexName/ImplTableName
-                        // IndexName здесь выступает как директория
                         dstPath = JoinPath({
                             tx.GetBackupIncrementalBackupCollection().GetName(),
                             tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
                             "__ydb_backup_meta",
                             "indexes",
-                            relativeItemPath,  // Имя таблицы
-                            childName,         // Имя индекса (станет директорией)
-                            implTableName      // Имя конкретной под-таблицы (levelTable, postingTable...)
+                            relativeItemPath,
+                            childName,
+                            implTableName
                         });
                     } else {
-                        // Сохраняем старую логику: .../indexes/TableName/IndexName
-                        // IndexName здесь выступает как файл таблицы (содержимое indexImplTable)
                         dstPath = JoinPath({
                             tx.GetBackupIncrementalBackupCollection().GetName(),
                             tx.GetBackupIncrementalBackupCollection().GetTargetDir(),

@@ -150,7 +150,8 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     }
                     
                     auto indexInfo = context.SS->Indexes.at(childPathId);
-                    if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal && indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                    if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal &&
+                        indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
                         continue;
                     }
                 
@@ -172,14 +173,14 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                                 }
                             }
                         }
-                        
+
                         NKikimrSchemeOp::TCreateCdcStream indexCdcStreamOp;
                         indexCdcStreamOp.SetTableName(implTableName);
                         auto& indexStreamDescription = *indexCdcStreamOp.MutableStreamDescription();
                         indexStreamDescription.SetName(streamName);
                         indexStreamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
                         indexStreamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
-                        
+
                         NCdc::DoCreateStreamImpl(result, indexCdcStreamOp, opId, indexTablePath, false, false);
                         (*desc.MutableIndexImplTableCdcStreams())[childName].CopyFrom(indexCdcStreamOp);
 
@@ -199,7 +200,8 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex && !childPath->Dropped()) {
                         auto indexInfo = context.SS->Indexes.find(childPathId);
                         if (indexInfo != context.SS->Indexes.end() && 
-                            indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobal && indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                            indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobal &&
+                            indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
                             
                             auto indexPath = TPath::Init(childPathId, context.SS);
                             for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
@@ -282,7 +284,8 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     
                     // Get index info and filter for global sync only
                     auto indexInfo = context.SS->Indexes.at(childPathId);
-                    if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal && indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                    if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal &&
+                        indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
                         continue;
                     }
                 
@@ -292,14 +295,14 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
                         auto indexTablePath = indexPath.Child(implTableName);
                         auto indexTable = context.SS->Tables.at(implTablePathId);
-                        
+
                         NKikimrSchemeOp::TCreateCdcStream indexCdcStreamOp;
                         indexCdcStreamOp.SetTableName(implTableName);
                         auto& indexStreamDescription = *indexCdcStreamOp.MutableStreamDescription();
                         indexStreamDescription.SetName(streamName);
                         indexStreamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
                         indexStreamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
-                        
+
                         TVector<TString> indexBoundaries;
                         const auto& indexPartitions = indexTable->GetPartitions();
                         indexBoundaries.reserve(indexPartitions.size() - 1);
@@ -309,7 +312,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                                 indexBoundaries.push_back(partition.EndOfRange);
                             }
                         }
-                        
+
                         const auto indexStreamPath = indexTablePath.Child(streamName);
                         NCdc::DoCreatePqPart(result, indexCdcStreamOp, opId, indexStreamPath, streamName, indexTable, indexBoundaries, false);
                     }

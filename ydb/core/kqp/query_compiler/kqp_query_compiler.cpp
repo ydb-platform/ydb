@@ -287,6 +287,10 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
     for (const auto& columnName : columns) {
         auto column = tableMeta.Columns.FindPtr(columnName);
         if (!column) {
+            if (columnName == "_yql_full_text_relevance") {
+                continue;
+            }
+
             YQL_ENSURE(GetSystemColumns().find(columnName) != GetSystemColumns().end());
             continue;
         }
@@ -1382,16 +1386,22 @@ private:
                 indexProto->MutableTable()->SetVersion(implTableMeta->SchemaVersion);
 
                 for(auto& keyColumn: implTableMeta->KeyColumnNames) {
-                    fillCol(implTableMeta->Columns.FindPtr(keyColumn), indexProto->AddKeyColumns());
+                    auto* columnPtr = implTableMeta->Columns.FindPtr(keyColumn);
+                    YQL_ENSURE(columnPtr);
+                    fillCol(columnPtr, indexProto->AddKeyColumns());
                 }
 
                 for(auto& column: implTableMeta->Columns) {
-                    fillCol(implTableMeta->Columns.FindPtr(column.first), indexProto->AddColumns());
+                    auto* columnPtr = implTableMeta->Columns.FindPtr(column.first);
+                    YQL_ENSURE(columnPtr);
+                    fillCol(columnPtr, indexProto->AddColumns());
                 }
             }
 
             for (auto& keyColumn: tableMeta->KeyColumnNames) {
-                fillCol(tableMeta->Columns.FindPtr(keyColumn), fullTextProto.AddKeyColumns());
+                auto* columnPtr = tableMeta->Columns.FindPtr(keyColumn);
+                YQL_ENSURE(columnPtr);
+                fillCol(columnPtr, fullTextProto.AddKeyColumns());
             }
 
             for (auto item : type->GetItems()) {
@@ -1401,39 +1411,27 @@ private:
                     continue;
                 }
 
-                fillCol(tableMeta->Columns.FindPtr(item->GetName()), columnProto);
+                auto* columnPtr = tableMeta->Columns.FindPtr(item->GetName());
+                YQL_ENSURE(columnPtr);
+                fillCol(columnPtr, columnProto);
             }
 
             {
                 TExprBase expr(settings.Query().Raw());
-                if (expr.Maybe<TCoString>()) {
-                    auto* literal = fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableLiteralValue();
-                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
-                    literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
-                } else if (expr.Maybe<TCoParameter>()) {
+                if (expr.Maybe<TCoParameter>()) {
                     fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
                 } else {
-                    YQL_ENSURE(false, "Unexpected VectorTopKTarget callable '" << expr.Ref().Content()
-                        << "'. Expected TCoString or TCoParameter.");
+                    FillLiteralProto(expr.Cast<TCoDataCtor>(), *fullTextProto.MutableQuerySettings()->MutableQueryValue()->MutableLiteralValue());
                 }
             }
 
             TKqpReadTableFullTextIndexSettings settingsObj = TKqpReadTableFullTextIndexSettings::Parse(settings.Settings().Cast());
             if (settingsObj.ItemsLimit) {
-
                 auto itemsLimit = TExprBase(settingsObj.ItemsLimit);
-                if (itemsLimit.Maybe<TCoUint64>()) {
-                    auto* literal = fullTextProto.MutableTakeLimit()->MutableLiteralValue();
-
-                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-
-                    literal->MutableValue()->SetUint64(FromString<ui64>(itemsLimit.Cast<TCoUint64>().Literal().Value()));
-                } else if (itemsLimit.Maybe<TCoParameter>()) {
+                if (itemsLimit.Maybe<TCoParameter>()) {
                     fullTextProto.MutableTakeLimit()->MutableParamValue()->SetParamName(itemsLimit.Cast<TCoParameter>().Name().StringValue());
                 } else {
-                    YQL_ENSURE(false, "Unexpected ItemsLimit callable " << itemsLimit.Ref().Content());
+                    FillLiteralProto(itemsLimit.Cast<TCoDataCtor>(), *fullTextProto.MutableTakeLimit()->MutableLiteralValue());
                 }
             }
 
@@ -1457,7 +1455,10 @@ private:
                 }
             }
 
-            FillColumns(settings.Columns().Cast(), *tableMeta, *fullTextProto.MutableQuerySettings(), false);
+            for(const auto& column: settings.QueryColumns().Cast()) {
+                fillCol(tableMeta->Columns.FindPtr(column.StringValue()), fullTextProto.MutableQuerySettings()->AddColumns());
+            }
+
         } else {
             YQL_ENSURE(false, "Unsupported source type");
         }

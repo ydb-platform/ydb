@@ -20,4 +20,6 @@ PEERDIR(
     ydb/services/persqueue_v1/actors
 )
 
+YQL_LAST_ABI_VERSION()
+
 END()

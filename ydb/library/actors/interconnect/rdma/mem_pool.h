@@ -14,16 +14,20 @@ namespace NMonitoring {
     struct TDynamicCounters;
 }
 
+struct TMemRegCompare;
 namespace NInterconnect::NRdma {
 
     class IMemPool;
     class TMemRegion;
     class TChunk;
     class TMemPoolImpl;
+    class TSlotMemPool;
 
     using TChunkPtr = TIntrusivePtr<TChunk>;
 
     class TMemRegion: public NNonCopyable::TMoveOnly, public IContiguousChunk {
+        friend struct ::TMemRegCompare;
+        friend class TSlotMemPool;
     public:
         TMemRegion(TChunkPtr chunk, uint32_t offset, uint32_t size) noexcept;
         TMemRegion(TMemRegion&& other) noexcept = default;
@@ -35,17 +39,16 @@ namespace NInterconnect::NRdma {
         uint32_t GetLKey(size_t deviceIndex) const;
         uint32_t GetRKey(size_t deviceIndex) const;
 
-        void Resize(uint32_t newSize) noexcept;
-
     public: // IContiguousChunk
         TContiguousSpan GetData() const override;
         TMutableContiguousSpan UnsafeGetDataMut() override;
         size_t GetOccupiedMemorySize() const override;
         EInnerType GetInnerType() const noexcept override;
         IContiguousChunk::TPtr Clone() noexcept override;
+    protected:
+        void Resize(uint32_t newSize) noexcept;
         TChunkPtr Chunk;
         ui64 Generation = 0;
-    protected:
         const uint32_t Offset;
         uint32_t Size;
         const uint32_t OrigSize;

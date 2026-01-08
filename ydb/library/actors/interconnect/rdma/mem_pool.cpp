@@ -33,7 +33,6 @@ struct ibv_mr {
 #include <mutex>
 #include <thread>
 
-#include <unordered_set>
 #include <set>
 
 #include <cstdlib>
@@ -54,13 +53,13 @@ using ::NMonitoring::TDynamicCounters;
 
 struct TMemRegCompare {
     using is_transparent = void;
-    bool operator ()(const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& a, const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& b) const {
+    bool operator ()(const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& a, const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& b) const noexcept {
         return a->Chunk.Get() < b->Chunk.Get();
     }
-    bool operator ()(const NInterconnect::NRdma::TChunkPtr& a, const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& b) const {
+    bool operator ()(const NInterconnect::NRdma::TChunkPtr& a, const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& b) const noexcept {
         return a.Get() < b->Chunk.Get();
     }
-    bool operator ()(const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& a, const NInterconnect::NRdma::TChunkPtr& b) const {
+    bool operator ()(const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& a, const NInterconnect::NRdma::TChunkPtr& b) const noexcept {
         return a->Chunk.Get() < b.Get();
     }
 };

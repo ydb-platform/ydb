@@ -264,11 +264,10 @@ Y_UNIT_TEST_SUITE(ActorHandler) {
         });
 
         TStringStream responseStream;
-        THttpHeaders outHeaders;
-        const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream, TKeepAliveHttpClient::THeaders(), &outHeaders);
+        const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream);
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
 
-        AssertCorsHeaders(outHeaders);
+        // NOTE: no CORS check, handler must implement CORS headers itself if needed
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 0);

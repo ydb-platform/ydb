@@ -1461,7 +1461,6 @@ protected:
             auto finishSize = Stats->EstimateFinishMem();
             Counters->Counters->QueryStatMemFinishBytes->Add(finishSize);
             response.MutableResult()->MutableStats()->SetStatFinishBytes(finishSize);
-            Cerr << "*** StatsMode=" << (int)Request.StatsMode << Endl << response.GetResult().GetStats().DebugString() << Endl;
         }
 
         Counters->Counters->QueryStatMemCollectInflightBytes->Sub(StatCollectInflightBytes);

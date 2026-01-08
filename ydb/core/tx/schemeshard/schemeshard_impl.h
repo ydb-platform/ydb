@@ -1224,7 +1224,8 @@ public:
         const TString& relativeTablePath,
         const TString& indexName,
         const TString& targetTablePath,
-        const TActorContext& ctx);
+        const TActorContext& ctx,
+        const TString& specificImplTableName = "");
 
     TString FindTargetTablePath(
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,

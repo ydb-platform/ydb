@@ -685,15 +685,32 @@ void TSchemeShard::DiscoverIndexesRecursive(
         LOG_I("Found table mapping: " << accumulatedRelativePath << " -> " << targetTablePath);
 
         for (const auto& [indexName, indexDirPathId] : currentPath.Base()->GetChildren()) {
-            CreateSingleIndexRestoreOperation(
-                operationId,
-                backupName,
-                bcPath,
-                accumulatedRelativePath,
-                indexName,
-                targetTablePath,
-                ctx
-            );
+            auto indexPathInBackup = TPath::Init(indexDirPathId, this);
+            if (indexPathInBackup.Base()->IsDirectory()) {
+                for (const auto& [implName, implPathId] : indexPathInBackup.Base()->GetChildren()) {
+                    CreateSingleIndexRestoreOperation(
+                        operationId,
+                        backupName,
+                        bcPath,
+                        accumulatedRelativePath,
+                        indexName,
+                        targetTablePath,
+                        ctx,
+                        implName
+                    );
+                }
+            } else {
+                CreateSingleIndexRestoreOperation(
+                    operationId,
+                    backupName,
+                    bcPath,
+                    accumulatedRelativePath,
+                    indexName,
+                    targetTablePath,
+                    ctx,
+                    ""
+                );
+            }
         }
     } else {
         // Not a table yet, descend into children to build up the path
@@ -759,6 +776,7 @@ void TSchemeShard::DiscoverAndCreateIndexRestoreOperations(
     );
 }
 
+
 void TSchemeShard::CreateSingleIndexRestoreOperation(
     ui64 operationId,
     const TString& backupName,
@@ -766,11 +784,13 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
     const TString& relativeTablePath,
     const TString& indexName,
     const TString& targetTablePath,
-    const TActorContext& ctx) {
-
+    const TActorContext& ctx,
+    const TString& specificImplTableName)
+{
     LOG_I("CreateSingleIndexRestoreOperation: table=" << targetTablePath
           << " index=" << indexName
-          << " relativeTablePath=" << relativeTablePath);
+          << " relativeTablePath=" << relativeTablePath
+          << " specificImplTableName=" << specificImplTableName);
 
     // Validate target table exists
     const TPath targetTablePathObj = TPath::Resolve(targetTablePath, this);
@@ -790,51 +810,70 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
             if (childPath->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
                 indexPathId = childPathId;
 
-                // Get index info to verify it's a global index
                 auto indexInfoIt = Indexes.find(indexPathId);
                 if (indexInfoIt == Indexes.end()) {
                     LOG_W("Index info not found for pathId: " << indexPathId);
                     return;
                 }
-
                 auto indexInfo = indexInfoIt->second;
-                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
-                    LOG_I("Skipping non-global index: " << indexName << " (type=" << indexInfo->Type << ")");
+
+                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal && 
+                    indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                    LOG_I("Skipping index with unsupported type: " << indexName << " (type=" << indexInfo->Type << ")");
                     return;
                 }
 
-                // Get index impl table (single child of index)
                 auto indexPath = TPath::Init(indexPathId, this);
-                if (indexPath.Base()->GetChildren().size() == 1) {
-                    auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
-                    indexImplTablePathId = implTablePathId;
-                    indexFound = true;
-                    LOG_I("Found global index '" << indexName << "' with impl table: " << implTableName);
-                    break;
+
+                if (!specificImplTableName.empty()) {
+                    for (const auto& [implName, implPathId] : indexPath.Base()->GetChildren()) {
+                        if (implName == specificImplTableName) {
+                            indexImplTablePathId = implPathId;
+                            indexFound = true;
+                            LOG_I("Found vector index impl table: " << indexName << "/" << implName);
+                            break;
+                        }
+                    }
                 } else {
-                    LOG_W("Index '" << indexName << "' has unexpected number of children: "
-                          << indexPath.Base()->GetChildren().size());
-                    return;
+                    if (indexPath.Base()->GetChildren().size() == 1) {
+                        auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
+                        indexImplTablePathId = implTablePathId;
+                        indexFound = true;
+                        LOG_I("Found global index '" << indexName << "' with impl table: " << implTableName);
+                    }
                 }
             }
+            if (indexFound) break;
         }
     }
 
     if (!indexFound) {
-        LOG_W("Index '" << indexName << "' not found on table " << targetTablePath
+        LOG_W("Index '" << indexName << "' (or specific table '" << specificImplTableName << "') not found on table " << targetTablePath
               << " - skipping (index may have been dropped)");
         return;
     }
 
-    // Source: {backup}/__ydb_backup_meta/indexes/{table}/{index}
-    TString srcIndexBackupPath = JoinPath({
-        bcPath.PathString(),
-        backupName + "_incremental",
-        "__ydb_backup_meta",
-        "indexes",
-        relativeTablePath,
-        indexName
-    });
+    TString srcIndexBackupPath;
+    if (!specificImplTableName.empty()) {
+        srcIndexBackupPath = JoinPath({
+            bcPath.PathString(),
+            backupName + "_incremental",
+            "__ydb_backup_meta",
+            "indexes",
+            relativeTablePath,
+            indexName,
+            specificImplTableName
+        });
+    } else {
+        srcIndexBackupPath = JoinPath({
+            bcPath.PathString(),
+            backupName + "_incremental",
+            "__ydb_backup_meta",
+            "indexes",
+            relativeTablePath,
+            indexName
+        });
+    }
 
     const TPath& srcBackupPath = TPath::Resolve(srcIndexBackupPath, this);
     if (!srcBackupPath.IsResolved()) {
@@ -848,7 +887,6 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
 
     LOG_I("Creating index restore operation: " << srcIndexBackupPath << " -> " << dstIndexImplPath);
 
-    // Create restore request (SAME structure as table restore)
     auto indexRequest = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
     auto& indexRecord = indexRequest->Record;
 
@@ -894,6 +932,143 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
     LOG_I("Sending index restore operation for: " << dstIndexImplPath);
     Send(SelfId(), indexRequest.Release());
 }
+
+
+// void TSchemeShard::CreateSingleIndexRestoreOperation(
+//     ui64 operationId,
+//     const TString& backupName,
+//     const TPath& bcPath,
+//     const TString& relativeTablePath,
+//     const TString& indexName,
+//     const TString& targetTablePath,
+//     const TActorContext& ctx) {
+
+//     LOG_I("CreateSingleIndexRestoreOperation: table=" << targetTablePath
+//           << " index=" << indexName
+//           << " relativeTablePath=" << relativeTablePath);
+
+//     // Validate target table exists
+//     const TPath targetTablePathObj = TPath::Resolve(targetTablePath, this);
+//     if (!targetTablePathObj.IsResolved() || !targetTablePathObj.Base()->IsTable()) {
+//         LOG_W("Target table not found or invalid: " << targetTablePath);
+//         return;
+//     }
+
+//     // Find the index and its impl table
+//     TPathId indexPathId;
+//     TPathId indexImplTablePathId;
+//     bool indexFound = false;
+
+//     for (const auto& [childName, childPathId] : targetTablePathObj.Base()->GetChildren()) {
+//         if (childName == indexName) {
+//             auto childPath = PathsById.at(childPathId);
+//             if (childPath->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
+//                 indexPathId = childPathId;
+
+//                 // Get index info to verify it's a global index
+//                 auto indexInfoIt = Indexes.find(indexPathId);
+//                 if (indexInfoIt == Indexes.end()) {
+//                     LOG_W("Index info not found for pathId: " << indexPathId);
+//                     return;
+//                 }
+
+//                 auto indexInfo = indexInfoIt->second;
+//                 if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
+//                     LOG_I("Skipping non-global index: " << indexName << " (type=" << indexInfo->Type << ")");
+//                     return;
+//                 }
+
+//                 // Get index impl table (single child of index)
+//                 auto indexPath = TPath::Init(indexPathId, this);
+//                 if (indexPath.Base()->GetChildren().size() == 1) {
+//                     auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
+//                     indexImplTablePathId = implTablePathId;
+//                     indexFound = true;
+//                     LOG_I("Found global index '" << indexName << "' with impl table: " << implTableName);
+//                     break;
+//                 } else {
+//                     LOG_W("Index '" << indexName << "' has unexpected number of children: "
+//                           << indexPath.Base()->GetChildren().size());
+//                     return;
+//                 }
+//             }
+//         }
+//     }
+
+//     if (!indexFound) {
+//         LOG_W("Index '" << indexName << "' not found on table " << targetTablePath
+//               << " - skipping (index may have been dropped)");
+//         return;
+//     }
+
+//     // Source: {backup}/__ydb_backup_meta/indexes/{table}/{index}
+//     TString srcIndexBackupPath = JoinPath({
+//         bcPath.PathString(),
+//         backupName + "_incremental",
+//         "__ydb_backup_meta",
+//         "indexes",
+//         relativeTablePath,
+//         indexName
+//     });
+
+//     const TPath& srcBackupPath = TPath::Resolve(srcIndexBackupPath, this);
+//     if (!srcBackupPath.IsResolved()) {
+//         LOG_W("Index backup not found at: " << srcIndexBackupPath);
+//         return;
+//     }
+
+//     // Destination: {table}/{index}/indexImplTable
+//     auto indexImplTablePath = TPath::Init(indexImplTablePathId, this);
+//     TString dstIndexImplPath = indexImplTablePath.PathString();
+
+//     LOG_I("Creating index restore operation: " << srcIndexBackupPath << " -> " << dstIndexImplPath);
+
+//     // Create restore request (SAME structure as table restore)
+//     auto indexRequest = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>();
+//     auto& indexRecord = indexRequest->Record;
+
+//     TTxId indexTxId = GetCachedTxId(ctx);
+//     indexRecord.SetTxId(ui64(indexTxId));
+
+//     auto& indexTx = *indexRecord.AddTransaction();
+//     indexTx.SetOperationType(NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups);
+//     indexTx.SetInternal(true);
+//     indexTx.SetWorkingDir(bcPath.PathString());
+
+//     auto& indexRestore = *indexTx.MutableRestoreMultipleIncrementalBackups();
+//     indexRestore.AddSrcTablePaths(srcIndexBackupPath);
+//     indexRestore.SetDstTablePath(dstIndexImplPath);
+
+//     // Track this operation as part of incremental restore
+//     TOperationId indexRestoreOpId(indexTxId, 0);
+//     IncrementalRestoreOperationToState[indexRestoreOpId] = operationId;
+//     TxIdToIncrementalRestore[indexTxId] = operationId;
+
+//     auto stateIt = IncrementalRestoreStates.find(operationId);
+//     if (stateIt != IncrementalRestoreStates.end()) {
+//         // Add to in-progress operations (will be tracked alongside table operations)
+//         stateIt->second.InProgressOperations.insert(indexRestoreOpId);
+
+//         // Track expected shards for this index impl table
+//         auto& indexOpState = stateIt->second.TableOperations[indexRestoreOpId];
+//         indexOpState.OperationId = indexRestoreOpId;
+
+//         if (Tables.contains(indexImplTablePathId)) {
+//             auto indexImplTable = Tables.at(indexImplTablePathId);
+//             for (const auto& [shardIdx, partitionIdx] : indexImplTable->GetShard2PartitionIdx()) {
+//                 indexOpState.ExpectedShards.insert(shardIdx);
+//                 stateIt->second.InvolvedShards.insert(shardIdx);
+//             }
+//             LOG_I("Index operation " << indexRestoreOpId << " expects " << indexOpState.ExpectedShards.size() << " shards");
+//         }
+
+//         LOG_I("Tracking index operation " << indexRestoreOpId << " for incremental restore " << operationId);
+//     }
+
+//     // Send the request (parallel with table operations)
+//     LOG_I("Sending index restore operation for: " << dstIndexImplPath);
+//     Send(SelfId(), indexRequest.Release());
+// }
 
 // Notification function for operation completion
 void TSchemeShard::NotifyIncrementalRestoreOperationCompleted(const TOperationId& operationId, const TActorContext& ctx) {

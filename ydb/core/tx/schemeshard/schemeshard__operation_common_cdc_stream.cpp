@@ -202,17 +202,17 @@ void HelpSyncSiblingVersions(
         if (myIndex->AlterVersion < maxVersion) {
             myIndex->AlterVersion = maxVersion;
             context.SS->PersistTableIndexAlterVersion(db, myIndexPathId, myIndex);
-            
-            auto myIndexPath = context.SS->PathsById.at(myIndexPathId);
-            context.SS->ClearDescribePathCaches(myIndexPath);
-            context.OnComplete.PublishToSchemeBoard(operationId, myIndexPathId);
-            
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Updated my index entity"
-                        << ", myIndexPathId: " << myIndexPathId
-                        << ", newVersion: " << maxVersion
-                        << ", at schemeshard: " << context.SS->SelfTabletId());
         }
+
+        auto myIndexPath = context.SS->PathsById.at(myIndexPathId);
+        context.SS->ClearDescribePathCaches(myIndexPath);
+        context.OnComplete.PublishToSchemeBoard(operationId, myIndexPathId);
+        
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Updated my index entity"
+                    << ", myIndexPathId: " << myIndexPathId
+                    << ", newVersion: " << maxVersion
+                    << ", at schemeshard: " << context.SS->SelfTabletId());
     }
 
     if (context.SS->Tables.contains(parentTablePathId)) {
@@ -253,19 +253,19 @@ void HelpSyncSiblingVersions(
         if (index->AlterVersion < maxVersion) {
             index->AlterVersion = maxVersion;
             context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
-            
-            auto indexPath = context.SS->PathsById.at(indexPathId);
-            context.SS->ClearDescribePathCaches(indexPath);
-            context.OnComplete.PublishToSchemeBoard(operationId, indexPathId);
-            
-            indexesUpdated++;
-            
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Updated sibling index entity"
-                        << ", indexPathId: " << indexPathId
-                        << ", newVersion: " << maxVersion
-                        << ", at schemeshard: " << context.SS->SelfTabletId());
         }
+
+        auto indexPath = context.SS->PathsById.at(indexPathId);
+        context.SS->ClearDescribePathCaches(indexPath);
+        context.OnComplete.PublishToSchemeBoard(operationId, indexPathId);
+        
+        indexesUpdated++;
+        
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Updated sibling index entity"
+                    << ", indexPathId: " << indexPathId
+                    << ", newVersion: " << maxVersion
+                    << ", at schemeshard: " << context.SS->SelfTabletId());
     }
     
     // CRITICAL: DO NOT help update sibling impl tables.
@@ -281,6 +281,16 @@ void HelpSyncSiblingVersions(
                  << ", totalImplTables: " << allImplTablePathIds.size()
                  << ", NOTE: Sibling impl tables NOT updated (they update themselves)"
                  << ", at schemeshard: " << context.SS->SelfTabletId());
+    
+    for (const auto& implTablePathId : allImplTablePathIds) {
+        if (implTablePathId == myImplTablePathId) continue;
+        
+        if (context.SS->PathsById.contains(implTablePathId)) {
+            auto implTablePath = context.SS->PathsById.at(implTablePathId);
+            context.SS->ClearDescribePathCaches(implTablePath);
+            context.OnComplete.PublishToSchemeBoard(operationId, implTablePathId);
+        }
+    }
 }
 
 }  // namespace anonymous

@@ -893,10 +893,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    void PqTransactions(TTestWithReboots& t, bool enable) {
+    void PqTransactions(TTestWithReboots& t) {
         t.GetTestEnvOptions()
-            .EnableChangefeedInitialScan(true)
-            .EnablePQConfigTransactionsAtSchemeShard(enable);
+            .EnableChangefeedInitialScan(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {

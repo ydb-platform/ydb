@@ -356,7 +356,6 @@ public:
     bool EnableBorrowedSplitCompaction = false;
     bool EnableMoveIndex = true;
     bool EnableAlterDatabaseCreateHiveFirst = false;
-    bool EnablePQConfigTransactionsAtSchemeShard = false;
     bool EnableStatistics = false;
     bool EnableServerlessExclusiveDynamicNodes = false;
     bool EnableAddColumsWithDefaults = false;

@@ -2299,6 +2299,9 @@ message TEvReadResult {
 
     optional uint32 NodeId = 13;
 
+    // Temporary for prototype: indicates read was processed by a follower
+    optional bool FromFollower = 14;
+
     // Data for the possibly partial result
     oneof ReadResult {
         TArrowBatch ArrowBatch = 900;

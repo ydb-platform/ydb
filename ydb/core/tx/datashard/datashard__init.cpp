@@ -99,11 +99,9 @@ void TDataShard::OnInMemoryStateRestored(THashMap<ui64, TOperation::TPtr> migrat
     Execute(CreateTxInitRestored(std::move(migratedTxs)));
 }
 
-namespace {
-
-// Helper to build HNSW index for vector columns on restart
+// Helper to build HNSW index for vector columns on restart or follower sync
 // Returns true if all indexes were built successfully, false if a retry is needed
-bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
+static bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
                                ui64 tableId, const TUserTable& tableInfo,
                                const TActorContext& ctx) {
     // Find vector columns (named "emb", "embedding", or "vector" with String type)
@@ -220,8 +218,6 @@ bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
 
     return true;  // All indexes built successfully
 }
-
-} // anonymous namespace
 
 bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute");
@@ -1049,6 +1045,8 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         }
 
         FollowerState.LastSchemeUpdate = lastSchemeUpdate;
+        // Schema changed, HNSW indexes need to be rebuilt
+        FollowerState.HnswIndexesBuilt = false;
     }
 
     // N.B. follower with snapshots support may be loaded in datashard without a snapshots table
@@ -1067,6 +1065,61 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     return true;
+}
+
+// Transaction to build HNSW indexes on follower after activation
+class TDataShard::TTxInitHnswIndexesFollower
+    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
+{
+public:
+    TTxInitHnswIndexesFollower(TDataShard* self)
+        : TBase(self)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_INIT; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+            "TTxInitHnswIndexesFollower::Execute at follower " << Self->TabletID());
+
+        // Sync scheme first to ensure we have table info
+        NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
+        TString errMessage;
+        if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) {
+            // Need to retry - page fault during schema sync
+            return false;
+        }
+
+        if (status != NKikimrTxDataShard::TError::OK) {
+            // Schema not ready yet, will retry on next read
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "TTxInitHnswIndexesFollower: schema not ready at follower " << Self->TabletID()
+                << ", status: " << status << ", error: " << errMessage);
+            return true;
+        }
+
+        // Build HNSW indexes for all tables
+        for (const auto& [tableId, tableInfo] : Self->TableInfos) {
+            if (!BuildHnswIndexesForTable(Self, txc, tableId, *tableInfo, ctx)) {
+                // Page fault, need to retry
+                return false;
+            }
+        }
+
+        Self->FollowerState.HnswIndexesBuilt = true;
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
+            "TTxInitHnswIndexesFollower: HNSW indexes built at follower " << Self->TabletID());
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        // Nothing to do
+    }
+};
+
+ITransaction* TDataShard::CreateTxInitHnswIndexesFollower() {
+    return new TTxInitHnswIndexesFollower(this);
 }
 
 }}

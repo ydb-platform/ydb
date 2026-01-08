@@ -1077,6 +1077,8 @@ private:
             && State.VectorTopK->Limit != 11    // Hack: switch to brute force to measure recall
             && State.VectorTopK->TryHnswSearch()
         ) {
+            // Hack: Limit == 7 is a test marker that HNSW must be used
+            // If we reach here, HNSW search succeeded - good!
             // Fast return for empty HNSW results
             if (State.VectorTopK->HnswResults.empty()) {
                 return EReadStatus::Done;
@@ -1123,6 +1125,11 @@ private:
             std::sort(topK.Rows.begin(), topK.Rows.end());
             return EReadStatus::Done;
         }
+
+        // Hack: Limit == 7 is a test marker that HNSW MUST be used
+        // If we reach here with Limit == 7, it means HNSW was not used - fail the test
+        Y_ABORT_UNLESS(!State.VectorTopK || State.VectorTopK->Limit != 7,
+            "HNSW search was expected but not performed (Limit == 7 is a test marker)");
 
         auto keyAccessSampler = Self->GetKeyAccessSampler();
 
@@ -2458,6 +2465,11 @@ public:
         if (!Reader->FillResult(*Result, state)) {
             ResultSent = false;
             return;
+        }
+
+        // Set follower flag for test verification
+        if (Self->IsFollower()) {
+            Result->Record.SetFromFollower(true);
         }
 
         if (!gSkipReadIteratorResultFailPoint.Check(Self->TabletID())) {

@@ -219,6 +219,7 @@ class TDataShard
     class TTxCdcStreamScanProgress;
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
+    class TTxInitHnswIndexesFollower;
     class TTxRemoveSchemaSnapshots;
     class TTxIncrementalRestore;
     class TTxCleanupUncommitted;
@@ -1487,6 +1488,7 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxInitRestored(THashMap<ui64, TOperation::TPtr> migratedTxs);
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
+    NTabletFlatExecutor::ITransaction* CreateTxInitHnswIndexesFollower();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxStartSplit();
     NTabletFlatExecutor::ITransaction* CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext);
@@ -2546,6 +2548,7 @@ private:
         NTable::TDatabase::TChangeCounter LastSysUpdate;
         NTable::TDatabase::TChangeCounter LastSchemeUpdate;
         NTable::TDatabase::TChangeCounter LastSnapshotsUpdate;
+        bool HnswIndexesBuilt = false;
     };
 
     //

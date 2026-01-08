@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-SIZE(MEDIUM)
+SIZE(SMALL)
 
 SRCS(
     kqp_knn_ut.cpp

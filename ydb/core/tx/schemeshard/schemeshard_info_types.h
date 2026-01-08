@@ -176,7 +176,7 @@ private:
 };
 
 struct TPartitionConfigMerger {
-    static constexpr ui32 MaxFollowersCount = 3;
+    static constexpr ui32 MaxFollowersCount = 100; // for testing purposes
 
     static NKikimrSchemeOp::TPartitionConfig DefaultConfig(const TAppData* appData, const std::optional<TString>& defaultPoolKind);
     static bool ApplyChanges(

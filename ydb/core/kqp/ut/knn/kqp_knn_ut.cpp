@@ -129,6 +129,37 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         CheckDistance(results[2].second, 0.001070f);
     }
 
+    // LIMIT 7 is a magic marker that triggers Y_ABORT_UNLESS if HNSW is not used
+    // This version of the function verifies HNSW is actually used
+    template <bool Nullable>
+    void VerifyVectorSearchResultsHnsw(TKikimrRunner& kikimr, TSession& session, TTxSettings txSettings = TTxSettings::SerializableRW(), bool useRunCall = true) {
+        // Same as VerifyVectorSearchResults but with LIMIT 7 (magic marker for HNSW must be used)
+        const TString query = Q_(R"(
+            $TargetEmbedding = String::HexDecode("677102");
+            SELECT pk, Knn::CosineDistance(emb, $TargetEmbedding) AS distance FROM `/Root/TestTable`
+            ORDER BY distance
+            LIMIT 7
+        )");
+
+        auto result = useRunCall
+            ? kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx()).ExtractValueSync();
+            })
+            : session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // Extract PKs and distances from result - should have 7 results
+        auto results = ExtractPksAndScores<Nullable>(result.GetResultSetParser(0));
+
+        // Verify we got 7 results (or 10 if table has only 10 rows)
+        UNIT_ASSERT_C(results.size() >= 3u && results.size() <= 10u, "Expected 3-10 results, got " << results.size());
+        // First 3 should be the same as in VerifyVectorSearchResults
+        UNIT_ASSERT_VALUES_EQUAL(results[0].first, 8);
+        UNIT_ASSERT_VALUES_EQUAL(results[1].first, 5);
+        UNIT_ASSERT_VALUES_EQUAL(results[2].first, 9);
+    }
+
     Y_UNIT_TEST_TWIN(VectorSearchKnnPushdown, Nullable) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -586,64 +617,124 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         DoVectorKnnPushdownTest(EVectorType::Int8);
     }
 
+    Y_UNIT_TEST(VectorSearchKnnPushdownWithRestart) {
+        const TString tableName = "/Root/TestTable";
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return CreateTableForVectorSearch(db, false, "data", true); });
+
+        // Restart tablets to trigger HNSW index building
+        {
+            auto sender = runtime->AllocateEdgeActor();
+            auto shards = GetTableShards(&kikimr.GetTestServer(), sender, tableName);
+            for (auto shardId : shards) {
+                RebootTablet(*runtime, shardId, sender);
+            }
+            runtime->SimulateSleep(TDuration::Seconds(1));
+        }
+
+        // Setup observer to verify VectorTopK pushdown is used with LIMIT 7 (HNSW must be used marker)
+        auto observer = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            auto& read = ev->Get()->Record;
+            UNIT_ASSERT(read.HasVectorTopK());
+            UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetLimit(), 7u);
+        });
+
+        // Perform read - HNSW should be used after tablet restart
+        // LIMIT 7 is a magic marker that will Y_ABORT_UNLESS if HNSW is not used
+        VerifyVectorSearchResultsHnsw<false>(kikimr, session, TTxSettings::SerializableRW());
+
+        observer.Remove();
+    }
+
     Y_UNIT_TEST_TWIN(VectorSearchKnnPushdownFollower, StaleRO) {
         const TString tableName = "/Root/TestTable";
 
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
+            .SetUseRealThreads(false)
             .SetEnableForceFollowers(true)
             .SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         auto runtime = kikimr.GetTestServer().GetRuntime();
 
-        auto db = kikimr.GetTableClient();
-        auto session = CreateTableForVectorSearch(db, false, "data", true); // singlePartition = true for followers
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return CreateTableForVectorSearch(db, false, "data", true); }); // singlePartition = true for followers
 
-        // Setup observer to verify VectorTopK pushdown
-        auto observer = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
-            auto& read = ev->Get()->Record;
-            UNIT_ASSERT(read.HasVectorTopK());
-            UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetLimit(), 3u);
-        });
-
-        // Enable followers on the table
+        // Enable followers on the table BEFORE restart so followers get created
         {
             const TString alterTable(Q_(Sprintf(R"(
-                ALTER TABLE `%s` SET (READ_REPLICAS_SETTINGS = "PER_AZ:1");
+                ALTER TABLE `%s` SET (READ_REPLICAS_SETTINGS = "PER_AZ:10");
             )", tableName.c_str())));
 
-            auto result = session.ExecuteSchemeQuery(alterTable).ExtractValueSync();
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(alterTable).ExtractValueSync();
+            });
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
         // Verify followers are configured
         {
-            auto result = session.DescribeTable(tableName).ExtractValueSync();
+            auto result = kikimr.RunCall([&] {
+                return session.DescribeTable(tableName).ExtractValueSync();
+            });
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
             const auto& table = result.GetTableDescription();
             UNIT_ASSERT(table.GetReadReplicasSettings()->GetMode() == NYdb::NTable::TReadReplicasSettings::EMode::PerAz);
-            UNIT_ASSERT_VALUES_EQUAL(table.GetReadReplicasSettings()->GetReadReplicasCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(table.GetReadReplicasSettings()->GetReadReplicasCount(), 10);
         }
 
-        // Perform read
-        VerifyVectorSearchResults<false>(kikimr, session, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW(), false);
+        // Restart tablets to trigger HNSW index building on leader and followers
+        {
+            auto sender = runtime->AllocateEdgeActor();
+            auto shards = GetTableShards(&kikimr.GetTestServer(), sender, tableName);
+            for (auto shardId : shards) {
+                RebootTablet(*runtime, shardId, sender);
+            }
+            runtime->SimulateSleep(TDuration::Seconds(1));
+        }
 
+        // Track whether read was from follower
+        bool readFromFollower = false;
+
+        // Setup observer to verify VectorTopK pushdown with LIMIT 7 (HNSW must be used marker)
+        auto readObserver = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+            auto& read = ev->Get()->Record;
+            UNIT_ASSERT(read.HasVectorTopK());
+            UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetLimit(), 7u);
+        });
+
+        // Setup observer to check if result came from follower
+        auto resultObserver = runtime->AddObserver<TEvDataShard::TEvReadResult>([&](auto& ev) {
+            auto& result = ev->Get()->Record;
+            if (result.GetFromFollower()) {
+                readFromFollower = true;
+            }
+        });
+
+        // Perform read with LIMIT 7 - will Y_ABORT_UNLESS if HNSW is not used
+        // The fact that this doesn't crash proves HNSW was used
+        VerifyVectorSearchResultsHnsw<false>(kikimr, session, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW());
+
+        readObserver.Remove();
+        resultObserver.Remove();
+
+        // Verify follower was used for StaleRO reads
         if (StaleRO) {
-            // from leader - should NOT read
-            CheckTableReads(session, tableName, false, false);
-            // from followers - should read
-            CheckTableReads(session, tableName, true, true);
+            UNIT_ASSERT_C(readFromFollower, "StaleRO read should have been served by a follower");
         } else {
-            // from leader - should read
-            CheckTableReads(session, tableName, false, true);
-            // from followers - should NOT read
-            CheckTableReads(session, tableName, true, false);
+            UNIT_ASSERT_C(!readFromFollower, "SerializableRW read should have been served by leader, not follower");
         }
-
-        // Observer is automatically removed when it goes out of scope
-        observer.Remove();
     }
 
 }

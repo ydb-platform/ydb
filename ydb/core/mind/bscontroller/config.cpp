@@ -446,9 +446,17 @@ namespace NKikimr::NBsController {
                         auto& topology = *group->Topology;
                         // fill in vector of failed disks (that are not fully operational)
                         TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
+                        
+                        bool alreadySeenReplicatingWithPhantomsOnly = false;
                         for (const TVSlotInfo *slot : group->VDisksInGroup) {
-                            if (!slot->IsReady) {
+                            bool replicatingWithPhantomsOnly = slot->IsReplicatingWithPhantomsOnly();
+                            // We allow exactly one VDisk to be in REPLICATING state with only phantoms remaining
+                            bool allowedOneReplicatingWithPhantomsOnly = replicatingWithPhantomsOnly && !alreadySeenReplicatingWithPhantomsOnly;
+                            if (!slot->IsReady && !allowedOneReplicatingWithPhantomsOnly) {
                                 failed |= {&topology, slot->GetShortVDiskId()};
+                            }
+                            if (replicatingWithPhantomsOnly) {
+                                alreadySeenReplicatingWithPhantomsOnly = true;
                             }
                         }
                         // check the failure model

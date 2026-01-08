@@ -267,6 +267,7 @@ struct TStageExecutionStats {
     ui32 FinishedCount = 0;
     std::vector<TStageExecutionStats*> InputStages;
     std::vector<TStageExecutionStats*> OutputStages;
+    std::unordered_map<ui32, NYql::NDqProto::TDqComputeActorStats> ComputeActors;
 
     void Resize(ui32 taskCount);
     ui32 EstimateMem() {
@@ -426,7 +427,7 @@ public:
 
     void UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats);
     void UpdateStorageTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
-    void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state);
+    void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
     ui64 EstimateCollectMem();

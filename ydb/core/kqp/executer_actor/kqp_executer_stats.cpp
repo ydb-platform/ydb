@@ -1394,6 +1394,23 @@ void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats&
         queryTableStats.EraseRows.SetNonZero(index, tableStat.GetEraseRows());
         queryTableStats.EraseBytes.SetNonZero(index, tableStat.GetEraseBytes());
         queryTableStats.AffectedPartitions.SetNonZero(index, tableStat.GetAffectedPartitions());
+
+        NKqpProto::TKqpTableExtraStats tableExtraStats;
+        if (tableStat.GetExtra().UnpackTo(&tableExtraStats)) {
+            for (const auto& shardId : tableExtraStats.GetReadActorTableAggrExtraStats().GetAffectedShards()) {
+                AffectedShards.insert(shardId);
+            }
+        }
+
+        // TODO: the following code is for backward compatibility, remove it after ydb release
+        {
+            NKqpProto::TKqpReadActorTableAggrExtraStats tableExtraStats;
+            if (tableStat.GetExtra().UnpackTo(&tableExtraStats)) {
+                for (const auto& shardId : tableExtraStats.GetAffectedShards()) {
+                    AffectedShards.insert(shardId);
+                }
+            }
+        }
     }
 }
 
@@ -1420,7 +1437,7 @@ void TQueryExecutionStats::UpdateStorageTables(const NYql::NDqProto::TDqTaskStat
     }
 }
 
-void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state) {
+void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
     AFL_ENSURE(stats.GetTasks().size() == 1);
     const NYql::NDqProto::TDqTaskStats& taskStats = stats.GetTasks(0);
     AFL_ENSURE(taskStats.GetTaskId() == taskId);
@@ -1435,22 +1452,39 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
         if (CollectFullStats(StatsMode)) {
             auto stageId = TasksGraph->GetTask(taskId).StageId;
             auto [it, inserted] = StageStats.try_emplace(stageId);
+            TStageExecutionStats& stageStats = it->second;
             if (inserted) {
-                it->second.StageId = stageId;
-                it->second.SetHistorySampleCount(HistorySampleCount);
+                stageStats.StageId = stageId;
+                stageStats.SetHistorySampleCount(HistorySampleCount);
             }
-            BaseTimeMs = NonZeroMin(BaseTimeMs, it->second.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
+            BaseTimeMs = NonZeroMin(BaseTimeMs, stageStats.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
 
             constexpr ui64 deadline = 600'000'000; // 10m
-            if (it->second.CurrentWaitOutputTimeUs.MinValue > deadline) {
-                for (auto stat : it->second.OutputStages) {
+            if (stageStats.CurrentWaitOutputTimeUs.MinValue > deadline) {
+                for (auto stat : stageStats.OutputStages) {
                     if (stat->IsDeadlocked(deadline)) {
                         DeadlockedStageId = stat->StageId.StageId;
                         break;
                     }
                 }
-            } else if (it->second.IsDeadlocked(deadline)) {
-                DeadlockedStageId = it->second.StageId.StageId;
+            } else if (stageStats.IsDeadlocked(deadline)) {
+                DeadlockedStageId = stageStats.StageId.StageId;
+            }
+
+            if (CollectProfileStats(StatsMode)) {
+                stageStats.ComputeActors[taskId].CopyFrom(stats);
+            } else {
+                auto taskDuration = TDuration::MilliSeconds(
+                    taskStats.GetStartTimeMs() != 0 && taskStats.GetFinishTimeMs() >= taskStats.GetStartTimeMs()
+                    ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
+                    : 0);
+                auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
+                if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
+                    CollectStatsByLongTasks = true;
+                    longestTaskDuration = taskDuration;
+                    stageStats.ComputeActors.clear();
+                    stageStats.ComputeActors[taskId].CopyFrom(stats);
+                }
             }
         }
     }
@@ -1745,6 +1779,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 }
                 for (auto& [id, m] : stageStat.Mkql) {
                     ExportAggStats(m, (*stageStats.MutableMkql())[id]);
+                }
+                for (auto& [id, caStats] : stageStat.ComputeActors) {
+                    stageStats.AddComputeActors()->Swap(&caStats);
                 }
 
                 if (CollectProfileStats(StatsMode)) {

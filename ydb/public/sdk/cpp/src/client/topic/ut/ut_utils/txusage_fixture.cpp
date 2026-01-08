@@ -60,6 +60,8 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
 
 void TFixture::NotifySchemeShard(const TFeatureFlags& flags)
 {
+    Y_UNUSED(flags);
+
     auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
     *request->Record.MutableConfig() = *Setup->GetServer().ServerSettings.AppConfig;
 

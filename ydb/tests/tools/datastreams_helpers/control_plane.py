@@ -74,6 +74,17 @@ def delete_stream(path):
     _get_and_check_result(response, datastreams_pb2.DeleteStreamResult)
 
 
+def update_stream(path, partitions_count=1):
+    stub = _new_datastreams_service()
+
+    request = datastreams_pb2.UpdateStreamRequest()
+    request.stream_name = _build_stream_path(path)
+    request.target_shard_count = partitions_count
+    logging.debug("Requesting UpdateStreamRequest.\nDatabase: \"{}\".\nRequest:\n{}".format(_get_database(), request))
+    response = stub.UpdateStream(request, metadata=_build_request_metadata())
+    _get_and_check_result(response, datastreams_pb2.UpdateStreamResult)
+
+
 def create_read_rule(path, consumer_name="test_client"):
     stub = _new_persqueue_service()
 

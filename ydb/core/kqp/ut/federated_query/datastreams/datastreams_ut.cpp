@@ -3660,6 +3660,48 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         CheckScriptExecutionsCount(0, 0);
     }
+
+    Y_UNIT_TEST_F(ReadSystemMetadataFields, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "createStreamingQuerySystemMetadata";
+        constexpr char outputTopicName[] = "createStreamingQuerySystemMetadata";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $input = SELECT
+                    CAST(SystemMetadata("partition_id") as String) as part_id,
+                    CAST(SystemMetadata("offset") as String) as offset,
+                    value as value
+                    FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        key Uint64 NOT NULL,
+                        value String NOT NULL
+                    )
+                );
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                    SELECT part_id || "-" || offset || "-" || value FROM $input;
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessages(inputTopicName, {
+            R"({"key": 1, "value": "value1"})"
+        });
+        ReadTopicMessages(outputTopicName, {"0-0-value1"});
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {

@@ -136,8 +136,10 @@ namespace NInterconnect::NRdma {
             static constexpr ui64 UseCountMask = (1ul << UseCountBits) - 1u;
         public:
             void Release() noexcept {
-                Y_ABORT_UNLESS((Lock.load() & UseCountMask) > 0);
-                Lock.fetch_sub(1);
+                //TODO: remove this verify it is a bit expensive
+                Y_ABORT_UNLESS(static_cast<i64>(Lock.load() & UseCountMask) > 0);
+                //Just decrease use count, no need to be synchronized with other threads
+                Lock.fetch_sub(1, std::memory_order_relaxed);
             }
 
             bool TryAcquire(ui64 expectedGeneration) noexcept {
@@ -791,7 +793,7 @@ namespace NInterconnect::NRdma {
 
             void Free(TMemRegion&& mr, TSlotMemPool& pool) noexcept {
                 ui32 chainIndex = GetChainIndex(mr.GetSize());
-                if (Stopped) {
+                if (Y_UNLIKELY(Stopped)) {
                     // current thread is stopped, return mr to global pool
                     pool.Chains[chainIndex].PutSlot(MakeIntrusive<TMemRegion>(std::move(mr)));
                     return;

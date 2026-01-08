@@ -379,13 +379,13 @@ TStatus AnnotateReadTableFullTextIndexSourceSettings(const TExprNode::TPtr& node
         return TStatus::Error;
     }
 
-    const auto& resultColumns = node->Child(TKqpReadTableFullTextIndexSourceSettings::idx_ResultColumns);
-    if (!EnsureTupleOfAtoms(*resultColumns, ctx)) {
+    const auto& queryColumns = node->Child(TKqpReadTableFullTextIndexSourceSettings::idx_QueryColumns);
+    if (!EnsureTupleOfAtoms(*queryColumns, ctx)) {
         return TStatus::Error;
     }
 
     auto rowType = GetReadTableRowTypeFullText(
-        ctx, tablesData, cluster, table.first, TCoAtomList(resultColumns), false);
+        ctx, tablesData, cluster, table.first, TCoAtomList(columns), false);
 
     node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
     return TStatus::Ok;
@@ -585,13 +585,13 @@ TStatus AnnotateReadTableFullTextIndex(const TExprNode::TPtr& node, TExprContext
         return TStatus::Error;
     }
 
-    const auto& resultColumns = node->ChildPtr(TKqlReadTableFullTextIndex::idx_ResultColumns);
-    if (!EnsureTupleOfAtoms(*resultColumns, ctx)) {
+    const auto& queryColumns = node->ChildPtr(TKqlReadTableFullTextIndex::idx_QueryColumns);
+    if (!EnsureTupleOfAtoms(*queryColumns, ctx)) {
         return TStatus::Error;
     }
 
     auto rowType = GetReadTableRowTypeFullText(
-        ctx, tablesData, cluster, table.first, TCoAtomList(resultColumns), false);
+        ctx, tablesData, cluster, table.first, TCoAtomList(columns), false);
 
     if (isPhysical) {
         node->SetTypeAnn(ctx.MakeType<TFlowExprType>(rowType));

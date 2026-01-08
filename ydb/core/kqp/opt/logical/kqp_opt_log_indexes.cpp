@@ -1405,9 +1405,9 @@ TExprBase KqpRewriteFlatMapOverFullTextRelevance(const NYql::NNodes::TExprBase& 
     auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
         .Table(read.Table())
         .Index(read.Index())
-        .Columns(searchColumns.Ptr())
+        .Columns(resultColumns.Ptr())
         .Query(searchQuery.Ptr())
-        .ResultColumns(resultColumns.Ptr())
+        .QueryColumns(searchColumns.Ptr())
         .Settings<TCoNameValueTupleList>().Add(settings).Build()
         .Done();
 
@@ -1497,9 +1497,9 @@ TExprBase KqpRewriteFlatMapOverFullTextContains(const NYql::NNodes::TExprBase& n
     auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
         .Table(read.Table())
         .Index(read.Index())
-        .Columns(searchColumns.Ptr())
+        .Columns(resultColumns.Ptr())
         .Query(searchQuery.Ptr())
-        .ResultColumns(resultColumns.Ptr())
+        .QueryColumns(searchColumns.Ptr())
         .Settings<TCoNameValueTupleList>().Add(settings).Build()
         .Done();
 

@@ -75,7 +75,7 @@ TExprBase KqpRewriteReadTableFullText(TExprBase node, TExprContext& ctx, const T
                 .Index(physicalRead.Cast().Index())
                 .Columns(physicalRead.Cast().Columns())
                 .Query(physicalRead.Cast().Query())
-                .ResultColumns(physicalRead.Cast().ResultColumns())
+                .QueryColumns(physicalRead.Cast().QueryColumns())
                 .Settings(physicalRead.Cast().Settings())
             .Build()
             .DataSource<TCoDataSource>()

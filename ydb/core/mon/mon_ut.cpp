@@ -35,7 +35,7 @@ struct THttpMonTestEnvOptions {
     enum class ERegKind {
         None,
         ActorPage,
-        Handler,
+        ActorHandler,
         MonPage,
     };
 
@@ -95,10 +95,10 @@ public:
                 });
                 break;
             }
-            case THttpMonTestEnvOptions::ERegKind::Handler: {
+            case THttpMonTestEnvOptions::ERegKind::ActorHandler: {
                 TestActorHandler = new TTestActorHandler();
                 TestActorId = Runtime->Register(TestActorHandler);
-                mon->RegisterHandler("/" + TString(TEST_MON_PATH), TestActorId);
+                mon->RegisterHandler(MakeDefaultUrl(), TestActorId);
                 break;
             }
             case THttpMonTestEnvOptions::ERegKind::MonPage: {
@@ -239,10 +239,10 @@ Y_UNIT_TEST_SUITE(ActorPage) {
     }
 }
 
-Y_UNIT_TEST_SUITE(Handler) {
+Y_UNIT_TEST_SUITE(ActorHandler) {
     Y_UNIT_TEST(HttpOk) {
         THttpMonTestEnv env({
-            .RegKind = THttpMonTestEnvOptions::ERegKind::Handler,
+            .RegKind = THttpMonTestEnvOptions::ERegKind::ActorHandler,
         });
 
         TStringStream responseStream;
@@ -251,11 +251,16 @@ Y_UNIT_TEST_SUITE(Handler) {
 
         const TString response = responseStream.ReadAll();
         UNIT_ASSERT_STRING_CONTAINS(response, TEST_RESPONSE);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 0);
     }
 
     Y_UNIT_TEST(OptionsOk) {
         THttpMonTestEnv env({
-            .RegKind = THttpMonTestEnvOptions::ERegKind::Handler,
+            .RegKind = THttpMonTestEnvOptions::ERegKind::ActorHandler,
         });
 
         TStringStream responseStream;
@@ -264,6 +269,11 @@ Y_UNIT_TEST_SUITE(Handler) {
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
 
         AssertCorsHeaders(outHeaders);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketSuccesses, 0);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 0);
     }
 }
 
@@ -294,10 +304,9 @@ Y_UNIT_TEST_SUITE(MonPage) {
         TStringStream responseStream;
         THttpHeaders outHeaders;
         const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream, TKeepAliveHttpClient::THeaders(), &outHeaders);
-        // MonPage doesn't handle OPTIONS specially, returns 200
         UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
 
-        // MonPage is legacy monlib page - doesn't have CORS headers
+        AssertCorsHeaders(outHeaders);
 
         TFakeTicketParserActor* ticketParser = env.GetTicketParser();
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 0);

@@ -31,14 +31,15 @@ void TTestActorHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr
     TStringBuilder body;
     body << "<html><body><p>" << TEST_RESPONSE << "</p></body></html>";
 
-    NHttp::THeadersBuilder headers;
-    headers.Set("Access-Control-Allow-Origin", "*");
-    headers.Set("Access-Control-Allow-Credentials", "true");
-    headers.Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
-    headers.Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST, PUT, DELETE");
+    TStringBuilder response;
+    response << "HTTP/1.1 200 OK\r\n"
+                << "Content-Type: text/html\r\n"
+                << "Content-Length: " << body.size() << "\r\n"
+                << "Connection: Close\r\n\r\n"
+                << body;
 
-    auto response = ev->Get()->Request->CreateResponse("200", "OK", headers, body);
-    Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+    Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
+        ev->Get()->Request->CreateResponseString(response)));
 }
 
 TTestMonPage::TTestMonPage()

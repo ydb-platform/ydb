@@ -7,6 +7,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/grpc_services/base
+    ydb/core/grpc_streaming
     ydb/library/actors/wilson
     ydb/library/wilson_ids
     ydb/public/sdk/cpp/src/client/types

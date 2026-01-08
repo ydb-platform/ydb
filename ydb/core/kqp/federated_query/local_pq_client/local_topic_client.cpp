@@ -1,4 +1,5 @@
 #include "local_topic_client.h"
+#include "local_topic_read_session.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc_operation.h>
 #include <ydb/core/grpc_services/service_topic.h>
@@ -8,7 +9,6 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-using namespace NActors;
 using namespace NGRpcService;
 using namespace NRpcService;
 using namespace NYdb;
@@ -16,10 +16,11 @@ using namespace NYdb::NTopic;
 
 class TLocalTopicClient final : public NYql::ITopicClient {
 public:
-    TLocalTopicClient(const TLocalTopicClientSettings& localSettings, const NYdb::NTopic::TTopicClientSettings& clientSettings)
+    TLocalTopicClient(const TLocalTopicClientSettings& localSettings, const TTopicClientSettings& clientSettings)
         : ActorSystem(localSettings.ActorSystem)
         , ChannelBufferSize(localSettings.ChannelBufferSize)
         , Database(clientSettings.Database_.value_or(""))
+        , DefaultCompressionExecutor(clientSettings.DefaultCompressionExecutor_)
     {
         Y_VALIDATE(ActorSystem, "Actor system is required for local topic client");
         Y_VALIDATE(ChannelBufferSize, "Channel buffer size is not set");
@@ -69,8 +70,12 @@ public:
     }
 
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings) final {
-        Y_UNUSED(settings);
-        Y_VALIDATE(false, __func__ << " is not implemented");
+        std::optional<TReadSessionSettings> modifiedSettings;
+        if (!settings.DecompressionExecutor_) {
+            modifiedSettings = settings;
+            modifiedSettings->DecompressionExecutor_ = DefaultCompressionExecutor;
+        }
+        return CreateLocalTopicReadSession({.ActorSystem = ActorSystem, .Database = Database}, modifiedSettings.value_or(settings));
     }
 
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings) final {
@@ -100,18 +105,19 @@ private:
             .Promise = promise,
             .OperationName = "local_topic_rpc_operation",
         });
-        ActorSystem->Register(actor, TMailboxType::HTSwap, ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId);
+        ActorSystem->Register(actor, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
         return promise.GetFuture();
     }
 
-    TActorSystem* ActorSystem = nullptr;
+    TActorSystem* const ActorSystem = nullptr;
     const ui64 ChannelBufferSize = 0;
     const TString Database;
+    const IExecutor::TPtr DefaultCompressionExecutor;
 };
 
 } // anonymous namespace
 
-NYql::ITopicClient::TPtr CreateLocalTopicClient(const TLocalTopicClientSettings& localSettings, const NYdb::NTopic::TTopicClientSettings& clientSettings) {
+NYql::ITopicClient::TPtr CreateLocalTopicClient(const TLocalTopicClientSettings& localSettings, const TTopicClientSettings& clientSettings) {
     return MakeIntrusive<TLocalTopicClient>(localSettings, clientSettings);
 }
 

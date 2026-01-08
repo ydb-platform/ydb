@@ -101,7 +101,12 @@ public:
     }
 
     ITopicClient::TPtr GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) final {
-        Y_VALIDATE(HasEndpoint<TTopicClientSettings>(driver, settings), "Missing endpoint value for topic client");
+        const bool hasEndpoint = HasEndpoint<TTopicClientSettings>(driver, settings);
+        if (!hasEndpoint && LocalTopicClientFactory) {
+            return LocalTopicClientFactory->CreateTopicClient(settings);
+        }
+
+        Y_VALIDATE(hasEndpoint, "Missing endpoint value for topic client and local topics are not allowed");
         return CreateExternalTopicClient(driver, settings);
     }
 

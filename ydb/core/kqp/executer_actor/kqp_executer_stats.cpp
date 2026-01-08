@@ -1697,7 +1697,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             THashMap<ui32, NDqProto::TDqStageStats*> protoStages;
 
             for (auto& [stageId, stagetype] : TasksGraph->GetStagesInfo()) {
-                protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
+                if (stageId.TxId == 0) {
+                    protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
+                }
             }
 
             for (auto& [stageId, stageStat] : StageStats) {

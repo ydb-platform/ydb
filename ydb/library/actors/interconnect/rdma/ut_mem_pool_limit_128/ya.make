@@ -15,6 +15,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/threading/future
     ydb/library/actors/interconnect/rdma
     ydb/library/actors/interconnect/rdma/ut/utils
 )

@@ -23,42 +23,6 @@ void TTestActorPage::Handle(NMon::TEvHttpInfo::TPtr& ev) {
     Send(ev->Sender, new NMon::TEvHttpInfoRes(body));
 }
 
-void TTestActorHandler::Bootstrap() {
-    Become(&TTestActorHandler::StateWork);
-}
-
-void TTestActorHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
-    TStringBuilder body;
-    body << "<html><body><p>" << TEST_RESPONSE << "</p></body></html>";
-
-    TStringBuilder response;
-    response << "HTTP/1.1 200 OK\r\n"
-                << "Content-Type: text/html\r\n"
-                << "Content-Length: " << body.size() << "\r\n"
-                << "Connection: Close\r\n\r\n"
-                << body;
-
-    Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
-        ev->Get()->Request->CreateResponseString(response)));
-}
-
-TTestMonPage::TTestMonPage()
-    : NMonitoring::IMonPage(TEST_MON_PATH, TString("Test Page"))
-{
-}
-
-void TTestMonPage::Output(NMonitoring::IMonHttpRequest& request) {
-    const TStringBuf pathInfo = request.GetPathInfo();
-    if (!pathInfo.empty() && pathInfo != TStringBuf("/")) {
-        request.Output() << NMonitoring::HTTPNOTFOUND;
-        return;
-    }
-
-    auto& out = request.Output();
-    out << NMonitoring::HTTPOKHTML;
-    out << "<html><body><p>" << TEST_RESPONSE << "</p></body></html>";
-}
-
 TFakeTicketParserActor::TFakeTicketParserActor(TVector<TString> groupSIDs)
     : TActor<TFakeTicketParserActor>(&TFakeTicketParserActor::StateFunc)
     , GroupSIDs(std::move(groupSIDs))

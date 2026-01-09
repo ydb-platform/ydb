@@ -180,7 +180,6 @@ public:
         response << "Content-Length: " << body.Size() << "\r\n";
         response << "\r\n";
         response << body.Str();
-
         Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }

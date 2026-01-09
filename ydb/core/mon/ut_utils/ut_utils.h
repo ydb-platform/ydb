@@ -31,26 +31,6 @@ private:
     }
 };
 
-class TTestActorHandler : public TActorBootstrapped<TTestActorHandler> {
-public:
-    void Bootstrap();
-
-private:
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev);
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
-        }
-    }
-};
-
-class TTestMonPage : public NMonitoring::IMonPage {
-public:
-    TTestMonPage();
-    void Output(NMonitoring::IMonHttpRequest& request) override;
-};
-
 struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
     TFakeTicketParserActor(TVector<TString> groupSIDs);
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev);

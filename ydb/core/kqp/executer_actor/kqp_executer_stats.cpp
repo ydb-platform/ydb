@@ -755,13 +755,6 @@ TProgressStatEntry operator - (const TProgressStatEntry& l, const TProgressStatE
     };
 }
 
-void MergeAggr(NDqProto::TDqStatsAggr& aggr, const NDqProto::TDqStatsAggr& stat) noexcept {
-    aggr.SetMin(NonZeroMin(aggr.GetMin(), stat.GetMin()));
-    aggr.SetMax(std::max(aggr.GetMax(), stat.GetMax()));
-    aggr.SetSum(aggr.GetSum() + stat.GetSum());
-    aggr.SetCnt(aggr.GetCnt() + stat.GetCnt());
-}
-
 void UpdateAggr(NDqProto::TDqStatsAggr* aggr, ui64 value) noexcept {
     if (value) {
         if (aggr->GetMin() == 0) {
@@ -773,63 +766,6 @@ void UpdateAggr(NDqProto::TDqStatsAggr* aggr, ui64 value) noexcept {
         aggr->SetSum(aggr->GetSum() + value);
         aggr->SetCnt(aggr->GetCnt() + 1);
     }
-}
-
-void MergeExternal(NDqProto::TDqExternalAggrStats& asyncAggr, const NDqProto::TDqExternalAggrStats& asyncStat) noexcept {
-    MergeAggr(*asyncAggr.MutableExternalRows(), asyncStat.GetExternalRows());
-    MergeAggr(*asyncAggr.MutableExternalBytes(), asyncStat.GetExternalBytes());
-    MergeAggr(*asyncAggr.MutableStorageRows(), asyncStat.GetStorageRows());
-    MergeAggr(*asyncAggr.MutableStorageBytes(), asyncStat.GetStorageBytes());
-    MergeAggr(*asyncAggr.MutableCpuTimeUs(), asyncStat.GetCpuTimeUs());
-    MergeAggr(*asyncAggr.MutableWaitInputTimeUs(), asyncStat.GetWaitInputTimeUs());
-    MergeAggr(*asyncAggr.MutableWaitOutputTimeUs(), asyncStat.GetWaitOutputTimeUs());
-    MergeAggr(*asyncAggr.MutableFirstMessageMs(), asyncStat.GetFirstMessageMs());
-    MergeAggr(*asyncAggr.MutableLastMessageMs(), asyncStat.GetLastMessageMs());
-    asyncAggr.SetPartitionCount(asyncAggr.GetPartitionCount() + asyncStat.GetExternalRows().GetCnt());
-    asyncAggr.SetFinishedPartitionCount(asyncAggr.GetFinishedPartitionCount() + asyncStat.GetFinishedPartitionCount());
-}
-
-ui64 UpdateAsyncAggr(NDqProto::TDqAsyncStatsAggr& asyncAggr, const NDqProto::TDqAsyncBufferStats& asyncStat) noexcept {
-    ui64 baseTimeMs = 0;
-
-    UpdateAggr(asyncAggr.MutableBytes(), asyncStat.GetBytes());
-    UpdateAggr(asyncAggr.MutableDecompressedBytes(), asyncStat.GetDecompressedBytes());
-    UpdateAggr(asyncAggr.MutableRows(), asyncStat.GetRows());
-    UpdateAggr(asyncAggr.MutableChunks(), asyncStat.GetChunks());
-    UpdateAggr(asyncAggr.MutableSplits(), asyncStat.GetSplits());
-
-    auto firstMessageMs = asyncStat.GetFirstMessageMs();
-    if (firstMessageMs) {
-        UpdateAggr(asyncAggr.MutableFirstMessageMs(), firstMessageMs);
-        baseTimeMs = NonZeroMin(baseTimeMs, firstMessageMs);
-    }
-
-    auto pauseMessageMs = asyncStat.GetPauseMessageMs();
-    if (pauseMessageMs) {
-        UpdateAggr(asyncAggr.MutablePauseMessageMs(), pauseMessageMs);
-        baseTimeMs = NonZeroMin(baseTimeMs, pauseMessageMs);
-    }
-
-    auto resumeMessageMs = asyncStat.GetResumeMessageMs();
-    if (resumeMessageMs) {
-        UpdateAggr(asyncAggr.MutableResumeMessageMs(), resumeMessageMs);
-        baseTimeMs = NonZeroMin(baseTimeMs, resumeMessageMs);
-    }
-
-    auto lastMessageMs = asyncStat.GetLastMessageMs();
-    if (lastMessageMs) {
-        UpdateAggr(asyncAggr.MutableLastMessageMs(), lastMessageMs);
-        baseTimeMs = NonZeroMin(baseTimeMs, lastMessageMs);
-    }
-
-    UpdateAggr(asyncAggr.MutableWaitTimeUs(), asyncStat.GetWaitTimeUs());
-    UpdateAggr(asyncAggr.MutableWaitPeriods(), asyncStat.GetWaitPeriods());
-
-    if (firstMessageMs && lastMessageMs >= firstMessageMs) {
-        UpdateAggr(asyncAggr.MutableActiveTimeUs(), (lastMessageMs - firstMessageMs) * 1000);
-    }
-
-    return baseTimeMs;
 }
 
 NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDq::TStageId& stageId,
@@ -854,24 +790,6 @@ NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDq::TStageId& stageI
     newStage->MutableIntrospections()->Add(intros.begin(), intros.end());
 
     return newStage;
-}
-
-NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDqProto::TDqTaskStats& taskStats,
-    const TKqpTasksGraph& tasksGraph, NDqProto::TDqExecutionStats& execStats)
-{
-    auto& task = tasksGraph.GetTask(taskStats.GetTaskId());
-    return GetOrCreateStageStats(task.StageId, tasksGraph, execStats);
-}
-
-NDqProto::TDqTableAggrStats* GetOrCreateTableAggrStats(NDqProto::TDqStageStats* stage, const TString& tablePath) {
-    for(auto& table : *stage->MutableTables()) {
-        if (table.GetTablePath() == tablePath) {
-            return &table;
-        }
-    }
-    auto table = stage->AddTables();
-    table->SetTablePath(tablePath);
-    return table;
 }
 
 } // anonymous namespace
@@ -989,231 +907,6 @@ ui64 TQueryExecutionStats::EstimateFinishMem() {
     return Result->ByteSizeLong();
 }
 
-void TQueryExecutionStats::AddComputeActorFullStatsByTask(
-        const NYql::NDqProto::TDqTaskStats& task,
-        const NYql::NDqProto::TDqComputeActorStats& stats,
-        NYql::NDqProto::EComputeState state
-    ) {
-
-    auto& task1 = TasksGraph->GetTask(task.GetTaskId());
-    if (task1.StageId.TxId > 0) {
-        return;
-    }
-    auto* stageStats = GetOrCreateStageStats(task1.StageId, *TasksGraph, *Result);
-
-    stageStats->SetTotalTasksCount(stageStats->GetTotalTasksCount() + 1);
-    if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
-        stageStats->SetFinishedTasksCount(stageStats->GetFinishedTasksCount() + 1);
-    }
-    UpdateAggr(stageStats->MutableMaxMemoryUsage(), stats.GetMaxMemoryUsage()); // only 1 task per CA now
-    UpdateAggr(stageStats->MutableCpuTimeUs(), task.GetCpuTimeUs());
-    UpdateAggr(stageStats->MutableSourceCpuTimeUs(), task.GetSourceCpuTimeUs());
-    UpdateAggr(stageStats->MutableInputRows(), task.GetInputRows());
-    UpdateAggr(stageStats->MutableInputBytes(), task.GetInputBytes());
-    UpdateAggr(stageStats->MutableOutputRows(), task.GetOutputRows());
-    UpdateAggr(stageStats->MutableOutputBytes(), task.GetOutputBytes());
-    UpdateAggr(stageStats->MutableResultRows(), task.GetResultRows());
-    UpdateAggr(stageStats->MutableResultBytes(), task.GetResultBytes());
-    UpdateAggr(stageStats->MutableIngressRows(), task.GetIngressRows());
-    UpdateAggr(stageStats->MutableIngressBytes(), task.GetIngressBytes());
-    UpdateAggr(stageStats->MutableIngressDecompressedBytes(), task.GetIngressDecompressedBytes());
-    UpdateAggr(stageStats->MutableEgressRows(), task.GetEgressRows());
-    UpdateAggr(stageStats->MutableEgressBytes(), task.GetEgressBytes());
-
-    auto startTimeMs = task.GetStartTimeMs();
-    UpdateAggr(stageStats->MutableStartTimeMs(), startTimeMs);
-    BaseTimeMs = NonZeroMin(BaseTimeMs, startTimeMs);
-
-    auto finishTimeMs = task.GetFinishTimeMs();
-    UpdateAggr(stageStats->MutableFinishTimeMs(), finishTimeMs);
-    BaseTimeMs = NonZeroMin(BaseTimeMs, finishTimeMs);
-
-    UpdateAggr(stageStats->MutableDurationUs(), stats.GetDurationUs());
-    UpdateAggr(stageStats->MutableWaitInputTimeUs(), task.GetWaitInputTimeUs());
-    UpdateAggr(stageStats->MutableWaitOutputTimeUs(), task.GetWaitOutputTimeUs());
-
-    auto updateTimeMs = task.GetUpdateTimeMs();
-    stageStats->SetUpdateTimeMs(std::max(stageStats->GetUpdateTimeMs(), updateTimeMs));
-    BaseTimeMs = NonZeroMin(BaseTimeMs, updateTimeMs);
-
-    UpdateAggr(stageStats->MutableSpillingComputeBytes(), task.GetSpillingComputeWriteBytes());
-    UpdateAggr(stageStats->MutableSpillingChannelBytes(), task.GetSpillingChannelWriteBytes());
-    UpdateAggr(stageStats->MutableSpillingComputeTimeUs(), task.GetSpillingComputeReadTimeUs() + task.GetSpillingComputeWriteTimeUs());
-    UpdateAggr(stageStats->MutableSpillingChannelTimeUs(), task.GetSpillingChannelReadTimeUs() + task.GetSpillingChannelWriteTimeUs());
-
-    FillStageDurationUs(*stageStats);
-
-    for (auto& sourcesStat : task.GetSources()) {
-        auto& ingress = (*stageStats->MutableIngress())[sourcesStat.GetIngressName()];
-        MergeExternal(*ingress.MutableExternal(), sourcesStat.GetExternal());
-
-        const auto& [it, inserted] = ExternalPartitionStats.emplace(stageStats->GetStageId(), sourcesStat.GetIngressName());
-        auto& externalPartitionStat = it->second;
-
-        for (auto& externalPartition : sourcesStat.GetExternalPartitions()) {
-            const auto& [it, inserted] = externalPartitionStat.Stat.emplace(externalPartition.GetPartitionId(),
-                TExternalPartitionStat(externalPartition.GetExternalRows(), externalPartition.GetExternalBytes(),
-                externalPartition.GetFirstMessageMs(), externalPartition.GetLastMessageMs(), externalPartition.GetCpuTimeUs(),
-                externalPartition.GetWaitInputTimeUs(), externalPartition.GetWaitOutputTimeUs(), externalPartition.GetFinished()));
-            if (!inserted) {
-                it->second.ExternalRows += externalPartition.GetExternalRows();
-                it->second.ExternalBytes += externalPartition.GetExternalBytes();
-                it->second.FirstMessageMs = NonZeroMin(it->second.FirstMessageMs, externalPartition.GetFirstMessageMs());
-                it->second.LastMessageMs = std::max(it->second.LastMessageMs, externalPartition.GetLastMessageMs());
-                it->second.CpuTimeUs = std::max(it->second.CpuTimeUs, externalPartition.GetCpuTimeUs());
-                it->second.WaitInputTimeUs = std::max(it->second.WaitInputTimeUs, externalPartition.GetWaitInputTimeUs());
-                it->second.WaitOutputTimeUs = std::max(it->second.WaitOutputTimeUs, externalPartition.GetWaitOutputTimeUs());
-                it->second.Finished |= externalPartition.GetFinished();
-            }
-        }
-
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*ingress.MutableIngress(), sourcesStat.GetIngress()));
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*ingress.MutablePush(),   sourcesStat.GetPush()));
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*ingress.MutablePop(),  sourcesStat.GetPop()));
-    }
-    for (auto& inputChannelStat : task.GetInputChannels()) {
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableInput())[inputChannelStat.GetSrcStageId()].MutablePush(), inputChannelStat.GetPush()));
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableInput())[inputChannelStat.GetSrcStageId()].MutablePop(), inputChannelStat.GetPop()));
-    }
-    for (auto& outputChannelStat : task.GetOutputChannels()) {
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableOutput())[outputChannelStat.GetDstStageId()].MutablePush(), outputChannelStat.GetPush()));
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableOutput())[outputChannelStat.GetDstStageId()].MutablePop(), outputChannelStat.GetPop()));
-    }
-    for (auto& sinksStat : task.GetSinks()) {
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutablePush(),   sinksStat.GetPush()));
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutablePop(),    sinksStat.GetPop()));
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableEgress())[sinksStat.GetEgressName()].MutableEgress(), sinksStat.GetEgress()));
-    }
-    for (auto& operatorStat : task.GetOperators()) {
-        switch (operatorStat.GetTypeCase()) {
-            case NYql::NDqProto::TDqOperatorStats::kJoin: {
-                auto& joinStats = (*stageStats->MutableOperatorJoin())[operatorStat.GetOperatorId()];
-                joinStats.SetOperatorId(operatorStat.GetOperatorId());
-                UpdateAggr(joinStats.MutableBytes(), operatorStat.GetBytes());
-                UpdateAggr(joinStats.MutableRows(), operatorStat.GetRows());
-                break;
-            }
-            case NYql::NDqProto::TDqOperatorStats::kFilter: {
-                auto& filterStats = (*stageStats->MutableOperatorFilter())[operatorStat.GetOperatorId()];
-                filterStats.SetOperatorId(operatorStat.GetOperatorId());
-                UpdateAggr(filterStats.MutableBytes(), operatorStat.GetBytes());
-                UpdateAggr(filterStats.MutableRows(), operatorStat.GetRows());
-                break;
-            }
-            case NYql::NDqProto::TDqOperatorStats::kAggregation: {
-                auto& aggrStats = (*stageStats->MutableOperatorAggregation())[operatorStat.GetOperatorId()];
-                aggrStats.SetOperatorId(operatorStat.GetOperatorId());
-                UpdateAggr(aggrStats.MutableBytes(), operatorStat.GetBytes());
-                UpdateAggr(aggrStats.MutableRows(), operatorStat.GetRows());
-                break;
-            }
-            default:
-                break;
-        }
-
-    }
-    for (auto& tableStat : task.GetTables()) {
-        auto& tableStats = *GetOrCreateTableAggrStats(stageStats, tableStat.GetTablePath());
-        UpdateAggr(tableStats.MutableReadRows(), tableStat.GetReadRows());
-        UpdateAggr(tableStats.MutableReadBytes(), tableStat.GetReadBytes());
-    }
-    for (const auto& mkqlStat : task.GetMkqlStats()) {
-        UpdateAggr(&(*stageStats->MutableMkql())[mkqlStat.GetName()], mkqlStat.GetValue());
-    }
-}
-
-void TQueryExecutionStats::AddComputeActorProfileStatsByTask(
-        const NYql::NDqProto::TDqTaskStats& task, const NYql::NDqProto::TDqComputeActorStats& stats,
-        bool keepOnlyLastTask) {
-    auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
-    if (keepOnlyLastTask) {
-        stageStats->MutableComputeActors()->Clear();
-    }
-    stageStats->AddComputeActors()->CopyFrom(stats);
-}
-
-void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProto::TDqComputeActorStats&& stats,
-    NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
-//    Cerr << (TStringBuilder() << "::AddComputeActorStats " << stats.DebugString() << Endl);
-
-    Result->SetCpuTimeUs(Result->GetCpuTimeUs() + stats.GetCpuTimeUs());
-
-    UpdateAggr(ExtraStats.MutableComputeCpuTimeUs(), stats.GetCpuTimeUs());
-
-    NYql::NDqProto::TDqTaskStats * longTask = nullptr;
-
-    for (auto& task : *stats.MutableTasks()) {
-        ResultBytes += task.GetResultBytes();
-        ResultRows += task.GetResultRows();
-        for (auto& table : task.GetTables()) {
-            NYql::NDqProto::TDqTableStats* tableAggr = nullptr;
-            if (auto it = TableStats.find(table.GetTablePath()); it != TableStats.end()) {
-                tableAggr = it->second;
-            } else {
-                tableAggr = Result->AddTables();
-                tableAggr->SetTablePath(table.GetTablePath());
-                TableStats.emplace(table.GetTablePath(), tableAggr);
-            }
-
-            tableAggr->SetReadRows(tableAggr->GetReadRows() + table.GetReadRows());
-            tableAggr->SetReadBytes(tableAggr->GetReadBytes() + table.GetReadBytes());
-            tableAggr->SetWriteRows(tableAggr->GetWriteRows() + table.GetWriteRows());
-            tableAggr->SetWriteBytes(tableAggr->GetWriteBytes() + table.GetWriteBytes());
-            tableAggr->SetEraseRows(tableAggr->GetEraseRows() + table.GetEraseRows());
-            tableAggr->SetAffectedPartitions(tableAggr->GetAffectedPartitions() + table.GetAffectedPartitions());
-
-            NKqpProto::TKqpTableExtraStats tableExtraStats;
-            if (table.GetExtra().UnpackTo(&tableExtraStats)) {
-                for (const auto& shardId : tableExtraStats.GetReadActorTableAggrExtraStats().GetAffectedShards()) {
-                    AffectedShards.insert(shardId);
-                }
-            }
-
-            // TODO: the following code is for backward compatibility, remove it after ydb release
-            {
-                NKqpProto::TKqpReadActorTableAggrExtraStats tableExtraStats;
-                if (table.GetExtra().UnpackTo(&tableExtraStats)) {
-                    for (const auto& shardId : tableExtraStats.GetAffectedShards()) {
-                        AffectedShards.insert(shardId);
-                    }
-                }
-            }
-        }
-
-        // checking whether the task is long
-
-        // TODO(ilezhankin): investigate - for some reason `task.FinishTimeMs` may be large (or small?)
-        //      enough to result in an enormous duration - triggering the "long tasks" mode.
-
-        auto taskDuration = TDuration::MilliSeconds(
-            task.GetStartTimeMs() != 0 && task.GetFinishTimeMs() >= task.GetStartTimeMs()
-            ? task.GetFinishTimeMs() - task.GetStartTimeMs()
-            : 0);
-        auto& longestTaskDuration = LongestTaskDurations[task.GetStageId()];
-        if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
-            CollectStatsByLongTasks = true;
-            longTask = &task;
-            longestTaskDuration = taskDuration;
-        }
-    }
-
-    if (CollectFullStats(StatsMode)) {
-        for (const auto& task : stats.GetTasks()) {
-            AddComputeActorFullStatsByTask(task, stats, state);
-        }
-    }
-
-    if (CollectProfileStats(StatsMode)) {
-        for (const auto& task : stats.GetTasks()) {
-            AddComputeActorProfileStatsByTask(task, stats, false);
-        }
-    } else {
-        if (longTask) {
-            AddComputeActorProfileStatsByTask(*longTask, stats, true);
-        }
-    }
-}
-
 void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats) {
 //    Cerr << (TStringBuilder() << "::AddDatashardPrepareStats " << txStats.DebugString() << Endl);
 
@@ -1229,70 +922,6 @@ void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&
     StorageCpuTimeUs += cpuUs;
 }
 
-void TQueryExecutionStats::AddDatashardFullStatsByTask(
-        const NYql::NDqProto::TDqTaskStats& task, ui64 datashardCpuTimeUs) {
-    auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
-
-    // TODO: dedup with AddComputeActorFullStatsByTask
-
-    stageStats->SetTotalTasksCount(stageStats->GetTotalTasksCount() + 1);
-    UpdateAggr(stageStats->MutableCpuTimeUs(), task.GetCpuTimeUs());
-    UpdateAggr(stageStats->MutableInputRows(), task.GetInputRows());
-    UpdateAggr(stageStats->MutableInputBytes(), task.GetInputBytes());
-    UpdateAggr(stageStats->MutableOutputRows(), task.GetOutputRows());
-    UpdateAggr(stageStats->MutableOutputBytes(), task.GetOutputBytes());
-
-    auto startTimeMs = task.GetStartTimeMs();
-    UpdateAggr(stageStats->MutableStartTimeMs(), startTimeMs);
-    BaseTimeMs = NonZeroMin(BaseTimeMs, startTimeMs);
-
-    auto finishTimeMs = task.GetFinishTimeMs();
-    UpdateAggr(stageStats->MutableFinishTimeMs(), finishTimeMs);
-    BaseTimeMs = NonZeroMin(BaseTimeMs, finishTimeMs);
-
-    FillStageDurationUs(*stageStats);
-    UpdateAggr(stageStats->MutableWaitInputTimeUs(), task.GetWaitInputTimeUs());
-    UpdateAggr(stageStats->MutableWaitOutputTimeUs(), task.GetWaitOutputTimeUs());
-
-    UpdateAggr(stageStats->MutableSpillingComputeBytes(), task.GetSpillingComputeWriteBytes());
-    UpdateAggr(stageStats->MutableSpillingChannelBytes(), task.GetSpillingChannelWriteBytes());
-    UpdateAggr(stageStats->MutableSpillingComputeTimeUs(), task.GetSpillingComputeReadTimeUs() + task.GetSpillingComputeWriteTimeUs());
-    UpdateAggr(stageStats->MutableSpillingChannelTimeUs(), task.GetSpillingChannelReadTimeUs() + task.GetSpillingChannelWriteTimeUs());
-
-    for (auto& tableStats: task.GetTables()) {
-        auto* tableAggrStats = GetOrCreateTableAggrStats(stageStats, tableStats.GetTablePath());
-
-        UpdateAggr(tableAggrStats->MutableReadRows(), tableStats.GetReadRows());
-        UpdateAggr(tableAggrStats->MutableReadBytes(), tableStats.GetReadBytes());
-        UpdateAggr(tableAggrStats->MutableWriteRows(), tableStats.GetWriteRows());
-        UpdateAggr(tableAggrStats->MutableWriteBytes(), tableStats.GetWriteBytes());
-        UpdateAggr(tableAggrStats->MutableEraseRows(), tableStats.GetEraseRows());
-
-        NKqpProto::TKqpShardTableExtraStats tableExtraStats;
-
-        if (tableStats.GetExtra().UnpackTo(&tableExtraStats)) {
-            NKqpProto::TKqpShardTableAggrExtraStats tableAggrExtraStats;
-            if (tableAggrStats->HasExtra()) {
-                bool ok = tableAggrStats->MutableExtra()->UnpackTo(&tableAggrExtraStats);
-                YQL_ENSURE(ok);
-            }
-
-            tableAggrExtraStats.SetAffectedShards(TableShards[tableStats.GetTablePath()].size());
-            UpdateAggr(tableAggrExtraStats.MutableShardCpuTimeUs(), datashardCpuTimeUs);
-
-            tableAggrStats->MutableExtra()->PackFrom(tableAggrExtraStats);
-        }
-    }
-
-    NKqpProto::TKqpStageExtraStats stageExtraStats;
-    if (stageStats->HasExtra()) {
-        bool ok = stageStats->GetExtra().UnpackTo(&stageExtraStats);
-        YQL_ENSURE(ok);
-    }
-    stageExtraStats.AddDatashardTasks()->CopyFrom(task);
-    stageStats->MutableExtra()->PackFrom(stageExtraStats);
-}
-
 void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStats&& stats,
     NKikimrQueryStats::TTxStats&& txStats, TDuration collectLongTaskStatsTimeout)
 {
@@ -1301,55 +930,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
     LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
 
-    ui64 datashardCpuTimeUs = 0;
-    for (const auto& perShard : txStats.GetPerShardStats()) {
-        AffectedShards.emplace(perShard.GetShardId());
-
-        datashardCpuTimeUs += perShard.GetCpuTimeUsec();
-        UpdateAggr(ExtraStats.MutableShardsCpuTimeUs(), perShard.GetCpuTimeUsec());
-    }
-
-    StorageCpuTimeUs += datashardCpuTimeUs;
-
-    NYql::NDqProto::TDqTaskStats* longTask = nullptr;
-
-    for (auto& task : *stats.MutableTasks()) {
-        UpdateStorageTables(task, &txStats);
-
-        // checking whether the task is long
-
-        auto taskDuration = TDuration::MilliSeconds(
-            task.GetStartTimeMs() != 0 && task.GetFinishTimeMs() >= task.GetStartTimeMs()
-            ? task.GetFinishTimeMs() - task.GetStartTimeMs()
-            : 0);
-        auto& longestTaskDuration = LongestTaskDurations[task.GetStageId()];
-        if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
-            CollectStatsByLongTasks = true;
-            longTask = &task;
-            longestTaskDuration = taskDuration;
-        }
-    }
-
-    if (CollectFullStats(StatsMode)) {
-        for (auto& task : stats.GetTasks()) {
-            AddDatashardFullStatsByTask(task, datashardCpuTimeUs);
-        }
-        DatashardStats.emplace_back(std::move(txStats));
-    } else {
-        if (longTask) {
-            DatashardStats.emplace_back(std::move(txStats));
-        }
-    }
-
-    if (CollectProfileStats(StatsMode)) {
-        for (const auto& task : stats.GetTasks()) {
-            AddComputeActorProfileStatsByTask(task, stats, false);
-        }
-    } else {
-        if (longTask) {
-            AddComputeActorProfileStatsByTask(*longTask, stats, true);
-        }
-    }
+    UpdateTaskStats(0, stats, NYql::NDqProto::COMPUTE_STATE_FINISHED, collectLongTaskStatsTimeout);
 }
 
 void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats) {
@@ -1365,10 +946,6 @@ void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txSta
     }
 
     StorageCpuTimeUs += datashardCpuTimeUs;
-
-    if (CollectFullStats(StatsMode)) {
-        DatashardStats.emplace_back(std::move(txStats));
-    }
 }
 
 void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats) {
@@ -1438,52 +1015,57 @@ void TQueryExecutionStats::UpdateStorageTables(const NYql::NDqProto::TDqTaskStat
 }
 
 void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
-    AFL_ENSURE(stats.GetTasks().size() == 1);
-    const NYql::NDqProto::TDqTaskStats& taskStats = stats.GetTasks(0);
-    AFL_ENSURE(taskStats.GetTaskId() == taskId);
-    AFL_ENSURE(taskId > 0);
-    auto index = taskId - 1;
-    AFL_ENSURE(index < TaskCount);
+    if (taskId) {
+        AFL_ENSURE(stats.GetTasks().size() == 1);
+        AFL_ENSURE(stats.GetTasks(0).GetTaskId() == taskId);
+    }
 
-    ComputeCpuTimeUs.SetNonZero(index, taskStats.GetCpuTimeUs());
-    UpdateQueryTables(taskStats);
+    for (auto& taskStats : stats.GetTasks()) {
+        auto taskId = taskStats.GetTaskId();
+        AFL_ENSURE(taskId > 0);
+        auto index = taskId - 1;
+        AFL_ENSURE(index < TaskCount);
 
-    if (CollectBasicStats(StatsMode)) {
-        if (CollectFullStats(StatsMode)) {
-            auto stageId = TasksGraph->GetTask(taskId).StageId;
-            auto [it, inserted] = StageStats.try_emplace(stageId);
-            TStageExecutionStats& stageStats = it->second;
-            if (inserted) {
-                stageStats.StageId = stageId;
-                stageStats.SetHistorySampleCount(HistorySampleCount);
-            }
-            BaseTimeMs = NonZeroMin(BaseTimeMs, stageStats.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
+        ComputeCpuTimeUs.SetNonZero(index, taskStats.GetCpuTimeUs());
+        UpdateQueryTables(taskStats);
 
-            constexpr ui64 deadline = 600'000'000; // 10m
-            if (stageStats.CurrentWaitOutputTimeUs.MinValue > deadline) {
-                for (auto stat : stageStats.OutputStages) {
-                    if (stat->IsDeadlocked(deadline)) {
-                        DeadlockedStageId = stat->StageId.StageId;
-                        break;
-                    }
+        if (CollectBasicStats(StatsMode)) {
+            if (CollectFullStats(StatsMode)) {
+                auto stageId = TasksGraph->GetTask(taskId).StageId;
+                auto [it, inserted] = StageStats.try_emplace(stageId);
+                TStageExecutionStats& stageStats = it->second;
+                if (inserted) {
+                    stageStats.StageId = stageId;
+                    stageStats.SetHistorySampleCount(HistorySampleCount);
                 }
-            } else if (stageStats.IsDeadlocked(deadline)) {
-                DeadlockedStageId = stageStats.StageId.StageId;
-            }
+                BaseTimeMs = NonZeroMin(BaseTimeMs, stageStats.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
 
-            if (CollectProfileStats(StatsMode)) {
-                stageStats.ComputeActors[taskId].CopyFrom(stats);
-            } else {
-                auto taskDuration = TDuration::MilliSeconds(
-                    taskStats.GetStartTimeMs() != 0 && taskStats.GetFinishTimeMs() >= taskStats.GetStartTimeMs()
-                    ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
-                    : 0);
-                auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
-                if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
-                    CollectStatsByLongTasks = true;
-                    longestTaskDuration = taskDuration;
-                    stageStats.ComputeActors.clear();
+                constexpr ui64 deadline = 600'000'000; // 10m
+                if (stageStats.CurrentWaitOutputTimeUs.MinValue > deadline) {
+                    for (auto stat : stageStats.OutputStages) {
+                        if (stat->IsDeadlocked(deadline)) {
+                            DeadlockedStageId = stat->StageId.StageId;
+                            break;
+                        }
+                    }
+                } else if (stageStats.IsDeadlocked(deadline)) {
+                    DeadlockedStageId = stageStats.StageId.StageId;
+                }
+
+                if (CollectProfileStats(StatsMode)) {
                     stageStats.ComputeActors[taskId].CopyFrom(stats);
+                } else {
+                    auto taskDuration = TDuration::MilliSeconds(
+                        taskStats.GetStartTimeMs() != 0 && taskStats.GetFinishTimeMs() >= taskStats.GetStartTimeMs()
+                        ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
+                        : 0);
+                    auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
+                    if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
+                        CollectStatsByLongTasks = true;
+                        longestTaskDuration = taskDuration;
+                        stageStats.ComputeActors.clear();
+                        stageStats.ComputeActors[taskId].CopyFrom(stats);
+                    }
                 }
             }
         }
@@ -1909,149 +1491,6 @@ void TQueryExecutionStats::AdjustBaseTime(NDqProto::TDqStageStats* stageStats) {
     }
     auto updateTimeMs = stageStats->GetUpdateTimeMs();
     stageStats->SetUpdateTimeMs(updateTimeMs > BaseTimeMs ? updateTimeMs - BaseTimeMs : 0);
-}
-
-void TQueryExecutionStats::Finish() {
-//    Cerr << (TStringBuilder() << "-- finish: executerTime: " << ExecuterCpuTime.MicroSeconds() << Endl);
-
-    for (auto& [stageId, stagetype] : TasksGraph->GetStagesInfo()) {
-        if (stageId.TxId > 0) {
-            continue;
-        }
-        auto stageStats = GetOrCreateStageStats(stageId, *TasksGraph, *Result);
-        stageStats->SetBaseTimeMs(BaseTimeMs);
-
-        if (ExternalPartitionStats.contains(stageStats->GetStageId())) {
-            auto& externalPartitionStat = ExternalPartitionStats[stageStats->GetStageId()];
-            auto& ingress = (*stageStats->MutableIngress())[externalPartitionStat.Name];
-            auto& external = *ingress.MutableExternal();
-            ui32 finishedPartitions = 0;
-            for (auto& [partitionId, partitionStat] : externalPartitionStat.Stat) {
-                if (partitionStat.ExternalRows) {
-                    auto& externalRows = *external.MutableExternalRows();
-                    externalRows.SetMin(NonZeroMin(externalRows.GetMin(), partitionStat.ExternalRows));
-                    externalRows.SetMax(std::max(externalRows.GetMax(), partitionStat.ExternalRows));
-                    externalRows.SetSum(externalRows.GetSum() + partitionStat.ExternalRows);
-                    externalRows.SetCnt(externalRows.GetCnt() + 1);
-                }
-
-                if (partitionStat.ExternalBytes) {
-                    auto& externalBytes = *external.MutableExternalBytes();
-                    externalBytes.SetMin(NonZeroMin(externalBytes.GetMin(), partitionStat.ExternalBytes));
-                    externalBytes.SetMax(std::max(externalBytes.GetMax(), partitionStat.ExternalBytes));
-                    externalBytes.SetSum(externalBytes.GetSum() + partitionStat.ExternalBytes);
-                    externalBytes.SetCnt(externalBytes.GetCnt() + 1);
-                }
-
-                if (partitionStat.FirstMessageMs) {
-                    auto& firstMessageMs = *external.MutableFirstMessageMs();
-                    firstMessageMs.SetMin(NonZeroMin(firstMessageMs.GetMin(), partitionStat.FirstMessageMs));
-                    firstMessageMs.SetMax(std::max(firstMessageMs.GetMax(), partitionStat.FirstMessageMs));
-                    firstMessageMs.SetSum(firstMessageMs.GetSum() + partitionStat.FirstMessageMs);
-                    firstMessageMs.SetCnt(firstMessageMs.GetCnt() + 1);
-                }
-
-                if (partitionStat.LastMessageMs) {
-                    auto& lastMessageMs = *external.MutableLastMessageMs();
-                    lastMessageMs.SetMin(NonZeroMin(lastMessageMs.GetMin(), partitionStat.LastMessageMs));
-                    lastMessageMs.SetMax(std::max(lastMessageMs.GetMax(), partitionStat.LastMessageMs));
-                    lastMessageMs.SetSum(lastMessageMs.GetSum() + partitionStat.LastMessageMs);
-                    lastMessageMs.SetCnt(lastMessageMs.GetCnt() + 1);
-                }
-
-                if (partitionStat.CpuTimeUs) {
-                    auto& cpuTimeUs = *external.MutableCpuTimeUs();
-                    cpuTimeUs.SetMin(NonZeroMin(cpuTimeUs.GetMin(), partitionStat.CpuTimeUs));
-                    cpuTimeUs.SetMax(std::max(cpuTimeUs.GetMax(), partitionStat.CpuTimeUs));
-                    cpuTimeUs.SetSum(cpuTimeUs.GetSum() + partitionStat.CpuTimeUs);
-                    cpuTimeUs.SetCnt(cpuTimeUs.GetCnt() + 1);
-                }
-
-                if (partitionStat.WaitInputTimeUs) {
-                    auto& waitInputTimeUs = *external.MutableWaitInputTimeUs();
-                    waitInputTimeUs.SetMin(NonZeroMin(waitInputTimeUs.GetMin(), partitionStat.WaitInputTimeUs));
-                    waitInputTimeUs.SetMax(std::max(waitInputTimeUs.GetMax(), partitionStat.WaitInputTimeUs));
-                    waitInputTimeUs.SetSum(waitInputTimeUs.GetSum() + partitionStat.WaitInputTimeUs);
-                    waitInputTimeUs.SetCnt(waitInputTimeUs.GetCnt() + 1);
-                }
-
-                if (partitionStat.WaitOutputTimeUs) {
-                    auto& waitOutputTimeUs = *external.MutableWaitOutputTimeUs();
-                    waitOutputTimeUs.SetMin(NonZeroMin(waitOutputTimeUs.GetMin(), partitionStat.WaitOutputTimeUs));
-                    waitOutputTimeUs.SetMax(std::max(waitOutputTimeUs.GetMax(), partitionStat.WaitOutputTimeUs));
-                    waitOutputTimeUs.SetSum(waitOutputTimeUs.GetSum() + partitionStat.WaitOutputTimeUs);
-                    waitOutputTimeUs.SetCnt(waitOutputTimeUs.GetCnt() + 1);
-                }
-
-                finishedPartitions += partitionStat.Finished;
-            }
-            external.SetPartitionCount(external.GetPartitionCount() + externalPartitionStat.Stat.size());
-            external.SetFinishedPartitionCount(external.GetFinishedPartitionCount() + finishedPartitions);
-
-            auto it = StageStats.find(stageId);
-            if (it != StageStats.end()) {
-                auto it1 = it->second.Ingress.find(externalPartitionStat.Name);
-                if (it1 != it->second.Ingress.end()) {
-                    external.SetPartitionCount(std::max<ui32>(it1->second.External.PartitionCount, external.GetPartitionCount()));
-                }
-            }
-        }
-
-        AdjustBaseTime(stageStats);
-
-        auto it = StageStats.find(stageId);
-        if (it != StageStats.end()) {
-            it->second.ExportHistory(BaseTimeMs, *stageStats);
-        }
-    }
-
-    Result->SetCpuTimeUs(Result->GetCpuTimeUs() + ExecuterCpuTime.MicroSeconds());
-    Result->SetDurationUs(FinishTs.MicroSeconds() - StartTs.MicroSeconds());
-
-    // Result->Result* fields are (temporary?) commented out in proto due to lack of use
-    //
-    // Result->SetResultBytes(ResultBytes);
-    // Result->SetResultRows(ResultRows);
-
-    ExtraStats.SetAffectedShards(AffectedShards.size());
-    if (CollectStatsByLongTasks || CollectProfileStats(StatsMode)) {
-        for (auto&& s : UseLlvmByStageId) {
-            for (auto&& pbs : *Result->MutableStages()) {
-                if (pbs.GetStageId() == s.first) {
-                    pbs.SetUseLlvm(s.second);
-                    break;
-                }
-            }
-        }
-
-        for (auto&& s : ShardsCountByNode) {
-            for (auto&& pbs : *Result->MutableStages()) {
-                if (pbs.GetStageId() == s.first) {
-                    NKqpProto::TKqpStageExtraStats pbStats;
-                    if (pbs.HasExtra() && !pbs.GetExtra().UnpackTo(&pbStats)) {
-                        break;
-                    }
-                    for (auto&& i : s.second) {
-                        auto& nodeStat = *pbStats.AddNodeStats();
-                        nodeStat.SetNodeId(i.first);
-                        nodeStat.SetShardsCount(i.second);
-                    }
-                    pbs.MutableExtra()->PackFrom(pbStats);
-                    break;
-                }
-            }
-        }
-    }
-    Result->MutableExtra()->PackFrom(ExtraStats);
-
-    if (CollectStatsByLongTasks || CollectFullStats(StatsMode)) {
-        Result->SetExecuterCpuTimeUs(ExecuterCpuTime.MicroSeconds());
-
-        Result->SetStartTimeMs(StartTs.MilliSeconds());
-        Result->SetFinishTimeMs(FinishTs.MilliSeconds());
-    }
-
- //   Cerr << (TStringBuilder() << "TQueryExecutionStats::Finish" << Endl << Result->DebugString() << Endl);
 }
 
 TTableStat& TTableStat::operator +=(const TTableStat& rhs) {

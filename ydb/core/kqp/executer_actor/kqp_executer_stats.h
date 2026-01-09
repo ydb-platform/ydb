@@ -385,7 +385,6 @@ public:
     // profile stats
     TDuration ResolveCpuTime;
     TDuration ResolveWallTime;
-    TVector<NKikimrQueryStats::TTxStats> DatashardStats;
 
     bool CollectStatsByLongTasks = false;
 
@@ -400,12 +399,6 @@ public:
 
     void Prepare();
 
-    void AddComputeActorStats(
-        ui32 nodeId,
-        NYql::NDqProto::TDqComputeActorStats&& stats,
-        NYql::NDqProto::EComputeState state,
-        TDuration collectLongTaskStatsTimeout = TDuration::Max()
-    );
     void AddNodeShardsCount(const ui32 stageId, const ui32 nodeId, const ui32 shardsCount) {
         Y_ABORT_UNLESS(ShardsCountByNode[stageId].emplace(nodeId, shardsCount).second);
     }
@@ -433,19 +426,6 @@ public:
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();
     void Finish();
-
-private:
-    void AddComputeActorFullStatsByTask(
-        const NYql::NDqProto::TDqTaskStats& task,
-        const NYql::NDqProto::TDqComputeActorStats& stats,
-        NYql::NDqProto::EComputeState state);
-    void AddComputeActorProfileStatsByTask(
-        const NYql::NDqProto::TDqTaskStats& task,
-        const NYql::NDqProto::TDqComputeActorStats& stats,
-        bool keepOnlyLastTask);
-    void AddDatashardFullStatsByTask(
-        const NYql::NDqProto::TDqTaskStats& task,
-        ui64 datashardCpuTimeUs);
 };
 
 struct TTableStat {

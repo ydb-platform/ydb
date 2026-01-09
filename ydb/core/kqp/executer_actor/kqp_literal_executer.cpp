@@ -254,27 +254,25 @@ public:
             ui64 elapsedMicros = TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000;
             TDuration executerCpuTime = TDuration::MicroSeconds(elapsedMicros);
 
-            NYql::NDqProto::TDqComputeActorStats fakeComputeActorStats;
-
+            Stats->Prepare();
             for (auto& taskRunner : TaskRunners) {
+                NYql::NDqProto::TDqComputeActorStats fakeComputeActorStats;
+
                 auto* stats = taskRunner->GetStats();
                 auto taskCpuTime = stats->BuildCpuTime + stats->ComputeCpuTime;
                 executerCpuTime -= taskCpuTime;
                 NYql::NDq::FillTaskRunnerStats(taskRunner->GetTaskId(), TaskId2StageId[taskRunner->GetTaskId()],
                     *stats, fakeComputeActorStats.AddTasks(), StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode)));
-                fakeComputeActorStats.SetCpuTimeUs(fakeComputeActorStats.GetCpuTimeUs() + taskCpuTime.MicroSeconds());
+                fakeComputeActorStats.SetCpuTimeUs(taskCpuTime.MicroSeconds());
+                fakeComputeActorStats.SetDurationUs(elapsedMicros);
+                Stats->UpdateTaskStats(taskRunner->GetTaskId(), fakeComputeActorStats, NYql::NDqProto::COMPUTE_STATE_FINISHED, TDuration::Max());
             }
-
-            fakeComputeActorStats.SetDurationUs(elapsedMicros);
-
-            Stats->AddComputeActorStats(OwnerActor.NodeId(), std::move(fakeComputeActorStats), NYql::NDqProto::COMPUTE_STATE_FINISHED);
 
             Stats->ExecuterCpuTime = executerCpuTime;
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);
             Stats->ResultRows = ResponseEv->GetResultRowsCount();
             Stats->ResultBytes = ResponseEv->GetByteSize();
-
-            Stats->Finish();
+            Stats->ExportExecStats(*response.MutableResult()->MutableStats());
 
             if (Y_UNLIKELY(CollectFullStats(Request.StatsMode))) {
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {

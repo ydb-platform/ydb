@@ -624,14 +624,6 @@ protected:
                     auto& extraData = ExtraData[computeActor];
                     extraData.TaskId = taskId;
                     extraData.Data.Swap(state.MutableExtraData());
-/*
-                    Stats->AddComputeActorStats(
-                        computeActor.NodeId(),
-                        std::move(*state.MutableStats()),
-                        (NYql::NDqProto::EComputeState) state.GetState(),
-                        TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs())
-                    );
-*/
                     LastTaskId = taskId;
                     LastComputeActorId = computeActor.ToString();
 
@@ -1419,8 +1411,6 @@ protected:
             ReportEventElapsedTime();
 
             Stats->FinishTs = TInstant::Now();
-
-            // Stats->Finish();
 
             {
                 ui64 cycleCount = GetCycleCountFast();

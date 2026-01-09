@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
 
         env.UpdateSettings(false, true, false); // disable self-heal
 
-        constexpr ui32 groupId = 2181038080;
+        const ui32 groupId = env.GetGroups().at(0);
 
         TPDiskId originalPDiskId = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
 
@@ -461,7 +461,7 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
         UNIT_ASSERT_C(newPDiskId != originalPDiskId, "Expected VDisk (0, 1, 0) to be moved");
     }
 
-    Y_UNIT_TEST(SelfHealOnlyPhantomWithTwoOtherFailedDisksShouldNotWork) {
+    Y_UNIT_TEST(SelfHealWithTwoFailedDisksAndOnePhantomOnly) {
         const TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
         TEnvironmentSetup env({
             .NodeCount = erasure.BlobSubgroupSize() + 1,
@@ -472,7 +472,7 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
 
         env.UpdateSettings(false, true, false); // disable self-heal
 
-        constexpr ui32 groupId = 2181038080;
+        const ui32 groupId = env.GetGroups().at(0);
 
         TPDiskId originalPDiskId1 = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
         TPDiskId originalPDiskId2 = GetPDiskIdByVDisk(env, groupId, 0, 2, 0);

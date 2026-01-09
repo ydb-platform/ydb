@@ -155,6 +155,41 @@ function onDataShardInfoLoaded(data) {
         $('#pipeline-data-tx-cache-limit').text(pcfg.DataTxCacheSize);
     }
 
+    // HNSW Index Statistics
+    var hnsw = data.HnswStats;
+    if (hnsw) {
+        $('#hnsw-cache-hits').text(hnsw.CacheHits || 0);
+        $('#hnsw-cache-misses').text(hnsw.CacheMisses || 0);
+
+        var indexesHTML = '';
+        if (hnsw.Indexes && hnsw.Indexes.length > 0) {
+            for (var idx of hnsw.Indexes) {
+                indexesHTML += `
+                    <table class="ds-info">
+                      <caption class="ds-info">HNSW Index: ${idx.ColumnName} (Table ${idx.TableId})</caption>
+                      <tbody class="ds-info">
+                        <tr class="ds-info">
+                          <td class="ds-info">Index Size</td>
+                          <td class="ds-info">${idx.IndexSize || 0} vectors</td>
+                        </tr>
+                        <tr class="ds-info">
+                          <td class="ds-info">Ready</td>
+                          <td class="ds-info">${idx.IsReady ? 'Yes' : 'No'}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                `;
+            }
+        } else {
+            indexesHTML = '<p>No HNSW indexes configured for this shard.</p>';
+        }
+        $('#hnsw-indexes').html(indexesHTML);
+    } else {
+        $('#hnsw-cache-hits').text('N/A');
+        $('#hnsw-cache-misses').text('N/A');
+        $('#hnsw-indexes').html('<p>HNSW stats not available.</p>');
+    }
+
     scheduleLoadDataShardInfo(DataShardInfoState.fetchInterval);
 }
 

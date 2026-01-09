@@ -737,6 +737,143 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         }
     }
 
+    // Helper function to get HNSW stats from a shard (for debugging)
+    std::pair<ui64, ui64> GetHnswCacheStats(TTestActorRuntime& runtime, ui64 shardId) {
+        auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, shardId, sender, new TEvDataShard::TEvGetHnswStats(sender));
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<TEvDataShard::TEvGetHnswStatsResult>(handle);
+        UNIT_ASSERT(event);
+        return {event->Record.GetCacheHits(), event->Record.GetCacheMisses()};
+    }
+
+    // Test that HNSW index cache survives multiple restarts (leader reuse, follower reuse)
+    Y_UNIT_TEST(VectorSearchHnswCacheRobustness) {
+        const TString tableName = "/Root/TestTable";
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(true)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return CreateTableForVectorSearch(db, false, "data", true); });
+
+        auto sender = runtime->AllocateEdgeActor();
+        auto shards = GetTableShards(&kikimr.GetTestServer(), sender, tableName);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u); // Single partition for deterministic testing
+
+        ui64 shardId = shards[0];
+
+        // Helper to get stats and log them
+        auto getStats = [&]() -> std::pair<ui64, ui64> {
+            auto [hits, misses] = GetHnswCacheStats(*runtime, shardId);
+            return {hits, misses};
+        };
+
+        // Get baseline stats before any operations
+        auto [baseHits, baseMisses] = getStats();
+
+        // === Phase 1: Leader alone builds index ===
+        // TryGetFromCache -> MISS (cache empty)
+        // TryStartBuild -> succeeds (no one else building)
+        // BuildIndex -> registers in cache
+        // FinishBuild -> releases lock
+        {
+            RebootTablet(*runtime, shardId, sender);
+            runtime->SimulateSleep(TDuration::Seconds(1));
+        }
+
+        ui64 expectedHits = baseHits;
+        ui64 expectedMisses = baseMisses + 1;
+        {
+            auto [hits, misses] = getStats();
+            UNIT_ASSERT_VALUES_EQUAL_C(hits, expectedHits, "Phase 1: hits should not increase (cache was empty)");
+            UNIT_ASSERT_VALUES_EQUAL_C(misses, expectedMisses, "Phase 1: misses should be 1 (first build)");
+        }
+
+        // Verify HNSW works (leader read)
+        {
+            auto readObserver = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+                auto& read = ev->Get()->Record;
+                UNIT_ASSERT(read.HasVectorTopK());
+                UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetLimit(), 7u);
+            });
+            VerifyVectorSearchResultsHnsw<false>(kikimr, session, TTxSettings::SerializableRW());
+            readObserver.Remove();
+        }
+
+        // === Phase 2: Enable followers ===
+        // Followers will be created and will try to get index from cache
+        // TryGetFromCache -> HIT (leader already built it)
+        {
+            const TString alterTable(Q_(Sprintf(R"(
+                ALTER TABLE `%s` SET (READ_REPLICAS_SETTINGS = "PER_AZ:3");
+            )", tableName.c_str())));
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteSchemeQuery(alterTable).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            runtime->SimulateSleep(TDuration::Seconds(1));
+        }
+
+        // === Phase 3: Leader restart with followers present ===
+        // Leader: TryGetFromCache -> HIT (from Phase 1 build, still in node cache)
+        // Followers also activated and get HIT from cache
+        {
+            RebootTablet(*runtime, shardId, sender);
+            runtime->SimulateSleep(TDuration::Seconds(1));
+        }
+
+        // Leader gets cache HIT, followers also get cache HITs
+        // With 3 followers + 1 leader = up to 4 cache operations
+        // But we only check that hits increased (leader definitely gets one)
+        expectedHits = baseHits + 1;  // At least leader's HIT
+        {
+            auto [hits, misses] = getStats();
+            UNIT_ASSERT_C(hits >= expectedHits, TStringBuilder()
+                << "Phase 3: hits should be at least " << expectedHits << " (leader cache reuse), got " << hits);
+            UNIT_ASSERT_VALUES_EQUAL_C(misses, expectedMisses, "Phase 3: misses should stay at 1 (no new builds needed)");
+            expectedHits = hits;  // Update for next phase
+        }
+
+        // === Phase 4: Verify StaleRO reads from followers ===
+        bool readFromFollower = false;
+        {
+            auto readObserver = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
+                auto& read = ev->Get()->Record;
+                UNIT_ASSERT(read.HasVectorTopK());
+                UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetLimit(), 7u);
+            });
+
+            auto resultObserver = runtime->AddObserver<TEvDataShard::TEvReadResult>([&](auto& ev) {
+                auto& result = ev->Get()->Record;
+                if (result.GetFromFollower()) {
+                    readFromFollower = true;
+                }
+            });
+
+            VerifyVectorSearchResultsHnsw<false>(kikimr, session, TTxSettings::StaleRO());
+
+            readObserver.Remove();
+            resultObserver.Remove();
+        }
+
+        UNIT_ASSERT_C(readFromFollower, "StaleRO read should have been served by a follower");
+
+        // Final stats check
+        {
+            auto [hits, misses] = getStats();
+            UNIT_ASSERT_C(hits >= expectedHits, "Final: hits should not decrease");
+            UNIT_ASSERT_VALUES_EQUAL_C(misses, expectedMisses, "Final: misses should stay at 1");
+        }
+    }
+
 }
 
 }

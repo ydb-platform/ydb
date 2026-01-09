@@ -1255,6 +1255,7 @@ class TDataShard
 
     void Handle(TEvents::TEvGone::TPtr &ev);
     void Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvDataShard::TEvGetHnswStats::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvSchemaChangedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvStateChangedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx);
@@ -3169,6 +3170,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
             HFuncTraced(TEvDataShard::TEvGetShardState, Handle);
+            HFuncTraced(TEvDataShard::TEvGetHnswStats, Handle);
             HFuncTraced(TEvDataShard::TEvSchemaChangedResult, Handle);
             HFuncTraced(TEvDataShard::TEvStateChangedResult, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransaction, Handle);

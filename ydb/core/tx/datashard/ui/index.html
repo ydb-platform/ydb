@@ -56,6 +56,9 @@
         <li class="nav-item">
           <a class="nav-link" href="#ds-hist" data-toggle="tab" id="ds-hist-link">Data Histograms</a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#ds-hnsw" data-toggle="tab" id="ds-hnsw-link">HNSW Index</a>
+        </li>
       </ul>
       <div class="tab-content" style="padding-top: 10px">
         <div id="ds-info" class="tab-pane fade in active show">
@@ -334,6 +337,23 @@
         <div id="ds-hist" class="tab-pane fade">
           <div id="ds-hist-error" class="error"></div>
           <div id="ds-hist-tables"></div>
+        </div>
+        <div id="ds-hnsw" class="tab-pane fade">
+          <div id="ds-hnsw-error" class="error"></div>
+          <table class="ds-info">
+            <caption class="ds-info">HNSW Cache Statistics (Node-Level)</caption>
+            <tbody class="ds-info">
+              <tr class="ds-info">
+                <td class="ds-info">Cache Hits</td>
+                <td class="ds-info" id="hnsw-cache-hits">Loading...</td>
+              </tr>
+              <tr class="ds-info">
+                <td class="ds-info">Cache Misses</td>
+                <td class="ds-info" id="hnsw-cache-misses">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+          <div id="hnsw-indexes"></div>
         </div>
       </div>
     </div>

@@ -215,6 +215,7 @@ namespace TEvDataShard {
 
         EvInitDataShard = EvProposeTransaction + 4 * 512,
         EvGetShardState,
+        EvGetHnswStats,  // Debug event to get HNSW index statistics
         EvReadOperationHistogram,
         EvUpdateConfig,
         EvSchemaChanged,
@@ -226,6 +227,7 @@ namespace TEvDataShard {
 
         EvInitDataShardResult = EvProposeTransaction + 5 * 512,
         EvGetShardStateResult,
+        EvGetHnswStatsResult,  // Debug event result with HNSW index statistics
         EvReadOperationHistogramResult,
         EvUpdateConfigResult,
         EvSchemaChangedResult,
@@ -372,7 +374,7 @@ namespace TEvDataShard {
 
         EvBuildFulltextIndexRequest,
         EvBuildFulltextIndexResponse,
-        
+
         EvAsyncJobComplete,
 
         EvBuildFulltextDictRequest,
@@ -409,13 +411,29 @@ namespace TEvDataShard {
             Record.SetOrigin(origin);
             Record.SetState(state);
         }
+    };
 
-        ui64 GetOrigin() const {
-            return Record.GetOrigin();
+    // Debug event to get HNSW index statistics
+    struct TEvGetHnswStats : public TEventPB<TEvGetHnswStats, NKikimrTxDataShard::TEvGetHnswStats,
+        TEvDataShard::EvGetHnswStats> {
+        TEvGetHnswStats()
+        {
         }
 
-        ui32 GetState() const {
-            return Record.GetState();
+        TEvGetHnswStats(const TActorId& source)
+        {
+            ActorIdToProto(source, Record.MutableSource());
+        }
+
+        TActorId GetSource() const {
+            return ActorIdFromProto(Record.GetSource());
+        }
+    };
+
+    struct TEvGetHnswStatsResult : public TEventPB<TEvGetHnswStatsResult, NKikimrTxDataShard::TEvGetHnswStatsResult,
+        TEvDataShard::EvGetHnswStatsResult> {
+        TEvGetHnswStatsResult()
+        {
         }
     };
 
@@ -1637,8 +1655,8 @@ namespace TEvDataShard {
                           NKikimrTxDataShard::TEvIncrementalRestoreResponse,
                           TEvDataShard::EvIncrementalRestoreResponse> {
         TEvIncrementalRestoreResponse() = default;
-        
-        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx, 
+
+        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx,
                                      NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, const TString& errorMessage = "") {
             Record.SetTxId(txId);
             Record.SetTableId(tableId);
@@ -1649,8 +1667,8 @@ namespace TEvDataShard {
                 Record.SetErrorMessage(errorMessage);
             }
         }
-        
-        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx, 
+
+        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx,
                                      NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, ui64 processedRows, ui64 processedBytes,
                                      const TString& lastProcessedKey = "", const TString& errorMessage = "") {
             Record.SetTxId(txId);

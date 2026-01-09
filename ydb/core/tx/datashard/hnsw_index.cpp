@@ -6,6 +6,7 @@
 #pragma clang diagnostic pop
 
 #include <util/generic/yexception.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <cstring>
 #include <vector>
@@ -221,6 +222,130 @@ size_t THnswIndex::Size() const {
     return Impl->Size();
 }
 
+// TNodeHnswIndexCache implementation (singleton)
+
+TNodeHnswIndexCache& TNodeHnswIndexCache::Instance() {
+    static TNodeHnswIndexCache instance;
+    return instance;
+}
+
+std::shared_ptr<THnswIndex> TNodeHnswIndexCache::RegisterIndex(
+    ui64 tabletId, ui64 tableId, const TString& columnName,
+    std::unique_ptr<THnswIndex> index) {
+
+    std::lock_guard<std::mutex> lock(Mutex);
+    TNodeHnswIndexKey key{tabletId, tableId, columnName};
+
+    auto sharedIndex = std::shared_ptr<THnswIndex>(std::move(index));
+    size_t indexSize = sharedIndex->Size();
+    Indexes[key] = sharedIndex;
+
+    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::TX_DATASHARD,
+               "HNSW: registered index tabletId=" << tabletId << " tableId=" << tableId
+               << " column=" << columnName << " size=" << indexSize);
+
+    return sharedIndex;
+}
+
+std::shared_ptr<THnswIndex> TNodeHnswIndexCache::GetIndex(
+    ui64 tabletId, ui64 tableId, const TString& columnName, size_t expectedSize) const {
+
+    std::lock_guard<std::mutex> lock(Mutex);
+    TNodeHnswIndexKey key{tabletId, tableId, columnName};
+
+    auto it = Indexes.find(key);
+    if (it != Indexes.end() && it->second && it->second->IsReady()) {
+        size_t cachedSize = it->second->Size();
+        // If expectedSize is provided (non-zero), validate the index size matches
+        // This detects stale indexes after data changes
+        if (expectedSize > 0 && cachedSize != expectedSize) {
+            LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                       "HNSW: cache size mismatch tabletId=" << tabletId << " tableId=" << tableId
+                       << " column=" << columnName << " cached=" << cachedSize << " expected=" << expectedSize);
+            return nullptr;  // Size mismatch, index is stale
+        }
+        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                   "HNSW: cache hit tabletId=" << tabletId << " tableId=" << tableId
+                   << " column=" << columnName << " size=" << cachedSize);
+        return it->second;
+    }
+    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::TX_DATASHARD,
+               "HNSW: cache miss tabletId=" << tabletId << " tableId=" << tableId
+               << " column=" << columnName);
+    return nullptr;
+}
+
+bool TNodeHnswIndexCache::HasIndex(ui64 tabletId, ui64 tableId, const TString& columnName, size_t expectedSize) const {
+    return GetIndex(tabletId, tableId, columnName, expectedSize) != nullptr;
+}
+
+void TNodeHnswIndexCache::RemoveIndex(ui64 tabletId, ui64 tableId, const TString& columnName) {
+    std::lock_guard<std::mutex> lock(Mutex);
+    TNodeHnswIndexKey key{tabletId, tableId, columnName};
+    Indexes.erase(key);
+}
+
+void TNodeHnswIndexCache::RemoveTabletIndexes(ui64 tabletId) {
+    std::lock_guard<std::mutex> lock(Mutex);
+    // Collect keys to remove (THashMap::erase returns void)
+    std::vector<TNodeHnswIndexKey> keysToRemove;
+    for (const auto& [key, _] : Indexes) {
+        if (key.TabletId == tabletId) {
+            keysToRemove.push_back(key);
+        }
+    }
+    for (const auto& key : keysToRemove) {
+        Indexes.erase(key);
+    }
+}
+
+ui64 TNodeHnswIndexCache::GetCacheHits() const {
+    return GlobalCacheHits.load(std::memory_order_relaxed);
+}
+
+ui64 TNodeHnswIndexCache::GetCacheMisses() const {
+    return GlobalCacheMisses.load(std::memory_order_relaxed);
+}
+
+void TNodeHnswIndexCache::IncrementCacheHit() {
+    GlobalCacheHits.fetch_add(1, std::memory_order_relaxed);
+}
+
+void TNodeHnswIndexCache::IncrementCacheMiss() {
+    GlobalCacheMisses.fetch_add(1, std::memory_order_relaxed);
+}
+
+bool TNodeHnswIndexCache::IsBuildInProgress(ui64 tabletId, ui64 tableId, const TString& columnName) const {
+    std::lock_guard lock(Mutex);
+    TNodeHnswIndexKey key{tabletId, tableId, columnName};
+    return BuildingIndexes.contains(key);
+}
+
+bool TNodeHnswIndexCache::TryStartBuild(ui64 tabletId, ui64 tableId, const TString& columnName) {
+    std::lock_guard lock(Mutex);
+    TNodeHnswIndexKey key{tabletId, tableId, columnName};
+
+    // Check if already exists in cache - no need to build
+    if (Indexes.contains(key)) {
+        return false;
+    }
+
+    // Check if another builder is already working on this index
+    if (BuildingIndexes.contains(key)) {
+        return false;  // Another build in progress, caller should wait
+    }
+
+    // Mark as building and return true (caller should build)
+    BuildingIndexes.insert(key);
+    return true;
+}
+
+void TNodeHnswIndexCache::FinishBuild(ui64 tabletId, ui64 tableId, const TString& columnName) {
+    std::lock_guard lock(Mutex);
+    TNodeHnswIndexKey key{tabletId, tableId, columnName};
+    BuildingIndexes.erase(key);
+}
+
 // THnswIndexManager implementation
 
 bool THnswIndexManager::IsVectorColumn(const TString& columnName) {
@@ -231,22 +356,47 @@ bool THnswIndexManager::BuildIndex(ui64 tableId, const TString& columnName,
                                     const std::vector<std::pair<ui64, TString>>& vectors) {
     THnswIndexKey key{tableId, columnName};
 
-    THnswIndex index;
-    if (!index.Build(vectors)) {
+    auto index = std::make_unique<THnswIndex>();
+    if (!index->Build(vectors)) {
         return false;
     }
 
-    Indexes[key] = std::move(index);
+    // Register in node cache for sharing with followers, and store locally
+    if (TabletId != 0) {
+        Indexes[key] = TNodeHnswIndexCache::Instance().RegisterIndex(
+            TabletId, tableId, columnName, std::move(index));
+    } else {
+        // Fallback: no tablet ID set, store locally only
+        Indexes[key] = std::shared_ptr<THnswIndex>(std::move(index));
+    }
     return true;
+}
+
+bool THnswIndexManager::TryGetFromCache(ui64 tableId, const TString& columnName, size_t expectedSize) {
+    if (TabletId == 0) {
+        ++CacheMisses;
+        TNodeHnswIndexCache::Instance().IncrementCacheMiss();
+        return false;
+    }
+
+    auto cachedIndex = TNodeHnswIndexCache::Instance().GetIndex(TabletId, tableId, columnName, expectedSize);
+    if (cachedIndex) {
+        THnswIndexKey key{tableId, columnName};
+        Indexes[key] = cachedIndex;
+        ++CacheHits;
+        TNodeHnswIndexCache::Instance().IncrementCacheHit();
+        return true;
+    }
+    ++CacheMisses;
+    TNodeHnswIndexCache::Instance().IncrementCacheMiss();
+    return false;
 }
 
 const THnswIndex* THnswIndexManager::GetIndex(ui64 tableId, const TString& columnName) const {
     THnswIndexKey key{tableId, columnName};
     auto it = Indexes.find(key);
-    if (it != Indexes.end()) {
-        if (it->second.IsReady()) {
-            return &it->second;
-        }
+    if (it != Indexes.end() && it->second && it->second->IsReady()) {
+        return it->second.get();
     }
     return nullptr;
 }
@@ -257,6 +407,27 @@ bool THnswIndexManager::HasIndex(ui64 tableId, const TString& columnName) const 
 
 void THnswIndexManager::Clear() {
     Indexes.clear();
+}
+
+void THnswIndexManager::ClearAndRemoveFromCache() {
+    if (TabletId != 0) {
+        TNodeHnswIndexCache::Instance().RemoveTabletIndexes(TabletId);
+    }
+    Indexes.clear();
+}
+
+std::vector<THnswIndexManager::TIndexInfo> THnswIndexManager::GetAllIndexesInfo() const {
+    std::vector<TIndexInfo> result;
+    result.reserve(Indexes.size());
+    for (const auto& [key, index] : Indexes) {
+        TIndexInfo info;
+        info.TableId = key.TableId;
+        info.ColumnName = key.ColumnName;
+        info.IndexSize = index ? index->Size() : 0;
+        info.IsReady = index ? index->IsReady() : false;
+        result.push_back(info);
+    }
+    return result;
 }
 
 } // namespace NKikimr::NDataShard

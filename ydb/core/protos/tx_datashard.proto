@@ -59,6 +59,26 @@ message TEvGetShardStateResult {
     optional uint64 DropTxId = 3;
 }
 
+// Debug event to get HNSW index statistics
+message TEvGetHnswStats {
+    optional NActorsProto.TActorId Source = 1;
+}
+
+// Per-index statistics
+message THnswIndexStats {
+    optional uint64 TableId = 1;
+    optional string ColumnName = 2;
+    optional uint64 IndexSize = 3;       // Number of vectors in index
+    optional bool IsReady = 4;           // Whether index is ready for search
+}
+
+message TEvGetHnswStatsResult {
+    optional uint64 Origin = 1;
+    optional uint64 CacheHits = 2;       // Number of times index was reused from cache
+    optional uint64 CacheMisses = 3;     // Number of times index was built (not in cache)
+    repeated THnswIndexStats Indexes = 4; // Per-index statistics
+}
+
 message TShardOpResult {
     optional bool Success = 1;
     optional string Explain = 2;
@@ -1073,6 +1093,12 @@ message TEvGetInfoResponse {
         optional uint32 DataTxCacheSize = 7;
     }
 
+    message THnswStats {
+        optional uint64 CacheHits = 1;
+        optional uint64 CacheMisses = 2;
+        repeated THnswIndexStats Indexes = 3;  // Uses THnswIndexStats defined earlier
+    }
+
     optional TStatus Status = 1;
     repeated TUserTable UserTables = 2;
     optional TTabletInfo TabletInfo = 3;
@@ -1080,6 +1106,7 @@ message TEvGetInfoResponse {
     optional TActivities Activities = 5;
     repeated TNamedValue SysTable = 6;
     optional TPipelineConfig PipelineConfig = 7;
+    optional THnswStats HnswStats = 8;
 }
 
 message TEvListOperationsRequest {

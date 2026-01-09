@@ -172,6 +172,9 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     >());
     TabletCounters = TabletCountersPtr.Get();
 
+    // Set TabletId for HNSW index node-level sharing
+    HnswIndexes.SetTabletId(info->TabletID);
+
     RegisterDataShardProbes();
 }
 
@@ -2958,6 +2961,26 @@ void TDataShard::Handle(TEvents::TEvGone::TPtr &ev) {
 
 void TDataShard::Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx) {
     Execute(new TTxGetShardState(this, ev), ctx);
+}
+
+void TDataShard::Handle(TEvDataShard::TEvGetHnswStats::TPtr &ev, const TActorContext &ctx) {
+    // Simple synchronous handler for debugging - return stats immediately
+    auto result = MakeHolder<TEvDataShard::TEvGetHnswStatsResult>();
+    result->Record.SetOrigin(TabletID());
+    // Use global node-level cache stats (survives tablet restarts)
+    result->Record.SetCacheHits(TNodeHnswIndexCache::Instance().GetCacheHits());
+    result->Record.SetCacheMisses(TNodeHnswIndexCache::Instance().GetCacheMisses());
+
+    // Add per-index info
+    for (const auto& info : HnswIndexes.GetAllIndexesInfo()) {
+        auto* indexStats = result->Record.AddIndexes();
+        indexStats->SetTableId(info.TableId);
+        indexStats->SetColumnName(info.ColumnName);
+        indexStats->SetIndexSize(info.IndexSize);
+        indexStats->SetIsReady(info.IsReady);
+    }
+
+    ctx.Send(ev->Get()->GetSource(), result.Release());
 }
 
 void TDataShard::Handle(TEvDataShard::TEvSchemaChangedResult::TPtr& ev, const TActorContext& ctx) {

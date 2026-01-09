@@ -16,6 +16,7 @@ PEERDIR(
     ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/gateway/clients/local
     ydb/library/yverify_stream
+    ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/topic
     ydb/services/persqueue_v1/actors
 )

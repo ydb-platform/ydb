@@ -20,7 +20,6 @@ public:
         : ActorSystem(localSettings.ActorSystem)
         , ChannelBufferSize(localSettings.ChannelBufferSize)
         , Database(clientSettings.Database_.value_or(""))
-        , DefaultCompressionExecutor(clientSettings.DefaultCompressionExecutor_)
     {
         Y_VALIDATE(ActorSystem, "Actor system is required for local topic client");
         Y_VALIDATE(ChannelBufferSize, "Channel buffer size is not set");
@@ -70,12 +69,7 @@ public:
     }
 
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings) final {
-        std::optional<TReadSessionSettings> modifiedSettings;
-        if (!settings.DecompressionExecutor_) {
-            modifiedSettings = settings;
-            modifiedSettings->DecompressionExecutor_ = DefaultCompressionExecutor;
-        }
-        return CreateLocalTopicReadSession({.ActorSystem = ActorSystem, .Database = Database}, modifiedSettings.value_or(settings));
+        return CreateLocalTopicReadSession({.ActorSystem = ActorSystem, .Database = Database}, settings);
     }
 
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings) final {
@@ -112,7 +106,6 @@ private:
     TActorSystem* const ActorSystem = nullptr;
     const ui64 ChannelBufferSize = 0;
     const TString Database;
-    const IExecutor::TPtr DefaultCompressionExecutor;
 };
 
 } // anonymous namespace

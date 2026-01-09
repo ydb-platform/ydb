@@ -4,8 +4,8 @@
 
 | | |
 | - | - |
-| version |0.18.16 |
-| updated |2025-10-22 |
+| version |0.18.17 |
+| updated |2025-12-17 |
 | documentation |https://yaml.dev/doc/ruamel.yaml |
 | repository |https://sourceforge.net/projects/ruamel-yaml |
 | pypi |https://pypi.org/project/ruamel.yaml |
@@ -32,6 +32,43 @@ My experience with other such service downgrades (Bitbucket, Readthedocs), has n
 
 -----
 
+
+
+This is probably the last patch version of `ruamel.yaml` that installs pre-compiled
+`ruamel.yaml.clib`. This version already supports loading of the C extension
+compiled using the Zig toolchain
+(i.e. without you having to have a compiler environment pre-installed).
+
+You can test this by invoking (note the final z):
+```
+python -m pip install --no-deps ruamel.yaml ruamel.yaml.clibz
+
+```
+You can however install both `ruamel.yaml.clib` and `ruamel.yaml.clibz`, in
+which case the latter is taken (e.g. by dropping `--no-deps` from the invocation)
+
+The move to using zig eliminates having to generate the 60 or so .whl files
+(partly on unreliable services like AppVeyor and Github). Apart from that
+the compilation on the target machine can fully optimize for that
+architecture and its OS.
+
+But the test matrix still has many dimensions:
+```
+    Python versions: 3.9 - 3.14
+    OS-es:           Linux, Alpine (musl), macOS, Windows
+    Architectures:   Intel/AMD, Arm (and others), in 64 and some also in 32 bit versions
+    Zig version:     ziglang < 0.16 is taken from PyPI
+```
+I try to test as much as possible, multiple Python versions were macOS-Arm and Ubuntu Linux-Intel.
+And at least one Python version along each of the indicated positions of the
+dimensions above (e.g. Windows10 64bit was tested, but not the RISC-V architecture).
+
+In 0.19 the loading mechanism will be reversed: defaulting to installing and using
+`ruamel.yaml.clibz` unless `ruamel.yaml.clib` is installed. This backwards
+compatibility will be dropped at the end of the 0.19 series.
+*Pin the version that you are relying on, until you can test the changes to work for you.*
+
+-------
 
 
 As announced, in 0.18.0, the old PyYAML functions have been deprecated.
@@ -90,6 +127,10 @@ For packaging purposes you can use a download of the [tar balls of tagged source
 <a href="https://pypi.org/project/oitnb/"><img src="https://sourceforge.net/p/oitnb/code/ci/default/tree/_doc/_static/oitnb.svg?format=raw"></a>
 <a href="http://mypy-lang.org/"><img src="http://www.mypy-lang.org/static/mypy_badge.svg"></a>
 <a href="https://www.pepy.tech/projects/ruamel.yaml"><img src="https://img.shields.io/pepy/dt/ruamel.yaml.svg"></a>
+
+0.18.17 (2025-12-17):
+
+- try to load C functions from `_ruamel_yaml_clibz` first.
 
 0.18.16 (2025-10-22):
 

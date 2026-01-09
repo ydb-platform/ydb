@@ -647,11 +647,6 @@ public:
         // nodes waiting for this group to become listable
         THashSet<TNodeId> WaitingNodes;
 
-        // group's geometry; it doesn't ever change since the group is created
-        const ui32 NumFailRealms = 0;
-        const ui32 NumFailDomainsPerFailRealm = 0;
-        const ui32 NumVDisksPerFailDomain = 0;
-
         // topology according to the geometry
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
 
@@ -784,11 +779,8 @@ public:
             , Down(PersistedDown)
             , VDisksInGroup(numFailRealms * numFailDomainsPerFailRealm * numVDisksPerFailDomain)
             , StoragePoolId(storagePoolId)
-            , NumFailRealms(numFailRealms)
-            , NumFailDomainsPerFailRealm(numFailDomainsPerFailRealm)
-            , NumVDisksPerFailDomain(numVDisksPerFailDomain)
             , Topology(std::make_shared<TBlobStorageGroupInfo::TTopology>(TBlobStorageGroupType(ErasureSpecies),
-                NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain))
+                numFailRealms, numFailDomainsPerFailRealm, numVDisksPerFailDomain))
         {
             Topology->FinalizeConstruction();
             Y_ABORT_UNLESS(VDisksInGroup.size() == Topology->GetTotalVDisksNum());
@@ -1543,7 +1535,7 @@ private:
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     TSelfHealSettings SelfHealSettings;
-    
+
     TClusterBalancingSettings ClusterBalancingSettings;
 
     TActorId SystemViewsCollectorId;

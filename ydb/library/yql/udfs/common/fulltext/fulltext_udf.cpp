@@ -8,6 +8,7 @@ using namespace NUdf;
 
 namespace {
 
+template <class TInputType>
 class TFulltextContains: public TBoxedValue {
 public:
     explicit TFulltextContains(const TSourcePosition& pos)
@@ -15,10 +16,7 @@ public:
     {
     }
 
-    static const ::NYql::NUdf::TStringRef& Name() {
-        static auto name = ::NYql::NUdf::TStringRef::Of("Contains");
-        return name;
-    }
+    static const ::NYql::NUdf::TStringRef& Name();
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         Y_UNUSED(valueBuilder);
@@ -42,8 +40,8 @@ public:
         }
 
         builder.Args()
-            ->Add(builder.Optional()->Item<const char*>().Build())
-            .Add<const char*>()
+            ->Add(builder.Optional()->Item<TInputType>().Build())
+            .template Add<const char*>()
             .Done()
             .Returns(builder.SimpleType<bool>());
 
@@ -57,6 +55,19 @@ private:
     const TSourcePosition Pos_;
 };
 
+template<>
+const ::NYql::NUdf::TStringRef& TFulltextContains<TUtf8>::Name() {
+    static auto name = ::NYql::NUdf::TStringRef::Of("ContainsUtf8");
+    return name;
+}
+
+template<>
+const ::NYql::NUdf::TStringRef& TFulltextContains<const char*>::Name() {
+    static auto name = ::NYql::NUdf::TStringRef::Of("Contains");
+    return name;
+}
+
+template <class TInputType>
 class TFulltextRelevance: public TBoxedValue {
 public:
     explicit TFulltextRelevance(const TSourcePosition& pos)
@@ -64,10 +75,7 @@ public:
     {
     }
 
-    static const ::NYql::NUdf::TStringRef& Name() {
-        static auto name = ::NYql::NUdf::TStringRef::Of("Relevance");
-        return name;
-    }
+    static const ::NYql::NUdf::TStringRef& Name();
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         Y_UNUSED(valueBuilder);
@@ -90,10 +98,13 @@ public:
             return false;
         }
 
-        builder.Args()
-            ->Add(builder.Optional()->Item<const char*>().Build())
-            .Add<const char*>()
-            .Done()
+        auto argsBuilder = builder.Args(4);
+        argsBuilder->Add<TOptional<TInputType>>();
+        argsBuilder->Add<const char*>();
+        argsBuilder->Add<TOptional<double>>().Name(TStringRef::Of("B"));
+        argsBuilder->Add<TOptional<double>>().Name(TStringRef::Of("K1"));
+        builder.OptionalArgs(2);
+        builder
             .Returns(builder.SimpleType<double>());
 
         if (!typesOnly) {
@@ -106,10 +117,23 @@ private:
     const TSourcePosition Pos_;
 };
 
+template<>
+const ::NYql::NUdf::TStringRef& TFulltextRelevance<TUtf8>::Name() {
+    static auto name = ::NYql::NUdf::TStringRef::Of("RelevanceUtf8");
+    return name;
+}
+
+template<>
+const ::NYql::NUdf::TStringRef& TFulltextRelevance<const char*>::Name() {
+    static auto name = ::NYql::NUdf::TStringRef::Of("Relevance");
+    return name;
+}
 
 SIMPLE_MODULE(TFullTextModule,
-              TFulltextContains,
-              TFulltextRelevance)
+              TFulltextContains<TUtf8>,
+              TFulltextContains<const char*>,
+              TFulltextRelevance<TUtf8>,
+              TFulltextRelevance<const char*>)
 
 } // namespace
 

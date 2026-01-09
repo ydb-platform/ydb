@@ -234,7 +234,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         if (BufferPageAllocSize) {
             serializedTask->SetBufferPageAllocSize(*BufferPageAllocSize);
         }
-        serializedTask->SetFastChannels(TasksGraph.GetMeta().UseFastChannels);
+        serializedTask->SetDqChannelVersion(TasksGraph.GetMeta().DqChannelVersion);
         request.AddTasks()->Swap(serializedTask);
     }
 
@@ -503,7 +503,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         taskDesc->SetBufferPageAllocSize(*BufferPageAllocSize);
     }
 
-    taskDesc->SetFastChannels(TasksGraph.GetMeta().UseFastChannels);
+    taskDesc->SetDqChannelVersion(TasksGraph.GetMeta().DqChannelVersion);
     auto startResult = CaFactory_->CreateKqpComputeActor({
         .ExecuterId = ExecuterId,
         .TxId = TxId,

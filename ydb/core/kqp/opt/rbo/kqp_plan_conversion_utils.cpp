@@ -8,26 +8,41 @@ namespace NKqp {
 using namespace NYql;
 using namespace NNodes;
 
-TExprNode::TPtr PlanConverter::RemoveScalarSubplans(TExprNode::TPtr node) {
+TExprNode::TPtr PlanConverter::RemoveSubplans(TExprNode::TPtr node) {
     auto lambda = TCoLambda(node);
     auto lambdaBody = lambda.Body().Ptr();
 
-    auto exprSublinks = FindNodes(lambdaBody, [](const TExprNode::TPtr& n){return n->IsCallable("KqpExprSublink");});
-    if (exprSublinks.empty()) {
+    auto sublinks = FindNodes(lambdaBody, [](const TExprNode::TPtr& n){ return TKqpSublinkBase::Match(n.Get()); });
+    if (sublinks.empty()) {
         return node;
     }
     else {
         TNodeOnNodeOwnedMap replaceMap;
 
-        for (auto link : exprSublinks) {
+        for (auto link : sublinks) {
             auto sublinkVar = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++), true);
             auto member = Build<TCoMember>(Ctx, lambda.Pos())
                     .Struct(lambda.Args().Arg(0).Ptr())
                     .Name<TCoAtom>().Value(sublinkVar.GetFullName()).Build()
                     .Done().Ptr();
             replaceMap[link.Get()] = member;
-            auto subplan = ExprNodeToOperator(TKqpExprSublink(link).Expr().Ptr());
-            PlanProps.ScalarSubplans.Add(sublinkVar, subplan);
+            auto subplan = ExprNodeToOperator(TKqpSublinkBase(link).Subquery().Ptr());
+            TSubplanEntry entry;
+            if (TKqpExprSublink::Match(link.Get())) {
+                entry = TSubplanEntry(subplan, {}, ESubplanType::EXPR);
+            } else if (TKqpExistsSublink::Match(link.Get())) {
+                entry = TSubplanEntry(subplan, {}, ESubplanType::EXISTS);
+            } else /* In sublink */ {
+                auto tupleType = link->Child(TKqpInSublink::idx_InTuple);
+                Y_ENSURE(tupleType->IsCallable("StructType"));
+                TVector<TInfoUnit> tuple;
+
+                //FIXME: Currently only a single element tuple in IN clause is supported, so we hardcode this case
+                auto tupleElement = tupleType->Child(0)->Child(0)->Content();
+                auto tupleElementIU = TInfoUnit(TString(tupleElement));
+                entry = TSubplanEntry(subplan, {TInfoUnit(TString(tupleElement))}, ESubplanType::IN_SUBPLAN);
+            }
+            PlanProps.Subplans.Add(sublinkVar, entry);
         }
 
         TOptimizeExprSettings settings(&TypeCtx);
@@ -46,7 +61,7 @@ TOpRoot PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     auto rootInput = ExprNodeToOperator(opRoot.Input().Ptr());
     TVector<TString> columnOrder;
 
-    for (auto c : opRoot.ColumnOrder()) {
+    for (const auto& c : opRoot.ColumnOrder()) {
         columnOrder.push_back(c.StringValue());
     }
 
@@ -90,30 +105,60 @@ std::shared_ptr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr nod
     return result;
 }
 
+bool GetForceOptional(const TKqpOpMapElementLambda& mapElement) {
+    auto maybeForceOptional = mapElement.ForceOptional();
+    return maybeForceOptional && maybeForceOptional.Cast().StringValue() == "True";
+}
+
+TExprNode::TPtr GetMapElementLambda(TExprNode::TPtr lambdaPtr, const bool forceOptional, TExprContext& ctx) {
+    auto lambda = TCoLambda(lambdaPtr);
+    auto body = lambda.Body().Ptr();
+    auto lambdaArg = lambda.Args().Arg(0);
+    auto bodyType = body->GetTypeAnn();
+    Y_ENSURE(bodyType);
+    // Force optional by adding Just.
+    if (!bodyType->IsOptionalOrNull() && forceOptional) {
+        // clang-format off
+        body = Build<TCoJust>(ctx, lambdaPtr->Pos())
+            .Input(body)
+        .Done().Ptr();
+
+        lambdaPtr = Build<TCoLambda>(ctx, lambdaPtr->Pos())
+            .Args({"arg"})
+            .Body<TExprApplier>()
+                .Apply(TExprBase(body))
+                .With(lambdaArg, "arg")
+            .Build()
+        .Done().Ptr();
+        // clang-format on
+    }
+    return lambdaPtr;
+}
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
     auto opMap = TKqpOpMap(node);
     auto input = ExprNodeToOperator(opMap.Input().Ptr());
     auto project = opMap.Project().IsValid();
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
+    TVector<TMapElement> mapElements;
 
-    for (auto mapElement : opMap.MapElements()) {
+    for (const auto& mapElement : opMap.MapElements()) {
         const auto iu = TInfoUnit(mapElement.Variable().StringValue());
         if (mapElement.Maybe<TKqpOpMapElementRename>()) {
             auto element = mapElement.Cast<TKqpOpMapElementRename>();
             auto fromIU = TInfoUnit(element.From().StringValue());
-            mapElements.push_back(std::make_pair(iu, fromIU));
+            mapElements.emplace_back(iu, fromIU);
         } else {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
+            const auto forceOptional = GetForceOptional(element);
             // case lambda ($arg) { member $arg `name }
             if (auto maybeMember = element.Lambda().Body().Maybe<TCoMember>();
-                maybeMember && maybeMember.Cast().Struct().Ptr() == element.Lambda().Args().Arg(0).Ptr()) {
+                !forceOptional && maybeMember && maybeMember.Cast().Struct().Ptr() == element.Lambda().Args().Arg(0).Ptr()) {
                 auto member = maybeMember.Cast();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
-                mapElements.push_back(std::make_pair(iu, fromIU));
+                mapElements.emplace_back(iu, fromIU);
             } else {
-                mapElements.push_back(std::make_pair(iu, element.Lambda().Ptr()));
+                mapElements.emplace_back(iu, GetMapElementLambda(element.Lambda().Ptr(), forceOptional, Ctx));
             }
         }
     }
@@ -124,7 +169,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr no
     auto opFilter = TKqpOpFilter(node);
     auto input = ExprNodeToOperator(opFilter.Input().Ptr());
     auto lambda = opFilter.Lambda().Ptr();
-    auto newLambda = RemoveScalarSubplans(lambda);
+    auto newLambda = RemoveSubplans(lambda);
     return std::make_shared<TOpFilter>(input, node->Pos(), newLambda);
 }
 
@@ -164,8 +209,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpProject(TExprNode::TPtr n
     auto input = ExprNodeToOperator(opProject.Input().Ptr());
 
     TVector<TInfoUnit> projectList;
-
-    for (auto p : opProject.ProjectList()) {
+    for (const auto& p : opProject.ProjectList()) {
         projectList.push_back(TInfoUnit(p.StringValue()));
     }
     return std::make_shared<TOpProject>(input, node->Pos(), projectList);
@@ -177,9 +221,9 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
     auto output = input;
 
     TVector<TSortElement> sortElements;
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
+    TVector<TMapElement> mapElements;
 
-    for (auto el : opSort.SortExpressions()) {
+    for (const auto& el : opSort.SortExpressions()) {
         TInfoUnit column;
 
         if (auto member = el.Lambda().Body().Maybe<TCoMember>()) {
@@ -187,7 +231,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
         } else {
             TString newName = "_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++);
             column = TInfoUnit(newName);
-            mapElements.push_back(std::make_pair(column, el.Lambda().Ptr()));
+            mapElements.emplace_back(column, el.Lambda().Ptr());
         }
         sortElements.push_back(TSortElement(column, el.Direction().StringValue() == "asc", el.NullsFirst().StringValue() == "first"));
     }
@@ -200,14 +244,6 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpSort(TExprNode::TPtr node
     return output;
 }
 
-bool GetForceOptional(const TKqpOpAggregationTraits& traits) {
-    const auto traitsPtr = traits.Ptr();
-    if (traitsPtr->ChildrenSize() > TKqpOpAggregationTraits::idx_ForceOptional) {
-        return TString(TCoAtom(traitsPtr->ChildPtr(TKqpOpAggregationTraits::idx_ForceOptional))) == "True" ? true : false;
-    }
-    return false;
-}
-
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr node) {
     auto opAggregate = TKqpOpAggregate(node);
     auto input = ExprNodeToOperator(opAggregate.Input().Ptr());
@@ -216,8 +252,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
     for (const auto& traits : opAggregate.AggregationTraitsList()) {
         const auto originalColName = TInfoUnit(TString(traits.OriginalColName()));
         const auto aggFuncName = TString(traits.AggregationFunction());
-        const auto forceOptional = GetForceOptional(traits);
-        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, forceOptional);
+        TOpAggregationTraits opAggTraits(originalColName, aggFuncName);
         opAggTraitsList.push_back(opAggTraits);
     }
 

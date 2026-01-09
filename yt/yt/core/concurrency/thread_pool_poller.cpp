@@ -190,7 +190,7 @@ class TThreadPoolPollerImpl
 public:
     TThreadPoolPollerImpl(
         int threadCount,
-        std::string threadNamePrefix,
+        TStringBuf threadNamePrefix,
         TDuration pollingPeriod)
         : TThread(Format("%v:%v", threadNamePrefix, "Poll"))
         , Logger(ConcurrencyLogger().WithTag("ThreadNamePrefix: %v", threadNamePrefix))
@@ -201,7 +201,7 @@ public:
 
         FairShareThreadPool_ = CreateTwoLevelFairShareThreadPool(
             threadCount,
-            threadNamePrefix + "FS",
+            std::string(threadNamePrefix) + "FS",
             {
                 .PollingPeriod = pollingPeriod,
                 .PoolRetentionTime = TDuration::Zero()
@@ -256,7 +256,7 @@ public:
         auto* cookie = TPollableCookie::TryFromPollable(pollable.Get());
         if (!cookie) {
             // Pollable was not registered.
-            return VoidFuture;
+            return OKFuture;
         }
 
         DoUnregister(pollable);
@@ -518,7 +518,7 @@ class TThreadPoolPoller
     : public IThreadPoolPoller
 {
 public:
-    TThreadPoolPoller(int threadCount, std::string threadNamePrefix, TDuration pollingPeriod)
+    TThreadPoolPoller(int threadCount, TStringBuf threadNamePrefix, TDuration pollingPeriod)
         : Poller_(New<TThreadPoolPollerImpl>(threadCount, threadNamePrefix, pollingPeriod))
     { }
 
@@ -595,7 +595,7 @@ private:
 
 IThreadPoolPollerPtr CreateThreadPoolPoller(
     int threadCount,
-    std::string threadNamePrefix,
+    TStringBuf threadNamePrefix,
     TDuration pollingPeriod)
 {
     auto poller = New<TThreadPoolPoller>(threadCount, threadNamePrefix, pollingPeriod);

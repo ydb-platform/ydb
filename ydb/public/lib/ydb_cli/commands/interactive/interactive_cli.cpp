@@ -1,9 +1,12 @@
 #include "interactive_cli.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/line_reader.h>
+#if defined(YDB_CLI_AI_ENABLED)
 #include <ydb/public/lib/ydb_cli/commands/interactive/session/ai_session_runner.h>
+#endif
 #include <ydb/public/lib/ydb_cli/commands/interactive/session/sql_session_runner.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
@@ -103,6 +106,7 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         .EnableAiInteractive = config.EnableAiInteractive,
     }, Log));
 
+#if defined(YDB_CLI_AI_ENABLED)
     if (config.EnableAiInteractive) {
         sessions.push_back(CreateAiSessionRunner({
             .ConfigurationManager = configurationManager,
@@ -111,6 +115,9 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
             .ConnectionString = connectionString,
         }, Log));
     }
+#else
+    Y_UNUSED(connectionString);
+#endif
 
     if (activeSession >= sessions.size()) {
         activeSession = 0;

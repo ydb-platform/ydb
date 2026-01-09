@@ -8,6 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/metadata.h>
@@ -47,6 +48,9 @@ struct TChangefeedExportDescriptions {
 };
 
 template <typename TSettings>
+constexpr bool RequiresHttpResolver = std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>;
+
+template <typename TSettings>
 class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     using TThis = TS3Uploader;
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
@@ -71,6 +75,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     static TMaybe<THttpResolverConfig> GetHttpResolverConfig(const TS3ExternalStorageConfig& settings) {
+        if constexpr (!RequiresHttpResolver<TSettings>) {
+            return Nothing();
+        }
         return GetHttpResolverConfig(NormalizeEndpoint(settings.GetConfig().endpointOverride));
     }
 
@@ -170,7 +177,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             this->Send(std::exchange(Client, TActorId()), new TEvents::TEvPoisonPill());
         }
 
-        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        auto storageOperator = ExternalStorageConfig->ConstructStorageOperator();
+        Client = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(std::move(storageOperator)));
 
         if (!MetadataUploaded) {
             UploadMetadata();
@@ -790,7 +798,12 @@ public:
             << ": self# " << this->SelfId()
             << ", attempt# " << Attempt);
 
-        ProxyResolved = !HttpResolverConfig.Defined();
+        if constexpr (!RequiresHttpResolver<TSettings>) {
+            ProxyResolved = true;
+        } else {
+            ProxyResolved = !HttpResolverConfig.Defined();
+        }
+
         if (!ProxyResolved) {
             ResolveProxy();
         } else {
@@ -933,9 +946,16 @@ private:
 
 template <>
 NKikimrSchemeOp::TS3Settings TS3Uploader<NKikimrSchemeOp::TS3Settings>::GetSettings(
-    const NKikimrSchemeOp::TBackupTask& task) 
+    const NKikimrSchemeOp::TBackupTask& task)
 {
     return task.GetS3Settings();
+}
+
+template <>
+NKikimrSchemeOp::TFSSettings TS3Uploader<NKikimrSchemeOp::TFSSettings>::GetSettings(
+    const NKikimrSchemeOp::TBackupTask& task)
+{
+    return task.GetFSSettings();
 }
 
 IActor* CreateUploaderBySettingsType(
@@ -949,6 +969,11 @@ IActor* CreateUploaderBySettingsType(
 {
     if (task.HasS3Settings()) {
         return new TS3Uploader<NKikimrSchemeOp::TS3Settings>(
+            dataShard, txId, task,
+            std::move(scheme), std::move(changefeeds),
+            std::move(permissions), std::move(metadata));
+    } else if (task.HasFSSettings()) {
+        return new TS3Uploader<NKikimrSchemeOp::TFSSettings>(
             dataShard, txId, task,
             std::move(scheme), std::move(changefeeds),
             std::move(permissions), std::move(metadata));

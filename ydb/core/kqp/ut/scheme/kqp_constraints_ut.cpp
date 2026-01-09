@@ -582,9 +582,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(IndexedTableAndNotNullColumn) {
-        TKikimrRunner kikimr(TKikimrSettings()
-            .SetWithSampleTables(false));
+    Y_UNIT_TEST_TWIN(IndexedTableAndNotNullColumn, StreamIndex) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();

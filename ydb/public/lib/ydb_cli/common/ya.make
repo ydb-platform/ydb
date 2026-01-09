@@ -35,6 +35,7 @@ SRCS(
     sys.cpp
     tabbed_table.cpp
     waiting_bar.cpp
+    ydb_path.cpp
     ydb_updater.cpp
     yt.cpp
 )

@@ -7,7 +7,7 @@ import yatest.common
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from ydb.tests.library.stability.utils.collect_errors import create_cluster_issue
-from ydb.tests.library.stability.utils.remote_execution import copy_file, execute_command, deploy_binaries_to_hosts
+from ydb.tests.library.stability.utils.remote_execution import patch_max_suffix, copy_file, execute_command, deploy_binaries_to_hosts
 from ydb.tests.library.stability.utils.upload_results import test_event_report
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.library.stability.utils.results_models import StressUtilDeployResult
@@ -25,6 +25,7 @@ class StressUtilDeployer:
         self.cluster_path = cluster_path
         self.yaml_config = yaml_config
         self.nodes = YdbCluster.get_cluster_nodes()
+        patch_max_suffix(1000000)
 
         # Collect unique hosts and their corresponding nodes
         unique_hosts = set(node.host for node in self.nodes)

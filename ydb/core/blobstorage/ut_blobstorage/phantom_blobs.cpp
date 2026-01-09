@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             CheckStatus();
             CheckBlobs(blobs);
         }
-    
+
     public:
         const ui64 TabletId = 5000;
         const ui32 Channel = 1;

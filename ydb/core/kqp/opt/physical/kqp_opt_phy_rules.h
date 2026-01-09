@@ -62,6 +62,9 @@ NYql::NNodes::TExprBase KqpBuildTopStageRemoveSortFSM(NYql::NNodes::TExprBase no
     NYql::IOptimizationContext& optCtx, NYql::TTypeAnnotationContext& typeCtx, const NYql::TParentsMap& parentsMap,
     bool allowStageMultiUsage, bool ruleEnabled);
 
+NYql::NNodes::TExprBase KqpApplyLimitToFullTextIndex(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx);
+
 NYql::NNodes::TExprBase KqpApplyLimitToReadTable(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx);
 

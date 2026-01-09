@@ -187,7 +187,7 @@ struct TFakeConnection
     TFuture<void> Write(const TSharedRef& ref) override
     {
         Output += TString(ref.Begin(), ref.Size());
-        return VoidFuture;
+        return OKFuture;
     }
 
     TFuture<void> WriteV(const TSharedRefArray& refs) override
@@ -195,7 +195,7 @@ struct TFakeConnection
         for (const auto& ref : refs) {
             Output += TString(ref.Begin(), ref.Size());
         }
-        return VoidFuture;
+        return OKFuture;
     }
 
     TFuture<void> Close() override
@@ -436,7 +436,7 @@ TEST(THttpOutputTest, LargeResponse)
                     Output += TString(ref.Begin(), ref.Size());
                 }
             }
-            return VoidFuture;
+            return OKFuture;
         }
 
         TSharedRef LargeRef;
@@ -715,6 +715,7 @@ TEST_P(THttpServerTest, CertificateValidation)
     Server->Start();
 
     auto clientConfig = New<NHttps::TClientConfig>();
+    EXPECT_FALSE(clientConfig->AllowHTTP);
     clientConfig->Credentials = New<NHttps::TClientCredentialsConfig>();
     auto client = NHttps::CreateClient(clientConfig, Poller);
 
@@ -727,6 +728,23 @@ TEST_P(THttpServerTest, CertificateValidation)
         EXPECT_THROW_WITH_ERROR_CODE(result.ThrowOnError(), NRpc::EErrorCode::SslError);
         EXPECT_THROW_WITH_SUBSTRING(result.ThrowOnError(), "SSL_do_handshake failed");
     }
+}
+
+TEST_P(THttpServerTest, HttpInHttpsClient)
+{
+    if (GetParam()) {
+        return;
+    }
+
+    Server->AddHandler("/", New<TOKHttpHandler>());
+    Server->Start();
+
+    auto clientConfig = New<NHttps::TClientConfig>();
+    clientConfig->AllowHTTP = true;
+    auto httpsClient = NHttps::CreateClient(clientConfig, Poller);
+
+    auto rsp = WaitFor(httpsClient->Get(TestUrl)).ValueOrThrow();
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
 }
 
 TEST_P(THttpServerTest, SimpleRequest)

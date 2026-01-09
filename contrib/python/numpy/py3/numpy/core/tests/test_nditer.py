@@ -34,6 +34,7 @@ def iter_iterindices(i):
         i.iternext()
     return ret
 
+@pytest.mark.skipif(sys.version_info >= (3, 13), reason="Skip Python 3.13")
 @pytest.mark.skipif(not HAS_REFCOUNT, reason="Python lacks refcounts")
 def test_iter_refcount():
     # Make sure the iterator doesn't leak

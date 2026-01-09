@@ -21,11 +21,12 @@ struct TCodeLineException: public yexception {
 
 TCodeLineException operator+(const TSourceLocation& sl, TCodeLineException&& t);
 
-#define YQL_ENSURE_CODELINE(CONDITION, CODE, ...)           \
-    do {                                                    \
-        if (Y_UNLIKELY(!(CONDITION))) {                     \
-            ythrow TCodeLineException(CODE) << __VA_ARGS__; \
-        }                                                   \
+#define YQL_ENSURE_CODELINE(CONDITION, CODE, ...)                                                                                                                                                 \
+    do {                                                                                                                                                                                          \
+        static_assert(!std::is_array_v<std::remove_cvref_t<decltype(CONDITION)>>, "An array type always evaluates to true in a condition; this is likely an error in the condition expression."); \
+        if (Y_UNLIKELY(!(CONDITION))) {                                                                                                                                                           \
+            ythrow TCodeLineException(CODE) << __VA_ARGS__;                                                                                                                                       \
+        }                                                                                                                                                                                         \
     } while (0)
 
 } // namespace NYql

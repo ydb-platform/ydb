@@ -366,7 +366,7 @@ namespace NKikimr::NBsController {
                     const auto [it, inserted] = Groups.try_emplace(groupId, groupId);
                     auto& g = it->second;
                     bool hasVDisksToReassign = false;
-                    
+
                     g.Content = std::move(*data);
 
                     UpdateGroupLayoutInformation(g);
@@ -455,7 +455,7 @@ namespace NKikimr::NBsController {
                 if (group.UpdateConfigTxSeqNo < group.ResponseConfigTxSeqNo) {
                     continue; // response from bsc was received before selfheal info update
                 }
-            
+
                 EnqueueReassign(group, EGroupRepairOperation::SelfHeal);
             }
 
@@ -624,7 +624,7 @@ namespace NKikimr::NBsController {
         }
 
         using TVDiskInfo = TEvControllerUpdateSelfHealInfo::TGroupContent::TVDiskInfo;
-        TGroupMapper::TGroupDefinition MakeGroupDefinition(const TMap<TVDiskID, TVDiskInfo>& vdisks, 
+        TGroupMapper::TGroupDefinition MakeGroupDefinition(const TMap<TVDiskID, TVDiskInfo>& vdisks,
                 const TGroupGeometryInfo& geom) {
             TGroupMapper::TGroupDefinition groupDefinition;
             geom.ResizeGroup(groupDefinition);
@@ -715,7 +715,7 @@ namespace NKikimr::NBsController {
                     ss << "]";
                     return ss.Str();
                 };
-    
+
                 STLOG(PRI_INFO, BS_SELFHEAL, BSSH11, "group can't be reassigned right now " << log(), (GroupId, groupId));
             }
             return false;
@@ -895,7 +895,7 @@ namespace NKikimr::NBsController {
                                         TABLED() {
                                             out << i;
                                         }
-                                        TABLED() { 
+                                        TABLED() {
                                             auto record = GroupLayoutSanitizerOperationLog.BorrowByIdx(i);
                                             if (record) {
                                                 out << *record;

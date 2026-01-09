@@ -20,22 +20,21 @@ namespace NYT::NYTProf {
 
 void SymbolizeByExternalPProf(NProto::Profile* profile, const TSymbolizationOptions& options)
 {
-    TTempDir tmpDir = TTempDir::NewTempDir(options.TmpDir);
+    TTempDir tmpDir = TTempDir::NewTempDir(std::string(options.TmpDir));
     if (options.KeepTmpDir) {
         tmpDir.DoNotRemove();
     }
 
-    auto writeFile = [&] (const TString& name) -> TString {
+    auto writeFile = [&] (const std::string& name) {
         auto path = tmpDir.Path() / name;
         TFile file{path, EOpenModeFlag::CreateAlways|EOpenModeFlag::WrOnly|EOpenModeFlag::AX|EOpenModeFlag::ARW};
         auto binary = NResource::Find("/ytprof/" + name);
         file.Write(binary.data(), binary.size());
-        return path;
+        return TString(path);
     };
 
-
-    TString pprofPath;
-    std::optional<TString> llvmSymbolyzerPath;
+    std::string pprofPath;
+    std::optional<std::string> llvmSymbolyzerPath;
 
     if (NResource::Has("/ytprof/pprof")) {
         pprofPath = writeFile("pprof");
@@ -53,7 +52,7 @@ void SymbolizeByExternalPProf(NProto::Profile* profile, const TSymbolizationOpti
     WriteCompressedProfile(&output, *profile);
     output.Finish();
 
-    std::vector<TString> arguments{
+    std::vector<std::string> arguments{
         pprofPath,
         "-proto",
         "-output=" + (tmpDir.Path() / "out.pb.gz").GetPath(),

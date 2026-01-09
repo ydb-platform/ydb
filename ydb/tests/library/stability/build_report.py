@@ -218,6 +218,7 @@ def __set_nemesis_dashboard(test_info: dict[str, str], start_time: float, end_ti
     nemesis_monitoring = get_external_param('nemesis_dashboard', None)
     if not nemesis_monitoring:
         return
+    nemesis_monitoring = nemesis_monitoring.replace('{{', '{').replace('}}', '}')
     test_info['nemesis_dashboard'] = f"<a target='_blank' href='https://{nemesis_monitoring.format(
         start_time=monitoring_start,
         end_time=monitoring_end

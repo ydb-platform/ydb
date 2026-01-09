@@ -1,5 +1,5 @@
---- contrib/tools/python3/Modules/_blake2/blake2module.h	(index)
-+++ contrib/tools/python3/Modules/_blake2/blake2module.h	(working tree)
+--- a/Modules/_blake2/blake2module.h	(index)
++++ b/Modules/_blake2/blake2module.h	(working tree)
 @@ -2,7 +2,7 @@
  #define Py_BLAKE2MODULE_H
  

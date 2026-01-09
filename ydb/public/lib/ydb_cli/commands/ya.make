@@ -50,7 +50,6 @@ PEERDIR(
     library/cpp/protobuf/json
     library/cpp/regex/pcre
     library/cpp/threading/local_executor
-    ydb/core/base
     ydb/library/arrow_inference
     ydb/library/backup
     ydb/library/formats/arrow/csv/table
@@ -89,6 +88,7 @@ PEERDIR(
 
 IF (NOT OS_WINDOWS)
 PEERDIR(
+    ydb/core/base
     ydb/public/lib/ydb_cli/commands/sqs_workload
 )
 ENDIF()

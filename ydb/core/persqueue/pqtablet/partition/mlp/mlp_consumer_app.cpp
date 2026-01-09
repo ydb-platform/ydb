@@ -65,6 +65,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                             TABLEHEAD() {
                                 TABLER() {
                                     TABLEH() {str << "Zone";}
+                                    TABLEH() {str << "Offset";}
                                     TABLEH() {str << "Status";}
                                     TABLEH() {str << "Write Timestamp";}
                                     TABLEH() {str << "Processing Count";}
@@ -77,6 +78,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                                     auto message = *it;
                                     TABLER() {
                                         TABLED() { str << (message.SlowZone ? "S" : "F"); }
+                                        TABLED() { str << message.Offset; }
                                         TABLED() { str << message.Status; }
                                         TABLED() { str << message.WriteTimestamp; }
                                         TABLED() { str << message.ProcessingCount; }

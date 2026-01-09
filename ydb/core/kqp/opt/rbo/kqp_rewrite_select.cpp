@@ -157,13 +157,7 @@ TExprNode::TPtr BuildJoinKeys(const TVector<TInfoUnit> &joinKeys, const TJoinTab
     return Build<TDqJoinKeyTupleList>(ctx, pos).Add(keys).Done().Ptr();
 }
 
-TExprNode::TPtr BuildAggregationTraits(const TString& originalColName, const TString& aggFunction, TExprContext& ctx, TPositionHandle pos,
-                                       TExprNode::TPtr typeNode = nullptr) {
-    TString forceOptional = "False";
-    if (typeNode && TMaybeNode<TCoOptionalType>(typeNode.Get())) {
-        forceOptional = "True";
-    }
-
+TExprNode::TPtr BuildAggregationTraits(const TString& originalColName, const TString& aggFunction, TExprContext& ctx, TPositionHandle pos) {
     // clang-format off
     return Build<TKqpOpAggregationTraits>(ctx, pos)
         .OriginalColName<TCoAtom>()
@@ -171,9 +165,6 @@ TExprNode::TPtr BuildAggregationTraits(const TString& originalColName, const TSt
         .Build()
         .AggregationFunction<TCoAtom>()
             .Value(aggFunction)
-        .Build()
-        .ForceOptional<TCoAtom>()
-            .Value(forceOptional)
         .Build()
     .Done().Ptr();
     // clang-format on
@@ -230,17 +221,20 @@ TVector<std::pair<TInfoUnit, TExprNode::TPtr>> BuildExpressionsFromColumns(const
 }
 
 TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
-                                            const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& aggFieldsExpressionsMap,
+                                            const TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& aggFieldsExpressionsMap,
                                             const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
                                             TExprContext& ctx, TPositionHandle pos) {
     // Add expressions
     TVector<TExprNode::TPtr> mapElements;
-    for (const auto& [colName, expr] : aggFieldsExpressionsMap) {
+    for (const auto& [colName, expr, forceOptional] : aggFieldsExpressionsMap) {
         // clang-format off
         mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, pos)
             .Input(resultExpr)
             .Variable()
                 .Value(colName.GetFullName())
+            .Build()
+            .ForceOptional()
+                .Value(forceOptional ? "True" : "False")
             .Build()
             .Lambda(expr)
         .Done().Ptr());
@@ -292,6 +286,7 @@ void ToCamelCase(std::string& s) {
     std::transform(s.begin(), s.end(), s.begin(), f);
 }
 
+// FIXME: This function has a bug.
 TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext &ctx) {
     if (input->IsLambda()) {
         auto lambda = TCoLambda(input);
@@ -333,18 +328,30 @@ TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext &ctx) {
                 .Seal()
             .Build();
             // clnag-format on
-        }
-        else if (input->IsCallable()){
-            TVector<TExprNode::TPtr> newChildren;
-            for (auto c : input->Children()) {
-                newChildren.push_back(ReplacePgOps(c, ctx));
-            }
-            // clang-format off
+    } else if (input->IsCallable("PgNot")) {
+        // clang-format off
             return ctx.Builder(input->Pos())
-                .Callable(input->Content())
-                    .Add(std::move(newChildren))
+                .Callable("ToPg")
+                    .Callable(0, "Not")
+                        .Callable(0, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(0), ctx))
+                        .Seal()
+                    .Seal()
                 .Seal()
             .Build();
+            // clnag-format on
+    }
+    else if (input->IsCallable()){
+        TVector<TExprNode::TPtr> newChildren;
+        for (auto c : input->Children()) {
+            newChildren.push_back(ReplacePgOps(c, ctx));
+        }
+        // clang-format off
+        return ctx.Builder(input->Pos())
+            .Callable(input->Content())
+                .Add(std::move(newChildren))
+            .Seal()
+        .Build();
         // clang-format on
     } else if (input->IsList()) {
         TVector<TExprNode::TPtr> newChildren;
@@ -627,14 +634,18 @@ TExprNode::TPtr BuildFilter(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, TV
     return Build<TKqpOpFilter>(ctx, pos)
         .Input(input)
         .Lambda<TCoLambda>()
-            .Args({"arg"})
+            .Args({"_filter_arg_"})
             .Body<TExprApplier>()
                 .Apply(TExprBase(predicate))
-                .With(TExprBase(lambdaArg), "arg")
+                .With(TExprBase(lambdaArg), "_filter_arg_")
             .Build()
         .Build()
     .Done().Ptr();
     // clang-format on
+}
+
+bool IsForceOptionalNeeded(TExprNode::TPtr typeNode, const TString& aggFunc) {
+    return typeNode && TMaybeNode<TCoOptionalType>(typeNode.Get()) && (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg");
 }
 
 } // namespace
@@ -645,7 +656,6 @@ namespace NKqp {
 TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, const TKqpOptimizeContext& kqpCtx, ui64& uniqueSourceIdCounter, bool pgSyntax) {
     Y_UNUSED(typeCtx);
     Y_UNUSED(pgSyntax);
-
     TVector<TString> finalColumnOrder;
 
     auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
@@ -860,13 +870,21 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         auto where = GetSetting(setItem->Tail(), "where");
 
         if (where) {
-            TExprNode::TPtr lambda = where->Child(1)->Child(1);
-            lambda = ReplacePgOps(lambda, ctx);
-            lambda = FlattenNestedConjunctions(lambda, ctx);
+            TExprNode::TPtr lambdaPtr = ctx.DeepCopyLambda(*(where->Child(1)->Child(1)));
+            if (pgSyntax) {
+                lambdaPtr = ReplacePgOps(lambdaPtr, ctx);
+            }
+            auto lambda = TCoLambda(FlattenNestedConjunctions(lambdaPtr, ctx));
             // clang-format off
             filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
                 .Input(filterExpr)
-                .Lambda(lambda)
+                .Lambda<TCoLambda>()
+                    .Args({"_filter_arg_"})
+                    .Body<TExprApplier>()
+                        .Apply(lambda.Body())
+                        .With(lambda.Args().Arg(0), "_filter_arg_")
+                    .Build()
+                .Build()
             .Done().Ptr();
             // clang-format on
         }
@@ -927,10 +945,11 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         auto result = GetSetting(setItem->Tail(), "result");
         Y_ENSURE(result);
         auto finalType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        const bool IsEmptyGroupByKeys = groupByKeysExpressionsMap.empty();
 
         // Aggregations.
-        TVector<std::pair<TInfoUnit, TExprNode::TPtr>> expressionsMapPreAgg;
-        TVector<std::pair<TInfoUnit, TExprNode::TPtr>> expressionsMapPostAgg;
+        TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPreAgg;
+        TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPostAgg;
         bool distinctPreAggregate = false;
         for (ui32 i = 0; i < result->Child(1)->ChildrenSize(); ++i) {
             const auto resultItem = result->Child(1)->ChildPtr(i);
@@ -1002,7 +1021,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                     .Done().Ptr();
                     // clang-format on
 
-                    expressionsMapPreAgg.push_back({aggColName, exprLambda});
+                    // This is a special case to force optional type for non optional column.
+                    const bool forceOptional = aggHasType ? (IsEmptyGroupByKeys && IsForceOptionalNeeded(aggregation->ChildPtr(2), aggFuncName)) : false;
+                    expressionsMapPreAgg.push_back({aggColName, exprLambda, forceOptional});
                     aggregationsForReplacement[aggregation] = aggColName.GetFullName();
 
                     // Distinct for column or expression f(distinct a) => (distinct a) as b -> f(b).
@@ -1014,10 +1035,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         distinctPreAggregate = true;
                     }
 
-                    TExprNode::TPtr typeExprNode = aggHasType ? aggregation->ChildPtr(2) : nullptr;
                     // Build an aggregation traits.
                     auto aggregationTraits =
-                        BuildAggregationTraits(aggColName.GetFullName(), aggFuncName, ctx, node->Pos(), typeExprNode);
+                        BuildAggregationTraits(aggColName.GetFullName(), aggFuncName, ctx, node->Pos());
                     aggTraits.AggTraitsList.push_back(aggregationTraits);
                 }
 
@@ -1057,7 +1077,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                 // clang-format on
 
                 auto colName = TInfoUnit(resultColName);
-                expressionsMapPostAgg.push_back({colName, exprLambda});
+                expressionsMapPostAgg.push_back({colName, exprLambda, false});
 
                 // Case for distinct after aggregation.
                 if (distinctAll) {
@@ -1229,7 +1249,13 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
             resultElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())
                 .Input(resultExpr)
                 .Variable(variable)
-                .Lambda(lambda)
+                .Lambda<TCoLambda>()
+                    .Args({"_map_arg_"})
+                    .Body<TExprApplier>()
+                        .Apply(TCoLambda(lambda))
+                        .With(TCoLambda(lambda).Args().Arg(0), "_map_arg_")
+                    .Build()
+                .Build()
             .Done().Ptr());
             // clang-format on
             
@@ -1385,8 +1411,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
     }
 
     TVector<TCoAtom> columnAtomList;
-    for (auto c : finalColumnOrder) {
-        columnAtomList.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(c).Done());
+    for (const auto& column : finalColumnOrder) {
+        columnAtomList.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(column).Done());
     }
     auto columnOrder = Build<TCoAtomList>(ctx, node->Pos()).Add(columnAtomList).Done().Ptr();
 

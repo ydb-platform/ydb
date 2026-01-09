@@ -28,7 +28,7 @@ namespace NTest {
                 : ClientId(clientId)
                 , TabletId(tabletId)
                 , ForwardTo(forwardTo) {}
-        
+
             void Bootstrap(const TActorContext&  ctx) {
                 if (ForwardTo) {
                     ctx.Send(ForwardTo, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::EReplyStatus::OK, ClientId, ClientId, true, false, 1));

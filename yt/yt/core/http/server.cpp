@@ -71,7 +71,7 @@ public:
         , Invoker_(std::move(invoker))
         , OwnPoller_(ownPoller)
         , Address_(Listener_ ? Listener_->GetAddress() : TNetworkAddress::CreateIPv6Any(Config_->Port))
-        , Profiling_(HttpProfiler.WithTag("server", Config_->ServerName))
+        , Profiling_(HttpProfiler.WithTag("server", Config_->ServerName), Config_->EnablePerPathRequestProfiling)
         , RequestPathMatcher_(std::move(requestPathMatcher))
     { }
 
@@ -178,11 +178,12 @@ private:
             TStatusCodeCounter StatusCodeCounter;
         };
 
-        explicit TProfiling(const TProfiler& profiler)
+        explicit TProfiling(const TProfiler& profiler, bool enablePerPathRequestProfiling)
             : ConnectionsActive(profiler.Gauge("/connections_active"))
             , ConnectionsAccepted(profiler.Counter("/connections_accepted"))
             , ConnectionsDropped(profiler.Counter("/connections_dropped"))
             , RequestsMissingHeaders(profiler.Counter("/requests_missing_headers"))
+            , EnablePerPathRequestProfiling_(enablePerPathRequestProfiling)
             , Profiler_(profiler)
         { }
 
@@ -193,15 +194,22 @@ private:
 
         TRequestProfiling* GetRequestProfiling(const THttpInputPtr& httpRequest)
         {
-            TRequestProfilingKey profilingKey{httpRequest->GetUrl().Path};
-            return RequestProfilingMap_.FindOrInsert(profilingKey, [&] {
-                return New<TRequestProfiling>(Profiler_
-                    .WithTag("path", std::string(std::get<0>(profilingKey))));
-            }).first->Get();
+            if (EnablePerPathRequestProfiling_) {
+                TRequestProfilingKey profilingKey{httpRequest->GetUrl().Path};
+                return RequestProfilingMap_.FindOrInsert(profilingKey, [&] {
+                    return New<TRequestProfiling>(Profiler_
+                        .WithTag("path", std::string(std::get<0>(profilingKey))));
+                }).first->Get();
+            } else {
+                return RequestProfilingMap_.FindOrInsert(TRequestProfilingKey{}, [&] {
+                    return New<TRequestProfiling>(Profiler_);
+                }).first->Get();
+            }
         }
 
     private:
-        TProfiler Profiler_;
+        const bool EnablePerPathRequestProfiling_;
+        const TProfiler Profiler_;
 
         // Path.
         using TRequestProfilingKey = std::tuple<std::string>;

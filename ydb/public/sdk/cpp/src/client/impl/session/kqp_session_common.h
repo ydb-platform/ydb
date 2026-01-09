@@ -69,6 +69,9 @@ public:
     // Called asynchronously from grpc thread.
     void CloseFromServer(std::weak_ptr<ISessionClient> client) noexcept;
 
+public:
+    std::optional<TDeadline> PropagatedDeadline_;
+
 protected:
     TAdaptiveLock Lock_;
 

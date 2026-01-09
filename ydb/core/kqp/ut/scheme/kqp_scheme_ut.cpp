@@ -355,12 +355,15 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    void SchemaVersionMismatchWithIndexTest(bool write) {
+    void SchemaVersionMismatchWithIndexTest(bool write, bool streamIndex) {
         //KIKIMR-14282
         //YDBREQUESTS-1324
         //some cases fail
 
-        TKikimrRunner kikimr;
+        TKikimrSettings settings = TKikimrSettings();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(streamIndex);
+
+        TKikimrRunner kikimr(settings);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -452,12 +455,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         SchemaVersionMismatchWithTest(true);
     }
 
-    Y_UNIT_TEST(SchemaVersionMismatchWithIndexRead) {
-        SchemaVersionMismatchWithIndexTest(false);
+    Y_UNIT_TEST_TWIN(SchemaVersionMismatchWithIndexRead, StreamIndex) {
+        SchemaVersionMismatchWithIndexTest(false, StreamIndex);
     }
 
-    Y_UNIT_TEST(SchemaVersionMismatchWithIndexWrite) {
-        SchemaVersionMismatchWithIndexTest(true);
+    Y_UNIT_TEST_TWIN(SchemaVersionMismatchWithIndexWrite, StreamIndex) {
+        SchemaVersionMismatchWithIndexTest(true, StreamIndex);
     }
 
     void TouchIndexAfterMoveIndex(bool write, bool replace) {
@@ -12187,6 +12190,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         config.MutableFeatureFlags()->SetEnableStreamingQueries(enableStreamingQueries);
         config.MutableFeatureFlags()->SetEnableExternalDataSources(true);
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
+        config.MutableTableServiceConfig()->SetDqChannelVersion(1u);
 
         auto kikimr = std::make_unique<TKikimrRunner>(NKqp::TKikimrSettings(config)
             .SetEnableStreamingQueries(enableStreamingQueries)

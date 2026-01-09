@@ -69,11 +69,11 @@ template <>
 class [[nodiscard]] TErrorOr<void>
 {
 public:
-    TErrorOr();
+    constexpr TErrorOr() = default;
     ~TErrorOr();
 
     TErrorOr(const TError& other);
-    TErrorOr(TError&& other) noexcept;
+    TErrorOr(TError&& other) noexcept = default;
 
     TErrorOr(const TErrorException& errorEx) noexcept;
 
@@ -98,7 +98,7 @@ public:
         TArgs&&... args);
 
     TError& operator = (const TError& other);
-    TError& operator = (TError&& other) noexcept;
+    TError& operator = (TError&& other) noexcept = default;
 
     static TError FromSystem();
     static TError FromSystem(int error);
@@ -235,7 +235,14 @@ public:
 
 private:
     class TImpl;
-    std::unique_ptr<TImpl> Impl_;
+
+    // Since TImpl is incomplete, we must provide a custom explicit deleter.
+    struct TImplDeleter
+    {
+        void operator()(TImpl* impl) const;
+    };
+
+    std::unique_ptr<TImpl, TImplDeleter> Impl_;
 
     explicit TErrorOr(std::unique_ptr<TImpl> impl);
 

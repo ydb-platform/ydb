@@ -149,7 +149,7 @@ TEST(TProcTest, BlockDeviceStat)
         EXPECT_EQ(stat.TimeSpentFlushing, TDuration::MilliSeconds(3564406312ul));
     }
     {
-        for (const TString& disk : ListDisks()) {
+        for (const std::string& disk : ListDisks()) {
             auto stat = GetBlockDeviceStat(disk);
             EXPECT_TRUE(stat);
             auto deviceId = GetBlockDeviceId(disk);

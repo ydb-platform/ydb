@@ -5,6 +5,7 @@ RECURSE(
     ctas
     kafka
     kv
+    kv_volume
     log
     mixedpy
     node_broker

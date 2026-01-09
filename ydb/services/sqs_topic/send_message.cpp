@@ -96,12 +96,6 @@ namespace NKikimr::NSqsTopic::V1 {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            TString serializedToken = this->Request_->GetSerializedToken();
-            NPQ::NDescriber::TDescribeSettings describeSettings{
-                .UserToken = MakeIntrusive<NACLib::TUserToken>(serializedToken),
-                .AccessRights = NACLib::EAccessRights::UpdateRow,
-            };
-
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
             ShouldBeCharged_ = FindPtr(AppData(ctx)->PQConfig.GetNonChargeableUser(), token.GetUserSID()) == nullptr;
 
@@ -149,11 +143,13 @@ namespace NKikimr::NSqsTopic::V1 {
                         TDerived::Method)
                 });
 
+            auto userToken = MakeIntrusive<NACLib::TUserToken>(this->Request_->GetSerializedToken());
             NPQ::NMLP::TWriterSettings writerSettings{
                 .DatabasePath = QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
                 .Messages = std::move(validItems),
                 .ShouldBeCharged = ShouldBeCharged_,
+                .UserToken = std::move(userToken),
             };
             WriterActor_ = this->RegisterWithSameMailbox(NPQ::NMLP::CreateWriter(this->SelfId(), std::move(writerSettings)));
         }

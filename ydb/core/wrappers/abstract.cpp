@@ -1,5 +1,6 @@
 #include "abstract.h"
 #include "fake_storage_config.h"
+#include "fs_storage_config.h"
 #include "s3_storage_config.h"
 
 namespace NKikimr::NWrappers::NExternalStorage {
@@ -15,6 +16,11 @@ IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrSche
     } else {
         return std::make_shared<TS3ExternalStorageConfig>(settings);
     }
+}
+
+template <>
+IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrSchemeOp::TFSSettings& settings) {
+    return std::make_shared<TFsExternalStorageConfig>(settings);
 }
 
 }

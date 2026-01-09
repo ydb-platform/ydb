@@ -1677,6 +1677,9 @@ TSession::TSession(std::shared_ptr<TTableClient::TImpl> client, std::shared_ptr<
 TFuture<TStatus> TSession::CreateTable(const std::string& path, TTableDescription&& tableDesc,
         const TCreateTableSettings& settings)
 {
+    auto rpcSettings = TRpcRequestSettings::Make(settings)
+        .TryUpdateDeadline(GetPropagatedDeadline());
+
     auto request = MakeOperationRequest<Ydb::Table::CreateTableRequest>(settings);
     request.set_session_id(TStringType{SessionImpl_->GetId()});
     request.set_path(TStringType{path});
@@ -1687,7 +1690,7 @@ TFuture<TStatus> TSession::CreateTable(const std::string& path, TTableDescriptio
 
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->CreateTable(std::move(request), settings),
+        Client_->CreateTable(std::move(request), rpcSettings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
@@ -1695,7 +1698,7 @@ TFuture<TStatus> TSession::CreateTable(const std::string& path, TTableDescriptio
 TFuture<TStatus> TSession::DropTable(const std::string& path, const TDropTableSettings& settings) {
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->DropTable(SessionImpl_->GetId(), path, settings),
+        Client_->DropTable(*this, path, settings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
@@ -1793,57 +1796,43 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
 }
 
 TAsyncStatus TSession::AlterTable(const std::string& path, const TAlterTableSettings& settings) {
+    auto rpcSettings = TRpcRequestSettings::Make(settings)
+        .TryUpdateDeadline(GetPropagatedDeadline());
+
     auto request = MakeAlterTableProtoRequest(path, settings, SessionImpl_->GetId());
 
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->AlterTable(std::move(request), settings),
+        Client_->AlterTable(std::move(request), rpcSettings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
 
 TAsyncOperation TSession::AlterTableLong(const std::string& path, const TAlterTableSettings& settings) {
+    auto rpcSettings = TRpcRequestSettings::Make(settings)
+        .TryUpdateDeadline(GetPropagatedDeadline());
+
     auto request = MakeAlterTableProtoRequest(path, settings, SessionImpl_->GetId());
 
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->AlterTableLong(std::move(request), settings),
+        Client_->AlterTableLong(std::move(request), rpcSettings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
 
 TAsyncStatus TSession::RenameTables(const std::vector<TRenameItem>& renameItems, const TRenameTablesSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::RenameTablesRequest>(settings);
-    request.set_session_id(TStringType{SessionImpl_->GetId()});
-
-    for (const auto& item: renameItems) {
-        auto add = request.add_tables();
-        add->set_source_path(TStringType{item.SourcePath()});
-        add->set_destination_path(TStringType{item.DestinationPath()});
-        add->set_replace_destination(item.ReplaceDestination());
-    }
-
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->RenameTables(std::move(request), settings),
+        Client_->RenameTables(*this, renameItems, settings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
 
 TAsyncStatus TSession::CopyTables(const std::vector<TCopyItem>& copyItems, const TCopyTablesSettings& settings) {
-    auto request = MakeOperationRequest<Ydb::Table::CopyTablesRequest>(settings);
-    request.set_session_id(TStringType{SessionImpl_->GetId()});
-
-    for (const auto& item: copyItems) {
-        auto add = request.add_tables();
-        add->set_source_path(TStringType{item.SourcePath()});
-        add->set_destination_path(TStringType{item.DestinationPath()});
-        add->set_omit_indexes(item.OmitIndexes());
-    }
-
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->CopyTables(std::move(request), settings),
+        Client_->CopyTables(*this, copyItems, settings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
@@ -1851,27 +1840,27 @@ TAsyncStatus TSession::CopyTables(const std::vector<TCopyItem>& copyItems, const
 TFuture<TStatus> TSession::CopyTable(const std::string& src, const std::string& dst, const TCopyTableSettings& settings) {
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->CopyTable(SessionImpl_->GetId(), src, dst, settings),
+        Client_->CopyTable(*this, src, dst, settings),
         false,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
 
 TAsyncDescribeTableResult TSession::DescribeTable(const std::string& path, const TDescribeTableSettings& settings) {
-    return Client_->DescribeTable(SessionImpl_->GetId(), path, settings);
+    return Client_->DescribeTable(*this, path, settings);
 }
 
 TAsyncDescribeExternalDataSourceResult TSession::DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings) {
-    return Client_->DescribeExternalDataSource(path, settings);
+    return Client_->DescribeExternalDataSource(*this, path, settings);
 }
 
 TAsyncDescribeExternalTableResult TSession::DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings) {
-    return Client_->DescribeExternalTable(path, settings);
+    return Client_->DescribeExternalTable(*this, path, settings);
 }
 
 TAsyncDescribeSystemViewResult TSession::DescribeSystemView(const std::string& path,
         const TDescribeSystemViewSettings& settings)
 {
-    return Client_->DescribeSystemView(path, settings);
+    return Client_->DescribeSystemView(*this, path, settings);
 }
 
 TAsyncDataQueryResult TSession::ExecuteDataQuery(const std::string& query, const TTxControl& txControl,
@@ -1929,7 +1918,7 @@ TAsyncPrepareQueryResult TSession::PrepareDataQuery(const std::string& query, co
 TAsyncStatus TSession::ExecuteSchemeQuery(const std::string& query, const TExecSchemeQuerySettings& settings) {
     return InjectSessionStatusInterception(
         SessionImpl_,
-        Client_->ExecuteSchemeQuery(SessionImpl_->GetId(), query, settings),
+        Client_->ExecuteSchemeQuery(*this, query, settings),
         true,
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
@@ -1966,7 +1955,7 @@ TAsyncTablePartIterator TSession::ReadTable(const std::string& path,
                 pair.second, pair.first.Endpoint) : nullptr, std::move(pair.first))
             );
     };
-    Client_->ReadTable(SessionImpl_->GetId(), path, settings).Subscribe(readTableIteratorBuilder);
+    Client_->ReadTable(*this, path, settings).Subscribe(readTableIteratorBuilder);
     return InjectSessionStatusInterception(
         SessionImpl_,
         promise.GetFuture(),
@@ -2004,6 +1993,14 @@ TTypeBuilder TSession::GetTypeBuilder() {
 
 const std::string& TSession::GetId() const {
     return SessionImpl_->GetId();
+}
+
+const std::optional<TDeadline>& TSession::GetPropagatedDeadline() const {
+    return SessionImpl_->PropagatedDeadline_;
+}
+
+void TSession::SetPropagatedDeadline(const TDeadline& deadline) {
+    SessionImpl_->PropagatedDeadline_ = deadline;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

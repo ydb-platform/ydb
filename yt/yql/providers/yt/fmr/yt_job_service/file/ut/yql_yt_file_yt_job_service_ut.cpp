@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(FileYtServiceTests) {
         TTempFileHandle file{};
         TYtTableRef ytTable{"Cluster", "Path", file.Name()};
 
-        auto fileService = MakeFileYtJobSerivce();
+        auto fileService = MakeFileYtJobService();
         auto writer = fileService->MakeWriter(ytTable, TClusterConnection());
         writer->Write(inputYsonContent.data(), inputYsonContent.size());
         writer->Flush();

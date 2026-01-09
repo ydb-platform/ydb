@@ -7,6 +7,7 @@
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/poller.h>
 
+#include <yt/yt/core/net/config.h>
 #include <yt/yt/core/net/connection.h>
 #include <yt/yt/core/net/dialer.h>
 #include <yt/yt/core/net/listener.h>
@@ -631,10 +632,12 @@ public:
     TTlsDialer(
         TSslContextImplPtr ctx,
         IDialerPtr dialer,
+        const TDialerConfigPtr& config,
         IPollerPtr poller)
         : Context_(std::move(ctx))
         , Underlying_(std::move(dialer))
         , Poller_(std::move(poller))
+        , AllowBypassTLS_(config->AllowBypassTLS)
     { }
 
     TFuture<IConnectionPtr> Dial(const TNetworkAddress& remoteAddress, TDialerContextPtr context) override
@@ -644,8 +647,12 @@ public:
                 ctx = Context_,
                 poller = Poller_,
                 context = std::move(context),
+                allowBypassTLS = AllowBypassTLS_,
                 insecureSkipVerify = Context_->IsInsecureSkipVerify()
             ] (const IConnectionPtr& underlying) -> IConnectionPtr {
+                if (allowBypassTLS && context->BypassTLS) {
+                    return underlying;
+                }
                 auto connection = New<TTlsConnection>(ctx, poller, underlying);
                 if (context && context->Host) {
                     connection->SetHost(*context->Host);
@@ -659,6 +666,7 @@ private:
     const TSslContextImplPtr Context_;
     const IDialerPtr Underlying_;
     const IPollerPtr Poller_;
+    const bool AllowBypassTLS_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -937,7 +945,7 @@ IDialerPtr TSslContext::CreateDialer(
     const TLogger& logger)
 {
     auto dialer = NNet::CreateDialer(config, poller, logger);
-    return New<TTlsDialer>(Impl_, dialer, poller);
+    return New<TTlsDialer>(Impl_, dialer, config, poller);
 }
 
 IListenerPtr TSslContext::CreateListener(

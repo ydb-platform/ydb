@@ -2140,8 +2140,8 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBe
     return true;
 }
 
-template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds) {
+template <>
+inline void TSingleClusterReadSessionImpl<false>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<false>* partitionStream, const std::vector<ui32>& childIds) {
     ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
     for (auto& [_, s] : PartitionStreams) {
         for (auto partitionId : childIds) {
@@ -2151,6 +2151,12 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
             }
         }
     }
+}
+
+template <>
+inline void TSingleClusterReadSessionImpl<true>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<true>* partitionStream, const std::vector<ui32>& childIds) {
+    Y_UNUSED(partitionStream, childIds);
+    Y_ABORT("Not implemented");
 }
 
 template <bool UseMigrationProtocol>

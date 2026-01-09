@@ -33,6 +33,28 @@ std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TDataReceivedEvent& da
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TPartitionSession
+
+void TPartitionSession::Commit(ui64 startOffset, ui64 endOffset) {
+    Y_UNUSED(startOffset, endOffset);
+    Y_ABORT("Not implemented");
+}
+
+void TPartitionSession::ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) {
+    Y_UNUSED(readOffset, commitOffset);
+    Y_ABORT("Not implemented");
+}
+
+void TPartitionSession::ConfirmDestroy() {
+    Y_ABORT("Not implemented");
+}
+
+void TPartitionSession::ConfirmEnd(const std::vector<ui32>& childIds) {
+    Y_UNUSED(childIds);
+    Y_ABORT("Not implemented");
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation
 
 TMessageInformation::TMessageInformation(
@@ -191,8 +213,7 @@ bool TMessage::HasException() const {
 }
 
 void TMessage::Commit() {
-    static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
-        ->Commit(Information.Offset, Information.Offset + 1);
+    PartitionSession->Commit(Information.Offset, Information.Offset + 1);
 }
 
 template<>
@@ -225,8 +246,7 @@ uint64_t TCompressedMessage::GetUncompressedSize() const {
 }
 
 void TCompressedMessage::Commit() {
-    static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
-        ->Commit(Information.Offset, Information.Offset + 1);
+    PartitionSession->Commit(Information.Offset, Information.Offset + 1);
 }
 
 template<>
@@ -264,7 +284,7 @@ void TDataReceivedEvent::Commit() {
     }
 
     for (auto [from, to] : OffsetRanges) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
+        PartitionSession->Commit(from, to);
     }
 }
 
@@ -317,8 +337,7 @@ TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr
 
 void TStartPartitionSessionEvent::Confirm(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) {
     if (PartitionSession) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())
-            ->ConfirmCreate(readOffset, commitOffset);
+        PartitionSession->ConfirmCreate(readOffset, commitOffset);
     }
 }
 
@@ -342,7 +361,7 @@ TStopPartitionSessionEvent::TStopPartitionSessionEvent(TPartitionSession::TPtr p
 
 void TStopPartitionSessionEvent::Confirm() {
     if (PartitionSession) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmDestroy();
+        PartitionSession->ConfirmDestroy();
     }
 }
 
@@ -366,7 +385,7 @@ TEndPartitionSessionEvent::TEndPartitionSessionEvent(TPartitionSession::TPtr par
 
 void TEndPartitionSessionEvent::Confirm() {
     if (PartitionSession) {
-        static_cast<TPartitionStreamImpl<false>*>(PartitionSession.Get())->ConfirmEnd(GetChildPartitionIds());
+        PartitionSession->ConfirmEnd(GetChildPartitionIds());
     }
 }
 

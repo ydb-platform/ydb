@@ -186,11 +186,10 @@ public:
         while (true) {
             rebaseIt();
             const auto& address = channelIt->first.second;
-            if (seenAddresses.count(address) == 0) {
+            if (seenAddresses.insert(address).second) {
                 if (currentRandomIndex == 0) {
                     break;
                 }
-                seenAddresses.insert(address);
                 --currentRandomIndex;
             } else {
                 ++channelIt;

@@ -39,4 +39,6 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    ut_mem_pool_limit_32
+    ut_mem_pool_limit_128
 )

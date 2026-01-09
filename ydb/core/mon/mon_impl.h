@@ -154,10 +154,10 @@ public:
         Die(ctx);
     }
 
-    void ReplyErrorAndDie(const TActorContext &ctx, int statusCode, const TString& statusText, const TString& title, const TString& error = TString()) {
+    void ReplyUnathorizedAndDie(const TActorContext &ctx, const TString& error = TString()) {
         TStringStream response;
         TStringStream body;
-        body << "<html><body><h1>" << statusCode << " " << title << "</h1>";
+        body << "<html><body><h1>401 Unauthorized</h1>";
         if (!error.empty()) {
             body << "<p>" << error << "</p>";
         }
@@ -166,7 +166,7 @@ public:
         if (origin.empty()) {
             origin = "*";
         }
-        response << "HTTP/1.1 " << statusCode << " " << statusText << "\r\n";
+        response << "HTTP/1.1 401 Unauthorized\r\n";
         response << "Access-Control-Allow-Origin: " << origin << "\r\n";
         response << "Access-Control-Allow-Credentials: true\r\n";
         response << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
@@ -179,16 +179,38 @@ public:
         Die(ctx);
     }
 
-    void ReplyUnathorizedAndDie(const TActorContext &ctx, const TString& error = TString()) {
-        ReplyErrorAndDie(ctx, 401, "Unauthorized", "Unauthorized", error);
-    }
-
     void ReplyForbiddenAndDie(const TActorContext &ctx, const TString& error = TString()) {
-        ReplyErrorAndDie(ctx, 403, "Forbidden", "Forbidden", error);
+        TStringStream response;
+        TStringStream body;
+        body << "<html><body><h1>403 Forbidden</h1>";
+        if (!error.empty()) {
+            body << "<p>" << error << "</p>";
+        }
+        body << "</body></html>";
+        response << "HTTP/1.1 403 Forbidden\r\n";
+        response << "Content-Type: text/html\r\n";
+        response << "Content-Length: " << body.Size() << "\r\n";
+        response << "\r\n";
+        response << body.Str();
+        Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Die(ctx);
     }
 
     void ReplyActorUnavailableAndDie(const TActorContext &ctx, const TString& error = TString()) {
-        ReplyErrorAndDie(ctx, 503, "Actor Unavailable", "Actor Unavailable", error);
+        TStringStream response;
+        TStringStream body;
+        body << "<html><body><h1>503 Actor Unavailable</h1>";
+        if (!error.empty()) {
+            body << "<p>" << error << "</p>";
+        }
+        body << "</body></html>";
+        response << "HTTP/1.1 503 Actor Unavailable\r\n";
+        response << "Content-Type: text/html\r\n";
+        response << "Content-Length: " << body.Size() << "\r\n";
+        response << "\r\n";
+        response << body.Str();
+        Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Die(ctx);
     }
 
     virtual TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId &self, const TActorId& parentId) override {

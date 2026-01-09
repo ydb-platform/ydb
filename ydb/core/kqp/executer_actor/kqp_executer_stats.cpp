@@ -959,7 +959,12 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
         const NYql::NDqProto::TDqComputeActorStats& stats,
         NYql::NDqProto::EComputeState state
     ) {
-    auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
+
+    auto& task1 = TasksGraph->GetTask(task.GetTaskId());
+    if (task1.StageId.TxId > 0) {
+        return;
+    }
+    auto* stageStats = GetOrCreateStageStats(task1.StageId, *TasksGraph, *Result);
 
     stageStats->SetTotalTasksCount(stageStats->GetTotalTasksCount() + 1);
     if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
@@ -1609,7 +1614,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
 
     if (CollectFullStats(StatsMode)) {
         for (auto& [stageId, stagetype] : TasksGraph->GetStagesInfo()) {
-            protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
+            if (stageId.TxId == 0) {
+                protoStages.emplace(stageId.StageId, GetOrCreateStageStats(stageId, *TasksGraph, stats));
+            }
         }
     }
 
@@ -1803,9 +1810,11 @@ void TQueryExecutionStats::AdjustBaseTime(NDqProto::TDqStageStats* stageStats) {
 
 void TQueryExecutionStats::Finish() {
 //    Cerr << (TStringBuilder() << "-- finish: executerTime: " << ExecuterCpuTime.MicroSeconds() << Endl);
-    THashMap<ui32, NDqProto::TDqStageStats*> protoStages;
 
     for (auto& [stageId, stagetype] : TasksGraph->GetStagesInfo()) {
+        if (stageId.TxId > 0) {
+            continue;
+        }
         auto stageStats = GetOrCreateStageStats(stageId, *TasksGraph, *Result);
         stageStats->SetBaseTimeMs(BaseTimeMs);
 

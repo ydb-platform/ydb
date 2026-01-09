@@ -65,7 +65,13 @@ TScheme::TPtr BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& na
             result->ReadIndex.push_back(j);
 
             Ydb::Type type;
-            type.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(column.PType.GetTypeId()));
+            if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
+                auto* decimalType = type.mutable_decimal_type();
+                decimalType->set_precision(column.PType.GetDecimalType().GetPrecision());
+                decimalType->set_scale(column.PType.GetDecimalType().GetScale());
+            } else {
+                type.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(column.PType.GetTypeId()));
+            }
             result->Types->emplace_back(column.Name, type);
         }
 

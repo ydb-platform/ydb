@@ -131,7 +131,7 @@ inline ui64 Checker<ui64>::Get(const ::Ydb::Value& value) {
 
 template<>
 inline std::pair<ui64, i64> Checker<std::pair<ui64, i64>>::Get(const ::Ydb::Value& value) {
-    return std::make_pair(value.uint64_value(), value.int64_value());
+    return std::make_pair(value.high_128(), value.low_128());
 }
 
 template<>

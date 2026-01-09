@@ -247,7 +247,7 @@ void ColumnType_Decimal(const std::string& tableType) {
 
         .Expectations = {{
             _C("Key", ui64(0)),
-            _C("Message", std::make_pair<ui64, i64>(123, 45)),
+            _C("Message", std::make_pair<ui64, i64>(0, 12345)),
         }}
     });
 }

@@ -154,28 +154,23 @@ public:
         Die(ctx);
     }
 
-    void ReplyErrorAndDie(const TActorContext &ctx, int statusCode, const TString& statusText, const TString& title, const TString& error = TString(), bool addAccessControlHeaders = true) {
+    void ReplyErrorAndDie(const TActorContext &ctx, int statusCode, const TString& statusText, const TString& title, const TString& error = TString()) {
+        TStringStream response;
         TStringStream body;
         body << "<html><body><h1>" << statusCode << " " << title << "</h1>";
         if (!error.empty()) {
             body << "<p>" << error << "</p>";
         }
         body << "</body></html>";
-
-        TStringStream response;
-        response << "HTTP/1.1 " << statusCode << " " << statusText << "\r\n";
-
-        if (addAccessControlHeaders) {
-            TString origin = TString(Request.GetHeader("Origin"));
-            if (origin.empty()) {
-                origin = "*";
-            }
-            response << "Access-Control-Allow-Origin: " << origin << "\r\n";
-            response << "Access-Control-Allow-Credentials: true\r\n";
-            response << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
-            response << "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n";
+        TString origin = TString(Request.GetHeader("Origin"));
+        if (origin.empty()) {
+            origin = "*";
         }
-
+        response << "HTTP/1.1 " << statusCode << " " << statusText << "\r\n";
+        response << "Access-Control-Allow-Origin: " << origin << "\r\n";
+        response << "Access-Control-Allow-Credentials: true\r\n";
+        response << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
+        response << "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n";
         response << "Content-Type: text/html\r\n";
         response << "Content-Length: " << body.Size() << "\r\n";
         response << "\r\n";

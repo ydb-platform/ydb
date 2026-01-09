@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(ActorPage) {
         TStringStream responseStream;
         THttpHeaders outHeaders;
         const auto status = env.GetHttpClient().DoRequest("OPTIONS", env.MakeDefaultUrl(), "", &responseStream, TKeepAliveHttpClient::THeaders(), &outHeaders);
-        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_NO_CONTENT);
 
         AssertCorsHeaders(outHeaders);
     }

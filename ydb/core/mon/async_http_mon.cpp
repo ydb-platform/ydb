@@ -205,6 +205,9 @@ public:
     }
 
     void Bootstrap() {
+        if (Event->Get()->Request->Method == "OPTIONS") {
+            return ReplyOptionsAndPassAway();
+        }
         AuditCtx.InitAudit(Event);
         Become(&THttpMonLegacyActorRequest::StateFunc);
         if (ActorMonPage->Authorizer) {
@@ -230,6 +233,31 @@ public:
         ResponseTimeHgram->Collect(Event->Get()->Request->Timer.Passed() * 1000);
 
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+    }
+
+    void ReplyOptionsAndPassAway() {
+        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
+        TString url(request->URL.Before('?'));
+        TString type = mimetypeByExt(url.data());
+        if (type.empty()) {
+            type = "application/json";
+        }
+        NHttp::THeaders headers(request->Headers);
+        TString origin = TString(headers["Origin"]);
+        if (origin.empty()) {
+            origin = "*";
+        }
+        TStringBuilder response;
+        response << "HTTP/1.1 204 No Content\r\n"
+                    "Access-Control-Allow-Origin: " << origin << "\r\n"
+                    "Access-Control-Allow-Credentials: true\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent\r\n"
+                    "Access-Control-Expose-Headers: traceresponse,X-Worker-Name\r\n"
+                    "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
+                    "Content-Type: " << type << "\r\n"
+                    "Connection: keep-alive\r\n\r\n";
+        ReplyWith(request->CreateResponseString(response));
+        PassAway();
     }
 
     bool CredentialsProvided() {
@@ -398,38 +426,8 @@ public:
     }
 
     void Bootstrap() {
-        if (Event->Get()->Request->Method == "OPTIONS") {
-            return ReplyOptionsAndPassAway();
-        }
         AuditCtx.InitAudit(Event);
         ProcessRequest();
-    }
-
-    void ReplyOptionsAndPassAway() {
-        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
-        TString url(request->URL.Before('?'));
-        TString type = mimetypeByExt(url.data());
-        if (type.empty()) {
-            type = "application/json";
-        }
-        NHttp::THeaders headers(request->Headers);
-        TString origin = TString(headers["Origin"]);
-        if (origin.empty()) {
-            origin = "*";
-        }
-        TStringBuilder response;
-        response << "HTTP/1.1 204 No Content\r\n"
-                    "Access-Control-Allow-Origin: " << origin << "\r\n"
-                    "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent\r\n"
-                    "Access-Control-Expose-Headers: traceresponse,X-Worker-Name\r\n"
-                    "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
-                    "Content-Type: " << type << "\r\n"
-                    "Connection: keep-alive\r\n\r\n";
-        NHttp::THttpOutgoingResponsePtr outResponse = request->CreateResponseString(response);
-        AuditCtx.LogOnCompleted(outResponse);
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(outResponse));
-        PassAway();
     }
 
     void ProcessRequest() {

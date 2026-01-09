@@ -9,6 +9,7 @@
 
 #include <cstring>
 #include <vector>
+#include <thread>
 
 namespace NKikimr::NDataShard {
 
@@ -74,7 +75,7 @@ public:
 
     THnswIndexImpl() = default;
 
-    bool Build(const THashMap<ui64, TString>& vectors) {
+    bool Build(const std::vector<std::pair<ui64, TString>>& vectors) {
         if (vectors.empty()) {
             return false;
         }
@@ -111,20 +112,32 @@ public:
         }
         Index = std::move(result.index);
 
-        // Reserve capacity
-        Index.reserve(vectors.size());
+        // Setup multi-threaded executor using all available cores
+        std::size_t executor_threads = std::thread::hardware_concurrency();
+        if (executor_threads == 0) {
+            executor_threads = 1;  // Fallback if hardware_concurrency() returns 0
+        }
+        executor_default_t executor(executor_threads);
 
-        // Add all vectors (deserialized to float)
-        for (const auto& [key, vectorData] : vectors) {
+        // Reserve capacity with executor size for parallel operations
+        index_limits_t limits{vectors.size(), executor.size()};
+        if (!Index.try_reserve(limits)) {
+            return false;
+        }
+
+        // Add all vectors in parallel (deserialized to float)
+        executor.fixed(vectors.size(), [&](std::size_t thread, std::size_t task) {
+            const auto& [key, vectorData] = vectors[task];
             auto floatVec = DeserializeToFloatVector(vectorData);
             if (floatVec.size() != floatDimension) {
-                continue;  // Skip invalid vectors
+                return;  // Skip invalid vectors
             }
-            auto addResult = Index.add(key, floatVec.data());
+            // Pass thread ID directly as third parameter
+            auto addResult = Index.add(key, floatVec.data(), thread);
             if (!addResult) {
                 // Log error but continue
             }
-        }
+        });
 
         Ready = true;
         return true;
@@ -182,7 +195,7 @@ THnswIndex::~THnswIndex() = default;
 THnswIndex::THnswIndex(THnswIndex&&) noexcept = default;
 THnswIndex& THnswIndex::operator=(THnswIndex&&) noexcept = default;
 
-bool THnswIndex::Build(const THashMap<ui64, TString>& vectors) {
+bool THnswIndex::Build(const std::vector<std::pair<ui64, TString>>& vectors) {
     return Impl->Build(vectors);
 }
 
@@ -205,7 +218,7 @@ bool THnswIndexManager::IsVectorColumn(const TString& columnName) {
 }
 
 bool THnswIndexManager::BuildIndex(ui64 tableId, const TString& columnName,
-                                    const THashMap<ui64, TString>& vectors) {
+                                    const std::vector<std::pair<ui64, TString>>& vectors) {
     THnswIndexKey key{tableId, columnName};
 
     THnswIndex index;

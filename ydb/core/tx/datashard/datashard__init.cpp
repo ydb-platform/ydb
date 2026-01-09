@@ -120,7 +120,7 @@ static bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
             << tableId << " column " << colInfo.Name);
 
         // Collect all vectors from the table
-        THashMap<ui64, TString> vectors;
+        std::vector<std::pair<ui64, TString>> vectors;
         size_t vectorSize = 0;
 
         // Get all columns including the vector column and primary key
@@ -190,7 +190,7 @@ static bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
                     }
 
                     if (vectorData.size() == vectorSize + 1) {  // data + format byte
-                        vectors[rowKey] = vectorData;
+                        vectors.emplace_back(rowKey, vectorData);
                     }
                 }
             }

@@ -29,8 +29,8 @@ public:
     THnswIndex& operator=(THnswIndex&&) noexcept;
 
     // Build index from data
-    // vectors: map of row key -> float vector data (serialized as string)
-    bool Build(const THashMap<ui64, TString>& vectors);
+    // vectors: vector of (row key, float vector data) pairs (serialized as string)
+    bool Build(const std::vector<std::pair<ui64, TString>>& vectors);
 
     // Search for top-K nearest neighbors
     // targetVector: serialized float vector
@@ -74,7 +74,7 @@ public:
     // Build index for a specific table/column
     // Returns true if build succeeded
     bool BuildIndex(ui64 tableId, const TString& columnName,
-                    const THashMap<ui64, TString>& vectors);
+                    const std::vector<std::pair<ui64, TString>>& vectors);
 
     // Get index for search (returns nullptr if not available)
     const THnswIndex* GetIndex(ui64 tableId, const TString& columnName) const;

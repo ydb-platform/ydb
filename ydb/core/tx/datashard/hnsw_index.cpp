@@ -24,48 +24,60 @@ namespace {
         BitVector = 10,
     };
 
-    // Convert serialized vector (with format byte at end) to float vector for HNSW
-    std::vector<float> DeserializeToFloatVector(const TString& serialized) {
-        if (serialized.size() < 2) {
-            return {};
+    // Unified helper: zero-copy for FloatVector, deserialized vector for other formats
+    struct TFloatVectorView {
+        const float* Data = nullptr;
+        size_t Dimension = 0;
+        std::vector<float> OwnedData;  // Only used for non-FloatVector formats
+
+        static TFloatVectorView FromSerialized(const TString& serialized) {
+            TFloatVectorView result;
+            if (serialized.size() < 2) {
+                return result;
+            }
+
+            ui8 formatByte = static_cast<ui8>(serialized.back());
+            size_t dataSize = serialized.size() - 1;  // Exclude format byte
+
+            if (formatByte == FloatVector) {
+                // Zero-copy path for FloatVector
+                if (dataSize % sizeof(float) == 0) {
+                    result.Dimension = dataSize / sizeof(float);
+                    result.Data = reinterpret_cast<const float*>(serialized.data());
+                }
+            } else {
+                // Deserialize other formats
+                switch (formatByte) {
+                    case Uint8Vector: {
+                        result.OwnedData.reserve(dataSize);
+                        for (size_t i = 0; i < dataSize; ++i) {
+                            result.OwnedData.push_back(static_cast<float>(static_cast<ui8>(serialized[i])));
+                        }
+                        break;
+                    }
+                    case Int8Vector: {
+                        result.OwnedData.reserve(dataSize);
+                        for (size_t i = 0; i < dataSize; ++i) {
+                            result.OwnedData.push_back(static_cast<float>(static_cast<i8>(serialized[i])));
+                        }
+                        break;
+                    }
+                    default:
+                        return result;  // Unsupported format
+                }
+                if (!result.OwnedData.empty()) {
+                    result.Dimension = result.OwnedData.size();
+                    result.Data = result.OwnedData.data();
+                }
+            }
+
+            return result;
         }
 
-        ui8 formatByte = static_cast<ui8>(serialized.back());
-        size_t dataSize = serialized.size() - 1;  // Exclude format byte
-
-        std::vector<float> result;
-
-        switch (formatByte) {
-            case FloatVector: {
-                if (dataSize % sizeof(float) != 0) {
-                    return {};
-                }
-                size_t dim = dataSize / sizeof(float);
-                result.resize(dim);
-                std::memcpy(result.data(), serialized.data(), dataSize);
-                break;
-            }
-            case Uint8Vector: {
-                result.reserve(dataSize);
-                for (size_t i = 0; i < dataSize; ++i) {
-                    result.push_back(static_cast<float>(static_cast<ui8>(serialized[i])));
-                }
-                break;
-            }
-            case Int8Vector: {
-                result.reserve(dataSize);
-                for (size_t i = 0; i < dataSize; ++i) {
-                    result.push_back(static_cast<float>(static_cast<i8>(serialized[i])));
-                }
-                break;
-            }
-            default:
-                // Unsupported format (e.g., BitVector)
-                return {};
+        bool IsValid() const {
+            return Data != nullptr && Dimension > 0;
         }
-
-        return result;
-    }
+    };
 } // anonymous namespace
 
 // Implementation class using usearch
@@ -80,12 +92,12 @@ public:
             return false;
         }
 
-        // Determine dimension from first vector after deserialization
+        // Determine dimension from first vector
         size_t floatDimension = 0;
         for (const auto& [key, vectorData] : vectors) {
-            auto floatVec = DeserializeToFloatVector(vectorData);
-            if (!floatVec.empty()) {
-                floatDimension = floatVec.size();
+            auto view = TFloatVectorView::FromSerialized(vectorData);
+            if (view.IsValid()) {
+                floatDimension = view.Dimension;
                 break;
             }
         }
@@ -125,15 +137,14 @@ public:
             return false;
         }
 
-        // Add all vectors in parallel (deserialized to float)
+        // Add all vectors in parallel (zero-copy for FloatVector, deserialized for others)
         executor.fixed(vectors.size(), [&](std::size_t thread, std::size_t task) {
             const auto& [key, vectorData] = vectors[task];
-            auto floatVec = DeserializeToFloatVector(vectorData);
-            if (floatVec.size() != floatDimension) {
+            auto view = TFloatVectorView::FromSerialized(vectorData);
+            if (!view.IsValid() || view.Dimension != floatDimension) {
                 return;  // Skip invalid vectors
             }
-            // Pass thread ID directly as third parameter
-            auto addResult = Index.add(key, floatVec.data(), thread);
+            auto addResult = Index.add(key, view.Data, thread);
             if (!addResult) {
                 // Log error but continue
             }
@@ -150,13 +161,12 @@ public:
             return result;
         }
 
-        // Deserialize target vector
-        auto floatVec = DeserializeToFloatVector(targetVector);
-        if (floatVec.size() != Dimension) {
+        auto view = TFloatVectorView::FromSerialized(targetVector);
+        if (!view.IsValid() || view.Dimension != Dimension) {
             return result;
         }
 
-        auto searchResult = Index.search(floatVec.data(), k);
+        auto searchResult = Index.search(view.Data, k);
         if (!searchResult) {
             return result;
         }

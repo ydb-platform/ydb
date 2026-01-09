@@ -119,9 +119,6 @@ static bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
             "DataShard " << self->TabletID() << " building HNSW index for table "
             << tableId << " column " << colInfo.Name);
 
-        // Collect all vectors from the table
-        std::vector<std::pair<ui64, TString>> vectors;
-        size_t vectorSize = 0;
 
         // Get all columns including the vector column and primary key
         std::vector<NTable::TTag> columns;
@@ -151,6 +148,11 @@ static bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
                 << tableId << " column " << colInfo.Name << " needs retry due to prefetch failure");
             return false;
         }
+
+        // Collect all vectors from the table
+        std::vector<std::pair<ui64, TString>> vectors;
+        vectors.reserve(prefetchResult.ItemsPrecharged);
+        size_t vectorSize = 0;
 
         // Scan the table
         auto iter = txc.DB.IterateRange(tableInfo.LocalTid, {}, columns, TRowVersion::Max(), nullptr, nullptr);

@@ -20,17 +20,11 @@ public:
 
 public:
     void CreateProgram(NYql::NPureCalc::IProgramFactoryPtr programFactory) override {
-        auto schema = MakeOutputSchema(TableScheme->TableColumns);
-
-        TStringStream ss;
-        schema.Save(&ss);
-        Cerr << (TStringBuilder() << ">>>>> " << ss.Str() << Endl);
-
         // Program should be stateless because input values
         // allocated on another allocator and should be released
         Program = programFactory->MakePullListProgram(
             TMessageInputSpec(),
-            TMessageOutputSpec(TableScheme, schema),
+            TMessageOutputSpec(TableScheme, MakeOutputSchema(TableScheme->TableColumns)),
             Sql,
             NYql::NPureCalc::ETranslationMode::SQL
         );

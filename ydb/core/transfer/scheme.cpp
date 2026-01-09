@@ -77,27 +77,28 @@ TScheme::TPtr BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& na
 
 namespace {
 
-NYT::TNode CreateTypeNode(const TString& fieldType) {
-    if (fieldType.Contains("Decimal")) {
+NYT::TNode CreateTypeNode(const NScheme::TTypeInfo& fieldType) {
+    if (fieldType.GetTypeId() == NScheme::NTypeIds::Decimal) {
+        const auto& decimal = fieldType.GetDecimalType();
         return NYT::TNode::CreateList()
             .Add("DataType")
             .Add("Decimal")
-            .Add(10)
-            .Add(2);
+            .Add(Sprintf("%u", decimal.GetPrecision()))
+            .Add(Sprintf("%u", decimal.GetScale()));
     }
 
     return NYT::TNode::CreateList()
         .Add("DataType")
-        .Add(fieldType);
+        .Add(NScheme::TypeName(fieldType));
 }
 
-NYT::TNode CreateOptionalTypeNode(const TString& fieldType) {
+NYT::TNode CreateOptionalTypeNode(const NScheme::TTypeInfo& fieldType) {
     return NYT::TNode::CreateList()
         .Add("OptionalType")
         .Add(CreateTypeNode(fieldType));
 }
 
-void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType, bool nullable) {
+void AddField(NYT::TNode& node, const TString& fieldName, const NScheme::TTypeInfo& fieldType, bool nullable) {
     node.Add(
         NYT::TNode::CreateList()
             .Add(fieldName)
@@ -110,9 +111,9 @@ void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldTy
 NYT::TNode MakeOutputSchema(const TVector<TSchemeColumn>& columns) {
     auto structMembers = NYT::TNode::CreateList();
 
-    AddField(structMembers, SystemColumns::TargetTable, "String", true);
+    AddField(structMembers, SystemColumns::TargetTable, NScheme::TTypeInfo(NScheme::NTypeIds::String), true);
     for (const auto& column : columns) {
-        AddField(structMembers, column.Name, column.TypeName(), column.Nullable);
+        AddField(structMembers, column.Name, column.PType, column.Nullable);
     }
 
     auto rootMembers = NYT::TNode::CreateList();

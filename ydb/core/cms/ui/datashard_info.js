@@ -176,6 +176,22 @@ function onDataShardInfoLoaded(data) {
                           <td class="ds-info">Ready</td>
                           <td class="ds-info">${idx.IsReady ? 'Yes' : 'No'}</td>
                         </tr>
+                        <tr class="ds-info">
+                          <td class="ds-info">Total Reads</td>
+                          <td class="ds-info">${idx.Reads || 0}</td>
+                        </tr>
+                        <tr class="ds-info">
+                          <td class="ds-info">Fast Path Reads</td>
+                          <td class="ds-info">${idx.FastPathReads || 0}</td>
+                        </tr>
+                        <tr class="ds-info">
+                          <td class="ds-info">Slow Path Reads</td>
+                          <td class="ds-info">${idx.SlowPathReads || 0}</td>
+                        </tr>
+                        <tr class="ds-info">
+                          <td class="ds-info">Page Faults</td>
+                          <td class="ds-info">${idx.PageFaults || 0}</td>
+                        </tr>
                       </tbody>
                     </table>
                 `;

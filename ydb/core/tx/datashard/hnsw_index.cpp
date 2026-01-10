@@ -181,6 +181,35 @@ public:
         return result;
     }
 
+    std::vector<TString> GetVectors(const std::vector<ui64>& keys) const {
+        std::vector<TString> results;
+        results.reserve(keys.size());
+
+        if (!Ready || Dimension == 0) {
+            results.resize(keys.size());  // All empty strings
+            return results;
+        }
+
+        const size_t vectorBytes = Dimension * sizeof(float);
+        std::vector<float> vectorData(Dimension);
+
+        for (ui64 key : keys) {
+            std::size_t count = Index.get(key, vectorData.data(), 1);
+            if (count == 0) {
+                results.emplace_back();  // Empty string for not found
+            } else {
+                // Serialize as FloatVector format (data + format byte)
+                TString result;
+                result.resize(vectorBytes + 1);
+                std::memcpy(result.Detach(), vectorData.data(), vectorBytes);
+                result[vectorBytes] = static_cast<char>(FloatVector);
+                results.push_back(std::move(result));
+            }
+        }
+
+        return results;
+    }
+
     bool IsReady() const {
         return Ready;
     }
@@ -212,6 +241,10 @@ bool THnswIndex::Build(const std::vector<std::pair<ui64, TString>>& vectors) {
 
 THnswSearchResult THnswIndex::Search(const TString& targetVector, size_t k) const {
     return Impl->Search(targetVector, k);
+}
+
+std::vector<TString> THnswIndex::GetVectors(const std::vector<ui64>& keys) const {
+    return Impl->GetVectors(keys);
 }
 
 bool THnswIndex::IsReady() const {
@@ -419,15 +452,47 @@ void THnswIndexManager::ClearAndRemoveFromCache() {
 std::vector<THnswIndexManager::TIndexInfo> THnswIndexManager::GetAllIndexesInfo() const {
     std::vector<TIndexInfo> result;
     result.reserve(Indexes.size());
+    std::lock_guard<std::mutex> lock(StatsMutex);
     for (const auto& [key, index] : Indexes) {
         TIndexInfo info;
         info.TableId = key.TableId;
         info.ColumnName = key.ColumnName;
         info.IndexSize = index ? index->Size() : 0;
         info.IsReady = index ? index->IsReady() : false;
+        auto statsIt = IndexStats.find(key);
+        if (statsIt != IndexStats.end()) {
+            info.Reads = statsIt->second.Reads.load(std::memory_order_relaxed);
+            info.FastPathReads = statsIt->second.FastPathReads.load(std::memory_order_relaxed);
+            info.SlowPathReads = statsIt->second.SlowPathReads.load(std::memory_order_relaxed);
+            info.PageFaults = statsIt->second.PageFaults.load(std::memory_order_relaxed);
+        }
         result.push_back(info);
     }
     return result;
+}
+
+void THnswIndexManager::IncrementReads(ui64 tableId, const TString& columnName) {
+    THnswIndexKey key{tableId, columnName};
+    std::lock_guard<std::mutex> lock(StatsMutex);
+    IndexStats[key].Reads.fetch_add(1, std::memory_order_relaxed);
+}
+
+void THnswIndexManager::IncrementFastPathReads(ui64 tableId, const TString& columnName) {
+    THnswIndexKey key{tableId, columnName};
+    std::lock_guard<std::mutex> lock(StatsMutex);
+    IndexStats[key].FastPathReads.fetch_add(1, std::memory_order_relaxed);
+}
+
+void THnswIndexManager::IncrementSlowPathReads(ui64 tableId, const TString& columnName) {
+    THnswIndexKey key{tableId, columnName};
+    std::lock_guard<std::mutex> lock(StatsMutex);
+    IndexStats[key].SlowPathReads.fetch_add(1, std::memory_order_relaxed);
+}
+
+void THnswIndexManager::IncrementPageFaults(ui64 tableId, const TString& columnName) {
+    THnswIndexKey key{tableId, columnName};
+    std::lock_guard<std::mutex> lock(StatsMutex);
+    IndexStats[key].PageFaults.fetch_add(1, std::memory_order_relaxed);
 }
 
 } // namespace NKikimr::NDataShard

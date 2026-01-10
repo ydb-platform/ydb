@@ -2975,13 +2975,17 @@ void TDataShard::Handle(TEvDataShard::TEvGetHnswStats::TPtr &ev, const TActorCon
     result->Record.SetCacheHits(TNodeHnswIndexCache::Instance().GetCacheHits());
     result->Record.SetCacheMisses(TNodeHnswIndexCache::Instance().GetCacheMisses());
 
-    // Add per-index info
+    // Add per-index info with statistics
     for (const auto& info : HnswIndexes.GetAllIndexesInfo()) {
         auto* indexStats = result->Record.AddIndexes();
         indexStats->SetTableId(info.TableId);
         indexStats->SetColumnName(info.ColumnName);
         indexStats->SetIndexSize(info.IndexSize);
         indexStats->SetIsReady(info.IsReady);
+        indexStats->SetReads(info.Reads);
+        indexStats->SetFastPathReads(info.FastPathReads);
+        indexStats->SetSlowPathReads(info.SlowPathReads);
+        indexStats->SetPageFaults(info.PageFaults);
     }
 
     ctx.Send(ev->Get()->GetSource(), result.Release());

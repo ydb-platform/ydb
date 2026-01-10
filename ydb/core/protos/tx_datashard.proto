@@ -70,6 +70,10 @@ message THnswIndexStats {
     optional string ColumnName = 2;
     optional uint64 IndexSize = 3;       // Number of vectors in index
     optional bool IsReady = 4;           // Whether index is ready for search
+    optional uint64 Reads = 5;           // Total number of HNSW search reads for this index
+    optional uint64 FastPathReads = 6;  // Number of reads using fast path (key + embedding only)
+    optional uint64 SlowPathReads = 7;  // Number of reads using slow path (additional columns)
+    optional uint64 PageFaults = 8;      // Number of page faults during HNSW reads
 }
 
 message TEvGetHnswStatsResult {

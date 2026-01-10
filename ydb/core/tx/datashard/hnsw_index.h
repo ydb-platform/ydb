@@ -39,6 +39,10 @@ public:
     // k: number of results to return
     THnswSearchResult Search(const TString& targetVector, size_t k) const;
 
+    // Get embedding vectors for multiple keys (batch)
+    // Returns a vector of serialized embeddings (Float format), empty string for not found keys
+    std::vector<TString> GetVectors(const std::vector<ui64>& keys) const;
+
     // Check if index is ready for search
     bool IsReady() const;
 
@@ -160,8 +164,18 @@ public:
         TString ColumnName;
         size_t IndexSize;
         bool IsReady;
+        ui64 Reads = 0;
+        ui64 FastPathReads = 0;
+        ui64 SlowPathReads = 0;
+        ui64 PageFaults = 0;
     };
     std::vector<TIndexInfo> GetAllIndexesInfo() const;
+
+    // Increment statistics for a specific index
+    void IncrementReads(ui64 tableId, const TString& columnName);
+    void IncrementFastPathReads(ui64 tableId, const TString& columnName);
+    void IncrementSlowPathReads(ui64 tableId, const TString& columnName);
+    void IncrementPageFaults(ui64 tableId, const TString& columnName);
 
     // Check if column should have HNSW index (name is emb, embedding, or vector)
     static bool IsVectorColumn(const TString& columnName);
@@ -196,6 +210,15 @@ private:
     // Statistics for debugging/testing
     mutable ui64 CacheHits = 0;
     mutable ui64 CacheMisses = 0;
+    // Per-index read statistics
+    struct TIndexStats {
+        std::atomic<ui64> Reads{0};
+        std::atomic<ui64> FastPathReads{0};
+        std::atomic<ui64> SlowPathReads{0};
+        std::atomic<ui64> PageFaults{0};
+    };
+    mutable THashMap<THnswIndexKey, TIndexStats, THnswIndexKeyHash> IndexStats;
+    mutable std::mutex StatsMutex;
 };
 
 } // namespace NKikimr::NDataShard

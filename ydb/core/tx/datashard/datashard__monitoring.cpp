@@ -130,6 +130,10 @@ void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
         indexStats->SetColumnName(info.ColumnName);
         indexStats->SetIndexSize(info.IndexSize);
         indexStats->SetIsReady(info.IsReady);
+        indexStats->SetReads(info.Reads);
+        indexStats->SetFastPathReads(info.FastPathReads);
+        indexStats->SetSlowPathReads(info.SlowPathReads);
+        indexStats->SetPageFaults(info.PageFaults);
     }
 
     Send(ev->Sender, response);

@@ -53,6 +53,9 @@ struct TReadIteratorVectorTop {
 
     // HNSW index for accelerated search (nullptr if not available)
     const THnswIndex* HnswIndex = nullptr;
+    // Table and column info for statistics tracking
+    ui64 TableId = 0;
+    TString ColumnName;
 
     // HNSW search results: (key, distance) pairs
     std::vector<std::pair<ui64, float>> HnswResults;
@@ -222,6 +225,7 @@ struct TShortTableInfo {
         SchemaVersion = tableInfo->GetTableSchemaVersion();
         KeyColumnTypes = tableInfo->KeyColumnTypes;
         KeyColumnCount = tableInfo->KeyColumnIds.size();
+        KeyColumnIds.assign(tableInfo->KeyColumnIds.begin(), tableInfo->KeyColumnIds.end());
 
         for (const auto& it: tableInfo->Columns) {
             const auto& column = it.second;
@@ -276,6 +280,7 @@ struct TShortTableInfo {
     ui64 SchemaVersion = 0;
     size_t KeyColumnCount = 0;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    TVector<NTable::TTag> KeyColumnIds;
     TMap<NTable::TTag, TShortColumnInfo> Columns;
 };
 
@@ -1088,37 +1093,123 @@ private:
 
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, Self->TabletID() << " HNSW search returned " << topK.HnswResults.size() << " rows");
 
-            for (const auto& [key, distance] : topK.HnswResults) {
-                // Build key cells from the ui64 key (assuming Uint64 primary key)
-                TCell keyCell = TCell::Make(static_cast<ui64>(key));
-                TSmallVec<TRawTypeValue> rawKey;
-                rawKey.push_back(TRawTypeValue(keyCell.AsRef(), TableInfo.KeyColumnTypes[0].GetTypeId()));
+            // Increment per-index reads counter
+            if (topK.TableId != 0 && !topK.ColumnName.empty()) {
+                Self->GetHnswIndexManager().IncrementReads(topK.TableId, topK.ColumnName);
+            }
 
-                // Fetch row by key
-                NTable::TRowState rowState;
-                rowState.Init(State.Columns.size());
-                NTable::TSelectStats stats;
-                auto ready = txc.DB.Select(TableInfo.LocalTid, rawKey, State.Columns, rowState, stats, 0, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
+            // Clear any previously fetched rows (in case of transaction restart after page fault)
+            topK.Rows.clear();
+            topK.TotalReadRows = 0;
+            topK.TotalReadBytes = 0;
 
-                if (ready == NTable::EReady::Page) {
-                    // Need more data - fail the read instead of falling back to brute force
-                    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, Self->TabletID() << " HNSW search: failed to fetch row by key (Page state)");
-                    return EReadStatus::Done;
+            // Get the first key column ID
+            NTable::TTag firstKeyColId = TableInfo.KeyColumnIds.empty() ? 0 : TableInfo.KeyColumnIds[0];
+
+            // Check if we only need key + embedding (can use HNSW data)
+            // or if there are additional columns that require DB lookup
+            bool hasAdditionalColumns = false;
+            for (size_t colIdx = 0; colIdx < State.Columns.size(); ++colIdx) {
+                NTable::TTag colId = State.Columns[colIdx];
+                if (colId != firstKeyColId && colIdx != topK.Column) {
+                    hasAdditionalColumns = true;
+                    break;
+                }
+            }
+
+            if (hasAdditionalColumns) {
+                // Slow path: need to fetch additional columns from DB
+                if (topK.TableId != 0 && !topK.ColumnName.empty()) {
+                    Self->GetHnswIndexManager().IncrementSlowPathReads(topK.TableId, topK.ColumnName);
+                }
+                for (size_t i = 0; i < topK.HnswResults.size(); ++i) {
+                    const auto& [key, distance] = topK.HnswResults[i];
+                    TCell keyCell = TCell::Make(static_cast<ui64>(key));
+                    TSmallVec<TRawTypeValue> rawKey;
+                    rawKey.push_back(TRawTypeValue(keyCell.AsRef(), TableInfo.KeyColumnTypes[0].GetTypeId()));
+
+                    NTable::TRowState rowState;
+                    rowState.Init(State.Columns.size());
+                    NTable::TSelectStats stats;
+                    auto ready = txc.DB.Select(TableInfo.LocalTid, rawKey, State.Columns, rowState, stats, 0, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
+
+                    if (ready == NTable::EReady::Page) {
+                        // Page fault - precharge remaining HNSW result keys and request restart
+                        if (topK.TableId != 0 && !topK.ColumnName.empty()) {
+                            Self->GetHnswIndexManager().IncrementPageFaults(topK.TableId, topK.ColumnName);
+                        }
+                        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                            Self->TabletID() << " HNSW search: page fault during row fetch at index " << i
+                            << " of " << topK.HnswResults.size() << ", will retry after precharge");
+
+                        for (size_t j = i; j < topK.HnswResults.size(); ++j) {
+                            const auto& [prechargeKey, _] = topK.HnswResults[j];
+                            TCell prechargeKeyCell = TCell::Make(static_cast<ui64>(prechargeKey));
+                            TSmallVec<TRawTypeValue> prechargeRawKey;
+                            prechargeRawKey.push_back(TRawTypeValue(prechargeKeyCell.AsRef(), TableInfo.KeyColumnTypes[0].GetTypeId()));
+                            txc.DB.Precharge(TableInfo.LocalTid, prechargeRawKey, prechargeRawKey,
+                                State.Columns, 0, 1, Max<ui64>(), NTable::EDirection::Forward, State.ReadVersion);
+                        }
+                        return EReadStatus::NeedData;
+                    }
+
+                    if (ready == NTable::EReady::Gone) {
+                        continue;  // Row was deleted
+                    }
+
+                    topK.TotalReadRows++;
+                    topK.TotalReadBytes += EstimateSize(TConstArrayRef<TCell>((*rowState).data(), rowState.Size()));
+                    topK.Rows.emplace_back(
+                        TConstArrayRef<TCell>((*rowState).data(), rowState.Size()),
+                        static_cast<double>(distance),
+                        TString()
+                    );
+                }
+            } else {
+                // Fast path: only key + embedding - use batch GetVectors from HNSW
+                if (topK.TableId != 0 && !topK.ColumnName.empty()) {
+                    Self->GetHnswIndexManager().IncrementFastPathReads(topK.TableId, topK.ColumnName);
+                }
+                std::vector<ui64> keys;
+                keys.reserve(topK.HnswResults.size());
+                for (const auto& [key, _] : topK.HnswResults) {
+                    keys.push_back(key);
                 }
 
-                if (ready == NTable::EReady::Gone) {
-                    // Row was deleted, skip it
-                    continue;
-                }
+                std::vector<TString> embeddings = topK.HnswIndex->GetVectors(keys);
 
-                // Add the row with the distance from HNSW
-                topK.TotalReadRows++;
-                topK.TotalReadBytes += EstimateSize(TConstArrayRef<TCell>((*rowState).data(), rowState.Size()));
-                topK.Rows.emplace_back(
-                    TConstArrayRef<TCell>((*rowState).data(), rowState.Size()),
-                    static_cast<double>(distance),
-                    TString()
-                );
+                for (size_t i = 0; i < topK.HnswResults.size(); ++i) {
+                    const auto& [key, distance] = topK.HnswResults[i];
+                    const TString& embeddingData = embeddings[i];
+
+                    if (embeddingData.empty()) {
+                        Y_ABORT("Vector not found in HNSW - this should not happen");
+                    }
+
+                    TCell keyCell = TCell::Make(static_cast<ui64>(key));
+
+                    // Build cells for the requested columns
+                    TSmallVec<TCell> cells;
+                    cells.resize(State.Columns.size());
+
+                    for (size_t colIdx = 0; colIdx < State.Columns.size(); ++colIdx) {
+                        NTable::TTag colId = State.Columns[colIdx];
+
+                        if (colId == firstKeyColId) {
+                            cells[colIdx] = keyCell;
+                        } else if (colIdx == topK.Column) {
+                            cells[colIdx] = TCell(embeddingData.data(), embeddingData.size());
+                        }
+                    }
+
+                    topK.TotalReadRows++;
+                    topK.TotalReadBytes += EstimateSize(TConstArrayRef<TCell>(cells.data(), cells.size()));
+                    topK.Rows.emplace_back(
+                        TConstArrayRef<TCell>(cells.data(), cells.size()),
+                        static_cast<double>(distance),
+                        TString()
+                    );
+                }
             }
 
             // Sort rows by distance (they may not be perfectly sorted by HNSW)
@@ -2380,6 +2471,8 @@ public:
                 auto colIt = TableInfo.Columns.find(colId);
                 if (colIt != TableInfo.Columns.end()) {
                     const TString& columnName = colIt->second.Name;
+                    topState->TableId = state.PathId.LocalPathId;
+                    topState->ColumnName = columnName;
                     topState->HnswIndex = Self->GetHnswIndex(state.PathId.LocalPathId, columnName);
                 }
             }

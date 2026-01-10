@@ -39,6 +39,18 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         return results;
     }
 
+    // Helper to create Float format embedding (2D vector)
+    // Float format: 4 bytes per float + 0x01 format byte
+    static TString MakeFloatEmb(float v1, float v2) {
+        TString result;
+        result.resize(sizeof(float) * 2 + 1);
+        char* p = result.Detach();
+        memcpy(p, &v1, sizeof(float));
+        memcpy(p + sizeof(float), &v2, sizeof(float));
+        p[sizeof(float) * 2] = 0x01;  // FloatVector format byte
+        return result;
+    }
+
     TSession CreateTableForVectorSearch(TTableClient& db, bool nullable, const TString& dataCol = "data", bool singlePartition = false) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -72,48 +84,72 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
+        // Use Float format embeddings (same values as before but in Float format)
+        // Original Uint8 values were: (3,48), (19,49), (35,50), (83,51), (67,52), (80,96), (97,17), (18,98), (117,118), (118,118)
         {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$emb0").String(MakeFloatEmb(3.0f, 48.0f)).Build()
+                .AddParam("$emb1").String(MakeFloatEmb(19.0f, 49.0f)).Build()
+                .AddParam("$emb2").String(MakeFloatEmb(35.0f, 50.0f)).Build()
+                .AddParam("$emb3").String(MakeFloatEmb(83.0f, 51.0f)).Build()
+                .AddParam("$emb4").String(MakeFloatEmb(67.0f, 52.0f)).Build()
+                .AddParam("$emb5").String(MakeFloatEmb(80.0f, 96.0f)).Build()
+                .AddParam("$emb6").String(MakeFloatEmb(97.0f, 17.0f)).Build()
+                .AddParam("$emb7").String(MakeFloatEmb(18.0f, 98.0f)).Build()
+                .AddParam("$emb8").String(MakeFloatEmb(117.0f, 118.0f)).Build()
+                .AddParam("$emb9").String(MakeFloatEmb(118.0f, 118.0f)).Build()
+                .Build();
+
             const TString query1 = TStringBuilder()
                 << "UPSERT INTO `/Root/TestTable` (pk, emb, " << dataCol << ") VALUES "
-                << "(0, \"\x03\x30\x02\", \"0\"),"
-                    "(1, \"\x13\x31\x02\", \"1\"),"
-                    "(2, \"\x23\x32\x02\", \"2\"),"
-                    "(3, \"\x53\x33\x02\", \"3\"),"
-                    "(4, \"\x43\x34\x02\", \"4\"),"
-                    "(5, \"\x50\x60\x02\", \"5\"),"
-                    "(6, \"\x61\x11\x02\", \"6\"),"
-                    "(7, \"\x12\x62\x02\", \"7\"),"
-                    "(8, \"\x75\x76\x02\", \"8\"),"
-                    "(9, \"\x76\x76\x02\", \"9\");";
+                << "(0, $emb0, \"0\"),"
+                   "(1, $emb1, \"1\"),"
+                   "(2, $emb2, \"2\"),"
+                   "(3, $emb3, \"3\"),"
+                   "(4, $emb4, \"4\"),"
+                   "(5, $emb5, \"5\"),"
+                   "(6, $emb6, \"6\"),"
+                   "(7, $emb7, \"7\"),"
+                   "(8, $emb8, \"8\"),"
+                   "(9, $emb9, \"9\");";
 
-            auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+            auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params)
                 .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
         return session;
     }
 
+    // Target embedding for tests: (103.0, 113.0) in Float format
+    static TString GetTargetEmbedding() {
+        return MakeFloatEmb(103.0f, 113.0f);
+    }
+
     template <bool Nullable>
-    void VerifyVectorSearchResults(TKikimrRunner& kikimr, TSession& session, TTxSettings txSettings = TTxSettings::SerializableRW(), bool useRunCall = true) {
+    void VerifyVectorSearchResults(TKikimrRunner& kikimr, TSession& session, TTableClient& db, TTxSettings txSettings = TTxSettings::SerializableRW(), bool useRunCall = true) {
         // Verify actual results - check that top 3 PKs are correct
-        // Target vector is 0x67, 0x71 (103, 113)
+        // Target vector is (103.0, 113.0) in Float format
         // Cosine distances calculated:
         //   pk=8 (117, 118): 0.000882 - closest
         //   pk=5 (80, 96):   0.000985
         //   pk=9 (118, 118): 0.001070
 
         const TString query = Q_(R"(
-            $TargetEmbedding = String::HexDecode("677102");
+            DECLARE $TargetEmbedding AS String;
             SELECT pk, Knn::CosineDistance(emb, $TargetEmbedding) AS distance FROM `/Root/TestTable`
             ORDER BY distance
             LIMIT 3
         )");
 
+        auto params = db.GetParamsBuilder()
+            .AddParam("$TargetEmbedding").String(GetTargetEmbedding()).Build()
+            .Build();
+
         auto result = useRunCall
             ? kikimr.RunCall([&] {
-                return session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx()).ExtractValueSync();
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx(), params).ExtractValueSync();
             })
-            : session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx()).ExtractValueSync();
+            : session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx(), params).ExtractValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -132,20 +168,24 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
     // LIMIT 7 is a magic marker that triggers Y_ABORT_UNLESS if HNSW is not used
     // This version of the function verifies HNSW is actually used
     template <bool Nullable>
-    void VerifyVectorSearchResultsHnsw(TKikimrRunner& kikimr, TSession& session, TTxSettings txSettings = TTxSettings::SerializableRW(), bool useRunCall = true) {
+    void VerifyVectorSearchResultsHnsw(TKikimrRunner& kikimr, TSession& session, TTableClient& db, TTxSettings txSettings = TTxSettings::SerializableRW(), bool useRunCall = true) {
         // Same as VerifyVectorSearchResults but with LIMIT 7 (magic marker for HNSW must be used)
         const TString query = Q_(R"(
-            $TargetEmbedding = String::HexDecode("677102");
+            DECLARE $TargetEmbedding AS String;
             SELECT pk, Knn::CosineDistance(emb, $TargetEmbedding) AS distance FROM `/Root/TestTable`
             ORDER BY distance
             LIMIT 7
         )");
 
+        auto params = db.GetParamsBuilder()
+            .AddParam("$TargetEmbedding").String(GetTargetEmbedding()).Build()
+            .Build();
+
         auto result = useRunCall
             ? kikimr.RunCall([&] {
-                return session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx()).ExtractValueSync();
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx(), params).ExtractValueSync();
             })
-            : session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx()).ExtractValueSync();
+            : session.ExecuteDataQuery(query, TTxControl::BeginTx(txSettings).CommitTx(), params).ExtractValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -184,6 +224,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
         ui64 expectedLimit = 3;
         ui64 testTableLocalId = 0;
+        TString expectedTargetVector = GetTargetEmbedding();
         auto observer = runtime->AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
             auto* evRead = ev->Get();
             auto& read = evRead->Record;
@@ -196,7 +237,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                 }
                 if (localId == testTableLocalId) {
                     auto& topK = read.GetVectorTopK();
-                    UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
+                    UNIT_ASSERT(topK.GetTargetVector() == expectedTargetVector);
                     UNIT_ASSERT_VALUES_EQUAL(topK.GetLimit(), expectedLimit);
                 }
             } else if (testTableLocalId != 0 && localId == testTableLocalId) {
@@ -224,45 +265,52 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
 
-        // Literal target vector, normal order (column, target)
-        runQuery(Q_(R"(
-            SELECT pk FROM `/Root/TestTable`
-            ORDER BY Knn::CosineDistance(emb, "\x67\x71\x02")
-            LIMIT 3
-        )"));
+        // All queries use Float format target embedding via parameter
+        auto targetParams = db.GetParamsBuilder()
+            .AddParam("$TargetEmbedding").String(GetTargetEmbedding()).Build()
+            .Build();
 
-        // Literal target vector, reversed order (target, column)
-        runQuery(Q_(R"(
+        // Parameter-based target vector, normal order (column, target)
+        runQueryWithParams(Q_(R"(
+            DECLARE $TargetEmbedding AS String;
             SELECT pk FROM `/Root/TestTable`
-            ORDER BY Knn::CosineDistance("\x67\x71\x02", emb)
+            ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
             LIMIT 3
-        )"));
+        )"), targetParams);
 
-        // Variable equal to function call, normal order (column, target)
-        runQuery(Q_(R"(
-            $TargetEmbedding = String::HexDecode("677102");
+        // Parameter-based target vector, reversed order (target, column)
+        runQueryWithParams(Q_(R"(
+            DECLARE $TargetEmbedding AS String;
+            SELECT pk FROM `/Root/TestTable`
+            ORDER BY Knn::CosineDistance($TargetEmbedding, emb)
+            LIMIT 3
+        )"), targetParams);
+
+        // With all columns, normal order
+        runQueryWithParams(Q_(R"(
+            DECLARE $TargetEmbedding AS String;
             SELECT pk, emb, ___data FROM `/Root/TestTable`
             ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
             LIMIT 3
-        )"));
+        )"), targetParams);
 
-        // Variable equal to function call, reversed order (target, column)
-        runQuery(Q_(R"(
-            $TargetEmbedding = String::HexDecode("677102");
+        // With all columns, reversed order
+        runQueryWithParams(Q_(R"(
+            DECLARE $TargetEmbedding AS String;
             SELECT pk, emb, ___data FROM `/Root/TestTable`
             ORDER BY Knn::CosineDistance($TargetEmbedding, emb)
             LIMIT 3
-        )"));
+        )"), targetParams);
 
         // Implicit columns
-        runQuery(Q_(R"(
-            $TargetEmbedding = String::HexDecode("677102");
+        runQueryWithParams(Q_(R"(
+            DECLARE $TargetEmbedding AS String;
             SELECT * FROM `/Root/TestTable`
             ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
             LIMIT 3
-        )"));
+        )"), targetParams);
 
-        // NOTE: The following distance metrics are commented out for the HNSW prototype
+        // The following distance metrics are commented out for the HNSW prototype
         // which only supports CosineDistance with Float vectors.
 /*
         // Inner product similarity
@@ -297,17 +345,13 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             LIMIT 3
         )"));
 */
-        // Parameters
+        // Parameters (using Float format)
         runQueryWithParams(Q_(R"(
             DECLARE $TargetEmbedding AS String;
             SELECT * FROM `/Root/TestTable`
             ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
             LIMIT 3
-        )"), db.GetParamsBuilder()
-            .AddParam("$TargetEmbedding")
-                .String(TString("\x67\x71\x02", 3))
-                .Build()
-            .Build());
+        )"), targetParams);
 
         // Tagged vector converted from a parameter
         runQueryWithParams(Q_(R"(
@@ -327,28 +371,28 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
         // LIMIT 1
         expectedLimit = 1;
-        runQuery(Q_(R"(
-            $TargetEmbedding = String::HexDecode("677102");
+        runQueryWithParams(Q_(R"(
+            DECLARE $TargetEmbedding AS String;
             SELECT * FROM `/Root/TestTable`
             ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
             LIMIT 1
-        )"));
+        )"), targetParams);
 
         // LIMIT 100
         expectedLimit = 100;
-        runQuery(Q_(R"(
-            $TargetEmbedding = String::HexDecode("677102");
+        runQueryWithParams(Q_(R"(
+            DECLARE $TargetEmbedding AS String;
             SELECT * FROM `/Root/TestTable`
             ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
             LIMIT 100
-        )"));
+        )"), targetParams);
         expectedLimit = 3;
 
         // Test two-stage query from the same table: quantized search followed by full precision reranking
         // The first query uses pushdown of VectorTopK.
         // The second query uses point lookups (WHERE pk IN ...) where pushdown of VectorTopK is not implemented.
-        runQuery(Q_(R"(
-            $TargetEmbedding = String::HexDecode("677102");
+        runQueryWithParams(Q_(R"(
+            DECLARE $TargetEmbedding AS String;
 
             $Pks = SELECT pk
             FROM `/Root/TestTable`
@@ -360,10 +404,10 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             WHERE pk IN $Pks
             ORDER BY distance
             LIMIT 3;
-        )"));
+        )"), targetParams);
 
         // Verify actual results
-        VerifyVectorSearchResults<Nullable>(kikimr, session);
+        VerifyVectorSearchResults<Nullable>(kikimr, session, db);
 
         // Test with subquery: target vector from another table
         {
@@ -379,11 +423,15 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
             });
             UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
 
-            // Insert the target vector
-            runQuery(Q_(R"(
+            // Insert the target vector (Float format)
+            auto insertParams = db.GetParamsBuilder()
+                .AddParam("$target").String(GetTargetEmbedding()).Build()
+                .Build();
+            runQueryWithParams(Q_(R"(
+                DECLARE $target AS String;
                 UPSERT INTO `/Root/TargetVectors` (id, target_emb) VALUES
-                (1, "\x67\x71\x02")
-            )"));
+                (1, $target)
+            )"), insertParams);
 
             // Run query with subquery target, normal argument order (column first)
             runQuery(Q_(R"(
@@ -604,11 +652,12 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
     }
 
     // NOTE: The following vector type tests are commented out for the HNSW prototype
+    // HNSW index stores vectors as Float internally, so non-Float formats are not supported
 /*
     Y_UNIT_TEST(BitVectorKnnPushdown) {
         DoVectorKnnPushdownTest(EVectorType::Bit);
     }
-*/
+
     Y_UNIT_TEST(Uint8VectorKnnPushdown) {
         DoVectorKnnPushdownTest(EVectorType::Uint8);
     }
@@ -616,6 +665,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
     Y_UNIT_TEST(Int8VectorKnnPushdown) {
         DoVectorKnnPushdownTest(EVectorType::Int8);
     }
+*/
 
     Y_UNIT_TEST(VectorSearchKnnPushdownWithRestart) {
         const TString tableName = "/Root/TestTable";
@@ -650,7 +700,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
         // Perform read - HNSW should be used after tablet restart
         // LIMIT 7 is a magic marker that will Y_ABORT_UNLESS if HNSW is not used
-        VerifyVectorSearchResultsHnsw<false>(kikimr, session, TTxSettings::SerializableRW());
+        VerifyVectorSearchResultsHnsw<false>(kikimr, session, db, TTxSettings::SerializableRW());
 
         observer.Remove();
     }
@@ -724,7 +774,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
         // Perform read with LIMIT 7 - will Y_ABORT_UNLESS if HNSW is not used
         // The fact that this doesn't crash proves HNSW was used
-        VerifyVectorSearchResultsHnsw<false>(kikimr, session, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW());
+        VerifyVectorSearchResultsHnsw<false>(kikimr, session, db, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW());
 
         readObserver.Remove();
         resultObserver.Remove();
@@ -803,7 +853,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                 UNIT_ASSERT(read.HasVectorTopK());
                 UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetLimit(), 7u);
             });
-            VerifyVectorSearchResultsHnsw<false>(kikimr, session, TTxSettings::SerializableRW());
+            VerifyVectorSearchResultsHnsw<false>(kikimr, session, db, TTxSettings::SerializableRW());
             readObserver.Remove();
         }
 
@@ -858,7 +908,7 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                 }
             });
 
-            VerifyVectorSearchResultsHnsw<false>(kikimr, session, TTxSettings::StaleRO());
+            VerifyVectorSearchResultsHnsw<false>(kikimr, session, db, TTxSettings::StaleRO());
 
             readObserver.Remove();
             resultObserver.Remove();

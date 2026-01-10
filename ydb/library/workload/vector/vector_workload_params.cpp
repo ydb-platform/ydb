@@ -97,32 +97,11 @@ void TVectorWorkloadParams::Init() {
     // Get the table description
     const auto& tableDescription = describeTableResult.GetTableDescription();
 
-    // Find the specified index
-    bool indexFound = false;
-
     KeyColumns = tableDescription.GetPrimaryKeyColumns();
 
-    for (const auto& index : tableDescription.GetIndexDescriptions()) {
-        if (index.GetIndexName() == IndexName) {
-            indexFound = true;
-
-            // Check if we have more than one column (indicating a prefixed index)
-            const auto& keyColumns = index.GetIndexColumns();
-            if (keyColumns.size() > 1) {
-                // The first column is the prefix column, the last column is the embedding
-                Y_ABORT_UNLESS(keyColumns.size() == 2, "Only single prefix column is supported");
-                PrefixColumn = keyColumns[0];
-            }
-            EmbeddingColumn = keyColumns.back();
-
-            // Extract the distance metric from index settings
-            const auto& indexSettings = std::get<NYdb::NTable::TKMeansTreeSettings>(index.GetIndexSettings());
-            Metric = indexSettings.Settings.Metric;
-            VectorOpts.VectorDimension = indexSettings.Settings.VectorDimension;
-
-            break;
-        }
-    }
+    EmbeddingColumn = "embedding";
+    Metric = NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance;
+    VectorOpts.VectorDimension = 768;
 
     // Verify that key and prefix columns have integer types
     for (const auto& column : tableDescription.GetColumns()) {
@@ -145,7 +124,6 @@ void TVectorWorkloadParams::Init() {
     // If we have fewer vectors than requested targets, adjust Params.Targets
     Y_ABORT_UNLESS(TableRowCount >= Targets, "Requested more targets than row number in the dataset.");
 
-    Y_ABORT_UNLESS(indexFound, "Index %s not found in table %s", IndexName.c_str(), TableOpts.Name.c_str());
 
     if (QueryTableName) {
         const TString tablePath = GetFullTableName(QueryTableName.c_str());

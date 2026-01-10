@@ -1516,7 +1516,8 @@ message TImmediateControlsConfig {
             Description: "Forces shards to split when reaching the given data size (2 GiB by default)",
             MinValue: 10485760, // 10 MiB
             MaxValue: 17179869184, // 16 GiB
-            DefaultValue: 2147483648 }]; // 2GiB
+            // DefaultValue: 2147483648 }]; // 2GiB - Commented out to remove forced datashard splitting
+            DefaultValue: 18446744073709551615 }]; // Max<ui64>() - effectively disables forced splitting
         optional uint64 DisableForceShardSplit = 2 [(ControlOptions) = {
             Description: "Disables forced shard splits, for special cases only",
             MinValue: 0,

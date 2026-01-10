@@ -411,6 +411,14 @@ namespace TEvDataShard {
             Record.SetOrigin(origin);
             Record.SetState(state);
         }
+
+        ui64 GetOrigin() const {
+            return Record.GetOrigin();
+        }
+
+        ui32 GetState() const {
+            return Record.GetState();
+        }
     };
 
     // Debug event to get HNSW index statistics

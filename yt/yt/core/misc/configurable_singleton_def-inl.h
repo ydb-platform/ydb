@@ -146,8 +146,9 @@ struct TSingletonConfigHelpers
     [[maybe_unused]] void CheckSingletonConfigRegistered(::NYT::NDetail::TSingletonConfigTag<configType, true>) \
     { } \
     \
-    YT_STATIC_INITIALIZER( \
-        ::NYT::NDetail::TSingletonConfigHelpers::RegisterSingleton<configType>(singletonName))
+    YT_STATIC_INITIALIZER({ \
+        ::NYT::NDetail::TSingletonConfigHelpers::RegisterSingleton<configType>(singletonName); \
+    })
 
 #define YT_DEFINE_RECONFIGURABLE_SINGLETON(singletonName, configType, dynamicConfigType) \
     [[maybe_unused]] void CheckSingletonConfigRegistered(::NYT::NDetail::TSingletonConfigTag<configType, true>) \
@@ -156,8 +157,9 @@ struct TSingletonConfigHelpers
     [[maybe_unused]] void CheckSingletonConfigRegistered(::NYT::NDetail::TSingletonConfigTag<dynamicConfigType, false>) \
     { } \
     \
-    YT_STATIC_INITIALIZER( \
-         ::NYT::NDetail::TSingletonConfigHelpers::RegisterReconfigurableSingleton<configType, dynamicConfigType>(singletonName)) \
+    YT_STATIC_INITIALIZER({ \
+         ::NYT::NDetail::TSingletonConfigHelpers::RegisterReconfigurableSingleton<configType, dynamicConfigType>(singletonName); \
+    })
 
 ////////////////////////////////////////////////////////////////////////////////
 

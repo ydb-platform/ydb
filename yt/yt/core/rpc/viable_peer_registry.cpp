@@ -186,11 +186,10 @@ public:
         while (true) {
             rebaseIt();
             const auto& address = channelIt->first.second;
-            if (seenAddresses.count(address) == 0) {
+            if (seenAddresses.insert(address).second) {
                 if (currentRandomIndex == 0) {
                     break;
                 }
-                seenAddresses.insert(address);
                 --currentRandomIndex;
             } else {
                 ++channelIt;
@@ -206,19 +205,6 @@ public:
             channelIt->first.second);
 
         return channelIt->second;
-    }
-
-    // We only use this method for small counts, so this approach should work fine.
-    static THashSet<int> GetRandomIndexes(int max, int count = 1)
-    {
-        THashSet<int> result;
-        count = std::min(count, max);
-        result.reserve(count);
-        while (std::ssize(result) < count) {
-            result.insert(static_cast<int>(RandomNumber<unsigned int>(max)));
-        }
-
-        return result;
     }
 
     std::vector<std::pair<std::string, IChannelPtr>> PickRandomPeers(int peerCount = 1) const

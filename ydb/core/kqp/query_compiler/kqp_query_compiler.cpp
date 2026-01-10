@@ -59,10 +59,7 @@ void SetVectorTopKMetric(Ydb::Table::VectorIndexSettings* indexSettings, const T
 void SetVectorTopKTarget(NKqpProto::TKqpPhyValue* targetProto, const TExprNode::TPtr& targetExpr) {
     TExprBase expr(targetExpr);
     if (expr.Maybe<TCoString>()) {
-        auto* literal = targetProto->MutableLiteralValue();
-        literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-        literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
-        literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+        FillLiteralProto(expr.Cast<TCoDataCtor>(), *targetProto->MutableLiteralValue());
     } else if (expr.Maybe<TCoParameter>()) {
         targetProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
     } else {
@@ -75,10 +72,7 @@ void SetVectorTopKTarget(NKqpProto::TKqpPhyValue* targetProto, const TExprNode::
 void SetVectorTopKLimit(NKqpProto::TKqpPhyValue* limitProto, const TExprNode::TPtr& limitExpr) {
     TExprBase expr(limitExpr);
     if (expr.Maybe<TCoUint64>()) {
-        auto* literal = limitProto->MutableLiteralValue();
-        literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-        literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-        literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+        FillLiteralProto(expr.Cast<TCoDataCtor>(), *limitProto->MutableLiteralValue());
     } else if (expr.Maybe<TCoParameter>()) {
         limitProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
     } else {
@@ -364,38 +358,39 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
     }
 }
 
-void FillNothingData(const TDataExprType& dataType, NKqpProto::TKqpPhyLiteralValue& value) {
+void FillNothingData(const TDataExprType& dataType, Ydb::TypedValue& value) {
     auto slot = dataType.GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
     YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
         NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
 
-    value.MutableType()->SetKind(NKikimrMiniKQL::Optional);
-    auto* toFill = value.MutableType()->MutableOptional()->MutableItem();
-
-    toFill->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    toFill->MutableData()->SetScheme(typeId);
-
     if (slot == EDataSlot::Decimal) {
         const auto& paramsDataType = *dataType.Cast<TDataExprParamsType>();
         auto precision = FromString<ui8>(paramsDataType.GetParamOne());
         auto scale = FromString<ui8>(paramsDataType.GetParamTwo());
-        toFill->MutableData()->MutableDecimalParams()->SetPrecision(precision);
-        toFill->MutableData()->MutableDecimalParams()->SetScale(scale);
+        value.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type()->set_precision(precision);
+        value.mutable_type()->mutable_optional_type()->mutable_item()->mutable_decimal_type()->set_scale(scale);
+    } else {
+        auto& protoType = *value.mutable_type();
+        protoType.mutable_optional_type()->mutable_item()->set_type_id((Ydb::Type::PrimitiveTypeId)typeId);
     }
 
-    value.MutableValue()->SetNullFlagValue(::google::protobuf::NullValue::NULL_VALUE);
+    value.mutable_value()->set_null_flag_value(::google::protobuf::NullValue::NULL_VALUE);
 }
 
-void FillNothingPg(const TPgExprType& pgType, NKqpProto::TKqpPhyLiteralValue& value) {
-    value.MutableType()->SetKind(NKikimrMiniKQL::Pg);
-    value.MutableType()->MutablePg()->Setoid(pgType.GetId());
+void FillNothingPg(const TPgExprType& pgType, Ydb::TypedValue& value) {
+    auto& protoType = *value.mutable_type();
+    auto actualPgType = pgType.Cast<TPgExprType>();
+    auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
 
-    value.MutableValue()->SetNullFlagValue(::google::protobuf::NullValue::NULL_VALUE);
+    protoType.mutable_pg_type()->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+    protoType.mutable_pg_type()->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+
+    value.mutable_value()->set_null_flag_value(::google::protobuf::NullValue::NULL_VALUE);
 }
 
-void FillNothing(TCoNothing expr, NKqpProto::TKqpPhyLiteralValue& value) {
+void FillNothing(TCoNothing expr, Ydb::TypedValue& value) {
     auto* typeann = expr.Raw()->GetTypeAnn();
     switch (typeann->GetKind()) {
         case ETypeAnnotationKind::Optional: {
@@ -476,12 +471,7 @@ void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& ta
     if (settings.ItemsLimit) {
         TExprBase expr(settings.ItemsLimit);
         if (expr.Maybe<TCoUint64>()) {
-            auto* literal = readProto.MutableItemsLimit()->MutableLiteralValue();
-
-            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-
-            literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+            FillLiteralProto(expr.Cast<TCoDataCtor>(), *readProto.MutableItemsLimit()->MutableLiteralValue());
         } else if (expr.Maybe<TCoParameter>()) {
             readProto.MutableItemsLimit()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
         } else {
@@ -511,12 +501,7 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta
     if (settings.ItemsLimit) {
         TExprBase expr(settings.ItemsLimit);
         if (expr.template Maybe<TCoUint64>()) {
-            auto* literal = readProto.MutableItemsLimit()->MutableLiteralValue();
-
-            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-
-            literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+            FillLiteralProto(expr.Cast<TCoDataCtor>(), *readProto.MutableItemsLimit()->MutableLiteralValue());
         } else if (expr.template Maybe<TCoParameter>()) {
             readProto.MutableItemsLimit()->MutableParamValue()->SetParamName(expr.template Cast<TCoParameter>().Name().StringValue());
         } else {
@@ -1326,12 +1311,7 @@ private:
             if (readSettings.ItemsLimit) {
                 TExprBase expr(readSettings.ItemsLimit);
                 if (expr.template Maybe<TCoUint64>()) {
-                    auto* literal = readProto.MutableItemsLimit()->MutableLiteralValue();
-
-                    literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-                    literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-
-                    literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+                    FillLiteralProto(expr.Cast<TCoDataCtor>(), *readProto.MutableItemsLimit()->MutableLiteralValue());
                 } else if (expr.template Maybe<TCoParameter>()) {
                     readProto.MutableItemsLimit()->MutableParamValue()->SetParamName(expr.template Cast<TCoParameter>().Name().StringValue());
                 } else {
@@ -1884,10 +1864,7 @@ private:
         // Limit - may be a parameter which will be linked later
         TExprBase expr(settings.VectorTopLimit);
         if (expr.Maybe<TCoUint64>()) {
-            auto* literal = vectorTopK.MutableLimit()->MutableLiteralValue();
-            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
-            literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+            FillLiteralProto(expr.Cast<TCoDataCtor>(), *vectorTopK.MutableLimit()->MutableLiteralValue());
         } else if (expr.Maybe<TCoParameter>()) {
             vectorTopK.MutableLimit()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
         } else {
@@ -1897,10 +1874,7 @@ private:
         // Target vector - may be a parameter which will be linked later
         expr = TExprBase(settings.VectorTopTarget);
         if (expr.Maybe<TCoString>()) {
-            auto* literal = vectorTopK.MutableTargetVector()->MutableLiteralValue();
-            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
-            literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+            FillLiteralProto(expr.Cast<TCoDataCtor>(), *vectorTopK.MutableTargetVector()->MutableLiteralValue());
         } else if (expr.Maybe<TCoParameter>()) {
             vectorTopK.MutableTargetVector()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
         } else {

@@ -135,32 +135,11 @@ message TKqpPhyParamElementValue {
     uint32 ElementIndex = 2;
 }
 
-message TKqpPhyLiteralValue {
-    NKikimrMiniKQL.TType Type = 1;
-    NKikimrMiniKQL.TValue Value = 2;
-}
-
-message TKqpPhyRowsList {
-    message TValue {
-        oneof Kind {
-            TKqpPhyParamValue ParamValue = 1;
-            TKqpPhyLiteralValue LiteralValue = 2;
-        }
-    }
-
-    message TRow {
-        map<string, TValue> Columns = 1;
-    }
-
-    repeated TRow Rows = 1;
-}
-
 message TKqpPhyValue {
     oneof Kind {
         TKqpPhyParamValue ParamValue = 1;               // any type here (value, list of structs, ...)
         TKqpPhyParamElementValue ParamElementValue = 2; // any type here (value, list of structs, ...)
-        TKqpPhyRowsList RowsList = 3;                   // list of structs
-        TKqpPhyLiteralValue LiteralValue = 4;          // value
+        Ydb.TypedValue LiteralValue = 4;          // value
     }
 }
 

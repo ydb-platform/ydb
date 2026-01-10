@@ -20,6 +20,7 @@ SRCS(
     fair_share_invoker_pool_ut.cpp
     fair_share_thread_pool_ut.cpp
     fair_throttler_ut.cpp
+    fair_throttler_ipc_ut.cpp
     fls_ut.cpp
     invoker_alarm_ut.cpp
     invoker_pool_ut.cpp

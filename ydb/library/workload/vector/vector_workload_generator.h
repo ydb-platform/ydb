@@ -34,7 +34,7 @@ private:
     // Helper method to get next target index
     size_t GetNextTargetIndex(size_t currentIndex) const;
 
-    size_t CurrentIndex = 0;
+    std::atomic<size_t> CurrentIndex = 0;
 
     THolder<TVectorSampler> VectorSampler;
 };

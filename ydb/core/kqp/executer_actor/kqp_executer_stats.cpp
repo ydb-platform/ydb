@@ -971,11 +971,17 @@ void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats&
             auto& tableShards = TableShards[tablePath];
             for (const auto& perShard : txStats->GetPerShardStats()) {
                 tableShards.insert(perShard.GetShardId());
+                AffectedShards.insert(perShard.GetShardId());
             }
             queryTableStats.AffectedPartitionsUniqueCount = tableShards.size();
             queryTableStats.AffectedPartitions.SetNonZero(index, txStats->GetPerShardStats().size());
         } else {
             queryTableStats.AffectedPartitions.SetNonZero(index, tableStat.GetAffectedPartitions());
+        }
+
+        NKqpProto::TKqpShardTableExtraStats shardExtraStats;
+        if (tableStat.GetExtra().UnpackTo(&shardExtraStats)) {
+            AffectedShards.insert(shardExtraStats.GetShardId());
         }
 
         NKqpProto::TKqpTableExtraStats tableExtraStats;

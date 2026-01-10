@@ -172,10 +172,10 @@ public:
         const double n = simpleStats.GetCount();
         const double ndv = simpleStats.GetCountDistinct();
 
-        if (ndv >= 0.8 * n) {
-            // Too many distinct values
-            return TPtr{};
-        }
+        //if (ndv >= 0.8 * n) {
+        //    // Too many distinct values
+        //    return TPtr{};
+        //}
 
         const double cbrtN = std::cbrt(n);
         const double numBucketsEstimate = std::ceil(

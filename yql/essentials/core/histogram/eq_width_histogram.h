@@ -487,7 +487,7 @@ public:
 
         ui64 cardinality = 0;
         for (size_t i = leftIndex; i < rightIndex + 1; ++i) {
-            cardinality += Histogram_->GetNumElementsInBucket(i) * other.Histogram_->GetNumElementsInBucket(i);
+            cardinality += Histogram_->GetNumElementsInBucket(i);
         }
         return cardinality;
     }

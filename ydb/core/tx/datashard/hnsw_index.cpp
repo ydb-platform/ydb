@@ -269,7 +269,7 @@ std::shared_ptr<THnswIndex> TNodeHnswIndexCache::GetIndex(
                    << " column=" << columnName << " size=" << cachedSize);
         return it->second;
     }
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::TX_DATASHARD,
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::TX_DATASHARD,
                "HNSW: cache miss tabletId=" << tabletId << " tableId=" << tableId
                << " column=" << columnName);
     return nullptr;

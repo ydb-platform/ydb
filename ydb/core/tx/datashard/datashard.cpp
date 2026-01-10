@@ -398,7 +398,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         Become(&TThis::StateWorkAsFollower);
         SignalTabletActive(ctx);
         // Build HNSW indexes for vector columns on follower after activation
-        Execute(CreateTxInitHnswIndexesFollower(), ctx);
+        Execute(CreateTxInitHnswIndexes(), ctx);
         if (AppData(ctx)->FeatureFlags.GetEnableFollowerStats()) {
             DoPeriodicTasks(ctx);
         }
@@ -439,6 +439,10 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     }
 
     SignalTabletActive(ctx);
+
+    // Build HNSW indexes for vector columns (same as followers)
+    Execute(CreateTxInitHnswIndexes(), ctx);
+
     DoPeriodicTasks(ctx);
 
     NotifySchemeshard(ctx);
@@ -3983,6 +3987,13 @@ void TDataShard::DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TAc
     Y_ENSURE(PeriodicWakeupPending, "Unexpected TEvPeriodicWakeup message");
     PeriodicWakeupPending = false;
     DoPeriodicTasks(ctx);
+}
+
+void TDataShard::HandleRetryHnswIndexInit(TEvPrivate::TEvRetryHnswIndexInit::TPtr&, const TActorContext &ctx) {
+    // Retry HNSW index initialization
+    if (!HnswIndexesBuilt) {
+        Execute(CreateTxInitHnswIndexes(), ctx);
+    }
 }
 
 void TDataShard::UpdateLagCounters(const TActorContext &ctx) {

@@ -219,7 +219,7 @@ class TDataShard
     class TTxCdcStreamScanProgress;
     class TTxCdcStreamEmitHeartbeats;
     class TTxUpdateFollowerReadEdge;
-    class TTxInitHnswIndexesFollower;
+    class TTxInitHnswIndexes;
     class TTxRemoveSchemaSnapshots;
     class TTxIncrementalRestore;
     class TTxCleanupUncommitted;
@@ -359,6 +359,7 @@ class TDataShard
             EvTableStatsError,
             EvRemoveSchemaSnapshots,
             EvBlockFailPointUnblock,
+            EvRetryHnswIndexInit,
             EvEnd
         };
 
@@ -382,6 +383,8 @@ class TDataShard
         struct TEvProgressOperationHistogramScan : public TEventLocal<TEvProgressOperationHistogramScan, EvProgressOperationHistogramScan> {};
 
         struct TEvPeriodicWakeup : public TEventLocal<TEvPeriodicWakeup, EvPeriodicWakeup> {};
+
+        struct TEvRetryHnswIndexInit : public TEventLocal<TEvRetryHnswIndexInit, EvRetryHnswIndexInit> {};
 
         struct TEvBuildTableStatsResult : public TEventLocal<TEvBuildTableStatsResult, EvAsyncTableStats> {
             ui64 TableId = -1;
@@ -1425,6 +1428,7 @@ class TDataShard
 
     void DoPeriodicTasks(const TActorContext &ctx);
     void DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx);
+    void HandleRetryHnswIndexInit(TEvPrivate::TEvRetryHnswIndexInit::TPtr&, const TActorContext &ctx);
 
     TDuration GetDataTxCompleteLag()
     {
@@ -1489,7 +1493,7 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxInitRestored(THashMap<ui64, TOperation::TPtr> migratedTxs);
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
-    NTabletFlatExecutor::ITransaction* CreateTxInitHnswIndexesFollower();
+    NTabletFlatExecutor::ITransaction* CreateTxInitHnswIndexes();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxStartSplit();
     NTabletFlatExecutor::ITransaction* CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext);
@@ -2549,8 +2553,10 @@ private:
         NTable::TDatabase::TChangeCounter LastSysUpdate;
         NTable::TDatabase::TChangeCounter LastSchemeUpdate;
         NTable::TDatabase::TChangeCounter LastSnapshotsUpdate;
-        bool HnswIndexesBuilt = false;
     };
+
+    // HNSW index state (for both leader and followers)
+    bool HnswIndexesBuilt = false;
 
     //
 
@@ -3264,6 +3270,7 @@ protected:
             HFunc(TEvPrivate::TEvRestartOperation, Handle);
             HFunc(TEvPrivate::TEvBlockFailPointUnblock, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
+            HFunc(TEvPrivate::TEvRetryHnswIndexInit, HandleRetryHnswIndexInit);
             HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -3327,6 +3334,7 @@ protected:
             hFuncTraced(TEvDataShard::TEvReadScanFinished, Handle);
             HFunc(TEvDataShard::TEvGetTableStats, Handle);
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
+            HFunc(TEvPrivate::TEvRetryHnswIndexInit, HandleRetryHnswIndexInit);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
         default:

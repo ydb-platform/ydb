@@ -908,8 +908,6 @@ ui64 TQueryExecutionStats::EstimateFinishMem() {
 }
 
 void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&& txStats) {
-//    Cerr << (TStringBuilder() << "::AddDatashardPrepareStats " << txStats.DebugString() << Endl);
-
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
     LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
 
@@ -925,12 +923,10 @@ void TQueryExecutionStats::AddDatashardPrepareStats(NKikimrQueryStats::TTxStats&
 void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStats&& stats,
     NKikimrQueryStats::TTxStats&& txStats, TDuration collectLongTaskStatsTimeout)
 {
-//    Cerr << (TStringBuilder() << "::AddDatashardStats " << stats.DebugString() << ", " << txStats.DebugString() << Endl);
-
     LocksBrokenAsBreaker += txStats.GetLocksBrokenAsBreaker();
     LocksBrokenAsVictim += txStats.GetLocksBrokenAsVictim();
 
-    UpdateTaskStats(0, stats, NYql::NDqProto::COMPUTE_STATE_FINISHED, collectLongTaskStatsTimeout);
+    UpdateTaskStats(0, stats, &txStats, NYql::NDqProto::COMPUTE_STATE_FINISHED, collectLongTaskStatsTimeout);
 }
 
 void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txStats) {
@@ -957,7 +953,7 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
     UpdateStorageTables(taskStats, nullptr);
 }
 
-void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats) {
+void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats) {
     auto index = taskStats.GetTaskId() - 1;
     AFL_ENSURE(index < TaskCount);
     for (auto& tableStat : taskStats.GetTables()) {
@@ -970,7 +966,17 @@ void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats&
         queryTableStats.WriteBytes.SetNonZero(index, tableStat.GetWriteBytes());
         queryTableStats.EraseRows.SetNonZero(index, tableStat.GetEraseRows());
         queryTableStats.EraseBytes.SetNonZero(index, tableStat.GetEraseBytes());
-        queryTableStats.AffectedPartitions.SetNonZero(index, tableStat.GetAffectedPartitions());
+
+        if (txStats) {
+            auto& tableShards = TableShards[tablePath];
+            for (const auto& perShard : txStats->GetPerShardStats()) {
+                tableShards.insert(perShard.GetShardId());
+            }
+            queryTableStats.AffectedPartitionsUniqueCount = tableShards.size();
+            queryTableStats.AffectedPartitions.SetNonZero(index, txStats->GetPerShardStats().size());
+        } else {
+            queryTableStats.AffectedPartitions.SetNonZero(index, tableStat.GetAffectedPartitions());
+        }
 
         NKqpProto::TKqpTableExtraStats tableExtraStats;
         if (tableStat.GetExtra().UnpackTo(&tableExtraStats)) {
@@ -1014,7 +1020,9 @@ void TQueryExecutionStats::UpdateStorageTables(const NYql::NDqProto::TDqTaskStat
     }
 }
 
-void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
+void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NKikimrQueryStats::TTxStats* txStats,
+    NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
+
     if (taskId) {
         AFL_ENSURE(stats.GetTasks().size() == 1);
         AFL_ENSURE(stats.GetTasks(0).GetTaskId() == taskId);
@@ -1022,12 +1030,16 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
 
     for (auto& taskStats : stats.GetTasks()) {
         auto taskId = taskStats.GetTaskId();
-        AFL_ENSURE(taskId > 0);
-        auto index = taskId - 1;
+        // AFL_ENSURE(taskId > 0);
+        auto index = taskId ? taskId - 1 : 0;
         AFL_ENSURE(index < TaskCount);
 
         ComputeCpuTimeUs.SetNonZero(index, taskStats.GetCpuTimeUs());
-        UpdateQueryTables(taskStats);
+        if (taskId == 0) {
+            UpdateStorageTables(taskStats, txStats);
+        } else {
+            UpdateQueryTables(taskStats, txStats);
+        }
 
         if (CollectBasicStats(StatsMode)) {
             if (CollectFullStats(StatsMode)) {
@@ -1037,6 +1049,11 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
                 if (inserted) {
                     stageStats.StageId = stageId;
                     stageStats.SetHistorySampleCount(HistorySampleCount);
+                }
+                if (taskId == 0 && stageStats.TaskCount == 0) {
+                    stageStats.Task2Index.emplace(0, 0);
+                    stageStats.TaskCount = 4;
+                    stageStats.Resize(4);
                 }
                 BaseTimeMs = NonZeroMin(BaseTimeMs, stageStats.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
 
@@ -1407,7 +1424,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         tableAggr.SetWriteBytes(t.StorageStats.WriteBytes + t.WriteBytes.Sum);
         tableAggr.SetEraseRows(t.StorageStats.EraseRows + t.EraseRows.Sum);
         tableAggr.SetEraseBytes(t.StorageStats.EraseBytes + t.EraseBytes.Sum);
-        tableAggr.SetAffectedPartitions(t.StorageStats.AffectedPartitions + t.AffectedPartitions.Sum);
+        tableAggr.SetAffectedPartitions(t.StorageStats.AffectedPartitions +
+            (t.AffectedPartitionsUniqueCount ? t.AffectedPartitionsUniqueCount : t.AffectedPartitions.Sum)
+        );
     }
 
     ExtraStats.SetAffectedShards(AffectedShards.size());

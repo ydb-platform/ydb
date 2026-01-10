@@ -332,6 +332,7 @@ struct TQueryTableStats {
     TSumStats EraseBytes;
     TSumStats AffectedPartitions;
     TStorageTableStats StorageStats;
+    ui64 AffectedPartitionsUniqueCount = 0;
 
     void Resize(ui32 taskCount);
 };
@@ -418,14 +419,14 @@ public:
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
 
-    void UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats);
+    void UpdateQueryTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
     void UpdateStorageTables(const NYql::NDqProto::TDqTaskStats& taskStats, NKikimrQueryStats::TTxStats* txStats);
-    void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout);
+    void UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NKikimrQueryStats::TTxStats* txStats,
+        NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout);
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats);
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();
-    void Finish();
 };
 
 struct TTableStat {

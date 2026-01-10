@@ -265,7 +265,7 @@ public:
                     *stats, fakeComputeActorStats.AddTasks(), StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode)));
                 fakeComputeActorStats.SetCpuTimeUs(taskCpuTime.MicroSeconds());
                 fakeComputeActorStats.SetDurationUs(elapsedMicros);
-                Stats->UpdateTaskStats(taskRunner->GetTaskId(), fakeComputeActorStats, NYql::NDqProto::COMPUTE_STATE_FINISHED, TDuration::Max());
+                Stats->UpdateTaskStats(taskRunner->GetTaskId(), fakeComputeActorStats, nullptr, NYql::NDqProto::COMPUTE_STATE_FINISHED, TDuration::Max());
             }
 
             Stats->ExecuterCpuTime = executerCpuTime;

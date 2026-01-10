@@ -255,19 +255,19 @@ public:
             TDuration executerCpuTime = TDuration::MicroSeconds(elapsedMicros);
 
             Stats->Prepare();
-            for (auto& taskRunner : TaskRunners) {
-                NYql::NDqProto::TDqComputeActorStats fakeComputeActorStats;
 
+            NYql::NDqProto::TDqComputeActorStats fakeComputeActorStats;
+            for (auto& taskRunner : TaskRunners) {
                 auto* stats = taskRunner->GetStats();
                 auto taskCpuTime = stats->BuildCpuTime + stats->ComputeCpuTime;
                 executerCpuTime -= taskCpuTime;
                 NYql::NDq::FillTaskRunnerStats(taskRunner->GetTaskId(), TaskId2StageId[taskRunner->GetTaskId()],
                     *stats, fakeComputeActorStats.AddTasks(), StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode)));
-                fakeComputeActorStats.SetCpuTimeUs(taskCpuTime.MicroSeconds());
-                fakeComputeActorStats.SetDurationUs(elapsedMicros);
-                Stats->UpdateTaskStats(taskRunner->GetTaskId(), fakeComputeActorStats, nullptr, NYql::NDqProto::COMPUTE_STATE_FINISHED, TDuration::Max());
+                fakeComputeActorStats.SetCpuTimeUs(fakeComputeActorStats.GetCpuTimeUs() + taskCpuTime.MicroSeconds());
             }
+            fakeComputeActorStats.SetDurationUs(elapsedMicros);
 
+            Stats->UpdateTaskStats(0, fakeComputeActorStats, nullptr, NYql::NDqProto::COMPUTE_STATE_FINISHED, TDuration::Max());
             Stats->ExecuterCpuTime = executerCpuTime;
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);
             Stats->ResultRows = ResponseEv->GetResultRowsCount();

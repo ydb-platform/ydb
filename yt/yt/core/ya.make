@@ -67,6 +67,7 @@ SRCS(
     concurrency/fair_share_queue_scheduler_thread.cpp
     concurrency/fair_share_thread_pool.cpp
     concurrency/fair_throttler.cpp
+    concurrency/fair_throttler_ipc.cpp
     concurrency/fiber_scheduler_thread.cpp
     concurrency/fiber.cpp
     concurrency/fiber_manager.cpp

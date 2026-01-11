@@ -39,15 +39,18 @@ public:
     // k: number of results to return
     THnswSearchResult Search(const TString& targetVector, size_t k) const;
 
-    // Get embedding vectors for multiple keys (batch)
-    // Returns a vector of serialized embeddings (Float format), empty string for not found keys
-    std::vector<TString> GetVectors(const std::vector<ui64>& keys) const;
+    // Get single embedding vector into pre-allocated buffer
+    // Returns true if found and copied, false if not found
+    bool GetVector(ui64 key, TString& result) const;
 
     // Check if index is ready for search
     bool IsReady() const;
 
     // Get number of vectors in index
     size_t Size() const;
+
+    // Get vector dimension
+    size_t GetDimension() const;
 
 private:
     std::unique_ptr<THnswIndexImpl> Impl;

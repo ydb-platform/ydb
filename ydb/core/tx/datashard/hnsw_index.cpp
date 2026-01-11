@@ -181,41 +181,34 @@ public:
         return result;
     }
 
-    std::vector<TString> GetVectors(const std::vector<ui64>& keys) const {
-        std::vector<TString> results;
-        results.reserve(keys.size());
-
+    
+    bool GetVector(ui64 key, TString& result) const {
         if (!Ready || Dimension == 0) {
-            results.resize(keys.size());  // All empty strings
-            return results;
+            return false;
         }
-
+    
+        // Get vector data directly into the result buffer
         const size_t vectorBytes = Dimension * sizeof(float);
-        std::vector<float> vectorData(Dimension);
-
-        for (ui64 key : keys) {
-            std::size_t count = Index.get(key, vectorData.data(), 1);
-            if (count == 0) {
-                results.emplace_back();  // Empty string for not found
-            } else {
-                // Serialize as FloatVector format (data + format byte)
-                TString result;
-                result.resize(vectorBytes + 1);
-                std::memcpy(result.Detach(), vectorData.data(), vectorBytes);
-                result[vectorBytes] = static_cast<char>(FloatVector);
-                results.push_back(std::move(result));
-            }
+        std::size_t count = Index.get(key, reinterpret_cast<float*>(result.begin()), 1);
+        if (count == 0) {
+            return false;  // Not found
         }
-
-        return results;
+    
+        // Set format byte
+        result[vectorBytes] = static_cast<char>(FloatVector);
+        return true;
     }
-
+    
     bool IsReady() const {
         return Ready;
     }
-
+    
     size_t Size() const {
         return Ready ? Index.size() : 0;
+    }
+
+    size_t GetDimension() const {
+        return Dimension;
     }
 
 private:
@@ -243,8 +236,8 @@ THnswSearchResult THnswIndex::Search(const TString& targetVector, size_t k) cons
     return Impl->Search(targetVector, k);
 }
 
-std::vector<TString> THnswIndex::GetVectors(const std::vector<ui64>& keys) const {
-    return Impl->GetVectors(keys);
+bool THnswIndex::GetVector(ui64 key, TString& result) const {
+    return Impl->GetVector(key, result);
 }
 
 bool THnswIndex::IsReady() const {
@@ -253,6 +246,10 @@ bool THnswIndex::IsReady() const {
 
 size_t THnswIndex::Size() const {
     return Impl->Size();
+}
+
+size_t THnswIndex::GetDimension() const {
+    return Impl->GetDimension();
 }
 
 // TNodeHnswIndexCache implementation (singleton)

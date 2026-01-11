@@ -1166,40 +1166,50 @@ private:
                     );
                 }
             } else {
-                // Fast path: only key + embedding - use batch GetVectors from HNSW
+                // Fast path: only key + embedding - use individual GetVector calls
                 if (topK.TableId != 0 && !topK.ColumnName.empty()) {
                     Self->GetHnswIndexManager().IncrementFastPathReads(topK.TableId, topK.ColumnName);
                 }
-                std::vector<ui64> keys;
-                keys.reserve(topK.HnswResults.size());
-                for (const auto& [key, _] : topK.HnswResults) {
-                    keys.push_back(key);
+
+                // Pre-allocate embedding data string once to avoid repeated allocations
+                TString embeddingData;
+                // Get vector dimension from HNSW index
+                const size_t dimension = topK.HnswIndex->GetDimension();
+                const size_t vectorBytes = dimension * sizeof(float);
+                embeddingData.resize(vectorBytes + 1); // +1 for format byte
+                
+                // Pre-allocate cells vector once and set up constant parts
+                TSmallVec<TCell> cells;
+                cells.resize(State.Columns.size(), TCell()); // Initialize all cells as empty
+                
+                // Find indices for key and embedding columns to avoid repeated lookups
+                size_t keyColIdx = State.Columns.size(); // Invalid index
+                size_t embeddingColIdx = State.Columns.size(); // Invalid index
+                
+                for (size_t colIdx = 0; colIdx < State.Columns.size(); ++colIdx) {
+                    NTable::TTag colId = State.Columns[colIdx];
+                    if (colId == firstKeyColId) {
+                        keyColIdx = colIdx;
+                    } else if (colIdx == topK.Column) {
+                        embeddingColIdx = colIdx;
+                    }
                 }
+                
+                for (const auto& [key, distance] : topK.HnswResults) {
+                    bool found = topK.HnswIndex->GetVector(key, embeddingData);
 
-                std::vector<TString> embeddings = topK.HnswIndex->GetVectors(keys);
-
-                for (size_t i = 0; i < topK.HnswResults.size(); ++i) {
-                    const auto& [key, distance] = topK.HnswResults[i];
-                    const TString& embeddingData = embeddings[i];
-
-                    if (embeddingData.empty()) {
+                    if (!found) {
                         Y_ABORT("Vector not found in HNSW - this should not happen");
                     }
 
                     TCell keyCell = TCell::Make(static_cast<ui64>(key));
 
-                    // Build cells for the requested columns
-                    TSmallVec<TCell> cells;
-                    cells.resize(State.Columns.size());
-
-                    for (size_t colIdx = 0; colIdx < State.Columns.size(); ++colIdx) {
-                        NTable::TTag colId = State.Columns[colIdx];
-
-                        if (colId == firstKeyColId) {
-                            cells[colIdx] = keyCell;
-                        } else if (colIdx == topK.Column) {
-                            cells[colIdx] = TCell(embeddingData.data(), embeddingData.size());
-                        }
+                    // Direct assignment to known indices - no loop needed
+                    if (keyColIdx < State.Columns.size()) {
+                        cells[keyColIdx] = keyCell;
+                    }
+                    if (embeddingColIdx < State.Columns.size()) {
+                        cells[embeddingColIdx] = TCell(embeddingData.data(), embeddingData.size());
                     }
 
                     topK.TotalReadRows++;

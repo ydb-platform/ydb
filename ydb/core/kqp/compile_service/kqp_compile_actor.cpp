@@ -803,6 +803,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
         kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
         kqpConfig.YqlCoreOptimizerFlags.insert("sqlinwithnothingornull");
     }
+    kqpConfig.YqlCoreOptimizerFlags.insert("normalizeequalityfilteroverjoin");
 
     switch(serviceConfig.GetDefaultHashShuffleFuncType()) {
         case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V1:

@@ -4,7 +4,7 @@ import logging
 import sys
 from google.protobuf import json_format, text_format
 from ydb.tests.stress.kv_volume.workload import YdbKeyValueVolumeWorkload
-import ydb.tests.stress.kv_volume.protos.config_pb as config_pb
+import ydb.tests.stress.kv_volume.protos.config_pb2 as config_pb
 
 
 def load_config(path):
@@ -75,7 +75,7 @@ if __name__ == '__main__':
         storage_channels=storage_channels,
         kv_load_type=args.load_type,
         worker_count=args.in_flight,
-        version=args.version
+        version=args.version,
         config=cfg
     )
     workload.start(use_multiprocessing=True)

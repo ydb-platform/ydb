@@ -45,7 +45,7 @@ class Worker:
             self.parent = parent
             
         def make_with_parent(self, parent):
-            return Worker.Action(self.config, parent))
+            return Worker.Action(self.config, parent)
     
     def __init__(self, worker_id, duration):
         self.worker_id = worker_id
@@ -78,13 +78,13 @@ class Worker:
         return chain(self.triggered, self.always_triggered)
 
     def process_triggered(self, trigger):
-        
+        pass
         
     async def arun(self):
         self.aqueue = asyncio.Queue(maxsize=10)
         
         self.begin_time = datetime.now()
-        self.end_time = self.begin_time + timedelta(secon∏ds=self.duration)
+        self.end_time = self.begin_time + timedelta(seconds=self.duration)
         
         while datetime.now() < self.end_time:
             pass

@@ -1,13 +1,21 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NKikimrKeyValue;
+option java_package = "ru.yandex.kikimr.proto";
+option java_outer_classname = "KeyValueVolumeStressLoadConfig";
+option java_multiple_files = true;
+
+
 message PartitionMode {
     enum Code {
-        UNSPECIFIED,
-        OnePartition,
-        MultiPartition
+        UNSPECIFIED = 0;
+        OnePartition = 1;
+        MultiPartition = 2;
     }
 }
 
 message ActionDataMode {
-    message All {}
     message Worker {}
     message FromPrevActions {
         repeated string action_name = 1;
@@ -44,7 +52,7 @@ message ActionCommand {
 
 message Action {
     string name = 1;
-    string parent_action = 2;
+    optional string parent_action = 2;
     
     optional uint32 period_us = 3;
     optional uint32 worker_max_in_flight = 4;

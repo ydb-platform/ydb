@@ -11,6 +11,7 @@ IF (SANITIZER_TYPE)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
+TIMEOUT(10)
 
 PEERDIR(
     ydb/library/actors/interconnect

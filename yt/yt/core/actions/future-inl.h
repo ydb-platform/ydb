@@ -1257,8 +1257,9 @@ TFuture<R> TFutureBase<T>::Apply(TCallback<TFuture<R>(const TErrorOr<T>&)> callb
 
 template <class T>
 template <class U>
-TFuture<U> TFutureBase<T>::As() const
+TFuture<U> TFutureBase<T>::As() const&
 {
+    // Fast path for void conversion.
     if constexpr (std::is_same_v<U, void>) {
         return TFuture<void>(Impl_);
     }
@@ -1278,6 +1279,19 @@ TFuture<U> TFutureBase<T>::As() const
     }));
 
     return promise;
+}
+
+template <class T>
+template <class U>
+TFuture<U> TFutureBase<T>::As() &&
+{
+    // Fast path for void conversion.
+    if constexpr (std::is_same_v<U, void>) {
+        return TFuture<void>(std::move(Impl_));
+    }
+
+    // This overload makes little sense for arbitrary type conversions.
+    return As<U>();
 }
 
 template <class T>

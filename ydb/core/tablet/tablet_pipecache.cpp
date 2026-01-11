@@ -95,6 +95,14 @@ class TPipePerNodeCache : public TActor<TPipePerNodeCache> {
             return &it->second;
         }
 
+        const TClientState* FindClient(const TActorId& clientId) const {
+            auto it = ByClient.find(clientId);
+            if (it == ByClient.end()) {
+                return nullptr;
+            }
+            return &it->second;
+        }
+
         TClientState* GetActive() {
             if (ActiveClients.empty()) {
                 return nullptr;
@@ -151,16 +159,17 @@ class TPipePerNodeCache : public TActor<TPipePerNodeCache> {
             return count;
         }
 
-        // Get a list of connected follower NodeIds
-        THashSet<ui32> GetConnectedNodes() const {
-            THashSet<ui32> nodes;
+        // Count connected clients among active ones
+        ui32 CountConnectedClients() const {
+            ui32 connectedCount = 0;
             for (const auto& clientId : ActiveClients) {
-                auto it = ByClient.find(clientId);
-                if (it != ByClient.end() && it->second.Connected && it->second.NodeId != 0) {
-                    nodes.insert(it->second.NodeId);
+                if (const auto* cs = FindClient(clientId)) {
+                    if (cs->Connected) {
+                        connectedCount++;
+                    }
                 }
             }
-            return nodes;
+            return connectedCount;
         }
     };
 
@@ -324,23 +333,16 @@ class TPipePerNodeCache : public TActor<TPipePerNodeCache> {
     }
 
     TClientState* EnsureClient(TTabletState *tabletState, ui64 tabletId) {
-        // Count connected clients among active ones
-        ui32 connectedCount = 0;
-        for (const auto& clientId : tabletState->ActiveClients) {
-            if (auto* cs = tabletState->FindClient(clientId)) {
-                if (cs->Connected) {
-                    connectedCount++;
-                }
-            }
-        }
-
-        bool refreshExpired = Config->PipeRefreshTime &&
+        const bool refreshExpired = Config->PipeRefreshTime &&
             Config->PipeRefreshTime < (TActivationContext::Now() - tabletState->LastCreated);
 
         // Periodically cleanup idle clients when we have many
         if (refreshExpired && tabletState->ActiveClients.size() > 1) {
             CleanupIdleClients(tabletState);
         }
+
+        // Count connected clients among active ones
+        const ui32 connectedCount = tabletState->CountConnectedClients();
 
         // Determine if we need to create a new client
         bool needNewClient = tabletState->ActiveClients.empty() ||

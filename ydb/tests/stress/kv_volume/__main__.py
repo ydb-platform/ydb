@@ -71,8 +71,6 @@ if __name__ == '__main__':
         args.endpoint,
         args.database,
         duration=args.duration,
-        path=volume_path,
-        storage_channels=storage_channels,
         kv_load_type=args.load_type,
         worker_count=args.in_flight,
         version=args.version,

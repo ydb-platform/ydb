@@ -13,7 +13,7 @@ def chained_method(method):
     def _wrapped(self, *args, **kwargs):
         method(self, *args, **kwargs)
         return self
-    
+
     return _wrapped
 
 
@@ -55,7 +55,7 @@ class ConfigBuilder:
     @chained_method
     def add_read_to_prepared_action(self, size, count):
         command = config_pb.ActionCommand()
-        command.read.size = size 
+        command.read.size = size
         command.read.count = count
         self.prepared_action.action_command.append(command)
 
@@ -70,10 +70,10 @@ class ConfigBuilder:
     @chained_method
     def set_data_mode_for_prepared_action(self, worker=False, from_prev_actions=[]):
         if worker:
-            self.prepared_action.action_data_mode.worker
+            self.prepared_action.action_data_mode.worker.CopyFrom(config_pb.ActionDataMode.Worker())
         else:
             mode = config_pb.ActionDataMode.FromPrevActions(action_name=from_prev_actions)
-            self.prepared_action.action_data_mode = config_pb.ActionDataMode(from_prev_actions=mode)
+            self.prepared_action.action_data_mode.from_prev_actions.CopyFrom(mode)
 
     @chained_method
     def set_periodicity_for_prepared_action(self, period_us=None, worker_max_in_flight=None, global_max_in_flight=None):

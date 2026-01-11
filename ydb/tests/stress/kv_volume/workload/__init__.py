@@ -30,77 +30,149 @@ def parse_int_with_default(s, default=None):
 def parse_endpoint(endpoint):
     # Normalize and split endpoint into host and port (strip scheme if present)
     hostport = endpoint.split('://', 1)[1] if '://' in endpoint else endpoint
-    parts = hostport.rsplit(':', 1)  # Разделить с конца, максимум 1 раз
+    parts = hostport.rsplit(':', 1)  # Split from end, max 1 time
     host = parts[0]
     s_port = parts[1] if len(parts) > 1 else None
     return host, parse_int_with_default(s_port, DEFAULT_YDB_KV_PORT)
 
 
 class Worker:
-    class Action:
-        def __init__(self, config, parent = None):
-            self.id = uuid.uuid4()
-            self.name = config.name
+    class ActionRunner:
+        def __init__(self, config, workload, worker_semaphore=None, global_semaphore=None):
             self.config = config
-            self.parent = parent
+            self.workload = workload
+            self.task = None
+            self.completed_actions = set()
+            self.worker_semaphore = worker_semaphore
+            self.global_semaphore = global_semaphore
             
-        def make_with_parent(self, parent):
-            return Worker.Action(self.config, parent)
+        async def execute_command(self, cmd, data_context=None):
+            cmd_type = cmd.WhichOneof('Command')
+            if cmd_type == 'print':
+                print(f"[Worker Action: {self.config.name}] {cmd.print.msg}")
+            elif cmd_type == 'read':
+                partition_id = random.randrange(0, self.workload.partition_count)
+                key = self.workload._get_init_pair_key(random.randint(0, 63))
+                offset = random.randint(0, self.workload.INIT_DATA_VALUE_SIZE - cmd.read.size)
+                response = self.workload.client.kv_read(
+                    self.workload._volume_path(),
+                    partition_id,
+                    key,
+                    offset=offset,
+                    size=cmd.read.size,
+                    version=self.workload.version
+                )
+                if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
+                    logger.error(f"Read failed for action {self.config.name}")
+            elif cmd_type == 'write':
+                partition_id = random.randrange(0, self.workload.partition_count)
+                key = self.workload._get_init_pair_key(random.randint(0, 63))
+                pattern_repeats = (cmd.write.size + len(self.workload.INIT_DATA_PATTERN)) // len(self.workload.INIT_DATA_PATTERN)
+                data = self.workload.INIT_DATA_PATTERN * pattern_repeats
+                data = data[:cmd.write.size]
+                response = self.workload.client.kv_write(
+                    self.workload._volume_path(),
+                    partition_id,
+                    key,
+                    data,
+                    channel=cmd.write.channel,
+                    version=self.workload.version
+                )
+                if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
+                    logger.error(f"Write failed for action {self.config.name}")
+        
+        async def run_commands(self):
+            if self.worker_semaphore:
+                async with self.worker_semaphore:
+                    if self.global_semaphore:
+                        async with self.global_semaphore:
+                            data_context = {}
+                            for cmd in self.config.action_command:
+                                await self.execute_command(cmd, data_context)
+                    else:
+                        data_context = {}
+                        for cmd in self.config.action_command:
+                            await self.execute_command(cmd, data_context)
+            elif self.global_semaphore:
+                async with self.global_semaphore:
+                    data_context = {}
+                    for cmd in self.config.action_command:
+                        await self.execute_command(cmd, data_context)
+            else:
+                data_context = {}
+                for cmd in self.config.action_command:
+                    await self.execute_command(cmd, data_context)
+        
+        async def run_periodic(self, end_time):
+            period = self.config.period_us / 1000000.0
+            while datetime.now() < end_time:
+                await self.run_commands()
+                await asyncio.sleep(period)
+        
+        async def run_once(self):
+            await self.run_commands()
     
-    def __init__(self, worker_id, duration):
+    def __init__(self, worker_id, workload):
         self.worker_id = worker_id
-        self.triggers_by_name = defaultdict(list) # action.name -> [action.name]
-        self.action_configs = dict() # action.name -> action_config
-        self.always_triggered = set()
-        self.triggered = set()
-        self.aqueue = None # asyncio.Queue
+        self.workload = workload
+        self.actions = {}
+        self.runners = {}
+        self.global_semaphores = {}
         
-        self.duration = duration
-
-        self.begin_time = None
-        self.end_time = None
-        self.actions = dict() # action.id -> action
+    def add_action(self, action_config):
+        worker_sem = None
+        if action_config.HasField('worker_max_in_flight'):
+            worker_sem = asyncio.Semaphore(action_config.worker_max_in_flight)
         
-    def add_action(self, action):
-        if not action.name:
-            raise ValueError(f"inapriopriate action name: {action.name}")
-        parent_action = action.name or ""
-        if parent_action == "":
-            self.always_triggered.add(action.name)
-        self.triggers_by_name[parent_action].append(action.name)
-        self.action_configs[action.name] = Worker.Action(action)
+        global_sem = None
+        if action_config.HasField('global_max_in_flight'):
+            if action_config.name not in self.global_semaphores:
+                self.global_semaphores[action_config.name] = asyncio.Semaphore(action_config.global_max_in_flight)
+            global_sem = self.global_semaphores[action_config.name]
         
-    async def schedule(queue: asyncio.Queue, delay_us: float, func):
-        await asyncio.sleep(delay_us / 1000000) # convert to seconds
-        await func()
-        
-    def triggered(self):
-        return chain(self.triggered, self.always_triggered)
-
-    def process_triggered(self, trigger):
-        pass
+        runner = self.ActionRunner(action_config, self.workload, worker_sem, global_sem)
+        self.actions[action_config.name] = action_config
+        self.runners[action_config.name] = runner
         
     async def arun(self):
-        self.aqueue = asyncio.Queue(maxsize=10)
+        end_time = datetime.now() + timedelta(seconds=self.workload.duration)
         
-        self.begin_time = datetime.now()
-        self.end_time = self.begin_time + timedelta(seconds=self.duration)
+        task_map = {}
         
-        while datetime.now() < self.end_time:
-            pass
+        for name, action in self.actions.items():
+            parent = action.parent_action if action.HasField('parent_action') else None
+            if parent is None:
+                if action.HasField('period_us'):
+                    task_map[name] = asyncio.create_task(self.runners[name].run_periodic(end_time))
+                else:
+                    task_map[name] = asyncio.create_task(self.runners[name].run_once())
         
+        for name, action in self.actions.items():
+            parent = action.parent_action if action.HasField('parent_action') else None
+            if parent is not None and parent in task_map:
+                async def wait_and_run(parent_task=task_map[parent], runner=self.runners[name]):
+                    await parent_task
+                    if action.HasField('period_us'):
+                        await runner.run_periodic(end_time)
+                    else:
+                        await runner.run_once()
+                task_map[name] = asyncio.create_task(wait_and_run())
         
-
+        if task_map:
+            await asyncio.gather(*task_map.values())
+    
     def run(self):
         asyncio.run(self.arun())
 
 class WorkerBuilder:
-    def __init__(self, config, duration):
+    def __init__(self, config, workload):
         self.config = config
-        self.duration = duration
+        self.workload = workload
         
     def build(self, worker_id):
-        worker = Worker(worker_id, self.duration)
+        worker = Worker(worker_id, self.workload)
+        for action in self.config.actions:
+            worker.add_action(action)
         return worker
         
 
@@ -125,6 +197,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         self.version = version
         self.init_data_keys = set()
         self.config = config
+        self.client = None
 
     @property
     def partition_count(self):
@@ -132,7 +205,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
 
     @property
     def storage_channels(self):
-        return self.config.volume_config.storage_channels
+        return self.config.volume_config.channel_media
 
     @property
     def path(self):
@@ -176,13 +249,13 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
 
     def _pre_start(self):
         print('Init keyvalue volume')
-        client = KeyValueClient(self.fqdn, self.port)
-        create_reponse = self._create_volume(client)
+        self.client = KeyValueClient(self.fqdn, self.port)
+        create_reponse = self._create_volume(self.client)
         if create_reponse is None or create_reponse.operation.status != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
             print('Create volume failed')
             print('response:', create_reponse)
             return False
-        self._fill_init_data(client)
+        self._fill_init_data(self.client)
         self.begin_time = datetime.now()
         self.end_time = self.begin_time + timedelta(seconds=self.duration)
         print('Start Load; Begin Time:', self.begin_time, '; End Time:', self.end_time)
@@ -190,8 +263,8 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
 
     def _post_stop(self):
         print('Stop Load; Drop Volume')
-        client = KeyValueClient(self.fqdn, self.port)
-        self._drop_volume(client)
+        if self.client:
+            self._drop_volume(self.client)
         return True
 
     def get_status(self, response):
@@ -201,31 +274,17 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
             return response.operation.status
         return response.status
 
-    def run_worker(self, worker_id):
-        t = type(self)
-        client = KeyValueClient(self.fqdn, self.port)
-        # Determine available keys
-        keys = list(self.init_data_keys)
-        if not keys:
-            default_pairs = t.INIT_DATA_PAIRS if self.kv_load_type == 'read' else t.INIT_INLINE_DATA_PAIRS
-            keys = [self._get_init_pair_key(i) for i in range(default_pairs)]
-        while datetime.now() < self.end_time:
-            partition_id = random.randrange(0, self.partition_count)
-            key = random.choice(keys)
-            size = random.randint(1, t.INIT_DATA_VALUE_SIZE)
-            if size != t.INIT_DATA_VALUE_SIZE:
-                offset = random.randint(0, t.INIT_DATA_VALUE_SIZE - size)
-            else:
-                offset = 0
-            response = client.kv_read(self._volume_path(), partition_id, key, offset=offset, size=size, version=self.version)
-            status = self.get_status(response)
-            if response is None or status != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
-                print('Read failed')
-                print('response:', response)
-                return
+    def __enter__(self):
+        self._pre_start()
+        return self
 
-    def _get_worker_action(self, worker_id):
-        return lambda: self.run_worker(worker_id)
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._post_stop()
+        return False
 
     def get_workload_thread_funcs(self):
-        return [self._get_worker_action(i) for i in range(self.worker_count)]
+        workers = []
+        for i in range(self.worker_count):
+            builder = WorkerBuilder(self.config, self)
+            workers.append(lambda w=builder.build(i): w.run())
+        return workers

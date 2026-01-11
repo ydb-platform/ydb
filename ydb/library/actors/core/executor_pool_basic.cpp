@@ -202,6 +202,7 @@ namespace NActors {
         if constexpr (DebugMode) {
             Sanitizer.reset(new TBasicExecutorPoolSanitizer(this));
         }
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "ThreadCount == ", ThreadCount, " DefaultThreadCount == ", DefaultThreadCount, " MinThreadCount == ", MinThreadCount, " MaxThreadCount == ", MaxThreadCount, " DefaultFullThreadCount == ", DefaultFullThreadCount, " MinFullThreadCount == ", MinFullThreadCount, " MaxFullThreadCount == ", MaxFullThreadCount);
     }
 
     TBasicExecutorPool::~TBasicExecutorPool() {

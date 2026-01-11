@@ -129,7 +129,7 @@ public:
             Config->_KqpTablePathPrefix = Settings.Database;
         }
 
-        ApplyServiceConfig(*Config, Settings.TableService);
+        Config->ApplyServiceConfig(Settings.TableService);
 
         Config->FreezeDefaults();
 

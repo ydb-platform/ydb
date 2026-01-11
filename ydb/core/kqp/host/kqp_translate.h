@@ -187,8 +187,6 @@ private:
     bool IsAmbiguityError = false;
 };
 
-NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode);
-
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);
 
 NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,

@@ -95,6 +95,7 @@ namespace NKikimr {
 
         TIntrusivePtr<TPipePerNodeCacheConfig> followerPipeConfig = new TPipePerNodeCacheConfig();
         followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
+        followerPipeConfig->MaxActiveClients = 10;  // Multiple follower connections for load distribution
         followerPipeConfig->PipeConfig.AllowFollower = true;
         followerPipeConfig->PipeConfig.ForceFollower = forceFollowers;
 

@@ -1435,6 +1435,7 @@ void TTabletPipePerNodeCachesInitializer::InitializeServices(
 
     TIntrusivePtr<TPipePerNodeCacheConfig> followerPipeConfig = new TPipePerNodeCacheConfig();
     followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
+    followerPipeConfig->MaxActiveClients = 10;
     followerPipeConfig->PipeConfig.AllowFollower = true;
     followerPipeConfig->Counters = counters->GetSubgroup("type", "FOLLOWER_PIPE_CACHE");
 

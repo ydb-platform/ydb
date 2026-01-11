@@ -121,37 +121,72 @@ namespace NActors {
     {
         Y_UNUSED(Jail, SoftProcessingDurationTs);
 
-        ui32 sharedThreads = cfg.AllThreadsAreShared ? DefaultThreadCount : HasOwnSharedThread ? 1 : 0;
-        ui32 threads = ThreadCount;
-        if (sharedThreads && threads) {
-            threads = threads - sharedThreads;
-        }
         if (cfg.AllThreadsAreShared) {
-            threads = 0;
-        }
-
-        if (MaxLocalQueueSize) {
-            LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
-            LocalQueueSize = MinLocalQueueSize;
-        }
-        if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
-            for (ui32 idx = 0; idx < threads; ++idx) {
-                SpinThresholdCyclesPerThread[idx].store(0);
+            ui32 sharedThreads = DefaultThreadCount;
+            ui32 threads = ThreadCount;
+            if (sharedThreads && threads) {
+                threads = threads - sharedThreads;
             }
-        }
-        if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
-            MovingWaitingStats.Reset(new TWaitingStats<double>[threads]);
-        }
+            if (cfg.AllThreadsAreShared) {
+                threads = 0;
+            }
 
-        i16 limit = Min(threads, (ui32)Max<i16>());
-        DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - sharedThreads, limit);
+            if (MaxLocalQueueSize) {
+                LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
+                LocalQueueSize = MinLocalQueueSize;
+            }
+            if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
+                for (ui32 idx = 0; idx < threads; ++idx) {
+                    SpinThresholdCyclesPerThread[idx].store(0);
+                }
+            }
+            if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
+                MovingWaitingStats.Reset(new TWaitingStats<double>[threads]);
+            }
 
-        MaxFullThreadCount = Min(Max<i16>(MaxFullThreadCount - sharedThreads, DefaultFullThreadCount), limit);
+            i16 limit = Min(threads, (ui32)Max<i16>());
+            DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - sharedThreads, limit);
 
-        if (MinFullThreadCount) {
-            MinFullThreadCount = Min<i16>(MinFullThreadCount - sharedThreads, DefaultFullThreadCount);
+            MaxFullThreadCount = Min(Max<i16>(MaxFullThreadCount - sharedThreads, DefaultFullThreadCount), limit);
+
+            if (MinFullThreadCount) {
+                MinFullThreadCount = Min<i16>(MinFullThreadCount - sharedThreads, DefaultFullThreadCount);
+            } else {
+                MinFullThreadCount = DefaultFullThreadCount;
+            }
         } else {
-            MinFullThreadCount = DefaultFullThreadCount;
+            ui32 threads = ThreadCount;
+            if (HasOwnSharedThread && threads) {
+                threads = threads - 1;
+            }
+
+            if (MaxLocalQueueSize) {
+                LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
+                LocalQueueSize = MinLocalQueueSize;
+            }
+            if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
+                for (ui32 idx = 0; idx < threads; ++idx) {
+                    SpinThresholdCyclesPerThread[idx].store(0);
+                }
+            }
+            if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
+                MovingWaitingStats.Reset(new TWaitingStats<double>[threads]);
+            }
+
+            i16 limit = Min(threads, (ui32)Max<i16>());
+            if (DefaultFullThreadCount) {
+                DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - HasOwnSharedThread, limit);
+            } else {
+                DefaultFullThreadCount = limit;
+            }
+
+            MaxFullThreadCount = Min(Max<i16>(MaxFullThreadCount - HasOwnSharedThread, DefaultFullThreadCount), limit);
+
+            if (MinFullThreadCount) {
+                MinFullThreadCount = Min<i16>(MinFullThreadCount - HasOwnSharedThread, DefaultFullThreadCount);
+            } else {
+                MinFullThreadCount = DefaultFullThreadCount;
+            }
         }
 
         ThreadCount = static_cast<i16>(MaxFullThreadCount);
@@ -159,9 +194,9 @@ namespace NActors {
         semaphore.CurrentThreadCount = ThreadCount;
         Semaphore = semaphore.ConvertToI64();
 
-        DefaultThreadCount = DefaultFullThreadCount + sharedThreads;
-        MinThreadCount = MinFullThreadCount + sharedThreads;
-        MaxThreadCount = MaxFullThreadCount + sharedThreads;
+        DefaultThreadCount = DefaultFullThreadCount + HasOwnSharedThread;
+        MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
+        MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
 
         Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);
         if constexpr (DebugMode) {

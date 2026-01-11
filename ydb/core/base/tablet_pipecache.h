@@ -134,6 +134,7 @@ struct TEvPipeCache {
 struct TPipePerNodeCacheConfig : public TAtomicRefCount<TPipePerNodeCacheConfig>{
     ui64 TabletCacheLimit = 500000;
     TDuration PipeRefreshTime = TDuration::Zero();
+    ui32 MaxActiveClients = 1;  // Max concurrent follower connections per tablet
     NTabletPipe::TClientConfig PipeConfig = DefaultPipeConfig();
     ::NMonitoring::TDynamicCounterPtr Counters;
 

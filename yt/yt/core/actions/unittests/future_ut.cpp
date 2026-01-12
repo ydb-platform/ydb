@@ -260,7 +260,7 @@ TEST_F(TFutureTest, NoncopyableApplySO5086)
 TEST_F(TFutureTest, NonAssignable1)
 {
     auto f = MakeFuture<TNonAssignable>({
-        .Value = 1
+        .Value = 1,
     });
 
     auto g = f.AsUnique().Apply(BIND([] (TNonAssignable&& object) {
@@ -274,7 +274,7 @@ TEST_F(TFutureTest, NonAssignable1)
 TEST_F(TFutureTest, NonAssignable2)
 {
     auto f = MakeFuture<TNonAssignable>({
-        .Value = 1
+        .Value = 1,
     });
 
     std::vector<decltype(f)> futures;
@@ -295,7 +295,7 @@ TEST_F(TFutureTest, NonAssignable2)
 TEST_F(TFutureTest, NonAssignable3)
 {
     auto f = MakeFuture<TNonAssignable>({
-        .Value = 1
+        .Value = 1,
     });
 
     std::vector<decltype(f)> futures;

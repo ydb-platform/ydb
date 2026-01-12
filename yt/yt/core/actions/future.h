@@ -291,7 +291,9 @@ public:
 
     //! Converts (successful) result to |U|; propagates errors as is.
     template <class U>
-    TFuture<U> As() const;
+    TFuture<U> As() const&;
+    template <class U>
+    TFuture<U> As() &&;
 
     //! Converts to TFuture<void> by discarding the value; propagates errors as is.
     TFuture<void> AsVoid() const&;

@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
                 TSocketOutput so(sock);
                 so.Write(request);
                 so.Finish();
-           }
+            }
 
             TSocketInput si(sock);
             THttpInput input(&si);
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
             return {httpCode, description, responseBody};
         };
 
-        const bool expectCorrect = contentLengthDiff == 0;  // Content-Length is mandatory
+        const bool expectCorrect = contentLengthDiff == 0; // Content-Length is mandatory
 
         TMaybe<THttpResult> res;
         try {
@@ -164,7 +164,6 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
         TestContentLengthDiff(*this, +3000, "gzip");
     }
 
-
     void TestStartLine(THttpProxyTestMock& mock, const TMaybe<TStringBuf> startLine, const TConstArrayRef<TStringBuf> auxHeaders) {
         constexpr TStringBuf headers[]{
             "Host:example.amazonaws.com",
@@ -199,7 +198,7 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
                 TSocketOutput so(sock);
                 so.Write(request);
                 so.Finish();
-           }
+            }
 
             TSocketInput si(sock);
             THttpInput input(&si);
@@ -253,7 +252,7 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
         TestStartLine(*this, "POST /Root\nHTTP/1.1", {});
     }
     Y_UNIT_TEST_F(InvalidHttpStartLine5, THttpProxyTestMock) {
-        TestStartLine(*this, Nothing(), {"Not a header",});
+        TestStartLine(*this, Nothing(), {"Not a header"});
     }
     Y_UNIT_TEST_F(InvalidHttpStartLine6, THttpProxyTestMock) {
         TestStartLine(*this, "POST /Root\r\nHTTP/1.1 HTTP/1.1", {});

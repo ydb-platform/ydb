@@ -45,8 +45,8 @@ class Worker:
             self.completed_actions = set()
             self.worker_semaphore = worker_semaphore
             self.global_semaphore = global_semaphore
-            self.init_keys = init_keys or set()
-            self.results = results if results is not None else defaultdict(lambda: defaultdict(set))
+            self.init_keys = init_keys or {}
+            self.results = results if results is not None else defaultdict(lambda: defaultdict(dict))
             self.parent_names = parent_names or set()
             self.parent_chain = parent_chain or {}
             self.instance_id = None
@@ -56,12 +56,11 @@ class Worker:
             if cmd_type == 'print':
                 print(f"[Worker Action: {self.config.name}] {cmd.print.msg}")
             elif cmd_type == 'read':
-                keys = self._get_keys()
-                if not keys:
+                keys_with_partitions = self._get_keys()
+                if not keys_with_partitions:
                     logger.warning(f"No keys available for read in action {self.config.name}")
                     return
-                partition_id = random.randrange(0, self.workload.partition_count)
-                key = random.choice(keys)
+                key, partition_id = random.choice(list(keys_with_partitions.items()))
                 offset = 0
                 if cmd.read.size != 0:
                     offset = random.randint(0, cmd.read.size - 1) if cmd.read.size > 1 else 0
@@ -74,7 +73,30 @@ class Worker:
                     version=self.workload.version
                 )
                 if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
-                    logger.error(f"Read failed for action {self.config.name}")
+                    logger.error(f"Read failed for key {key} in action {self.config.name}")
+            elif cmd_type == 'delete':
+                keys_with_partitions = self._get_keys()
+                if not keys_with_partitions:
+                    logger.warning(f"No keys available for delete in action {self.config.name}")
+                    return
+                count = min(cmd.delete.count, len(keys_with_partitions)) if cmd.delete.count > 0 else 0
+                if count == 0:
+                    return
+                keys_to_delete = list(keys_with_partitions.items())[:count]
+                for key, partition_id in keys_to_delete:
+                    response = await self.workload.client.a_kv_delete_range(
+                        self.workload._volume_path(),
+                        partition_id,
+                        from_key=key,
+                        to_key=key,
+                        from_inclusive=True,
+                        to_inclusive=True,
+                        version=self.workload.version
+                    )
+                    if response is not None and self.workload.get_status(response) == ydb_status_codes.StatusIds.StatusCode.SUCCESS:
+                        self._remove_key(key)
+                    else:
+                        logger.error(f"Delete failed for key {key} in action {self.config.name}")
             elif cmd_type == 'write':
                 key = self.workload._generate_write_key()
                 partition_id = random.randrange(0, self.workload.partition_count)
@@ -90,26 +112,33 @@ class Worker:
                     version=self.workload.version
                 )
                 if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
-                    logger.error(f"Write failed for action {self.config.name}")
-                self._store_key(key)
+                    logger.error(f"Write failed for key {key} in action {self.config.name}")
+                else:
+                    self._store_key(key, partition_id)
 
         def _get_keys(self):
             mode = self.config.action_data_mode.WhichOneof('Mode')
             if mode == 'worker':
-                return list(self.init_keys) if self.init_keys else []
+                return dict(self.init_keys) if self.init_keys else {}
             elif mode == 'from_prev_actions':
-                keys = set()
+                keys = {}
                 for action_name in self.config.action_data_mode.from_prev_actions.action_name:
                     if action_name in self.results and action_name in self.parent_chain:
                         instance_id = self.parent_chain[action_name]
                         if instance_id and instance_id in self.results[action_name]:
                             keys.update(self.results[action_name][instance_id])
-                return list(keys) if keys else []
+                return keys
             else:
-                return list(self.init_keys) if self.init_keys else []
+                return dict(self.init_keys) if self.init_keys else {}
 
-        def _store_key(self, key):
-            self.results[self.config.name][self.instance_id].add(key)
+        def _get_keys_copy(self):
+            return self._get_keys()
+
+        def _store_key(self, key, partition_id):
+            self.results[self.config.name][self.instance_id][key] = partition_id
+
+        def _remove_key(self, key):
+            self.results[self.config.name][self.instance_id].pop(key, None)
         
         async def run_commands(self, parent_chain_update=None):
             self.instance_id = self.workload._generate_instance_id(self.config.name)
@@ -150,7 +179,7 @@ class Worker:
         self.runners = {}
         self.global_semaphores = {}
         self.init_keys = self._generate_init_keys()
-        self.results = defaultdict(lambda: defaultdict(set))
+        self.results = defaultdict(lambda: defaultdict(dict))
         self.write_key_counter = 0
         self.instance_counter = 0
 
@@ -166,13 +195,15 @@ class Worker:
         return f'worker_{self.worker_id}_write_key_{self.write_key_counter}'
 
     def _generate_init_keys(self):
-        init_keys = set()
+        init_keys = {}
         if not hasattr(self.workload.config, 'initial_data'):
             return init_keys
 
         for write_cmd in self.workload.config.initial_data.write_commands:
             for pair_id in range(write_cmd.count):
-                init_keys.add(self._generate_init_key(pair_id))
+                key = self._generate_init_key(pair_id)
+                partition_id = random.randrange(0, self.workload.partition_count)
+                init_keys[key] = partition_id
         return init_keys
 
     async def _fill_init_data(self):
@@ -186,7 +217,8 @@ class Worker:
             data = data[:write_cmd.size]
             for pair_id in range(write_cmd.count):
                 key = self._generate_init_key(pair_id)
-                for partition_id in range(self.workload.partition_count):
+                partition_id = self.init_keys.get(key)
+                if partition_id is not None:
                     await self.workload.client.a_kv_write(
                         self.workload._volume_path(),
                         partition_id,

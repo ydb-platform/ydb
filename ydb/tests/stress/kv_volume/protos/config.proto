@@ -43,10 +43,15 @@ message ActionCommand {
         uint32 channel = 3;
     }
     
+    message Delete {
+        uint32 count = 1;
+    }
+    
     oneof Command {
         Print print = 1;
         Read read = 2;
         Write write = 3;
+        Delete delete = 4;
     }
 }
 

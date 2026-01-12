@@ -399,6 +399,7 @@ public:
     ui64 Offset;
     ui64 Size;
     void *Cookie;
+    TLogoBlobID BlobId;
 
     ui64 CurrentSector = 0;
     ui64 RemainingSize;
@@ -425,6 +426,7 @@ public:
         , Offset(ev.Offset)
         , Size(ev.Size)
         , Cookie(ev.Cookie)
+        , BlobId(ev.BlobId)
         , RemainingSize(ev.Size)
         , SlackSize(Max<ui32>())
         , DoubleFreeCanary(ReferenceCanary)
@@ -518,6 +520,8 @@ public:
     bool IsSeqWrite;
     bool IsReplied = false;
     bool ChunkEncrypted = true;
+
+    TLogoBlobID BlobId;
 
     ui32 TotalSize;
     ui32 CurrentPart = 0;

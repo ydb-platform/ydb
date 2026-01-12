@@ -10,7 +10,7 @@ namespace NKikimr {
         NMatrix::TVectorType Local;
         NMatrix::TVectorType ReadableLocal;
         std::vector<TDiskPart> CorruptedParts;
-        std::function<std::optional<TRcBuf>(const TDiskPart&)> Read;
+        std::function<std::optional<TRcBuf>(const TDiskPart&, TLogoBlobID)> Read;
         const TBlobStorageGroupType GType;
         TScrubCoroImpl *Impl;
 
@@ -49,7 +49,8 @@ namespace NKikimr {
                     const TDiskPart *part = extr.Begin;
                     for (ui32 i = local.FirstPosition(); i != local.GetSize(); i = local.NextPosition(i), ++part) {
                         if (part->ChunkIdx && part->Size) {
-                            std::optional<TRcBuf> data = Read(*part);
+                            const TLogoBlobID partId(key.LogoBlobID(), i + 1); // part id for this blob
+                            std::optional<TRcBuf> data = Read(*part, partId);
                             STLOGX(Impl->GetActorContext(), data ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDS21,
                                 VDISKP(LogPrefix, "huge blob read"), (Id, key.LogoBlobID()), (Local, local),
                                 (Location, *part), (IsReadable, data.has_value()));

@@ -799,8 +799,8 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
     UpdateLastGoodToWritePosition();
 
     const ui64 magic = format.MagicLogChunk;
-    TSectorRestorator restorator(false, LogErasureDataParts, false, format,
-        PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get());
+    TSectorRestorator restorator(false, LogErasureDataParts, false, format, PCtx.get(), &PDisk->Mon,
+        PDisk->BufferPool.Get(), {});
     restorator.Restore(sector->GetData(), sector->Offset, magic, LastNonce, Owner);
 
     if (!restorator.GoodSectorFlags) {
@@ -1190,7 +1190,7 @@ bool TLogReader::ProcessNextChunkReference(TSectorData& sector) {
 
     TSectorRestorator restorator(true, 0, format.IsErasureEncodeNextChunkReference(),
             PDisk->Format, PCtx.get(), &PDisk->Mon,
-            PDisk->BufferPool.Get());
+            PDisk->BufferPool.Get(), {});
     restorator.Restore(sector.GetData(), sector.Offset, format.MagicNextLogChunkReference, LastNonce,
             Owner);
     P_LOG(PRI_DEBUG, BPD01, SelfInfo() << " ProcessNextChunkReference");

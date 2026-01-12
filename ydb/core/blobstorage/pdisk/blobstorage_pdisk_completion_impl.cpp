@@ -186,11 +186,11 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
     while (PayloadReadSize > 0) {
         ui32 beginUserOffset = sectorIdx * userSectorSize;
 
-        TSectorRestorator restorator(false, 1, false,
-            format, PDisk->PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get());
+        TSectorRestorator restorator(false, 1, false, format, PDisk->PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get(),
+            Read->BlobId);
         ui64 lastNonce = Min((ui64)0, ChunkNonce - 1);
         restorator.Restore(source, format.Offset(Read->ChunkIdx, sectorIdx), format.MagicDataChunk, lastNonce,
-                Read->Owner);
+            Read->Owner);
 
         const ui32 sectorCount = 1;
         if (restorator.GoodSectorCount != sectorCount) {

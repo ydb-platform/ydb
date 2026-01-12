@@ -8,7 +8,7 @@ namespace NPDisk {
 TSectorRestorator::TSectorRestorator(const bool isTrippleCopy, const ui32 erasureDataParts,
         const bool isErasureEncode, const TDiskFormat &format,
         const TPDiskCtx *pCtx, TPDiskMon *mon,
-        TBufferPool *bufferPool)
+        TBufferPool *bufferPool, TLogoBlobID blobId)
     : IsTrippleCopy(isTrippleCopy)
     , ErasureDataParts(erasureDataParts)
     , LastGoodIdx((ui32)-1)
@@ -21,12 +21,13 @@ TSectorRestorator::TSectorRestorator(const bool isTrippleCopy, const ui32 erasur
     , IsErasureEncode(isErasureEncode)
     , Mon(mon)
     , BufferPool(bufferPool)
+    , BlobId(blobId)
 {}
 
 TSectorRestorator::TSectorRestorator(const bool isTrippleCopy, const ui32 erasureDataParts,
-        const bool isErasureEncode, const TDiskFormat &format)
+        const bool isErasureEncode, const TDiskFormat &format, TLogoBlobID blobId)
     : TSectorRestorator(isTrippleCopy, erasureDataParts, isErasureEncode, format, nullptr, nullptr,
-            nullptr)
+            nullptr, blobId)
 {}
 
 void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic, const ui64 lastNonce,
@@ -42,7 +43,7 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
 
         ui64 sectorOffset = offset + (IsTrippleCopy ? 0 : (ui64)i * (ui64)Format.SectorSize);
         ui8 *sectorData = source + i * Format.SectorSize;
-        bool isCrcOk = hasher.CheckSectorHash(sectorOffset, magic, sectorData, Format.SectorSize, sectorFooter->Hash);
+        bool isCrcOk = hasher.CheckSectorHash(sectorOffset, magic, sectorData, Format.SectorSize, sectorFooter->Hash, BlobId);
         if (!isCrcOk) {
             if (PCtx) {
                 P_LOG(PRI_INFO, BPD01, " Bad hash",
@@ -125,14 +126,14 @@ void TSectorRestorator::Restore(ui8 *source, const ui64 offset, const ui64 magic
                 TDataSectorFooter *goodDataFooter = (TDataSectorFooter*)
                     (source + (ErasureDataParts) * Format.SectorSize - sizeof(TDataSectorFooter));
                 sectorFooter->Nonce = goodDataFooter->Nonce + 1;
-                sectorFooter->Hash = hasher.HashSector(sectorOffset, magic, sectorData, Format.SectorSize);
+                sectorFooter->Hash = hasher.HashSector(sectorOffset, magic, sectorData, Format.SectorSize, BlobId);
             } else {
                 // restoring data sector
                 TDataSectorFooter *sectorFooter = (TDataSectorFooter*)
                     (sectorData + Format.SectorSize - sizeof(TDataSectorFooter));
                 // TODO: restore the correct Version value
                 sectorFooter->Version = PDISK_DATA_VERSION;
-                sectorFooter->Hash = hasher.HashSector(sectorOffset, magic, sectorData, Format.SectorSize);
+                sectorFooter->Hash = hasher.HashSector(sectorOffset, magic, sectorData, Format.SectorSize, BlobId);
                 // Increment here because we don't want to count initialy not written parts
                 *Mon->DeviceErasureSectorRestorations += 1;
             }

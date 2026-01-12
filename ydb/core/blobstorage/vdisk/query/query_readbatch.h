@@ -24,10 +24,12 @@ namespace NKikimr {
             TBufferWithGaps Data;
             // was it read successfully?
             bool Success = false;
+            // logo blob id for huge blob
+            TLogoBlobID HugeBlobId;
 
-            TGlueRead(const TDiskPart &part)
+            TGlueRead(const TDiskPart &part, TLogoBlobID hugeBlobId)
                 : Part(part)
-                , Data()
+                , HugeBlobId(hugeBlobId)
             {}
         };
 
@@ -62,6 +64,8 @@ namespace NKikimr {
             // extra found disk items for the case when ActualRead fails by disk corruption
             std::vector<TDiskPart> ExtraDiskItems;
 
+            bool IsHugeBlob = false;
+
         public:
             TString ToString() const {
                 TStringStream str;
@@ -94,6 +98,7 @@ namespace NKikimr {
                 ActualRead.Clear();
                 MemData = {};
                 ExtraDiskItems.clear();
+                IsHugeBlob = false;
             }
 
             // Set NO_DATA
@@ -118,7 +123,7 @@ namespace NKikimr {
             }
 
             // Update with disk data
-            void UpdateWithDiskItem(const TLogoBlobID &id, void *cookie, const TDiskPart &actualRead) {
+            void UpdateWithDiskItem(const TLogoBlobID &id, void *cookie, const TDiskPart &actualRead, bool isHugeBlob) {
                 if (Type == ET_SETDISK) { // add backup copy of data for the case when main reads as CORRUPTED
                     ExtraDiskItems.push_back(ActualRead);
                 }
@@ -128,6 +133,7 @@ namespace NKikimr {
                 Cookie = cookie;
                 ////// set disk
                 ActualRead = actualRead;
+                IsHugeBlob = isHugeBlob;
             }
 
             // Update with mem data
@@ -306,7 +312,7 @@ namespace NKikimr {
         // shift != 0 and size == 0   =>   read from shift and up to the end
 
         // We have data on disk
-        void operator () (const TDiskPart &data, NMatrix::TVectorType parts);
+        void operator () (const TDiskPart &data, NMatrix::TVectorType parts, bool isHugeBlob);
         // We have diskBlob in memory
         void operator () (const TDiskBlob &diskBlob);
         // Finish data traverse for a single key

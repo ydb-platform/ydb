@@ -251,7 +251,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
                     return NQuery::TTxSettings::SnapshotRW();
                 }
                 throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable, snapshot";
-            }).DefaultValue(NQuery::TTxSettings::SerializableRW());
+            }).DefaultValue("serializable");
 
     auto simulateOpt = config.Opts->AddLongOption(
         "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")

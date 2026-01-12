@@ -116,7 +116,7 @@ class Workload():
 
         for writer in writers:
             writer.close(flush=False)
-        
+
         logger.info("Workload::write_to_input_topic end")
 
     def read_from_output_topic(self):

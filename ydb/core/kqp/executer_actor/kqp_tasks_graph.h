@@ -212,7 +212,7 @@ struct TGraphMeta {
     TMaybe<ui64> LockTxId;
     ui64 TxId = 0;
     ui32 LockNodeId = 0;
-    NKikimrKqp::EIsolationLevel RequestIsolationLevel;
+    NKqpProto::EIsolationLevel RequestIsolationLevel;
     TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
@@ -238,6 +238,8 @@ struct TGraphMeta {
     bool ShardsResolved = false;
     TMap<ui64 /* shardId */, ui64 /* nodeId */> ShardIdToNodeId;
     TMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> ShardsOnNode;
+
+    ui32 DqChannelVersion = 1u;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;

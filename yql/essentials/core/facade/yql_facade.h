@@ -136,6 +136,8 @@ public:
     bool ParseSql();
     bool ParseSql(const NSQLTranslation::TTranslationSettings& settings);
 
+    TStatus TestPartialTypecheck();
+
     bool Compile(const TString& username, bool skipLibraries = false);
 
     TStatus Discover(const TString& username);

@@ -101,14 +101,22 @@ namespace {
         }
     }
 
-    TVector<TString> Tokenize(const TString& text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer) {
+    TVector<TString> Tokenize(const TString& text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer, const std::optional<wchar32> ignoredDelimiter) {
         TVector<TString> tokens;
         switch (tokenizer) {
             case Ydb::Table::FulltextIndexSettings::WHITESPACE:
-                Tokenize(text, tokens, IsWhitespace);
+                Tokenize(text, tokens, [ignoredDelimiter](const wchar32 c) {
+                    return ignoredDelimiter.has_value() && ignoredDelimiter.value() == c
+                        ? false
+                        : IsWhitespace(c);
+                });
                 break;
             case Ydb::Table::FulltextIndexSettings::STANDARD:
-                Tokenize(text, tokens, IsNonStandard);
+                Tokenize(text, tokens, [ignoredDelimiter](const wchar32 c) {
+                    return ignoredDelimiter.has_value() && ignoredDelimiter.value() == c
+                        ? false
+                        : IsNonStandard(c);
+                });
                 break;
             case Ydb::Table::FulltextIndexSettings::KEYWORD:
                 if (UTF8Detect(text) != NotUTF8) {
@@ -275,8 +283,18 @@ namespace {
     }
 }
 
-TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings) {
-    TVector<TString> tokens = Tokenize(text, settings.tokenizer());
+Ydb::Table::FulltextIndexSettings::Analyzers GetAnalyzersForQuery(Ydb::Table::FulltextIndexSettings::Analyzers analyzers) {
+    // Prevent splitting tokens into ngrams
+    analyzers.set_use_filter_ngram(false);
+    analyzers.set_use_filter_edge_ngram(false);
+    // Prevent dropping patterns by length
+    analyzers.set_use_filter_length(false);
+
+    return analyzers;
+}
+
+TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, const std::optional<wchar32> ignoredDelimiter) {
+    TVector<TString> tokens = Tokenize(text, settings.tokenizer(), ignoredDelimiter);
 
     if (settings.use_filter_lowercase()) {
         for (auto i : xrange(tokens.size())) {
@@ -328,6 +346,36 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
     }
 
     return tokens;
+}
+
+TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::FulltextIndexSettings::Analyzers& settings) {
+    const bool expectWildcard = settings.use_filter_ngram() || settings.use_filter_edge_ngram();
+    const bool edge = settings.use_filter_edge_ngram();
+
+    if (!expectWildcard) {
+        return Analyze(query, settings);
+    }
+
+    const Ydb::Table::FulltextIndexSettings::Analyzers analyzersForQuery = GetAnalyzersForQuery(settings);
+
+    TVector<TString> searchTerms;
+    for (const TString& pattern : Analyze(query, analyzersForQuery, '*')) {
+        for (const auto& term : StringSplitter(pattern).Split('*')) {
+            const TString token(term.Token());
+            const i64 tokenLength = GetLengthUTF8(token);
+            if (tokenLength == 0 || analyzersForQuery.filter_ngram_min_length() > tokenLength) {
+                continue;
+            }
+
+            const size_t upper = MIN(analyzersForQuery.filter_ngram_max_length(), tokenLength);
+            BuildNgrams(token, upper, upper, edge, searchTerms);
+
+            if (edge) {
+                break;
+            }
+        }
+    }
+    return searchTerms;
 }
 
 bool ValidateColumnsMatches(const NProtoBuf::RepeatedPtrField<TString>& columns, const Ydb::Table::FulltextIndexSettings& settings, TString& error) {

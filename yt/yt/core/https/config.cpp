@@ -15,13 +15,16 @@ void TServerCredentialsConfig::Register(TRegistrar registrar)
 void TServerConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("credentials", &TThis::Credentials);
+
+    registrar.Preprocessor([] (TThis* config) {
+        config->ServerName = "Https";
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void TClientCredentialsConfig::Register(TRegistrar /*registrar*/)
-{
-}
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,6 +32,8 @@ void TClientConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("credentials", &TThis::Credentials)
         .Optional();
+    registrar.Parameter("allow_http", &TThis::AllowHTTP)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

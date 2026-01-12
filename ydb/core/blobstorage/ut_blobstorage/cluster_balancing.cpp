@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
 
         bool seenParameters = false;
 
-        auto catchReassigns = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) { 
+        auto catchReassigns = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
                 const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
                 for (const auto& command : request.GetCommand()) {
@@ -145,8 +145,8 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
         env.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType) {
                 const auto& response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.GetResponse();
-                    
-                const auto& status = response.GetStatus(0);                
+
+                const auto& status = response.GetStatus(0);
 
                 UNIT_ASSERT_VALUES_EQUAL(0, status.ReassignedItemSize());
             }

@@ -1083,11 +1083,6 @@ public:
             return true;
         }
 
-        if (tableDesc.Metadata->Kind == EKikimrTableKind::Datashard && mode == "analyze") {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << static_cast<TStringBuf>(mode) << " is not supported for oltp tables."));
-            return true;
-        }
-
         return false;
     }
 

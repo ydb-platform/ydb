@@ -272,5 +272,7 @@ private:
     bool FastWrite = true;
 };
 
+TVector<TBatch> GetUnpackedBatches(const TKey& key, const TString& blob);
+
 }// NPQ
 }// NKikimr

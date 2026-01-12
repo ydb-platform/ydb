@@ -1746,9 +1746,10 @@ public:
     }
 
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx) override
+        const IDqTaskRunnerExecutionContext& execCtx, TDqComputeActorWatermarks* watermarksTracker) override
     {
         Y_UNUSED(execCtx);
+        Y_UNUSED(watermarksTracker);
         Y_ABORT_UNLESS(Task.GetId() == task.GetId());
         try {
             auto result = Delegate->Prepare(memoryLimits);
@@ -1817,6 +1818,10 @@ public:
 
     std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 /*inputIndex*/) override {
         return {};
+    }
+
+    TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 /*inputId*/) override {
+        return nullptr;
     }
 
     std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 /*outputIndex*/) override {

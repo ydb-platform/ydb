@@ -58,4 +58,75 @@ namespace NKikimr::NSqsTopic {
         }
         return res;
     }
+
+    TVector<std::pair<TString, TString>> GetMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumerName,
+        const TString& method,
+        TVector<std::pair<TString, TString>>&& labels
+    ) {
+        TVector<std::pair<TString, TString>> common{
+            {"database", databasePath},
+            {"method", method},
+            {"topic", topicPath},
+            {"consumer", consumerName},
+        };
+        std::move(labels.begin(), labels.end(), std::back_inserter(common));
+        return common;
+    }
+
+    TVector<std::pair<TString, TString>> GetRequestMessageCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    ) {
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            {
+                {"name", "api.sqs.request.message_count"}
+            }
+        );
+    }
+
+    TVector<std::pair<TString, TString>> GetResponseMessageCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method,
+        const TString& status
+    ) {
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            {
+                {"name", "api.sqs.response.message_count"},
+                {"status", status}
+            }
+        );
+    }
+
+    TVector<std::pair<TString, TString>> GetResponseEmptyCountMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    ) {
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            {
+                {"name", "api.sqs.response.empty_count"}
+            }
+        );
+    }
+
 } // namespace NKikimr::NSqsTopic

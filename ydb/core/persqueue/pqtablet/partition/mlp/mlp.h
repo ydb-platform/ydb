@@ -32,6 +32,8 @@ struct TMetrics {
 
     // stores how many times messages were locked
     TTabletPercentileCounter MessageLocks;
+    // stores the duration of message locking
+    TTabletPercentileCounter MessageLockingDuration;
 };
 
 // MLP не работает если включена компактифкация по ключу!!! (иначе не понятно как прореживать скомпакченные значения)

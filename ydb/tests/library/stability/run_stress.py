@@ -1,3 +1,4 @@
+import json
 import traceback
 import uuid
 import allure
@@ -24,6 +25,8 @@ class StressRunExecutor:
     def __init__(self, ignore_stderr_content, event_process_mode):
         self._ignore_stderr_content = ignore_stderr_content
         self.event_process_mode = event_process_mode
+        self.run_counter_lock = threading.Lock()
+        self.run_counter = 0
 
     def __substitute_variables_in_template(
         self,
@@ -69,6 +72,7 @@ class StressRunExecutor:
             "{run_id}": run_id,
             "{timestamp}": str(timestamp),
             "{uuid}": short_uuid,
+            "{global_run_id}": str(self.run_counter),
         }
 
         # Perform substitutions
@@ -150,8 +154,6 @@ class StressRunExecutor:
                     node_result.stress_name = stress_name
                     node_result.node = node['node']
                     node_result.host = node_host
-                    node_result.successful_runs = 0
-                    node_result.total_runs = 0
                     node_result.runs = []
                     start_time = time_module.time()
                     node_result.start_time = time_module.time()
@@ -168,6 +170,8 @@ class StressRunExecutor:
                         f"Execute workload {stress_name} on {node_host}"
                     ):
                         while time_module.time() < planned_end_time:
+                            with self.run_counter_lock:
+                                self.run_counter += 1
 
                             # Use iter_N format without adding iter_ prefix in _execute_single_workload_run
                             # since it will be added there
@@ -218,10 +222,17 @@ class StressRunExecutor:
                                 )
                             else:
                                 logging.warning(
-                                    f"Run {current_iteration} on {node_host} failed")
+                                    f"Run {current_iteration} on {node_host} failed. Continuing after 120s delay")
+                                time_module.sleep(120)
                             current_iteration += 1
                             run_duration = planned_end_time - time_module.time()
-                    node_result.end_time = time_module.time()
+
+                        node_result.end_time = time_module.time()
+                        allure.attach(
+                            json.dumps(node_result.to_dict(), indent=2),
+                            "Execution summary",
+                            attachment_type=allure.attachment_type.JSON,
+                        )
                     logging.info(
                         f"Execution on {node_host} completed: "
                         f"{node_result.get_successful_runs()}/{node_result.get_total_runs()} successful"
@@ -337,99 +348,43 @@ class StressRunExecutor:
         run_start_time = time_module.time()
 
         try:
-            with allure.step(f"Execute {run_name}"):
-                allure.attach(
-                    f"Run config: {run_config}",
-                    "Run Info",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
-                allure.attach(
-                    command_args,
-                    "Command Arguments",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
-                allure.attach(
-                    f"Target host: {target_node.host}",
-                    "Execution Target",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
+            # Disable buffering to ensure output capture
+            event_prefix = ''
+            if self.event_process_mode is not None:
+                event_prefix = f'export YDB_STRESS_UTIL_EVENT_PROCESS_MODE={self.event_process_mode};'
+            cmd = f"{event_prefix}stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
 
-                # Build and execute command
-                with allure.step("Execute workload command"):
-                    # Disable buffering to ensure output capture
-                    event_prefix = ''
-                    if self.event_process_mode is not None:
-                        event_prefix = f'export YDB_STRESS_UTIL_EVENT_PROCESS_MODE={self.event_process_mode};'
-                    cmd = f"{event_prefix}stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
+            run_timeout = (
+                run_config["duration"] + 600
+            )  # Add buffer for completion
 
-                    run_timeout = (
-                        run_config["duration"] + 600
-                    )  # Add buffer for completion
+            execution_result = execute_command(
+                target_node.host,
+                cmd,
+                raise_on_error=False,
+                timeout=int(run_timeout),
+                raise_on_timeout=False,
+            )
 
-                    allure.attach(
-                        cmd, "Full Command", attachment_type=allure.attachment_type.TEXT
-                    )
-                    allure.attach(
-                        f"Timeout: {int(run_timeout)}s",
-                        "Execution Timeout",
-                        attachment_type=allure.attachment_type.TEXT,
-                    )
+            stdout = execution_result.stdout
+            stderr = execution_result.stderr
+            is_timeout = execution_result.is_timeout
 
-                    execution_result = execute_command(
-                        target_node.host,
-                        cmd,
-                        raise_on_error=False,
-                        timeout=int(run_timeout),
-                        raise_on_timeout=False,
-                    )
+            if self._ignore_stderr_content:
+                success = not is_timeout and execution_result.exit_code == 0
+            else:
+                # success=True only if stderr is empty (excluding SSH
+                # warnings) AND no timeout
+                success = not bool(stderr.strip()) and not is_timeout and execution_result.exit_code == 0
 
-                    stdout = execution_result.stdout
-                    stderr = execution_result.stderr
-                    is_timeout = execution_result.is_timeout
+            execution_time = time_module.time() - run_start_time
 
-                    # Attach command execution results
-                    if stdout:
-                        allure.attach(
-                            stdout,
-                            "Command Stdout",
-                            attachment_type=allure.attachment_type.TEXT,
-                        )
-                    else:
-                        allure.attach(
-                            "(empty)",
-                            "Command Stdout",
-                            attachment_type=allure.attachment_type.TEXT,
-                        )
+            logging.info(
+                f"{run_name} completed in {
+                    execution_time: .1f}s, success: {success}, timeout: {is_timeout}"
+            )
 
-                    if stderr:
-                        allure.attach(
-                            stderr,
-                            "Command Stderr",
-                            attachment_type=allure.attachment_type.TEXT,
-                        )
-                    else:
-                        allure.attach(
-                            "(empty)",
-                            "Command Stderr",
-                            attachment_type=allure.attachment_type.TEXT,
-                        )
-
-                    if self._ignore_stderr_content:
-                        success = not is_timeout and execution_result.exit_code == 0
-                    else:
-                        # success=True only if stderr is empty (excluding SSH
-                        # warnings) AND no timeout
-                        success = not bool(stderr.strip()) and not is_timeout and execution_result.exit_code == 0
-
-                    execution_time = time_module.time() - run_start_time
-
-                    logging.info(
-                        f"{run_name} completed in {
-                            execution_time: .1f}s, success: {success}, timeout: {is_timeout}"
-                    )
-
-                    return success, execution_time, stdout, stderr, is_timeout
-
+            return success, execution_time, stdout, stderr, is_timeout
         except Exception as e:
             execution_time = time_module.time() - run_start_time
             error_msg = f"Exception in {run_name}: {e}"

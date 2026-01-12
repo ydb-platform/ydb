@@ -35,44 +35,24 @@ class TKqpRewriteSelectTransformer : public TSyncTransformerBase {
 TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
                                                              TTypeAnnotationContext &typeCtx);
 
-class TKqpNewRBOTransformer : public TSyncTransformerBase {
-  public:
-    TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
-                          TTypeAnnotationContext &typeCtx,
-                          TAutoPtr<IGraphTransformer> rboTypeAnnTransformer, 
-                          TAutoPtr<IGraphTransformer> typeAnnTransformer, 
-                          TAutoPtr<IGraphTransformer> peephole,
-                          const NMiniKQL::IFunctionRegistry& funcRegistry) :
-        TypeCtx(typeCtx), 
-        KqpCtx(*kqpCtx),
-          RBO(
-              { std::make_shared<TRuleBasedStage>(RuleStage1),
-                std::make_shared<TRenameStage>(),
-                std::make_shared<TConstantFoldingStage>(),
-                std::make_shared<TRuleBasedStage>(RuleStage2), 
-                std::make_shared<TRuleBasedStage>(RuleStage3),
-                std::make_shared<TRuleBasedStage>(RuleStage4),
-                std::make_shared<TRuleBasedStage>(RuleStage5),
-                std::make_shared<TRuleBasedStage>(RuleStage6)
-              },
-              kqpCtx, typeCtx, rboTypeAnnTransformer, typeAnnTransformer, peephole, funcRegistry) {}
-
+class TKqpNewRBOTransformer: public TSyncTransformerBase {
+public:
+    TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
+                          TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, const NMiniKQL::IFunctionRegistry& funcRegistry);
     // Main method of the transformer
-    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) final;
+    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
     void Rewind() override;
 
-  private:
-    TTypeAnnotationContext &TypeCtx;
-    TKqpOptimizeContext &KqpCtx;
+private:
+    TTypeAnnotationContext& TypeCtx;
+    TKqpOptimizeContext& KqpCtx;
     TRuleBasedOptimizer RBO;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
-                                                      TTypeAnnotationContext &typeCtx,
-                                                      TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
-                                                      TAutoPtr<IGraphTransformer> typeAnnTransformer,
-                                                      TAutoPtr<IGraphTransformer> peepholeTransformer,
-                                                      const NMiniKQL::IFunctionRegistry& funcRegistry);
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
+                                                       TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
+                                                       TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer,
+                                                       const NMiniKQL::IFunctionRegistry& funcRegistry);
 
 class TKqpRBOCleanupTransformer : public TSyncTransformerBase {
   public:

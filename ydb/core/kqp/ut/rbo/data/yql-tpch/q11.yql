@@ -1,0 +1,39 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+-- ignore runonopt plan diff
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    ps_partkey,
+    Sum(ps_supplycost * ps_availqty) AS value
+FROM
+    `/Root/partsupp` as partsupp
+,
+    `/Root/supplier` as supplier
+,
+    `/Root/nation` as nation
+WHERE
+    ps_suppkey == s_suppkey
+    AND s_nationkey == n_nationkey
+    AND n_name == 'GERMANY'
+GROUP BY
+    ps_partkey
+HAVING
+    Sum(ps_supplycost * ps_availqty) > (
+        SELECT
+            Sum(ps_supplycost * ps_availqty) * 0.0001
+        FROM
+            `/Root/partsupp` as partsupp
+        ,
+            `/Root/supplier` as supplier
+        ,
+            `/Root/nation` as nation
+        WHERE
+            ps_suppkey == s_suppkey
+            AND s_nationkey == n_nationkey
+            AND n_name == 'GERMANY'
+    )
+ORDER BY
+    value DESC
+;

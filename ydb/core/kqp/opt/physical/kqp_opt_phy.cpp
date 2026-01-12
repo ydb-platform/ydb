@@ -45,6 +45,7 @@ public:
         AddHandler(0, &TKqlSequencer::Match, HNDL(BuildSequencerStages));
         AddHandler(0, IsSort, HNDL(RemoveRedundantSortOverReadTable));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
+        AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToFullTextIndex));
         AddHandler(0, &TCoTopSort::Match, HNDL(ApplyLimitToOlapReadTable));
         AddHandler(0, &TCoTopSort::Match, HNDL(ApplyVectorTopKToReadTable));
         AddHandler(0, &TDqStage::Match, HNDL(ApplyVectorTopKToStageWithSource));
@@ -261,6 +262,12 @@ protected:
     TMaybeNode<TExprBase> RewriteKqpLookupTable(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteLookupTablePhy(node, ctx, KqpCtx);
         DumpAppliedRule("RewriteKqpLookupTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> ApplyLimitToFullTextIndex(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpApplyLimitToFullTextIndex(node, ctx, KqpCtx);
+        DumpAppliedRule("ApplyLimitToFullTextIndex", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

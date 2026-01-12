@@ -31,6 +31,9 @@ TString QuoteJsonItem(TStringBuf item) {
 }
 
 TJsonPath ToJsonPath(TStringBuf path) {
+    if (!path.StartsWith('"')) {
+        return TString("$.") + QuoteJsonItem(path);
+    }
     return TString("$.") + path;
 }
 

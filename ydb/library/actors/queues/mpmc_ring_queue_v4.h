@@ -33,7 +33,7 @@ struct TMPMCRingQueueV4 {
 
     static constexpr ui32 MaxSize = 1 << MaxSizeBits;
 
-    struct alignas(ui64) TSlot {
+    struct TSlot {
         static constexpr ui64 EmptyBit = 1ull << 63;
         static constexpr ui64 OvertakenBit = 1ull << 62;
         ui64 Value = 0;
@@ -69,18 +69,6 @@ struct TMPMCRingQueueV4 {
 
     static constexpr ui32 ConvertIdx(ui32 idx) {
         idx = idx % MaxSize;
-        if constexpr (MaxSize < 0x100) {
-            return idx;
-        }
-        // 0, 16, 32, .., 240,
-        // 1, 17, 33, .., 241,
-        // ...
-        // 15, 31, 63, ..., 255,
-        return (idx & ~0xff) | ((idx & 0xf) << 4) | ((idx >> 4) & 0xf);
-    }
-
-    static constexpr ui32 ConvertOvertakenIdx(ui32 idx) {
-        idx = idx % 4096;
         if constexpr (MaxSize < 0x100) {
             return idx;
         }
@@ -148,9 +136,6 @@ struct TMPMCRingQueueV4 {
         }
     }
 
-    struct TOverreadedSlot {};
-    struct TFailedToGetSlot {};
-
     ui32 TryPopFromOvertakenSlots() {
         return OvertakenQueue.Pop(ReadRevolvingCounter.fetch_add(1, std::memory_order_relaxed));
     }
@@ -182,42 +167,27 @@ struct TMPMCRingQueueV4 {
             }
         }
 
-        for (ui32 it = 0;; ++it) {
-            OBSERVE_WITH_CONDITION(LongFastPop10It, it == 10);
-            OBSERVE_WITH_CONDITION(LongFastPop100It, it == 100);
-            OBSERVE_WITH_CONDITION(LongFastPop1000It, it == 1000);
+        ui64 currentHead = Head.fetch_add(1, std::memory_order_relaxed);
+        OBSERVE(AfterReserveSlotInFastPop);
 
-            ui64 currentHead = Head.fetch_add(1, std::memory_order_relaxed);
-            OBSERVE(AfterReserveSlotInFastPop);
+        ui64 slotIdx = ConvertIdx(currentHead);
+        std::atomic<ui64> &currentSlot = Buffer[slotIdx];
 
-            ui64 slotIdx = ConvertIdx(currentHead);
-            std::atomic<ui64> &currentSlot = Buffer[slotIdx];
+        ui64 expected = currentSlot.load(std::memory_order_relaxed);
+        TSlot slot = TSlot::Recognise(expected);
 
-            ui64 expected = currentSlot.load(std::memory_order_relaxed);
-            TSlot slot = TSlot::Recognise(expected);
-
-            while (!slot.IsEmpty || !slot.IsOvertaken) {
-                if (slot.IsEmpty) {
-                    if (currentSlot.compare_exchange_weak(expected, TSlot::MakeOvertaken())) {
-                        break;
-                    }
-                } else {
-                    if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty())) {
-                        OBSERVE(SuccessFastPop);
-                        return slot.Value;
-                    }
+        while (!slot.IsEmpty || !slot.IsOvertaken) {
+            if (slot.IsEmpty) {
+                if (currentSlot.compare_exchange_weak(expected, TSlot::MakeOvertaken())) {
+                    break;
                 }
-                slot = TSlot::Recognise(expected);
+            } else {
+                if (currentSlot.compare_exchange_weak(expected, TSlot::MakeEmpty())) {
+                    OBSERVE(SuccessFastPop);
+                    return slot.Value;
+                }
             }
-
-            ui64 currentTail = Tail.load(std::memory_order_acquire);
-            if (currentTail <= currentHead) {
-                OBSERVE(FailedFastPop);
-                return std::nullopt;
-            }
-
-            OBSERVE(FailedFastPopAttempt);
-            SpinLockPause();
+            slot = TSlot::Recognise(expected);
         }
 
         return std::nullopt;

@@ -1123,7 +1123,13 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
 {
     ui32 curWrites = 0;
     for (ui32 i = 0; i < request->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
-        auto key = TKey::FromString(request->Record.GetCmdWrite(i).GetKey());
+        const auto& k = request->Record.GetCmdWrite(i).GetKey();
+        if ((k.front() != TKeyPrefix::TypeTmpData) &&
+            (k.front() != TKeyPrefix::ServiceTypeTmpData)) {
+            continue;
+        }
+        // оптимизация. можно не создавать ключ. достаточно проверить первый символ и перевести с учётом типа партиции
+        auto key = TKey::FromString(k);
         if (key.GetType() == TKeyPrefix::TypeTmpData) {
             key.SetType(TKeyPrefix::TypeData);
             request->Record.MutableCmdWrite(i)->SetKey(key.Data(), key.Size());
@@ -1592,8 +1598,15 @@ bool TPartition::RequestBlobQuota()
     }
 
     size_t quotaSize = 0;
+    size_t deduplicationIdQuotaSize = 0;
     for (auto& r : PendingRequests) {
         quotaSize += r.GetWriteSize();
+        if (r.IsWrite()) {
+            auto& write = r.GetWrite();
+            if (write.Msg.MessageDeduplicationId && write.Msg.PartNo == 0) {
+                ++deduplicationIdQuotaSize;
+            }
+        }
     }
 
     if (!quotaSize) {
@@ -1606,7 +1619,7 @@ bool TPartition::RequestBlobQuota()
     }
 
     RemovePendingRequests(QuotaWaitingRequests);
-    RequestBlobQuota(quotaSize);
+    RequestBlobQuota(quotaSize, deduplicationIdQuotaSize);
 
     return true;
 }
@@ -1797,7 +1810,7 @@ bool TPartition::WaitingForSubDomainQuota(const ui64 withSize) const {
     return UserDataSize() + withSize > ReserveSize();
 }
 
-void TPartition::RequestBlobQuota(size_t quotaSize)
+void TPartition::RequestBlobQuota(size_t quotaSize, size_t deduplicationIdQuotaSize)
 {
     LOG_T("TPartition::RequestBlobQuota.");
 
@@ -1805,6 +1818,7 @@ void TPartition::RequestBlobQuota(size_t quotaSize)
 
     TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++;
     BlobQuotaSize = quotaSize;
+    DeduplicationIdQuotaSize = deduplicationIdQuotaSize;
     RequestQuotaForWriteBlobRequest(quotaSize, TopicQuotaRequestCookie);
 }
 
@@ -1815,7 +1829,7 @@ void TPartition::ConsumeBlobQuota()
     }
 
     PQ_ENSURE(TopicQuotaRequestCookie != 0);
-    Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(BlobQuotaSize, TopicQuotaRequestCookie, {}));
+    Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(BlobQuotaSize, DeduplicationIdQuotaSize, TopicQuotaRequestCookie, {}));
 }
 
 } // namespace NKikimr::NPQ

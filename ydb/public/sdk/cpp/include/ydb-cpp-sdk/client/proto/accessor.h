@@ -74,8 +74,8 @@ public:
     static NExport::TExportToS3Settings::EStorageClass FromProto(Ydb::Export::ExportToS3Settings::StorageClass value);
     static NExport::EExportProgress FromProto(Ydb::Export::ExportProgress::Progress value);
     static NImport::EImportProgress FromProto(Ydb::Import::ImportProgress::Progress value);
-    static Ydb::Import::ImportFromS3Settings::IndexFillingMode GetProto(NImport::EIndexFillingMode value);
-    static NImport::EIndexFillingMode FromProto(Ydb::Import::ImportFromS3Settings::IndexFillingMode value);
+    static Ydb::Import::ImportFromS3Settings::IndexPopulationMode GetProto(NImport::EIndexPopulationMode value);
+    static NImport::EIndexPopulationMode FromProto(Ydb::Import::ImportFromS3Settings::IndexPopulationMode value);
 };
 
 } // namespace NYdb

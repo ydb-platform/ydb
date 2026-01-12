@@ -52,10 +52,13 @@ public:
         AddHandler(0, &TKqlDeleteRows::Match, HNDL(DeleteOverLookup));
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
         AddHandler(0, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
+        AddHandler(0, &TCoTopSort::Match, HNDL(RewriteFlatMapOverFullTextRelevance));
+
         AddHandler(0, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
         AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
         AddHandler(0, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<false>));
         AddHandler(0, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
+        AddHandler(0, &TKqlReadTableFullTextIndex::Match, HNDL(ApplyExtractMembersToReadTable<false>));
         AddHandler(0, &TCoTop::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(UnorderedOverDqReadWrap));
@@ -82,6 +85,7 @@ public:
 
         AddHandler(3, &TKqlLookupTableBase::Match, HNDL(RewriteLookupTable));
 
+        AddHandler(4, &TKqlReadTableFullTextIndex::Match, HNDL(ApplyExtractMembersToReadTable<true>));
         AddHandler(4, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
         AddHandler(4, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
         AddHandler(4, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
@@ -224,6 +228,12 @@ protected:
     TMaybeNode<TExprBase> RewriteTopSortOverFlatMap(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteTopSortOverFlatMap(node, ctx);
         DumpAppliedRule("RewriteTopSortOverFlatMap", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteFlatMapOverFullTextRelevance(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        TExprBase output = KqpRewriteFlatMapOverFullTextRelevance(node, ctx, KqpCtx, *getParents());
+        DumpAppliedRule("RewriteFlatMapOverFullTextRelevance", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

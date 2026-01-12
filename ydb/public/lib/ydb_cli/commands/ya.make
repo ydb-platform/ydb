@@ -45,6 +45,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
+    contrib/restricted/patched/replxx
     library/cpp/histogram/hdr
     library/cpp/protobuf/json
     library/cpp/regex/pcre
@@ -54,13 +55,13 @@ PEERDIR(
     ydb/library/formats/arrow/csv/table
     ydb/library/workload
     ydb/library/yaml_config/public
+    ydb/library/yverify_stream
     ydb/public/lib/stat_visualization
     ydb/public/lib/ydb_cli/commands/command_base
     ydb/public/lib/ydb_cli/commands/interactive
     ydb/public/lib/ydb_cli/commands/sdk_core_access
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
-    ydb/public/lib/ydb_cli/commands/sqs_workload
     ydb/public/lib/ydb_cli/commands/ydb_discovery
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump
@@ -85,6 +86,13 @@ PEERDIR(
     yql/essentials/public/decimal
 )
 
+IF (NOT OS_WINDOWS)
+PEERDIR(
+    ydb/core/base
+    ydb/public/lib/ydb_cli/commands/sqs_workload
+)
+ENDIF()
+
 GENERATE_ENUM_SERIALIZATION(ydb_ping.h)
 GENERATE_ENUM_SERIALIZATION(ydb_latency.h)
 
@@ -95,7 +103,12 @@ RECURSE(
     interactive
     sdk_core_access
     topic_workload
-    sqs_workload
     transfer_workload
     ydb_discovery
 )
+
+IF (NOT OS_WINDOWS)
+RECURSE(
+    sqs_workload
+)
+ENDIF()

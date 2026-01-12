@@ -84,7 +84,9 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
 
     results = []
     for result in report.get("results", []):
-        if result.get("type") != "test":
+        # Filtering (suite, build, configure) is done by transform_build_results.py
+        status = result.get("status")
+        if not status:
             continue
         
         suite_folder = result.get("path", "")
@@ -105,11 +107,12 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
         duration = result.get("duration", 0)
         
         # Determine status
+        # Status normalization (OK->PASSED, NOT_LAUNCHED->SKIPPED, mute->MUTE) is done by transform_build_results.py
         status_str = result.get("status", "OK")
         error_type = result.get("error_type", "")
         status_description = result.get("rich-snippet", "")  # Already cleaned by transform_build_results.py
         
-        if result.get("muted", False):
+        if status_str == "MUTE":
             status = "mute"
         elif status_str == "FAILED":
             status = "failure"

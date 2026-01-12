@@ -49,6 +49,7 @@ private:
     std::atomic<float> MinElapsedCpu = 0;
 
     ISharedPool* Shared = nullptr;
+    bool United = false;
     TSharedInfo SharedInfo;
 
     TWaitingInfo WaitingInfo;
@@ -192,7 +193,7 @@ void THarmonizer::ProcessNeedyState() {
         float foreignElapsed = CpuConsumption.PoolForeignConsumption[needyPoolIdx].Elapsed;
         float extraForeignElapsed = std::max(0.0f, foreignElapsed - std::max(0, SharedInfo.ForeignThreadsAllowed[needyPoolIdx] - 1));
         bool allowedNextThreadCount = pool.GetFullThreadCount() + 1 <= pool.MaxFullThreadCount;
-        if (ProcessingBudget > 0.0 && ProcessingBudget + extraForeignElapsed >= 1.0 && allowedNextThreadCount) {
+        if (!United && ProcessingBudget > 0.0 && ProcessingBudget + extraForeignElapsed >= 1.0 && allowedNextThreadCount) {
             pool.IncreasingThreadsByNeedyState.fetch_add(1, std::memory_order_relaxed);
             CpuConsumption.IsNeedyByPool[needyPoolIdx] = false;
             CpuConsumption.AdditionalThreads++;
@@ -215,6 +216,10 @@ void THarmonizer::ProcessNeedyState() {
 
 void THarmonizer::ProcessExchange() {
     HARMONIZER_DEBUG_PRINT("ProcessExchange");
+    if (United) {
+        HARMONIZER_DEBUG_PRINT("United pool doesn't need to exchange threads");
+        return;
+    }
     if (CpuConsumption.NeedyPools.empty()) {
         HARMONIZER_DEBUG_PRINT("No needy pools");
         return;
@@ -374,6 +379,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             "potential max thread count without shared cpu: ", potentialMaxThreadCountWithoutSharedCpu,
             "possible max shared quota: ", possibleMaxSharedQuota,
             "thread count: ", fullThreadCount,
+            "max thread count: ", pool.MaxThreadCount,
             "elapsed cpu: ", elapsedCpu,
             "parked cpu: ", parkedCpu,
             "additional threads from lower priority: ", additionalThreadsFromLowerPriority
@@ -522,6 +528,9 @@ THarmonizerStats THarmonizer::GetStats() const {
 
 void THarmonizer::SetSharedPool(ISharedPool* pool) {
     Shared = pool;
+    if (pool) {
+        United = Shared->IsUnited();
+    }
 }
 
 TString TPoolHarmonizerStats::ToString() const {

@@ -650,7 +650,7 @@ TEST(TAsyncLooperTest, CancelInvoker)
         /*asyncStart*/ BIND([=] {
             EXPECT_FALSE(syncFinishStarted.IsSet());
             YT_ASSERT_INVOKER_AFFINITY(invoker);
-            return VoidFuture;
+            return OKFuture;
         }),
         /*syncFinish*/ BIND([=] {
             YT_ASSERT_INVOKER_AFFINITY(invoker);

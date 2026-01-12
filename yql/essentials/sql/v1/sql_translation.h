@@ -304,6 +304,10 @@ protected:
 
     TNodePtr ReturningList(const ::NSQLv1Generated::TRule_returning_columns_list& columns);
 
+    TNodePtr YqlSelectOrLegacy(
+        std::function<TNodeResult()> yqlSelect,
+        std::function<TNodePtr()> legacy);
+
 private:
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);

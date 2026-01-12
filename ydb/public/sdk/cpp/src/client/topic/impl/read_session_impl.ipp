@@ -242,6 +242,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TDecompressionQueueIte
 
 template<bool UseMigrationProtocol>
 TSingleClusterReadSessionImpl<UseMigrationProtocol>::~TSingleClusterReadSessionImpl() {
+    std::lock_guard guard(Lock);
+
     for (auto&& [_, partitionStream] : PartitionStreams) {
         partitionStream->ClearQueue();
     }
@@ -1696,6 +1698,13 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     if (partitionStreamIt == PartitionStreams.end()) {
         return;
     }
+
+    // We should never get an old status:
+    Y_ABORT_UNLESS(
+        partitionStreamIt->second->GetFirstNotReadOffset() <= static_cast<ui64>(msg.read_offset()) &&
+        partitionStreamIt->second->GetFirstNotReadOffset() <= static_cast<ui64>(msg.partition_offsets().end())
+    );
+
     bool pushRes = EventsQueue->PushEvent(partitionStreamIt->second,
                             TReadSessionEvent::TPartitionSessionStatusEvent(
                                 partitionStreamIt->second, msg.committed_offset(),
@@ -3049,7 +3058,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                     ) {
                         const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(data.codec()));
                         std::string decompressed = codecImpl->Decompress(data.data());
-                        data.set_data(TStringType{decompressed});
+                        data.set_data(TStringType{std::move(decompressed)});
                         data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
                     }
                 } else {
@@ -3059,7 +3068,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                     ) {
                         const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
                         std::string decompressed = codecImpl->Decompress(data.data());
-                        data.set_data(TStringType{decompressed});
+                        data.set_data(TStringType{std::move(decompressed)});
                     }
                 }
             } catch (...) {

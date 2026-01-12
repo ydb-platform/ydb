@@ -54,6 +54,13 @@ TMaybe<TString> ArgonHashToNewFormat(const TStringBuf oldArgonHash) {
     return json["salt"].GetString() + "$" + json["hash"].GetString();
 }
 
+TString HashedPasswordFromNewArgonHashFormat(const TString& argonHash) {
+    NJson::TJsonValue hashes;
+    hashes["argon2id"] = argonHash;
+    hashes["version"] = HASHES_JSON_SCHEMA_VERSION;
+    return Base64Encode(NJson::WriteJson(hashes, false));
+}
+
 TMaybe<TString> ArgonHashToOldFormat(const TStringBuf newArgonHash) {
     auto argonSecret = ParseArgonHash(newArgonHash);
     if (argonSecret.Salt.empty() || argonSecret.Hash.empty()) {
@@ -85,10 +92,7 @@ TMaybe<THashes> ConvertHashes(const TString& hash) {
         return Nothing();
     } else { // old format
         if (auto argonHash = ArgonHashToNewFormat(hash)) {
-            NJson::TJsonValue hashes;
-            hashes["argon2id"] = *argonHash;
-            hashes["version"] = HASHES_JSON_SCHEMA_VERSION;
-            return THashes(hash, Base64Encode(NJson::WriteJson(hashes, false)));
+            return THashes(hash, HashedPasswordFromNewArgonHashFormat(*argonHash));
         }
 
         return Nothing();
@@ -132,14 +136,7 @@ NLogin::TScramSecret ParseScramHash(const TStringBuf hash) {
     return { TString(iterationsCount), TString(salt), TString(storedKey), TString(serverKey) };
 }
 
-THashesChecker::THashesChecker() {
-    AvailableHashTypes.reserve(HashesRegistry.size());
-    for (const auto& record : HashesRegistry) {
-        AvailableHashTypes.emplace(record.Name, record);
-    }
-}
-
-THashesChecker::TResult THashesChecker::OldFormatCheck(const TString& hash) const {
+THashesChecker::TResult THashesChecker::OldFormatCheck(const TString& hash) {
     NJson::TJsonValue json;
     if (!NJson::ReadJsonTree(hash, &json)) {
         return {.Success = false, .Error = "Cannot parse hash value; it should be in JSON-format"};
@@ -158,10 +155,10 @@ THashesChecker::TResult THashesChecker::OldFormatCheck(const TString& hash) cons
                 .Error = "There should be strictly three fields here: salt, hash and type"};
     }
 
-    const auto& argonHashDescription = AvailableHashTypes.at("argon2id");
+    const auto& argonHashDescription = HashesRegistry.HashNamesMap.at("argon2id");
     if (json["type"].GetStringRobust() != argonHashDescription.Name) {
         return {.Success = false,
-                .Error = std::format("Field \'type\' must be equal 'argon2id\'")};
+                .Error = std::format("Field 'type' must be equal 'argon2id'")};
     }
 
     const auto& hashField = json["hash"].GetStringRobust();
@@ -171,29 +168,29 @@ THashesChecker::TResult THashesChecker::OldFormatCheck(const TString& hash) cons
     const auto saltSize64 = Base64EncodeBufSize(argonHashDescription.SaltSize) - 1;
 
     if (hashField.size() != hashSize64) {
-        std::string error = std::format("Length of field \'hash\' is {}, but it must be equal {}", hashField.size(), hashSize64);
+        std::string error = std::format("Length of field 'hash' is {}, but it must be equal {}", hashField.size(), hashSize64);
         return {.Success = false, .Error = std::move(error)};
     }
 
     if (saltField.size() != saltSize64) {
-        std::string error = std::format("Length of field \'salt\' is {}, but it must be equal {}", saltField.size(), saltSize64);
+        std::string error = std::format("Length of field 'salt' is {}, but it must be equal {}", saltField.size(), saltSize64);
         return {.Success = false, .Error = std::move(error)};
     }
 
     if (!IsBase64(hashField)) {
         return {.Success = false,
-                .Error = "Field \'hash\' must be in base64 format"};
+                .Error = "Field 'hash' must be in base64 format"};
     }
 
     if (!IsBase64(saltField)) {
         return {.Success = false,
-                .Error = "Field \'salt\' must be in base64 format"};
+                .Error = "Field 'salt' must be in base64 format"};
     }
 
     return {.Success = true};
 };
 
-THashesChecker::TResult THashesChecker::NewFormatCheck(const TString& hashes) const {
+THashesChecker::TResult THashesChecker::NewFormatCheck(const TString& hashes) {
     if (!IsBase64(hashes)) {
         return {.Success = false, .Error = "Cannot parse hashes value; it should be JSON in base64 encoding"};
     }
@@ -220,8 +217,8 @@ THashesChecker::TResult THashesChecker::NewFormatCheck(const TString& hashes) co
     for (const auto& [fieldName, value] : json.GetMap()) {
         if (fieldName == "version") {
             continue;
-        } else if (AvailableHashTypes.contains(fieldName)) {
-            const auto& hashTypeDescription = AvailableHashTypes.at(fieldName);
+        } else if (HashesRegistry.HashNamesMap.contains(fieldName)) {
+            const auto& hashTypeDescription = HashesRegistry.HashNamesMap.at(fieldName);
             if (!value.IsString()) {
                 return {.Success = false, .Error = "Hash '" + fieldName + "' isn't stored in string format"};
             }
@@ -318,14 +315,6 @@ THashesChecker::TResult THashesChecker::NewFormatCheck(const TString& hashes) co
     }
 
     return {.Success = true};
-}
-
-const THashTypeDescription* THashesChecker::GetHashParams(const TString& hashName) const {
-    if (auto it = AvailableHashTypes.find(hashName); it != AvailableHashTypes.end()) {
-        return &it->second;
-    }
-
-    return nullptr;
 }
 
 } // namespace NLogin

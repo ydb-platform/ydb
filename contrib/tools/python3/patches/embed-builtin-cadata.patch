@@ -24,8 +24,8 @@ revision: 5191643
     REVIEW: 861704
     Note: mandatory check (NEED_CHECK) was skipped
 
---- contrib/tools/python3/Lib/ssl.py	(index)
-+++ contrib/tools/python3/Lib/ssl.py	(working tree)
+--- a/Lib/ssl.py	(index)
++++ b/Lib/ssl.py	(working tree)
 @@ -481,6 +481,20 @@ class Purpose(_ASN1Object, _Enum):
      CLIENT_AUTH = '1.3.6.1.5.5.7.3.2'
  

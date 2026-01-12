@@ -7,7 +7,7 @@ import yatest.common
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from ydb.tests.library.stability.utils.collect_errors import create_cluster_issue
-from ydb.tests.library.stability.utils.remote_execution import copy_file, execute_command, deploy_binaries_to_hosts
+from ydb.tests.library.stability.utils.remote_execution import patch_max_suffix, copy_file, execute_command, deploy_binaries_to_hosts
 from ydb.tests.library.stability.utils.upload_results import test_event_report
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.library.stability.utils.results_models import StressUtilDeployResult
@@ -25,6 +25,7 @@ class StressUtilDeployer:
         self.cluster_path = cluster_path
         self.yaml_config = yaml_config
         self.nodes = YdbCluster.get_cluster_nodes()
+        patch_max_suffix(1000000)
 
         # Collect unique hosts and their corresponding nodes
         unique_hosts = set(node.host for node in self.nodes)
@@ -107,7 +108,7 @@ class StressUtilDeployer:
             deploy_futures = []
 
             processed_binaries = defaultdict(list)
-            with ThreadPoolExecutor(max_workers=30) as tpe:
+            with ThreadPoolExecutor(max_workers=10) as tpe:
                 for workload_name, workload_info in workload_params.items():
                     if workload_info['local_path'] in processed_binaries:
                         processed_binaries[workload_info['local_path']].append(workload_name)
@@ -451,7 +452,7 @@ class StressUtilDeployer:
                         # 1. Set execute permissions for nemesis
                         chmod_cmd = "sudo chmod +x /Berkanavt/nemesis/bin/nemesis"
                         chmod_result = execute_command(
-                            host=host, cmd=chmod_cmd, raise_on_error=False, timeout=30
+                            host=host, cmd=chmod_cmd, raise_on_error=False, timeout=90
                         )
 
                         chmod_stderr = (
@@ -600,7 +601,7 @@ class StressUtilDeployer:
                 try:
                     cmd = f"sudo service nemesis {action}"
                     result = execute_command(
-                        host=host, cmd=cmd, raise_on_error=False, timeout=30)
+                        host=host, cmd=cmd, raise_on_error=False, timeout=90)
 
                     stdout = result.stdout if result.stdout else ""
                     stderr = result.stderr if result.stderr else ""
@@ -648,7 +649,7 @@ class StressUtilDeployer:
             error_count = 0
             errors = []
 
-            with ThreadPoolExecutor(max_workers=min(len(unique_hosts), 20)) as executor:
+            with ThreadPoolExecutor(max_workers=min(len(unique_hosts), 10)) as executor:
                 future_to_host = {
                     executor.submit(execute_service_command, host): host
                     for host in unique_hosts
@@ -922,7 +923,7 @@ class StressUtilDeployer:
                 host=host,
                 cmd=f"sudo cp {fallback_source} {remote_path}",
                 raise_on_error=False,
-                timeout=30
+                timeout=90
             )
 
         # Check the result

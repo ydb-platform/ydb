@@ -52,4 +52,13 @@ bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool s
     return true;
 }
 
+namespace NPQ {
+
+bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig, bool isLocalDC) {
+    const auto& quotingConfig = pqConfig.GetQuotingConfig();
+    return isLocalDC && quotingConfig.GetEnableQuoting() && !pqConfig.GetTopicsAreFirstClassCitizen();
+}
+
+}
+
 } // NKikimr

@@ -684,7 +684,7 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 11, 12, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 11, 13, ctx)) {
         return TStatus::Error;
     }
     if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_Output), ctx)) {
@@ -1275,14 +1275,28 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     auto& inputStream = input->ChildRef(TDqPhyHashCombine::idx_Input);
-    if (!EnsureStreamType(*inputStream, ctx)) {
+    if (!inputStream->GetTypeAnn()) {
         return TStatus::Error;
     }
-    auto streamType = inputStream->GetTypeAnn()->Cast<TStreamExprType>();
-    auto multiType = streamType->GetItemType();
+
+    const TTypeAnnotationNode* multiType = nullptr;
+    bool isFlow = false;
+
+    if (inputStream->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+        auto streamType = inputStream->GetTypeAnn()->Cast<TStreamExprType>();
+        multiType = streamType->GetItemType();
+    } else if (inputStream->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
+        auto flowType = inputStream->GetTypeAnn()->Cast<TFlowExprType>();
+        multiType = flowType->GetItemType();
+        isFlow = true;
+    } else {
+        return TStatus::Error;
+    }
+
     if (!EnsureMultiType(inputStream->Pos(), *multiType, ctx)) {
         return TStatus::Error;
     }
+
     auto itemTypes = multiType->Cast<TMultiExprType>()->GetItems();
 
     // key extractor lambda
@@ -1371,7 +1385,12 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
     auto finishOutputType = ctx.MakeType<TMultiExprType>(finishOutputTypes);
 
-    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(finishOutputType));
+    if (isFlow) {
+        input->SetTypeAnn(ctx.MakeType<TFlowExprType>(finishOutputType));
+    } else {
+        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(finishOutputType));
+    }
+
     return TStatus::Ok;
 }
 

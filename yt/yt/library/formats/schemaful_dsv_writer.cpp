@@ -154,9 +154,9 @@ private:
                 }
             }
             WriteRaw(Config_->RecordSeparator);
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
-        TryFlushBuffer(true);
+        MaybeFlushBuffer(/*force*/ true);
     }
 
     void WriteRaw(TStringBuf str)
@@ -195,7 +195,7 @@ public:
     TFuture<void> Close() override
     {
         DoFlushBuffer();
-        return VoidFuture;
+        return OKFuture;
     }
 
     bool Write(TRange<TUnversionedRow> rows) override

@@ -64,7 +64,7 @@ protected:
                 Abort(op, ctx, "Exports to YT are disabled");
                 return false;
             }
-        } else if (backup.HasS3Settings()) {
+        } else if (backup.HasS3Settings() || backup.HasFSSettings()) {
             NBackupRestoreTraits::ECompressionCodec codec;
             if (!TryCodecFromTask(backup, codec)) {
                 Abort(op, ctx, TStringBuilder() << "Unsupported compression codec"

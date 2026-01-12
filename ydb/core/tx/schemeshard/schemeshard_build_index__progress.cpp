@@ -26,7 +26,8 @@ namespace NSchemeShard {
 ui64 gVectorIndexSeed = 0;
 
 // return count, parts, step
-static std::tuple<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId> ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo) {
+static std::tuple<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId>
+    ComputeKMeansBoundaries(const NSchemeShard::TTableInfo& tableInfo, const TIndexBuildInfo& buildInfo, ui64 maxShardsInPath) {
     const auto& kmeans = buildInfo.KMeans;
     Y_ENSURE(kmeans.K != 0);
     const auto count = kmeans.ChildCount();
@@ -36,7 +37,7 @@ static std::tuple<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClust
     if (!buildInfo.KMeans.NeedsAnotherLevel() || count <= 1 || shards <= 1) {
         return {1, 1, 1};
     }
-    for (; 2 * shards <= parts || parts > 32768; parts = (parts + 1) / 2) {
+    for (; 2 * shards <= parts || parts > maxShardsInPath; parts = (parts + 1) / 2) {
         step *= 2;
     }
     return {count, parts, step};
@@ -284,6 +285,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     modifyScheme.SetInternal(true);
 
     auto path = TPath::Init(buildInfo.TablePathId, ss);
+    auto maxShardsInPath = path.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
+
     const auto& tableInfo = ss->Tables.at(path->PathId);
     NTableIndex::TTableColumns implTableColumns;
     THashSet<TString> indexDataColumns;
@@ -326,7 +329,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         NTableIndex::FillIndexTableColumns(tableInfo->Columns, implTableColumns.Keys, implTableColumns.Columns, op);
         auto& policy = *resetPartitionsSettings();
         // Prevent merging partitions
-        policy.SetMinPartitionsCount(32768);
+        policy.SetMinPartitionsCount(maxShardsInPath);
         policy.SetMaxPartitionsCount(0);
 
         LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
@@ -344,6 +347,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
             indexDataColumns = THashSet<TString>(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
         }
         op = NTableIndex::CalcVectorKmeansTreeBuildOverlapTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix);
+        // Prevent merging partitions
+        auto& policy = *resetPartitionsSettings();
+        policy.SetMinPartitionsCount(maxShardsInPath);
+        policy.SetMaxPartitionsCount(0);
         // This also means that we can directly copy split boundaries from the main table!
         const auto& tableInfo = ss->Tables.at(buildInfo.TablePathId);
         size_t parts = tableInfo->GetPartitions().size();
@@ -352,10 +359,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
                 op.AddSplitBoundary()->SetSerializedKeyPrefix(x.EndOfRange);
             }
         }
-        auto& policy = *resetPartitionsSettings();
-        // Prevent merging partitions
-        policy.SetMinPartitionsCount(32768);
-        policy.SetMaxPartitionsCount(0);
         LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
             "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
         return propose;
@@ -363,7 +366,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
 
     op = NTableIndex::CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix,
         buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1);
-    const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
+    const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo, maxShardsInPath);
 
     auto& policy = *resetPartitionsSettings();
     static constexpr std::string_view LogPrefix = "Create build table boundaries for ";
@@ -378,7 +381,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
             op.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize({&cell, 1}));
         }
         // Prevent merging partitions
-        policy.SetMinPartitionsCount(32768);
+        policy.SetMinPartitionsCount(maxShardsInPath);
         policy.SetMaxPartitionsCount(0);
     }
 
@@ -2782,7 +2785,11 @@ struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TE
     }
 
     void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
-        if (Response->Get()->Record.GetIsEmpty()) {
+        if (Response->Get()->Record.GetIsEmpty() &&
+            buildInfo.KMeans.Parent == 0)
+        {
+            // We only handle the root level through MultiLocal if the table has exactly 1 shard.
+            // If that shard is empty then it means the whole index is empty.
             buildInfo.KMeans.IsEmpty = true;
             Self->PersistBuildIndexKMeansState(db, buildInfo);
         }

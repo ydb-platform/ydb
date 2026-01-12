@@ -95,6 +95,7 @@ SRCS(
     kesus.proto
     key.proto
     kqp_compile_settings.proto
+    kqp_tablemetadata.proto
     kqp.proto
     kqp_physical.proto
     kqp_stats.proto

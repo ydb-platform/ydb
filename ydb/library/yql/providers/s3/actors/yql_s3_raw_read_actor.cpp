@@ -42,6 +42,7 @@ public:
         const TTxId& txId,
         IHTTPGateway::TPtr gateway,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TString& url,
         const TS3Credentials& credentials,
         const TString& pattern,
@@ -66,6 +67,7 @@ public:
         , ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
+        , Alloc(std::move(alloc))
         , TxId(txId)
         , ComputeActorId(computeActorId)
         , RetryPolicy(retryPolicy)
@@ -101,7 +103,19 @@ public:
         IngressStats.Level = statsLevel;
     }
 
+    ~TS3ReadActor() {
+        if (Alloc) {
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ClearMkqlData();
+        }
+    }
+
     void Bootstrap() {
+        if (Url.StartsWith("file://")) {
+            OnFatalError({TIssue("Reading from files is not supported in raw read actor, please contact internal support")}, NDqProto::StatusIds::INTERNAL_ERROR);
+            return;
+        }
+
         if (!UseRuntimeListing) {
             FileQueueActor = RegisterWithSameMailbox(CreateS3FileQueueActor(
                 TxId,
@@ -441,7 +455,7 @@ private:
         }
         QueueTotalDataSize = 0;
 
-        ContainerCache.Clear();
+        ClearMkqlData();
         FileQueueEvents.Unsubscribe();
         TActorBootstrapped<TS3ReadActor>::PassAway();
     }
@@ -450,10 +464,16 @@ private:
         Send(ComputeActorId, ev.release());
     }
 
+    // Should be called with bound MKQL alloc
+    void ClearMkqlData() {
+        ContainerCache.Clear();
+    }
+
 private:
     const TS3ReadActorFactoryConfig ReadActorFactoryCfg;
     const IHTTPGateway::TPtr Gateway;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+    const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NKikimr::NMiniKQL::TPlainContainerCache ContainerCache;
 
     TDqAsyncStats IngressStats;
@@ -513,6 +533,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     const TTxId& txId,
     IHTTPGateway::TPtr gateway,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const TString& url,
     const TS3Credentials& credentials,
     const TString& pattern,
@@ -540,6 +561,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
         txId,
         std::move(gateway),
         holderFactory,
+        std::move(alloc),
         url,
         credentials,
         pattern,

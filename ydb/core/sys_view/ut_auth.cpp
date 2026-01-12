@@ -1,5 +1,7 @@
 #include "ut_common.h"
 
+#include <library/cpp/string_utils/base64/base64.h>
+
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 namespace NKikimr {
@@ -96,10 +98,31 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
             )").GetValueSync();
 
             auto actual = NKqp::StreamResultToYson(it);
-            UNIT_ASSERT_STRING_CONTAINS(actual, "hash");
-            UNIT_ASSERT_STRING_CONTAINS(actual, "salt");
-            UNIT_ASSERT_STRING_CONTAINS(actual, "type");
-            UNIT_ASSERT_STRING_CONTAINS(actual, "argon2id");
+
+            const auto extractHashesValue = [](const TString& input) -> TString {
+                const TString prefix = "[[[\"";
+                const TString suffix = "\"]]]";
+
+                size_t startPos = input.find(prefix);
+                if (startPos == NPOS) {
+                    return "";
+                }
+
+                startPos += prefix.length();
+                size_t endPos = input.find(suffix, startPos);
+                if (endPos == NPOS) {
+                    return "";
+                }
+
+                return input.substr(startPos, endPos - startPos);
+            };
+
+            const auto hashesValue = extractHashesValue(actual);
+            const auto hashesJson = Base64StrictDecode(hashesValue);
+
+            UNIT_ASSERT_STRING_CONTAINS(hashesJson, "version");
+            UNIT_ASSERT_STRING_CONTAINS(hashesJson, "argon2id");
+            UNIT_ASSERT_STRING_CONTAINS(hashesJson, "scram-sha-256");
         }
 
         {

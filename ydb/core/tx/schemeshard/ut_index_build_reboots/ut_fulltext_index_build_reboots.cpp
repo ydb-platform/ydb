@@ -9,11 +9,10 @@ using namespace NSchemeShardUT_Private;
 
 
 Y_UNIT_TEST_SUITE(FulltextIndexBuildTestReboots) {
-    Y_UNIT_TEST_WITH_REBOOTS(BaseCase) {
-        // Without killOnCommit, the schemeshard doesn't get rebooted on TEvDataShard::BuildFulltext**Response's,
-        // and thus the fulltext index build process is never interrupted at all because there are no other
-        // events to reboot on.
-        T t(true /*killOnCommit*/);
+    // Without killOnCommit, the schemeshard doesn't get rebooted on TEvDataShard::BuildFulltext**Response's,
+    // and thus the fulltext index build process is never interrupted at all because there are no other
+    // events to reboot on.
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCase, 1, 1, true /*killOnCommit*/) {
         // speed up the test:
         // only check scheme shard reboots
         t.TabletIds.clear();

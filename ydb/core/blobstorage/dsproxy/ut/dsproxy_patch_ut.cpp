@@ -386,7 +386,7 @@ void ConductNaivePatch(TTestBasicRuntime &runtime, const TTestArgs &args, ENaive
     CTEST << "ConductNaivePatch: Finish\n";
 }
 
-template <typename InnerType> 
+template <typename InnerType>
 TString ToString(const TVector<InnerType> &lst) {
     TStringBuilder bld;
     bld << '[';
@@ -678,7 +678,7 @@ void RunGeneralTest(void(*runner)(TTestBasicRuntime &runtime, const TTestArgs &a
 //    Y_UNIT_TEST_VPATCH(OneErrorAndAllPartExistInStart, erasure)
 //    Y_UNIT_TEST_VPATCH(OnePartLostInStart, erasure)
 //    Y_UNIT_TEST_VPATCH(DeadGroupInStart, erasure)
-//    Y_UNIT_TEST_VPATCH(ErrorDuringVPatchDiff, erasure) 
+//    Y_UNIT_TEST_VPATCH(ErrorDuringVPatchDiff, erasure)
 
     Y_UNIT_TEST_PATCH_PACK(ErasureNone)
     Y_UNIT_TEST_PATCH_PACK(Erasure4Plus2Block)

@@ -1444,7 +1444,7 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
     }
 
     guard.Release();
-    PCtx->ActorSystem->Send(evChunkReserve.Sender, result.Release());
+    PCtx->ActorSystem->Send(evChunkReserve.Sender, result.Release(), 0, evChunkReserve.Cookie);
     Mon.ChunkReserve.CountResponse();
 
 }
@@ -3405,7 +3405,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 P_LOG(PRI_ERROR, BPD01, err.Str());
                 THolder<NPDisk::TEvChunkReserveResult> result(new NPDisk::TEvChunkReserveResult(errStatus,
                             GetStatusFlags(ev.Owner, ev.OwnerGroupType), err.Str()));
-                PCtx->ActorSystem->Send(ev.Sender, result.Release());
+                PCtx->ActorSystem->Send(ev.Sender, result.Release(), 0, ev.Cookie);
                 Mon.ChunkReserve.CountResponse();
                 delete request;
                 return false;
@@ -4125,7 +4125,7 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
             return true;
         }
         case ERequestType::RequestChunkReserve:
-            PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, errorReason));
+            PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, errorReason), 0, request->Cookie);
             return true;
         case ERequestType::RequestChunkLock:
             PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkLockResult(NKikimrProto::CORRUPTED, {}, 0, errorReason));

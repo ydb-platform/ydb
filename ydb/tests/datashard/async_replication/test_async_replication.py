@@ -1,5 +1,4 @@
 import pytest
-import time
 
 from ydb.tests.sql.lib.test_query import Query
 from ydb.tests.library.common.wait_for import wait_for
@@ -28,13 +27,8 @@ class TestAsyncReplicationBase(MulticlusterTestBase):
                         CONNECTION_STRING = 'grpc://{self.get_endpoint(self.clusters[0])}/?database={self.get_database()}'
                             )
                          """)
-        for _ in range(100):
-            try:
-                dml_cluster_2.query(
-                    f"select count(*) as count from {table_name}")
-                break
-            except Exception:
-                time.sleep(1)
+        assert wait_for(lambda: dml_cluster_2.table_exists(table_name), timeout_seconds=100), "Table not created"
+        assert wait_for(self.create_predicate(False, table_name, dml_cluster_2.query), timeout_seconds=100), "Expected non-zero rows after insert"
         dml_cluster_2.select_after_insert(
             table_name, all_types, pk_types, index, ttl)
         dml_cluster_1.query(f"delete from {table_name}")

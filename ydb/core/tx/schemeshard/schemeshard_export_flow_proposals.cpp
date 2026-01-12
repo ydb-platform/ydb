@@ -61,7 +61,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.SourcePathName);
         desc.SetDstPath(ExportItemPathName(ss, exportInfo, itemIdx));
-        desc.SetOmitIndexes(!exportInfo.MaterializeIndexes);
+        desc.SetOmitIndexes(!exportInfo.IncludeIndexData);
         desc.SetOmitFollowers(true);
         desc.SetIsBackup(true);
     }

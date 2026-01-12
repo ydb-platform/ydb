@@ -392,6 +392,10 @@ public:
         Counters->WriteActorsCount->Inc();
     }
 
+    ~TKqpTableWriteActor() {
+        ClearMkqlData();
+    }
+
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         try {
@@ -859,8 +863,8 @@ public:
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
-                    NYql::NDqProto::StatusIds::OVERLOADED,
-                    NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
                     TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. Table `"
                         << TablePath << "`.",
                     getIssues());
@@ -1428,11 +1432,8 @@ public:
     }
 
     void PassAway() override {
-        {
-            Y_ABORT_UNLESS(Alloc);
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
-            ShardedWriteController.Reset();
-        }
+        Y_ABORT_UNLESS(Alloc);
+        ClearMkqlData();
         Counters->WriteActorsCount->Dec();
         Unlink();
         TActorBootstrapped<TKqpTableWriteActor>::PassAway();
@@ -1455,6 +1456,13 @@ public:
     }
 
 private:
+    void ClearMkqlData() {
+        if (Alloc && ShardedWriteController) {
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ShardedWriteController.Reset();
+        }
+    }
+
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
     bool LinkedPipeCache = false;
 
@@ -1899,8 +1907,7 @@ private:
                 for (size_t index = 0; index < writeRows.size(); ++index) {
                     const auto& row = writeRows[index];
                     if (isPrimaryKeySubset && existsMask[index]
-                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
+                            && OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
                         Error = ConflictWithExistingKeyErrorText;
                         return false;
                     }
@@ -2396,9 +2403,9 @@ private:
     }
 
     i64 GetMemory() const {
-        return (WriteTableActor && WriteTableActor->IsReady())
+        return DataBufferMemory + ((WriteTableActor && WriteTableActor->IsReady())
             ? WriteTableActor->GetMemory()
-            : 0;
+            : 0);
     }
 
     TMaybe<google::protobuf::Any> ExtraData() override {
@@ -2427,7 +2434,9 @@ private:
         try {
             if (!data.empty()) {
                 Batcher->AddData(data);
-                DataBuffer.emplace(Batcher->Build());
+                auto batch = Batcher->Build();
+                DataBufferMemory += batch->GetMemory();
+                DataBuffer.emplace(std::move(batch));
             }
 
             if (checkpoint) {
@@ -2465,7 +2474,9 @@ private:
                 DataBuffer.pop();
 
                 if (std::holds_alternative<IDataBatchPtr>(variant)) {
-                    WriteTableActor->Write(WriteToken, std::get<IDataBatchPtr>(std::move(variant)));
+                    auto data = std::get<IDataBatchPtr>(std::move(variant));
+                    DataBufferMemory -= data->GetMemory();
+                    WriteTableActor->Write(WriteToken, std::move(data));
                 } else if (std::holds_alternative<NYql::NDqProto::TCheckpoint>(variant)) {
                     CheckpointInProgress = std::get<NYql::NDqProto::TCheckpoint>(std::move(variant));
                     WriteTableActor->FlushBuffers();
@@ -2622,6 +2633,7 @@ private:
     TKqpTableWriteActor::TWriteToken WriteToken = 0;
     std::queue<std::variant<IDataBatchPtr, NYql::NDqProto::TCheckpoint>> DataBuffer;
     std::optional<NYql::NDqProto::TCheckpoint> CheckpointInProgress;
+    i64 DataBufferMemory = 0;
 
     bool Closed = false;
     bool WaitingForTableActor = false;
@@ -4310,8 +4322,8 @@ public:
                 << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
             ReplyError(
-                NYql::NDqProto::StatusIds::OVERLOADED,
-                NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE,
                 TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. "
                     << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
@@ -4377,6 +4389,10 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+            if (ev->Get()->Record.HasTxStats()) {
+                LocksBrokenAsBreaker += ev->Get()->Record.GetTxStats().GetLocksBrokenAsBreaker();
+                LocksBrokenAsVictim += ev->Get()->Record.GetTxStats().GetLocksBrokenAsVictim();
+            }
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());

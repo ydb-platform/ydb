@@ -318,6 +318,13 @@ void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TCon
 
         YQL_ENSURE(inputStageInfo.Tasks.size() == 1, "actual count: " << inputStageInfo.Tasks.size());
         auto originTaskId = inputStageInfo.Tasks[0];
+        auto& originTask = GetTask(originTaskId);
+        auto& taskOutput = originTask.Outputs[outputIdx];
+
+        if (result.GetCanSkipChannel()) {
+            taskOutput.Type = TTaskOutputType::Effects;
+            continue;
+        }
 
         auto& channel = AddChannel();
         channel.SrcTask = originTaskId;
@@ -326,9 +333,6 @@ void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TCon
         channel.DstInputIndex = i;
         channel.InMemory = true;
 
-        auto& originTask = GetTask(originTaskId);
-
-        auto& taskOutput = originTask.Outputs[outputIdx];
         taskOutput.Type = TTaskOutputType::Map;
         taskOutput.Channels.push_back(channel.Id);
 
@@ -372,44 +376,7 @@ void TKqpTasksGraph::BuildSequencerChannels(const TStageInfo& stageInfo, ui32 in
     NKikimrKqp::TKqpSequencerSettings* settings = GetMeta().Allocate<NKikimrKqp::TKqpSequencerSettings>();
     settings->MutableTable()->CopyFrom(sequencer.GetTable());
     settings->SetDatabase(GetMeta().Database);
-
-    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-    THashSet<TString> autoIncrementColumns(sequencer.GetAutoIncrementColumns().begin(), sequencer.GetAutoIncrementColumns().end());
-
-    for(const auto& column: sequencer.GetColumns()) {
-        auto columnIt = tableInfo->Columns.find(column);
-        YQL_ENSURE(columnIt != tableInfo->Columns.end(), "Unknown column: " << column);
-        const auto& columnInfo = columnIt->second;
-
-        auto* columnProto = settings->AddColumns();
-        columnProto->SetName(column);
-        columnProto->SetId(columnInfo.Id);
-        columnProto->SetTypeId(columnInfo.Type.GetTypeId());
-
-        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnInfo.Type, columnInfo.TypeMod);
-        if (columnType.TypeInfo) {
-            *columnProto->MutableTypeInfo() = *columnType.TypeInfo;
-        }
-
-        auto aic = autoIncrementColumns.find(column);
-        if (aic != autoIncrementColumns.end()) {
-            auto sequenceIt = tableInfo->Sequences.find(column);
-            if (sequenceIt != tableInfo->Sequences.end()) {
-                auto sequencePath = sequenceIt->second.first;
-                auto sequencePathId = sequenceIt->second.second;
-                columnProto->SetDefaultFromSequence(sequencePath);
-                sequencePathId.ToMessage(columnProto->MutableDefaultFromSequencePathId());
-                columnProto->SetDefaultKind(
-                    NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE);
-            } else {
-                auto literalIt = tableInfo->DefaultFromLiteral.find(column);
-                YQL_ENSURE(literalIt != tableInfo->DefaultFromLiteral.end());
-                columnProto->MutableDefaultFromLiteral()->CopyFrom(literalIt->second);
-                columnProto->SetDefaultKind(
-                    NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
-            }
-        }
-    }
+    settings->MutableColumns()->CopyFrom(sequencer.GetColumns());
 
     TTransform transform;
     transform.Type = "SequencerInputTransformer";
@@ -500,7 +467,7 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
     settings->SetIsolationLevel(GetMeta().RequestIsolationLevel);
 
     if (streamLookup.GetIsTableImmutable()
-        && GetMeta().RequestIsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_READ_STALE)
+        && GetMeta().RequestIsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_STALE)
     {
         settings->SetAllowUseFollowers(true);
         settings->SetIsTableImmutable(true);
@@ -607,6 +574,7 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     settings->SetCacheTtlSeconds(dqSourceStreamLookup.GetCacheTtlSeconds());
     settings->SetMaxDelayedRows(dqSourceStreamLookup.GetMaxDelayedRows());
     settings->SetIsMultiget(dqSourceStreamLookup.GetIsMultiGet());
+    settings->SetIsMultiMatches(dqSourceStreamLookup.GetIsMultiMatches());
 
     const auto& leftJointKeys = dqSourceStreamLookup.GetLeftJoinKeyNames();
     settings->MutableLeftJoinKeyNames()->Assign(leftJointKeys.begin(), leftJointKeys.end());
@@ -1114,6 +1082,7 @@ void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TCha
     if (channel.DstTask) {
         FillEndpointDesc(*channelDesc.MutableDstEndpoint(), GetTask(channel.DstTask));
     } else if (!resultChannelProxies.empty()) {
+        Y_ENSURE(GetMeta().DqChannelVersion <= 1u);
         auto it = resultChannelProxies.find(channel.Id);
         YQL_ENSURE(it != resultChannelProxies.end());
         ActorIdToProto(it->second, channelDesc.MutableDstEndpoint()->MutableActorId());
@@ -1473,7 +1442,7 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             enableMetering = true;
             YQL_ENSURE(input.Meta.StreamLookupSettings);
             bool isTableImmutable = input.Meta.StreamLookupSettings->GetIsTableImmutable() &&
-                GetMeta().RequestIsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_READ_STALE;
+                GetMeta().RequestIsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_STALE;
 
             if (snapshot.IsValid() && !isTableImmutable) {
                 input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
@@ -1488,8 +1457,12 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                 input.Meta.StreamLookupSettings->SetLockNodeId(GetMeta().LockNodeId);
             }
 
-            if (GetMeta().LockMode && !isTableImmutable) {
-                input.Meta.StreamLookupSettings->SetLockMode(*GetMeta().LockMode);
+            if (lockTxId && GetMeta().LockMode && !isTableImmutable) {
+                input.Meta.StreamLookupSettings->SetLockMode(
+                    // Unique Index needs read lock even in snapshot isolation mode.
+                    input.Meta.StreamLookupSettings->GetLookupStrategy() != NKqpProto::EStreamLookupStrategy::UNIQUE
+                        ? *GetMeta().LockMode
+                        : NKikimrDataEvents::OPTIMISTIC);
             }
 
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
@@ -2601,8 +2574,45 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     settings->SetIndex(fullTextSource.GetIndex());
     settings->SetDatabase(GetMeta().Database);
     settings->MutableTable()->CopyFrom(fullTextSource.GetTable());
+    settings->MutableIndexDescription()->CopyFrom(fullTextSource.GetIndexDescription());
 
-    settings->MutableQuerySettings()->SetQuery(fullTextSource.GetQuerySettings().GetQuery());
+    auto guard = TxAlloc->TypeEnv.BindAllocator();
+    {
+        auto value = ExtractPhyValue(
+        stageInfo, fullTextSource.GetQuerySettings().GetQueryValue(),
+        TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        settings->MutableQuerySettings()->SetQuery(TString(value.AsStringRef()));
+    }
+
+
+    if (fullTextSource.HasTakeLimit())
+    {
+        auto value = ExtractPhyValue(
+            stageInfo, fullTextSource.GetTakeLimit(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        if (value.HasValue()) {
+            settings->SetLimit(value.Get<ui64>());
+        }
+    }
+
+    if (fullTextSource.HasBFactor()) {
+        auto value = ExtractPhyValue(
+            stageInfo, fullTextSource.GetBFactor(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+
+        if (value.HasValue()) {
+            settings->SetBFactor(value.Get<double>());
+        }
+    }
+
+    if (fullTextSource.HasK1Factor()) {
+        auto value = ExtractPhyValue(
+            stageInfo, fullTextSource.GetK1Factor(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        if (value.HasValue()) {
+            settings->SetK1Factor(value.Get<double>());
+        }
+    }
 
     for(const auto& column : fullTextSource.GetQuerySettings().GetColumns()) {
         auto* protoColumn = settings->MutableQuerySettings()->AddColumns();
@@ -2615,17 +2625,15 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         }
     }
 
-    for (const auto& column : fullTextSource.GetColumns()) {
-        auto* protoColumn = settings->AddColumns();
-        protoColumn->SetId(column.GetId());
-        auto columnIt = stageInfo.Meta.TableConstInfo->Columns.find(column.GetName());
-        ParseColumnToProto(column.GetName(), columnIt, protoColumn);
-        protoColumn->SetName(column.GetName());
-        if (columnIt->second.NotNull) {
-            protoColumn->SetNotNull(true);
-        }
+    for(const auto& indexTable : fullTextSource.GetIndexTables()) {
+        auto* indexTableProto = settings->AddIndexTables();
+        indexTableProto->MutableTable()->CopyFrom(indexTable.GetTable());
+        indexTableProto->MutableKeyColumns()->CopyFrom(indexTable.GetKeyColumns());
+        indexTableProto->MutableColumns()->CopyFrom(indexTable.GetColumns());
     }
 
+    settings->MutableKeyColumns()->CopyFrom(fullTextSource.GetKeyColumns());
+    settings->MutableColumns()->CopyFrom(fullTextSource.GetColumns());
     if (GetMeta().Snapshot.IsValid()) {
         settings->MutableSnapshot()->SetStep(GetMeta().Snapshot.Step);
         settings->MutableSnapshot()->SetTxId(GetMeta().Snapshot.TxId);
@@ -2737,7 +2745,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             settings->MutableSnapshot()->SetTxId(snapshot.TxId);
         }
 
-        if (GetMeta().RequestIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED) {
+        if (GetMeta().RequestIsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED) {
             settings->SetAllowInconsistentReads(true);
         }
 
@@ -3116,6 +3124,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
             GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
             BuildKqpStageChannels(stageInfo, GetMeta().TxId, GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
         }
+        GetMeta().DqChannelVersion = tx.Body->DqChannelVersion();
 
         // Not task-related
         BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
@@ -3152,7 +3161,7 @@ TKqpTasksGraph::TKqpTasksGraph(
 {
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;
-    GetMeta().RequestIsolationLevel = NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SERIALIZABLE;
+    GetMeta().RequestIsolationLevel = NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SERIALIZABLE;
 
     if (Transactions.empty()) {
         return;
@@ -3206,7 +3215,7 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
         for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
             const auto& stage = tx.Body->GetStages(stageIdx);
             auto& stageInfo = GetStageInfo(NYql::NDq::TStageId(txIdx, stageIdx));
-         
+
             if (stage.SinksSize() == 0) {
                 continue;
             }

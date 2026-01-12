@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
     allocation_tags_ut.cpp
+    trace_context_guard_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)

@@ -297,9 +297,6 @@ const TYdbOperations& KikimrDataOps();
 const TYdbOperations& KikimrModifyOps();
 const TYdbOperations& KikimrReadOps();
 
-TIssue AddDmlIssue(const TIssue& issue);
-bool AddDmlIssue(const TIssue& issue, TExprContext& ctx);
-
 class TKikimrTransactionContextBase : public TThrRefBase {
 public:
     explicit TKikimrTransactionContextBase()
@@ -461,7 +458,7 @@ public:
 public:
     THashMap<TString, TYdbOperations> TableOperations;
     THashMap<TKikimrPathId, TString> TableByIdMap;
-    TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
+    TMaybe<NKqpProto::EIsolationLevel> EffectiveIsolationLevel;
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
     bool Readonly = false;
     bool Invalidated = false;

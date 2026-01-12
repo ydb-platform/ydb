@@ -161,7 +161,7 @@ namespace NKikimr::NBlobDepot {
         public:
             TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_DECOMMIT_BLOBS; }
 
-            TTxDecommitBlobs(TBlobDepot *self, THashSet<TLogoBlobID>&& resolutionErrors, 
+            TTxDecommitBlobs(TBlobDepot *self, THashSet<TLogoBlobID>&& resolutionErrors,
                     std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob>&& decommitBlobs,
                     TEvBlobDepot::TEvResolve::TPtr ev)
                 : TTransactionBase(self)

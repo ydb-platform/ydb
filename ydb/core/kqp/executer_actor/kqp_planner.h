@@ -155,6 +155,7 @@ private:
     bool CheckpointsReadyStateSent = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
+    THashMap<ui32, TActorId> ResultChannels;
 };
 
 std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpPlanner::TArgs args);

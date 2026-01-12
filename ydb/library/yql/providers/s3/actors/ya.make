@@ -28,6 +28,7 @@ PEERDIR(
     library/cpp/xml/document
     ydb/core/base
     ydb/core/fq/libs/events
+    ydb/core/util
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/common/arrow
     ydb/library/yql/providers/common/arrow/interface
@@ -43,7 +44,6 @@ PEERDIR(
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/s3/range_helpers
     ydb/library/yql/udfs/common/clickhouse/client
-    ydb/library/yverify_stream
     yql/essentials/minikql
     yql/essentials/minikql/computation
     yql/essentials/providers/common/schema/mkql

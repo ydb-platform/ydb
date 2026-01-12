@@ -15,11 +15,11 @@ PEERDIR(
     ydb/core/fq/libs/quota_manager/events
     ydb/core/fq/libs/shared_resources/interface
     ydb/core/protos
+    ydb/core/util
     ydb/library/actors/core
     ydb/library/db_pool
     ydb/library/logger
     ydb/library/security
-    ydb/library/yverify_stream
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/extensions/solomon_stats
     ydb/public/sdk/cpp/src/client/extension_common

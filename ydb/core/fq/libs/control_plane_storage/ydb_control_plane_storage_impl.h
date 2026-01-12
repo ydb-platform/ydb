@@ -31,7 +31,7 @@
 #include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/security/util.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
-#include <ydb/library/yverify_stream/exceptions.h>
+#include <ydb/core/util/exceptions.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>

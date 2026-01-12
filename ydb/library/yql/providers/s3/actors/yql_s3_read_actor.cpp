@@ -29,7 +29,7 @@
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/providers/s3/serializations/serialization_interval.h>
-#include <ydb/library/yverify_stream/exceptions.h>
+#include <ydb/core/util/exceptions.h>
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/mkql_string_util.h>

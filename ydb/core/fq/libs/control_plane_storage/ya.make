@@ -37,10 +37,10 @@ PEERDIR(
     ydb/core/kqp/opt
     ydb/core/kqp/proxy_service/script_executions_utils
     ydb/core/mon
+    ydb/core/util
     ydb/library/db_pool
     ydb/library/security
     ydb/library/yql/providers/s3/path_generator
-    ydb/library/yverify_stream
     ydb/public/api/protos
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/scheme

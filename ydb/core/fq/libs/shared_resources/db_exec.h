@@ -7,7 +7,7 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/db_pool/db_pool.h>
-#include <ydb/library/yverify_stream/exceptions.h>
+#include <ydb/core/util/exceptions.h>
 
 namespace NFq {
 

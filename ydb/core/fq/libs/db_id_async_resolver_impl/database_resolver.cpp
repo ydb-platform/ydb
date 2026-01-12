@@ -9,7 +9,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/library/yverify_stream/exceptions.h>
+#include <ydb/core/util/exceptions.h>
 
 #include <yql/essentials/utils/url_builder.h>
 

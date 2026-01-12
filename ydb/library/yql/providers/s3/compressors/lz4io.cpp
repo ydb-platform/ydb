@@ -8,7 +8,7 @@
 #include <util/generic/size_literals.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
-#include <ydb/library/yverify_stream/exceptions.h>
+#include <ydb/core/util/exceptions.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 

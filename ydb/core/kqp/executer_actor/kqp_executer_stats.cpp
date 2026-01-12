@@ -1390,6 +1390,16 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
     AFL_ENSURE(stats.GetTasks().size() == 1);
     const NYql::NDqProto::TDqTaskStats& taskStats = stats.GetTasks(0);
     AFL_ENSURE(taskStats.GetTaskId() == taskId);
+
+    // Extract lock stats from task extra stats (populated by read actors for broken locks)
+    if (taskStats.HasExtra()) {
+        NKqpProto::TKqpTaskExtraStats extraStats;
+        if (taskStats.GetExtra().UnpackTo(&extraStats)) {
+            LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
+            LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
+        }
+    }
+
     auto stageId = TasksGraph->GetTask(taskId).StageId;
     auto [it, inserted] = StageStats.try_emplace(stageId);
     if (inserted) {

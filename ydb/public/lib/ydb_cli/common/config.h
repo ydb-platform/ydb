@@ -3,8 +3,6 @@
 #include <util/generic/fwd.h>
 #include <util/folder/path.h>
 
-#include <yaml-cpp/node/node.h>
-
 #include <memory>
 #include <optional>
 
@@ -13,10 +11,15 @@ namespace NYdb::NConsoleClient {
 class TConfigurationManager;
 
 // Wrapper around YAML::Node that tracks modifications and triggers config save
+// Uses pimpl to hide YAML dependency from header
 class TConfigNode {
 public:
-    TConfigNode() = default;
-    TConfigNode(YAML::Node node, TConfigurationManager* manager, const TString& path);
+    TConfigNode();
+    ~TConfigNode();
+    TConfigNode(const TConfigNode& other);
+    TConfigNode(TConfigNode&& other) noexcept;
+    TConfigNode& operator=(const TConfigNode& other);
+    TConfigNode& operator=(TConfigNode&& other) noexcept;
 
     // Check if node exists and is valid
     bool IsDefined() const;
@@ -33,32 +36,12 @@ public:
     TConfigNode operator[](size_t index);
 
     // Get typed values with defaults
-    template<typename T>
-    T As(const T& defaultValue = T{}) const {
-        if (!IsDefined() || IsNull()) {
-            return defaultValue;
-        }
-        try {
-            return Node.as<T>(defaultValue);
-        } catch (...) {
-            return defaultValue;
-        }
-    }
-
-    // Specialization for TString
     TString AsString(const TString& defaultValue = "") const;
     bool AsBool(bool defaultValue = false) const;
     int AsInt(int defaultValue = 0) const;
     double AsDouble(double defaultValue = 0.0) const;
 
     // Set value - triggers config save
-    template<typename T>
-    void Set(const T& value) {
-        Node = value;
-        NotifyModified();
-    }
-
-    // Set from string
     void SetString(const TString& value);
     void SetBool(bool value);
     void SetInt(int value);
@@ -66,22 +49,22 @@ public:
     // Remove this node from parent
     void Remove();
 
-    // Get underlying YAML node (for advanced usage)
-    YAML::Node& GetYamlNode() { return Node; }
-    const YAML::Node& GetYamlNode() const { return Node; }
-
     // Get path in config
     const TString& GetPath() const { return Path; }
 
 private:
-    void NotifyModified();
-    void SetValueInternal(const YAML::Node& value);
-    TConfigNode GetChildBySimpleKey(const TString& key);
+    friend class TConfigurationManager;
 
-private:
-    YAML::Node Node;
+    struct TImpl;
+    std::unique_ptr<TImpl> Impl;
     TConfigurationManager* Manager = nullptr;
     TString Path;
+
+    void NotifyModified();
+    void SetValueInternal(const TString& value);
+    void SetValueInternal(bool value);
+    void SetValueInternal(int value);
+    TConfigNode GetChildBySimpleKey(const TString& key);
 };
 
 // Global CLI configuration manager
@@ -113,12 +96,12 @@ public:
 private:
     friend class TConfigNode;
 
+    struct TImpl;
+    std::unique_ptr<TImpl> Impl;
+    bool Modified = false;
+
     void Load();
     void MarkModified();
-
-private:
-    YAML::Node Config;
-    bool Modified = false;
 };
 
 // Global configuration instance (initializes on first call)

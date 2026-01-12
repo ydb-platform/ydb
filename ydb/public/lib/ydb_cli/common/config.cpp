@@ -14,6 +14,18 @@
 
 namespace NYdb::NConsoleClient {
 
+// Pimpl implementation structures
+struct TConfigNode::TImpl {
+    YAML::Node Node;
+
+    TImpl() = default;
+    explicit TImpl(YAML::Node node) : Node(std::move(node)) {}
+};
+
+struct TConfigurationManager::TImpl {
+    YAML::Node Config;
+};
+
 namespace {
 
 constexpr int DIR_MODE_PRIVATE = S_IRUSR | S_IWUSR | S_IXUSR; // rwx------
@@ -139,49 +151,72 @@ static TConfigurationManager::TPtr GlobalConfig;
 } // anonymous namespace
 
 // TConfigNode implementation
-TConfigNode::TConfigNode(YAML::Node node, TConfigurationManager* manager, const TString& path)
-    : Node(node)
-    , Manager(manager)
-    , Path(path)
+TConfigNode::TConfigNode()
+    : Impl(std::make_unique<TImpl>())
 {}
 
+TConfigNode::~TConfigNode() = default;
+
+TConfigNode::TConfigNode(const TConfigNode& other)
+    : Impl(std::make_unique<TImpl>(YAML::Clone(other.Impl->Node)))
+    , Manager(other.Manager)
+    , Path(other.Path)
+{}
+
+TConfigNode::TConfigNode(TConfigNode&& other) noexcept = default;
+
+TConfigNode& TConfigNode::operator=(const TConfigNode& other) {
+    if (this != &other) {
+        Impl = std::make_unique<TImpl>(YAML::Clone(other.Impl->Node));
+        Manager = other.Manager;
+        Path = other.Path;
+    }
+    return *this;
+}
+
+TConfigNode& TConfigNode::operator=(TConfigNode&& other) noexcept = default;
+
 bool TConfigNode::IsDefined() const {
-    return Node.IsDefined();
+    return Impl->Node.IsDefined();
 }
 
 bool TConfigNode::IsNull() const {
-    return !Node.IsDefined() || Node.IsNull();
+    return !Impl->Node.IsDefined() || Impl->Node.IsNull();
 }
 
 bool TConfigNode::IsScalar() const {
-    return Node.IsDefined() && Node.IsScalar();
+    return Impl->Node.IsDefined() && Impl->Node.IsScalar();
 }
 
 bool TConfigNode::IsSequence() const {
-    return Node.IsDefined() && Node.IsSequence();
+    return Impl->Node.IsDefined() && Impl->Node.IsSequence();
 }
 
 bool TConfigNode::IsMap() const {
-    return Node.IsDefined() && Node.IsMap();
+    return Impl->Node.IsDefined() && Impl->Node.IsMap();
 }
 
 TConfigNode TConfigNode::GetChildBySimpleKey(const TString& key) {
     TString childPath = Path.empty() ? key : (Path + "." + key);
 
     GetGlobalLogger().Debug() << "GetChildBySimpleKey: path=\"" << Path << "\", key=\"" << key
-               << "\", Node=" << NodeTypeStr(Node);
+               << "\", Node=" << NodeTypeStr(Impl->Node);
 
     // Check if trying to access child of a scalar
-    if (Node.IsDefined() && !Node.IsNull() && Node.IsScalar()) {
+    if (Impl->Node.IsDefined() && !Impl->Node.IsNull() && Impl->Node.IsScalar()) {
         GetGlobalLogger().Debug() << "GetChildBySimpleKey: Trying to access child of scalar";
         throw std::runtime_error(TStringBuilder() << "operator[] call on a scalar (key: \"" << key << "\")");
     }
 
     // Use safe lookup to avoid yaml-cpp corruption bug
-    YAML::Node child = SafeGetChild(Node, std::string(key));
+    YAML::Node child = SafeGetChild(Impl->Node, std::string(key));
     GetGlobalLogger().Debug() << "GetChildBySimpleKey result: childPath=\"" << childPath << "\", child=" << NodeTypeStr(child);
 
-    return TConfigNode(child, Manager, childPath);
+    TConfigNode result;
+    result.Impl->Node = std::move(child);
+    result.Manager = Manager;
+    result.Path = childPath;
+    return result;
 }
 
 TConfigNode TConfigNode::operator[](const TString& key) {
@@ -207,7 +242,11 @@ TConfigNode TConfigNode::operator[](const char* key) {
 
 TConfigNode TConfigNode::operator[](size_t index) {
     TString childPath = Path + "[" + ToString(index) + "]";
-    return TConfigNode(Node[index], Manager, childPath);
+    TConfigNode result;
+    result.Impl->Node = Impl->Node[index];
+    result.Manager = Manager;
+    result.Path = childPath;
+    return result;
 }
 
 TString TConfigNode::AsString(const TString& defaultValue) const {
@@ -215,7 +254,7 @@ TString TConfigNode::AsString(const TString& defaultValue) const {
         return defaultValue;
     }
     try {
-        return Node.as<TString>(defaultValue);
+        return Impl->Node.as<TString>(defaultValue);
     } catch (...) {
         return defaultValue;
     }
@@ -226,7 +265,7 @@ bool TConfigNode::AsBool(bool defaultValue) const {
         return defaultValue;
     }
     try {
-        return Node.as<bool>(defaultValue);
+        return Impl->Node.as<bool>(defaultValue);
     } catch (...) {
         return defaultValue;
     }
@@ -237,7 +276,7 @@ int TConfigNode::AsInt(int defaultValue) const {
         return defaultValue;
     }
     try {
-        return Node.as<int>(defaultValue);
+        return Impl->Node.as<int>(defaultValue);
     } catch (...) {
         return defaultValue;
     }
@@ -248,17 +287,17 @@ double TConfigNode::AsDouble(double defaultValue) const {
         return defaultValue;
     }
     try {
-        return Node.as<double>(defaultValue);
+        return Impl->Node.as<double>(defaultValue);
     } catch (...) {
         return defaultValue;
     }
 }
 
-void TConfigNode::SetValueInternal(const YAML::Node& value) {
-    GetGlobalLogger().Debug() << "SetValueInternal: Path=\"" << Path << "\"";
+void TConfigNode::SetValueInternal(const TString& value) {
+    GetGlobalLogger().Debug() << "SetValueInternal(string): Path=\"" << Path << "\"";
 
     if (!Manager || Path.empty()) {
-        Node = YAML::Clone(value);
+        Impl->Node = YAML::Node(std::string(value));
         NotifyModified();
         return;
     }
@@ -270,7 +309,7 @@ void TConfigNode::SetValueInternal(const YAML::Node& value) {
         return;
     }
 
-    YAML::Node& root = Manager->Config;
+    YAML::Node& root = Manager->Impl->Config;
 
     GetGlobalLogger().Debug() << "SetValueInternal: parts.size=" << parts.size() << ", root=" << NodeTypeStr(root);
 
@@ -281,29 +320,17 @@ void TConfigNode::SetValueInternal(const YAML::Node& value) {
     }
 
     // Use recursive function to handle any nesting depth
-    // yaml-cpp has bugs with chained access like root["a"]["b"] = value
-    SetValueAtPath(root, parts, 0, value);
+    SetValueAtPath(root, parts, 0, YAML::Node(std::string(value)));
     GetGlobalLogger().Debug() << "SetValueInternal: after set, root=" << NodeTypeStr(root);
 
     Manager->MarkModified();
 }
 
-void TConfigNode::SetString(const TString& value) {
-    SetValueInternal(YAML::Node(std::string(value)));
-}
+void TConfigNode::SetValueInternal(bool value) {
+    GetGlobalLogger().Debug() << "SetValueInternal(bool): Path=\"" << Path << "\", value=" << (value ? "true" : "false");
 
-void TConfigNode::SetBool(bool value) {
-    GetGlobalLogger().Debug() << "SetBool: value=" << (value ? "true" : "false");
-    SetValueInternal(YAML::Node(value));
-}
-
-void TConfigNode::SetInt(int value) {
-    SetValueInternal(YAML::Node(value));
-}
-
-void TConfigNode::Remove() {
     if (!Manager || Path.empty()) {
-        Node = YAML::Node();
+        Impl->Node = YAML::Node(value);
         NotifyModified();
         return;
     }
@@ -315,12 +342,76 @@ void TConfigNode::Remove() {
         return;
     }
 
-    YAML::Node& root = Manager->Config;
+    YAML::Node& root = Manager->Impl->Config;
+
+    // Ensure root is a map
+    if (!root.IsDefined() || root.IsNull()) {
+        root = YAML::Node(YAML::NodeType::Map);
+    }
+
+    SetValueAtPath(root, parts, 0, YAML::Node(value));
+    Manager->MarkModified();
+}
+
+void TConfigNode::SetValueInternal(int value) {
+    GetGlobalLogger().Debug() << "SetValueInternal(int): Path=\"" << Path << "\"";
+
+    if (!Manager || Path.empty()) {
+        Impl->Node = YAML::Node(value);
+        NotifyModified();
+        return;
+    }
+
+    TVector<TString> parts;
+    Split(Path, ".", parts);
+
+    if (parts.empty()) {
+        return;
+    }
+
+    YAML::Node& root = Manager->Impl->Config;
+
+    // Ensure root is a map
+    if (!root.IsDefined() || root.IsNull()) {
+        root = YAML::Node(YAML::NodeType::Map);
+    }
+
+    SetValueAtPath(root, parts, 0, YAML::Node(value));
+    Manager->MarkModified();
+}
+
+void TConfigNode::SetString(const TString& value) {
+    SetValueInternal(value);
+}
+
+void TConfigNode::SetBool(bool value) {
+    SetValueInternal(value);
+}
+
+void TConfigNode::SetInt(int value) {
+    SetValueInternal(value);
+}
+
+void TConfigNode::Remove() {
+    if (!Manager || Path.empty()) {
+        Impl->Node = YAML::Node();
+        NotifyModified();
+        return;
+    }
+
+    TVector<TString> parts;
+    Split(Path, ".", parts);
+
+    if (parts.empty()) {
+        return;
+    }
+
+    YAML::Node& root = Manager->Impl->Config;
 
     // Use recursive function to handle any nesting depth
     RemoveValueAtPath(root, parts, 0);
 
-    Node = YAML::Node();
+    Impl->Node = YAML::Node();
     Manager->MarkModified();
 }
 
@@ -331,7 +422,9 @@ void TConfigNode::NotifyModified() {
 }
 
 // TConfigurationManager implementation
-TConfigurationManager::TConfigurationManager() {
+TConfigurationManager::TConfigurationManager()
+    : Impl(std::make_unique<TImpl>())
+{
     GetGlobalLogger().Debug() << "TConfigurationManager::ctor";
     Load();
 }
@@ -356,15 +449,15 @@ void TConfigurationManager::Load() {
         TFsPath configPath = GetConfigFilePath();
         GetGlobalLogger().Debug() << "Load: path=" << configPath.GetPath() << ", exists=" << configPath.Exists();
         if (configPath.Exists()) {
-            Config = YAML::LoadFile(configPath.GetPath());
-            GetGlobalLogger().Debug() << "Load: loaded Config=" << NodeTypeStr(Config);
+            Impl->Config = YAML::LoadFile(configPath.GetPath());
+            GetGlobalLogger().Debug() << "Load: loaded Config=" << NodeTypeStr(Impl->Config);
         } else {
-            Config = YAML::Node(YAML::NodeType::Map);
+            Impl->Config = YAML::Node(YAML::NodeType::Map);
             GetGlobalLogger().Debug() << "Load: created empty map";
         }
     } catch (const std::exception& e) {
         GetGlobalLogger().Warning() << "Failed to load CLI config: " << e.what();
-        Config = YAML::Node(YAML::NodeType::Map);
+        Impl->Config = YAML::Node(YAML::NodeType::Map);
     }
     Modified = false;
 }
@@ -376,12 +469,12 @@ void TConfigurationManager::Save() {
 
         TFsPath configPath = GetConfigFilePath();
 
-        GetGlobalLogger().Debug() << "Save: before emit, Config=" << NodeTypeStr(Config);
+        GetGlobalLogger().Debug() << "Save: before emit, Config=" << NodeTypeStr(Impl->Config);
 
         YAML::Emitter out;
         out.SetMapFormat(YAML::Block);
         out.SetSeqFormat(YAML::Block);
-        out << Config;
+        out << Impl->Config;
 
         TString content = out.c_str();
         GetGlobalLogger().Debug() << "Save: emitter output:\n" << content;
@@ -396,8 +489,8 @@ void TConfigurationManager::Save() {
 
         // Reload config from file to ensure in-memory state is consistent
         GetGlobalLogger().Debug() << "Save: reloading from file";
-        Config = YAML::LoadFile(configPath.GetPath());
-        GetGlobalLogger().Debug() << "Save: after reload, Config=" << NodeTypeStr(Config);
+        Impl->Config = YAML::LoadFile(configPath.GetPath());
+        GetGlobalLogger().Debug() << "Save: after reload, Config=" << NodeTypeStr(Impl->Config);
     } catch (const std::exception& e) {
         GetGlobalLogger().Warning() << "Failed to save CLI config: " << e.what();
     }
@@ -417,8 +510,12 @@ TConfigNode TConfigurationManager::operator[](const char* key) {
 }
 
 TConfigNode TConfigurationManager::Root() {
-    GetGlobalLogger().Debug() << "Root: Config=" << NodeTypeStr(Config);
-    return TConfigNode(Config, this, "");
+    GetGlobalLogger().Debug() << "Root: Config=" << NodeTypeStr(Impl->Config);
+    TConfigNode result;
+    result.Impl->Node = Impl->Config;
+    result.Manager = this;
+    result.Path = "";
+    return result;
 }
 
 void TConfigurationManager::MarkModified() {

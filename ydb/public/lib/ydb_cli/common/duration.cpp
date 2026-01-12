@@ -48,19 +48,22 @@ TDuration ParseDurationMicroseconds(TStringBuf str) {
 
 TDuration ParseDurationMilliseconds(TStringBuf str) {
     return ParseDurationWithDefaultUnit(str, [](double ms) {
-        return TDuration::MilliSeconds(static_cast<ui64>(std::round(ms)));
+        // Convert milliseconds to microseconds and round to preserve precision
+        return TDuration::MicroSeconds(static_cast<ui64>(std::round(ms * 1000.0)));
     });
 }
 
 TDuration ParseDurationSeconds(TStringBuf str) {
     return ParseDurationWithDefaultUnit(str, [](double sec) {
-        return TDuration::Seconds(static_cast<ui64>(std::round(sec)));
+        // Convert seconds to microseconds and round to preserve precision
+        return TDuration::MicroSeconds(static_cast<ui64>(std::round(sec * 1000000.0)));
     });
 }
 
 TDuration ParseDurationHours(TStringBuf str) {
     return ParseDurationWithDefaultUnit(str, [](double hours) {
-        return TDuration::Seconds(std::round(hours * 3600.0));
+        // Convert hours to microseconds and round to preserve precision
+        return TDuration::MicroSeconds(static_cast<ui64>(std::round(hours * 3600000000.0)));
     });
 }
 

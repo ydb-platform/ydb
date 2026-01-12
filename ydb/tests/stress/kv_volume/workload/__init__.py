@@ -135,10 +135,12 @@ class Worker:
                 for cmd in self.config.action_command:
                     await self.execute_command(cmd)
 
-        async def run_periodic(self, end_time, update_parent_chains=None):
+        async def run_periodic(self, end_time, update_parent_chains=None, on_iteration_complete=None):
             period = self.config.period_us / 1000000.0
             while datetime.now() < end_time:
                 await self.run_commands(update_parent_chains)
+                if on_iteration_complete:
+                    await on_iteration_complete()
                 await asyncio.sleep(period)
 
         async def run_once(self, update_parent_chains=None):
@@ -235,32 +237,45 @@ class Worker:
         task_map = {}
         parent_chains = self._build_parent_chains()
 
+        child_actions_map = defaultdict(list)
+
+        for name, action in self.actions.items():
+            parent = action.parent_action if action.HasField('parent_action') else None
+            if parent is not None:
+                child_actions_map[parent].append(name)
+
         def update_parent_chains(action_name, instance_id):
             self._update_parent_chains(action_name, instance_id, parent_chains)
-            for child_name in self.runners:
-                self.runners[child_name].parent_chain = parent_chains[child_name].copy()
+
+        async def run_child_actions(parent_name):
+            child_tasks = []
+            for child_name in child_actions_map[parent_name]:
+                child_action = self.actions[child_name]
+                runner = self.runners[child_name]
+                runner.parent_chain = parent_chains[child_name]
+                if child_action.HasField('period_us'):
+                    child_task = asyncio.create_task(runner.run_periodic(end_time, update_parent_chains))
+                else:
+                    child_task = asyncio.create_task(runner.run_once(update_parent_chains))
+                child_tasks.append(child_task)
+            return child_tasks
 
         for name, action in self.actions.items():
             parent = action.parent_action if action.HasField('parent_action') else None
             if parent is None:
                 parent_chains[name] = {}
                 if action.HasField('period_us'):
-                    task_map[name] = asyncio.create_task(self.runners[name].run_periodic(end_time, update_parent_chains))
+                    async def run_periodic_with_children(runner=self.runners[name], end_time=end_time, update_parent_chains=update_parent_chains, action_name=name):
+                        await runner.run_periodic(end_time, update_parent_chains, lambda an=action_name: run_child_actions(an))
+                    task_map[name] = asyncio.create_task(run_periodic_with_children())
                 else:
-                    task_map[name] = asyncio.create_task(self.runners[name].run_once(update_parent_chains))
-
-        for name, action in self.actions.items():
-            parent = action.parent_action if action.HasField('parent_action') else None
-            if parent is not None and parent in task_map:
-                parent_chains[name] = parent_chains[parent].copy()
-                async def wait_and_run(parent_task=task_map[parent], runner=self.runners[name], action_name=name):
-                    await parent_task
-                    runner.parent_chain = parent_chains[action_name].copy()
-                    if action.HasField('period_us'):
-                        await runner.run_periodic(end_time, update_parent_chains)
-                    else:
-                        await runner.run_once(update_parent_chains)
-                task_map[name] = asyncio.create_task(wait_and_run())
+                    original_task = asyncio.create_task(self.runners[name].run_once(update_parent_chains))
+                    async def run_once_then_children(task=original_task, an=name):
+                        await task
+                        child_tasks = await run_child_actions(an)
+                        if child_tasks:
+                            await asyncio.gather(*child_tasks)
+                    task_map[name] = asyncio.create_task(run_once_then_children())
 
         if task_map:
             await asyncio.gather(*task_map.values())

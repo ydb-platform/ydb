@@ -57,6 +57,21 @@ protected:
 template<>
 void TPrintable<TPartitionSession>::DebugString(TStringBuilder& res, bool) const;
 
+struct TPartitionSessionControl : public TPartitionSession {
+    //! Commit offsets range.
+    //! Can be used from TDataReceivedEvent or TDeferredCommit.
+    virtual void Commit(ui64 startOffset, ui64 endOffset) = 0;
+
+    //! Confirm partition session creation from TStartPartitionSessionEvent.
+    virtual void ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) = 0;
+
+    //! Confirm partition session destruction from TStopPartitionSessionEvent.
+    virtual void ConfirmDestroy() = 0;
+
+    //! Confirm partition session end from TEndPartitionSessionEvent.
+    virtual void ConfirmEnd(const std::vector<ui32>& childIds) = 0;
+};
+
 //! Events for read session.
 struct TReadSessionEvent {
     class TPartitionSessionAccessor {

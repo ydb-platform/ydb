@@ -157,7 +157,7 @@ TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(NTopic::TReadSessionEv
 
 void TReadSessionEvent::TDataReceivedEvent::Commit() {
     for (auto [from, to] : OffsetRanges) {
-        static_cast<NTopic::TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
+        static_cast<NTopic::TPartitionSessionControl*>(PartitionSession.Get())->Commit(from, to);
     }
 }
 

@@ -70,10 +70,17 @@ using TASessionClosedEvent = std::conditional_t<UseMigrationProtocol,
     NYdb::NPersQueue::TSessionClosedEvent,
     NYdb::NTopic::TSessionClosedEvent>;
 
+struct TMigrationPartitionStream : public NYdb::NPersQueue::TPartitionStream {
+    virtual void Commit(ui64 startOffset, ui64 endOffset) = 0;
+    virtual void ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) = 0;
+    virtual void ConfirmDestroy() = 0;
+    virtual void ConfirmEnd(const std::vector<ui32>& childIds) = 0;
+};
+
 template <bool UseMigrationProtocol>
 using TAPartitionStream = std::conditional_t<UseMigrationProtocol,
-    NYdb::NPersQueue::TPartitionStream,
-    NYdb::NTopic::TPartitionSession>;
+    TMigrationPartitionStream,
+    NYdb::NTopic::TPartitionSessionControl>;
 
 template <bool UseMigrationProtocol>
 using TAReadSessionEvent = std::conditional_t<UseMigrationProtocol,
@@ -684,12 +691,12 @@ public:
         TAPartitionStream<false>::LastDirectReadId = id;
     }
 
-    void Commit(ui64 startOffset, ui64 endOffset) /*override*/;
+    void Commit(ui64 startOffset, ui64 endOffset) override;
     void RequestStatus() override;
 
-    void ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset);
-    void ConfirmDestroy();
-    void ConfirmEnd(const std::vector<ui32>& childIds);
+    void ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) override;
+    void ConfirmDestroy() override;
+    void ConfirmEnd(const std::vector<ui32>& childIds) override;
 
     void StopReading() /*override*/;
     void ResumeReading() /*override*/;

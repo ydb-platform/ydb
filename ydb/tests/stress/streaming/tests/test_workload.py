@@ -12,7 +12,7 @@ class TestYdbWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(
-            erasure=Erasure.NONE,
+            erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_external_data_sources": True,
                 "enable_streaming_queries": True

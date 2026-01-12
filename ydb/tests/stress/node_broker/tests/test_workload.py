@@ -14,7 +14,7 @@ class TestYdbWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(
-            erasure=Erasure.NONE,
+            erasure=Erasure.MIRROR_3_DC,
             additional_log_configs={
                 "NODE_BROKER": LogLevels.TRACE,
                 "NAMESERVICE": LogLevels.TRACE,
@@ -36,7 +36,7 @@ class TestDeltaProtocol(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster(
-            erasure=Erasure.NONE,
+            erasure=Erasure.MIRROR_3_DC,
             additional_log_configs={
                 "NODE_BROKER": LogLevels.TRACE,
                 "NAMESERVICE": LogLevels.TRACE,

@@ -13,8 +13,8 @@ class StressFixture:
     def base_setup(self):
         self.all_binary_paths = [kikimr_driver_path()]
         self.base_erasure = yatest.common.get_param('stress_default_erasure', default='NONE')
-        if self.base_erasure is not None:
-            self.base_erasure = Erasure.from_string(self.base_erasure)
+        self.base_erasure = Erasure.from_string(self.base_erasure)
+
         self.base_duration = yatest.common.get_param('stress_default_duration', default='60')
 
     def setup_cluster(self, erasure=None, **kwargs):

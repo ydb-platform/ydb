@@ -110,8 +110,7 @@ class Workload():
                 try:
                     writer.write(messages, timeout=0.5)
                     writer.flush()
-                    # time.sleep(1)
-                except Exception as e:
+                except Exception:
                     pass
 
         for writer in writers:

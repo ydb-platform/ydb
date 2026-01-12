@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
     }
 
     Y_UNIT_TEST_F(InvalidHttpStartLine0, THttpProxyTestMock) {
-        TestStartLine(*this, Nothing(), {});
+        TestStartLine(*this, Nothing(), {});  // valid request
     }
     Y_UNIT_TEST_F(InvalidHttpStartLine1, THttpProxyTestMock) {
         TestStartLine(*this, "", {});

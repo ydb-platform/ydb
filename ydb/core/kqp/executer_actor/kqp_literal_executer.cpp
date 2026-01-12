@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -39,6 +40,14 @@ std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComp
         // only for _pure_ compute actors!
         if (name == "KqpEnsure"sv) {
             return WrapKqpEnsure(callable, ctx);
+        }
+
+        if (name == "DqHashCombine"sv) {
+            return WrapDqHashCombine(callable, ctx);
+        }
+
+        if (name == "DqHashAggregate"sv) {
+            return WrapDqHashAggregate(callable, ctx);
         }
         return nullptr;
     };

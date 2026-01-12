@@ -20,14 +20,10 @@ const char* TCodeLineException::GetRawMessage() const {
 }
 
 const char* TCodeLineException::what() const noexcept {
-    try {
-        if (!Message) {
-            Message = TStringBuilder() << SourceLocation << ": " << yexception::what();
-        }
-        return Message.c_str();
-    } catch (...) {
-        return "Unexpected exception in TCodeLineException::what()";
+    if (!Message) {
+        Message = TStringBuilder() << SourceLocation << ": " << yexception::what();
     }
+    return Message.c_str();
 }
 
 TCodeLineException operator+(const TSourceLocation& sl, TCodeLineException&& t) {

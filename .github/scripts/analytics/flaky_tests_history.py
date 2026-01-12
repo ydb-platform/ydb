@@ -49,29 +49,63 @@ def main():
         try:
             results = ydb_wrapper.execute_scan_query(last_date_query, query_name=f"get_last_date_from_history_{branch}")
             
-            default_start_date = datetime.date(2024, 9, 1)
+            today = end_date_override if end_date_override else datetime.date.today()
+            default_start_date = today - datetime.timedelta(days=180)  # 6 months ago
             base_date = datetime.date(1970, 1, 1)
             
             # YDB may return date_window as int (days since 1970-01-01) or datetime.date
             max_date_window = results[0].get('max_date_window') if results[0] else None
             if start_date_override:
-                last_datetime = max(start_date_override, default_start_date)
+                # If start_date_override is provided, use it but ensure it's not after today
+                if start_date_override > today:
+                    raise ValueError(f"start-date ({start_date_override}) must be earlier or equal to end-date/today ({today})")
+                # Use start_date_override directly (user explicitly specified it)
+                last_datetime = start_date_override
             else:
                 if max_date_window is not None:
                     # Convert int to date if needed
                     if isinstance(max_date_window, int):
                         max_date_window = base_date + datetime.timedelta(days=max_date_window)
                     # Now max_date_window is datetime.date, can compare
+                    # Use max_date_window if it's greater than default_start_date, but not after today
                     if max_date_window > default_start_date:
-                        last_datetime = max_date_window
+                        last_datetime = min(max_date_window, today)  # Don't exceed today
                     else:
                         last_datetime = default_start_date
                 else:
-                    last_datetime = default_start_date
+                    # If no history exists, check test_runs_table for min date
+                    min_date_query = f"""
+                        select min(cast(run_timestamp as Date)) as min_run_date from `{test_runs_table}`
+                        where build_type = '{build_type}' and branch = '{branch}'
+                    """
+                    try:
+                        min_results = ydb_wrapper.execute_scan_query(min_date_query, query_name=f"get_min_date_from_test_runs_{branch}")
+                        min_run_date = min_results[0].get('min_run_date') if min_results[0] else None
+                        
+                        if min_run_date is not None:
+                            # Convert int to date if needed
+                            if isinstance(min_run_date, int):
+                                min_run_date = base_date + datetime.timedelta(days=min_run_date)
+                            # If default_start_date is later than min_run_date, use default_start_date
+                            # Otherwise use max of min_run_date and default_start_date
+                            # But ensure we don't exceed today
+                            if default_start_date > min_run_date:
+                                last_datetime = default_start_date
+                            else:
+                                last_datetime = max(min_run_date, default_start_date)
+                            # Ensure last_datetime doesn't exceed today
+                            last_datetime = min(last_datetime, today)
+                            print(f'📅 Found min date from test_runs_table: {min_run_date}, using: {last_datetime}')
+                        else:
+                            last_datetime = default_start_date
+                            print(f'📅 No data in test_runs_table, using default: {last_datetime}')
+                    except Exception as e:
+                        print(f'⚠️  Failed to get min date from test_runs_table: {e}, using default: {default_start_date}')
+                        last_datetime = default_start_date
             
-            today = end_date_override if end_date_override else datetime.date.today()
+            # Final check: ensure last_datetime doesn't exceed today
             if last_datetime > today:
-                raise ValueError("Start date is after end date/today; nothing to process")
+                raise ValueError(f"Start date ({last_datetime}) is after end date/today ({today}); nothing to process")
             
             last_date = last_datetime.strftime('%Y-%m-%d')
             print(f'📅 Start history date: {last_date}')

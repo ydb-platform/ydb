@@ -131,9 +131,6 @@ class Worker:
             else:
                 return dict(self.init_keys) if self.init_keys else {}
 
-        def _get_keys_copy(self):
-            return self._get_keys()
-
         def _store_key(self, key, partition_id):
             self.results[self.config.name][self.instance_id][key] = partition_id
 
@@ -164,10 +161,13 @@ class Worker:
         async def run_periodic(self, end_time, parent_chain_update=None, on_iteration_complete=None):
             period = self.config.period_us / 1000000.0
             while datetime.now() < end_time:
+                start = datetime.now()
                 await self.run_commands(parent_chain_update)
                 if on_iteration_complete:
                     await on_iteration_complete()
-                await asyncio.sleep(period)
+                elapsed = (datetime.now() - start).total_seconds()
+                sleep_time = max(0, period - elapsed)
+                await asyncio.sleep(sleep_time)
 
         async def run_once(self, parent_chain_update=None):
             await self.run_commands(parent_chain_update)
@@ -235,15 +235,18 @@ class Worker:
 
         global_sem = None
         if action_config.HasField('global_max_in_flight'):
-            if action_config.name not in self.global_semaphores:
-                self.global_semaphores[action_config.name] = asyncio.Semaphore(action_config.global_max_in_flight)
-            global_sem = self.global_semaphores[action_config.name]
+            global_sem = self._get_or_create_global_semaphore(action_config.name, action_config.global_max_in_flight)
 
-        parent_names = parent_names.copy() if parent_names is not None else set()
+        parent_names = parent_names or set()
         parent_chain = {name: None for name in parent_names}
         runner = self.ActionRunner(action_config, self.workload, worker_sem, global_sem, self.init_keys, self.results, parent_names, parent_chain)
         self.actions[action_config.name] = action_config
         self.runners[action_config.name] = runner
+
+    def _get_or_create_global_semaphore(self, name, limit):
+        if name not in self.global_semaphores:
+            self.global_semaphores[name] = asyncio.Semaphore(limit)
+        return self.global_semaphores[name]
         
     def _update_parent_chains(self, action_name, instance_id, parent_chains):
         for child_name, child_chain in parent_chains.items():

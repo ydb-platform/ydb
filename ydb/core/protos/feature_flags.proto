@@ -214,8 +214,8 @@ message TFeatureFlags {
     optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
     optional bool RequireDbPrefixInSecretName = 189 [default = false];
     optional bool EnableSystemNamesProtection = 190 [default = false];
-    optional bool EnableRealSystemViewPaths = 191 [default = false, (RequireRestart) = true];
-    optional bool EnableCSSchemasCollapsing = 192 [default = true];
+    optional bool EnableRealSystemViewPaths = 191 [default = true];
+    optional bool EnableCSSchemasCollapsing = 192 [default = false];
     optional bool EnableMoveColumnTable = 193 [default = true];
     optional bool EnableArrowResultSetFormat = 194 [default = false];
     optional bool EnableCsOverloadsSubscriptionRetries = 195 [default = true];
@@ -223,15 +223,28 @@ message TFeatureFlags {
     optional bool EnableCompactionOverloadDetection = 197 [default = true];
     reserved 198; // DisableColumnShardBulkUpsertRequireAllColumns
     optional bool EnableDataShardWriteAlwaysVolatile = 199 [default = true];
-    optional bool EnableMirroredTopicSplitMerge = 200 [default = false];
+    optional bool EnableMirroredTopicSplitMerge = 200 [default = true];
     optional bool EnableFulltextIndex = 201 [default = false];
     optional bool EnableSetColumnConstraint = 202 [default = false];
-    optional bool EnableSchemaSecrets = 203 [default = false];
-    optional bool EnableTableCacheModes = 204 [default = false];
+    optional bool EnableSchemaSecrets = 203 [default = true];
+    optional bool EnableTableCacheModes = 204 [default = true];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
     optional bool EnableStreamingQueries = 206 [default = false];
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = false];
     optional bool EnableCompileCacheView = 209 [default = false];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
+    optional bool EnableColumnshardBool = 211 [default = false];
+    optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
+    optional bool EnableOlapRejectProbability = 213 [default = true];
+    optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
+    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
+    optional bool EnableColumnTablesBackup = 216 [default = true];
+    optional bool EnableReplication = 217 [default = true];
+    optional bool EnableShuttingDownNodeState = 218 [default = false];
+    optional bool EnableStreamingQueriesCounters = 219 [default = false];
+    optional bool UseYdsTopicStorageMetering = 220 [default = false];
+    optional bool EnableIndexMaterialization = 221 [default = false];
+    optional bool EnableFsBackups = 222 [default = false];
+    optional bool EnableCmsLocksPriority = 223 [default = false];
 }

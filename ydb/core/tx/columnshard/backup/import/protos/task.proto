@@ -1,0 +1,22 @@
+package NKikimrColumnShardImportProto;
+
+message TIdentifier {
+    optional uint64 PathId = 1;
+}
+
+message TImportTask {
+    optional TIdentifier Identifier = 1;
+    optional uint64 TxId = 5;
+}
+
+message TSessionControlContainer {
+    optional string ClassName = 1;
+}
+
+message TImportSessionLogic {
+    optional TImportTask Task = 1;
+}
+
+message TImportSessionState {
+    optional string Status = 1;
+}

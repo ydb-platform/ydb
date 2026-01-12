@@ -40,11 +40,14 @@ class YdbCliHelper:
 
     @staticmethod
     def get_cli_command() -> list[str]:
-        return [
+        result = [
             YdbCliHelper.get_cli_path(),
             '-e', YdbCluster.ydb_endpoint,
             '-d', f'/{YdbCluster.ydb_database}'
         ]
+        if YdbCluster.ydb_iam_file:
+            result += ['--sa-key-file', YdbCluster.ydb_iam_file]
+        return result
 
     class QueryPlan:
         def __init__(self) -> None:

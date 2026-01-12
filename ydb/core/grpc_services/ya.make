@@ -28,6 +28,7 @@ SRCS(
     rpc_cms.cpp
     rpc_commit_transaction.cpp
     rpc_config.cpp
+    rpc_cluster_state.cpp
     rpc_copy_table.cpp
     rpc_copy_tables.cpp
     rpc_create_coordination_node.cpp
@@ -86,6 +87,7 @@ SRCS(
     rpc_scheme_base.cpp
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
+    rpc_test_shard.cpp
     rpc_view.cpp
     rpc_whoami.cpp
     table_settings.cpp
@@ -116,8 +118,10 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/backup/common
+    ydb/core/backup/regexp
     ydb/core/base
     ydb/core/control/lib
+    ydb/core/counters_info
     ydb/core/discovery
     ydb/core/engine
     ydb/core/formats

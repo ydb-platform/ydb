@@ -113,6 +113,8 @@ namespace NKikimr::NStorage {
         }
         if (cmd.GetEnableSelfHealStateStorage()) {
             SelfHealStateStorage(cmd.GetWaitForConfigStep(), true, cmd.GetPileupReplicas(), cmd.GetOverrideReplicasInRingCount(), cmd.GetOverrideRingsCount(), cmd.GetReplicasSpecificVolume());
+        } else {
+            Finish(TResult::OK, std::nullopt);
         }
     }
 

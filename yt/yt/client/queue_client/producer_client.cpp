@@ -2,6 +2,8 @@
 
 #include "private.h"
 
+#include <yt/yt/client/table_client/public.h>
+
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/transaction.h>
 
@@ -117,7 +119,7 @@ public:
     TFuture<void> GetReadyEvent() override
     {
         if (FlushExecutor_) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         {
@@ -175,7 +177,7 @@ public:
             }));
     }
 
-    std::optional<TMD5Hash> GetDigest() const override
+    std::optional<TRowsDigest> GetDigest() const override
     {
         return std::nullopt;
     }
@@ -250,12 +252,12 @@ private:
         {
             auto guard = Guard(SpinLock_);
             if ((checkIfFlushNeeded && !IsFlushNeeded()) && !Closed_) {
-                return VoidFuture;
+                return OKFuture;
             }
             buffer = GetBufferToFlush();
         }
         if (!buffer) {
-            return VoidFuture;
+            return OKFuture;
         }
         return FlushImpl(std::move(*buffer))
             .Apply(BIND([this, this_ = MakeStrong(this), checkIfFlushNeeded] {

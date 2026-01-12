@@ -80,6 +80,6 @@ NActors::IActor* CreateTableCreator(
     const TString& database = {},
     bool isSystemUser = false,
     TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing(),
-    TMaybe<NACLib::TDiffACL> newTableAcl = Nothing());
+    TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing());
 
 } // namespace NKikimr

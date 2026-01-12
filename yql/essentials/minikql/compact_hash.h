@@ -385,6 +385,8 @@ public:
     TListPool(const TListPool&) = delete;
     TListPool(TListPool&& other)
         : TListPoolBase(std::move(other))
+        // TListPoolBase does not moves Pools_ out
+        // NOLINTNEXTLINE(bugprone-use-after-move)
         , Pools_(std::move(other.Pools_))
     {
     }
@@ -446,8 +448,8 @@ public:
                 header->Size = oldSize;
             }
 
-            if (std::is_trivially_copyable<T>::value) {
-                memcpy(list, oldList, sizeof(T) * oldSize);
+            if constexpr (std::is_trivially_copyable<T>::value) {
+                memcpy(reinterpret_cast<ui8*>(list), reinterpret_cast<const ui8*>(oldList), sizeof(T) * oldSize);
             } else {
                 for (size_t i = 0; i < oldSize; ++i) {
                     ::WriteUnaligned<T>(list + i, ::ReadUnaligned<T>(oldList + i));

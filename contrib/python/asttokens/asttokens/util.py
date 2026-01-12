@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#    http://www.apache.org/licenses/LICENSE-2.0
+#    https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -46,6 +46,8 @@ if TYPE_CHECKING:  # pragma: no cover
     first_token = None  # type: Token
     last_token = None  # type: Token
     lineno = 0  # type: int
+    end_lineno = 0 # type : int
+    end_col_offset = 0 # type : int
 
   AstNode = Union[EnhancedAST, NodeNG]
 
@@ -110,7 +112,7 @@ def generate_tokens(text):
   Generates standard library tokens for the given code.
   """
   # tokenize.generate_tokens is technically an undocumented API for Python3, but allows us to use the same API as for
-  # Python2. See http://stackoverflow.com/a/4952291/328565.
+  # Python2. See https://stackoverflow.com/a/4952291/328565.
   # FIXME: Remove cast once https://github.com/python/typeshed/issues/7003 gets fixed
   return tokenize.generate_tokens(cast(Callable[[], str], io.StringIO(text).readline))
 
@@ -199,7 +201,7 @@ def is_expr_stmt(node):
 
 CONSTANT_CLASSES: Tuple[Type, ...] = (ast.Constant,)
 try:
-  from astroid import Const
+  from astroid.nodes import Const
   CONSTANT_CLASSES += (Const,)
 except ImportError:  # pragma: no cover
   # astroid is not available
@@ -404,7 +406,7 @@ def combine_tokens(group):
 
 
 def last_stmt(node):
-  # type: (ast.AST) -> ast.AST
+  # type: (AstNode) -> AstNode  
   """
   If the given AST node contains multiple statements, return the last one.
   Otherwise, just return the node.

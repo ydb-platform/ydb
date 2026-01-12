@@ -19,6 +19,15 @@ TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, ui64
 {
 }
 
+void TDataShardUserDb::EnsureVolatileTxId() {
+    if (!VolatileTxId) {
+        if (GlobalTxId == 0) {
+            throw TNeedGlobalTxId();
+        }
+        SetVolatileTxId(GlobalTxId);
+    }
+}
+
 NTable::EReady TDataShardUserDb::SelectRow(
         const TTableId& tableId,
         TArrayRef<const TRawTypeValue> key,
@@ -90,11 +99,11 @@ TArrayRef<const NIceDb::TUpdateOp> TDataShardUserDb::RemoveDefaultColumnsIfNeede
         // row not exist - no changes need
         return ops;
     }
-    
+
     //newOps is ops without last DefaultFilledColumnCount values
     auto newOps = TArrayRef<const NIceDb::TUpdateOp> (ops.begin(), ops.end() - DefaultFilledColumnCount);
-    
-    return newOps;  
+
+    return newOps;
 }
 
 
@@ -189,8 +198,12 @@ void TDataShardUserDb::InsertRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected InsertRow for an unknown table");
 
-    if (RowExists(tableId, key))
+    if (RowExists(tableId, key)) {
+        // Compatibility with old stats.
+        // We count read only if row exists.
+        IncreaseSelectCounters(key);
         throw TUniqueConstrainException();
+    }
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
 
@@ -205,11 +218,22 @@ void TDataShardUserDb::UpdateRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
-    if (!RowExists(tableId, key))
+    if (!RowExists(tableId, key)) {
+        if (LockTxId) {
+            // We don't perform an update, but this key may be modified later
+            // by a different transaction. Make sure we set the read lock to
+            // guard against that.
+            TSmallVec<TCell> keyCells = ConvertTableKeys(key);
+            Self.SysLocksTable().SetLock(tableId, keyCells);
+        }
+        // Compatibility with old stats.
+        // We count read only if row exists.
         return;
+    }
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
 
+    IncreaseSelectCounters(key);
     IncreaseUpdateCounters(key, ops);
 }
 
@@ -227,11 +251,11 @@ void TDataShardUserDb::IncrementRow(
     }
 
     auto currentRow = GetRowState(tableId, key, columns);
-    
+
     if (currentRow.Size() == 0) {
         return;
     }
-    
+
     TStackVec<NIceDb::TUpdateOp> newOps(ops.size());
 
     Y_ENSURE(currentRow.Size() == ops.size());
@@ -242,18 +266,19 @@ void TDataShardUserDb::IncrementRow(
 
     for (size_t i = 0; i < ops.size(); i++) {
         auto vtype = scheme.GetColumnInfo(tableInfo, ops[i].Tag)->PType.GetTypeId();
-       
+
         auto current = currentRow.Get(i);
         auto delta = ops[i].AsCell();
-        
+
         NFormats::AddTwoCells(incrementResults[i], current, delta, vtype);
-            
+
         TRawTypeValue rawTypeValue(incrementResults[i].Data(), incrementResults[i].Size(), vtype);
         newOps[i] = NIceDb::TUpdateOp(ops[i].Tag, ops[i].Op, rawTypeValue);
     }
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, newOps);
 
+    IncreaseSelectCounters(key);
     IncreaseUpdateCounters(key, ops);
 }
 
@@ -267,7 +292,7 @@ void TDataShardUserDb::EraseRow(
     UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {});
 
     ui64 keyBytes = CalculateKeyBytes(key);
-    
+
     Counters.NEraseRow++;
     Counters.EraseRowBytes += keyBytes + 8;
 }
@@ -279,12 +304,12 @@ bool TDataShardUserDb::PrechargeRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected PrechargeRow for an unknown table");
 
-    return Db.Precharge(localTableId, key, key, {}, 0, Max<ui64>(), Max<ui64>());     
+    return Db.Precharge(localTableId, key, key, {}, 0, Max<ui64>(), Max<ui64>()).Ready;
 }
 
 void TDataShardUserDb::IncreaseUpdateCounters(
-    const TArrayRef<const TRawTypeValue> key, 
-    const TArrayRef<const NIceDb::TUpdateOp> ops) 
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops)
 {
     ui64 valueBytes = CalculateValueBytes(ops);
     ui64 keyBytes = CalculateKeyBytes(key);
@@ -293,12 +318,22 @@ void TDataShardUserDb::IncreaseUpdateCounters(
     Counters.UpdateRowBytes += keyBytes + valueBytes;
 }
 
+void TDataShardUserDb::IncreaseSelectCounters(
+    const TArrayRef<const TRawTypeValue> key) 
+{
+    ui64 keyBytes = CalculateKeyBytes(key);
+
+    Counters.NSelectRow++;
+    Counters.SelectRowRows++;
+    Counters.SelectRowBytes += keyBytes;
+}
+
 void TDataShardUserDb::UpsertRowInt(
     NTable::ERowOp rowOp,
     const TTableId& tableId,
     ui64 localTableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops) 
+    const TArrayRef<const NIceDb::TUpdateOp> ops)
 {
     TSmallVec<TCell> keyCells = ConvertTableKeys(key);
 
@@ -458,11 +493,8 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
         lock->ForAllVolatileDependencies([this](ui64 txId) {
             auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId);
             if (info && info->State != EVolatileTxState::Aborting) {
-                if (VolatileDependencies.insert(txId).second && !VolatileTxId) {
-                    if (GlobalTxId == 0) {
-                        throw TNeedGlobalTxId();
-                    }
-                    SetVolatileTxId(GlobalTxId);
+                if (VolatileDependencies.insert(txId).second) {
+                    EnsureVolatileTxId();
                 }
             }
         });
@@ -477,12 +509,15 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
                 it->second->Add(lockId, MvccVersion);
             }
         }
+        // Note for AI agents: we don't add lockId to CommittedTxIds because
+        // it's not committed in the storage yet.
         return;
     }
 
     LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Committing changes lockId# " << lockId << " in localTid# " << localTid << " shard# " << Self.TabletID());
     Db.CommitTx(localTid, lockId, MvccVersion);
     Self.GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(lockId, Db);
+    CommittedTxIds.insert(lockId);
 
     if (!CommittedLockChanges.contains(lockId) && Self.HasLockChangeRecords(lockId)) {
         if (auto* collector = GetChangeCollector(tableId)) {
@@ -641,7 +676,12 @@ public:
     void OnSkipUncommitted(ui64 txId) override {
         // Note: all active volatile transactions will be uncommitted
         // without a tx map, and will be handled by BreakWriteConflict.
-        ConflictChecker.BreakWriteConflict(txId);
+        // We don't handle changes below our current (volatile) tx id, because
+        // we should have checked them already. This handles cases when the
+        // same key is written to multiple times.
+        if (!SelfFound) {
+            SelfFound = ConflictChecker.BreakWriteConflict(txId);
+        }
     }
 
     void OnSkipCommitted(const TRowVersion&) override {
@@ -662,6 +702,7 @@ public:
 
 private:
     IDataShardConflictChecker& ConflictChecker;
+    bool SelfFound = false;
 };
 
 void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) {
@@ -669,8 +710,11 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
     Y_ENSURE(localTableId != 0, "Unexpected CheckWriteConflicts for an unknown table");
 
     // When there are uncommitted changes (write locks) we must find which
-    // locks would break upon commit.
-    bool mustFindConflicts = Self.SysLocksTable().HasWriteLocks(tableId);
+    // locks would break upon commit. For snapshot isolation transactions we
+    // must also find all conflicts which could prevent us from committing.
+    bool mustFindConflicts = (
+        LockMode == ELockMode::OptimisticSnapshotIsolation ||
+        Self.SysLocksTable().HasWriteLocks(tableId));
 
     // When there are volatile changes (tx map) we try to find precise
     // dependencies, but we may switch to total order on page faults.
@@ -690,12 +734,31 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
         txObserver = new TLockedWriteTxObserver(*this, Db, LockTxId, skipCount, localTableId);
         // Locked writes are immediate, increased latency is not critical
         mustFindConflicts = true;
-    } else if (auto* cached = Self.GetConflictsCache().GetTableCache(localTableId).FindUncommittedWrites(keyCells)) {
-        for (ui64 txId : *cached) {
-            BreakWriteConflict(txId);
-        }
-        return;
     } else {
+        if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
+            // We switch to volatile code path to make sure all changes by the
+            // current commit will not be marked as committed in the storage
+            // until all operations are applied. This is more expensive, but
+            // allows us to distinguish between changes written in the current
+            // commit and changes committed by other transactions at the same
+            // row version.
+            EnsureVolatileTxId();
+        }
+
+        // TODO: conflicts cache doesn't track the last committed row version
+        // for cached keys, so it cannot be used to speed up conflict checks
+        // in snapshot isolation. This cache is only needed to avoid retries
+        // due to page faults and does not affect correctness, but we may want
+        // to track additional info in the future.
+        if (LockMode != ELockMode::OptimisticSnapshotIsolation) {
+            if (auto* cached = Self.GetConflictsCache().GetTableCache(localTableId).FindUncommittedWrites(keyCells)) {
+                for (ui64 txId : *cached) {
+                    BreakWriteConflict(txId);
+                }
+                return;
+            }
+        }
+
         txObserver = new TWriteTxObserver(*this);
         // Prefer precise conflicts for non-distributed transactions
         if (IsImmediateTx) {
@@ -718,16 +781,27 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
 
         // Upgrade to volatile ordered commit and ignore the page fault
         if (!VolatileCommitOrdered) {
-            if (!VolatileTxId) {
-                if (GlobalTxId == 0) {
-                    throw TNeedGlobalTxId();
-                }
-                SetVolatileTxId(GlobalTxId);
-            }
+            EnsureVolatileTxId();
             VolatileCommitOrdered = true;
             VolatileDependencies.clear();
         }
         return;
+    }
+
+    if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
+        if (res.RowVersion > SnapshotVersion) {
+            // Current row version is above the snapshot, which could indicate
+            // a conflicting write. However, this transaction may have already
+            // marked some of its TxIds as committed, and we don't want to
+            // report serialization conflict in that case.
+            // Note for AI agents: we don't check VolatileCommitTxIds because
+            // those changes are not committed in the storage yet, and this
+            // check is for changes which have already been marked as committed.
+            if (!res.RowTxId || !CommittedTxIds.contains(res.RowTxId)) {
+                // This change has no chance of ever committing
+                throw TSerializableIsolationException();
+            }
+        }
     }
 
     if (LockTxId || VolatileTxId) {
@@ -739,19 +813,70 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
 }
 
 void TDataShardUserDb::AddWriteConflict(ui64 txId) {
+    // Note for AI agents: this code path is only called when writing new
+    // uncommitted changes, which may or may not be committed in the distant
+    // future at an unknown version. We handle conflicts with changes from
+    // other transactions here, which are not yet marked as committed in the
+    // storage, but may or may not be logically committed.
     if (auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId)) {
+        if (info->State != EVolatileTxState::Aborting &&
+            LockMode == ELockMode::OptimisticSnapshotIsolation &&
+            info->Version > SnapshotVersion)
+        {
+            if (info->State == EVolatileTxState::Waiting) {
+                // We need to resolve this dependency first (it may abort)
+                VolatileReadDependencies.insert(info->TxId);
+            }
+            // This write will not be able to commit
+            throw TSerializableIsolationException();
+        }
         if (info->State != EVolatileTxState::Aborting) {
             Self.SysLocksTable().AddVolatileDependency(info->TxId);
         }
     } else {
         Self.SysLocksTable().AddWriteConflict(txId);
+        if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
+            Self.SysLocksTable().AddReadConflict(txId);
+        }
     }
 }
 
-void TDataShardUserDb::BreakWriteConflict(ui64 txId) {
+bool TDataShardUserDb::BreakWriteConflict(ui64 txId) {
+    // Note for AI agents: this code path is only called when writing new
+    // changes at commit time. We handle conflicts with changes from other
+    // transactions here (txId != 0), which are not yet marked as committed in
+    // the storage, but may or may not be logically committed. Although we
+    // perform this check at commit time, the commit may be optimistic with
+    // VolatileTxId != 0 and may or may not rollback later.
+    //
+    // When writing uncommitted changes at commit time we add those TxIds to
+    // VolatileCommitTxIds, which is a set of changes which are currently
+    // uncommitted, but will be committed later when transaction eventually
+    // commits in storage.
+    //
+    // We don't check CommittedTxIds because those changes are already marked
+    // as committed in the storage, and will never end up in this callback.
+    // Transaction may have some of its changes in CommittedTxIds and others
+    // in VolatileCommitTxIds, because for some changes it may be safe to
+    // commit immediately, but for other changes we may need to wait until
+    // some earlier transaction commits or aborts.
     if (VolatileCommitTxIds.contains(txId)) {
         // Skip our own commits
-    } else if (auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId)) {
+        return true;
+    }
+
+    if (auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId)) {
+        if (info->State != EVolatileTxState::Aborting &&
+            LockMode == ELockMode::OptimisticSnapshotIsolation &&
+            info->Version > SnapshotVersion)
+        {
+            if (info->State == EVolatileTxState::Waiting) {
+                // We need to resolve this dependency first (it may abort)
+                VolatileReadDependencies.insert(info->TxId);
+            }
+            // This write will not be able to commit
+            throw TSerializableIsolationException();
+        }
         // We must not overwrite uncommitted changes that may become committed
         // later, so we need to add a dependency that will force us to wait
         // until it is persistently committed. We may ignore aborting changes
@@ -759,24 +884,21 @@ void TDataShardUserDb::BreakWriteConflict(ui64 txId) {
         // also perform writes, and either it fails, or future generation
         // could not have possibly committed it already.
         if (info->State != EVolatileTxState::Aborting && !VolatileCommitOrdered) {
-            if (!VolatileTxId) {
-                // All further writes will use this VolatileTxId and will
-                // add it to VolatileCommitTxIds, forcing it to be committed
-                // like a volatile transaction. Note that this does not make
-                // it into a real volatile transaction, it works as usual in
-                // every sense, only persistent commit order is affected by
-                // a dependency below.
-                if (GlobalTxId == 0) {
-                    throw TNeedGlobalTxId();
-                }
-                SetVolatileTxId(GlobalTxId);
-            }
+            // All further writes will use this VolatileTxId and will
+            // add it to VolatileCommitTxIds, forcing it to be committed
+            // like a volatile transaction. Note that this does not make
+            // it into a real volatile transaction, it works as usual in
+            // every sense, only persistent commit order is affected by
+            // a dependency below.
+            EnsureVolatileTxId();
             VolatileDependencies.insert(info->TxId);
         }
     } else {
-        // Break uncommitted locks
+        // Break uncommitted locks from other transactions
         Self.SysLocksTable().BreakLock(txId);
     }
+
+    return false;
 }
 
 absl::flat_hash_set<ui64>& TDataShardUserDb::GetVolatileReadDependencies() {
@@ -809,6 +931,8 @@ ui64 TDataShardUserDb::GetWriteTxId(const TTableId& tableId) {
                 it->second->Add(VolatileTxId, MvccVersion);
             }
         }
+        // Note for AI agents: we don't add VolatileTxId to CommittedTxIds
+        // because it's not committed in the storage yet.
         return VolatileTxId;
     }
 
@@ -851,8 +975,6 @@ NTable::ITransactionMapPtr TDataShardUserDb::GetReadTxMap(const TTableId& tableI
 
     return txMap;
 }
-
-
 
 NTable::ITransactionObserverPtr TDataShardUserDb::GetReadTxObserver(const TTableId& tableId) {
     auto localTableId = Self.GetLocalTableId(tableId);
@@ -913,9 +1035,11 @@ void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) {
     }
 }
 
-
-
 bool TDataShardUserDb::NeedToReadBeforeWrite(const TTableId& tableId) {
+    if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
+        return true;
+    }
+
     if (Self.GetVolatileTxManager().GetTxMap()) {
         return true;
     }

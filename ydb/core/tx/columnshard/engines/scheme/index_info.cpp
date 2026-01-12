@@ -137,6 +137,9 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
         InitializeCaches(operators, columns, nullptr);
         Precalculate();
     }
+    for (auto&& [id, column] : columns) {
+        Columns.emplace_back(TNameTypeInfo(column.Name, column.PType));
+    }
 }
 
 TColumnSaver TIndexInfo::GetColumnSaver(const ui32 columnId) const {
@@ -213,8 +216,13 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
         auto container =
             NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(optionsProto.GetCompactionPlannerConstructor());
         CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
-    } else {
-        CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+    } else if (AppDataVerified().ColumnShardConfig.HasDefaultCompactionConstructor()) {
+        auto container =
+            NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(AppDataVerified().ColumnShardConfig.GetDefaultCompactionConstructor());
+        CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
+    }
+    else {
+        CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault(AppDataVerified().ColumnShardConfig.GetDefaultCompactionPreset());
     }
     if (optionsProto.HasMetadataManagerConstructor()) {
         auto container =

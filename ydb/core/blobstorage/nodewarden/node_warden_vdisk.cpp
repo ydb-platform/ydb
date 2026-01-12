@@ -204,8 +204,10 @@ namespace NKikimr::NStorage {
         vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
         vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
         vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
-
+        vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
+        vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
         vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
+
         if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
             vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionHDD;
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightHDD;
@@ -227,13 +229,15 @@ namespace NKikimr::NStorage {
         vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
 
         vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
+        vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
+        vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
 
         vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 
         vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
-        if (StorageConfig->HasBlobStorageConfig() && StorageConfig->GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
-            for (auto &type : StorageConfig->GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
+        if (Cfg->BlobStorageConfig.HasVDiskPerformanceSettings()) {
+            for (auto &type : Cfg->BlobStorageConfig.GetVDiskPerformanceSettings().GetVDiskTypes()) {
                 if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
                     if (type.HasMinHugeBlobSizeInBytes()) {
                         vdiskConfig->MinHugeBlobInBytes = type.GetMinHugeBlobSizeInBytes();
@@ -259,6 +263,12 @@ namespace NKikimr::NStorage {
         vdiskConfig->GroupSizeInUnits = groupInfo->GroupSizeInUnits;
 
         vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
+
+        // debug options
+        if (Cfg->TinySyncLog) {
+            vdiskConfig->SyncLogMaxDiskAmount = 1;
+            vdiskConfig->SyncLogMaxMemAmount = 1;
+        }
 
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),

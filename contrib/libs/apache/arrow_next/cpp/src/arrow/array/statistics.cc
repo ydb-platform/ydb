@@ -18,4 +18,4 @@
 // This empty .cc file is for embedding not inlined symbols in
 // arrow20::ArrayStatistics into libarrow.
 
-#include "arrow/array/statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/statistics.h"

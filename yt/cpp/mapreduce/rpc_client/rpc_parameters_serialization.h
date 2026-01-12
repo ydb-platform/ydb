@@ -215,6 +215,26 @@ NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     const TTransactionId& transactionId,
     const TGetTablePartitionsOptions& options);
 
+NApi::TDistributedWriteSessionStartOptions SerializeOptionsForStartDistributedTableSession(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options);
+
+NApi::TDistributedWriteSessionFinishOptions SerializeOptionsForFinishDistributedTableSession(
+    TMutationId& mutationId,
+    const TFinishDistributedWriteTableOptions& options);
+
+NApi::TDistributedWriteFileSessionStartOptions SerializeOptionsForStartDistributedFileSession(
+    TMutationId& mutationId,
+    const TTransactionId& transactionId,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options);
+
+NApi::TDistributedWriteFileSessionFinishOptions SerializeOptionsForFinishDistributedFileSession(
+    TMutationId& mutationId,
+    const TFinishDistributedWriteFileOptions& options);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDetail

@@ -7,9 +7,12 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/docapi/traits.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/security/sasl/events.h>
+#include <ydb/core/security/sasl/hasher.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <ydb/library/login/login.h>
@@ -17,11 +20,21 @@
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/login/hashes_checker/hashes_checker.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <util/string/cast.h>
+
+namespace {
+
+const TVector<NLogin::EHashType> HASHES_TO_COMPUTE = {
+    NLogin::EHashType::Argon,
+    NLogin::EHashType::ScramSha256,
+};
+
+}
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -45,6 +58,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     TActorId Source;
     TActorId PipeClient;
+    ui64 SchemeshardIdToRequest;
 
     struct TPathToResolve {
         const NKikimrSchemeOp::TModifyScheme& ModifyScheme;
@@ -102,6 +116,23 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " SEND to# " << shardToRequest << " shardToRequest " << req->ToString());
         NTabletPipe::SendData(ctx, PipeClient, req.Release());
+    }
+
+    THolder<TEvSchemeShardPropose> MakePropose(ui64 schemeshardIdToRequest) {
+        auto request = MakeHolder<TEvSchemeShardPropose>(TxId, schemeshardIdToRequest);
+
+        if (UserToken) {
+            request->Record.SetOwner(UserToken->GetUserSID());
+        }
+
+        request->Record.SetPeerName(GetRequestProto().GetPeerName());
+        if (GetRequestEv().HasModifyScheme()) {
+            request->Record.AddTransaction()->MergeFrom(GetModifyScheme());
+        } else {
+            request->Record.MutableTransaction()->MergeFrom(GetModifications());
+        }
+
+        return request;
     }
 
     static bool IsSplitMergeFromSchemeShard(const NKikimrSchemeOp::TModifyScheme& modifyScheme) {
@@ -502,15 +533,18 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
     }
 
-    static THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForAdjustPathNames(NKikimrSchemeOp::TModifyScheme& scheme) {
+    static THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForAdjustPathNames(
+        const TString& database, NKikimrSchemeOp::TModifyScheme& scheme)
+    {
         auto parts = GetFullPath(scheme);
         if (parts.size() < 2) {
             return {};
         }
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        TVector<TString> path;
+        request->DatabaseName = database;
 
+        TVector<TString> path;
         for (auto it = parts.begin(); it != parts.end() - 1; ++it) {
             path.emplace_back(*it);
 
@@ -624,7 +658,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             // Cluster admin trumps database admin, database owner check is needed only for database admin.
             if (!IsClusterAdministrator && CheckDatabaseAdministrator) {
                 auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-                request->DatabaseName = CanonizePath(GetRequestProto().GetDatabaseName());
+                request->DatabaseName = GetRequestProto().GetDatabaseName();
 
                 auto& entry = request->ResultSet.emplace_back();
                 entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
@@ -649,6 +683,23 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
 
         TBase::Die(ctx);
+    }
+
+    void RunPasswordHasher(const TActorContext &ctx, const TString& username, const TString& password) {
+        const auto& passwordComplexityProto = AppData()->AuthConfig.GetPasswordComplexity();
+        NLogin::TPasswordComplexity passwordComplexity({
+            .MinLength = passwordComplexityProto.GetMinLength(),
+            .MinLowerCaseCount = passwordComplexityProto.GetMinLowerCaseCount(),
+            .MinUpperCaseCount = passwordComplexityProto.GetMinUpperCaseCount(),
+            .MinNumbersCount = passwordComplexityProto.GetMinNumbersCount(),
+            .MinSpecialCharsCount = passwordComplexityProto.GetMinSpecialCharsCount(),
+            .SpecialChars = passwordComplexityProto.GetSpecialChars(),
+            .CanContainUsername = passwordComplexityProto.GetCanContainUsername(),
+        });
+
+        NSasl::TStaticCredentials creds(username, password);
+        TBase::Register(NSasl::CreateHasher(ctx.SelfID, creds, HASHES_TO_COMPUTE, std::move(passwordComplexity)).release());
+        return;
     }
 
     // KIKIMR-12624 move that logic to the schemeshard
@@ -1321,13 +1372,32 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                         return false;
                     }
+
+                    bool isAdminChangesOwnPasswordHash = [](const auto& alterLogin, const NACLib::TSID& subjectSid) {
+                        if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser) {
+                            const auto& targetUser = alterLogin.GetModifyUser();
+                            if (targetUser.HasHashedPassword() && !targetUser.HasCanLogin()) {
+                                return (subjectSid == targetUser.GetUser());
+                            }
+                        }
+                        return false;
+                    }(alterLogin, UserToken->GetUserSID());
+
                     // Database admin still can change its own password
-                    if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser && !isUserChangesOwnPassword) {
+                    if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser
+                        && !isUserChangesOwnPassword && !isAdminChangesOwnPasswordHash) {
                         const auto& targetUser = alterLogin.GetModifyUser();
                         const auto targetUserToken = NKikimr::BuildLocalUserToken(DatabaseSecurityState, targetUser.GetUser());
-                        if (NKikimr::IsDatabaseAdministrator(&targetUserToken, DatabaseOwner)) {
+                        if (UserToken->GetUserSID() == targetUser.GetUser()) {
                             const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
-                                << "attempt to change other database admin by the database admin"
+                                << "attempt to change self login attributes managed by the cluster admin"
+                            );
+                            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                            return false;
+                        } else if (NKikimr::IsDatabaseAdministrator(&targetUserToken, DatabaseOwner)) {
+                            const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                                << "attempt to change other database admins"
                             );
                             auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
@@ -1584,33 +1654,111 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
         }
 
-        ui64 shardToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
-        auto request = MakeHolder<TEvSchemeShardPropose>(TxId, shardToRequest);
-
-        if (UserToken) {
-            request->Record.SetOwner(UserToken->GetUserSID());
-        }
-
-        request->Record.SetPeerName(GetRequestProto().GetPeerName());
-        if (GetRequestEv().HasModifyScheme()) {
-            request->Record.AddTransaction()->MergeFrom(GetModifyScheme());
-        } else {
-            request->Record.MutableTransaction()->MergeFrom(GetModifications());
-        }
+        SchemeshardIdToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                     "Actor# " << ctx.SelfID.ToString()
                               << " HANDLE EvNavigateKeySetResult,"
                               << " txid# " << TxId
-                              << " shardToRequest# " << shardToRequest
+                              << " shardToRequest# " << SchemeshardIdToRequest
                               << " DomainKey# " << navigate->ResultSet.begin()->DomainInfo->DomainKey
                               << " DomainInfo.Params# " << navigate->ResultSet.begin()->DomainInfo->Params.ShortDebugString()
                               << " RedirectRequired# " <<  (navigate->ResultSet.begin()->RedirectRequired ? "true" : "false"));
 
+        // TSchemeTransactionalReq can't contain AlterLogin operations since it's used only for RenameTables requests
+        if (GetRequestEv().HasModifyScheme()
+            && GetModifyScheme().GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterLogin) {
+            auto& alterLogin = *GetModifyScheme().MutableAlterLogin();
+            switch (alterLogin.GetAlterCase()) {
+            case NKikimrSchemeOp::TAlterLogin::kCreateUser:
+            {
+                auto& targetUser = *alterLogin.MutableCreateUser();
+                if (targetUser.GetHashedPassword()) {
+                    // to support compatibility between old and new hash formats
+                    // TODO: remove after the end of old format support in local backups
+                    auto hashes = NLogin::ConvertHashes(targetUser.GetHashedPassword());
+                    if (hashes) {
+                        targetUser.SetPassword(std::move(hashes->OldHashFormat));
+                        targetUser.SetIsHashedPassword(true);
+                        targetUser.SetHashedPassword(std::move(hashes->NewHashFormat));
+                    } else {
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                            "Unsupported format of hashed password");
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, nullptr, &issue, ctx);
+                        return Die(ctx);
+                    }
+                } else {
+                    RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
+                    return;
+                }
+                break;
+            }
+            case NKikimrSchemeOp::TAlterLogin::kModifyUser:
+            {
+                auto& targetUser = *alterLogin.MutableModifyUser();
+                if (targetUser.HasHashedPassword()) {
+                    // to support compatibility between old and new hash formats
+                    // TODO: remove after the end of old format support in local backups
+                    auto hashes = NLogin::ConvertHashes(targetUser.GetHashedPassword());
+                    if (hashes) {
+                        targetUser.SetPassword(std::move(hashes->OldHashFormat));
+                        targetUser.SetIsHashedPassword(true);
+                        targetUser.SetHashedPassword(std::move(hashes->NewHashFormat));
+                    } else {
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                            "Unsupported format of hashed password");
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, nullptr, &issue, ctx);
+                        return Die(ctx);
+                    }
+                } else if (targetUser.HasPassword()) {
+                    RunPasswordHasher(ctx, targetUser.GetUser(), targetUser.GetPassword());
+                    return;
+                }
+                break;
+            }
+            default:
+                break;
+            }
+        }
 
-        SendPropose(request.Release(), shardToRequest, ctx);
+        auto request = MakePropose(SchemeshardIdToRequest);
+        SendPropose(request.Release(), SchemeshardIdToRequest, ctx);
         static_cast<TDerived*>(this)->Become(&TDerived::StateWaitPrepare);
     }
+
+    void Handle(NSasl::TEvSasl::TEvComputedHashes::TPtr &ev, const TActorContext &ctx) {
+        auto* computedHashes = ev->Get();
+        if (!computedHashes->Error.empty()) {
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, std::move(computedHashes->Error));
+        }
+
+        auto& alterLogin = *GetModifyScheme().MutableAlterLogin();
+        switch (alterLogin.GetAlterCase()) {
+        case NKikimrSchemeOp::TAlterLogin::kCreateUser:
+        {
+            auto& targetUser = *alterLogin.MutableCreateUser();
+            targetUser.SetPassword(std::move(computedHashes->ArgonHash));
+            targetUser.SetIsHashedPassword(true);
+            targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
+            break;
+        }
+        case NKikimrSchemeOp::TAlterLogin::kModifyUser:
+        {
+            auto& targetUser = *alterLogin.MutableModifyUser();
+            targetUser.SetPassword(std::move(computedHashes->ArgonHash));
+            targetUser.SetIsHashedPassword(true);
+            targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
+            break;
+        }
+        default:
+            break;
+        }
+
+        auto request = MakePropose(SchemeshardIdToRequest);
+        SendPropose(request.Release(), SchemeshardIdToRequest, ctx);
+        static_cast<TDerived*>(this)->Become(&TDerived::StateWaitPrepare);
+    }
+
 };
 
 //////////////////////////////////////////////////////////////
@@ -1653,6 +1801,7 @@ struct TFlatSchemeReq : public TBaseSchemeReq<TFlatSchemeReq> {
     STFUNC(StateWaitResolve) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            HFunc(NSasl::TEvSasl::TEvComputedHashes, Handle);
         }
     }
 
@@ -1696,7 +1845,7 @@ void TFlatSchemeReq::Start(const TActorContext &ctx) {
     }
 
     if (NeedAdjustPathNames(GetModifyScheme())) {
-        auto resolveRequest = ResolveRequestForAdjustPathNames(GetModifyScheme());
+        auto resolveRequest = ResolveRequestForAdjustPathNames(GetRequestProto().GetDatabaseName(), GetModifyScheme());
         if (!resolveRequest) {
             ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError, ctx);
             TxProxyMon->ResolveKeySetWrongRequest->Inc();

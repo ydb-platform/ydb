@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class GridLayout(Layout):
-    """Used to layout Widgets in to a grid."""
+    """Used to layout Widgets into a grid."""
 
     name = "grid"
 
@@ -28,7 +28,9 @@ class GridLayout(Layout):
         parent.pre_layout(self)
         styles = parent.styles
         row_scalars = styles.grid_rows or (
-            [Scalar.parse("1fr")] if size.height else [Scalar.parse("auto")]
+            [Scalar.parse("1fr")]
+            if (size.height and not parent.styles.is_auto_height)
+            else [Scalar.parse("auto")]
         )
         column_scalars = styles.grid_columns or [Scalar.parse("1fr")]
         gutter_horizontal = styles.grid_gutter_horizontal
@@ -253,6 +255,7 @@ class GridLayout(Layout):
                             + gutter_height,
                         )
                         height = max(height, widget_height)
+
                 row_scalars[row] = Scalar.from_number(height)
 
         rows = resolve(row_scalars, size.height, gutter_horizontal, size, viewport)
@@ -260,8 +263,6 @@ class GridLayout(Layout):
         placements: list[WidgetPlacement] = []
         _WidgetPlacement = WidgetPlacement
         add_placement = placements.append
-        widgets: list[Widget] = []
-        add_widget = widgets.append
         max_column = len(columns) - 1
         max_row = len(rows) - 1
 
@@ -273,12 +274,15 @@ class GridLayout(Layout):
             x2, cell_width = columns[min(max_column, column + column_span)]
             y2, cell_height = rows[min(max_row, row + row_span)]
             cell_size = Size(cell_width + x2 - x, cell_height + y2 - y)
+
             box_width, box_height, margin = widget._get_box_model(
                 cell_size,
                 viewport,
                 Fraction(cell_size.width),
                 Fraction(cell_size.height),
+                constrain_width=True,
             )
+
             if self.stretch_height and len(children) > 1:
                 if box_height <= cell_size.height:
                     box_height = Fraction(cell_size.height)
@@ -289,17 +293,21 @@ class GridLayout(Layout):
                 )
                 .crop_size(cell_size)
                 .shrink(margin)
-            )
+            ) + offset
 
+            widget_styles = widget.styles
             placement_offset = (
-                styles.offset.resolve(cell_size, viewport)
-                if styles.has_rule("offset")
+                widget_styles.offset.resolve(cell_size, viewport)
+                if widget_styles.has_rule("offset")
                 else NULL_OFFSET
             )
 
+            absolute = (
+                widget_styles.has_rule("position") and styles.position == "absolute"
+            )
             add_placement(
                 _WidgetPlacement(
-                    region + offset,
+                    region,
                     placement_offset,
                     (
                         margin
@@ -307,8 +315,8 @@ class GridLayout(Layout):
                         else margin.grow_maximum(gutter_spacing)
                     ),
                     widget,
+                    absolute,
                 )
             )
-            add_widget(widget)
 
         return placements

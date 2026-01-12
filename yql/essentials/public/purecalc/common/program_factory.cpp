@@ -92,7 +92,7 @@ IPullStreamWorkerFactoryPtr TProgramFactory::MakePullStreamWorkerFactory(
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
-        Options_.UseAntlr4));
+        Options_.InternalSettings));
 }
 
 IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
@@ -121,7 +121,7 @@ IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
-        Options_.UseAntlr4));
+        Options_.InternalSettings));
 }
 
 IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
@@ -154,5 +154,5 @@ IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
         Options_.DeterministicTimeProviderSeed,
         Options_.UseSystemColumns,
         Options_.UseWorkerPool,
-        Options_.UseAntlr4));
+        Options_.InternalSettings));
 }

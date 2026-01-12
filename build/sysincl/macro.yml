@@ -1215,3 +1215,13 @@
 - source_filter: "^contrib/libs/llvm/flang-rt"
   includes:
     - BACKTRACE_HEADER: $U/execinfo.h
+
+- source_filter: "^contrib/libs/nvidia/cutlass"
+  includes:
+    - CUDA_STD_HEADER(cassert):       $U/cuda/std/cassert
+    - CUDA_STD_HEADER(cstddef):       $U/cuda/std/cstddef
+    - CUDA_STD_HEADER(cstdint):       $U/cuda/std/cstdint
+    - CUDA_STD_HEADER(limits):        $U/cuda/std/limits
+    - CUDA_STD_HEADER(tuple):         $U/cuda/std/tuple
+    - CUDA_STD_HEADER(type_traits):   $U/cuda/std/type_traits
+    - CUDA_STD_HEADER(utility):       $U/cuda/std/utility

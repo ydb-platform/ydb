@@ -36,6 +36,7 @@ protected:
     NKikimrConfig::TAppConfig& Config;
     const ui32                       NodeId;
     const TKikimrScopeId             ScopeId;
+    const bool                       TinyMode;
 
 public:
     IKikimrServicesInitializer(const TKikimrRunConfig& runConfig);
@@ -588,6 +589,13 @@ public:
 class THealthCheckInitializer : public IKikimrServicesInitializer {
 public:
     THealthCheckInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TCountersInfoProviderInitializer : public IKikimrServicesInitializer {
+public:
+    TCountersInfoProviderInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };

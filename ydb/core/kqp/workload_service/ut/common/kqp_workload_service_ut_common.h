@@ -76,7 +76,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
     FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
     FLUENT_SETTING(NKikimrConfig::TWorkloadManagerConfig, WorkloadManagerConfig);
-
+    FLUENT_SETTING_DEFAULT(i32, DedicatedDiskQuota, -1);
 
     // Default pool settings
     FLUENT_SETTING_DEFAULT(TString, PoolId, "sample_pool_id");
@@ -116,6 +116,7 @@ public:
     virtual NActors::TActorId CreateInFlightCoordinator(ui32 numberRequests, ui32 expectedInFlight) const = 0;
 
     // Pools actions
+    virtual void CreateSamplePoolOn(const TString& databaseId) const = 0;
     virtual TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const = 0;
     virtual void WaitPoolState(const TPoolStateDescription& state, const TString& poolId = "") const = 0;
     virtual void WaitPoolHandlersCount(i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;

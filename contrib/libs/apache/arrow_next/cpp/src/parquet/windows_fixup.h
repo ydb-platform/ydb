@@ -18,7 +18,7 @@
 
 // This header needs to be included multiple times.
 
-#include "arrow/util/windows_fixup.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_fixup.h"
 
 #ifdef _WIN32
 

@@ -3,7 +3,9 @@
 #include <ydb/core/formats/arrow/arrow_helpers_minikql.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/kqp/common/kqp_types.h>
-#include <ydb/core/kqp/common/result_set_format/kqp_result_set_arrow.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_formats_arrow.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
@@ -22,6 +24,14 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
 }
 
 [[maybe_unused]] arrow::Status AppendCell(arrow::BooleanBuilder& builder, const TCell& cell) {
+    if (cell.IsNull()) {
+        return builder.AppendNull();
+    }
+
+    return builder.Append(cell.AsValue<ui8>());
+}
+
+[[maybe_unused]] arrow::Status AppendCell(arrow::UInt8Builder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
@@ -280,12 +290,15 @@ void TArrowBatchBuilder::AppendValue(const NUdf::TUnboxedValue& value, ui32 colN
 }
 
 void TArrowBatchBuilder::AddRow(const TDbTupleRef& key, const TDbTupleRef& value) {
+    AFL_VERIFY(key.ColumnCount + value.ColumnCount == YdbSchema.size())("key", key.ColumnCount)("value", value.ColumnCount)(
+                                                      "schema", YdbSchema.size());
     ++NumRows;
 
     auto fnAppendTuple = [&] (const TDbTupleRef& tuple, size_t offsetInRow) {
         for (size_t i = 0; i < tuple.ColumnCount; ++i) {
             auto ydbType = tuple.Types[i];
             const ui32 colNum =  offsetInRow + i;
+            AFL_VERIFY(colNum < YdbSchema.size())("column", colNum)("schema", YdbSchema.size());
             Y_ABORT_UNLESS(ydbType == YdbSchema[colNum].second);
             auto& cell = tuple.Columns[i];
             AppendCell(cell, colNum);

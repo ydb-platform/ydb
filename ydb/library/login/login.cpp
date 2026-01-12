@@ -1,3 +1,7 @@
+#include "login.h"
+
+#include <deque>
+
 #include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
 #include <library/cpp/digest/argonish/argon2.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -10,11 +14,7 @@
 
 #include <util/string/builder.h>
 
-#include <deque>
-
-#include <ydb/library/login/password_checker/password_checker.h>
-
-#include "login.h"
+#include <ydb/library/login/hashes_checker/hashes_checker.h>
 
 namespace NLogin {
 
@@ -35,7 +35,7 @@ public:
     {}
 
     void GenerateKeyPair(TString& publicKey, TString& privateKey) const ;
-    TString GenerateHash(const TString& password) const;
+    TString GenerateArgonHash(const TString& password) const;
     static bool VerifyHash(const TString& password, const TString& hash);
     bool VerifyHashWithCache(const TLruCache::TKey& key);
     bool NeedVerifyHash(const TLruCache::TKey& key, TPasswordCheckResult* checkResult);
@@ -91,9 +91,19 @@ bool TLoginProvider::CheckGroupNameAllowed(const bool strongCheckName, const TSt
     return BasicCheckAllowedName(groupName);
 }
 
-bool TLoginProvider::CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const {
+bool TLoginProvider::CheckHashes(const TString& hashedPassword, TString& error) const {
+    auto hashCheckResult = THashesChecker::NewFormatCheck(hashedPassword);
+    if (!hashCheckResult.Success) {
+        error = hashCheckResult.Error;
+        return false;
+    }
+
+    return true;
+}
+
+bool TLoginProvider::CheckPasswordOrArgonHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const {
     if (IsHashedPassword) {
-        auto hashCheckResult = HashChecker.Check(password);
+        auto hashCheckResult = THashesChecker::OldFormatCheck(password);
         if (!hashCheckResult.Success) {
             error = hashCheckResult.Error;
             return false;
@@ -117,7 +127,13 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
         return response;
     }
 
-    if (!CheckPasswordOrHash(request.IsHashedPassword, request.User, request.Password, response.Error)) {
+    if (request.HashedPassword) {
+        if (!CheckHashes(request.HashedPassword, response.Error)) {
+            return response;
+        }
+    }
+
+    if (!CheckPasswordOrArgonHash(request.IsHashedPassword, request.User, request.Password, response.Error)) {
         return response;
     }
 
@@ -133,9 +149,15 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
 
     TSidRecord& user = itUserCreate.first->second;
     user.Name = request.User;
-    user.PasswordHash = request.IsHashedPassword ? request.Password : Impl->GenerateHash(request.Password);
     user.CreatedAt = std::chrono::system_clock::now();
     user.IsEnabled = request.CanLogin;
+    user.ArgonHash = request.IsHashedPassword ? request.Password : Impl->GenerateArgonHash(request.Password);
+    if (request.HashedPassword) {
+        user.PasswordHashes = request.HashedPassword;
+    } else {
+        user.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*ArgonHashToNewFormat(user.ArgonHash));
+    }
+
     return response;
 }
 
@@ -163,12 +185,26 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
 
     TSidRecord& user = itUserModify->second;
 
-    if (request.Password.has_value()) {
-        if (!CheckPasswordOrHash(request.IsHashedPassword, request.User, request.Password.value(), response.Error)) {
+    if (request.HashedPassword.has_value()) {
+        if (!CheckHashes(*request.HashedPassword, response.Error)) {
             return response;
         }
+    }
 
-        user.PasswordHash = request.IsHashedPassword ? request.Password.value() : Impl->GenerateHash(request.Password.value());
+    if (request.Password.has_value()) {
+        if (!CheckPasswordOrArgonHash(request.IsHashedPassword, request.User, request.Password.value(), response.Error)) {
+            return response;
+        }
+    }
+
+    if (request.Password.has_value()) {
+        user.ArgonHash = request.IsHashedPassword ? request.Password.value() : Impl->GenerateArgonHash(request.Password.value());
+    }
+
+    if (request.HashedPassword.has_value()) {
+        user.PasswordHashes = request.HashedPassword.value();
+    } else if (request.Password.has_value()) {
+        user.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*ArgonHashToNewFormat(user.ArgonHash));
     }
 
     if (request.CanLogin.has_value()) {
@@ -484,8 +520,8 @@ bool TLoginProvider::NeedVerifyHash(const TLoginUserRequest& request, TPasswordC
             return false;
         }
 
-        *passwordHash = sid->PasswordHash;
-        return Impl->NeedVerifyHash({.User = request.User, .Password = request.Password, .Hash = sid->PasswordHash}, checkResult);
+        *passwordHash = sid->ArgonHash;
+        return Impl->NeedVerifyHash({.User = request.User, .Password = request.Password, .Hash = sid->ArgonHash}, checkResult);
     }
 
     return false;
@@ -709,6 +745,16 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
     }
     return response;
 }
+bool TLoginProvider::CanDecodeToken(const TString& token) {
+    try {
+        jwt::decoded_jwt decoded_token = jwt::decode(token);
+    } catch (const std::invalid_argument& e) {
+        return false;
+    } catch (const std::runtime_error& e) {
+        return false;
+    }
+    return true;
+}
 
 TString TLoginProvider::GetTokenAudience(const TString& token) {
     try {
@@ -801,21 +847,23 @@ void TLoginProvider::TImpl::GenerateKeyPair(TString& publicKey, TString& private
     BN_free(bne);
 }
 
-TString TLoginProvider::TImpl::GenerateHash(const TString& password) const {
-    char salt[SALT_SIZE];
-    char hash[HASH_SIZE];
-    RAND_bytes(reinterpret_cast<unsigned char*>(salt), SALT_SIZE);
+TString TLoginProvider::TImpl::GenerateArgonHash(const TString& password) const {
+    TString hashType = "argon2id";
+    const auto& hashDescription = HashesRegistry.HashNamesMap.at(hashType);
+    char salt[hashDescription.SaltSize];
+    char hash[hashDescription.HashSize];
+    RAND_bytes(reinterpret_cast<unsigned char*>(salt), hashDescription.SaltSize);
     ArgonHasher->Hash(
         reinterpret_cast<const ui8*>(password.data()),
         password.size(),
         reinterpret_cast<ui8*>(salt),
-        SALT_SIZE,
+        hashDescription.SaltSize,
         reinterpret_cast<ui8*>(hash),
-        HASH_SIZE);
+        hashDescription.HashSize);
     NJson::TJsonValue json;
-    json["type"] = "argon2id";
-    json["salt"] = Base64Encode(TStringBuf(salt, SALT_SIZE));
-    json["hash"] = Base64Encode(TStringBuf(hash, HASH_SIZE));
+    json["type"] = std::move(hashType);
+    json["salt"] = Base64Encode(TStringBuf(salt, hashDescription.SaltSize));
+    json["hash"] = Base64Encode(TStringBuf(hash, hashDescription.HashSize));
     return NJson::WriteJson(json, false);
 }
 
@@ -961,7 +1009,13 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             TSidRecord& sid = Sids[pbSid.GetName()];
             sid.Type = pbSid.GetType();
             sid.Name = pbSid.GetName();
-            sid.PasswordHash = pbSid.GetHash();
+            sid.ArgonHash = pbSid.GetArgonHash();
+            if (pbSid.GetPasswordHashes()) {
+                sid.PasswordHashes = pbSid.GetPasswordHashes();
+            } else if (pbSid.GetArgonHash()) {
+                sid.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*ArgonHashToNewFormat(pbSid.GetArgonHash()));
+            }
+
             sid.IsEnabled = pbSid.GetIsEnabled();
             for (const auto& pbSubSid : pbSid.GetMembers()) {
                 sid.Members.emplace(pbSubSid);

@@ -12,7 +12,7 @@ namespace NKikimr::NKqp {
 
 // Creates all needed tables.
 // Sends result event back when the work is done.
-IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags);
+IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags, ui64 generation = 0);
 
 // Create script execution and run it.
 IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, TDuration maxRunTime = SCRIPT_TIMEOUT_LIMIT);
@@ -41,7 +41,7 @@ IActor* CreateScriptProgressActor(const TString& executionId, const TString& dat
 IActor* CreateRefreshScriptExecutionLeasesActor(const TActorId& replyActorId, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters);
 
 // Script execution physical graph management
-IActor* CreateSaveScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, const TString& database, const TString& executionId, NKikimrKqp::TQueryPhysicalGraph&& physicalGraph, i64 leaseGeneration, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig);
+IActor* CreateSaveScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, const TString& database, const TString& executionId, NKikimrKqp::TQueryPhysicalGraph physicalGraph, i64 leaseGeneration, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig);
 IActor* CreateGetScriptExecutionPhysicalGraphActor(const TActorId& replyActorId, const TString& database, const TString& executionId);
 
 } // namespace NKikimr::NKqp

@@ -391,6 +391,8 @@ struct TEvControlPlaneStorage {
     using TEvModifyBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::ModifyBindingResult, FederatedQuery::Binding, EvModifyBindingResponse>;
     using TEvDeleteBindingRequest = TControlPlaneRequest<FederatedQuery::DeleteBindingRequest, EvDeleteBindingRequest>;
     using TEvDeleteBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::DeleteBindingResult, FederatedQuery::Binding, EvDeleteBindingResponse>;
+    using TEvDeleteFolderResourcesRequest = TControlPlaneRequest<google::protobuf::Empty, EvDeleteFolderResourcesRequest>;
+    using TEvDeleteFolderResourcesResponse = TControlPlaneNonAuditableResponse<Ydb::Operations::Operation, EvDeleteFolderResourcesResponse>;
 
     // internal messages
     struct TEvWriteResultDataRequest : NActors::TEventLocal<TEvWriteResultDataRequest, EvWriteResultDataRequest> {
@@ -853,73 +855,6 @@ struct TEvControlPlaneStorage {
         NYql::TIssues Issues;
         NYql::TIssues TransientIssues;
     };
-
-    struct TEvDeleteFolderResourcesRequest : NActors::TEventLocal<TEvDeleteFolderResourcesRequest, EvDeleteFolderResourcesRequest> {
-        explicit TEvDeleteFolderResourcesRequest(
-            const TString& scope,
-            const TString& user,
-            const TString& token,
-            const TString& cloudId,
-            TPermissions permissions,
-            TMaybe<TQuotaMap> quotas,
-            TTenantInfo::TPtr tenantInfo,
-            const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase)
-            : Scope(scope)
-            , User(user)
-            , Token(token)
-            , CloudId(cloudId)
-            , Permissions(permissions)
-            , Quotas(std::move(quotas))
-            , TenantInfo(tenantInfo)
-            , ComputeDatabase(computeDatabase) { }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Scope.size()
-                    + User.size()
-                    + Token.size()
-                    + CloudId.size();
-        }
-
-        TString Scope;
-        TString User;
-        TString Token;
-        TString CloudId;
-        TPermissions Permissions;
-        TMaybe<TQuotaMap> Quotas;
-        TTenantInfo::TPtr TenantInfo;
-        FederatedQuery::Internal::ComputeDatabaseInternal ComputeDatabase;
-        bool ExtractSensitiveFields = false;
-    };
-
-    struct TEvDeleteFolderResourcesResponse : NActors::TEventLocal<TEvDeleteFolderResourcesResponse, EvDeleteFolderResourcesResponse> {
-        static constexpr bool Auditable = false;
-        explicit TEvDeleteFolderResourcesResponse(const Ydb::Operations::Operation& result)
-            : Result(result)
-        {
-        }
-
-        explicit TEvDeleteFolderResourcesResponse(const NYql::TIssues& issues)
-            : Issues(issues)
-        {
-        }
-
-        explicit TEvDeleteFolderResourcesResponse(const Ydb::Operations::Operation& result, const NYql::TIssues& issues)
-            : Result(result), Issues(issues)
-        {
-        }
-
-        size_t GetByteSize() const {
-            return sizeof(*this)
-                    + Result.ByteSizeLong()
-                    + GetIssuesByteSize(Issues)
-                    + GetDebugInfoByteSize(DebugInfo);
-        }
-
-        Ydb::Operations::Operation Result;
-        NYql::TIssues Issues;
-        TDebugInfoPtr DebugInfo;
-    };
 };
 
-}
+} // namespace NFq {

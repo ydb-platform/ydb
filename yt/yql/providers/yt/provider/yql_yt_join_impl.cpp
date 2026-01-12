@@ -211,7 +211,9 @@ TStatus UpdateInMemorySizeSetting(TMapJoinSettings& settings, TYtSection& inputS
         if (mapJoinUseFlow) {
             result = size + rows * (1ULL + label.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Collect
         } else {
-            ui64 avgOtherSideWeight = (isLeft ? settings.RightSize : settings.LeftSize) / (isLeft ? settings.RightRows : settings.LeftRows);
+            ui64 otherSideRowCount = (isLeft ? settings.RightRows : settings.LeftRows);
+            ui64 otherSideWeight = (isLeft ? settings.RightSize : settings.LeftSize);
+            ui64 avgOtherSideWeight =  otherSideRowCount ? otherSideWeight / otherSideRowCount : 0;
 
             ui64 rowFactor = (1 + label.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Collect
             rowFactor += (1 + label.InputType->GetSize() + labels.Inputs[isLeft ? 1 : 0].InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Map with added left side
@@ -264,6 +266,7 @@ TYtJoinNodeLeaf::TPtr ConvertYtEquiJoinToLeaf(const TYtJoinNodeOp& op, TPosition
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
             .Build()
         .Build()
         .Settings()
@@ -1066,6 +1069,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
                     .Columns<TCoVoid>().Build()
                     .Ranges<TCoVoid>().Build()
                     .Stat<TCoVoid>().Build()
+                    .QLFilter<TCoVoid>().Build()
                 .Build()
             .Build()
             .Settings().Build()
@@ -1109,6 +1113,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
             .Build()
         .Build()
         .Settings().Build()
@@ -1786,7 +1791,7 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
 
     ui64 partCount = 1;
     ui64 partRows = settings.RightRows;
-    if ((settings.RightSize > 0) && useShards) {
+    if (settings.RightRows && settings.RightSize && useShards) {
         partCount = std::min(((useBlocks ? settings.RightMemSizeUsingBlocks : settings.RightMemSize) + settings.MapJoinLimit - 1) / settings.MapJoinLimit, settings.RightRows);
         partRows = (settings.RightRows + partCount - 1) / partCount;
     }
@@ -1829,7 +1834,7 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
     if (isCross) {
         ui64 rowFactor = (1 + smallLabel.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Collect
         rowFactor += (1 + smallLabel.InputType->GetSize() + mainLabel.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Map with added left side
-        rowFactor += settings.LeftSize / settings.LeftRows; // Average added left side for each row after Map
+        rowFactor += settings.LeftRows ? settings.LeftSize / settings.LeftRows : 0; // Average added left side for each row after Map
 
         tableContentSettings = NYql::AddSetting(*tableContentSettings, EYtSettingType::RowFactor, ctx.NewAtom(pos, ToString(rowFactor), TNodeFlags::Default), ctx);
     }
@@ -2332,6 +2337,7 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                 .Columns<TCoVoid>().Build()
                 .Ranges<TCoVoid>().Build()
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
                 .Done()
             );
         }
@@ -3005,6 +3011,7 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
                 .Columns<TCoVoid>().Build()
                 .Ranges(ranges)
                 .Stat<TCoVoid>().Build()
+                .QLFilter<TCoVoid>().Build()
                 .Done()
             );
         }
@@ -3017,6 +3024,7 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
             .Columns<TCoVoid>().Build()
             .Ranges<TCoVoid>().Build()
             .Stat<TCoVoid>().Build()
+            .QLFilter<TCoVoid>().Build()
             .Done()
         );
 
@@ -3643,11 +3651,13 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
             TMaybe<ui64> rightPartCount;
             if (leftPartSize) {
                 YQL_ENSURE(leftTablesReady);
+                YQL_ENSURE(*leftPartSize);
                 leftPartCount = (mapSettings.LeftRows + *leftPartSize - 1) / *leftPartSize;
             }
 
             if (rightPartSize) {
                 YQL_ENSURE(rightTablesReady);
+                YQL_ENSURE(*rightPartSize);
                 rightPartCount = (mapSettings.RightRows + *rightPartSize - 1) / *rightPartSize;
             }
 

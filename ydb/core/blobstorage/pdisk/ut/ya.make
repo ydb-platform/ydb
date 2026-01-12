@@ -6,7 +6,7 @@ IF (WITH_VALGRIND)
     ENV(VALGRIND_OPTS=--max-stackframe=16000000)
 ENDIF()
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SPLIT_FACTOR(20)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -21,7 +21,7 @@ PEERDIR(
     ydb/core/testlib/actors
 )
 
-IF (YDB_ENABLE_PDISK_SHRED) 
+IF (YDB_ENABLE_PDISK_SHRED)
     CFLAGS(
         -DENABLE_PDISK_SHRED
     )
@@ -44,6 +44,7 @@ SRCS(
     blobstorage_pdisk_util_ut.cpp
     blobstorage_pdisk_ut_pdisk_config.cpp
     blobstorage_pdisk_ut_chunk_tracker.cpp
+    blobstorage_pdisk_ut_failure.cpp
     mock/pdisk_mock.cpp
 )
 

@@ -17,13 +17,20 @@ namespace NYql {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 enum class EYtWriteMode: ui32 {
-    Renew           /* "renew" */,
-    RenewKeepMeta   /* "renew_keep_meta" */,
-    Append          /* "append" */,
-    Drop            /* "drop" */,
-    Flush           /* "flush" */,
-    Create          /* "create" */,
-    Alter           /* "alter" */,
+    Renew                   /* "renew" */,
+    RenewKeepMeta           /* "renew_keep_meta" */,
+    Append                  /* "append" */,
+    Drop                    /* "drop" */,
+    DropIfExists            /* "drop_if_exists" */,
+    Flush                   /* "flush" */,
+    Create                  /* "create" */,
+    CreateIfNotExists       /* "create_if_not_exists" */,
+    Alter                   /* "alter" */,
+    Replace                 /* "replace" */,
+    CreateObject            /* "createObject" "create_object" */,
+    CreateObjectIfNotExists /* "createObjectIfNotExists" "create_object_if_not_exists" */,
+    DropObject              /* "dropObject" "drop_object" */,
+    DropObjectIfExists      /* "dropObjectIfExists" "drop_object_if_exists" */,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -74,6 +81,7 @@ enum class EYtSettingType: ui64 {
     SysColumns               /* "syscolumns" */,
     IgnoreTypeV3             /* "ignore_type_v3" "ignoretypev3" */,
     ExtraColumns             /* "extraColumns" */,
+    Pruned                   /* "pruned" */,
     // Table content
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,
@@ -131,7 +139,8 @@ enum class EYtSettingType: ui64 {
     // Create, Alter
     Columns                  /* "columns"*/,
     Actions                  /* "actions"*/,
-    PrimaryKey               /* "primarykey"*/,
+    OrderBy                  /* "orderby","order_by" */,
+    Features                 /* "features"*/,
 
     LAST
 };
@@ -165,7 +174,7 @@ public:
 
     friend EYtSettingTypes operator&(EYtSettingTypes, const EYtSettingTypes&);
 
-    bool HasFlags(const EYtSettingTypes& other) {
+    bool HasFlags(const EYtSettingTypes& other) const {
         return *this & other;
     }
 

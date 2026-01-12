@@ -126,7 +126,7 @@ TVector<TCell> FillKeyValues(const TVector<NScheme::TTypeInfo>& keyColumnTypes, 
             case NKqpProto::TKqpPhyValue::kLiteralValue: {
                 const auto& literal = tupleValue.GetLiteralValue();
                 auto binded = typeEnv.BindAllocator();
-                auto [type, value] = ImportValueFromProto(literal.GetType(), literal.GetValue(), typeEnv, holderFactory);
+                auto [type, value] = ImportValueFromProto(literal.type(), literal.value(), typeEnv, holderFactory);
                 keyValues.emplace_back(NMiniKQL::MakeCell(keyColumnTypes[i], value, typeEnv, /* copy */ true));
                 continue;
             }
@@ -302,6 +302,8 @@ TVector<TSerializedPointOrRange> BuildFullRange(const TVector<NScheme::TTypeInfo
 TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyParamValue& rangesParam, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    Y_ASSERT(stageInfo.Meta.Tx.Params);
+
     auto guard = typeEnv.BindAllocator();
     TString paramName = rangesParam.GetParamName();
     auto [_, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
@@ -696,14 +698,6 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyTableOperatio
     }
 }
 
-
-namespace {
-
-using namespace NMiniKQL;
-
-} // namespace
-
-
 template <typename TEffect>
 THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TEffect& effect,
     const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
@@ -774,37 +768,38 @@ THashMap<ui64, TShardInfo> PruneEffectPartitions(const NKqpProto::TKqpPhyTableOp
     }
 }
 
-ui64 ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoPhyValue,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
+    const NUdf::TUnboxedValue& defaultValue)
 {
-    switch (protoItemsLimit.GetKindCase()) {
+    switch (protoPhyValue.GetKindCase()) {
         case NKqpProto::TKqpPhyValue::kLiteralValue: {
-            const auto& literalValue = protoItemsLimit.GetLiteralValue();
+            const auto& literalValue = protoPhyValue.GetLiteralValue();
 
             auto [type, value] = NMiniKQL::ImportValueFromProto(
-                literalValue.GetType(), literalValue.GetValue(), typeEnv, holderFactory);
+                literalValue.type(), literalValue.value(), typeEnv, holderFactory);
 
             YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
-            return value.Get<ui64>();
+            return value;
         }
 
         case NKqpProto::TKqpPhyValue::kParamValue: {
-            const TString& itemsLimitParamName = protoItemsLimit.GetParamValue().GetParamName();
-            if (!itemsLimitParamName) {
-                return 0;
+            const TString& paramName = protoPhyValue.GetParamValue().GetParamName();
+            if (!paramName) {
+                return defaultValue;
             }
 
-            auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(itemsLimitParamName);
-            YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
-            return value.Get<ui64>();
+            auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
+            YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data ||
+                type->GetKind() == NMiniKQL::TType::EKind::Tagged, "Unexpected PhyValue kind " << (int)type->GetKind());
+            return value;
         }
 
         case NKqpProto::TKqpPhyValue::kParamElementValue:
-        case NKqpProto::TKqpPhyValue::kRowsList:
-            YQL_ENSURE(false, "Unexpected ItemsLimit kind " << protoItemsLimit.DebugString());
+            YQL_ENSURE(false, "Unexpected PhyValue kind " << protoPhyValue.DebugString());
 
         case NKqpProto::TKqpPhyValue::KIND_NOT_SET:
-            return 0;
+            return defaultValue;
     }
 }
 
@@ -815,7 +810,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
 
     switch(operation.GetTypeCase()){
         case NKqpProto::TKqpPhyTableOperation::kReadRanges: {
-            readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadRanges().GetItemsLimit(), holderFactory, typeEnv);
+            readSettings.ItemsLimit = ExtractPhyValue(stageInfo, operation.GetReadRanges().GetItemsLimit(), holderFactory, typeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>();
             if (operation.GetReadRanges().GetReverse()) {
                 readSettings.SetSorting(ERequestSorting::DESC);
             }
@@ -823,7 +818,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
         }
 
         case NKqpProto::TKqpPhyTableOperation::kReadRange: {
-            readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadRange().GetItemsLimit(), holderFactory, typeEnv);
+            readSettings.ItemsLimit = ExtractPhyValue(stageInfo, operation.GetReadRange().GetItemsLimit(), holderFactory, typeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>();
             if (operation.GetReadRange().GetReverse()) {
                 readSettings.SetSorting(ERequestSorting::DESC);
             }
@@ -838,7 +833,7 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
             } else {
                 readSettings.SetSorting(ERequestSorting::NONE);
             }
-            readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv);
+            readSettings.ItemsLimit = ExtractPhyValue(stageInfo, operation.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>();
             NKikimrMiniKQL::TType minikqlProtoResultType;
             ConvertYdbTypeToMiniKQLType(operation.GetReadOlapRange().GetResultType(), minikqlProtoResultType);
             readSettings.ResultType = ImportTypeFromProto(minikqlProtoResultType, typeEnv);

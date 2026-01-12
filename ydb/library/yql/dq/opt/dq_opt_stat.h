@@ -59,7 +59,8 @@ public:
     struct TColumnStatisticsUsedMembers {
         struct TColumnStatisticsUsedMember {
             enum _ : ui32 {
-                EEquality
+                EEquality,
+                EInequality
             };
 
             TColumnStatisticsUsedMember(NNodes::TCoMember member, ui32 predicateType)
@@ -73,6 +74,10 @@ public:
 
         void AddEquality(const NNodes::TCoMember& member) {
             Data.emplace_back(std::move(member), TColumnStatisticsUsedMember::EEquality);
+        }
+
+        void AddInequality(const NNodes::TCoMember& member) {
+            Data.emplace_back(std::move(member), TColumnStatisticsUsedMember::EInequality);
         }
 
         TVector<TColumnStatisticsUsedMember> Data{};
@@ -122,7 +127,8 @@ protected:
     double ComputeInequalitySelectivity(
         const NYql::NNodes::TExprBase& left,
         const NYql::NNodes::TExprBase& right,
-        EInequalityPredicateType predicate
+        EInequalityPredicateType predicate,
+        bool collectConstantMembers
     );
 
     double ComputeComparisonSelectivity(
@@ -146,5 +152,15 @@ private:
 bool NeedCalc(NNodes::TExprBase node);
 bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs = true);
 bool IsConstantExprWithParams(const TExprNode::TPtr& input);
+
+TCardinalityHints::TCardinalityHint* FindCardHint(TVector<TString>& labels, TCardinalityHints& hints);
+TCardinalityHints::TCardinalityHint* FindBytesHint(TVector<TString>& labels, TCardinalityHints& hints);
+std::shared_ptr<TOptimizerStatistics> ApplyBytesHints(std::shared_ptr<TOptimizerStatistics>& inputStats,
+    TVector<TString>& labels,
+    TCardinalityHints hints);
+std::shared_ptr<TOptimizerStatistics> ApplyRowsHints(
+    std::shared_ptr<TOptimizerStatistics>& inputStats,
+    TVector<TString>& labels,
+    TCardinalityHints hints);
 
 } // namespace NYql::NDq {

@@ -26,11 +26,11 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/sort.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/sort.h"
 
 using std::size_t;
 

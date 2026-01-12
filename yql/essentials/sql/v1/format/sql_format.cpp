@@ -5,7 +5,7 @@
 #include <yql/essentials/parser/lexer_common/lexer.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
 #include <library/cpp/resource/resource.h>
@@ -805,7 +805,7 @@ private:
                 break;
             }
             case TRule_value_constructor::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }
 
@@ -963,6 +963,11 @@ private:
     void VisitAlterDatabase(const TRule_alter_database_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_alter_database_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitTruncateTable(const TRule_truncate_table_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_truncate_table_stmt::GetDescriptor(), msg);
     }
 
     void VisitCreateTable(const TRule_create_table_stmt& msg) {
@@ -1361,6 +1366,10 @@ private:
             Visit(b.GetToken1());
             NewLine();
             Visit(b.GetRule_values_source_row2());
+        }
+
+        if (rowList.HasBlock3()) {
+            Visit(rowList.GetBlock3().GetToken1());
         }
 
         PopCurrentIndent();
@@ -1854,9 +1863,13 @@ private:
                         Visit(block.GetRule_an_id2());
                     }
 
+                    if (columns.HasBlock4()) {
+                        Visit(columns.GetBlock4().GetToken1());
+                    }
+
                     PopCurrentIndent();
                     NewLine();
-                    Visit(columns.GetToken4());
+                    Visit(columns.GetToken5());
                     NewLine();
                 }
 
@@ -2292,9 +2305,13 @@ private:
                     Visit(block.GetRule_an_id2());
                 }
 
+                if (columns.HasBlock4()) {
+                    Visit(columns.GetBlock4().GetToken1());
+                }
+
                 NewLine();
                 PopCurrentIndent();
-                Visit(columns.GetToken4());
+                Visit(columns.GetToken5());
             }
         }
 
@@ -2357,9 +2374,13 @@ private:
                 Visit(block.GetRule_an_id2());
             }
 
+            if (columns.HasBlock4()) {
+                Visit(columns.GetBlock4().GetToken1());
+            }
+
             PopCurrentIndent();
             NewLine();
-            Visit(columns.GetToken4());
+            Visit(columns.GetToken5());
             PopCurrentIndent();
         }
     }
@@ -2773,7 +2794,7 @@ private:
                 VisitKeyword(msg.GetAlt_ttl_tier_action2().GetToken1());
                 break;
             case TRule_ttl_tier_action::ALT_NOT_SET:
-                break;
+                Y_UNREACHABLE();
         }
     }
 
@@ -3170,6 +3191,7 @@ TStaticData::TStaticData()
           {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
           {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
           {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
+          {TRule_truncate_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTruncateTable)},
           {TRule_show_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShowCreateTable)},
           {TRule_streaming_query_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitStreamingQuerySettings)},
           {TRule_create_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateStreamingQuery)},
@@ -3233,7 +3255,7 @@ public:
         }
 
         if (mode == EFormatMode::Obfuscate) {
-            auto message = NSQLTranslationV1::SqlAST(Parsers_, query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers_, query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
             if (!message) {
                 return false;
             }
@@ -3242,7 +3264,7 @@ public:
             return Format(visitor.Process(*message), formattedQuery, issues, EFormatMode::Pretty);
         }
 
-        auto lexer = NSQLTranslationV1::MakeLexer(Lexers_, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
+        auto lexer = NSQLTranslationV1::MakeLexer(Lexers_, parsedSettings.AnsiLexer);
         TVector<TString> statements;
         if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File)) {
             return false;
@@ -3268,7 +3290,7 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
             if (!message) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
@@ -3337,7 +3359,7 @@ TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
         throw yexception() << issues.ToString();
     }
 
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, parsedSettings.AnsiLexer);
     TVector<NSQLTranslation::TParsedToken> allTokens;
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         if (token.Name != "EOF") {
@@ -3383,8 +3405,7 @@ bool SqlFormatSimple(const NSQLTranslationV1::TLexers& lexers,
 
 THashSet<TString> GetKeywords() {
     TString grammar;
-    // ANTLR4-MIGRATION: just change SQLv1 to SQLv1Antlr4
-    Y_ENSURE(NResource::FindExact("SQLv1.g.in", &grammar));
+    Y_ENSURE(NResource::FindExact("SQLv1Antlr4.g.in", &grammar));
     THashSet<TString> res;
     TVector<TString> lines;
     Split(grammar, "\n", lines);

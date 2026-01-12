@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/sys_view/sessions
     ydb/core/sys_view/show_create
     ydb/core/sys_view/storage
+    ydb/core/sys_view/streaming_queries
     ydb/core/sys_view/tablets
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
@@ -43,6 +44,7 @@ RECURSE(
     resource_pools
     service
     storage
+    streaming_queries
     tablets
 )
 

@@ -264,6 +264,10 @@ message TProposeStoragePools {
 message TQueryBaseConfig {
     bool RetrieveDevices = 1;
     bool VirtualGroupsOnly = 2;
+    bool SuppressPDisks = 3;
+    bool SuppressVSlots = 4;
+    bool SuppressGroups = 5;
+    bool SuppressNodes = 6;
 }
 
 message TReadSettings {
@@ -599,6 +603,15 @@ message TUpdateBridgeGroupInfo {
     NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3; // new value for bridge group info
 }
 
+message TReconfigureVirtualGroup {
+    string Name = 1;
+    optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
+}
+
+message TRecommissionGroups {
+    repeated uint32 GroupIds = 1;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -649,6 +662,8 @@ message TConfigRequest {
             TChangeGroupSizeInUnits ChangeGroupSizeInUnits = 52;
             TMovePDisk MovePDisk = 53;
             TUpdateBridgeGroupInfo UpdateBridgeGroupInfo = 54;
+            TReconfigureVirtualGroup ReconfigureVirtualGroup = 55;
+            TRecommissionGroups RecommissionGroups = 56;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -836,6 +851,25 @@ message TReassignedItem {
     string ToPath = 7;
 }
 
+message TGroupMapperError {
+    message TStats {
+        string Domain = 1;
+        uint32 AllSlotsAreOccupied = 2;
+        uint32 NotEnoughSpace = 3;
+        uint32 NotAcceptingNewSlots = 4;
+        uint32 NotOperational = 5;
+        uint32 Decommission = 6;
+    }
+    TStats TotalStats = 1;
+    repeated TStats MatchingDomainsStats = 2;
+    uint32 MissingFailRealmsCount = 3;
+    uint32 FailRealmsWithMissingDomainsCount = 4;
+    uint32 DomainsWithMissingDisksCount = 5;
+    uint32 OkDisksCount = 6;
+    string RealmLocationKey = 7;
+    string DomainLocationKey = 8;
+}
+
 message TConfigResponse {
     message TStatus {
         enum EFailReason {
@@ -874,6 +908,7 @@ message TConfigResponse {
                 string DiskSerialNumber = 15;
                 uint32 GroupGenerationProvided = 16;
                 uint32 GroupGenerationExpected = 17;
+                TGroupMapperError GroupMapperError = 18;
             }
         }
 

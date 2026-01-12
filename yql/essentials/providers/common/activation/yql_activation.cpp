@@ -12,27 +12,30 @@
 namespace NYql::NConfig {
 
 template <class TActivation>
-ui32 GetPercentage(const TActivation& activation, const TString& userName, const std::unordered_set<std::string_view>& groups) {
-    if (AnyOf(activation.GetIncludeUsers(), [&](const auto& user) { return user == userName; })) {
-        return 100;
-    }
-    if (!groups.empty() && AnyOf(activation.GetIncludeGroups(), [&](const auto& includeGroup) { return groups.contains(includeGroup); })) {
-        return 100;
-    }
-    const auto currentRev = GetProgramCommitId();
-    if (currentRev && AnyOf(activation.GetIncludeRevisions(), [&](const auto& rev) { return rev == currentRev; })) {
-        return 100;
-    }
+ui32 GetPercentage(const TActivation& activation, const TString& userName, bool isRobot, const std::unordered_set<std::string_view>& groups) {
     if (AnyOf(activation.GetExcludeUsers(), [&](const auto& user) { return user == userName; })) {
         return 0;
     }
-    if (!groups.empty() && AnyOf(activation.GetExcludeGroups(), [&](const auto& excludeGroup) { return groups.contains(excludeGroup); })) {
-        return 0;
+    if (AnyOf(activation.GetIncludeUsers(), [&](const auto& user) { return user == userName; })) {
+        return 100;
     }
-    if (currentRev && AnyOf(activation.GetExcludeRevisions(), [&](const auto& rev) { return rev == currentRev; })) {
-        return 0;
+    if (!groups.empty()) {
+        if (AnyOf(activation.GetExcludeGroups(), [&](const auto& excludeGroup) { return groups.contains(excludeGroup); })) {
+            return 0;
+        }
+        if (AnyOf(activation.GetIncludeGroups(), [&](const auto& includeGroup) { return groups.contains(includeGroup); })) {
+            return 100;
+        }
     }
-    if ((userName.StartsWith("robot-") || userName.StartsWith("zomb-")) && activation.GetExcludeRobots()) {
+    if (const auto currentRev = GetProgramCommitId()) {
+        if (AnyOf(activation.GetExcludeRevisions(), [&](const auto& rev) { return rev == currentRev; })) {
+            return 0;
+        }
+        if (AnyOf(activation.GetIncludeRevisions(), [&](const auto& rev) { return rev == currentRev; })) {
+            return 100;
+        }
+    }
+    if (isRobot && activation.GetExcludeRobots()) {
         return 0;
     }
 
@@ -55,13 +58,13 @@ ui32 GetPercentage(const TActivation& activation, const TString& userName, const
 }
 
 template <class TActivation>
-bool Allow(const TActivation& activation, const TString& userName, const std::unordered_set<std::string_view>& groups) {
-    ui32 percent = GetPercentage(activation, userName, groups);
+bool Allow(const TActivation& activation, const TString& userName, bool isRobot, const std::unordered_set<std::string_view>& groups) {
+    ui32 percent = GetPercentage(activation, userName, isRobot, groups);
     const auto random = RandomNumber<ui8>(100);
     return random < percent;
 }
 
-template ui32 GetPercentage<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName, const std::unordered_set<std::string_view>& groups);
-template bool Allow<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName, const std::unordered_set<std::string_view>& groups);
+template ui32 GetPercentage<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName, bool isRobot, const std::unordered_set<std::string_view>& groups);
+template bool Allow<NYql::TActivationPercentage>(const NYql::TActivationPercentage& activation, const TString& userName, bool isRobot, const std::unordered_set<std::string_view>& groups);
 
 } // namespace NYql::NConfig

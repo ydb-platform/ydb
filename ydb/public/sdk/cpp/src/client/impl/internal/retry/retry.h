@@ -4,6 +4,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
+
 #include <library/cpp/threading/future/core/fwd.h>
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>
@@ -19,10 +21,9 @@ class IClientImplCommon;
 
 namespace NYdb::inline Dev::NRetry {
 
-ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber);
-void Backoff(const NRetry::TBackoffSettings& settings, ui32 retryNumber);
+void Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber);
 void AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,
-    ui32 retryNumber, const std::function<void()>& fn);
+    std::uint32_t retryNumber, const std::function<void()>& fn);
 
 enum class NextStep {
     RetryImmediately,
@@ -34,7 +35,7 @@ enum class NextStep {
 class TRetryContextBase : TNonCopyable {
 protected:
     TRetryOperationSettings Settings_;
-    ui32 RetryNumber_;
+    std::uint32_t RetryNumber_;
     TInstant RetryStartTime_;
 
 protected:
@@ -109,6 +110,14 @@ protected:
 
     TDuration GetRemainingTimeout() {
         return Settings_.MaxTimeout_ - (TInstant::Now() - RetryStartTime_);
+    }
+};
+
+template<typename TClient>
+class TRetryDeadlineHelper {
+public:
+    static void SetDeadline(TClient::TSession& session, const TDeadline& deadline) {
+        session.SetPropagatedDeadline(deadline);
     }
 };
 

@@ -7,9 +7,7 @@
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
-    template <typename T>
-    void CreateStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false, bool onIndex = false) {
-        T t;
+    void CreateStream(TTestWithReboots& t, const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false, bool onIndex = false) {
         t.GetTestEnvOptions()
             .EnableChangefeedInitialScan(true)
             .EnableChangefeedsOnIndexTables(true);
@@ -72,40 +70,39 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStream) {
-        CreateStream<T>();
+    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamSimple) {
+        CreateStream(t);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTable) {
-        CreateStream<T>({}, false, true);
+        CreateStream(t, {}, false, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamExplicitReady) {
-        CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateReady);
+        CreateStream(t, NKikimrSchemeOp::ECdcStreamStateReady);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTableExplicitReady) {
-        CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateReady, false, true);
+        CreateStream(t, NKikimrSchemeOp::ECdcStreamStateReady, false, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithInitialScan) {
-        CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateScan);
+        CreateStream(t, NKikimrSchemeOp::ECdcStreamStateScan);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTableWithInitialScan) {
-        CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateScan, false, true);
+        CreateStream(t, NKikimrSchemeOp::ECdcStreamStateScan, false, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithVirtualTimestamps) {
-        CreateStream<T>({}, true);
+        CreateStream(t, {}, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTableWithVirtualTimestamps) {
-        CreateStream<T>({}, true, true);
+        CreateStream(t, {}, true, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithAwsRegion) {
-        T t;
         t.GetTestEnvOptions().EnableChangefeedDynamoDBStreamsFormat(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -144,7 +141,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithResolvedTimestamps) {
-        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -178,7 +174,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithSchemaChanges) {
-        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -212,7 +207,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(DisableStream) {
-        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -263,7 +257,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(GetReadyStream) {
-        T t;
         t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -323,9 +316,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    template <typename T>
-    void DropStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool onIndex = false) {
-        T t;
+    void DropStream(TTestWithReboots& t, const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool onIndex = false) {
         t.GetTestEnvOptions()
             .EnableChangefeedInitialScan(true)
             .EnableChangefeedsOnIndexTables(true);
@@ -391,32 +382,31 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DropStream) {
-        DropStream<T>();
+    Y_UNIT_TEST_WITH_REBOOTS(DropStreamSimple) {
+        DropStream(t);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(DropStreamOnIndexTable) {
-        DropStream<T>({}, true);
+        DropStream(t, {}, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(DropStreamExplicitReady) {
-        DropStream<T>(NKikimrSchemeOp::ECdcStreamStateReady);
+        DropStream(t, NKikimrSchemeOp::ECdcStreamStateReady);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(DropStreamOnIndexTableExplicitReady) {
-        DropStream<T>(NKikimrSchemeOp::ECdcStreamStateReady, true);
+        DropStream(t, NKikimrSchemeOp::ECdcStreamStateReady, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(DropStreamCreatedWithInitialScan) {
-        DropStream<T>(NKikimrSchemeOp::ECdcStreamStateScan);
+        DropStream(t, NKikimrSchemeOp::ECdcStreamStateScan);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(DropStreamOnIndexTableCreatedWithInitialScan) {
-        DropStream<T>(NKikimrSchemeOp::ECdcStreamStateScan, true);
+        DropStream(t, NKikimrSchemeOp::ECdcStreamStateScan, true);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(DropMultipleStreams) {
-        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -475,7 +465,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(CreateDropRecreate) {
-        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
@@ -542,7 +531,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(Attributes) {
-        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -583,7 +571,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(RacySplitAndDropTable) {
-        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -628,7 +615,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(InitialScan) {
-        T t;
         t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -741,9 +727,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         }
     }
 
-    template <typename T>
-    void SplitTable(const TString& cdcStreamDesc) {
-        T t;
+    void SplitTable(TTestWithReboots& t, const TString& cdcStreamDesc) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             NKikimrScheme::TEvDescribeSchemeResult initialTableDesc;
             {
@@ -782,8 +766,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SplitTable) {
-        SplitTable<T>(R"(
+    Y_UNIT_TEST_WITH_REBOOTS(SplitTableSimple) {
+        SplitTable(t, R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
@@ -794,7 +778,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(SplitTableResolvedTimestamps) {
-        SplitTable<T>(R"(
+        SplitTable(t, R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
@@ -805,9 +789,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         )");
     }
 
-    template <typename T>
-    void MergeTable(const TString& cdcStreamDesc) {
-        T t;
+    void MergeTable(TTestWithReboots& t, const TString& cdcStreamDesc) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             NKikimrScheme::TEvDescribeSchemeResult initialTableDesc;
             {
@@ -848,8 +830,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(MergeTable) {
-        MergeTable<T>(R"(
+    Y_UNIT_TEST_WITH_REBOOTS(MergeTableSimple) {
+        MergeTable(t, R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
@@ -860,7 +842,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(MergeTableResolvedTimestamps) {
-        MergeTable<T>(R"(
+        MergeTable(t, R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
@@ -872,7 +854,6 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(RacySplitTableAndCreateStream) {
-        T t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -912,9 +893,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    template <typename T>
-    void PqTransactions(bool enable) {
-        T t;
+    void PqTransactions(TTestWithReboots& t, bool enable) {
         t.GetTestEnvOptions()
             .EnableChangefeedInitialScan(true)
             .EnablePQConfigTransactionsAtSchemeShard(enable);
@@ -955,11 +934,11 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(WithoutPqTransactions) {
-        PqTransactions<T>(false);
+        PqTransactions(t, false);
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(WithPqTransactions) {
-        PqTransactions<T>(true);
+        PqTransactions(t, true);
     }
 
 } // TCdcStreamWithRebootsTests

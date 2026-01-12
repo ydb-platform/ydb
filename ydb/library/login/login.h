@@ -5,11 +5,11 @@
 #include <vector>
 #include <deque>
 #include <util/generic/string.h>
-#include <ydb/library/login/protos/login.pb.h>
-#include <ydb/library/login/password_checker/password_checker.h>
-#include <ydb/library/login/password_checker/hash_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
 #include <ydb/library/login/cache/lru.h>
+#include <ydb/library/login/hashes_checker/hash_types.h>
+#include <ydb/library/login/protos/login.pb.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 
 namespace NLogin {
 
@@ -21,9 +21,6 @@ public:
     static constexpr size_t MAX_CLIENT_KEYS = 100000;
     static constexpr auto KEYS_ROTATION_PERIOD = std::chrono::hours(6);
     static constexpr auto KEY_EXPIRE_TIME = std::chrono::hours(24);
-
-    static constexpr size_t SALT_SIZE = THashChecker::SALT_SIZE;
-    static constexpr size_t HASH_SIZE = THashChecker::HASH_SIZE;
 
     static constexpr const char* GROUPS_CLAIM_NAME = "https://ydb.tech/groups";
     static constexpr const char* EXTERNAL_AUTH_CLAIM_NAME = "external_authentication";
@@ -119,6 +116,7 @@ public:
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
+        TString HashedPassword;
         bool IsHashedPassword = false;
         bool CanLogin = true;
     };
@@ -126,6 +124,7 @@ public:
     struct TModifyUserRequest : TBasicRequest {
         TString User;
         std::optional<TString> Password;
+        std::optional<TString> HashedPassword;
         bool IsHashedPassword = false;
         std::optional<bool> CanLogin;
     };
@@ -184,7 +183,10 @@ public:
     struct TSidRecord {
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
-        TString PasswordHash;
+
+        TString ArgonHash;
+        TString PasswordHashes;
+
         bool IsEnabled;
         std::unordered_set<TString> Members;
         std::chrono::system_clock::time_point CreatedAt;
@@ -253,6 +255,7 @@ public:
     ~TLoginProvider();
 
     std::vector<TString> GetGroupsMembership(const TString& member) const;
+    static bool CanDecodeToken(const TString& token);
     static TString GetTokenAudience(const TString& token);
     static std::chrono::system_clock::time_point GetTokenExpiresAt(const TString& token);
     static TString SanitizeJwtToken(const TString& token);
@@ -270,7 +273,8 @@ private:
     static void UnlockAccount(TSidRecord* sid);
     bool ShouldResetFailedAttemptCount(const TSidRecord& sid) const;
     bool ShouldUnlockAccount(const TSidRecord& sid) const;
-    bool CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
+    bool CheckHashes(const TString& hashedPassword, TString& error) const;
+    bool CheckPasswordOrArgonHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
     TSidRecord* GetUserSid(const TString& user);
     bool FillUnavailableKey(TPasswordCheckResult* checkResult) const;
     bool FillInvalidUser(const TSidRecord* sid, TPasswordCheckResult* checkResult) const;
@@ -280,7 +284,6 @@ private:
     THolder<TImpl> Impl;
 
     TPasswordChecker PasswordChecker;
-    THashChecker HashChecker;
     TAccountLockout AccountLockout;
 };
 

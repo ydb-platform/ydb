@@ -310,7 +310,7 @@ struct IWireProtocolRowsetReader
 DEFINE_REFCOUNTED_TYPE(IWireProtocolRowsetReader)
 
 IWireProtocolRowsetReaderPtr CreateWireProtocolRowsetReader(
-    const std::vector<TSharedRef>& compressedBlocks,
+    std::vector<TSharedRef> compressedBlocks,
     NCompression::ECodec codecId,
     NTableClient::TTableSchemaPtr schema,
     bool schemaful,

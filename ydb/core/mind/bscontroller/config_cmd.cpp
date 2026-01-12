@@ -53,6 +53,13 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            void Rollback() {
+                Y_ENSURE(Success);
+                Success = false;
+                RollbackSuccess = true;
+                Error = "transaction rollback";
+            }
+
             void Finish() {
                 Response->SetSuccess(Success);
                 Response->SetRollbackSuccess(RollbackSuccess);
@@ -61,32 +68,45 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            bool ExecuteSoleCommand(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd, TTransactionContext& txc) {
+            bool IsSoleCommand(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd) {
+                switch (cmd.GetCommandCase()) {
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableDonorMode:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetScrubPeriodicity:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskSpaceMarginPromille:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings:
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+
+            void ExecuteSoleCommand(const NKikimrBlobStorage::TConfigRequest::TCommand& cmd, TTransactionContext& txc) {
                 NIceDb::TNiceDb db(txc.DB);
                 switch (cmd.GetCommandCase()) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:
                         Self->SelfHealEnable = cmd.GetEnableSelfHeal().GetEnable();
                         db.Table<Schema::State>().Key(true).Update<Schema::State::SelfHealEnable>(Self->SelfHealEnable);
-                        return true;
+                        return;
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableDonorMode:
                         Self->DonorMode = cmd.GetEnableDonorMode().GetEnable();
                         db.Table<Schema::State>().Key(true).Update<Schema::State::DonorModeEnable>(Self->DonorMode);
-                        return true;
+                        return;
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetScrubPeriodicity: {
                         const ui32 seconds = cmd.GetSetScrubPeriodicity().GetScrubPeriodicity();
                         Self->ScrubPeriodicity = TDuration::Seconds(seconds);
                         db.Table<Schema::State>().Key(true).Update<Schema::State::ScrubPeriodicity>(seconds);
                         Self->ScrubState.OnScrubPeriodicityChange();
-                        return true;
+                        return;
                     }
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskSpaceMarginPromille: {
                         const ui32 value = cmd.GetSetPDiskSpaceMarginPromille().GetPDiskSpaceMarginPromille();
                         Self->PDiskSpaceMarginPromille = value;
                         db.Table<Schema::State>().Key(true).Update<Schema::State::PDiskSpaceMarginPromille>(value);
-                        return true;
+                        return;
                     }
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings: {
@@ -157,11 +177,11 @@ namespace NKikimr::NBsController {
                             Self->TryToRelocateBrokenDisksLocallyFirst = value;
                             db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
                         }
-                        return true;
+                        return;
                     }
 
                     default:
-                        return false;
+                        throw TExError() << "unsupported sole command " << static_cast<int>(cmd.GetCommandCase());
                 }
             }
 
@@ -170,18 +190,17 @@ namespace NKikimr::NBsController {
                 THPTimer timer;
 
                 // check if there is some special sole command
-                if (Cmd.CommandSize() == 1) {
-                    bool res = true;
+                if (Cmd.CommandSize() == 1 && IsSoleCommand(Cmd.GetCommand(0))) {
                     WrapCommand([&] {
-                        res = ExecuteSoleCommand(Cmd.GetCommand(0), txc);
+                        if (Cmd.GetRollback()) {
+                            Rollback();
+                        } else {
+                            ExecuteSoleCommand(Cmd.GetCommand(0), txc);
+                        }
                     });
-                    if (res) {
-                        Finish();
-                        LogCommand(txc, TDuration::Seconds(timer.Passed()));
-                        return true;
-                    }
-                    Y_ABORT_UNLESS(Success);
-                    Response->MutableStatus()->RemoveLast();
+                    Finish();
+                    LogCommand(txc, TDuration::Seconds(timer.Passed()));
+                    return true;
                 }
 
                 const auto& hostRecords = EnforceHostRecords ? *EnforceHostRecords : Self->HostRecords;
@@ -254,6 +273,8 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(SanitizeGroup, SANITIZE_GROUP)
                             MAP_TIMING(CancelVirtualGroup, CANCEL_VIRTUAL_GROUP)
                             MAP_TIMING(ChangeGroupSizeInUnits, CHANGE_GROUP_SIZE_IN_UNITS)
+                            MAP_TIMING(ReconfigureVirtualGroup, RECONFIGURE_VIRTUAL_GROUP)
+                            MAP_TIMING(RecommissionGroups, RECOMMISSION_GROUPS)
 
                             default:
                                 break;
@@ -265,9 +286,7 @@ namespace NKikimr::NBsController {
                 }
 
                 if (Success && Cmd.GetRollback()) {
-                    Success = false;
-                    RollbackSuccess = true;
-                    Error = "transaction rollback";
+                    Rollback();
                 }
 
                 if (Success && SelfHeal && !Self->SelfHealEnable) {
@@ -312,18 +331,22 @@ namespace NKikimr::NBsController {
             }
 
             void LogCommand(TTransactionContext& txc, TDuration executionTime) {
+                ui64 operationLogIndex = Self->NextOperationLogIndex;
                 // update operation log for write transaction
                 NIceDb::TNiceDb db(txc.DB);
                 TString requestBuffer, responseBuffer;
                 Y_PROTOBUF_SUPPRESS_NODISCARD Cmd.SerializeToString(&requestBuffer);
                 Y_PROTOBUF_SUPPRESS_NODISCARD Response->SerializeToString(&responseBuffer);
-                db.Table<Schema::OperationLog>().Key(Self->NextOperationLogIndex).Update(
+                db.Table<Schema::OperationLog>().Key(operationLogIndex).Update(
                     NIceDb::TUpdate<Schema::OperationLog::Timestamp>(TActivationContext::Now()),
                     NIceDb::TUpdate<Schema::OperationLog::Request>(requestBuffer),
                     NIceDb::TUpdate<Schema::OperationLog::Response>(responseBuffer),
                     NIceDb::TUpdate<Schema::OperationLog::ExecutionTime>(executionTime));
                 db.Table<Schema::State>().Key(true).Update(
                     NIceDb::TUpdate<Schema::State::NextOperationLogIndex>(++Self->NextOperationLogIndex));
+
+                STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA10, "Finished processing command", (Request, Cmd.DebugString()),
+                        (Response, Response->DebugString()), (ExecutionTime, executionTime), (OperationLogIndex, operationLogIndex));
             }
 
             void ExecuteStep(TConfigState& state, const NKikimrBlobStorage::TConfigRequest::TCommand& cmd,
@@ -370,21 +393,16 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(GetInterfaceVersion)
                     HANDLE_COMMAND(MovePDisk)
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
-
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDeclareIntent:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kReadIntent:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableDonorMode:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetScrubPeriodicity:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskSpaceMarginPromille:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::COMMAND_NOT_SET:
-                        throw TExError() << "unsupported command";
+                    HANDLE_COMMAND(ReconfigureVirtualGroup)
+                    HANDLE_COMMAND(RecommissionGroups)
+                    default: break;
                 }
 
-                throw TExError() << "unsupported command";
+                if (IsSoleCommand(cmd)) {
+                    throw TExError() << "command must be sole";
+                } else {
+                    throw TExError() << "unsupported command " << static_cast<int>(cmd.GetCommandCase());
+                }
             }
 
             void Complete(const TActorContext&) override {

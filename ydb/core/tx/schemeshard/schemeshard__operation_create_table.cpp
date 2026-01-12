@@ -2,7 +2,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for IsAllowedKeyType
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -58,8 +57,8 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
                       const TVector<ui32>& keyColIds,
                       const TVector<NScheme::TTypeInfo>& keyColTypeIds,
                       TString& errStr,
-                      TVector<TTableShardInfo>& partitions,
-                      const TSchemeLimits& limits) {
+                      TVector<TTableShardInfo>& partitions)
+{
     ui32 partitionCount = 1;
     if (op.HasUniformPartitionsCount()) {
         partitionCount = op.GetUniformPartitionsCount();
@@ -67,8 +66,8 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
         partitionCount = op.SplitBoundarySize() + 1;
     }
 
-    if (partitionCount == 0 || partitionCount > limits.MaxShardsInPath) {
-        errStr = Sprintf("Invalid partition count specified: %u", partitionCount);
+    if (partitionCount == 0) {
+        errStr = Sprintf("Invalid table partition count specified: %u", partitionCount);
         return false;
     }
 
@@ -109,8 +108,8 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
                         const NKikimrSchemeOp::TTableDescription& op,
                         const NScheme::TTypeRegistry* typeRegistry,
                         TString& errStr,
-                        TVector<TTableShardInfo>& partitions,
-                        const TSchemeLimits& limits) {
+                        TVector<TTableShardInfo>& partitions)
+{
     const TVector<ui32>& keyColIds = tableInfo->KeyColumnIds;
     if (keyColIds.size() == 0) {
         errStr = Sprintf("No key columns specified");
@@ -130,7 +129,7 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
         keyColTypeIds.push_back(type);
     }
 
-    if (!InitPartitioning(op, typeRegistry, keyColIds, keyColTypeIds, errStr, partitions, limits)) {
+    if (!InitPartitioning(op, typeRegistry, keyColIds, keyColTypeIds, errStr, partitions)) {
         return false;
     }
 
@@ -159,6 +158,10 @@ void ApplyPartitioning(TTxId txId,
 }
 
 std::optional<TString> InferDefaultPoolKind(const TStoragePools& storagePools, const NKikimrSchemeOp::TPartitionConfig& changes) {
+    if (changes.HasChannelProfileId()) {
+        return std::nullopt;
+    }
+
     // Refuse to infer the default pool kind if any column family in the requested changes has a legacy Storage parameter
     for (const auto& changesFamily : changes.GetColumnFamilies()) {
         if (changesFamily.HasStorage()) {
@@ -578,9 +581,11 @@ public:
             return result;
         }
 
+        const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
+
         std::optional<TString> defaultPoolKind = InferDefaultPoolKind(domainInfo->EffectiveStoragePools(), schema.GetPartitionConfig());
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), AppData(), errStr)
+        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), schema.GetColumns(), AppData(), isServerless, errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
@@ -619,7 +624,7 @@ public:
 
         TVector<TTableShardInfo> partitions;
 
-        if (!DoInitPartitioning(tableInfo, schema, typeRegistry, errStr, partitions, domainInfo->GetSchemeLimits())) {
+        if (!DoInitPartitioning(tableInfo, schema, typeRegistry, errStr, partitions)) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
         }

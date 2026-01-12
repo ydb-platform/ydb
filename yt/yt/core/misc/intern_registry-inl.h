@@ -168,7 +168,7 @@ TInternedObject<T> TInternedObject<T>::FromDataPtr(TInternedObjectDataPtr<T> dat
     return TInternedObject<T>(std::move(data));
 }
 
-template<class T>
+template <class T>
 bool TInternedObject<T>::RefEqual(const TInternedObject <T>& lhs, const TInternedObject <T>& rhs)
 {
     return lhs.Data_ == rhs.Data_;

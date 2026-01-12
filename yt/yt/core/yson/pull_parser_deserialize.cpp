@@ -118,7 +118,8 @@ void Deserialize(bool& value, TYsonPullParserCursor* cursor)
         case EYsonItemType::Int64Value: {
             auto intValue = (*cursor)->UncheckedAsInt64();
             if (intValue != 0 && intValue != 1) {
-                THROW_ERROR_EXCEPTION("Expected 0 or 1 but found %v", intValue);
+                THROW_ERROR_EXCEPTION("Bool cannot be parsed from integer other than 0 or 1")
+                    << TErrorAttribute("integer_value", intValue);
             }
             value = static_cast<bool>(intValue);
             cursor->Next();
@@ -127,7 +128,8 @@ void Deserialize(bool& value, TYsonPullParserCursor* cursor)
         case EYsonItemType::Uint64Value: {
             auto uintValue = (*cursor)->UncheckedAsUint64();
             if (uintValue != 0 && uintValue != 1) {
-                THROW_ERROR_EXCEPTION("Expected 0 or 1 but found %v", uintValue);
+                THROW_ERROR_EXCEPTION("Bool cannot be parsed from integer other than 0 or 1")
+                    << TErrorAttribute("integer_value", uintValue);
             }
             value = static_cast<bool>(uintValue);
             cursor->Next();
@@ -152,7 +154,8 @@ void Deserialize(char& value, TYsonPullParserCursor* cursor)
     EnsureYsonToken("char", *cursor, EYsonItemType::StringValue);
     auto stringValue = (*cursor)->UncheckedAsString();
     if (stringValue.size() != 1) {
-        THROW_ERROR_EXCEPTION("Expected string of length 1 but found of length %v", stringValue.size());
+        THROW_ERROR_EXCEPTION("Char cannot be parsed from string whose length is not equal to 1")
+            << TErrorAttribute("string_length", stringValue.size());
     }
     value = stringValue[0];
     cursor->Next();
@@ -162,30 +165,39 @@ void Deserialize(char& value, TYsonPullParserCursor* cursor)
 void Deserialize(TDuration& value, TYsonPullParserCursor* cursor)
 {
     switch ((*cursor)->GetType()) {
-        case EYsonItemType::Int64Value:
-            value = TDuration::MilliSeconds((*cursor)->UncheckedAsInt64());
+        case EYsonItemType::Int64Value: {
+            auto ms = (*cursor)->UncheckedAsInt64();
+            if (ms < 0) {
+                THROW_ERROR_EXCEPTION("Duration value cannot be negative")
+                    << TErrorAttribute("duration_value", ms);
+            }
+            value = TDuration::MilliSeconds(static_cast<ui64>(ms));
             cursor->Next();
             break;
+        }
 
-        case EYsonItemType::Uint64Value:
+        case EYsonItemType::Uint64Value: {
             value = TDuration::MilliSeconds((*cursor)->UncheckedAsUint64());
             cursor->Next();
             break;
+        }
+
+        case EYsonItemType::DoubleValue: {
+            auto ms = (*cursor)->UncheckedAsDouble();
+            THROW_ERROR_EXCEPTION_IF(!std::isfinite(ms), "Duration must be finite");
+            if (ms < 0) {
+                THROW_ERROR_EXCEPTION("Duration value cannot be negative")
+                    << TErrorAttribute("duration_value", ms);
+            }
+            value = TDuration::MilliSeconds(ms);
+            cursor->Next();
+            break;
+        }
 
         case EYsonItemType::StringValue:
             value = TDuration::Parse((*cursor)->UncheckedAsString());
             cursor->Next();
             break;
-
-        case EYsonItemType::DoubleValue: {
-            auto ms = (*cursor)->UncheckedAsDouble();
-            if (ms < 0) {
-                THROW_ERROR_EXCEPTION("Duration cannot be negative");
-            }
-            value = TDuration::MicroSeconds(static_cast<ui64>(ms * 1000.0));
-            cursor->Next();
-            break;
-        }
 
         case EYsonItemType::BeginAttributes:
             SkipAttributes(cursor);
@@ -197,7 +209,7 @@ void Deserialize(TDuration& value, TYsonPullParserCursor* cursor)
             ThrowUnexpectedYsonTokenException(
                 "TDuration",
                 *cursor,
-                {EYsonItemType::Int64Value, EYsonItemType::Uint64Value});
+                {EYsonItemType::Int64Value, EYsonItemType::Uint64Value, EYsonItemType::StringValue});
     }
 }
 
@@ -205,10 +217,16 @@ void Deserialize(TDuration& value, TYsonPullParserCursor* cursor)
 void Deserialize(TInstant& value, TYsonPullParserCursor* cursor)
 {
     switch ((*cursor)->GetType()) {
-        case EYsonItemType::Int64Value:
-            value = TInstant::MilliSeconds((*cursor)->UncheckedAsInt64());
+        case EYsonItemType::Int64Value: {
+            auto ms = (*cursor)->UncheckedAsInt64();
+            if (ms < 0) {
+                THROW_ERROR_EXCEPTION("Instant value cannot be negative")
+                    << TErrorAttribute("instant_value", ms);
+            }
+            value = TInstant::MilliSeconds(ms);
             cursor->Next();
             break;
+        }
 
         case EYsonItemType::Uint64Value:
             value = TInstant::MilliSeconds((*cursor)->UncheckedAsUint64());
@@ -222,8 +240,10 @@ void Deserialize(TInstant& value, TYsonPullParserCursor* cursor)
 
         case EYsonItemType::DoubleValue: {
             auto ms = (*cursor)->UncheckedAsDouble();
+            THROW_ERROR_EXCEPTION_IF(!std::isfinite(ms), "Instant must be finite");
             if (ms < 0) {
-                THROW_ERROR_EXCEPTION("Duration cannot be negative");
+                THROW_ERROR_EXCEPTION("Instant value cannot be negative")
+                    << TErrorAttribute("instant_value", ms);
             }
             value = TInstant::MicroSeconds(static_cast<ui64>(ms * 1000.0));
             cursor->Next();
@@ -239,7 +259,7 @@ void Deserialize(TInstant& value, TYsonPullParserCursor* cursor)
             ThrowUnexpectedYsonTokenException(
                 "TInstant",
                 *cursor,
-                {EYsonItemType::Int64Value, EYsonItemType::Uint64Value, EYsonItemType::StringValue});
+                {EYsonItemType::Int64Value, EYsonItemType::Uint64Value, EYsonItemType::DoubleValue, EYsonItemType::StringValue});
     }
 }
 
@@ -265,8 +285,8 @@ void DeserializeProtobufMessage(
     cursor->TransferComplexValue(protobufWriter.get());
 
     if (!message.ParseFromArray(wireBytes.data(), wireBytes.size())) {
-        THROW_ERROR_EXCEPTION("Error parsing %v from wire bytes",
-            message.GetTypeName());
+        THROW_ERROR_EXCEPTION("Error parsing protobuf message from wire bytes")
+            << TErrorAttribute("protobuf_type", message.GetTypeName());
     }
 }
 

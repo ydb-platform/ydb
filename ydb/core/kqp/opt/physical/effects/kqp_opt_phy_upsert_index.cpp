@@ -319,7 +319,7 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
 TMaybe<std::pair<TCondenseInputResult, TMaybeNode<TDqPhyPrecompute>>>
 RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf> inputColumns,
     const THashSet<TString>& checkDefaults, const TKikimrTableDescription& table,
-    const TSecondaryIndexes& indexes, TPositionHandle pos, TExprContext& ctx)
+    const TSecondaryIndexes& indexes, const bool useStreamIndexes, TPositionHandle pos, TExprContext& ctx)
 {
     auto condenseResult = CondenseInput(inputRows, ctx);
     if (!condenseResult) {
@@ -336,6 +336,11 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
     THashSet<TString> usedIndexes;
     bool hasUniqIndex = false;
     for (const auto& [_, indexDesc] : indexes) {
+        if (useStreamIndexes
+                &&  (indexDesc->Type == TIndexDescription::EType::GlobalSync
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+            continue;
+        }
         hasUniqIndex |= (indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique);
         for (const auto& indexKeyCol : indexDesc->KeyColumns) {
             if (inputColumns.contains(indexKeyCol)) {
@@ -585,8 +590,10 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
 } // namespace
 
 TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, const TExprBase& inputRows,
-    const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TCoAtomList& columnsWithDefaults, const TKikimrTableDescription& table,
-    const TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, TPositionHandle pos, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
+    const TCoAtomList& inputColumns, const TCoAtomList& returningColumns, const TCoAtomList& columnsWithDefaults,
+    const TExprBase& tableExpr, const TKikimrTableDescription& table,
+    const TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings, TPositionHandle pos,
+    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
     switch (mode) {
         case TKqpPhyUpsertIndexMode::Upsert:
@@ -610,9 +617,33 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     }
 
     auto filter = (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
-    const auto indexes = BuildSecondaryIndexVector(table, pos, ctx, filter);
+    const auto indexes = BuildAffectedIndexTables(table, pos, ctx, filter);
 
-    auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, pos, ctx);
+    const bool isSink = NeedSinks(table, kqpCtx);
+    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
+    const bool needPrecompute = !useStreamIndex
+        || !columnsWithDefaultsSet.empty()
+        || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
+            return index.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
+                || index.second->Type == TIndexDescription::EType::GlobalFulltext;
+        });
+
+    if (!needPrecompute) {
+        TVector<TExprBase> effects;
+        effects.emplace_back(Build<TKqlUpsertRows>(ctx, pos)
+            .Table(tableExpr.Ptr())
+            .Input(inputRows.Ptr())
+            .Columns(inputColumns)
+            .ReturningColumns(returningColumns.Ptr())
+            .IsBatch(ctx.NewAtom(pos, "false"))
+            .Settings(settings)
+            .Done());
+        return Build<TExprList>(ctx, pos)
+            .Add(effects)
+            .Done();
+    }
+
+    auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, useStreamIndex, pos, ctx);
 
     if (!checkedInput) {
         return {};
@@ -664,19 +695,22 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         : rowsPrecompute.Cast();
 
     auto mainTableNode = BuildTableMeta(table, pos, ctx);
-    auto tableUpsert = Build<TKqlUpsertRows>(ctx, pos)
+    TVector<TExprBase> effects;
+    effects.emplace_back(Build<TKqlUpsertRows>(ctx, pos)
         .Table(mainTableNode)
         .Input(tableUpsertRows)
         .Columns(inputColumns)
         .ReturningColumns(returningColumns)
         .IsBatch(ctx.NewAtom(pos, "false"))
         .Settings(settings)
-        .Done();
-
-    TVector<TExprBase> effects;
-    effects.emplace_back(tableUpsert);
+        .Done());
 
     for (const auto& [tableNode, indexDesc] : indexes) {
+        if (useStreamIndex
+                && (indexDesc->Type == TIndexDescription::EType::GlobalSync
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+            continue;
+        }
         bool indexKeyColumnsUpdated = false;
         THashSet<TStringBuf> indexTableColumnsSet;
         TVector<TStringBuf> indexTableColumns;
@@ -885,13 +919,26 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 ? MakeRowsFromTupleDict(lookupDictRecomputed, pk, indexTableColumnsWithoutData, pos, ctx)
                 : MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumnsWithoutData, pos, ctx);
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                if (indexDesc->KeyColumns.size() > 1) {
-                    deleteIndexKeys = BuildVectorIndexPrefixRows(table, *prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumnsWithoutData, pos, ctx);
+            switch (indexDesc->Type) {
+                case TIndexDescription::EType::GlobalSync:
+                case TIndexDescription::EType::GlobalAsync:
+                case TIndexDescription::EType::GlobalSyncUnique:
+                    // deleteIndexKeys are already correct
+                    break;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                    if (indexDesc->KeyColumns.size() > 1) {
+                        deleteIndexKeys = BuildVectorIndexPrefixRows(table, *prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumnsWithoutData, pos, ctx);
+                    }
+                    deleteIndexKeys = BuildVectorIndexPostingRows(table, mainTableNode,
+                        indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, false, pos, ctx);
+                    break;
                 }
-
-                deleteIndexKeys = BuildVectorIndexPostingRows(table, mainTableNode,
-                    indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, false, pos, ctx);
+                case TIndexDescription::EType::GlobalFulltext: {
+                    // For fulltext indexes, we need to tokenize the text and create deleted rows
+                    deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet,
+                        indexTableColumnsWithoutData, /*includeDataColumns=*/false, pos, ctx);
+                    break;
+                }
             }
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, pos)
@@ -916,21 +963,34 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 : MakeUpsertIndexRows(mode, rowsPrecompute.Cast(), lookupDict.Cast(),
                       inputColumnsSet, indexTableColumns, table, pos, ctx, false);
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                if (indexDesc->KeyColumns.size() > 1) {
-                    if (prefixTable->Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
-                        auto res = BuildVectorIndexPrefixRowsWithNew(table, *prefixTable, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
-                        upsertIndexRows = std::move(res.first);
-                        effects.emplace_back(std::move(res.second));
-                    } else {
-                        // Handle old prefixed vector index tables without the sequence
-                        upsertIndexRows = BuildVectorIndexPrefixRows(table, *prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+            switch (indexDesc->Type) {
+                case TIndexDescription::EType::GlobalSync:
+                case TIndexDescription::EType::GlobalAsync:
+                case TIndexDescription::EType::GlobalSyncUnique:
+                    // upsertIndexRows are already correct
+                    break;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                    if (indexDesc->KeyColumns.size() > 1) {
+                        if (prefixTable->Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
+                            auto res = BuildVectorIndexPrefixRowsWithNew(table, *prefixTable, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                            upsertIndexRows = std::move(res.first);
+                            effects.emplace_back(std::move(res.second));
+                        } else {
+                            // Handle old prefixed vector index tables without the sequence
+                            upsertIndexRows = BuildVectorIndexPrefixRows(table, *prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                        }
                     }
+                    upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,
+                        indexDesc->Name, indexTableColumns, upsertIndexRows, true, pos, ctx);
+                    indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+                    break;
                 }
-
-                upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,
-                    indexDesc->Name, indexTableColumns, upsertIndexRows, true, pos, ctx);
-                indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+                case TIndexDescription::EType::GlobalFulltext: {
+                    // For fulltext indexes, we need to tokenize the text and create upserted rows
+                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertIndexRows, indexTableColumnsSet,
+                        indexTableColumns, /*includeDataColumns=*/true, pos, ctx);
+                    break;
+                }
             }
 
             auto indexUpsert = Build<TKqlUpsertRows>(ctx, pos)
@@ -965,7 +1025,8 @@ TExprBase KqpBuildUpsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, upsert.Table().Path());
 
     auto effects = KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode::Upsert, upsert.Input(), upsert.Columns(),
-        upsert.ReturningColumns(), upsert.GenerateColumnsIfInsert(), table, upsert.Settings(), upsert.Pos(), ctx, kqpCtx);
+        upsert.ReturningColumns(), upsert.GenerateColumnsIfInsert(), upsert.Table(), table,
+        upsert.Settings(), upsert.Pos(), ctx, kqpCtx);
 
     if (!effects) {
         return node;

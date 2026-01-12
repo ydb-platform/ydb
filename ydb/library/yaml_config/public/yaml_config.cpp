@@ -1153,6 +1153,7 @@ void ResolveUniqueDocs(
     currentPath.reserve(ctx.Compiled.size());
 
     THashSet<size_t> seenHashes;
+    THashSet<TTriePath> seenPaths;
 
     const bool checkRules = ctx.Model.IncompatibilityRules.HasRules();
 
@@ -1174,6 +1175,10 @@ void ResolveUniqueDocs(
                 }
             }
 
+            if (seenPaths.contains(currentPath)) {
+                return;
+            }
+
             // we find the common prefix of the current path and the last path
             // this allows us to reuse one of the previous documents for the common prefix
             size_t commonPrefix = 0;
@@ -1192,9 +1197,14 @@ void ResolveUniqueDocs(
             for (size_t idx = commonPrefix; idx < currentPath.size(); ++idx) {
                 int selectorIndex = currentPath[idx];
                 auto nextDoc = states.back().Doc.Clone();
-                auto model = ParseConfig(nextDoc);
-                Apply(model.Config, model.Selectors[selectorIndex].Config);
-                states.push_back(TState{std::move(nextDoc), model.Config});
+
+                // apply without re-parsing selectors: copy "config" from original doc's selector into nextDoc
+                auto toConfig = nextDoc.Root().Map().at("config");
+                auto fromConfigOriginal = ctx.Model.Selectors[selectorIndex].Config;
+                auto fromConfigInNext = fromConfigOriginal.Copy(nextDoc);
+                Apply(toConfig, fromConfigInNext);
+
+                states.push_back(TState{std::move(nextDoc), toConfig});
                 lastPath.push_back(selectorIndex);
             }
 
@@ -1206,6 +1216,8 @@ void ResolveUniqueDocs(
             if (seenHashes.emplace(h).second) {
                 onDocument(TDocumentConfig{std::move(resolvedDoc), resolvedConfig});
             }
+
+            seenPaths.insert(currentPath);
         });
 }
 

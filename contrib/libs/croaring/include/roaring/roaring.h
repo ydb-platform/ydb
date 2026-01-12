@@ -13,8 +13,10 @@
 
 // Include other headers after roaring_types.h
 #include <roaring/bitset/bitset.h>
+#include <roaring/containers/containers.h>
 #include <roaring/memory.h>
 #include <roaring/portability.h>
+#include <roaring/roaring_array.h>
 #include <roaring/roaring_version.h>
 
 #ifdef __cplusplus
@@ -74,6 +76,18 @@ roaring_bitmap_t *roaring_bitmap_from_range(uint64_t min, uint64_t max,
  */
 roaring_bitmap_t *roaring_bitmap_of_ptr(size_t n_args, const uint32_t *vals);
 
+/**
+ * Check if the bitmap contains any shared containers.
+ */
+bool roaring_contains_shared(const roaring_bitmap_t *r);
+
+/**
+ * Unshare all shared containers.
+ * Returns true if any unsharing was performed, false if there were no shared
+ * containers.
+ */
+bool roaring_unshare_all(roaring_bitmap_t *r);
+
 /*
  * Whether you want to use copy-on-write.
  * Saves memory and avoids copies, but needs more care in a threaded context.
@@ -82,6 +96,9 @@ roaring_bitmap_t *roaring_bitmap_of_ptr(size_t n_args, const uint32_t *vals);
  * Note: If you do turn this flag to 'true', enabling COW, then ensure that you
  * do so for all of your bitmaps, since interactions between bitmaps with and
  * without COW is unsafe.
+ *
+ * When setting this flag to false, if any containers are shared, they
+ * are unshared (cloned) immediately.
  */
 inline bool roaring_bitmap_get_copy_on_write(const roaring_bitmap_t *r) {
     return r->high_low_container.flags & ROARING_FLAG_COW;
@@ -90,6 +107,9 @@ inline void roaring_bitmap_set_copy_on_write(roaring_bitmap_t *r, bool cow) {
     if (cow) {
         r->high_low_container.flags |= ROARING_FLAG_COW;
     } else {
+        if (roaring_bitmap_get_copy_on_write(r)) {
+            roaring_unshare_all(r);
+        }
         r->high_low_container.flags &= ~ROARING_FLAG_COW;
     }
 }
@@ -444,7 +464,27 @@ bool roaring_bitmap_remove_checked(roaring_bitmap_t *r, uint32_t x);
 /**
  * Check if value is present
  */
-bool roaring_bitmap_contains(const roaring_bitmap_t *r, uint32_t val);
+inline bool roaring_bitmap_contains(const roaring_bitmap_t *r, uint32_t val) {
+    // For performance reasons, this function is inline and uses internal
+    // functions directly.
+#ifdef __cplusplus
+    using namespace ::roaring::internal;
+#endif
+    const uint16_t hb = val >> 16;
+    /*
+     * the next function call involves a binary search and lots of branching.
+     */
+    int32_t i = ra_get_index(&r->high_low_container, hb);
+    if (i < 0) return false;
+
+    uint8_t typecode;
+    // next call ought to be cheap
+    container_t *container = ra_get_container_at_index(&r->high_low_container,
+                                                       (uint16_t)i, &typecode);
+    // rest might be a tad expensive, possibly involving another round of binary
+    // search
+    return container_contains(container, val & 0xFFFF, typecode);
+}
 
 /**
  * Check whether a range of values from range_start (included)
@@ -545,7 +585,11 @@ bool roaring_bitmap_to_bitset(const roaring_bitmap_t *r, bitset_t *bitset);
  *
  *     ans = malloc(roaring_bitmap_get_cardinality(limit) * sizeof(uint32_t));
  *
- * Return false in case of failure (e.g., insufficient memory)
+ * This function always returns `true`
+ *
+ * For more control, see `roaring_uint32_iterator_skip` and
+ * `roaring_uint32_iterator_read`, which can be used to e.g. tell how many
+ * values were actually read.
  */
 bool roaring_bitmap_range_uint32_array(const roaring_bitmap_t *r, size_t offset,
                                        size_t limit, uint32_t *ans);
@@ -1033,6 +1077,7 @@ while(i.has_value) {
   printf("value = %d\n", i.current_value);
   roaring_uint32_iterator_advance(&i);
 }
+roaring_uint32_iterator_free(&i);
 
 Obviously, if you modify the underlying bitmap, the iterator
 becomes invalid. So don't.
@@ -1085,7 +1130,7 @@ CROARING_DEPRECATED static inline void roaring_init_iterator_last(
 
 /**
  * Create an iterator object that can be used to iterate through the values.
- * Caller is responsible for calling `roaring_free_iterator()`.
+ * Caller is responsible for calling `roaring_uint32_iterator_free()`.
  *
  * The iterator is initialized (this function calls `roaring_iterator_init()`)
  * If there is a value, then this iterator points to the first value and
@@ -1172,7 +1217,7 @@ CROARING_DEPRECATED static inline void roaring_free_uint32_iterator(
     roaring_uint32_iterator_free(it);
 }
 
-/*
+/**
  * Reads next ${count} values from iterator into user-supplied ${buf}.
  * Returns the number of read elements.
  * This number can be smaller than ${count}, which means that iterator is
@@ -1191,6 +1236,30 @@ CROARING_DEPRECATED static inline uint32_t roaring_read_uint32_iterator(
     roaring_uint32_iterator_t *it, uint32_t *buf, uint32_t count) {
     return roaring_uint32_iterator_read(it, buf, count);
 }
+
+/**
+ * Skip the next ${count} values from iterator.
+ * Returns the number of values actually skipped.
+ * The number can be smaller than ${count}, which means that iterator is
+ * drained.
+ *
+ * This function is equivalent to calling `roaring_uint32_iterator_advance()`
+ * ${count} times but is much more efficient.
+ */
+uint32_t roaring_uint32_iterator_skip(roaring_uint32_iterator_t *it,
+                                      uint32_t count);
+
+/**
+ * Skip the previous ${count} values from iterator (move backwards).
+ * Returns the number of values actually skipped backwards.
+ * The number can be smaller than ${count}, which means that iterator reached
+ * the beginning.
+ *
+ * This function is equivalent to calling `roaring_uint32_iterator_previous()`
+ * ${count} times but is much more efficient.
+ */
+uint32_t roaring_uint32_iterator_skip_backward(roaring_uint32_iterator_t *it,
+                                               uint32_t count);
 
 #ifdef __cplusplus
 }

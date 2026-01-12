@@ -3,31 +3,28 @@
 #include <ydb/core/grpc_services/service_import.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
 void TGRpcYdbImportService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+    using namespace Ydb::Import;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_IMPORT_METHOD
+#error SETUP_IMPORT_METHOD macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, CB, AUDIT_MODE) \
-    MakeIntrusive<TGRpcRequest<Ydb::Import::IN, Ydb::Import::OUT, TGRpcYdbImportService>>(this, &Service_, CQ_, \
-        [this](NYdbGrpc::IRequestContextBase *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ActorSystem_->Send(GRpcRequestProxyId_, \
-                new NGRpcService::TGrpcRequestOperationCall<Ydb::Import::IN, Ydb::Import::OUT> \
-                    (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr, AUDIT_MODE})); \
-        }, &Ydb::Import::V1::ImportService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("import", #NAME))->Run();
 
-    ADD_REQUEST(ImportFromS3, ImportFromS3Request, ImportFromS3Response, DoImportFromS3Request, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
-    ADD_REQUEST(ListObjectsInS3Export, ListObjectsInS3ExportRequest, ListObjectsInS3ExportResponse, DoListObjectsInS3ExportRequest, TAuditMode::NonModifying());
-    ADD_REQUEST(ImportData, ImportDataRequest, ImportDataResponse, DoImportDataRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
+#define SETUP_IMPORT_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, import, auditMode)
 
-#undef ADD_REQUEST
+    SETUP_IMPORT_METHOD(ImportFromS3, DoImportFromS3Request, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
+    SETUP_IMPORT_METHOD(ImportFromFs, DoImportFromFsRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
+    SETUP_IMPORT_METHOD(ListObjectsInS3Export, DoListObjectsInS3ExportRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_IMPORT_METHOD(ImportData, DoImportDataRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
+
+#undef SETUP_IMPORT_METHOD
 }
 
 } // namespace NGRpcService

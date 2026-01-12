@@ -133,12 +133,13 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                         }
                     }
                     if (ownerData.VDiskId != TVDiskID::InvalidId) {
-                        if (ownerData.CurrentFirstLsnToKeep < footer->FirstLsnToKeep) {
+                        ui64 firstLsnToKeep = ReadUnaligned<ui64>(&footer->FirstLsnToKeep);
+                        if (ownerData.CurrentFirstLsnToKeep < firstLsnToKeep) {
                             P_LOG(PRI_INFO, BPD01, "ProcessReadLogRecord set new FirstLsnToKeep for Owner caused by Lsn",
                                     (OwnerId, (ui32)header.OwnerId),
-                                    (FirstLsnToKeep, footer->FirstLsnToKeep),
+                                    (FirstLsnToKeep, firstLsnToKeep),
                                     (Lsn, header.OwnerLsn));
-                            ownerData.CurrentFirstLsnToKeep = footer->FirstLsnToKeep;
+                            ownerData.CurrentFirstLsnToKeep = firstLsnToKeep;
                         }
                         ownerData.LogRecordsInitiallyRead++;
                     }
@@ -702,42 +703,41 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
     if (IsInitial) {
         PDisk->LastNonceJumpLogPageHeader2 = *nonceJumpLogPageHeader2;
 
+        const ui64 headerPrevNonce = ReadUnaligned<ui64>(&nonceJumpLogPageHeader2->PreviousNonce);
 
         if (SectorIdx == 0) {
             P_LOG(PRI_WARN, LR016, SelfInfo() << " nonce jump2 ",
                     (IsEndOfSplice, ChunkInfo->IsEndOfSplice),
                     (" replacing ChunkInfo->DesiredPrevChunkLastNonce# ", ChunkInfo->DesiredPrevChunkLastNonce),
-                    (" with nonceJumpLogPageHeader2->PreviousNonce# ", nonceJumpLogPageHeader2->PreviousNonce));
+                    (" with nonceJumpLogPageHeader2->PreviousNonce# ", headerPrevNonce));
 
 
             if (ChunkInfo->IsEndOfSplice) {
                 // NonceJump can't be interpreted the usual way
-                ChunkInfo->DesiredPrevChunkLastNonce = nonceJumpLogPageHeader2->PreviousNonce;
+                ChunkInfo->DesiredPrevChunkLastNonce = headerPrevNonce;
             } else {
                 // For future log splices DesiredPrevChunkLastNonce should be equal to expected in NonceJump record
-                ChunkInfo->DesiredPrevChunkLastNonce = nonceJumpLogPageHeader2->PreviousNonce;
+                ChunkInfo->DesiredPrevChunkLastNonce = headerPrevNonce;
             }
         }
 
         // TODO: Investigate / process error the proper way here.
-        if (previousNonce > nonceJumpLogPageHeader2->PreviousNonce &&
-                previousDataNonce > nonceJumpLogPageHeader2->PreviousNonce) {
+        if (previousNonce > headerPrevNonce && previousDataNonce > headerPrevNonce) {
             // We just came across an outdated nonce jump. This means the end of the log.
             P_LOG(PRI_WARN, LR001, SelfInfo() << " ReplyOk",
                     (currentSectorIdx, SectorIdx),
                     (previousNonce, previousNonce),
                     (previousDataNonce, previousDataNonce),
-                    (nonceJumpLogPageHeader2->PreviousNonce, nonceJumpLogPageHeader2->PreviousNonce),
+                    (nonceJumpLogPageHeader2->PreviousNonce, headerPrevNonce),
                     (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
             ReplyOk();
             return;
-        } else if (previousNonce < nonceJumpLogPageHeader2->PreviousNonce &&
-                previousDataNonce < nonceJumpLogPageHeader2->PreviousNonce) {
+        } else if (previousNonce < headerPrevNonce && previousDataNonce < headerPrevNonce) {
             TStringStream str;
             str << PCtx->PDiskLogPrefix
                 << "previousNonce# " << previousNonce
                 << " and previousDataNonce# " << previousDataNonce
-                << " != header->PreviousNonce# " << nonceJumpLogPageHeader2->PreviousNonce
+                << " != header->PreviousNonce# " << headerPrevNonce
                 << " OffsetInSector# " << OffsetInSector
                 << " sizeof(TNonceJumpLogPageHeader)# " << sizeof(TNonceJumpLogPageHeader2)
                 << " chunkIdx# " << ChunkIdx
@@ -809,7 +809,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));
         } else {
             bool outsideLogEnd = ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx;
-            
+
             if (!outsideLogEnd) {
                 // If read invalid data from the log (but not outside this owner's log bounds), check if the owner is on quarantine.
                 TGuard<TMutex> guard(PDisk->StateMutex);
@@ -1142,8 +1142,8 @@ void TLogReader::ReplyOk() {
     Result->NextPosition = IsInitial ? LastGoodToWriteLogPosition : TLogPosition::Invalid();
     Result->IsEndOfLog = true;
     if (IsInitial) {
-        Result->LastGoodChunkIdx = ChunkIdx; 
-        Result->LastGoodSectorIdx = SectorIdx; 
+        Result->LastGoodChunkIdx = ChunkIdx;
+        Result->LastGoodSectorIdx = SectorIdx;
     }
     Reply();
 }

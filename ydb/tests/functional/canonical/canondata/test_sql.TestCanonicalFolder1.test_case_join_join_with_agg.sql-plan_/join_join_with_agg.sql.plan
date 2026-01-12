@@ -19,7 +19,10 @@
                 },
                 {
                     "columns": [
-                        "Key"
+                        "Fk21",
+                        "Fk22",
+                        "Key",
+                        "Value"
                     ],
                     "lookup_by": [
                         "Key"

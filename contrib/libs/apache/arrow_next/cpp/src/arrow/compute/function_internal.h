@@ -22,20 +22,20 @@
 #include <string>
 #include <vector>
 
-#include "arrow/array/builder_base.h"
-#include "arrow/array/builder_binary.h"
-#include "arrow/array/builder_nested.h"
-#include "arrow/compute/api_vector.h"
-#include "arrow/compute/function.h"
-#include "arrow/compute/type_fwd.h"
-#include "arrow/result.h"
-#include "arrow/scalar.h"
-#include "arrow/status.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/reflection_internal.h"
-#include "arrow/util/string.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_nested.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/reflection_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 struct Scalar;

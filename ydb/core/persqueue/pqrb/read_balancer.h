@@ -5,13 +5,11 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
@@ -29,7 +27,17 @@ using namespace NTabletFlatExecutor;
 
 namespace NBalancing {
 class TBalancer;
+class TMLPBalancer;
 }
+
+class TTopicMetricsHandler;
+
+struct TDatabaseInfo {
+    TString DatabasePath;
+    TString DatabaseId;
+    TString FolderId;
+    TString CloudId;
+};
 
 
 class TMetricsTimeKeeper {
@@ -134,6 +142,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr&);
+
     ui64 PartitionReserveSize() {
         return TopicPartitionReserveSize(TabletConfig);
     }
@@ -154,13 +164,6 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     ui32 MaxPartsPerTablet;
     ui64 SchemeShardId;
     NKikimrPQ::TPQTabletConfig TabletConfig;
-
-    struct TConsumerInfo {
-        std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
-        THolder<TTabletLabeledCountersBase> Aggr;
-    };
-
-    std::unordered_map<TString, TConsumerInfo> Consumers;
 
     ui64 TxId;
     ui32 NumActiveParts;
@@ -193,6 +196,9 @@ private:
     friend class NBalancing::TBalancer;
     std::unique_ptr<NBalancing::TBalancer> Balancer;
 
+    friend class NBalancing::TMLPBalancer;
+    std::unique_ptr<NBalancing::TMLPBalancer> MLPBalancer;
+
     std::unique_ptr<TPartitionScaleManager> PartitionsScaleManager;
     TActorId MirrorTopicDescriberActorId;
 
@@ -209,53 +215,17 @@ private:
     std::unordered_map<ui64, TPipeLocation> TabletPipes;
     std::unordered_set<ui64> PipesRequested;
 
-    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
-    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCompactionCounters;
+    TDatabaseInfo DatabaseInfo;
 
-    NMonitoring::TDynamicCounterPtr DynamicCounters;
-    NMonitoring::TDynamicCounters::TCounterPtr ActivePartitionCountCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr InactivePartitionCountCounter;
+    std::unique_ptr<TTopicMetricsHandler> TopicMetricsHandler;
 
-    TString DatabasePath;
-    TString DatabaseId;
-    TString FolderId;
-    TString CloudId;
-
-    struct TPartitionStats {
-        ui64 DataSize = 0;
-        ui64 UsedReserveSize = 0;
-        NKikimrPQ::TAggregatedCounters Counters;
-        bool HasCounters = false;
-    };
-
-    struct TPartitionMetrics {
-        ui64 TotalAvgWriteSpeedPerSec = 0;
-        ui64 MaxAvgWriteSpeedPerSec = 0;
-        ui64 TotalAvgWriteSpeedPerMin = 0;
-        ui64 MaxAvgWriteSpeedPerMin = 0;
-        ui64 TotalAvgWriteSpeedPerHour = 0;
-        ui64 MaxAvgWriteSpeedPerHour = 0;
-        ui64 TotalAvgWriteSpeedPerDay = 0;
-        ui64 MaxAvgWriteSpeedPerDay = 0;
-    };
-
-    struct TAggregatedStats {
-        std::unordered_map<ui32, TPartitionStats> Stats;
+    struct TStatsRequestTracker {
         std::unordered_map<ui64, ui64> Cookies;
-
-        ui64 TotalDataSize = 0;
-        ui64 TotalUsedReserveSize = 0;
-
-        TPartitionMetrics Metrics;
-        TPartitionMetrics NewMetrics;
 
         ui64 Round = 0;
         ui64 NextCookie = 0;
-
-        void AggrStats(ui32 partition, ui64 dataSize, ui64 usedReserveSize);
-        void AggrStats(ui64 avgWriteSpeedPerSec, ui64 avgWriteSpeedPerMin, ui64 avgWriteSpeedPerHour, ui64 avgWriteSpeedPerDay);
     };
-    TAggregatedStats AggregatedStats;
+    TStatsRequestTracker StatsRequestTracker;
 
     struct TTxWritePartitionStats;
     bool TTxWritePartitionStatsScheduled = false;
@@ -282,70 +252,8 @@ public:
 
     TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info);
 
-    STFUNC(StateInit) {
-        auto ctx(ActorContext());
-        TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
-
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvUpdateBalancerConfig, HandleOnInit);
-            HFunc(TEvPersQueue::TEvRegisterReadSession, HandleOnInit);
-            HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
-            HFunc(TEvTabletPipe::TEvServerConnected, Handle);
-            HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-            HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-            HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
-            // From kafka
-            HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
-            HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
-            default:
-                StateInitImpl(ev, SelfId());
-                break;
-        }
-    }
-
-    STFUNC(StateWork) {
-        auto ctx(ActorContext());
-        TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
-
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvWakeup, HandleWakeup);
-            HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
-            HFunc(TEvPersQueue::TEvUpdateBalancerConfig, Handle);
-            HFunc(TEvPersQueue::TEvRegisterReadSession, Handle);
-            HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
-            HFunc(TEvPersQueue::TEvPartitionReleased, Handle);
-            HFunc(TEvTabletPipe::TEvServerConnected, Handle);
-            HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvPersQueue::TEvStatusResponse, Handle);
-            HFunc(TEvPQ::TEvStatsWakeup, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-            HFunc(TEvPersQueue::TEvStatus, Handle);
-            HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
-            HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
-            HFunc(TEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
-            HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
-            HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
-            HFunc(TEvPQ::TEvBalanceConsumer, Handle);
-            // From kafka
-            HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
-            HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
-            // from PQ
-            HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
-            // from TPartitionScaleRequest
-            HFunc(TPartitionScaleRequest::TEvPartitionScaleRequestDone, Handle);
-            // from MirrorDescriber
-            HFunc(TEvPQ::TEvMirrorTopicDescription, Handle);
-            default:
-                HandleDefaultEvents(ev, SelfId());
-                break;
-        }
-    }
-
+    STFUNC(StateInit);
+    STFUNC(StateWork);
 };
 
 TString EncodeAnchor(const TString& value);

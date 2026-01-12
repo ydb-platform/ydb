@@ -39,6 +39,21 @@ void TSingletonsConfigBase<Static>::SetSingletonConfig(TIntrusivePtr<TConfig> co
     *GetOrCrash(TypeToConfig_, typeid(TConfig)) = std::move(config);
 }
 
+template<bool Static>
+void TSingletonsConfigBase<Static>::MergeAllSingletonConfigsFrom(const TSingletonsConfigBase<Static>& src)
+{
+    THashMap<const std::any*, std::type_index> configToType(src.TypeToConfig_.size());
+    for (const auto& [type, config]: src.TypeToConfig_) {
+        EmplaceOrCrash(configToType, config, type);
+    }
+
+    for (const auto& [name, config]: src.NameToConfig_) {
+        auto it = NameToConfig_.insert_or_assign(name, config).first;
+        auto type = GetOrCrash(configToType, &config);
+        TypeToConfig_.insert_or_assign(type, &it->second);
+    }
+}
+
 template <class TManagerConfig>
 using TRegisterSingletonField = std::function<void(NYTree::TYsonStructRegistrar<TManagerConfig> registrar)>;
 using TConfigureSingleton = std::function<void(const std::any& config)>;
@@ -131,8 +146,9 @@ struct TSingletonConfigHelpers
     [[maybe_unused]] void CheckSingletonConfigRegistered(::NYT::NDetail::TSingletonConfigTag<configType, true>) \
     { } \
     \
-    YT_STATIC_INITIALIZER( \
-        ::NYT::NDetail::TSingletonConfigHelpers::RegisterSingleton<configType>(singletonName))
+    YT_STATIC_INITIALIZER({ \
+        ::NYT::NDetail::TSingletonConfigHelpers::RegisterSingleton<configType>(singletonName); \
+    })
 
 #define YT_DEFINE_RECONFIGURABLE_SINGLETON(singletonName, configType, dynamicConfigType) \
     [[maybe_unused]] void CheckSingletonConfigRegistered(::NYT::NDetail::TSingletonConfigTag<configType, true>) \
@@ -141,8 +157,9 @@ struct TSingletonConfigHelpers
     [[maybe_unused]] void CheckSingletonConfigRegistered(::NYT::NDetail::TSingletonConfigTag<dynamicConfigType, false>) \
     { } \
     \
-    YT_STATIC_INITIALIZER( \
-         ::NYT::NDetail::TSingletonConfigHelpers::RegisterReconfigurableSingleton<configType, dynamicConfigType>(singletonName)) \
+    YT_STATIC_INITIALIZER({ \
+         ::NYT::NDetail::TSingletonConfigHelpers::RegisterReconfigurableSingleton<configType, dynamicConfigType>(singletonName); \
+    })
 
 ////////////////////////////////////////////////////////////////////////////////
 

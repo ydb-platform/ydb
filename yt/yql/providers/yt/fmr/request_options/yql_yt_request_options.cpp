@@ -5,6 +5,22 @@
 
 namespace NYql::NFmr {
 
+void TFmrUserJobSettings::Save(IOutputStream* buffer) const {
+    ::SaveMany(
+        buffer,
+        ThreadPoolSize,
+        QueueSizeLimit
+    );
+}
+
+void TFmrUserJobSettings::Load(IInputStream* buffer) {
+    ::LoadMany(
+        buffer,
+        ThreadPoolSize,
+        QueueSizeLimit
+    );
+}
+
 TYtTableRef::TYtTableRef()
 {
 }
@@ -44,12 +60,17 @@ TFmrTableId::TFmrTableId(const TString& cluster, const TString& path): Id(cluste
 {
 }
 
-TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections, const TMaybe<NYT::TNode>& jobSettings) {
-    return MakeIntrusive<TTask>(taskType, taskId, taskParams, sessionId, clusterConnections, jobSettings);
+TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections, const std::vector<TFileInfo>& files, const std::vector<TYtResourceInfo>& ytResources, const std::vector<TFmrResourceTaskInfo>& fmrResources, const TMaybe<NYT::TNode>& jobSettings) {
+    return MakeIntrusive<TTask>(taskType, taskId, taskParams, sessionId, clusterConnections, files, ytResources, fmrResources, jobSettings);
 }
 
 TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage, const TStatistics& stats) {
     return MakeIntrusive<TTaskState>(taskStatus, taskId, taskErrorMessage, stats);
+}
+
+void TSortedUploadOperationParams::UpdateAfterPreparation(std::vector<TString> cookies, TString partitionId) {
+    Cookies = std::move(cookies);
+    PartitionId = std::move(partitionId);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -189,6 +210,17 @@ void TFmrTableId::Save(IOutputStream* buffer) const {
 
 void TFmrTableId::Load(IInputStream* buffer) {
     ::Load(buffer, Id);
+}
+
+void TSortedChunkStats::Save(IOutputStream* buffer) const {
+    ::SaveMany(buffer, IsSorted,
+               NYT::NodeToYsonString(FirstRowKeys));
+}
+
+void TSortedChunkStats::Load(IInputStream* buffer) {
+    TString FirstRowKeysStr;
+    ::LoadMany(buffer, IsSorted, FirstRowKeysStr);
+    FirstRowKeys = NYT::NodeFromYsonString(FirstRowKeysStr);
 }
 
 // helper functions for rich path

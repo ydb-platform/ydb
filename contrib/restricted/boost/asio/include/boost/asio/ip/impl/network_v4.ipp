@@ -1,3 +1,5 @@
+#pragma clang system_header
+
 //
 // ip/impl/network_v4.ipp
 // ~~~~~~~~~~~~~~~~~~~~~~

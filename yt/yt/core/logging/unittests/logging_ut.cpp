@@ -5,6 +5,7 @@
 
 #include <yt/yt/core/concurrency/async_semaphore.h>
 
+#include <yt/yt/core/logging/appendable_compressed_file.h>
 #include <yt/yt/core/logging/log.h>
 #include <yt/yt/core/logging/log_manager.h>
 #include <yt/yt/core/logging/log_writer.h>
@@ -14,11 +15,11 @@
 #include <yt/yt/core/logging/stream_log_writer.h>
 #include <yt/yt/core/logging/structured_log.h>
 #include <yt/yt/core/logging/random_access_gzip.h>
-#include <yt/yt/core/logging/compression.h>
-#include <yt/yt/core/logging/zstd_compression.h>
+#include <yt/yt/core/logging/log.h>
 #include <yt/yt/core/logging/config.h>
 #include <yt/yt/core/logging/formatter.h>
 #include <yt/yt/core/logging/system_log_event_provider.h>
+#include <yt/yt/core/logging/zstd_log_codec.h>
 
 #include <yt/yt/core/json/json_parser.h>
 
@@ -73,13 +74,13 @@ class TLoggingTestBase
 protected:
     const int DateLength = ToString("2014-04-24 23:41:09,804000").length();
 
-    IMapNodePtr DeserializeStructuredEvent(const TString& source, ELogFormat format)
+    IMapNodePtr DeserializeStructuredEvent(const std::string& source, ELogFormat format)
     {
         switch (format) {
             case ELogFormat::Json: {
                 auto builder = CreateBuilderFromFactory(GetEphemeralNodeFactory());
                 builder->BeginTree();
-                TStringStream stream(source);
+                TStringStream stream{TString(source)};
                 ParseJson(&stream, builder.get());
                 return builder->EndTree()->AsMap();
             }
@@ -106,7 +107,7 @@ protected:
         WriteEvent(writer, event);
     }
 
-    void ExpectPlainTextEvent(const TString& line)
+    void ExpectPlainTextEvent(const std::string& line)
     {
         EXPECT_EQ(
             Format("\tD\t%v\t%v\t%v\t\t\n",
@@ -122,13 +123,13 @@ protected:
         writer->Flush();
     }
 
-    std::vector<TString> ReadPlainTextEvents(
-        const TString& fileName,
+    std::vector<std::string> ReadPlainTextEvents(
+        const std::string& fileName,
         std::optional<ECompressionMethod> compressionMethod = {})
     {
         auto splitLines = [&] (IInputStream *input) {
             TString line;
-            std::vector<TString> lines;
+            std::vector<std::string> lines;
             while (input->ReadLine(line)) {
                 if (line.Contains(Logger().GetCategory()->Name)) {
                     lines.push_back(line + "\n");
@@ -152,15 +153,15 @@ protected:
         }
     }
 
-    bool CheckPlainTextLogFileContains(const TString& fileName, const TString& message)
+    bool CheckPlainTextLogFileContains(const std::string& fileName, const std::string& message)
     {
-        if (!NFs::Exists(fileName)) {
+        if (!NFs::Exists(TString(fileName))) {
             return false;
         }
 
         auto lines = ReadPlainTextEvents(fileName);
         for (const auto& line : lines) {
-            if (line.Contains(message)) {
+            if (line.contains(message)) {
                 return true;
             }
         }
@@ -1000,11 +1001,11 @@ class TBuiltinRotationTest
     , public TLoggingTestBase
 {
 protected:
-    std::vector<TString> ListLogFiles(const TString& fileNamePrefix, bool reverse = false, bool keepFirst = false)
+    std::vector<std::string> ListLogFiles(const std::string& fileNamePrefix, bool reverse = false, bool keepFirst = false)
     {
         auto files = NFS::EnumerateFiles("./", /*depth*/ 1, /*sortByName*/ true);
-        std::erase_if(files, [&] (const TString& fileName) {
-            return !fileName.StartsWith(fileNamePrefix);
+        std::erase_if(files, [&] (const std::string& fileName) {
+            return !fileName.starts_with(fileNamePrefix);
         });
         if (reverse || keepFirst) {
             std::reverse(files.begin() + (keepFirst ? 1 : 0), files.end());
@@ -1105,20 +1106,20 @@ protected:
         return {GenerateLogFileName() + ".zst"};
     }
 
-    TAppendableCompressedFilePtr CreateAppendableZstdFile(TFile rawFile, bool writeTruncateMessage)
+    IStreamLogOutputPtr CreateAppendableZstdFile(TFile rawFile, const TAppendableCompressedFileOptions& options)
     {
-        return New<TAppendableCompressedFile>(
+        return CreateAppendableCompressedFile(
             std::move(rawFile),
-            CreateZstdCompressionCodec(),
+            CreateZstdLogCodec(),
             GetCurrentInvoker(),
-            writeTruncateMessage);
+            options);
     }
 
-    void WriteTestFile(const TString& filename, i64 addBytes, bool writeTruncateMessage)
+    void WriteTestFile(const TString& filename, i64 addBytes, const TAppendableCompressedFileOptions& options)
     {
         {
             TFile rawFile(filename, OpenAlways|RdWr|CloseOnExec);
-            auto file = CreateAppendableZstdFile(rawFile, writeTruncateMessage);
+            auto file = CreateAppendableZstdFile(rawFile, options);
             *file << "foo\n";
             file->Flush();
             *file << "bar\n";
@@ -1128,7 +1129,7 @@ protected:
         }
         {
             TFile rawFile(filename, OpenAlways|RdWr|CloseOnExec);
-            auto file = CreateAppendableZstdFile(rawFile, writeTruncateMessage);
+            auto file = CreateAppendableZstdFile(rawFile, options);
             *file << "zog\n";
             file->Flush();
         }
@@ -1147,7 +1148,7 @@ protected:
 TEST_F(TAppendableZstdFileTest, Write)
 {
     auto logFile = GetLogFile();
-    WriteTestFile(logFile.Name(), 0, false);
+    WriteTestFile(logFile.Name(), 0, {.WriteTruncateMessage = false});
 
     TUnbufferedFileInput file(logFile.Name());
     TZstdDecompress decompress(&file);
@@ -1161,7 +1162,7 @@ TEST_F(TAppendableZstdFileTest, WriteMultipleFramesPerFlush)
 
     {
         TFile rawFile(logFile.Name(), OpenAlways|RdWr|CloseOnExec);
-        auto file = CreateAppendableZstdFile(rawFile, true);
+        auto file = CreateAppendableZstdFile(rawFile, {.WriteTruncateMessage = true});
         file->Write(data.data(), data.size());
         file->Finish();
     }
@@ -1177,7 +1178,7 @@ TEST_F(TAppendableZstdFileTest, WriteMultipleFramesPerFlush)
 TEST_F(TAppendableZstdFileTest, RepairSmall)
 {
     auto logFile = GetLogFile();
-    WriteTestFile(logFile.Name(), -1, false);
+    WriteTestFile(logFile.Name(), -1, {.WriteTruncateMessage = false});
 
     TUnbufferedFileInput file(logFile.Name());
     TZstdDecompress decompress(&file);
@@ -1187,13 +1188,13 @@ TEST_F(TAppendableZstdFileTest, RepairSmall)
 TEST_F(TAppendableZstdFileTest, RepairLarge)
 {
     auto logFile = GetLogFile();
-    WriteTestFile(logFile.Name(), 10_MB, true);
+    WriteTestFile(logFile.Name(), 10_MB, {.WriteTruncateMessage = true});
 
     TUnbufferedFileInput file(logFile.Name());
     TZstdDecompress decompress(&file);
 
     TStringBuilder expected;
-    expected.AppendFormat("foo\nbar\nTruncated %v bytes due to zstd repair.\nzog\n", 10_MB);
+    expected.AppendFormat("foo\nbar\n*** Truncated %v trailing bytes due to zstd repair\nzog\n", 10_MB);
     EXPECT_EQ(expected.Flush(), decompress.ReadAll());
 }
 
@@ -1311,7 +1312,7 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
             SafeCoreDumped = true;
             return TCoreDump{
                 .Path = "",
-                .WrittenEvent = VoidFuture,
+                .WrittenEvent = OKFuture,
             };
         }
         const NYTree::IYPathServicePtr& CreateOrchidService() const override

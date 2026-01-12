@@ -266,7 +266,7 @@ public:
     }
 
     TString GetDatabase() {
-        return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
+        return Request->GetDatabaseName().GetOrElse("");
     }
 
     const TString& GetTable() {
@@ -445,6 +445,7 @@ public:
         auto keyRange = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, columns);
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = GetDatabase();
         request->ResultSet.emplace_back(std::move(keyRange));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request.release()), 0, 0, Span.GetTraceId());
     }

@@ -33,7 +33,7 @@ struct TWorkerFactoryOptions {
     TMaybe<ui64> DeterministicTimeProviderSeed;
     bool UseSystemColumns;
     bool UseWorkerPool;
-    bool UseAntlr4;
+    TInternalProgramSettings InternalSettings;
 
     TWorkerFactoryOptions(
         IProgramFactoryPtr Factory,
@@ -55,7 +55,7 @@ struct TWorkerFactoryOptions {
         TMaybe<ui64> deterministicTimeProviderSeed,
         bool useSystemColumns,
         bool useWorkerPool,
-        bool useAntlr4)
+        const TInternalProgramSettings& internalSettings)
         : Factory(std::move(Factory))
         , InputSpec(InputSpec)
         , OutputSpec(OutputSpec)
@@ -75,7 +75,7 @@ struct TWorkerFactoryOptions {
         , DeterministicTimeProviderSeed(deterministicTimeProviderSeed)
         , UseSystemColumns(useSystemColumns)
         , UseWorkerPool(useWorkerPool)
-        , UseAntlr4(useAntlr4)
+        , InternalSettings(internalSettings)
     {
     }
 };
@@ -128,6 +128,7 @@ protected:
     void ReturnWorker(IWorker* worker) override;
 
 private:
+    void HandleInternalSettings(const TInternalProgramSettings& settings);
     TIntrusivePtr<TTypeAnnotationContext> PrepareTypeContext(
         IModuleResolver::TPtr factoryModuleResolver);
 
@@ -137,7 +138,6 @@ private:
                             const THashMap<TString, TString>& modules,
                             const TInputSpecBase& inputSpec,
                             const TOutputSpecBase& outputSpec,
-                            bool useAntlr4,
                             EProcessorMode processorMode,
                             TTypeAnnotationContext* typeContext);
 };

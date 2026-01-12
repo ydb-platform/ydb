@@ -325,6 +325,7 @@ struct TEvaluationGraphInfo {
     NActors::TActorId ResultId;
     NThreading::TPromise<NYql::IDqGateway::TResult> Result;
     ui64 Index = 0;
+    TMaybe<NCommon::TResultFormatSettings> ResultFormatSettings;
 };
 
 class TRunActor : public NActors::TActorBootstrapped<TRunActor> {
@@ -1288,7 +1289,7 @@ private:
 
             LOG_D("Query evaluation " << NYql::NDqProto::StatusIds_StatusCode_Name(QueryEvalStatusCode)
                 << ". " << it->second.Index << " response. Issues count: " << result.IssuesSize()
-                << ". Rows count: " << result.GetRowsCount());
+                << ". Rows count: " << result.GetRowsCount() << ", Sample count: " << result.SampleSize() << ", Truncated: " << result.GetTruncated());
 
             TVector<NDq::TDqSerializedBatch> rows;
             for (const auto& s : result.GetSample()) {
@@ -1297,11 +1298,12 @@ private:
                 rows.emplace_back(std::move(batch));
             }
 
-            TProtoBuilder protoBuilder(ResultFormatSettings->ResultType, ResultFormatSettings->Columns);
+            const auto& resultFormatSettings = it->second.ResultFormatSettings;
+            TProtoBuilder protoBuilder(resultFormatSettings->ResultType, resultFormatSettings->Columns);
 
             bool ysonTruncated = false;
-            queryResult.Data = protoBuilder.BuildYson(std::move(rows), ResultFormatSettings->SizeLimit.GetOrElse(Max<ui64>()),
-                ResultFormatSettings->RowsLimit.GetOrElse(Max<ui64>()), &ysonTruncated);
+            queryResult.Data = protoBuilder.BuildYson(std::move(rows), resultFormatSettings->SizeLimit.GetOrElse(Max<ui64>()),
+                resultFormatSettings->RowsLimit.GetOrElse(Max<ui64>()), &ysonTruncated);
 
             queryResult.RowsCount = result.GetRowsCount();
             queryResult.Truncated = result.GetTruncated() || ysonTruncated;
@@ -1555,7 +1557,7 @@ private:
         *request.MutableSettings() = dqGraphParams.GetSettings();
         *request.MutableSecureParams() = dqGraphParams.GetSecureParams();
         *request.MutableColumns() = dqGraphParams.GetColumns();
-        PrepareResultFormatSettings(dqGraphParams, *dqConfiguration);
+        PrepareResultFormatSettings(info.ResultFormatSettings, dqGraphParams, *dqConfiguration);
         NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
         Send(info.ExecuterId, new NYql::NDqs::TEvGraphRequest(request, info.ControlId, info.ResultId));
         LOG_D("Evaluation Executer: " << info.ExecuterId << ", Controller: " << info.ControlId << ", ResultActor: " << info.ResultId);
@@ -1594,7 +1596,7 @@ private:
                         ExecuterId, dqGraphParams.GetResultType(),
                         writerResultId, columns, dqGraphParams.GetSession(), Params.Deadline, Params.ResultBytesLimit));
 
-            PrepareResultFormatSettings(dqGraphParams, *dqConfiguration);
+            PrepareResultFormatSettings(ResultFormatSettings, dqGraphParams, *dqConfiguration);
         } else {
             LOG_D("ResultWriter was NOT CREATED since ResultType is empty");
             resultId = ExecuterId;
@@ -1614,18 +1616,11 @@ private:
         }
 
         if (enableCheckpointCoordinator) {
-            NKikimrConfig::TCheckpointsConfig config;
-            const auto& oldConfig = Params.Config.GetCheckpointCoordinator();
-            config.SetEnabled(oldConfig.GetEnabled());
-            config.SetCheckpointingPeriodMillis(oldConfig.GetCheckpointingPeriodMillis());
-            config.SetMaxInflight(oldConfig.GetMaxInflight());
-            config.SetCheckpointingSnapshotRotationPeriod(oldConfig.GetCheckpointingSnapshotRotationPeriod());
-
             CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
-                config,
+                Params.Config.GetCheckpointCoordinator(),
                 QueryCounters.Counters,
                 dqGraphParams,
                 Params.StateLoadMode,
@@ -1660,15 +1655,15 @@ private:
         LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId);
     }
 
-    void PrepareResultFormatSettings(NFq::NProto::TGraphParams& dqGraphParams, const TDqConfiguration& dqConfiguration) {
-        ResultFormatSettings.ConstructInPlace();
+    void PrepareResultFormatSettings(TMaybe<NCommon::TResultFormatSettings>& resultFormatSettings, NFq::NProto::TGraphParams& dqGraphParams, const TDqConfiguration& dqConfiguration) {
+        resultFormatSettings.ConstructInPlace();
         for (const auto& c : dqGraphParams.GetColumns()) {
-            ResultFormatSettings->Columns.push_back(c);
+            resultFormatSettings->Columns.push_back(c);
         }
 
-        ResultFormatSettings->ResultType = dqGraphParams.GetResultType();
-        ResultFormatSettings->SizeLimit = dqConfiguration._AllResultsBytesLimit.Get();
-        ResultFormatSettings->RowsLimit = dqConfiguration._RowsLimitPerWrite.Get();
+        resultFormatSettings->ResultType = dqGraphParams.GetResultType();
+        resultFormatSettings->SizeLimit = dqConfiguration._AllResultsBytesLimit.Get();
+        resultFormatSettings->RowsLimit = dqConfiguration._RowsLimitPerWrite.Get();
     }
 
     void ClearResultFormatSettings() {
@@ -1708,7 +1703,6 @@ private:
         apply("WatermarksMode", "disable");
         apply("WatermarksGranularityMs", "1000");
         apply("WatermarksLateArrivalDelayMs", "5000");
-        apply("WatermarksIdlePartitions", "true");
         apply("EnableChannelStats", "true");
         apply("ExportStats", "true");
 

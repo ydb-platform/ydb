@@ -518,6 +518,7 @@ namespace NKikimr {
                             stepsBetweenPowersOf2,
                             enableTinyDisks,
                             Config->HugeBlobsFreeChunkReservation,
+                            Config->GarbageThresholdToRunFullCompactionPerMille,
                             logFunc);
             } else {
                 // read existing one
@@ -541,7 +542,10 @@ namespace NKikimr {
                             stepsBetweenPowersOf2,
                             enableTinyDisks,
                             Config->HugeBlobsFreeChunkReservation,
-                            lsn, entryPoint, logFunc);
+                            lsn,
+                            entryPoint,
+                            Config->GarbageThresholdToRunFullCompactionPerMille,
+                            logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(LocRecCtx->VCtx->VDiskLogPrefix,
                 LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(), Config->BlobHeaderMode);
@@ -608,7 +612,7 @@ namespace NKikimr {
                 if (Config->UseCostTracker) {
                     NPDisk::EDeviceType trueMediaType = LocRecCtx->PDiskCtx->Dsk->TrueMediaType;
                     if (trueMediaType == NPDisk::DEVICE_TYPE_UNKNOWN) {
-                        // Unable to resolve type from PDisk's properties, using type from VDisk config 
+                        // Unable to resolve type from PDisk's properties, using type from VDisk config
                         trueMediaType = Config->BaseInfo.DeviceType;
                     }
                     if (trueMediaType != NPDisk::DEVICE_TYPE_UNKNOWN) {

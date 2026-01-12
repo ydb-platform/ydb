@@ -1,8 +1,12 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
-    SIZE(MEDIUM)
-
-    TIMEOUT(300)
+    IF (SANITIZER_TYPE OR WITH_VALGRIND)
+        FORK_SUBTESTS()
+        SIZE(LARGE)
+        TAG(ya:fat)
+    ELSE()
+        SIZE(MEDIUM)
+    ENDIF()
 
     SRCS(
         comp_defrag.cpp

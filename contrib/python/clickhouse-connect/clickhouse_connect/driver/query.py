@@ -48,6 +48,7 @@ class QueryContext(BaseQueryContext):
                  max_str_len: Optional[int] = 0,
                  query_tz: Optional[Union[str, tzinfo]] = None,
                  column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                 utc_tz_aware: bool = False,
                  use_extended_dtypes: Optional[bool] = None,
                  as_pandas: bool = False,
                  streaming: bool = False,
@@ -81,6 +82,8 @@ class QueryContext(BaseQueryContext):
           objects with the selected timezone
         :param column_tzs A dictionary of column names to tzinfo objects (or strings that will be converted to
           tzinfo objects).  The timezone will be applied to datetime objects returned in the query
+        :param utc_tz_aware Force timezone-aware Python datetime objects even when the active timezone is UTC.
+          Defaults to False to preserve the legacy behavior of returning naive UTC timestamps.
         """
         super().__init__(settings,
                          query_formats,
@@ -98,6 +101,7 @@ class QueryContext(BaseQueryContext):
         self.server_tz = server_tz
         self.apply_server_tz = apply_server_tz
         self.external_data = external_data
+        self.utc_tz_aware = utc_tz_aware
         if isinstance(query_tz, str):
             try:
                 query_tz = pytz.timezone(query_tz)
@@ -181,7 +185,7 @@ class QueryContext(BaseQueryContext):
             active_tz = self.server_tz
         else:
             active_tz = tzutil.local_tz
-        if active_tz == pytz.UTC:
+        if active_tz == pytz.UTC and not self.utc_tz_aware:
             return None
         return active_tz
 
@@ -200,6 +204,7 @@ class QueryContext(BaseQueryContext):
                      max_str_len: Optional[int] = None,
                      query_tz: Optional[Union[str, tzinfo]] = None,
                      column_tzs: Optional[Dict[str, Union[str, tzinfo]]] = None,
+                     utc_tz_aware: Optional[bool] = None,
                      use_extended_dtypes: Optional[bool] = None,
                      as_pandas: bool = False,
                      streaming: bool = False,
@@ -222,6 +227,7 @@ class QueryContext(BaseQueryContext):
                             self.max_str_len if max_str_len is None else max_str_len,
                             self.query_tz if query_tz is None else query_tz,
                             self.column_tzs if column_tzs is None else column_tzs,
+                            self.utc_tz_aware if utc_tz_aware is None else utc_tz_aware,
                             self.use_extended_dtypes if use_extended_dtypes is None else use_extended_dtypes,
                             as_pandas,
                             streaming,

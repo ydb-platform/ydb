@@ -1586,6 +1586,8 @@ dropdb(const char *dbname, bool missing_ok, bool force)
 	bool		db_istemplate;
 	Relation	pgdbrel;
 	HeapTuple	tup;
+	ScanKeyData scankey;
+	void	   *inplace_state;
 	Form_pg_database datform;
 	int			notherbackends;
 	int			npreparedxacts;
@@ -1723,11 +1725,6 @@ dropdb(const char *dbname, bool missing_ok, bool force)
 	 */
 	pgstat_drop_database(db_id);
 
-	tup = SearchSysCacheCopy1(DATABASEOID, ObjectIdGetDatum(db_id));
-	if (!HeapTupleIsValid(tup))
-		elog(ERROR, "cache lookup failed for database %u", db_id);
-	datform = (Form_pg_database) GETSTRUCT(tup);
-
 	/*
 	 * Except for the deletion of the catalog row, subsequent actions are not
 	 * transactional (consider DropDatabaseBuffers() discarding modified
@@ -1739,8 +1736,17 @@ dropdb(const char *dbname, bool missing_ok, bool force)
 	 * modification is durable before performing irreversible filesystem
 	 * operations.
 	 */
+	ScanKeyInit(&scankey,
+				Anum_pg_database_datname,
+				BTEqualStrategyNumber, F_NAMEEQ,
+				CStringGetDatum(dbname));
+	systable_inplace_update_begin(pgdbrel, DatabaseNameIndexId, true,
+								  NULL, 1, &scankey, &tup, &inplace_state);
+	if (!HeapTupleIsValid(tup))
+		elog(ERROR, "cache lookup failed for database %u", db_id);
+	datform = (Form_pg_database) GETSTRUCT(tup);
 	datform->datconnlimit = DATCONNLIMIT_INVALID_DB;
-	heap_inplace_update(pgdbrel, tup);
+	systable_inplace_update_finish(inplace_state, tup);
 	XLogFlush(XactLastRecEnd);
 
 	/*
@@ -1748,6 +1754,7 @@ dropdb(const char *dbname, bool missing_ok, bool force)
 	 * the row will be gone, but if we fail, dropdb() can be invoked again.
 	 */
 	CatalogTupleDelete(pgdbrel, &tup->t_self);
+	heap_freetuple(tup);
 
 	/*
 	 * Drop db-specific replication slots.
@@ -1806,6 +1813,7 @@ RenameDatabase(const char *oldname, const char *newname)
 {
 	Oid			db_id;
 	HeapTuple	newtup;
+	ItemPointerData otid;
 	Relation	rel;
 	int			notherbackends;
 	int			npreparedxacts;
@@ -1877,11 +1885,13 @@ RenameDatabase(const char *oldname, const char *newname)
 				 errdetail_busy_db(notherbackends, npreparedxacts)));
 
 	/* rename */
-	newtup = SearchSysCacheCopy1(DATABASEOID, ObjectIdGetDatum(db_id));
+	newtup = SearchSysCacheLockedCopy1(DATABASEOID, ObjectIdGetDatum(db_id));
 	if (!HeapTupleIsValid(newtup))
 		elog(ERROR, "cache lookup failed for database %u", db_id);
+	otid = newtup->t_self;
 	namestrcpy(&(((Form_pg_database) GETSTRUCT(newtup))->datname), newname);
-	CatalogTupleUpdate(rel, &newtup->t_self, newtup);
+	CatalogTupleUpdate(rel, &otid, newtup);
+	UnlockTuple(rel, &otid, InplaceUpdateTupleLock);
 
 	InvokeObjectPostAlterHook(DatabaseRelationId, db_id, 0);
 
@@ -2130,6 +2140,7 @@ movedb(const char *dbname, const char *tblspcname)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_DATABASE),
 					 errmsg("database \"%s\" does not exist", dbname)));
+		LockTuple(pgdbrel, &oldtuple->t_self, InplaceUpdateTupleLock);
 
 		new_record[Anum_pg_database_dattablespace - 1] = ObjectIdGetDatum(dst_tblspcoid);
 		new_record_repl[Anum_pg_database_dattablespace - 1] = true;
@@ -2138,6 +2149,7 @@ movedb(const char *dbname, const char *tblspcname)
 									 new_record,
 									 new_record_nulls, new_record_repl);
 		CatalogTupleUpdate(pgdbrel, &oldtuple->t_self, newtuple);
+		UnlockTuple(pgdbrel, &oldtuple->t_self, InplaceUpdateTupleLock);
 
 		InvokeObjectPostAlterHook(DatabaseRelationId, db_id, 0);
 
@@ -2368,6 +2380,7 @@ AlterDatabase(ParseState *pstate, AlterDatabaseStmt *stmt, bool isTopLevel)
 		ereport(ERROR,
 				(errcode(ERRCODE_UNDEFINED_DATABASE),
 				 errmsg("database \"%s\" does not exist", stmt->dbname)));
+	LockTuple(rel, &tuple->t_self, InplaceUpdateTupleLock);
 
 	datform = (Form_pg_database) GETSTRUCT(tuple);
 	dboid = datform->oid;
@@ -2417,6 +2430,7 @@ AlterDatabase(ParseState *pstate, AlterDatabaseStmt *stmt, bool isTopLevel)
 	newtuple = heap_modify_tuple(tuple, RelationGetDescr(rel), new_record,
 								 new_record_nulls, new_record_repl);
 	CatalogTupleUpdate(rel, &tuple->t_self, newtuple);
+	UnlockTuple(rel, &tuple->t_self, InplaceUpdateTupleLock);
 
 	InvokeObjectPostAlterHook(DatabaseRelationId, dboid, 0);
 
@@ -2466,6 +2480,7 @@ AlterDatabaseRefreshColl(AlterDatabaseRefreshCollStmt *stmt)
 	if (!object_ownercheck(DatabaseRelationId, db_id, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_DATABASE,
 					   stmt->dbname);
+	LockTuple(rel, &tuple->t_self, InplaceUpdateTupleLock);
 
 	datum = heap_getattr(tuple, Anum_pg_database_datcollversion, RelationGetDescr(rel), &isnull);
 	oldversion = isnull ? NULL : TextDatumGetCString(datum);
@@ -2483,6 +2498,7 @@ AlterDatabaseRefreshColl(AlterDatabaseRefreshCollStmt *stmt)
 		bool		nulls[Natts_pg_database] = {0};
 		bool		replaces[Natts_pg_database] = {0};
 		Datum		values[Natts_pg_database] = {0};
+		HeapTuple	newtuple;
 
 		ereport(NOTICE,
 				(errmsg("changing version from %s to %s",
@@ -2491,14 +2507,15 @@ AlterDatabaseRefreshColl(AlterDatabaseRefreshCollStmt *stmt)
 		values[Anum_pg_database_datcollversion - 1] = CStringGetTextDatum(newversion);
 		replaces[Anum_pg_database_datcollversion - 1] = true;
 
-		tuple = heap_modify_tuple(tuple, RelationGetDescr(rel),
-								  values, nulls, replaces);
-		CatalogTupleUpdate(rel, &tuple->t_self, tuple);
-		heap_freetuple(tuple);
+		newtuple = heap_modify_tuple(tuple, RelationGetDescr(rel),
+									 values, nulls, replaces);
+		CatalogTupleUpdate(rel, &tuple->t_self, newtuple);
+		heap_freetuple(newtuple);
 	}
 	else
 		ereport(NOTICE,
 				(errmsg("version has not changed")));
+	UnlockTuple(rel, &tuple->t_self, InplaceUpdateTupleLock);
 
 	InvokeObjectPostAlterHook(DatabaseRelationId, db_id, 0);
 
@@ -2610,6 +2627,8 @@ AlterDatabaseOwner(const char *dbname, Oid newOwnerId)
 					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 					 errmsg("permission denied to change owner of database")));
 
+		LockTuple(rel, &tuple->t_self, InplaceUpdateTupleLock);
+
 		repl_repl[Anum_pg_database_datdba - 1] = true;
 		repl_val[Anum_pg_database_datdba - 1] = ObjectIdGetDatum(newOwnerId);
 
@@ -2631,6 +2650,7 @@ AlterDatabaseOwner(const char *dbname, Oid newOwnerId)
 
 		newtuple = heap_modify_tuple(tuple, RelationGetDescr(rel), repl_val, repl_null, repl_repl);
 		CatalogTupleUpdate(rel, &newtuple->t_self, newtuple);
+		UnlockTuple(rel, &tuple->t_self, InplaceUpdateTupleLock);
 
 		heap_freetuple(newtuple);
 

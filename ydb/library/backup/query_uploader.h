@@ -27,12 +27,12 @@ private:
     const TString Query;
 
     TAtomic ShouldStop;
-    TSimpleSharedPtr<IThreadPool> TasksQueue;
 
     using TRpsLimiter = TBucketQuoter<ui64>;
     TRpsLimiter RequestLimiter;
     NYdb::NTable::TTableClient& Client;
 
+    TSimpleSharedPtr<IThreadPool> TasksQueue;
 public:
     TUploader(const TOptions& opts, NYdb::NTable::TTableClient& client, const TString& query);
 

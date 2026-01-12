@@ -12,8 +12,7 @@ namespace builtins
 {
 
   template <typename... Iter>
-  auto zip(Iter &&...iters) -> decltype(map(builtins::None,
-                                            std::forward<Iter>(iters)...))
+  auto zip(Iter &&...iters) -> decltype(map(builtins::None, std::forward<Iter>(iters)...))
   {
     return map(builtins::None, std::forward<Iter>(iters)...);
   }

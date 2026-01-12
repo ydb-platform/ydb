@@ -269,6 +269,10 @@ class YtError(Exception):
         """Rpc unavailable."""
         return self.contains_code(105)
 
+    def is_proxy_banned(self):
+        """Proxy is banned."""
+        return self.contains_code(2100)
+
     def is_rpc_response_memory_pressure(self):
         """Rpc response memory pressure."""
         return self.contains_code(122)
@@ -321,6 +325,14 @@ class YtError(Exception):
         """Tablet is in intermediate state."""
         # TODO(ifsmirnov) migrate to error code, YT-10993
         return self.contains_code(1744) or self._matches_regexp("Tablet .* is in state .*")
+
+    def is_hunk_tablet_store_toggle_conflict(self):
+        """Hunk tablet store toggle conflict."""
+        return self.contains_code(1745)
+
+    def is_hunk_store_allocation_failed(self):
+        """Hunk store allocation failed."""
+        return self.contains_code(1746)
 
     def is_no_such_tablet(self):
         """No such tablet."""
@@ -882,21 +894,22 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
     if ignore_exceptions:
         def check_predicate():
             try:
-                return predicate(), None
+                return predicate(), None, None
             # Do not catch BaseException because pytest exceptions are inherited from it
             # pytest.fail raises exception inherited from BaseException.
             except Exception as ex:
-                return False, ex
+                ex_traceback = sys.exc_info()[2]
+                return False, ex, ex_traceback
     else:
         def check_predicate():
-            return predicate(), None
+            return predicate(), None, None
 
     if timeout is None:
         if iter is None:
             iter = 100
         index = 0
         while index < iter:
-            result, last_exception = check_predicate()
+            result, last_exception, last_exception_traceback = check_predicate()
             if result:
                 return
             index += 1
@@ -904,7 +917,7 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
     else:
         start_time = datetime.datetime.now()
         while datetime.datetime.now() - start_time < datetime.timedelta(seconds=timeout):
-            result, last_exception = check_predicate()
+            result, last_exception, last_exception_traceback = check_predicate()
             if result:
                 return
             time.sleep(sleep_backoff)
@@ -918,4 +931,9 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
     if last_exception is not None:
         error_message += f", exception = {last_exception}"
     error_message += ")"
-    raise WaitFailed(error_message)
+
+    ex = WaitFailed(error_message)
+    if last_exception_traceback is None:
+        raise ex
+    else:
+        raise ex.with_traceback(last_exception_traceback)

@@ -2396,7 +2396,7 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
     auto rowArg = ctx.NewArgument(pos, "row");
     auto addMembersBody = rowArg;
 
-    static const TStringBuf keyColumnNamePrefix = "_yql_CalcOverWindowJoinKey";
+    static const TStringBuf KeyColumnNamePrefix = "_yql_CalcOverWindowJoinKey";
 
     const TStructExprType* rowTypeWithSession = ctx.MakeType<TStructExprType>(rowItems);
     for (auto& keyColumn : originalKeysWithSession) {
@@ -2405,7 +2405,7 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
         const TTypeAnnotationNode* columnType =
             rowTypeWithSession->GetItems()[*rowTypeWithSession->FindItem(columnName)]->GetItemType();
         if (columnType->HasOptionalOrNull()) {
-            addedColumns.push_back(ctx.NewAtom(pos, TStringBuilder() << keyColumnNamePrefix << addedColumns.size()));
+            addedColumns.push_back(ctx.NewAtom(pos, TStringBuilder() << KeyColumnNamePrefix << addedColumns.size()));
             keyColumns.push_back(addedColumns.back());
 
             TStringBuf newName = addedColumns.back()->Content();
@@ -2457,7 +2457,7 @@ TExprNode::TPtr ExpandNonCompactFullFrames(TPositionHandle pos, const TExprNode:
         addedColumns.push_back(ctx.NewAtom(pos, SessionParamsMemberName));
 
         if (sessionKeyType->HasOptionalOrNull()) {
-            addedColumns.push_back(ctx.NewAtom(pos, TStringBuilder() << keyColumnNamePrefix << addedColumns.size()));
+            addedColumns.push_back(ctx.NewAtom(pos, TStringBuilder() << KeyColumnNamePrefix << addedColumns.size()));
             preprocessLambda = ctx.Builder(pos)
                 .Lambda()
                     .Param("stream")
@@ -3465,12 +3465,14 @@ bool IsCurrentRow(const NNodes::TCoFrameBound& bound) {
 }
 
 TWindowFrameSettings TWindowFrameSettings::Parse(const TExprNode& node, TExprContext& ctx) {
-    auto maybeSettings = TryParse(node, ctx);
-    YQL_ENSURE(maybeSettings);
+    bool isUniversal;
+    auto maybeSettings = TryParse(node, ctx, isUniversal);
+    YQL_ENSURE(maybeSettings && !isUniversal);
     return *maybeSettings;
 }
 
-TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& node, TExprContext& ctx) {
+TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& node, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
     TWindowFrameSettings settings;
 
     if (node.IsCallable("WinOnRows")) {
@@ -3617,6 +3619,11 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
                 boundOffset = value;
             } else if (!setting->Tail().IsCallable("Void")) {
                 const TTypeAnnotationNode* type = setting->Tail().GetTypeAnn();
+                if (type && type->GetKind() == ETypeAnnotationKind::Universal) {
+                    isUniversal = true;
+                    return TWindowFrameSettings{};
+                }
+
                 TStringBuilder errMsg;
                 if (!type) {
                     errMsg << "lambda";

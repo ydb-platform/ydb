@@ -4,16 +4,15 @@
 # Distributed under the terms of the BSD 3-Clause License.
 
 import matplotlib
-from matplotlib import colors
-from matplotlib.backends import backend_agg
-from matplotlib.backends.backend_agg import FigureCanvasAgg
-from matplotlib._pylab_helpers import Gcf
-from matplotlib.figure import Figure
-
-from IPython.core.interactiveshell import InteractiveShell
 from IPython.core.getipython import get_ipython
+from IPython.core.interactiveshell import InteractiveShell
 from IPython.core.pylabtools import select_figure_formats
 from IPython.display import display
+from matplotlib import colors
+from matplotlib._pylab_helpers import Gcf
+from matplotlib.backends import backend_agg
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 
 from .config import InlineBackend
 
@@ -43,10 +42,11 @@ def new_figure_manager_given_figure(num, figure):
     # https://github.com/ipython/ipython/issues/1612
     # https://github.com/matplotlib/matplotlib/issues/835
 
-    if not hasattr(figure, 'show'):
+    if not hasattr(figure, "show"):
         # Queue up `figure` for display
         figure.show = lambda *a: display(
-            figure, metadata=_fetch_figure_metadata(figure))
+            figure, metadata=_fetch_figure_metadata(figure)
+        )
 
     # If matplotlib was manually set to non-interactive mode, this function
     # should be a no-op (otherwise we'll generate duplicate plots, since a user
@@ -89,20 +89,20 @@ def show(close=None, block=None):
         for figure_manager in Gcf.get_all_fig_managers():
             display(
                 figure_manager.canvas.figure,
-                metadata=_fetch_figure_metadata(figure_manager.canvas.figure)
+                metadata=_fetch_figure_metadata(figure_manager.canvas.figure),
             )
     finally:
         show._to_draw = []
         # only call close('all') if any to close
         # close triggers gc.collect, which can be slow
         if close and Gcf.get_all_fig_managers():
-            matplotlib.pyplot.close('all')
+            matplotlib.pyplot.close("all")
 
 
 # This flag will be reset by draw_if_interactive when called
-show._draw_called = False
+show._draw_called = False  # type: ignore[attr-defined]
 # list of figures to draw when flush_figures is called
-show._to_draw = []
+show._to_draw = []  # type: ignore[attr-defined]
 
 
 def flush_figures():
@@ -176,8 +176,8 @@ def configure_inline_support(shell, backend):
     if cfg not in shell.configurables:
         shell.configurables.append(cfg)
 
-    if backend in ('inline', 'module://matplotlib_inline.backend_inline'):
-        shell.events.register('post_execute', flush_figures)
+    if backend in ("inline", "module://matplotlib_inline.backend_inline"):
+        shell.events.register("post_execute", flush_figures)
 
         # Save rcParams that will be overwrittern
         shell._saved_rcParams = {}
@@ -188,10 +188,10 @@ def configure_inline_support(shell, backend):
         new_backend_name = "inline"
     else:
         try:
-            shell.events.unregister('post_execute', flush_figures)
+            shell.events.unregister("post_execute", flush_figures)
         except ValueError:
             pass
-        if hasattr(shell, '_saved_rcParams'):
+        if hasattr(shell, "_saved_rcParams"):
             matplotlib.rcParams.update(shell._saved_rcParams)
             del shell._saved_rcParams
         new_backend_name = "other"
@@ -208,11 +208,18 @@ def configure_inline_support(shell, backend):
 
 def _enable_matplotlib_integration():
     """Enable extra IPython matplotlib integration when we are loaded as the matplotlib backend."""
-    from matplotlib import get_backend
     ip = get_ipython()
-    backend = get_backend()
-    if ip and backend in ('inline', 'module://matplotlib_inline.backend_inline'):
+
+    import matplotlib
+
+    if matplotlib.__version_info__ >= (3, 10):
+        backend = matplotlib.get_backend(auto_select=False)
+    else:
+        backend = matplotlib.rcParams._get("backend")
+
+    if ip and backend in ("inline", "module://matplotlib_inline.backend_inline"):
         from IPython.core.pylabtools import activate_matplotlib
+
         try:
             activate_matplotlib(backend)
             configure_inline_support(ip, backend)
@@ -221,8 +228,9 @@ def _enable_matplotlib_integration():
             def configure_once(*args):
                 activate_matplotlib(backend)
                 configure_inline_support(ip, backend)
-                ip.events.unregister('post_run_cell', configure_once)
-            ip.events.register('post_run_cell', configure_once)
+                ip.events.unregister("post_run_cell", configure_once)
+
+            ip.events.register("post_run_cell", configure_once)
 
 
 _enable_matplotlib_integration()
@@ -233,13 +241,17 @@ def _fetch_figure_metadata(fig):
     # determine if a background is needed for legibility
     if _is_transparent(fig.get_facecolor()):
         # the background is transparent
-        ticksLight = _is_light([label.get_color()
-                                for axes in fig.axes
-                                for axis in (axes.xaxis, axes.yaxis)
-                                for label in axis.get_ticklabels()])
+        ticksLight = _is_light(
+            [
+                label.get_color()
+                for axes in fig.axes
+                for axis in (axes.xaxis, axes.yaxis)
+                for label in axis.get_ticklabels()
+            ]
+        )
         if ticksLight.size and (ticksLight == ticksLight[0]).all():
             # there are one or more tick labels, all with the same lightness
-            return {'needs_background': 'dark' if ticksLight[0] else 'light'}
+            return {"needs_background": "dark" if ticksLight[0] else "light"}
 
     return None
 
@@ -249,13 +261,13 @@ def _is_light(color):
     opposed to dark). Based on ITU BT.601 luminance formula (see
     https://stackoverflow.com/a/596241)."""
     rgbaArr = colors.to_rgba_array(color)
-    return rgbaArr[:, :3].dot((.299, .587, .114)) > .5
+    return rgbaArr[:, :3].dot((0.299, 0.587, 0.114)) > 0.5
 
 
 def _is_transparent(color):
     """Determine transparency from alpha."""
     rgba = colors.to_rgba(color)
-    return rgba[3] < .5
+    return rgba[3] < 0.5
 
 
 def set_matplotlib_formats(*formats, **kwargs):
@@ -263,12 +275,21 @@ def set_matplotlib_formats(*formats, **kwargs):
 
     For example, this enables PNG and JPEG output with a JPEG quality of 90%::
 
-        In [1]: set_matplotlib_formats('png', 'jpeg', quality=90)
+        In [1]: set_matplotlib_formats('png', 'jpeg',
+                                       pil_kwargs={'quality': 90})
+
+    To set this in your notebook by `%config` magic::
+
+        In [1]: %config InlineBackend.figure_formats = {'png', 'jpeg'}
+                %config InlineBackend.print_figure_kwargs = \\
+                                        {'pil_kwargs': {'quality' : 90}}
 
     To set this in your config files use the following::
 
         c.InlineBackend.figure_formats = {'png', 'jpeg'}
-        c.InlineBackend.print_figure_kwargs.update({'quality' : 90})
+        c.InlineBackend.print_figure_kwargs.update({
+                                        'pil_kwargs': {'quality' : 90}
+                                    })
 
     Parameters
     ----------
@@ -276,6 +297,10 @@ def set_matplotlib_formats(*formats, **kwargs):
         One or more figure formats to enable: 'png', 'retina', 'jpeg', 'svg', 'pdf'.
     **kwargs
         Keyword args will be relayed to ``figure.canvas.print_figure``.
+
+    In addition, see the docstrings of `plt.savefig()`,
+    `matplotlib.figure.Figure.savefig()`, `PIL.Image.Image.save()` and
+    :ref:`Pillow Image file formats <handbook/image-file-formats>`.
     """
     # build kwargs, starting with InlineBackend config
     cfg = InlineBackend.instance()

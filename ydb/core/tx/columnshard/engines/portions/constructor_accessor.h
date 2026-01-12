@@ -205,6 +205,10 @@ public:
         return result;
     }
 
+    std::vector<ui32> CalcSliceBorderOffsets() const {
+        return DoCalcSliceBorderOffsets(Records, Indexes);
+    }
+
     static TPortionAccessorConstructor BuildForRewriteBlobs(const TPortionInfo& portion) {
         return TPortionAccessorConstructor(portion.BuildConstructor(true));
     }

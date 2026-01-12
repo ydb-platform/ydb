@@ -114,6 +114,10 @@ public:
     NCommon::TConfSetting<EBlockOutputMode, StaticPerCluster> JobBlockOutput;
     NCommon::TConfSetting<TSet<TString>, StaticPerCluster> JobBlockOutputSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockOutputSupportedDataTypes;
+    NCommon::TConfSetting<bool, StaticPerCluster> ValidatePool;
+    NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpFolder;
+    NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpAccount;
+    NCommon::TConfSetting<bool, StaticPerCluster> _EnableDynamicTablesWrite;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -152,6 +156,13 @@ public:
     NCommon::TConfSetting<bool, Static> EnableDynamicStoreReadInDQ;
     NCommon::TConfSetting<bool, Static> UseDefaultArrowAllocatorInJobs;
     NCommon::TConfSetting<bool, Static> UseNativeYtDefaultColumnOrder;
+    NCommon::TConfSetting<bool, Static> EarlyPartitionPruning;
+    NCommon::TConfSetting<bool, Static> ValidateClusters;
+    NCommon::TConfSetting<NSize::TSize, Static> _QueryDumpTableSizeLimit;
+    NCommon::TConfSetting<ui32, Static> _QueryDumpTableCountPerClusterLimit;
+    NCommon::TConfSetting<ui32, Static> _QueryDumpFileCountPerOperationLimit;
+    NCommon::TConfSetting<bool, Static> KeepWorldDepForFillOp;
+    NCommon::TConfSetting<ui32, Static> CostBasedOptimizerPartial;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;
@@ -344,6 +355,8 @@ public:
     NCommon::TConfSetting<bool, Static> UseColumnGroupsFromInputTables;
     NCommon::TConfSetting<bool, Static> UseNativeDynamicTableRead;
     NCommon::TConfSetting<bool, Static> DontForceTransformForInputTables;
+    NCommon::TConfSetting<bool, Static> _RequestOnlyRequiredAttrs;
+    NCommon::TConfSetting<bool, Static> _CacheSchemaBySchemaId;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);
@@ -355,7 +368,7 @@ inline TString GetTablesTmpFolder(const TYtSettings& settings, const TString& cl
 struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TYtConfiguration>;
 
-    TYtConfiguration(TTypeAnnotationContext& typeCtx);
+    TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext = {});
     TYtConfiguration(const TYtConfiguration&) = delete;
 
     template <class TProtoConfig, typename TFilter>
@@ -396,8 +409,8 @@ public:
         TYtSettings::TConstPtr Snapshot;
     };
 
-    TYtVersionedConfiguration(TTypeAnnotationContext& types)
-        : TYtConfiguration(types)
+    TYtVersionedConfiguration(TTypeAnnotationContext& types, const TQContext& qContext = {})
+        : TYtConfiguration(types, qContext)
     {
     }
 

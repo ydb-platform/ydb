@@ -46,6 +46,9 @@ using TPeepHoleOptimizerMap = std::unordered_map<std::string_view, TPeepHoleOpti
 using TExtPeepHoleOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&, TTypeAnnotationContext& types);
 using TExtPeepHoleOptimizerMap = std::unordered_map<std::string_view, TExtPeepHoleOptimizerPtr>;
 
+using TMaybeNonDetPeepHoleOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions);
+using TMaybeNonDetPeepHoleOptimizerMap = std::unordered_map<std::string_view, TMaybeNonDetPeepHoleOptimizerPtr>;
+
 struct TBlockFuncRule {
     std::string_view Name;
 };
@@ -60,7 +63,10 @@ std::string_view ToLiteral(const TGUID& uuid) { return std::string_view(reinterp
 template <typename T> TString ToLiteral(const T value) { return ToString<T>(value); }
 
 template <typename TRandomType>
-TExprNode::TPtr Random0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr Random0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions) {
+    if (hasNonDeterministicFunctions) {
+        *hasNonDeterministicFunctions = true;
+    }
     if (node->ChildrenSize() == 0U) {
         YQL_CLOG(DEBUG, CorePeepHole) << "0-arg " << node->Content();
         const auto random = types.GetCachedRandom<TRandomType>();
@@ -70,11 +76,24 @@ TExprNode::TPtr Random0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TType
 }
 
 template <ui64(*Convert)(ui64)>
-TExprNode::TPtr Now0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr Now0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions) {
+    if (hasNonDeterministicFunctions) {
+        *hasNonDeterministicFunctions = true;
+    }
     if (node->ChildrenSize() == 0U) {
         YQL_CLOG(DEBUG, CorePeepHole) << "0-arg " << node->Content();
         const auto now = types.GetCachedNow();
         return ctx.NewCallable(node->Pos(), node->GetTypeAnn()->Cast<TDataExprType>()->GetName(), { ctx.NewAtom(node->Pos(), ToString(bool(Convert) ? Convert(now) : now), TNodeFlags::Default) });
+    }
+    return node;
+}
+
+TExprNode::TPtr NonDetUdf(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(types);
+    YQL_ENSURE(node->ChildrenSize() > 0);
+    if (hasNonDeterministicFunctions) {
+        *hasNonDeterministicFunctions |= node->Child(0)->Content().starts_with("ReservoirSampling.");
     }
     return node;
 }
@@ -2362,7 +2381,7 @@ IGraphTransformer::TStatus PeepHoleCommonStage(const TExprNode::TPtr& input, TEx
 IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions,
     const TPeepHoleOptimizerMap& optimizers, const TExtPeepHoleOptimizerMap& extOptimizers,
-    const TExtPeepHoleOptimizerMap& nonDetOptimizers)
+    const TMaybeNonDetPeepHoleOptimizerMap& nonDetOptimizers)
 {
     TOptimizeExprSettings settings(&types);
     settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get();
@@ -2370,10 +2389,7 @@ IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExp
     return OptimizeExpr(input, output, [hasNonDeterministicFunctions, &types, &extOptimizers, &optimizers, &nonDetOptimizers](
         const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (const auto nrule = nonDetOptimizers.find(node->Content()); nonDetOptimizers.cend() != nrule) {
-            if (hasNonDeterministicFunctions) {
-                *hasNonDeterministicFunctions = true;
-            }
-            return (nrule->second)(node, ctx, types);
+            return (nrule->second)(node, ctx, types, hasNonDeterministicFunctions);
         }
 
         if (const auto xrule = extOptimizers.find(node->Content()); extOptimizers.cend() != xrule) {
@@ -9372,14 +9388,15 @@ struct TPeepHoleRules {
         {"SqueezeToDict", &OptimizeSqueezeToDict},
     };
 
-    const TExtPeepHoleOptimizerMap FinalStageNonDetRules = {
+    const TMaybeNonDetPeepHoleOptimizerMap FinalStageNonDetRules = {
         {"Random", &Random0Arg<double>},
         {"RandomNumber", &Random0Arg<ui64>},
         {"RandomUuid", &Random0Arg<TGUID>},
         {"Now", &Now0Arg<nullptr>},
         {"CurrentUtcDate", &Now0Arg<&ToDate>},
         {"CurrentUtcDatetime", &Now0Arg<&ToDatetime>},
-        {"CurrentUtcTimestamp", &Now0Arg<&ToTimestamp>}
+        {"CurrentUtcTimestamp", &Now0Arg<&ToTimestamp>},
+        {"Udf", &NonDetUdf},
     };
 
     const TExtPeepHoleOptimizerMap BlockStageExtRules = {
@@ -9486,7 +9503,8 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
                     extStageRules.insert(finalExtRules.begin(), finalExtRules.end());
                 }
 
-                const auto& nonDetStageRules = withNonDeterministicRules ? TPeepHoleRules::Instance().FinalStageNonDetRules : TExtPeepHoleOptimizerMap{};
+                TMaybeNonDetPeepHoleOptimizerMap emptyMap;
+                const auto& nonDetStageRules = withNonDeterministicRules ? TPeepHoleRules::Instance().FinalStageNonDetRules : emptyMap;
                 return PeepHoleFinalStage(input, output, ctx, types, hasNonDeterministicFunctions, stageRules, extStageRules, nonDetStageRules);
             }
         ),

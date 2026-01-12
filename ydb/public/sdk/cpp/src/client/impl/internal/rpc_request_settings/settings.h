@@ -3,6 +3,8 @@
 #include <ydb/public/sdk/cpp/src/client/impl/endpoints/endpoints.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_header.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
+
 namespace NYdb::inline Dev {
 
 struct TRpcRequestSettings {
@@ -16,24 +18,30 @@ struct TRpcRequestSettings {
         UseDiscoveryEndpoint            // Use single discovery endpoint
     } EndpointPolicy = TEndpointPolicy::UsePreferredEndpointOptionally;
     bool UseAuth = true;
-    TDuration ClientTimeout;
+    NYdb::TDeadline Deadline = NYdb::TDeadline::Max();
+    std::string TraceParent;
 
     template <typename TRequestSettings>
-    static TRpcRequestSettings Make(const TRequestSettings& settings, const TEndpointKey& preferredEndpoint = {}, TEndpointPolicy endpointPolicy = TEndpointPolicy::UsePreferredEndpointOptionally) {
+    static TRpcRequestSettings Make(const TRequestSettings& settings,
+                                    const TEndpointKey& preferredEndpoint = {},
+                                    TEndpointPolicy endpointPolicy = TEndpointPolicy::UsePreferredEndpointOptionally) {
         TRpcRequestSettings rpcSettings;
         rpcSettings.TraceId = settings.TraceId_;
         rpcSettings.RequestType = settings.RequestType_;
         rpcSettings.Header = settings.Header_;
-
-        if (!settings.TraceParent_.empty()) {
-            rpcSettings.Header.emplace_back("traceparent", settings.TraceParent_);
-        }
-        
+        rpcSettings.TraceParent = settings.TraceParent_;
         rpcSettings.PreferredEndpoint = preferredEndpoint;
         rpcSettings.EndpointPolicy = endpointPolicy;
         rpcSettings.UseAuth = true;
-        rpcSettings.ClientTimeout = settings.ClientTimeout_;
+        rpcSettings.Deadline = std::min(settings.Deadline_, NYdb::TDeadline::AfterDuration(settings.ClientTimeout_));
         return rpcSettings;
+    }
+
+    TRpcRequestSettings& TryUpdateDeadline(const std::optional<TDeadline>& deadline) {
+        if (deadline) {
+            Deadline = std::min(Deadline, *deadline);
+        }
+        return *this;
     }
 };
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "sql_translation.h"
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 
 namespace NSQLTranslationV1 {
 
@@ -20,6 +20,7 @@ public:
     TSourcePtr BuildSubSelect(const TRule_select_subexpr& node);
 
 private:
+    TSourcePtr CheckSubSelectOnDiscard(TSourcePtr source);
     bool SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column& node);
     bool ValidateSelectColumns(const TVector<TNodePtr>& terms);
     bool ColumnName(TVector<TNodePtr>& keys, const TRule_column_name& node);

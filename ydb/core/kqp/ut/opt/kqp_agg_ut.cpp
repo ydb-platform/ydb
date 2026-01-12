@@ -406,7 +406,7 @@ Y_UNIT_TEST_SUITE(KqpAgg) {
                     .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-            const auto &ast = *result.GetStats()->GetAst();
+            const auto ast = *result.GetStats()->GetAst();
             ui32 physicalTxCount = 0;
             ui32 startPosition = 0;
             while (true) {

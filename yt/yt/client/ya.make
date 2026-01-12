@@ -16,6 +16,8 @@ SRCS(
     api/delegating_transaction.cpp
     api/distributed_table_session.cpp
     api/distributed_table_client.cpp
+    api/distributed_file_session.cpp
+    api/distributed_file_client.cpp
     api/etc_client.cpp
     api/journal_client.cpp
     api/operation_client.cpp
@@ -38,28 +40,29 @@ SRCS(
     api/private.cpp
 
     api/rpc_proxy/address_helpers.cpp
-    api/rpc_proxy/public.cpp
-    api/rpc_proxy/config.cpp
-    api/rpc_proxy/helpers.cpp
     api/rpc_proxy/chaos_lease.cpp
-    api/rpc_proxy/client_impl.cpp
     api/rpc_proxy/client_base.cpp
-    api/rpc_proxy/connection.cpp
+    api/rpc_proxy/client_impl.cpp
+    api/rpc_proxy/cluster_directory.cpp
+    api/rpc_proxy/config.cpp
     api/rpc_proxy/connection_impl.cpp
+    api/rpc_proxy/connection.cpp
     api/rpc_proxy/file_reader.cpp
     api/rpc_proxy/file_writer.cpp
+    api/rpc_proxy/helpers.cpp
     api/rpc_proxy/journal_reader.cpp
     api/rpc_proxy/journal_writer.cpp
+    api/rpc_proxy/public.cpp
+    api/rpc_proxy/row_batch_reader.cpp
+    api/rpc_proxy/row_batch_writer.cpp
+    api/rpc_proxy/row_stream.cpp
     api/rpc_proxy/table_mount_cache.cpp
     api/rpc_proxy/table_reader.cpp
     api/rpc_proxy/table_writer.cpp
     api/rpc_proxy/target_cluster_injecting_channel.cpp
     api/rpc_proxy/timestamp_provider.cpp
-    api/rpc_proxy/transaction.cpp
     api/rpc_proxy/transaction_impl.cpp
-    api/rpc_proxy/row_batch_reader.cpp
-    api/rpc_proxy/row_stream.cpp
-    api/rpc_proxy/row_batch_writer.cpp
+    api/rpc_proxy/transaction.cpp
     api/rpc_proxy/wire_row_stream.cpp
 
     bundle_controller_client/bundle_controller_client.cpp
@@ -108,9 +111,11 @@ SRCS(
     security_client/public.cpp
     security_client/helpers.cpp
 
+    signature/dynamic.cpp
+    signature/generator.cpp
+    signature/provided.cpp
     signature/signature.cpp
     signature/validator.cpp
-    signature/generator.cpp
 
     table_client/public.cpp
     table_client/adapters.cpp
@@ -123,6 +128,7 @@ SRCS(
     table_client/column_rename_descriptor.cpp
     table_client/column_sort_schema.cpp
     table_client/comparator.cpp
+    table_client/constrained_schema.cpp
     table_client/key.cpp
     table_client/key_bound.cpp
     table_client/key_bound_compressor.cpp

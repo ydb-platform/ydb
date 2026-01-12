@@ -6,6 +6,16 @@ RUN_PROGRAM(
 )
 
 RUN_PROGRAM(
+    yql/essentials/tools/yql_highlight --generate="highlightjs"
+    STDOUT YQL.highlightjs.json
+)
+
+RUN_PROGRAM(
+    yql/essentials/tools/yql_highlight --language="yqls" --generate="highlightjs"
+    STDOUT YQLs.highlightjs.json
+)
+
+RUN_PROGRAM(
     yql/essentials/tools/yql_highlight --generate="tmlanguage"
     STDOUT YQL.tmLanguage.json
 )

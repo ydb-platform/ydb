@@ -5,11 +5,58 @@ from datetime import datetime
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
+from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
-    index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync
+    index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync, \
+    filter_dict, pk_pg_types, pk_pg_types_no_bool, non_pk_pg_types
 
 
-class TestSplitMerge(TestBase):
+class TestSplitMergeBase(TestBase):
+    def do_test_merge_split(
+        self,
+        long_string_type: str,
+        table_name: str,
+        pk_types: dict[str, str],
+        all_types: dict[str, str],
+        index: dict[str, str],
+        ttl: str,
+        unique: str,
+        sync: str
+    ):
+        long_string = "a" * 100_000
+        all_types[long_string_type] = lambda i: f"long_string {long_string}{i}"
+        dml = DMLOperations(self)
+        dml.create_table(table_name, pk_types, all_types,
+                         index, ttl, unique, sync)
+        dml.query(
+            f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 1)")
+        dml.insert(table_name, all_types, pk_types, index, ttl)
+        is_split = wait_for(self.expected_split(
+            True, table_name), timeout_seconds=150)
+        assert is_split is True, f"The table {table_name} is not split into partition"
+        dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
+        dml.query(
+            f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT=1)")
+        is_merge = wait_for(self.expected_split(
+            False, table_name), timeout_seconds=150)
+        assert is_merge is True, f"the table {table_name} is not merge into one partition"
+        dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
+
+    def expected_split(self, is_split, table_name):
+        def predicate():
+            rows = self.query(f"""SELECT
+                count(*) as count
+                FROM `.sys/partition_stats`
+                WHERE Path = "{self.get_database()}/{table_name}"
+                """)
+            if is_split:
+                return rows[0].count > 1
+            else:
+                return rows[0].count == 1
+        return predicate
+
+
+class TestSplitMerge(TestSplitMergeBase):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
@@ -92,34 +139,33 @@ class TestSplitMerge(TestBase):
         ]
     )
     def test_merge_split(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
-        big_line = "a" * 100_000
-        all_types["String"] = lambda i: f"String {big_line}{i}"
-        dml = DMLOperations(self)
-        dml.create_table(table_name, pk_types, all_types,
-                         index, ttl, unique, sync)
-        dml.query(
-            f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 1)")
-        dml.insert(table_name, all_types, pk_types, index, ttl)
-        is_split = wait_for(self.expected_split(
-            True, table_name), timeout_seconds=150)
-        assert is_split is True, f"The table {table_name} is not split into partition"
-        dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
-        dml.query(
-            f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT=1)")
-        is_merge = wait_for(self.expected_split(
-            False, table_name), timeout_seconds=150)
-        assert is_merge is True, f"the table {table_name} is not merge into one partition"
-        dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
+        self.do_test_merge_split("String", table_name, pk_types, all_types, index, ttl, unique, sync)
 
-    def expected_split(self, is_split, table_name):
-        def predicate():
-            rows = self.query(f"""SELECT
-                count(*) as count
-                FROM `.sys/partition_stats`
-                WHERE Path = "{self.get_database()}/{table_name}"
-                """)
-            if is_split:
-                return rows[0].count > 1
-            else:
-                return rows[0].count == 1
-        return predicate
+
+class TestPgSplitMerge(TestPgBase, TestSplitMergeBase):
+    @pytest.mark.parametrize(
+        "table_name, pk_types, all_types, index, ttl, unique, sync",
+        [
+            ("table_index_0_UNIQUE_SYNC", pk_pg_types, {}, pk_pg_types_no_bool, "", "UNIQUE", "SYNC"),
+            ("table_index_0__SYNC", pk_pg_types, {}, pk_pg_types, "", "", "SYNC"),
+            ("table_index_0__ASYNC", pk_pg_types, {}, pk_pg_types, "", "", "ASYNC"),
+            ("table_all_types", pk_pg_types, {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_ttl_pgint4", pk_pg_types, {}, {}, "pgint4", "", ""),
+            ("table_ttl_pgint8", pk_pg_types, {}, {}, "pgint8", "", ""),
+            ("table_ttl_pgdate", pk_pg_types, {}, {}, "pgdate", "", ""),
+            ("table_ttl_pgtimestamp", pk_pg_types, {}, {}, "pgtimestamp", "", ""),
+            ("table_pgint2", filter_dict(pk_pg_types, "pgint2"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_pgint4", filter_dict(pk_pg_types, "pgint4"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_pgint8", filter_dict(pk_pg_types, "pgint8"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_pgnumeric", filter_dict(pk_pg_types, "pgnumeric"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_pgbytea", filter_dict(pk_pg_types, "pgbytea"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_pgtext", filter_dict(pk_pg_types, "pgtext"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_pgvarchar", filter_dict(pk_pg_types, "pgvarchar"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_pguuid", filter_dict(pk_pg_types, "pguuid"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_pgdate", filter_dict(pk_pg_types, "pgdate"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_pgtimestamp", filter_dict(pk_pg_types, "pgtimestamp"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_pginterval", filter_dict(pk_pg_types, "pginterval"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+        ]
+    )
+    def test_merge_split(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
+        self.do_test_merge_split("pgtext", table_name, pk_types, all_types, index, ttl, unique, sync)

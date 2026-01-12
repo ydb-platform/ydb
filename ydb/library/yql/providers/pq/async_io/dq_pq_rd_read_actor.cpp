@@ -7,7 +7,6 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
@@ -24,6 +23,8 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 
@@ -78,7 +79,7 @@ LWTRACE_USING(DQ_PQ_PROVIDER);
 } // namespace
 
 struct TRowDispatcherReadActorMetrics {
-    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams)
+    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
         if (Counters) {
@@ -86,11 +87,15 @@ struct TRowDispatcherReadActorMetrics {
         } else {
             SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         }
-        for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
-            SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+
+        auto task = SubGroup;
+        if (enableStreamingQueriesCounters) {
+            for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+                SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            }
+            auto source = SubGroup->GetSubgroup("tx_id", TxId);
+            task = source->GetSubgroup("task_id", ToString(taskId));
         }
-        auto source = SubGroup->GetSubgroup("tx_id", TxId);
-        auto task = source->GetSubgroup("task_id", ToString(taskId));
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
         ReInit = task->GetCounter("ReInit", true);
@@ -120,12 +125,19 @@ struct TEvPrivate {
         EvRefreshClusters = EvBegin + 23,
         EvReceivedClusters = EvBegin + 24,
         EvDescribeTopicResult = EvBegin + 25,
+        EvPartitionIdleness = EvBegin + 26,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvProcessState : public NActors::TEventLocal<TEvProcessState, EvProcessState> {};
     struct TEvNotifyCA : public NActors::TEventLocal<TEvNotifyCA, EvNotifyCA> {};
+    struct TEvPartitionIdleness : public NActors::TEventLocal<TEvPartitionIdleness, EvPartitionIdleness> {
+        explicit TEvPartitionIdleness(TInstant notifyTime)
+            : NotifyTime(notifyTime)
+        {}
+        const TInstant NotifyTime;
+    };
     struct TEvRefreshClusters : public NActors::TEventLocal<TEvRefreshClusters, EvRefreshClusters> {};
     struct TEvReceivedClusters : public NActors::TEventLocal<TEvReceivedClusters, EvReceivedClusters> {
         explicit TEvReceivedClusters(
@@ -225,7 +237,6 @@ private:
     NActors::TActorId LocalRowDispatcherActorId;
     // Set on Children
     std::queue<TReadyBatch> ReadyBuffer;
-    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     // Set on Parent
     EState State = EState::INIT;
     bool Inited = false;
@@ -313,6 +324,7 @@ private:
     // Set on Parent
     ui64 NextGeneration = 0;
     ui64 NextEventQueueId = 0;
+    bool EnableStreamingQueriesCounters = false;
 
     TMap<NActors::TActorId, TSet<ui32>> LastUsedPartitionDistribution;
     TMap<NActors::TActorId, TSet<ui32>> LastReceivedPartitionDistribution;
@@ -336,6 +348,7 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
+        bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent = nullptr,
         const TString& cluster = {});
 
@@ -347,6 +360,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvGetInternalStateRequest::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset::TPtr& ev);
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
     void HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev);
@@ -358,6 +372,7 @@ public:
     void Handle(TEvPrivate::TEvPrintState::TPtr&);
     void Handle(TEvPrivate::TEvProcessState::TPtr&);
     void Handle(TEvPrivate::TEvNotifyCA::TPtr&);
+    void Handle(TEvPrivate::TEvPartitionIdleness::TPtr&);
     void Handle(TEvPrivate::TEvRefreshClusters::TPtr&);
     void Handle(TEvPrivate::TEvReceivedClusters::TPtr&);
     void Handle(TEvPrivate::TEvDescribeTopicResult::TPtr&);
@@ -371,6 +386,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateRequest, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset, Handle);
 
         hFunc(NActors::TEvents::TEvPong, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -382,6 +398,7 @@ public:
         hFunc(TEvPrivate::TEvPrintState, Handle);
         hFunc(TEvPrivate::TEvProcessState, Handle);
         hFunc(TEvPrivate::TEvNotifyCA, Handle);
+        hFunc(TEvPrivate::TEvPartitionIdleness, Handle);
         hFunc(TEvPrivate::TEvRefreshClusters, Handle);
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
@@ -397,6 +414,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, ReplyNoSession);
         hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateRequest, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset, Handle);
 
         hFunc(NActors::TEvents::TEvPong, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
@@ -410,6 +428,7 @@ public:
         hFunc(TEvPrivate::TEvPrintState, IgnoreEvent);
         hFunc(TEvPrivate::TEvProcessState, IgnoreEvent);
         hFunc(TEvPrivate::TEvNotifyCA, IgnoreEvent);
+        hFunc(TEvPrivate::TEvPartitionIdleness, IgnoreEvent);
         hFunc(TEvPrivate::TEvRefreshClusters, IgnoreEvent);
         hFunc(TEvPrivate::TEvReceivedClusters, IgnoreEvent);
         hFunc(TEvPrivate::TEvDescribeTopicResult, IgnoreEvent);
@@ -428,12 +447,10 @@ public:
 
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
-    void LoadState(const TSourceState& state) override;
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override;
     void PassAway() override;
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override;
     TDuration GetCpuTime() override;
-    void InitWatermarkTracker();
     std::vector<ui64> GetPartitionsToRead() const;
     void AddMessageBatch(TRope&& serializedBatch, NKikimr::NMiniKQL::TUnboxedValueBatch& buffer);
     void ProcessState();
@@ -447,6 +464,8 @@ public:
     TSession* FindAndUpdateSession(const TEventPtr& ev);
     void SendNoSession(const NActors::TActorId& recipient, ui64 cookie);
     void NotifyCA();
+    void SchedulePartitionIdlenessCheck(TInstant) override;
+    void InitWatermarkTracker() override;
     void SendStartSession(TSession& sessionInfo);
     void Init();
     void InitChild();
@@ -516,6 +535,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
+        bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent,
         const TString& cluster)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
@@ -524,17 +544,17 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , Cluster(cluster)
         , Token(token)
         , LocalRowDispatcherActorId(localRowDispatcherActorId)
-        , Metrics(txId, taskId, counters, SourceParams)
+        , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
         , PqGateway(pqGateway)
         , HolderFactory(holderFactory)
         , TypeEnv(typeEnv)
         , Driver(std::move(driver))
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , MaxBufferSize(bufferSize)
+        , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {
-
     SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
-        << ", partitions: " << JoinSeq(',', GetPartitionsToRead()));
+        << ", partitions: " << JoinSeq(',', GetPartitionsToRead()) << ", skip json errors: " << SourceParams.GetSkipJsonErrors());
     if (Parent != this) {
         return;
     }
@@ -542,9 +562,10 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, *holderFactory.GetFunctionRegistry());
 
     // Parse output schema (expected struct output type)
-    const auto& outputTypeYson = SourceParams.GetRowType();
-    const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(outputTypeYson), *programBuilder, Cerr);
-    YQL_ENSURE(outputItemType, "Failed to parse output type: " << outputTypeYson);
+    const TStringBuf outputTypeYson(SourceParams.GetRowType());
+    TStringStream error;
+    const auto outputItemType = NCommon::ParseTypeFromYson(outputTypeYson, *programBuilder, error);
+    YQL_ENSURE(outputItemType, "Failed to parse output type: " << outputTypeYson << ", reason: " << error.Str());
     YQL_ENSURE(outputItemType->IsStruct(), "Output type " << outputTypeYson << " is not struct");
     const auto structType = static_cast<TStructType*>(outputItemType);
 
@@ -560,7 +581,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     InputDataType = programBuilder->NewMultiType(inputTypeParts);
     DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
 
-    InitWatermarkTracker();
+    InitWatermarkTracker(); // non-virtual!
     IngressStats.Level = statsLevel;
 }
 
@@ -623,10 +644,11 @@ void TDqPqRdReadActor::ProcessGlobalState() {
         }
         auto partitionToRead = GetPartitionsToRead();
         if (WatermarkTracker) {
+            auto now = TInstant::Now();
             TPartitionKey partitionKey { .Cluster = Cluster };
             for (auto partitionId: partitionToRead) {
                 partitionKey.PartitionId = partitionId;
-                WatermarkTracker->RegisterPartition(partitionKey);
+                WatermarkTracker->RegisterPartition(partitionKey, now);
             }
         }
         auto cookie = ++CoordinatorRequestCookie;
@@ -707,11 +729,6 @@ void TDqPqRdReadActor::SendStartSession(TSession& sessionInfo) {
     sessionInfo.EventsQueue.Send(event, sessionInfo.Generation);
 }
 
-void TDqPqRdReadActor::LoadState(const TSourceState& state) {
-    TDqPqReadActorBase::LoadState(state);
-    InitWatermarkTracker();
-}
-
 void TDqPqRdReadActor::CommitState(const NDqProto::TCheckpoint& /*checkpoint*/) {
 }
 
@@ -754,6 +771,22 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     InFlyAsyncInputData = false;
     buffer.clear();
     watermark = Nothing();
+
+    if (WatermarkTracker) {
+        const auto now = TInstant::Now();
+        const auto idleWatermark = WatermarkTracker->HandleIdleness(now);
+
+        if (idleWatermark) {
+            SRC_LOG_D("SessionId: " << GetSessionId() << " Idleness watermark " << idleWatermark << " was produced");
+            if (ReadyBuffer.empty()) {
+                watermark = *idleWatermark;
+            } else {
+                Y_ENSURE(ReadyBuffer.back().Watermark < *idleWatermark);
+                ReadyBuffer.back().Watermark = *idleWatermark;
+            }
+        }
+        MaybeSchedulePartitionIdlenessCheck(now);
+    }
 
     if (freeSpace == 0 || ReadyBuffer.empty()) {
         return 0;
@@ -798,20 +831,19 @@ TDuration TDqPqRdReadActor::GetCpuTime() {
     return TDuration::MicroSeconds(CpuMicrosec);
 }
 
+void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
+    Schedule(at, new TEvPrivate::TEvPartitionIdleness(at));
+}
+
 void TDqPqRdReadActor::InitWatermarkTracker() {
-    SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
-        << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds");
-
-    if (!SourceParams.GetWatermarks().GetEnabled()) {
-        return;
-    }
-
-    WatermarkTracker.ConstructInPlace(
-        TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
-        SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-        TDuration::Zero(),
-        TInstant::Now()
-    );
+    auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
+    auto idleTimeoutUs = // TODO remove fallback
+        SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
+        SourceParams.GetWatermarks().GetIdleTimeoutUs() :
+        lateArrivalDelayUs;
+    TDqPqReadActorBase::InitWatermarkTracker(
+            TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
+            TDuration::MicroSeconds(idleTimeoutUs));
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
@@ -896,6 +928,16 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvGetInternalStateRequest:
     auto response = std::make_unique<NFq::TEvRowDispatcher::TEvGetInternalStateResponse>();
     response->Record.SetInternalState(GetInternalState());
     Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
+void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset::TPtr& ev) {
+    if (CoordinatorActorId != ev->Sender) {
+        SRC_LOG_I("Ignore TEvCoordinatorDistributionReset, sender is not active coordinator (sender " << ev->Sender << ", current coordinator " << CoordinatorActorId << ")");
+        return;
+    }
+    SRC_LOG_I("Received TEvCoordinatorDistributionReset from " << ev->Sender);
+    ReInit("Distribution changed");
+    ScheduleProcessState();
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
@@ -1505,6 +1547,7 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
         {},
         MaxBufferSize,
         PqGateway,
+        EnableStreamingQueriesCounters,
         this,
         TString(Clusters[clusterIndex].Info.Name));
     Clusters[clusterIndex].Child = actor;
@@ -1523,6 +1566,12 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvNotifyCA::TPtr&) {
     NotifyCA();
 }
 
+void TDqPqRdReadActor::Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
+    if (WatermarkTracker->ProcessIdlenessCheck(ev->Get()->NotifyTime)) {
+        NotifyCA();
+    }
+}
+
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const TTypeEnvironment& typeEnv,
     NPq::NProto::TDqPqTopicSource&& settings,
@@ -1539,7 +1588,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 bufferSize,
-    const IPqGateway::TPtr& pqGateway)
+    const IPqGateway::TPtr& pqGateway,
+    bool enableStreamingQueriesCounters)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1561,7 +1611,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         token,
         counters,
         bufferSize,
-        pqGateway);
+        pqGateway,
+        enableStreamingQueriesCounters);
 
     return {actor, actor};
 }

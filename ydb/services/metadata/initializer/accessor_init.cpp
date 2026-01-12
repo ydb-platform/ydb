@@ -12,7 +12,7 @@ namespace NKikimr::NMetadata::NInitializer {
 
 void TDSAccessorInitialized::DoNextModifier(const bool doPop) {
     if (InitializationSnapshotOwner->HasInitializationSnapshot() && !doPop) {
-        while (Modifiers.size() && !doPop) {
+        while (Modifiers.size() && Modifiers.front()->GetSupportDbCache() && !doPop) {
             if (InitializationSnapshotOwner->HasModification(ComponentId, Modifiers.front()->GetModificationId())) {
                 Modifiers.pop_front();
             } else {

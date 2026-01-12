@@ -24,8 +24,7 @@
 
 #include <ydb/core/base/cputime.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 static const TString YqlName = "CompileActor";
 
@@ -69,7 +68,8 @@ public:
         , UserToken(userToken)
         , ClientAddress(clientAddress)
         , DbCounters(dbCounters)
-        , Config(MakeIntrusive<TKikimrConfiguration>())
+        , KqpSettings(kqpSettings)
+        , TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
         , CompilationTimeout(TDuration::MilliSeconds(tableServiceConfig.GetCompileTimeoutMs()))
         , SplitCtx(std::move(splitCtx))
@@ -80,26 +80,54 @@ public:
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
+        , EnforcedSqlVersion(tableServiceConfig.GetEnforceSqlVersionV1())
+        , EnableNewRBO(tableServiceConfig.GetEnableNewRBO())
+        , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
     {
-        Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, kqpSettings->Settings, false);
+        Config = BuildConfiguration(tableServiceConfig);
+        PerStatementResult = perStatementResult && Config->EnablePerStatementQueryExecution;
+    }
+
+    TKikimrConfiguration::TPtr BuildConfiguration(const TTableServiceConfig& tableServiceConfig) {
+        NYql::TKikimrConfiguration::TPtr config = MakeIntrusive<TKikimrConfiguration>();
+
+        config->Init(KqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, KqpSettings->Settings, false);
 
         if (!QueryId.Database.empty()) {
-            Config->_KqpTablePathPrefix = QueryId.Database;
+            config->_KqpTablePathPrefix = QueryId.Database;
         }
 
-        ApplyServiceConfig(*Config, tableServiceConfig);
+        ApplyServiceConfig(*config, tableServiceConfig);
+
+        if (!tableServiceConfig.HasSqlVersion() || tableServiceConfig.GetSqlVersion() != 0) {
+            EnforcedSqlVersion = false;
+        } else if (EnforcedSqlVersion) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR,
+                "Enforced SQL version 1, "
+                << "current sql version: " << tableServiceConfig.GetSqlVersion()
+                << " queryText: " << EscapeC(QueryId.Text)
+            );
+
+            config->_KqpYqlSyntaxVersion = 1;
+        } else {
+            EnforcedSqlVersion = false;
+        }
+
+        // This is either the default setting or the explicit exclusion of a new RBO when compilation fails and recompilation is attempted.
+        config->EnableNewRBO = EnableNewRBO;
 
         if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
             ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
             if (scriptResultRowsLimit > 0) {
-                Config->_ResultRowsLimit = scriptResultRowsLimit;
+                config->_ResultRowsLimit = scriptResultRowsLimit;
             } else {
-                Config->_ResultRowsLimit.Clear();
+                config->_ResultRowsLimit.Clear();
             }
         }
-        PerStatementResult = perStatementResult && Config->EnablePerStatementQueryExecution;
 
-        Config->FreezeDefaults();
+        config->FreezeDefaults();
+
+        return config;
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -253,7 +281,12 @@ private:
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, UserRequestContext->TraceId);
 
         auto prepareSettings = PrepareCompilationSettings(ctx);
+        StartCompilationWithSettings(prepareSettings);
+        Continue(ctx);
+        Become(&TKqpCompileActor::CompileState);
+    }
 
+    void StartCompilationWithSettings(IKqpHost::TPrepareSettings& prepareSettings) {
         NCpuTime::TCpuTimer timer(CompileCpuTime);
 
         switch (QueryId.Settings.QueryType) {
@@ -286,9 +319,6 @@ private:
             default:
                 YQL_ENSURE(false, "Unexpected query type: " << QueryId.Settings.QueryType);
         }
-
-        Continue(ctx);
-        Become(&TKqpCompileActor::CompileState);
     }
 
     void Continue(const TActorContext &ctx) {
@@ -305,6 +335,7 @@ private:
     }
 
     IKqpHost::TPrepareSettings PrepareCompilationSettings(const TActorContext &ctx) {
+        // If CurrentSqlVersion differs from the frozen Config, create a new Config with updated SqlVersion
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
         counters->Counters = Counters;
         counters->DbCounters = DbCounters;
@@ -532,6 +563,30 @@ private:
             return;
         }
 
+        if (IsSuitableToFallbackToYqlOptimizer(status)) {
+            Counters->ReportCompileNewRBOFailed(DbCounters);
+            // Disable compilation with new RBO.
+            EnableNewRBO = false;
+            TString logMessage = "Compilation with new RBO failed, retrying with YQL optimizer";
+            RebuildConfigAndStartCompilation(ctx, std::move(logMessage));
+            return;
+        } else if (IsSuitableToReportSuccessOnNewRBO(status)) {
+            Counters->ReportCompileNewRBOSuccess(DbCounters);
+        } else if (IsSuitableToReportFailOnNewRBO(status)) {
+            Counters->ReportCompileNewRBOFailed(DbCounters);
+        }
+
+        // If compilation failed and we tried SqlVersion = 1, retry with SqlVersion = 0
+        if (IsSuitableToFallbackToSqlV0(status)) {
+            Counters->ReportCompileEnforceConfigFailed(DbCounters);
+            EnforcedSqlVersion = false;
+            TString logMessage = "Compilation with SqlVersion = 1 failed, retrying with SqlVersion = 0";
+            RebuildConfigAndStartCompilation(ctx, std::move(logMessage));
+            return;
+        } else if (IsSuitableToReportSuccessOnEnforcedSqlVersion(status)) {
+            Counters->ReportCompileEnforceConfigSuccess(DbCounters);
+        }
+
         auto database = QueryId.Database;
         if (kqpResult.SqlVersion) {
             Counters->ReportSqlVersion(DbCounters, *kqpResult.SqlVersion);
@@ -600,6 +655,42 @@ private:
     }
 
 private:
+    void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage) {
+        LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, logMessage
+                << ", self: " << ctx.SelfID
+                << ", database: " << QueryId.Database
+                << ", text: \"" << EscapeC(QueryId.Text) << "\"");
+
+        // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
+        // and we want rebuild a KqpHost.
+        AsyncCompileResult.Drop();
+        Config = BuildConfiguration(TableServiceConfig);
+        auto prepareSettings = PrepareCompilationSettings(ctx);
+
+        StartCompilationWithSettings(prepareSettings);
+        Continue(ctx);
+    }
+
+    bool IsSuitableToFallbackToYqlOptimizer(Ydb::StatusIds::StatusCode status) {
+        return EnableNewRBO && EnableFallbackToYqlOptimizer && status != Ydb::StatusIds::SUCCESS;
+    }
+
+    bool IsSuitableToReportSuccessOnNewRBO(Ydb::StatusIds::StatusCode status) {
+        return EnableNewRBO && status == Ydb::StatusIds::SUCCESS;
+    }
+
+    bool IsSuitableToReportFailOnNewRBO(Ydb::StatusIds::StatusCode status) {
+        return EnableNewRBO && status != Ydb::StatusIds::SUCCESS;
+    }
+
+    bool IsSuitableToFallbackToSqlV0(Ydb::StatusIds::StatusCode status) {
+        return !EnableNewRBO && EnforcedSqlVersion && status != Ydb::StatusIds::SUCCESS;
+    }
+
+    bool IsSuitableToReportSuccessOnEnforcedSqlVersion(Ydb::StatusIds::StatusCode status) {
+        return !EnableNewRBO && EnforcedSqlVersion && status == Ydb::StatusIds::SUCCESS;
+    }
+
     TActorId Owner;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
@@ -613,6 +704,8 @@ private:
     TString ClientAddress;
     TKqpDbCountersPtr DbCounters;
     TKikimrConfiguration::TPtr Config;
+    TKqpSettings::TConstPtr KqpSettings;
+    TTableServiceConfig TableServiceConfig;
     TQueryServiceConfig QueryServiceConfig;
     TDuration CompilationTimeout;
     TInstant StartTime;
@@ -638,6 +731,9 @@ private:
     bool PerStatementResult;
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
+    bool EnforcedSqlVersion;
+    bool EnableNewRBO;
+    bool EnableFallbackToYqlOptimizer;
 };
 
 void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConfig& serviceConfig) {
@@ -655,6 +751,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
     kqpConfig.EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
+    kqpConfig.EnableDiscardSelect = serviceConfig.GetEnableDiscardSelect();
     kqpConfig.EnableCreateTableAs = serviceConfig.GetEnableCreateTableAs();
     kqpConfig.EnableDataShardCreateTableAs = serviceConfig.GetEnableDataShardCreateTableAs();
     kqpConfig.AllowOlapDataQuery = serviceConfig.GetAllowOlapDataQuery();
@@ -662,10 +759,12 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();
     kqpConfig.EnableHtapTx = serviceConfig.GetEnableHtapTx();
     kqpConfig.EnableStreamWrite = serviceConfig.GetEnableStreamWrite();
+    kqpConfig.EnableBatchUpdates = serviceConfig.GetEnableBatchUpdates();
     kqpConfig.BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
     kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
     kqpConfig.DefaultEnableShuffleElimination = serviceConfig.GetDefaultEnableShuffleElimination();
+    kqpConfig.DefaultDqChannelVersion = serviceConfig.GetDqChannelVersion();
     kqpConfig.EnableConstantFolding = serviceConfig.GetEnableConstantFolding();
     kqpConfig.EnableFoldUdfs = serviceConfig.GetEnableFoldUdfs();
     kqpConfig.SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
@@ -689,7 +788,10 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableTopSortSelectIndex = serviceConfig.GetEnableTopSortSelectIndex();
     kqpConfig.EnablePointPredicateSortAutoSelectIndex = serviceConfig.GetEnablePointPredicateSortAutoSelectIndex();
     kqpConfig.EnableDqHashCombineByDefault = serviceConfig.GetEnableDqHashCombineByDefault();
+    kqpConfig.EnableDqHashAggregateByDefault = serviceConfig.GetEnableDqHashAggregateByDefault();
+    kqpConfig.EnableWatermarks = serviceConfig.GetEnableWatermarks();
     kqpConfig.EnableBuildAggregationResultStages = serviceConfig.GetEnableBuildAggregationResultStages();
+    kqpConfig.EnableFallbackToYqlOptimizer = serviceConfig.GetEnableFallbackToYqlOptimizer();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
@@ -699,6 +801,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
         kqpConfig.FilterPushdownOverJoinOptionalSide = true;
         kqpConfig.YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
         kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
+        kqpConfig.YqlCoreOptimizerFlags.insert("sqlinwithnothingornull");
     }
 
     switch(serviceConfig.GetDefaultHashShuffleFuncType()) {
@@ -707,6 +810,15 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
             break;
         case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2:
             kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
+            break;
+    }
+
+    switch(serviceConfig.GetBackportMode()) {
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_Released:
+            kqpConfig.BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
+            break;
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_All:
+            kqpConfig.BackportMode = NYql::EBackportCompatibleFeaturesMode::All;
             break;
     }
 }
@@ -731,5 +843,4 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 std::move(splitCtx), std::move(splitExpr));
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

@@ -49,7 +49,8 @@ enum error_code {
   SCALAR_DOCUMENT_AS_VALUE,   ///< A scalar document is treated as a value.
   OUT_OF_BOUNDS,              ///< Attempted to access location outside of document.
   TRAILING_CONTENT,           ///< Unexpected trailing content in the JSON input
-  NUM_ERROR_CODES
+  OUT_OF_CAPACITY,            ///< The capacity was exceeded, we cannot allocate enough memory.
+  NUM_ERROR_CODES             ///< Placeholder for end of error code list.
 };
 
 /**
@@ -106,6 +107,10 @@ namespace internal {
 
 /**
  * The result of a simdjson operation that could fail.
+ *
+ * IMPORTANT: For the ondemand API, we use implementation_simdjson_result_base<T> as a base class
+ * to avoid some compilation issue. Thus, if you modify this class, please ensure that the ondemand
+ * implementation_simdjson_result_base<T> is also modified.
  *
  * Gives the option of reading error codes, or throwing an exception by casting to the desired result.
  *
@@ -167,7 +172,26 @@ struct simdjson_result_base : protected std::pair<T, error_code> {
    */
   simdjson_inline error_code error() const noexcept;
 
+  /**
+   * Whether there is a value.
+   */
+  simdjson_inline bool has_value() const noexcept;
 #if SIMDJSON_EXCEPTIONS
+
+  /**
+   * Dereference operator to access the contained value.
+   *
+   * @throw simdjson_error if there was an error.
+   */
+  simdjson_inline T& operator*() &  noexcept(false);
+  simdjson_inline T&& operator*() &&  noexcept(false);
+  /**
+   * Arrow operator to access members of the contained value.
+   *
+   * @throw simdjson_error if there was an error.
+   */
+  simdjson_inline T* operator->() noexcept(false);
+  simdjson_inline const T* operator->() const noexcept(false);
 
   /**
    * Get the result value.
@@ -202,15 +226,47 @@ struct simdjson_result_base : protected std::pair<T, error_code> {
   /**
    * Get the result value. This function is safe if and only
    * the error() method returns a value that evaluates to false.
+   * We discourage the use of value_unsafe().
+   *
+   * The recommended pattern is:
+   *
+   * T value; // where T is the type
+   * auto error = result.get(value);
+   * if (error) {
+   *   // handle error
+   * }
+   *
+   * Or you may call 'value()' which will raise an exception
+   * in case of error:
+   *
+   * T value = result.value();
    */
   simdjson_inline const T& value_unsafe() const& noexcept;
 
   /**
    * Take the result value (move it). This function is safe if and only
    * the error() method returns a value that evaluates to false.
+   * We discourage the use of value_unsafe().
+   *
+   * The recommended pattern is:
+   *
+   * T value; // where T is the type
+   * auto error = result.get(value);
+   * if (error) {
+   *   // handle error, return, exit, abort
+   * } else {
+   *   // use value here.
+   * }
+   *
+   * Or you may call 'value()' which will raise an exception
+   * in case of error:
+   *
+   * T value = result.value();
    */
   simdjson_inline T&& value_unsafe() && noexcept;
 
+  using value_type = T;
+  using error_type = error_code;
 }; // struct simdjson_result_base
 
 } // namespace internal
@@ -222,6 +278,7 @@ struct simdjson_result_base : protected std::pair<T, error_code> {
  */
 template<typename T>
 struct simdjson_result : public internal::simdjson_result_base<T> {
+
   /**
    * @private Create a new empty result with error = UNINITIALIZED.
    */
@@ -253,24 +310,33 @@ struct simdjson_result : public internal::simdjson_result_base<T> {
    * @param value The variable to assign the value to. May not be set if there is an error.
    */
   simdjson_warn_unused simdjson_inline error_code get(T &value) && noexcept;
-//
+
   /**
    * Copy the value to a provided std::string, only enabled for std::string_view.
    *
    * @param value The variable to assign the value to. May not be set if there is an error.
    */
-  simdjson_warn_unused simdjson_inline error_code get(std::string &value) && noexcept
-#if SIMDJSON_SUPPORTS_DESERIALIZATION
-  requires (!std::is_same_v<T, std::string>)
-#endif // SIMDJSON_SUPPORTS_DESERIALIZATION
-  ;
+  template <typename U = T>
+  simdjson_warn_unused simdjson_inline error_code get(std::string &value) && noexcept {
+    static_assert(std::is_same<U, std::string_view>::value, "SFINAE");
+    std::string_view v;
+    error_code error = std::forward<simdjson_result<T>>(*this).get(v);
+    if (!error) {
+      value.assign(v.data(), v.size());
+    }
+    return error;
+  }
+
   /**
    * The error.
    */
   simdjson_inline error_code error() const noexcept;
 
-#if SIMDJSON_EXCEPTIONS
 
+
+#if SIMDJSON_EXCEPTIONS
+  using internal::simdjson_result_base<T>::operator*;
+  using internal::simdjson_result_base<T>::operator->;
   /**
    * Get the result value.
    *
@@ -312,6 +378,8 @@ struct simdjson_result : public internal::simdjson_result_base<T> {
    */
   simdjson_inline T&& value_unsafe() && noexcept;
 
+  using value_type = T;
+  using error_type = error_code;
 }; // struct simdjson_result
 
 #if SIMDJSON_EXCEPTIONS

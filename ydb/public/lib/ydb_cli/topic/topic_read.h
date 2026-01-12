@@ -4,7 +4,7 @@
 #include "ydb/public/lib/ydb_cli/commands/ydb_command.h"
 #include <util/stream/null.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -60,7 +60,7 @@ namespace NYdb::NConsoleClient {
     class TTopicReaderTests;
 
     // TODO(shmel1k@): think about interruption here.
-    class TTopicReader: public TInterruptibleCommand {
+    class TTopicReader: public TInterruptableCommand {
         using TReceivedMessage = NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage;
 
     public:
@@ -91,6 +91,12 @@ namespace NYdb::NConsoleClient {
             PartitionWithData = 2,
         };
 
+        struct TPartitionSessionInfo {
+            NTopic::TPartitionSession::TPtr PartitionSession;
+            EReadingStatus ReadingStatus;
+            std::optional<ui64> LastReadOffset;
+        };
+
         bool HasSession(ui64 sessionId) const;
         std::optional<uint64_t> GetNextReadOffset(ui64 partitionId) const;
 
@@ -109,7 +115,7 @@ namespace NYdb::NConsoleClient {
 
         friend class TTopicReaderTests;
 
-        THashMap<ui64, std::pair<NTopic::TPartitionSession::TPtr, EReadingStatus>> ActivePartitionSessions_;
+        THashMap<ui64, TPartitionSessionInfo> ActivePartitionSessions_;
         TTopicReaderSettings::TPartitionReadOffsetMap PartitionReadOffset_;
     };
 } // namespace NYdb::NConsoleClient

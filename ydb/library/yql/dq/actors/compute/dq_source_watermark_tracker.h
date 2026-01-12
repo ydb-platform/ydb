@@ -1,6 +1,11 @@
+#pragma once
+
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 #include <util/system/types.h>
+#include <util/string/builder.h>
+#include <util/generic/set.h>
+#include <ydb/library/yql/dq/actors/compute/dq_watermark_tracker_impl.h>
 
 namespace NYql::NDq {
 
@@ -11,11 +16,13 @@ public:
         TDuration granularity,
         bool idlePartitionsEnabled,
         TDuration lateArrivalDelay,
-        TInstant systemTime)
+        TDuration idleTimeout,
+        const TString& logPrefix)
         : Granularity_(granularity)
         , IdlePartitionsEnabled_(idlePartitionsEnabled)
         , LateArrivalDelay_(lateArrivalDelay)
-        , LastTimeNotifiedAt_(systemTime)
+        , IdleTimeout_(idleTimeout)
+        , Impl_(logPrefix)
     {}
 
     [[nodiscard]] TMaybe<TInstant> NotifyNewPartitionTime(
@@ -23,131 +30,53 @@ public:
         TInstant partitionTime,
         TInstant systemTime
     ) {
-        auto [iter, inserted] = Data_.try_emplace(partitionKey);
-        bool pendingPartitionsBecameEmpty = false;
-        if (inserted) {
-            auto removed = PendingPartitions_.erase(partitionKey);
-            Y_DEBUG_ABORT_UNLESS(removed);
-            pendingPartitionsBecameEmpty = PendingPartitions_.empty();
-        }
-        if ((UpdatePartitionTime(iter->second, partitionTime, systemTime) && PendingPartitions_.empty()) || pendingPartitionsBecameEmpty) {
-            return RecalcWatermark(systemTime);
-        }
-
-        return Nothing();
+        const auto watermark = ToDiscreteTime(partitionTime - LateArrivalDelay_);
+        return Impl_.NotifyNewWatermark(partitionKey, watermark, ToNextDiscreteTime(systemTime)).first;
     }
 
-    bool RegisterPartition(const TPartitionKey& partitionKey) {
-        if (Data_.find(partitionKey) != Data_.end()) {
-            return false;
-        }
-        auto [_, inserted] = PendingPartitions_.insert(partitionKey);
-        return inserted;
+    bool RegisterPartition(const TPartitionKey& partitionKey, TInstant systemTime) {
+        return Impl_.RegisterInput(partitionKey, ToNextDiscreteTime(systemTime), IdlePartitionsEnabled_ ? IdleTimeout_ : TDuration::Max());
     }
 
     [[nodiscard]] TMaybe<TInstant> HandleIdleness(TInstant systemTime) {
-        if (!Watermark_) {
-            return Nothing();
-        }
-
-        if (!IdlePartitionsEnabled_ || !ShouldCheckIdlenessNow(systemTime)) {
-            return Nothing();
-        }
-
-        if (AllPartitionsAreIdle(systemTime)) {
-            return TryProduceFakeWatermark(systemTime);
-        }
-
-        return RecalcWatermark(systemTime);
+        return Impl_.HandleIdleness(ToDiscreteTime(systemTime));
     }
 
-    [[nodiscard]] TMaybe<TInstant> GetNextIdlenessCheckAt(TInstant systemTime) {
-        return IdlePartitionsEnabled_
-            ? ToDiscreteTime(systemTime + Granularity_)
-            : TMaybe<TInstant>();
+    // returns time for idleness check that should be scheduled now
+    [[nodiscard]] TMaybe<TInstant> PrepareIdlenessCheck(TInstant systemTime) {
+        if (auto nextCheck = Impl_.GetNextIdlenessCheckAt()) {
+            auto notifyTime = ToNextDiscreteTime(Max(*nextCheck, systemTime));
+            if (Impl_.AddScheduledIdlenessCheck(notifyTime)) {
+                return notifyTime;
+            }
+        }
+        return Nothing();
     }
 
-private:
-    struct TPartitionState {
-        TInstant Time;  // partition time, notified outside
-        TInstant TimeNotifiedAt; // system time when notification was received
-        TInstant Watermark;
-    };
+    bool ProcessIdlenessCheck(TInstant notifyTime) {
+        return Impl_.RemoveExpiredIdlenessChecks(notifyTime);
+    }
+
+    TMaybe<TDuration> GetWatermarkDiscrepancy() const {
+        return Impl_.GetWatermarkDiscrepancy();
+    }
 
 private:
     TInstant ToDiscreteTime(TInstant time) const {
         return TInstant::MicroSeconds(time.MicroSeconds() - time.MicroSeconds() % Granularity_.MicroSeconds());
     }
 
-    bool AllPartitionsAreIdle(TInstant systemTime) const {
-        return LastTimeNotifiedAt_ + LateArrivalDelay_ <= systemTime;
-    }
-
-    bool ShouldCheckIdlenessNow(TInstant systemTime) {
-        const auto discreteSystemTime = ToDiscreteTime(systemTime);
-        if (discreteSystemTime < NextIdlenessCheckAt_) {
-            return false;
-        }
-
-        NextIdlenessCheckAt_ = discreteSystemTime + Granularity_;
-        return true;
-    }
-
-    TMaybe<TInstant> RecalcWatermark(TInstant systemTime) {
-        const auto minPartitionSeenTimeIter = MinElementBy(
-            Data_.begin(),
-            Data_.end(),
-            [](const auto iter){ return iter.second.Watermark; });
-
-        if (minPartitionSeenTimeIter == Data_.end()) {
-            return Nothing();
-        }
-
-        const auto newWatermark = minPartitionSeenTimeIter->second.Watermark;
-
-        if (!Watermark_) {
-            Watermark_ = newWatermark;
-        } else if (newWatermark > *Watermark_) {
-            Watermark_ = newWatermark;
-        } else {
-            return Nothing();
-        }
-        LastTimeNotifiedAt_ = systemTime;
-        return Watermark_;
-    }
-
-    bool UpdatePartitionTime(TPartitionState& state, TInstant partitionTime, TInstant systemTime) {
-        state.Time = partitionTime;
-        state.TimeNotifiedAt = systemTime;
-
-        const auto watermark = ToDiscreteTime(partitionTime - LateArrivalDelay_);
-        if (state.Watermark < watermark) {
-            auto oldWatermark = std::exchange(state.Watermark, watermark);
-            return !Watermark_ || *Watermark_ == oldWatermark;
-        }
-
-        return false;
-    }
-
-    TMaybe<TInstant> TryProduceFakeWatermark(TInstant systemTime) {
-        const auto fakeWatermark = ToDiscreteTime(systemTime - LateArrivalDelay_);
-        if (fakeWatermark > Watermark_) {
-            return Watermark_ = fakeWatermark;
-        }
-
-        return Nothing();
+    TInstant ToNextDiscreteTime(TInstant time) const {
+        return TInstant::MicroSeconds(time.MicroSeconds() - time.MicroSeconds() % Granularity_.MicroSeconds()) + Granularity_;
     }
 
 private:
     const TDuration Granularity_;
     const bool IdlePartitionsEnabled_;
     const TDuration LateArrivalDelay_;
+    const TDuration IdleTimeout_;
 
-    THashMap<TPartitionKey, TPartitionState> Data_;
-    THashSet<TPartitionKey> PendingPartitions_;
-    TMaybe<TInstant> Watermark_;
-    TInstant LastTimeNotifiedAt_; // last system time when tracker received notification for any partition
-    TMaybe<TInstant> NextIdlenessCheckAt_;
+    TDqWatermarkTrackerImpl<TPartitionKey> Impl_;
 };
 
 }

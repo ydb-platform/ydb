@@ -25,6 +25,7 @@ RECURSE(
     blob
     common
     partition
+    quota
     readproxy
 )
 

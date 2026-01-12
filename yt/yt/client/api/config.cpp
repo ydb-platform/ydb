@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <yt/yt/client/transaction_client/config.h>
+
 #include <yt/yt/core/misc/config.h>
 
 namespace NYT::NApi {
@@ -38,6 +40,8 @@ void TConnectionDynamicConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("table_mount_cache", &TThis::TableMountCache)
         .DefaultNew();
+    registrar.Parameter("timestamp_provider", &TThis::TimestampProvider)
+        .Default(); // DefaultNew breaks exenodes job config due to direct patching.
     registrar.Parameter("tablet_write_backoff", &TThis::TabletWriteBackoff)
         .Default({
             .InvocationCount = 0,

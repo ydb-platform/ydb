@@ -2,16 +2,20 @@
 
 #include "ydb_common.h"
 
+#include <ydb/public/lib/ydb_cli/common/exclude_item.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb/library/backup/util.h>
 
+#include <util/generic/algorithm.h>
+#include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/stream/format.h> // for SF_BYTES
@@ -48,7 +52,7 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("s3-endpoint", "S3 endpoint to connect to")
         .Required().RequiredArgument("ENDPOINT").StoreResult(&AwsEndpoint);
 
-    auto colors = NColorizer::AutoColors(Cout);
+    auto colors = NConsoleClient::AutoColors(Cout);
     config.Opts->AddLongOption("scheme", TStringBuilder()
             << "S3 endpoint scheme - "
             << colors.BoldColor() << "http" << colors.OldColor()
@@ -83,6 +87,11 @@ void TCommandImportFromS3::Config(TConfig& config) {
     config.Opts->AddLongOption("include", "Schema objects to be included in the import. Directories are traversed recursively. The option can be used multiple times")
         .RequiredArgument("PATH").AppendTo(&IncludePaths);
 
+    config.Opts->AddLongOption("exclude", "Pattern (PCRE) for paths excluded from import operation")
+        .RequiredArgument("STRING").Handler([this](const TString& arg) {
+            ExclusionPatterns.emplace_back(TRegExMatch(arg));
+        });
+
     config.Opts->AddLongOption("item", TItem::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
 
@@ -91,6 +100,44 @@ void TCommandImportFromS3::Config(TConfig& config) {
 
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
+
+    {
+        TStringBuilder help;
+        help << "Index population mode. Supported values: ";
+        bool first = true;
+        for (auto mode : GetEnumAllValues<NImport::EIndexPopulationMode>()) {
+            if (mode == NImport::EIndexPopulationMode::Unknown) {
+                continue;
+            }
+
+            if (!first && config.HelpCommandVerbosiltyLevel < 2) {
+                help << ", ";
+            }
+
+            if (config.HelpCommandVerbosiltyLevel >= 2) {
+                help << Endl;
+                switch (mode) {
+                case NImport::EIndexPopulationMode::Build:
+                    help << "    - " << colors.BoldColor() << mode << colors.OldColor() << ": build index";
+                    break;
+                case NImport::EIndexPopulationMode::Import:
+                    help << "    - " << colors.BoldColor() << mode << colors.OldColor() << ": import index data";
+                    break;
+                case NImport::EIndexPopulationMode::Auto:
+                    help << "    - " << colors.BoldColor() << mode << colors.OldColor() << ": try to import index data, build otherwise";
+                    break;
+                case NImport::EIndexPopulationMode::Unknown:
+                    break;
+                }
+            } else {
+                help << colors.BoldColor() << mode << colors.OldColor();
+            }
+
+            first = false;
+        }
+        config.Opts->AddLongOption("index-population-mode", help)
+            .RequiredArgument("STRING").StoreResult(&IndexPopulationMode).DefaultValue(IndexPopulationMode);
+    }
 
     config.Opts->AddLongOption("use-virtual-addressing", TStringBuilder()
             << "Sets bucket URL style. Value "
@@ -161,7 +208,9 @@ void TCommandImportFromS3::ExtractParams(TConfig& config) {
 
 bool IsSupportedObject(TStringBuf& key) {
     return key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
-        || key.ChopSuffix(NDump::NFiles::CreateView().FileName);
+        || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
+        || key.ChopSuffix(NDump::NFiles::CreateTopic().FileName)
+        || key.ChopSuffix(NDump::NFiles::CreateAsyncReplication().FileName);
 }
 
 void TCommandImportFromS3::FillItems(NYdb::NImport::TImportFromS3Settings& settings) const {
@@ -169,6 +218,12 @@ void TCommandImportFromS3::FillItems(NYdb::NImport::TImportFromS3Settings& setti
         FillItemsFromItemParam(settings);
     } else {
         FillItemsFromIncludeParam(settings);
+    }
+
+    ExcludeItems(settings, ExclusionPatterns);
+
+    if (settings.Item_.empty()) {
+        throw TMisuseException() << "No objects to import: the list of objects is empty after applying all filters";
     }
 }
 
@@ -192,6 +247,8 @@ void TCommandImportFromS3::FillItemsFromItemParam(NYdb::NImport::TImportFromS3Se
             if (item.Destination.empty() || item.Destination.back() != '/') {
                 item.Destination += "/";
             }
+
+            TVector<NImport::TImportFromS3Settings::TItem> items;
             do {
                 auto listResult = s3Client->ListObjectKeys(item.Source, token);
                 token = listResult.NextToken;
@@ -204,10 +261,27 @@ void TCommandImportFromS3::FillItemsFromItemParam(NYdb::NImport::TImportFromS3Se
                         } else {
                             destination = NormalizePath(item.Destination);
                         }
-                        settings.AppendItem({TString(key), std::move(destination)});
+                        items.push_back({TString(key), std::move(destination)});
                     }
                 }
             } while (token);
+
+            Sort(items, [](const auto& a, const auto& b) {
+                return a.Src < b.Src;
+            });
+
+            THashSet<TString> seen;
+            for (auto& item : items) {
+                TStringBuf key = item.Src;
+                // try to skip /<index_name>/<indexImplTable>
+                key.RNextTok('/');
+                key.RNextTok('/');
+                if (seen.contains(key)) {
+                    continue;
+                }
+                seen.insert(TString{item.Src});
+                settings.AppendItem(std::move(item));
+            }
         }
     } catch (...) {
         ShutdownAwsAPI();
@@ -263,6 +337,7 @@ TSettings TCommandImportFromS3::MakeSettings() {
         }
 
         settings.NumberOfRetries(NumberOfRetries);
+        settings.IndexPopulationMode(IndexPopulationMode);
         settings.NoACL(NoACL);
         settings.SkipChecksumValidation(SkipChecksumValidation);
 
@@ -285,7 +360,7 @@ static int PrintListObjectResultPretty(const NImport::TListObjectsInS3ExportResu
 }
 
 static int PrintListObjectResultProtoJsonBase64(const NImport::TListObjectsInS3ExportResult& result) {
-    return PrintProtoJsonBase64(TProtoAccessor::GetProto(result));
+    return PrintProtoJsonBase64(TProtoAccessor::GetProto(result), Cout);
 }
 
 static int PrintListObjectResult(const NImport::TListObjectsInS3ExportResult& result, EDataFormat format) {
@@ -479,7 +554,7 @@ void TCommandImportFromCsv::Config(TConfig& config) {
         .StoreTrue(&NewlineDelimited);
     TStringStream description;
     description << "Format that data will be serialized to before sending to YDB. Available options: ";
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     description << "\n  " << colors.BoldColor() << "tvalue" << colors.OldColor()
         << "\n    " << "A default YDB protobuf format";
     description << "\n  " << colors.BoldColor() << "arrow" << colors.OldColor()

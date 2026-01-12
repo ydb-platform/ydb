@@ -5,8 +5,6 @@
 namespace NSQLTranslationV1 {
 
 struct TLexers {
-    NSQLTranslation::TLexerFactoryPtr Antlr3;
-    NSQLTranslation::TLexerFactoryPtr Antlr3Ansi;
     NSQLTranslation::TLexerFactoryPtr Antlr4;
     NSQLTranslation::TLexerFactoryPtr Antlr4Ansi;
     NSQLTranslation::TLexerFactoryPtr Antlr4Pure;
@@ -21,6 +19,10 @@ enum class ELexerFlavor {
     Regex,
 };
 
+NSQLTranslation::ILexer::TPtr MakeLexer(
+    const TLexers& lexers, bool ansi, ELexerFlavor flavor = ELexerFlavor::Default);
+
+// TODO(YQL-19017): remove.
 NSQLTranslation::ILexer::TPtr MakeLexer(
     const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor = ELexerFlavor::Default);
 

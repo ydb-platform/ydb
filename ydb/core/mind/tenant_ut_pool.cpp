@@ -57,7 +57,8 @@ void CheckLabels(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     allServices.insert(attrServices.begin(), attrServices.end());
 
     for (auto &service : allServices) {
-        THashSet<TString> allLabels = GetDatabaseAttributeLabels();
+        const TVector<TString>& attrLabelNames = GetDatabaseAttributeLabels();
+        THashSet<TString> allLabels(attrLabelNames.begin(), attrLabelNames.end());
         allLabels.insert(DATABASE_LABEL);
         allLabels.insert(SLOT_LABEL);
 

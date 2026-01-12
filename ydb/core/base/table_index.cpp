@@ -67,6 +67,14 @@ constexpr std::string_view GlobalFulltextImplTables[] = {
 };
 static_assert(std::is_sorted(std::begin(GlobalFulltextImplTables), std::end(GlobalFulltextImplTables)));
 
+constexpr std::string_view GlobalFulltextWithRelevanceImplTables[] = {
+    NFulltext::DictTable,
+    NFulltext::DocsTable,
+    NFulltext::StatsTable,
+    ImplTable,
+};
+static_assert(std::is_sorted(std::begin(GlobalFulltextWithRelevanceImplTables), std::end(GlobalFulltextWithRelevanceImplTables)));
+
 bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -113,7 +121,7 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
     return result;
 }
 
-NKikimrSchemeOp::EIndexType GetIndexType(NKikimrSchemeOp::TIndexCreationConfig indexCreation) {
+NKikimrSchemeOp::EIndexType GetIndexType(const NKikimrSchemeOp::TIndexCreationConfig& indexCreation) {
     // TODO: always provide EIndexTypeGlobal value instead of null
     // TODO: do not cast unknown index types to EIndexTypeGlobal (proto2 specific)
     return indexCreation.HasType()
@@ -123,6 +131,30 @@ NKikimrSchemeOp::EIndexType GetIndexType(NKikimrSchemeOp::TIndexCreationConfig i
 
 TString InvalidIndexType(NKikimrSchemeOp::EIndexType indexType) {
     return TStringBuilder() << "Invalid index type " << static_cast<int>(indexType);
+}
+
+std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::TableIndex::TypeCase type) {
+    switch (type) {
+        case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
+        case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobal;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalAsyncIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalAsync;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalUnique;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalFulltext;
+        default:
+            return std::nullopt;
+    }
+}
+
+NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase type) {
+    const auto result = TryConvertIndexType(type);
+    Y_ENSURE(result);
+    return *result;
 }
 
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain) {
@@ -224,7 +256,11 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
     }
 }
 
-std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType indexType, std::span<const TString> indexKeys) {
+std::span<const std::string_view> GetImplTables(
+        NKikimrSchemeOp::EIndexType indexType,
+        std::span<const TString> indexKeys,
+        std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout)
+{
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -237,10 +273,18 @@ std::span<const std::string_view> GetImplTables(NKikimrSchemeOp::EIndexType inde
                 return PrefixedGlobalKMeansTreeImplTables;
             }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-            return GlobalFulltextImplTables;
+            Y_ENSURE(layout);
+            return GetFulltextImplTables(*layout);
         default:
             Y_ENSURE(false, InvalidIndexType(indexType));
     }
+}
+
+std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout) {
+    if (layout == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        return GlobalFulltextWithRelevanceImplTables;
+    }
+    return GlobalFulltextImplTables;
 }
 
 bool IsImplTable(std::string_view tableName) {
@@ -317,6 +361,14 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvValidateUniqueIndexRespo
     // keys are not human readable and contain user data
     copy.ClearFirstIndexKey();
     copy.ClearLastIndexKey();
+    return copy.ShortDebugString();
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvFilterKMeansResponse& record) {
+    auto copy = record;
+    // keys are not human readable and contain user data
+    copy.ClearFirstKeyRows();
+    copy.ClearLastKeyRows();
     return copy.ShortDebugString();
 }
 

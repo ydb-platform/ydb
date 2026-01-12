@@ -127,7 +127,7 @@ struct TCombinerNodes {
     }
 
     bool IsInputItemNodeUsed(size_t i) const {
-        return (ItemNodes[i]->GetDependencesCount() > 0U || PasstroughtItems[i]);
+        return (ItemNodes[i]->GetDependentsCount() > 0U || PasstroughtItems[i]);
     }
 
     NUdf::TUnboxedValue* GetUsedInputItemNodePtrOrNull(TComputationContext& ctx, size_t i) const {
@@ -1111,7 +1111,7 @@ public:
 
                 do {
                     for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
-                        if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i]) {
+                        if (Nodes.ItemNodes[i]->GetDependentsCount() > 0U || Nodes.PasstroughtItems[i]) {
                             fields[i] = &Nodes.ItemNodes[i]->RefValue(ctx);
                         }
                     }
@@ -1282,7 +1282,7 @@ public:
 
             std::vector<Value*> items(Nodes.ItemNodes.size(), nullptr);
             for (ui32 i = 0U; i < items.size(); ++i) {
-                if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U) {
+                if (Nodes.ItemNodes[i]->GetDependentsCount() > 0U) {
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
                 } else if (Nodes.PasstroughtItems[i]) {
                     items[i] = getres.second[i](ctx, block);
@@ -1306,7 +1306,7 @@ public:
                     key = GetNodeValue(Nodes.KeyResultNodes[i], ctx, block);
                 }
 
-                if (Nodes.KeyNodes[i]->GetDependencesCount() > 0U) {
+                if (Nodes.KeyNodes[i]->GetDependentsCount() > 0U) {
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.KeyNodes[i])->CreateSetValue(ctx, block, key);
                 }
 
@@ -1368,7 +1368,7 @@ public:
 
             std::vector<Value*> stored(Nodes.StateNodes.size(), nullptr);
             for (ui32 i = 0U; i < stored.size(); ++i) {
-                const bool hasDependency = Nodes.StateNodes[i]->GetDependencesCount() > 0U;
+                const bool hasDependency = Nodes.StateNodes[i]->GetDependentsCount() > 0U;
                 if (const auto map = Nodes.StateOnUpdate[i]) {
                     if (hasDependency || i != *map) {
                         stored[i] = new LoadInst(valueType, pointers[i], (TString("state_") += ToString(i)).c_str(), block);
@@ -1461,7 +1461,7 @@ public:
 
             for (ui32 i = 0U; i < Nodes.FinishNodes.size(); ++i) {
                 const auto ptr = GetElementPtrInst::CreateInBounds(valueType, out, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("out_key_") += ToString(i)).c_str(), block);
-                if (Nodes.FinishNodes[i]->GetDependencesCount() > 0 || Nodes.ItemsOnResult[i]) {
+                if (Nodes.FinishNodes[i]->GetDependentsCount() > 0 || Nodes.ItemsOnResult[i]) {
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.FinishNodes[i])->CreateSetValue(ctx, block, ptr);
                 } else {
                     ValueUnRef(Nodes.FinishNodes[i]->GetRepresentation(), ptr, ctx, block);
@@ -1717,7 +1717,7 @@ public:
             if (phis[i]) {
                 items[i] = new LoadInst(valueType, ptr, (TString("load_") += ToString(i)).c_str(), block);
             }
-            if (i < Nodes.ItemNodes.size() && Nodes.ItemNodes[i]->GetDependencesCount() > 0U) {
+            if (i < Nodes.ItemNodes.size() && Nodes.ItemNodes[i]->GetDependentsCount() > 0U) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
             }
         }
@@ -1751,7 +1751,7 @@ public:
             if (phis[i]) {
                 items[i] = getres.second[i](ctx, block);
             }
-            if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U) {
+            if (Nodes.ItemNodes[i]->GetDependentsCount() > 0U) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.ItemNodes[i])->CreateSetValue(ctx, block, items[i]);
             }
         }
@@ -1779,7 +1779,7 @@ public:
                 key = GetNodeValue(Nodes.KeyResultNodes[i], ctx, block);
             }
 
-            if (Nodes.KeyNodes[i]->GetDependencesCount() > 0U) {
+            if (Nodes.KeyNodes[i]->GetDependentsCount() > 0U) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.KeyNodes[i])->CreateSetValue(ctx, block, key);
             }
 
@@ -1836,7 +1836,7 @@ public:
 
         std::vector<Value*> stored(Nodes.StateNodes.size(), nullptr);
         for (ui32 i = 0U; i < stored.size(); ++i) {
-            const bool hasDependency = Nodes.StateNodes[i]->GetDependencesCount() > 0U;
+            const bool hasDependency = Nodes.StateNodes[i]->GetDependentsCount() > 0U;
             if (const auto map = Nodes.StateOnUpdate[i]) {
                 if (hasDependency || i != *map) {
                     stored[i] = new LoadInst(valueType, pointers[i], (TString("state_") += ToString(i)).c_str(), block);
@@ -1900,7 +1900,7 @@ public:
 
         for (ui32 i = 0U; i < Nodes.FinishNodes.size(); ++i) {
             const auto ptr = GetElementPtrInst::CreateInBounds(valueType, out, {ConstantInt::get(Type::getInt32Ty(context), i)}, (TString("out_key_") += ToString(i)).c_str(), block);
-            if (Nodes.FinishNodes[i]->GetDependencesCount() > 0 || Nodes.ItemsOnResult[i]) {
+            if (Nodes.FinishNodes[i]->GetDependentsCount() > 0 || Nodes.ItemsOnResult[i]) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Nodes.FinishNodes[i])->CreateSetValue(ctx, block, ptr);
             } else {
                 ValueUnRef(Nodes.FinishNodes[i]->GetRepresentation(), ptr, ctx, block);

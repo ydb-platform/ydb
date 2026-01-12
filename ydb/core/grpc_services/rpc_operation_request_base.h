@@ -22,6 +22,9 @@ class TRpcOperationRequestActor: public TRpcRequestActor<TDerived, TEvRequest, H
 protected:
     virtual TStringBuf GetLogPrefix() const = 0;
     virtual IEventBase* MakeRequest() = 0;
+    virtual ui32 GetRequiredAccessRights() const {
+        return NACLib::GenericRead | NACLib::GenericWrite;
+    }
 
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
@@ -88,7 +91,7 @@ protected:
             }
         }
 
-        if (!this->CheckAccess(CanonizePath(entry.Path), entry.SecurityObject, NACLib::GenericRead | NACLib::GenericWrite)) {
+        if (!this->CheckAccess(CanonizePath(entry.Path), entry.SecurityObject, GetRequiredAccessRights())) {
             return;
         }
 

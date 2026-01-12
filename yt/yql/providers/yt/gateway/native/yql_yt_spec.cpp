@@ -559,6 +559,10 @@ void FillSpec(NYT::TNode& spec,
         }
         spec["additional_security_tags"] = std::move(secTagsNode);
     }
+
+    if (auto val = settings->ValidatePool.Get(cluster)) {
+        spec["require_specified_pools_existence"] = *val;
+    }
 }
 
 void CheckSpecForSecretsImpl(

@@ -245,7 +245,13 @@ def _async_fetch_pile_list(path_to_cli: str, endpoints: List[str], executor: Thr
     return executor.submit(worker)
 
 
-def _async_pile_health_check(path_to_cli: str, pile_name: str, endpoints, executor: ThreadPoolExecutor) -> Future:
+def _async_pile_health_check(
+        path_to_cli: str,
+        pile_name: str,
+        endpoints,
+        executor: ThreadPoolExecutor,
+        ydb_auth_opts: Optional[List[str]] = None,
+) -> Future:
     def filter_pile_issue(issue):
         try:
             type = issue["type"]
@@ -273,12 +279,12 @@ def _async_pile_health_check(path_to_cli: str, pile_name: str, endpoints, execut
 
         return EndpointHealthCheckResult(self_check_result, bad_piles)
 
-    def fetch_health(path_to_cli, endpoint: str) -> Optional[Tuple[str, Dict[str, Any]]]:
+    def fetch_health(path_to_cli, endpoint: str, ydb_auth_opts: Optional[List[str]) -> Optional[Tuple[str, Dict[str, Any]]]:
         try:
             start_ts = time.monotonic()
             cmd = ["-d", "", "monitoring", "healthcheck", "-v", "--format=json", "--no-merge", "--no-cache"]
             cmd += ["--timeout", str(YDB_HEALTHCHECK_TIMEOUT_MS)]
-            result = execute_cli_command(path_to_cli, cmd, [endpoint,])
+            result = execute_cli_command(path_to_cli, cmd, [endpoint,], ydb_auth_opts=ydb_auth_opts)
             if result is None:
                 return None
             data = json.loads(result.stdout.decode())
@@ -296,7 +302,7 @@ def _async_pile_health_check(path_to_cli: str, pile_name: str, endpoints, execut
         if not endpoints:
             return PileHealth(pile_name, {})
 
-        future_map = {executor.submit(fetch_health, path_to_cli, endpoint): endpoint for endpoint in endpoints}
+        future_map = {executor.submit(fetch_health, path_to_cli, endpoint, ydb_auth_opts): endpoint for endpoint in endpoints}
         for f in as_completed(list(future_map.keys())):
             try:
                 res = f.result()
@@ -442,7 +448,12 @@ class AsyncHealthcheckRunner:
 
             logger.trace(f"Running health check of {pile_name} using {endpoints}")
 
-            future = _async_pile_health_check(self.path_to_cli, pile_name, endpoints, self._executor)
+            future = _async_pile_health_check(
+                self.path_to_cli,
+                pile_name,
+                endpoints,
+                self._executor,
+                self.ydb_auth_opts)
             future_to_pile[future] = pile_name
 
         # TODO: we can break as soon as have quorum, but for now and for simplicity

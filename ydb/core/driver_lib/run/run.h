@@ -33,6 +33,7 @@ struct TGRpcServersWrapper {
     TGRpcServers Servers;
     TGRpcServersFactory GrpcServersFactory;
     TMutex Mutex;
+    std::atomic<bool> IsDisabled = false;
 
     TGuard<TMutex> Guard() {
         return TGuard<TMutex>(Mutex);
@@ -58,6 +59,7 @@ protected:
     bool GracefulShutdownSupported = false;
     TDuration MinDelayBeforeShutdown;
     TDuration DrainTimeout;
+    TDuration CheckForStopInterval;
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
 
     THolder<NYdb::TDriver> YdbDriver;
@@ -85,6 +87,16 @@ protected:
     virtual ~TKikimrRunner();
 
     virtual void InitializeRegistries(const TKikimrRunConfig& runConfig);
+
+    /**
+     * Initializes the XDS bootstrap configuration for the runner.
+     * This method should be called during the startup sequence, before any components
+     * that depend on XDS configuration are initialized. It reads the relevant settings
+     * from the provided runConfig and sets up the XDS bootstrap environment accordingly.
+     * This is necessary for enabling gRPC XDS features such as dynamic service discovery
+     * and load balancing.
+     */
+    void InitializeXdsBootstrapConfig(const TKikimrRunConfig& runConfig);
 
     void InitializeAllocator(const TKikimrRunConfig& runConfig);
 

@@ -13,6 +13,7 @@ from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.message import Message
 from textual.reactive import var
+from textual.timer import Timer
 from textual.widgets import Static
 from textual.widgets._option_list import Option, OptionList
 
@@ -59,6 +60,57 @@ class SelectOverlay(OptionList):
         option_index: int
         """The index of the new selection."""
 
+    def __init__(self, type_to_search: bool = True) -> None:
+        super().__init__()
+        self._type_to_search = type_to_search
+        """If True (default), the user can type to search for a matching option and the cursor will jump to it."""
+
+        self._search_query: str = ""
+        """The current search query used to find a matching option and jump to it."""
+
+        self._search_reset_delay: float = 0.7
+        """The number of seconds to wait after the most recent key press before resetting the search query."""
+
+    def on_mount(self) -> None:
+        def reset_query() -> None:
+            self._search_query = ""
+
+        self._search_reset_timer = Timer(
+            self, self._search_reset_delay, callback=reset_query
+        )
+
+    def watch_has_focus(self, value: bool) -> None:
+        self._search_query = ""
+        if value:
+            self._search_reset_timer._start()
+        else:
+            self._search_reset_timer.reset()
+            self._search_reset_timer.stop()
+        super().watch_has_focus(value)
+
+    async def _on_key(self, event: events.Key) -> None:
+        if not self._type_to_search:
+            return
+
+        self._search_reset_timer.reset()
+
+        if event.character is not None and event.is_printable:
+            event.time = 0
+            event.stop()
+            event.prevent_default()
+
+            # Update the search query and jump to the next option that matches.
+            self._search_query += event.character
+            index = self._find_search_match(self._search_query)
+            if index is not None:
+                self.select(index)
+
+    def check_consume_key(self, key: str, character: str | None = None) -> bool:
+        """Check if the widget may consume the given key."""
+        return (
+            self._type_to_search and character is not None and character.isprintable()
+        )
+
     def select(self, index: int | None) -> None:
         """Move selection.
 
@@ -66,7 +118,39 @@ class SelectOverlay(OptionList):
             index: Index of new selection.
         """
         self.highlighted = index
-        self.scroll_to_highlight(top=True)
+        self.scroll_to_highlight()
+
+    def _find_search_match(self, query: str) -> int | None:
+        """A simple substring search which favors options containing the substring
+        earlier in the prompt.
+
+        Args:
+            query: The substring to search for.
+
+        Returns:
+            The index of the option that matches the query, or `None` if no match is found.
+        """
+        best_match: int | None = None
+        minimum_index: int | None = None
+
+        query = query.lower()
+        for index, option in enumerate(self._options):
+            prompt = option.prompt
+            if isinstance(prompt, Text):
+                lower_prompt = prompt.plain.lower()
+            elif isinstance(prompt, str):
+                lower_prompt = prompt.lower()
+            else:
+                continue
+
+            match_index = lower_prompt.find(query)
+            if match_index != -1 and (
+                minimum_index is None or match_index < minimum_index
+            ):
+                best_match = index
+                minimum_index = match_index
+
+        return best_match
 
     def action_dismiss(self) -> None:
         """Dismiss the overlay."""
@@ -234,11 +318,9 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
             .down-arrow {
                 display: none;
             }
-
             .up-arrow {
                 display: block;
             }
-
             & > SelectOverlay {
                 display: block;
             }
@@ -297,6 +379,7 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
         prompt: str = "Select",
         allow_blank: bool = True,
         value: SelectType | NoSelection = BLANK,
+        type_to_search: bool = True,
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
@@ -315,6 +398,7 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
             value: Initial value selected. Should be one of the values in `options`.
                 If no initial value is set and `allow_blank` is `False`, the widget
                 will auto-select the first available option.
+            type_to_search: If `True`, typing will search for options.
             name: The name of the select control.
             id: The ID of the control in the DOM.
             classes: The CSS classes of the control.
@@ -329,6 +413,7 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
         self.prompt = prompt
         self._value = value
         self._setup_variables_for_options(options)
+        self._type_to_search = type_to_search
         if tooltip is not None:
             self.tooltip = tooltip
 
@@ -340,6 +425,7 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
         prompt: str = "Select",
         allow_blank: bool = True,
         value: SelectType | NoSelection = BLANK,
+        type_to_search: bool = True,
         name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
@@ -359,6 +445,7 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
             value: Initial value selected. Should be one of the values in `values`.
                 If no initial value is set and `allow_blank` is `False`, the widget
                 will auto-select the first available value.
+            type_to_search: If `True`, typing will search for options.
             name: The name of the select control.
             id: The ID of the control in the DOM.
             classes: The CSS classes of the control.
@@ -374,11 +461,24 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
             prompt=prompt,
             allow_blank=allow_blank,
             value=value,
+            type_to_search=type_to_search,
             name=name,
             id=id,
             classes=classes,
             disabled=disabled,
         )
+
+    @property
+    def selection(self) -> SelectType | None:
+        """The currently selected item.
+
+        Unlike [value][textual.widgets.Select.value], this will not return Blanks.
+        If nothing is selected, this will return `None`.
+
+        """
+        value = self.value
+        assert not isinstance(value, NoSelection)
+        return value
 
     def _setup_variables_for_options(
         self,
@@ -404,7 +504,7 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
 
     def _setup_options_renderables(self) -> None:
         """Sets up the `Option` renderables associated with the `Select` options."""
-        self._select_options: list[Option] = [
+        options: list[Option] = [
             (
                 Option(Text(self.prompt, style="dim"))
                 if value == self.BLANK
@@ -415,8 +515,7 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
 
         option_list = self.query_one(SelectOverlay)
         option_list.clear_options()
-        for option in self._select_options:
-            option_list.add_option(option)
+        option_list.add_options(options)
 
     def _init_selected_option(self, hint: SelectType | NoSelection = BLANK) -> None:
         """Initialises the selected option for the `Select`."""
@@ -487,7 +586,7 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
     def compose(self) -> ComposeResult:
         """Compose Select with overlay and current value."""
         yield SelectCurrent(self.prompt)
-        yield SelectOverlay()
+        yield SelectOverlay(type_to_search=self._type_to_search)
 
     def _on_mount(self, _event: events.Mount) -> None:
         """Set initial values."""
@@ -503,7 +602,7 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
             return
         self.set_class(expanded, "-expanded")
         if expanded:
-            overlay.focus()
+            overlay.focus(scroll_visible=False)
             if self.value is self.BLANK:
                 overlay.select(None)
                 self.query_one(SelectCurrent).has_value = False
@@ -538,12 +637,8 @@ class Select(Generic[SelectType], Vertical, can_focus=True):
         if value != self.value:
             self.value = value
 
-        async def update_focus() -> None:
-            """Update focus and reset overlay."""
-            self.focus()
-            self.expanded = False
-
-        self.call_after_refresh(update_focus)  # Prevents a little flicker
+        self.focus()
+        self.expanded = False
 
     def action_show_overlay(self) -> None:
         """Show the overlay."""

@@ -1,42 +1,25 @@
-#include "test_helpers.h"
-
 #include <ydb/library/workload/tpcc/task_queue.h>
 #include <ydb/library/workload/tpcc/terminal.h>
 
 #include <library/cpp/logger/log.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/core/coroutine_traits.h>
 
 #include <thread>
 
+using namespace NThreading;
 using namespace NYdb::NTPCC;
-using namespace NYdb::NTPCC::NTest;
-
-namespace std {
-    template<typename T, typename... Args>
-    struct coroutine_traits<NYdb::NTPCC::TTask<T>, Args...> {
-        using promise_type = typename NYdb::NTPCC::TTask<T>::TPromiseType;
-    };
-
-    template<typename... Args>
-    struct coroutine_traits<NYdb::NTPCC::TTask<void>, Args...> {
-        using promise_type = typename NYdb::NTPCC::TTask<void>::TPromiseType;
-    };
-} // namespace std
 
 Y_UNIT_TEST_SUITE(TTaskQueueTest) {
 
-    void WaitFor(TTerminalTask& task) {
-        while (!task.Handle.done()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
-    }
-
-    TTestTask MakeTransactionTask(int& counter) {
+    TFuture<void> MakeTransactionTask(int& counter) {
         counter++;
-        co_return TTestResult{};
+        co_return;
     }
 
-    TTerminalTask MakeTerminalTask(ITaskQueue& queue, int& transactionCounter, int& sleepCounter, size_t terminalId) {
+    TFuture<void> MakeTerminalTask(ITaskQueue& queue, int& transactionCounter, int& sleepCounter, size_t terminalId) {
+        co_await TTaskReady(queue, terminalId);
+
         // First sleep
         co_await TSuspend(queue, terminalId, std::chrono::milliseconds(10));
         sleepCounter++;
@@ -66,22 +49,23 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
         int sleepCounter = 0;
         const size_t terminalId = 1;
 
-        auto task = MakeTerminalTask(*queue, transactionCounter, sleepCounter, terminalId);
-        queue->TaskReady(task.Handle, terminalId);
         queue->Run();
 
-        WaitFor(task);
+        auto taskFuture = MakeTerminalTask(*queue, transactionCounter, sleepCounter, terminalId);
+        taskFuture.GetValueSync(); // should not throw
+
 
         UNIT_ASSERT_VALUES_EQUAL(transactionCounter, 2);
         UNIT_ASSERT_VALUES_EQUAL(sleepCounter, 3);
-        task.await_resume(); // should not throw
 
         queue->Join();
     }
 
-    TTerminalTask MakeTerminalTaskWithMultipleTransactions(
+    TFuture<void> MakeTerminalTaskWithMultipleTransactions(
         ITaskQueue& queue, int& transactionCounter, int& sleepCounter, size_t terminalId, int numTransactions)
     {
+        co_await TTaskReady(queue, terminalId);
+
         for (int i = 0; i < numTransactions; ++i) {
             // Sleep before each transaction
             co_await TSuspend(queue, terminalId, std::chrono::milliseconds(10));
@@ -103,26 +87,26 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
         const size_t terminalId = 1;
         const int numTransactions = 5;
 
-        auto task = MakeTerminalTaskWithMultipleTransactions(
-            *queue, transactionCounter, sleepCounter, terminalId, numTransactions);
-        queue->TaskReady(task.Handle, terminalId);
         queue->Run();
 
-        WaitFor(task);
+        auto taskFuture = MakeTerminalTaskWithMultipleTransactions(
+            *queue, transactionCounter, sleepCounter, terminalId, numTransactions);
+        taskFuture.GetValueSync(); // should not throw
 
         UNIT_ASSERT_VALUES_EQUAL(transactionCounter, numTransactions);
         UNIT_ASSERT_VALUES_EQUAL(sleepCounter, numTransactions);
-        task.await_resume(); // should not throw
 
         queue->Join();
     }
 
-    TTestTask MakeFailingTransactionTask() {
+    TFuture<void> MakeFailingTransactionTask() {
         throw std::runtime_error("Transaction failed");
-        co_return TTestResult{};
+        co_return;
     }
 
-    TTerminalTask MakeTerminalTaskWithFailingTransaction(ITaskQueue& queue, size_t terminalId) {
+    TFuture<void> MakeTerminalTaskWithFailingTransaction(ITaskQueue& queue, size_t terminalId) {
+        co_await TTaskReady(queue, terminalId);
+
         co_await TSuspend(queue, terminalId, std::chrono::milliseconds(10));
         co_await MakeFailingTransactionTask();
         co_return;
@@ -134,13 +118,10 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
 
         const size_t terminalId = 1;
 
-        auto task = MakeTerminalTaskWithFailingTransaction(*queue, terminalId);
-        queue->TaskReady(task.Handle, terminalId);
         queue->Run();
 
-        WaitFor(task);
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(task.await_resume(), std::runtime_error, "Transaction failed");
+        auto taskFuture = MakeTerminalTaskWithFailingTransaction(*queue, terminalId);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(taskFuture.GetValueSync(), std::runtime_error, "Transaction failed");
 
         queue->Join();
     }
@@ -153,20 +134,19 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
 
         std::vector<int> transactionCounters(numTerminals, 0);
         std::vector<int> sleepCounters(numTerminals, 0);
-        std::vector<TTerminalTask> tasks;
+        std::vector<TFuture<void>> taskFutures;
+
+        queue->Run();
 
         // Create and start multiple terminals
         for (int i = 0; i < numTerminals; ++i) {
-            tasks.push_back(MakeTerminalTaskWithMultipleTransactions(
+            taskFutures.push_back(MakeTerminalTaskWithMultipleTransactions(
                 *queue, transactionCounters[i], sleepCounters[i], i, 2));
-            queue->TaskReady(tasks.back().Handle, i);
         }
-        queue->Run();
 
         // Wait for all tasks to complete
-        for (auto& task : tasks) {
-            WaitFor(task);
-            task.await_resume(); // should not throw
+        for (size_t i = 0; i < taskFutures.size(); ++i) {
+            taskFutures[i].GetValueSync(); // should not throw
         }
 
         // Verify all terminals completed their work
@@ -186,43 +166,47 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
 
         int transactionCounter = 0;
         int sleepCounter = 0;
-        std::vector<TTerminalTask> tasks;
+        std::vector<TFuture<void>> taskFutures;
 
         // Create more tasks than queue limits
         for (size_t i = 0; i < maxTerminals + 1; ++i) {
-            tasks.push_back(MakeTerminalTask(*queue, transactionCounter, sleepCounter, i));
-            if (i < maxTerminals) {
-                queue->TaskReady(tasks.back().Handle, i);
-            } else {
-                UNIT_ASSERT_EXCEPTION_CONTAINS(
-                    queue->TaskReady(tasks.back().Handle, i),
-                    std::runtime_error,
-                    "Task queue is full: internal"
-                );
-            }
+            taskFutures.push_back(MakeTerminalTask(*queue, transactionCounter, sleepCounter, i));
         }
+
         queue->Run();
 
-        // Wait for tasks that were accepted
-        for (size_t i = 0; i < maxTerminals; ++i) {
-            WaitFor(tasks[i]);
-            tasks[i].await_resume(); // should not throw
+        // Wait for all tasks to complete
+        for (size_t i = 0; i < taskFutures.size(); ++i) {
+            taskFutures[i].Wait();
         }
+
+        size_t exceptionCount = 0;
+        for (size_t i = 0; i < taskFutures.size(); ++i) {
+            if (taskFutures[i].HasException()) {
+                ++exceptionCount;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(exceptionCount, 1);
 
         queue->Join();
     }
 
-    TTestTask MakeTransactionTaskWithInflight(ITaskQueue& queue, int& counter, size_t terminalId) {
+    TFuture<void> MakeTransactionTaskWithInflight(ITaskQueue& queue, int& counter, size_t terminalId) {
         // Use the new inflight control mechanism
         co_await TTaskHasInflight(queue, terminalId);
         counter++;
         // Simulate some work with a small delay
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         queue.DecInflight();
-        co_return TTestResult{};
+        co_return;
     }
 
-    TTerminalTask MakeTerminalTaskWithInflightControl(ITaskQueue& queue, int& transactionCounter, size_t terminalId, int numTransactions) {
+    TFuture<void> MakeTerminalTaskWithInflightControl(
+        ITaskQueue& queue, int& transactionCounter, size_t terminalId, int numTransactions)
+    {
+        co_await TTaskReady(queue, terminalId);
+
         for (int i = 0; i < numTransactions; ++i) {
             // Sleep before transaction
             co_await TSuspend(queue, terminalId, std::chrono::milliseconds(5));
@@ -241,20 +225,19 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
         auto queue = CreateTaskQueue(4, maxRunningTerminals, numTerminals, numTerminals, log);
 
         std::vector<int> transactionCounters(numTerminals, 0);
-        std::vector<TTerminalTask> tasks;
+        std::vector<TFuture<void>> taskFutures;
+
+        queue->Run();
 
         // Create terminals with inflight control
         for (int i = 0; i < numTerminals; ++i) {
-            tasks.push_back(MakeTerminalTaskWithInflightControl(
+            taskFutures.push_back(MakeTerminalTaskWithInflightControl(
                 *queue, transactionCounters[i], i, transactionsPerTerminal));
-            queue->TaskReady(tasks.back().Handle, i);
         }
-        queue->Run();
 
         // Wait for all tasks to complete
-        for (auto& task : tasks) {
-            WaitFor(task);
-            task.await_resume(); // should not throw
+        for (size_t i = 0; i < taskFutures.size(); ++i) {
+            taskFutures[i].GetValueSync(); // should not throw
         }
 
         // Verify all terminals completed their transactions
@@ -273,20 +256,19 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
         auto queue = CreateTaskQueue(4, maxRunningTerminals, numTerminals, numTerminals, log);
 
         std::vector<int> transactionCounters(numTerminals, 0);
-        std::vector<TTerminalTask> tasks;
+        std::vector<TFuture<void>> taskFutures;
+
+        queue->Run();
 
         // Create more terminals than the inflight limit
         for (int i = 0; i < numTerminals; ++i) {
-            tasks.push_back(MakeTerminalTaskWithInflightControl(
+            taskFutures.push_back(MakeTerminalTaskWithInflightControl(
                 *queue, transactionCounters[i], i, transactionsPerTerminal));
-            queue->TaskReady(tasks.back().Handle, i);
         }
-        queue->Run();
 
         // Wait for all tasks to complete
-        for (auto& task : tasks) {
-            WaitFor(task);
-            task.await_resume(); // should not throw
+        for (size_t i = 0; i < taskFutures.size(); ++i) {
+            taskFutures[i].GetValueSync(); // should not throw
         }
 
         // Verify all terminals completed their transactions despite the limit

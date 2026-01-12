@@ -1,6 +1,6 @@
 #include "partition_util.h"
-#include "partition_common.h"
 #include "partition_compactification.h"
+#include "partition_common.h"
 
 #include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
@@ -235,14 +235,14 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     }
 }
 
-void TPartition::Handle(NReadQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& /*ctx*/) {
+void TPartition::Handle(NQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr& ev, const TActorContext& /*ctx*/) {
     TabletCounters.Populate(*ev->Get()->AccountQuotaCounters.Get());
 }
 
 void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
     TSet<TString> important;
     for (const auto& consumer : Config.GetConsumers()) {
-        if (!consumer.GetImportant() && !(consumer.GetAvailabilityPeriodMs() > 0)) {
+        if (!IsImportant(consumer) && !(consumer.GetAvailabilityPeriodMs() > 0)) {
             continue;
         }
 
@@ -253,12 +253,12 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
             if (!ImporantOrExtendedAvailabilityPeriod(*userInfo) && userInfo->LabeledCounters) {
                 ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo->LabeledCounters->GetGroup()));
             }
-            UsersInfoStorage->SetImportant(*userInfo, consumer.GetImportant(), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()));
+            UsersInfoStorage->SetImportant(*userInfo, IsImportant(consumer), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()));
             continue;
         }
         if (!userInfo) {
             userInfo = &UsersInfoStorage->Create(
-                    ctx, consumer.GetName(), 0, consumer.GetImportant(), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()), "", 0, 0, 0, 0, 0, TInstant::Zero(), {}, false
+                    ctx, consumer.GetName(), 0, IsImportant(consumer), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()), "", 0, 0, 0, 0, 0, TInstant::Zero(), {}, false
             );
         }
         if (userInfo->Offset < (i64)GetStartOffset())
@@ -327,7 +327,7 @@ void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& 
     if (size_t count = GetUserActCount(ev->Get()->ClientId); count > MAX_USER_ACTS) {
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::OVERLOAD,
-            TStringBuilder() << "too big inflight: " << count, ev->Get()->IsInternal);
+            TStringBuilder() << "too big inflight: " << count, ev->Get()->IsInternal ? SelfId() : TActorId{});
         return;
     }
 
@@ -438,9 +438,8 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         ui32 count = blobs[pos].Count;
         ui16 partNo = blobs[pos].PartNo;
         ui16 internalPartsCount = blobs[pos].InternalPartsCount;
-        const TString& blobValue = blobs[pos].Value;
 
-        if (blobValue.empty()) { // this is ok. Means that someone requested too much data or retention race
+        if (blobs[pos].Empty()) { // this is ok. Means that someone requested too much data or retention race
             PQ_LOG_D("Not full answer here!");
             ui64 answerSize = answer->Response->ByteSize();
             if (userInfo && Destination != 0) {
@@ -455,11 +454,18 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             readResult->SetLastOffset(LastOffset);
             readResult->SetStartOffset(startOffset);
             readResult->SetEndOffset(endOffset);
-            return TReadAnswer{answerSize, std::move(answer)};
+            return TReadAnswer{
+                .Size = answerSize,
+                .Event = std::move(answer),
+                .IsInternal = IsInternal,
+                .ReplyTo = ReplyTo,
+            };
         }
-        AFL_ENSURE(blobValue.size() <= blobs[pos].Size)("value for offset", offset)("count", count)
-            ("size must be",  blobs[pos].Size)("got", (ui32)blobValue.size());
 
+        AFL_ENSURE(blobs[pos].RawValue.size() <= blobs[pos].Size)("value for offset", offset)("count", count)
+            ("size must be",  blobs[pos].Size)("got", blobs[pos].RawValue.size());
+
+        auto blobBatches = blobs[pos].GetBatches();
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
             Offset = offset;
             PartNo = partNo;
@@ -467,11 +473,14 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         AFL_ENSURE(offset <= Offset);
         AFL_ENSURE(offset < Offset || partNo <= PartNo);
         auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount);
-        ui64 firstHeaderOffset = GetFirstHeaderOffset(key, blobValue);
-        for (TBlobIterator it(key, blobValue); it.IsValid() && !needStop; it.Next()) {
-            TBatch batch = it.GetBatch();
+        ui64 firstHeaderOffset = blobBatches->front().GetOffset();
+
+        for (auto& batch : *blobBatches) {
+            if (needStop) {
+                break;
+            }
+
             auto& header = batch.Header;
-            batch.Unpack();
             ui64 trueOffset = blobs[pos].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
 
             ui32 pos = 0;
@@ -494,15 +503,6 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
-                Y_ABORT_UNLESS(PartNo == res.GetPartNo(), "%s",
-                               (TStringBuilder() <<
-                                "\npos=" << pos <<
-                                "\ni=" << i <<
-                                "\nOffset=" << Offset <<
-                                "\nPartNo=" << PartNo <<
-                                "\noffset=" << offset <<
-                                "\npartNo=" << res.GetPartNo()
-                               ).data());
                 AFL_ENSURE(PartNo == res.GetPartNo())("pos", pos)("i", i)("Offset", Offset)("PartNo", PartNo)("offset", offset)("partNo", res.GetPartNo());
 
                 if (userInfo) {
@@ -517,6 +517,10 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 if (res.IsLastPart()) {
                     PartNo = 0;
                     ++Offset;
+                    if (LastOffset && Offset >= LastOffset) {
+                        needStop = true;
+                        break;
+                    }
                 } else {
                     ++PartNo;
                 }
@@ -554,8 +558,10 @@ TReadAnswer TReadInfo::FormAnswer(
     if (HasError(blobResponse)) {
         Error = true;
         return TReadAnswer{
-            blobResponse.Error.ErrorStr.size(),
-            MakeHolder<TEvPQ::TEvError>(blobResponse.Error.ErrorCode, blobResponse.Error.ErrorStr, destination)
+            .Size = blobResponse.Error.ErrorStr.size(),
+            .Event = MakeHolder<TEvPQ::TEvError>(blobResponse.Error.ErrorCode, blobResponse.Error.ErrorStr, destination),
+            .IsInternal = IsInternal,
+            .ReplyTo = ReplyTo
         };
     }
 
@@ -645,29 +651,37 @@ TReadAnswer TReadInfo::FormAnswer(
 
             AddResultBlob(readResult, writeBlob, Offset);
             if (writeBlob.IsLastPart()) {
+                PartNo = 0;
                 ++Offset;
+            } else {
+                ++PartNo;
             }
             if (updateUsage(writeBlob)) {
+                break;
+            }
+            if (LastOffset && Offset >= LastOffset) {
                 break;
             }
         }
     }
 
-    readAnswer = AddBlobsFromBody(blobs,
-                                  CompactedBlobsCount, blobs.size(),
-                                  userInfo,
-                                  startOffset,
-                                  endOffset,
-                                  sizeLag,
-                                  tablet,
-                                  realReadOffset,
-                                  readResult,
-                                  answer,
-                                  needStop,
-                                  cnt, size, lastBlobSize,
-                                  ctx);
-    if (readAnswer) {
-        return std::move(*readAnswer);
+    if (!needStop && cnt < Count && size < Size) { // body blobs are fully processed and need to take more data
+        readAnswer = AddBlobsFromBody(blobs,
+                                      CompactedBlobsCount, blobs.size(),
+                                      userInfo,
+                                      startOffset,
+                                      endOffset,
+                                      sizeLag,
+                                      tablet,
+                                      realReadOffset,
+                                      readResult,
+                                      answer,
+                                      needStop,
+                                      cnt, size, lastBlobSize,
+                                      ctx);
+        if (readAnswer) {
+            return std::move(*readAnswer);
+        }
     }
 
     AFL_ENSURE(Offset <= (ui64)Max<i64>())("Offset is too big", Offset);
@@ -686,7 +700,12 @@ TReadAnswer TReadInfo::FormAnswer(
     readResult->SetStartOffset(startOffset);
     readResult->SetEndOffset(endOffset);
 
-    return {answerSize, std::move(answer), IsInternal};
+    return {
+        .Size = answerSize,
+        .Event = std::move(answer),
+        .IsInternal = IsInternal,
+        .ReplyTo = ReplyTo
+    };
 }
 
 void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ctx) {
@@ -697,7 +716,8 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
             ctx, nullptr, GetStartOffset(), res->Offset, Partition, nullptr,
             res->Destination, 0, TabletActorId, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User)
     );
-    ctx.Send(answer.IsInternal ? SelfId() : TabletActorId, answer.Event.Release());
+
+    ctx.Send(ReplyTo(res->Destination, answer.ReplyTo), answer.Event.Release());
     LOG_D(" waiting read cookie " << ev->Get()->Cookie
         << " partition " << Partition << " read timeout for " << res->User << " offset " << res->Offset);
     auto& userInfo = UsersInfoStorage->GetOrCreate(res->User, ctx);
@@ -706,13 +726,14 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     OnReadRequestFinished(res->Destination, answer.Size, res->User, ctx);
 }
 
-void CollectReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
+void CollectReadRequestFromBody(ui64 startOffset, const ui16 partNo, const ui32 maxCount,
                                 const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
                                 TBlobKeyTokens* blobKeyTokens,
                                 TPartitionBlobEncoder& zone,
                                 TVector<TRequestedBlob>& result)
 {
     AFL_ENSURE(rcount && rsize);
+    startOffset = Max(startOffset, zone.DataKeysBody.empty() ? zone.StartOffset : zone.DataKeysBody.front().Key.GetOffset());
     auto blobs = zone.GetBlobsFromBody(startOffset,
                                        partNo,
                                        maxCount,
@@ -771,14 +792,16 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
 
+    auto replyTo = ReplyTo(read->Cookie, read->ReplyTo);
+
     if (read->Count == 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, "no infinite flows allowed - count is not set or 0",
-                   ev->Get()->IsInternal);
+                   replyTo);
         return;
     }
-    if (read->Offset < GetStartOffset() && !read->IsInternal) {
+    if (read->Offset < GetStartOffset() && !read->IsInternal()) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_SMALL_OFFSET].Increment(1);
         read->Offset = GetStartOffset();
         if (read->PartNo > 0) {
@@ -793,7 +816,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             ctx, read->Cookie,
             NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
             "client requested not from first part, and this part is lost",
-            ev->Get()->IsInternal);
+            replyTo);
         return;
       }
     }
@@ -809,7 +832,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
                                       TStringBuilder() << "trying to read from future. ReadOffset " <<
                                       read->Offset << ", " << read->PartNo << " EndOffset " << GetEndOffset(),
-                                      ev->Get()->IsInternal);
+                                      replyTo);
         return;
     }
 
@@ -822,7 +845,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);
             TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
             ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
-                TStringBuilder() << "no such session '" << read->SessionId << "'", ev->Get()->IsInternal);
+                TStringBuilder() << "no such session '" << read->SessionId << "'", replyTo);
             return;
         }
     }
@@ -857,17 +880,17 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
     TReadInfo info(
             user, read->ClientDC, offset, read->LastOffset, read->PartNo, read->Count, read->Size, read->Cookie, read->ReadTimestampMs,
-            waitQuotaTime, read->ExternalOperation, userInfo->PipeClient, read->IsInternal
+            waitQuotaTime, read->ExternalOperation, userInfo->PipeClient, read->IsInternal(), read->ReplyTo
     );
 
     ui64 cookie = NextReadCookie();
 
     LOG_D("read cookie " << cookie << " Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
                 << " user " << user
-                << " offset " << read->Offset << " count " << read->Count << " size " << read->Size << " endOffset " << GetEndOffset()
+                << " offset " << read->Offset << " partno " << read->PartNo << " count " << read->Count << " size " << read->Size << " endOffset " << GetEndOffset()
                 << " max time lag " << read->MaxTimeLagMs << "ms effective offset " << offset);
 
-    if (offset == GetEndOffset()) {
+    if (offset == GetEndOffset() && !(read->Timeout == 0 && read->IsInternal())) { // Why? If read timeout = 0 we wait?
         const ui32 maxTimeout = IsActive() ? 30000 : 1000;
         if (read->Timeout > maxTimeout) {
             if (IsActive()) {
@@ -886,9 +909,9 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         return;
     }
 
-    if (offset >= GetEndOffset()) {
+    if (offset > GetEndOffset()) {
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << GetEndOffset(), read->IsInternal);
+            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << GetEndOffset(), ReplyTo(read->Cookie, read->ReplyTo));
         return;
     }
 
@@ -897,7 +920,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
 void TPartition::OnReadRequestFinished(ui64 cookie, ui64 answerSize, const TString& consumer, const TActorContext& ctx) {
     AvgReadBytes.Update(answerSize, ctx.Now());
-    Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumed(answerSize, cookie, consumer));
+    Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumed(answerSize, 0, cookie, consumer));
 }
 
 void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo, const TActorContext& ctx) {
@@ -1072,14 +1095,6 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     GetReadRequestFromCompactedBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
                                     &info.BlobKeyTokens, blobs);
     info.CompactedBlobsCount = blobs.size();
-    GetReadRequestFromFastWriteBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
-                                    &info.BlobKeyTokens, blobs);
-
-    info.Blobs = blobs;
-    ui64 lastOffset = blobs.empty() ? info.Offset : blobs.back().Key.GetOffset();
-
-    LOG_D("read cookie " << cookie << " added " << info.Blobs.size()
-                << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << GetEndOffset());
 
     if (blobs.empty() ||
         ((info.CompactedBlobsCount > 0) && (blobs[info.CompactedBlobsCount - 1].Key == CompactionBlobEncoder.DataKeysBody.back().Key))) { // read from head only when all blobs from body processed
@@ -1090,6 +1105,15 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         );
         info.CachedOffset = insideHeadOffset;
     }
+
+    GetReadRequestFromFastWriteBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
+                                    &info.BlobKeyTokens, blobs);
+
+    info.Blobs = blobs;
+    ui64 lastOffset = blobs.empty() ? info.Offset : blobs.back().Key.GetOffset();
+
+    LOG_D("read cookie " << cookie << " added " << info.Blobs.size()
+                << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << GetEndOffset());
 
     PQ_ENSURE(info.BlobKeyTokens.Size() == info.Blobs.size());
     if (info.Destination != 0) {

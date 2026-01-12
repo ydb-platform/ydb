@@ -109,7 +109,7 @@ public:
 
     void Init(const TScheme& scheme) override {
         Y_UNUSED(scheme);
-        Y_ENSURE("Not supported by flat db wrapper");
+        Y_ENSURE(false, "Not supported by flat db wrapper");
     }
 
     const TScheme& GetScheme() const override {
@@ -118,7 +118,7 @@ public:
 
     TString FinishTransaction(bool commit) override {
         Y_UNUSED(commit);
-        Y_ENSURE("Not supported by flat db wrapper");
+        Y_ENSURE(false, "Not supported by flat db wrapper");
         return "42";
     }
 
@@ -130,7 +130,7 @@ public:
     void Precharge(ui32 root,
                            TRawVals keyFrom, TRawVals keyTo,
                            TTagsRef tags, ui32 flags) override {
-        bool res = Db->Precharge(root, keyFrom, keyTo, tags, flags, -1, -1);
+        bool res = Db->Precharge(root, keyFrom, keyTo, tags, flags, -1, -1).Ready;
         if (!res)
             throw TIteratorNotReady();
     }

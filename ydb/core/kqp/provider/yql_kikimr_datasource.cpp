@@ -116,9 +116,9 @@ private:
         TExprBase currentNode(node);
         if (auto maybeReadTable = currentNode.Maybe<TKiReadTable>()) {
             auto readTable = maybeReadTable.Cast();
-            for (auto setting : readTable.Settings()) {
-                auto name = setting.Name().Value();
-                if (name == "sysViewRewritten") {
+            for (auto setting : readTable.Settings().Ref().ChildrenList()) {
+                auto maybeTuple = TMaybeNode<TCoNameValueTuple>(setting);
+                if (maybeTuple && maybeTuple.Cast().Name().Value() == "sysViewRewritten"sv) {
                     sysViewRewritten = true;
                 }
             }
@@ -759,6 +759,7 @@ public:
         const TString tablePath = key.GetTablePath();
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, tablePath);
         if (key.GetKeyType() == TKikimrKey::Type::Table) {
+            YQL_ENSURE(tableDesc.Metadata);
             if (tableDesc.Metadata->Kind == EKikimrTableKind::External) {
                 if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
                     ctx.AddError(TIssue(node->Pos(ctx),
@@ -908,6 +909,7 @@ public:
                     .Build()
                 .Columns(result.Columns())
                 .RowsLimit().Build(ToString(rowsLimit))
+                .Discard(result.Discard())
                 .Done();
 
             auto newResults = ctx.ChangeChild(results.Ref(), index - startBlockIndex, newResult.Ptr());

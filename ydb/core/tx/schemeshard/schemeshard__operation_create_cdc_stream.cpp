@@ -4,7 +4,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -322,6 +321,13 @@ public:
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateCdcStream, streamPath.Base()->PathId);
+        txState.CdcPathId = streamPath.Base()->PathId;
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "DoNewStream: Set CdcPathId"
+                    << ", operationId: " << OperationId
+                    << ", cdcPathId: " << streamPath.Base()->PathId
+                    << ", streamName: " << streamPath.Base()->Name
+                    << ", at schemeshard: " << context.SS->SelfTabletId());
         txState.State = TTxState::Propose;
 
         streamPath.Base()->PathState = NKikimrSchemeOp::EPathStateCreate;
@@ -582,6 +588,18 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
+        
+        // Set CdcPathId for continuous backup detection
+        auto streamPath = tablePath.Child(streamName);
+        if (streamPath.IsResolved()) {
+            txState.CdcPathId = streamPath.Base()->PathId;
+            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TNewCdcStreamAtTable: Set CdcPathId"
+                        << ", operationId: " << OperationId
+                        << ", cdcPathId: " << streamPath.Base()->PathId
+                        << ", streamName: " << streamName
+                        << ", at schemeshard: " << context.SS->SelfTabletId());
+        }
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
         tablePath.Base()->LastTxId = OperationId.GetTxId();
@@ -984,7 +1002,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         DoCreateLock(result, opId, workingDirPath, tablePath);
     }
 
-    if (workingDirPath.IsTableIndex()) {
+    if (workingDirPath.IsTableIndex() && !streamName.EndsWith("_continuousBackupImpl")) {
         auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
         outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
         outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);

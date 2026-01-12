@@ -16,20 +16,20 @@
 // under the License.
 
 #include <cstring>
-#include "arrow/array/builder_nested.h"
-#include "arrow/array/builder_primitive.h"
-#include "arrow/array/builder_time.h"
-#include "arrow/array/builder_union.h"
-#include "arrow/compute/api.h"
-#include "arrow/compute/kernels/codegen_internal.h"
-#include "arrow/compute/kernels/copy_data_internal.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/bit_block_counter.h"
-#include "arrow/util/bit_run_reader.h"
-#include "arrow/util/bitmap.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/bitmap_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_nested.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_time.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_union.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/copy_data_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_block_counter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_run_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_reader.h"
 
 namespace arrow20 {
 

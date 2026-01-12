@@ -49,7 +49,7 @@ class NopHostsInformationProvider(HostsInformationProvider):
         return zlib.crc32(hostname.encode())
 
     def get_module(self, hostname):
-        return ""
+        return "FAKE"
 
 
 class WalleHostsInformationProvider(HostsInformationProvider):

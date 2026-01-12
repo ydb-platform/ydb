@@ -7,6 +7,15 @@ SRCS(
     kqp_rbo_rules.cpp
     kqp_convert_to_physical.cpp
     kqp_plan_conversion_utils.cpp
+    kqp_rbo_type_ann.cpp
+    kqp_rename_unused_stage.cpp
+    kqp_constant_folding_stage.cpp
+    kqp_rewrite_select.cpp
+    kqp_rbo_compute_statistics.cpp
+    kqp_rbo_statistics.cpp
+    kqp_rbo_dp_cost_based.cpp
+    kqp_prune_columns_stage.cpp
+    kqp_rbo_physical_aggregation_builder.cpp
 )
 
 PEERDIR(

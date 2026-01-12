@@ -1,141 +1,125 @@
 #!/usr/bin/env python3
 
-import configparser
 import datetime
 import os
+import sys
 import time
 import ydb
 
-
-dir = os.path.dirname(__file__)
-config = configparser.ConfigParser()
-config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
-config.read(config_file_path)
-
-DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
-DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
+# Add analytics directory to path for ydb_wrapper import
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
+from ydb_wrapper import YDBWrapper
 
 
-def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, branch):
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print(
-            "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
-        )
-        return {}
-    else:
-        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
-        # So, set up it locally
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        ]
+def get_test_history(test_names_array, days_back, build_type, branch):
+    """
+    Get test history for the specified number of days back.
+    
+    Args:
+        test_names_array: List of test full names (suite_folder/test_name)
+        days_back: Number of days to look back (instead of last N runs)
+        build_type: Build type filter (can be empty string for all)
+        branch: Branch filter (can be empty string for all)
+    
+    Returns:
+        Dictionary with test history: {test_name: {timestamp: {status, datetime, ...}}}
+    """
+    # Cap days_back to prevent performance issues
+    MAX_DAYS_BACK = 180
+    if days_back > MAX_DAYS_BACK:
+        print(f"Warning: days_back ({days_back}) exceeds maximum ({MAX_DAYS_BACK}), capping to {MAX_DAYS_BACK}")
+        days_back = MAX_DAYS_BACK
+    
+    with YDBWrapper() as ydb_wrapper:
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            print(f"Warning: YDB credentials not found, returning empty history")
+            return {}
 
-    results = {}
-    with ydb.Driver(
-        endpoint=DATABASE_ENDPOINT,
-        database=DATABASE_PATH,
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        driver.wait(timeout=10, fail_fast=True)
-        session = ydb.retry_operation_sync(
-            lambda: driver.table_client.session().create()
-        )
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        
+        print(f"Querying history for {len(test_names_array)} tests:")
+        print(f"  build_type: {build_type}")
+        print(f"  branch: {branch}")
+        print(f"  days_back: {days_back}")
+        
+        results = {}
         batch_size = 500
-        start_time = time.time()
+        
         for start in range(0, len(test_names_array), batch_size):
             test_names_batch = test_names_array[start:start + batch_size]
             history_query = f"""
-        PRAGMA AnsiInForEmptyOrNullableItemsCollections;
-        DECLARE $test_names AS List<Utf8>;
-        DECLARE $rn_max AS Int32;
-        DECLARE $build_type AS Utf8;
-        DECLARE $branch AS Utf8;
+    PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+    DECLARE $test_names AS List<Utf8>;
+    DECLARE $days_back AS Int32;
+    DECLARE $build_type AS Utf8;
+    DECLARE $branch AS Utf8;
 
-        $test_names = [{','.join("'{0}'".format(x) for x in test_names_batch)}];
-        $rn_max = {last_n_runs_of_test_amount};
-        $build_type = '{build_type}';
-        $branch = '{branch}';
+    $test_names = [{','.join("'{0}'".format(x) for x in test_names_batch)}];
+    $days_back = {days_back};
+    $build_type = '{build_type}';
+    $branch = '{branch}';
 
-        -- Оптимизированный запрос с учетом особенностей YDB
-        $filtered_tests = (
-            SELECT 
-                suite_folder || '/' || test_name AS full_name,
-                test_name,
-                build_type, 
-                commit, 
-                branch, 
-                run_timestamp, 
-                status, 
-                status_description,
-                job_id,
-                job_name,
-                ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS rn
-            FROM 
-                `test_results/test_runs_column` AS t
-            WHERE 
-                t.build_type = $build_type
-                AND t.branch = $branch
-                AND t.job_name IN (
-                    'Nightly-run',
-                    'Regression-run',
-                    'Regression-whitelist-run',
-                    'Postcommit_relwithdebinfo', 
-                    'Postcommit_asan'
-                )
-                AND t.status != 'skipped'
-                AND suite_folder || '/' || test_name IN $test_names
-        );
+    -- Query to get test history for the specified number of days
+    -- Results are ordered by test_name, then by run_timestamp DESC (newest first)
+    -- This order is expected by the UI which displays results from newest to oldest
+    SELECT 
+        suite_folder || '/' || test_name AS full_name,
+        test_name,
+        build_type, 
+        commit, 
+        branch, 
+        run_timestamp, 
+        status, 
+        status_description,
+        job_id,
+        job_name
+    FROM 
+        `{test_runs_table}` AS t
+    WHERE 
+        t.status != 'skipped'
+        AND suite_folder || '/' || test_name IN $test_names
+        AND t.run_timestamp > CurrentUtcDate() - $days_back * Interval("P1D")
+        AND ($build_type = '' OR t.build_type = $build_type)
+        AND ($branch = '' OR t.branch = $branch)
+        AND t.job_name != 'Run-tests'
+    ORDER BY 
+        test_name, 
+        run_timestamp DESC;
 
-        -- Финальный запрос с ограничением по количеству запусков
-        SELECT 
-            full_name,
-            test_name,
-            build_type, 
-            commit, 
-            branch, 
-            run_timestamp, 
-            status, 
-            status_description,
-            job_id,
-            job_name,
-            rn
-        FROM 
-            $filtered_tests
-        WHERE 
-            rn <= $rn_max
-        ORDER BY 
-            test_name, 
-            run_timestamp;
-
-    """
-            query = ydb.ScanQuery(history_query, {})
-            it = driver.table_client.scan_query(query)
-            query_result = []
-
-            while True:
-                try:
-                    result = next(it)
-                    query_result = query_result + result.result_set.rows
-                except StopIteration:
-                    break
-
+"""
+            query_result = ydb_wrapper.execute_scan_query(history_query)
+            
+            rows_found = 0
             for row in query_result:
-                if not row["full_name"].decode("utf-8") in results:
-                    results[row["full_name"].decode("utf-8")] = {}
+                rows_found += 1
+                full_name = row["full_name"].decode("utf-8") if isinstance(row["full_name"], bytes) else row["full_name"]
+                if full_name not in results:
+                    results[full_name] = {}
 
-                results[row["full_name"].decode("utf-8")][row["run_timestamp"]] = {
-                    "branch": row["branch"],
-                    "status": row["status"],
-                    "commit": row["commit"],
-                    "datetime": datetime.datetime.fromtimestamp(int(row["run_timestamp"] / 1000000)).strftime("%H:%m %B %d %Y"),
-                    "status_description": row["status_description"].replace(';;','\n'),
-                    "job_id": row["job_id"],
-                    "job_name": row["job_name"]
+                results[full_name][row["run_timestamp"]] = {
+                    "branch": row["branch"].decode("utf-8") if isinstance(row["branch"], bytes) else row["branch"],
+                    "status": row["status"].decode("utf-8") if isinstance(row["status"], bytes) else row["status"],
+                    "commit": row["commit"].decode("utf-8") if isinstance(row["commit"], bytes) else row["commit"],
+                    "datetime": datetime.datetime.fromtimestamp(int(row["run_timestamp"] / 1000000)).strftime("%Y-%m-%d %H:%M:%S"),
+                    "status_description": (row["status_description"].decode("utf-8") if isinstance(row["status_description"], bytes) else row["status_description"]).replace(';;','\n'),
+                    "job_id": row["job_id"].decode("utf-8") if isinstance(row["job_id"], bytes) else row["job_id"],
+                    "job_name": row["job_name"].decode("utf-8") if isinstance(row["job_name"], bytes) else row["job_name"]
                 }
-        end_time = time.time()
-        print(
-            f'durations of getting history for {len(test_names_array)} tests :{end_time-start_time} sec')
+            
+            if rows_found == 0:
+                print(f"  Warning: No rows found in YDB for batch {start // batch_size + 1}")
+                print(f"  This could mean:")
+                print(f"    - No data with build_type='{build_type}' and branch='{branch}' in last {days_back} days")
+                print(f"    - Test names don't match (check format: suite_folder/test_name)")
+        
+        print(f'Retrieved history: {len(results)} tests with data out of {len(test_names_array)} requested')
+        if results:
+            sample_test = list(results.keys())[0]
+            print(f"  Sample: {sample_test} has {len(results[sample_test])} runs")
         return results
 
 
 if __name__ == "__main__":
-    get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, branch)
+    get_test_history(test_names_array, days_back, build_type, branch)

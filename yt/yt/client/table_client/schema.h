@@ -122,7 +122,7 @@ public:
     DEFINE_BYREF_RO_PROPERTY(TLogicalTypePtr, LogicalType);
     DEFINE_BYREF_RO_PROPERTY(std::optional<ESortOrder>, SortOrder);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Lock);
-    DEFINE_BYREF_RO_PROPERTY(std::optional<TString>, Expression);
+    DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Expression);
     DEFINE_BYREF_RO_PROPERTY(std::optional<bool>, Materialized);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Aggregate);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Group);
@@ -191,6 +191,7 @@ private:
 void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStringBuf spec);
 
 void Serialize(const TColumnSchema& schema, NYson::IYsonConsumer* consumer);
+void Serialize(const TColumnSchema& schema, std::optional<std::string> constraint, NYson::IYsonConsumer* consumer);
 
 void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema);
 void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
@@ -210,6 +211,8 @@ public:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TDeletedColumn& schema, NYson::IYsonConsumer* consumer);
 
 void ToProto(NProto::TDeletedColumn* protoSchema, const TDeletedColumn& schema);
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema);
@@ -300,7 +303,10 @@ public:
     bool IsSorted() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
-    bool IsCGComparatorApplicable() const;
+
+    //! Checks if the first `keyColumnCount` columns
+    //! (or all if not specified) are suitable for codegen comparison.
+    bool IsCGComparatorApplicable(std::optional<int> keyColumnCount = std::nullopt) const;
 
     std::optional<int> GetTtlColumnIndex() const;
 

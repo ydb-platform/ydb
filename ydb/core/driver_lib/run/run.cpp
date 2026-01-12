@@ -64,9 +64,11 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
+#include <ydb/core/protos/recoveryshard_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
+#include <ydb/core/protos/data_integrity_trails.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -115,7 +117,8 @@
 #include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/fq/ydb_over_fq.h>
 #include <ydb/services/kesus/grpc_service.h>
-#include <ydb/services/keyvalue/grpc_service.h>
+#include <ydb/services/keyvalue/grpc_service_v1.h>
+#include <ydb/services/keyvalue/grpc_service_v2.h>
 #include <ydb/services/local_discovery/grpc_service.h>
 #include <ydb/services/maintenance/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
@@ -125,6 +128,7 @@
 #include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/replication/grpc_service.h>
+#include <ydb/services/test_shard/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/services/ydb/ydb_export.h>
@@ -147,6 +151,9 @@
 #include <library/cpp/sighandler/async_signals_handler.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/malloc/api/malloc.h>
+#include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <ydb/core/util/sig.h>
 #include <ydb/core/util/stlog.h>
@@ -176,10 +183,16 @@ namespace NKikimr {
 
 namespace {
 
-    void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper) {
+    void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
         auto wrapper = grpcServersWrapper.lock();
         if (!wrapper) {
             return;
+        }
+        if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
+            return;
+        }
+        if (isDisabled) {
+            wrapper->IsDisabled.store(true, std::memory_order_release);
         }
         TGuard<TMutex> guard = wrapper->Guard();
         for (auto& [name, server] : wrapper->Servers) {
@@ -190,7 +203,6 @@ namespace {
         }
         wrapper->Servers.clear();
     }
-
 }
 
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
@@ -264,6 +276,9 @@ public:
         if (!wrapper) {
             return;
         }
+        if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
+            return;
+        }
         TGuard<TMutex> guard = wrapper->Guard();
         wrapper->Servers = wrapper->GrpcServersFactory();
         for (auto& [name, server] : wrapper->Servers) {
@@ -316,6 +331,7 @@ public:
         hFunc(TEvStop, HandleStop)
         cFunc(TEvGRpcServersManager::EvDisconnectRequestStarted, HandleDisconnectRequestStarted)
         cFunc(TEvGRpcServersManager::EvDisconnectRequestFinished, HandleDisconnectRequestFinished)
+        cFunc(TEvents::TSystem::PoisonPill, PassAway)
     )
 };
 
@@ -597,10 +613,10 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.Certificate = appConfig.GetMonitoringConfig().GetMonitoringCertificate();
         monConfig.MaxRequestsPerSecond = appConfig.GetMonitoringConfig().GetMaxRequestsPerSecond();
         monConfig.InactivityTimeout = TDuration::Parse(appConfig.GetMonitoringConfig().GetInactivityTimeout());
-        if (appConfig.GetMonitoringConfig().HasMonitoringCertificateFile()) {
-            monConfig.Certificate = TUnbufferedFileInput(appConfig.GetMonitoringConfig().GetMonitoringCertificateFile()).ReadAll();
-        }
+        monConfig.CertificateFile = appConfig.GetMonitoringConfig().GetMonitoringCertificateFile();
+        monConfig.PrivateKeyFile = appConfig.GetMonitoringConfig().GetMonitoringPrivateKeyFile();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
+        monConfig.RequireCountersAuthentication = appConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
         if (includeHostName) {
             if (appConfig.HasNameserviceConfig() && appConfig.GetNameserviceConfig().NodeSize() > 0) {
                 for (const auto& it : appConfig.GetNameserviceConfig().GetNode()) {
@@ -669,12 +685,16 @@ static TString ReadFile(const TString& fileName) {
 void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig) {
     GracefulShutdownSupported = true;
     DrainTimeout = TDuration::Seconds(30);
+    CheckForStopInterval = TDuration::MilliSeconds(100);
     const auto& config = runConfig.AppConfig.GetShutdownConfig();
     if (config.HasMinDelayBeforeShutdownSeconds()) {
         MinDelayBeforeShutdown = TDuration::Seconds(config.GetMinDelayBeforeShutdownSeconds());
     }
     if (config.HasDrainTimeoutSeconds()) {
         DrainTimeout = TDuration::Seconds(config.GetDrainTimeoutSeconds());
+    }
+    if (config.HasCheckForStopIntervalMilliseconds()) {
+        CheckForStopInterval = TDuration::MilliSeconds(config.GetCheckForStopIntervalMilliseconds());
     }
 }
 
@@ -793,6 +813,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["config"] = &hasConfig;
         TServiceCfg hasBridge = services.empty();
         names["bridge"] = &hasBridge;
+        TServiceCfg hasTestShard = services.empty();
+        names["test_shard"] = &hasTestShard;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -1067,7 +1089,9 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         }
 
         if (hasKeyValue) {
-            server.AddService(new NGRpcService::TKeyValueGRpcService(ActorSystem.Get(), Counters,
+            server.AddService(new NGRpcService::TKeyValueGRpcServiceV1(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0]));
+            server.AddService(new NGRpcService::TKeyValueGRpcServiceV2(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0]));
         }
 
@@ -1092,6 +1116,10 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
 
         if (hasBridge) {
             server.AddService(new NGRpcService::TBridgeGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        }
+
+        if (hasTestShard) {
+            server.AddService(new NGRpcService::TTestShardGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (ModuleFactories) {
@@ -1262,6 +1290,74 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
     return grpcServers;
 }
 
+void TKikimrRunner::InitializeXdsBootstrapConfig(const TKikimrRunConfig& runConfig) {
+    class TXdsBootstrapConfigBuilder {
+    private:
+        ::NKikimrConfig::TGRpcConfig::TXdsBootstrap ConfigYaml;
+        TString JsonConfig;
+
+    public:
+        TXdsBootstrapConfigBuilder(const ::NKikimrConfig::TGRpcConfig::TXdsBootstrap& config)
+            : ConfigYaml(config)
+        {
+            NJson::TJsonValue xdsBootstrapConfigJson;
+            NProtobufJson::Proto2Json(ConfigYaml, xdsBootstrapConfigJson, {.FieldNameMode = NProtobufJson::TProto2JsonConfig::FldNameMode::FieldNameSnakeCaseDense});
+            BuildFieldNode(&xdsBootstrapConfigJson);
+            BuildFieldXdsServers(&xdsBootstrapConfigJson);
+            JsonConfig = NJson::WriteJson(xdsBootstrapConfigJson, false);
+        }
+
+        TString Build() const {
+            return JsonConfig;
+        }
+
+    private:
+        void BuildFieldNode(NJson::TJsonValue* const json) const {
+            NJson::TJsonValue& nodeJson = (*json)["node"];
+            if (ConfigYaml.GetNode().HasMeta()) {
+                // Message in protobuf can not contain field with name "metadata", so
+                // Create field "meta" with string in JSON format
+                // Convert string from field "meta" to JsonValue struct and write to field "metadata"
+                ConvertStringToJsonValue(nodeJson["meta"].GetString(), &nodeJson["metadata"]);
+                nodeJson.EraseValue("meta");
+            }
+        }
+
+        void BuildFieldXdsServers(NJson::TJsonValue* const json) const {
+            NJson::TJsonValue& xdsServersJson = *json;
+            NJson::TJsonValue::TArray xdsServers;
+            xdsServersJson["xds_servers"].GetArray(&xdsServers);
+            xdsServersJson.EraseValue("xds_servers");
+            for (auto& xdsServerJson : xdsServers) {
+                NJson::TJsonValue::TArray channelCreds;
+                xdsServerJson["channel_creds"].GetArray(&channelCreds);
+                xdsServerJson.EraseValue("channel_creds");
+                for (auto& channelCredJson : channelCreds) {
+                    if (channelCredJson.Has("config")) {
+                        ConvertStringToJsonValue(channelCredJson["config"].GetString(), &channelCredJson["config"]);
+                    }
+                    xdsServerJson["channel_creds"].AppendValue(channelCredJson);
+                }
+                xdsServersJson["xds_servers"].AppendValue(xdsServerJson);
+            }
+        }
+
+        void ConvertStringToJsonValue(const TString& jsonString, NJson::TJsonValue* const out) const {
+            NJson::TJsonReaderConfig jsonConfig;
+            if (!NJson::ReadJsonTree(jsonString, &jsonConfig, out)) {
+                Cerr << "Warning: Failed to parse JSON string in ConvertStringToJsonValue: \"" << jsonString << "\"" << Endl;
+                *out = NJson::TJsonValue();
+            }
+        }
+    };
+
+    static const TString XDS_BOOTSTRAP_ENV = "GRPC_XDS_BOOTSTRAP";
+    static const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
+    if (GetEnv(XDS_BOOTSTRAP_ENV).empty() && GetEnv(XDS_BOOTSTRAP_CONFIG_ENV).empty() && runConfig.AppConfig.GetGRpcConfig().HasXdsBootstrap()) {
+        SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, TXdsBootstrapConfigBuilder(runConfig.AppConfig.GetGRpcConfig().GetXdsBootstrap()).Build());
+    }
+}
+
 void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
     const auto& cfg = runConfig.AppConfig;
     const auto& allocConfig = cfg.GetAllocatorConfig();
@@ -1412,6 +1508,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->AwsCompatibilityConfig = runConfig.AppConfig.GetAwsCompatibilityConfig();
     }
 
+    if (runConfig.AppConfig.HasAwsClientConfig()) {
+        AppData->AwsClientConfig = runConfig.AppConfig.GetAwsClientConfig();
+    }
+
     if (runConfig.AppConfig.HasS3ProxyResolverConfig()) {
         AppData->S3ProxyResolverConfig = runConfig.AppConfig.GetS3ProxyResolverConfig();
     }
@@ -1461,6 +1561,14 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->SystemTabletBackupConfig = runConfig.AppConfig.GetSystemTabletBackupConfig();
     }
 
+    if (runConfig.AppConfig.HasDataIntegrityTrailsConfig()) {
+        AppData->DataIntegrityTrailsConfig = runConfig.AppConfig.GetDataIntegrityTrailsConfig();
+    }
+
+    if (runConfig.AppConfig.HasRecoveryShardConfig()) {
+        AppData->RecoveryShardConfig = runConfig.AppConfig.GetRecoveryShardConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1468,6 +1576,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.GetBootstrapConfig().HasEnableIntrospection())
         AppData->EnableIntrospection = runConfig.AppConfig.GetBootstrapConfig().GetEnableIntrospection();
+
+    if (runConfig.AppConfig.HasClusterDiagnosticsConfig()) {
+        AppData->ClusterDiagnosticsConfig.CopyFrom(runConfig.AppConfig.GetClusterDiagnosticsConfig());
+    }
 
     TAppDataInitializersList appDataInitializers;
     // setup domain info
@@ -1839,6 +1951,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new THealthCheckInitializer(runConfig));
     }
 
+    if (serviceMask.EnableCountersInfoProvider) {
+        sil->AddServiceInitializer(new TCountersInfoProviderInitializer(runConfig));
+    }
+
     if (serviceMask.EnableGRpcService) {
         sil->AddServiceInitializer(new TGRpcServicesInitializer(runConfig, ModuleFactories));
     }
@@ -2144,14 +2260,13 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         SqsHttp.Destroy();
     }
 
-    if (ActorSystem) {
-        ActorSystem->Stop();
-    }
-
     // stop processing grpc requests/response - we must stop feeding ActorSystem
     if (GRpcServersManager) {
-        StopGRpcServers(GRpcServersWrapper);
-        GRpcServersWrapper->Servers.clear();
+        StopGRpcServers(GRpcServersWrapper, true);
+    }
+
+    if (ActorSystem) {
+        ActorSystem->Stop();
     }
 
     if (YqSharedResources) {
@@ -2180,8 +2295,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 void TKikimrRunner::BusyLoop() {
     auto shouldContinueState = KikimrShouldContinue.PollState();
     while (shouldContinueState == TProgramShouldContinue::Continue) {
-        // TODO make this interval configurable
-        Sleep(TDuration::MilliSeconds(10));
+        Sleep(CheckForStopInterval);
         shouldContinueState = KikimrShouldContinue.PollState();
     }
 }
@@ -2256,6 +2370,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories) {
     TIntrusivePtr<TKikimrRunner> runner(new TKikimrRunner(factories));
+    runner->InitializeXdsBootstrapConfig(runConfig);
     runner->InitializeAllocator(runConfig);
     runner->InitializeRegistries(runConfig);
     runner->InitializeMonitoring(runConfig);

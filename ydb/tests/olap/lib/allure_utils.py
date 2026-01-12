@@ -73,10 +73,24 @@ def _set_node_errors(node_errors: list[NodeErrors]) -> str:
         if node.sanitizer_errors and node.node.host not in reported_sanitizer:
             host_errors[node.node.host]['sanitizer'] = f'SANitizer: {node.sanitizer_errors}'
             reported_sanitizer.add(node.node.host)
-        for core_id, core_hash in node.core_hashes:
+
+        for core_info in node.core_hashes:
+            core_id = core_info[0]
+            core_hash = core_info[1]
+
+            core_version = 'v2'
+            if len(core_info) == 3:
+                core_version = core_info[2]
+
             color = hex(0xFF0000 + hash(str(core_hash)) % 0xFFFF).split('x')[-1]
-            host_cores[node.node.host] += f'{node.node.slot.split(' @ ')[0]} - \
-<a target="_blank" href="https://coredumps.yandex-team.ru/core_trace?core_id={core_id}" style="background-color: #{color}">{core_hash}</a></br>'
+            if core_version == 'v2':
+                host_cores[node.node.host] += f'{node.node.slot.split(' @ ')[0]} - \
+    <a target="_blank" href="https://coredumps.yandex-team.ru/core_trace?core_id={core_id}" style="background-color: #{color}">{core_hash}</a></br>'
+            elif core_version == 'v3':
+                host_cores[node.node.host] += f'{node.node.slot.split(' @ ')[0]} - \
+    <a target="_blank" href="https://coredumps.yandex-team.ru/v3/cores/{core_id}" style="background-color: #{color}">{core_hash}</a></br>'
+            else:
+                host_cores[node.node.host] += f'{node.node.slot.split(" @ ")[0]} - <div style="background-color: #{color}">{core_hash}</div></br>'
     for host, problems in host_errors.items():
         html += '<tr>'
         html += f'<td>{host}</td>'

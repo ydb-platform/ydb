@@ -27,6 +27,7 @@ public:
     bool Acquire(i64 size) override;
     void Release(i64 size) override;
     void SetLimit(i64 size) override;
+    void AdjustLimit(i64 adjustedLimit) override;
 
     void ClearTotalUsage();
     i64 GetTotalUsage() const;
@@ -58,6 +59,7 @@ private:
     };
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    i64 AdjustedLimit_ = std::numeric_limits<i64>::max();
     i64 Limit_;
     i64 Usage_ = 0;
     i64 TotalUsage_ = 0;

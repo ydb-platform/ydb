@@ -1,6 +1,8 @@
 #include "common.h"
 #include "manager.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/tiering/fetcher.h>
 #include <ydb/core/tx/tiering/tier/identifier.h>
@@ -15,7 +17,7 @@ namespace NKikimr::NColumnShard {
 
 class TTiersManager::TActor: public TActorBootstrapped<TTiersManager::TActor> {
 private:
-    using IRetryPolicy = IRetryPolicy<>;
+    using IRetryPolicy = IRetryPolicy<const NTiers::TEvSchemeObjectResolutionFailed::EReason>;
 
     std::shared_ptr<TTiersManager> Owner;
     IRetryPolicy::TPtr RetryPolicy;
@@ -28,13 +30,13 @@ private:
         return NMetadata::NProvider::MakeServiceId(SelfId().NodeId());
     }
 
-    void RetryTierRequest(const NTiers::TExternalStorageId& tier) {
+    void RetryTierRequest(const NTiers::TExternalStorageId& tier, const NTiers::TEvSchemeObjectResolutionFailed::EReason reason) {
         AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiers_manager")("event", "retry_watch_objects");
         auto findRetryState = RetryStateByObject.find(tier);
         if (!findRetryState) {
             findRetryState = RetryStateByObject.emplace(tier, RetryPolicy->CreateRetryState()).first;
         }
-        auto retryDelay = findRetryState->second->GetNextRetryDelay();
+        auto retryDelay = findRetryState->second->GetNextRetryDelay(reason);
         AFL_VERIFY(retryDelay)("object", tier.GetConfigPath());
         ActorContext().Schedule(*retryDelay, std::make_unique<IEventHandle>(SelfId(), TiersFetcher, new NTiers::TEvWatchSchemeObject(std::vector<TString>({ tier.GetConfigPath() }))));
     }
@@ -78,11 +80,16 @@ private:
         ResetRetryState(tierId);
         if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeExternalDataSource) {
             NTiers::TTierConfig tier;
+            if (HasAppData() && AppDataVerified().ColumnShardConfig.HasS3Client()) {
+                tier = NTiers::TTierConfig(AppDataVerified().ColumnShardConfig.GetS3Client());
+            }
+
             if (const auto status = tier.DeserializeFromProto(description.GetExternalDataSourceDescription()); status.IsFail()) {
                 AFL_WARN(NKikimrServices::TX_TIERING)("event", "fetched_invalid_tier_settings")("error", status.GetErrorMessage());
                 Owner->UpdateTierConfig(std::nullopt, tierId);
                 return;
             }
+
             Owner->UpdateTierConfig(tier, tierId);
         } else {
             AFL_WARN(NKikimrServices::TX_TIERING)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", tierId.GetConfigPath());
@@ -104,9 +111,9 @@ private:
                 Owner->UpdateTierConfig(std::nullopt, objectPath);
                 break;
             case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
-                RetryTierRequest(objectPath);
                 break;
         }
+        RetryTierRequest(objectPath, ev->Get()->GetReason());
     }
 
     void Handle(NTiers::TEvWatchSchemeObject::TPtr& ev) {
@@ -117,9 +124,14 @@ public:
     TActor(std::shared_ptr<TTiersManager> owner)
         : Owner(owner)
         , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
-              []() {
-                  return ERetryErrorClass::ShortRetry;
-              }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 10000))
+              [](const NTiers::TEvSchemeObjectResolutionFailed::EReason reason) {
+                  switch (reason) {
+                      case NTiers::TEvSchemeObjectResolutionFailed::NOT_FOUND:
+                          return ERetryErrorClass::LongRetry;
+                      case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
+                          return ERetryErrorClass::ShortRetry;
+                  }
+              }, TDuration::MilliSeconds(10), TDuration::Seconds(29), TDuration::Seconds(30), 10000))
         , SecretsFetcher(std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>())
     {
     }

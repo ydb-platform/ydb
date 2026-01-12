@@ -167,21 +167,25 @@ public:
             return v.GetPartitionId() == PartitionId;
         });
 
+        AFL_ENSURE(partition)("p", PartitionId);
+
+        const auto& keyRange = partition->GetKeyRange();
+
         auto inRange = [&](const TString& sourceIdHash) {
             if (sourceIdHash.empty()) {
                 return false;
             }
-            if (partition->GetKeyRange().HasFromBound() && sourceIdHash < partition->GetKeyRange().GetFromBound()) {
+            if (keyRange.HasFromBound() && sourceIdHash < keyRange.GetFromBound()) {
                 return false;
             }
-            if (partition->GetKeyRange().HasToBound() && sourceIdHash >= partition->GetKeyRange().GetToBound()) {
+            if (keyRange.HasToBound() && sourceIdHash >= keyRange.GetToBound()) {
                 return false;
             }
             return true;
         };
 
         ui64 lWrittenBytes = 0, rWrittenBytes = 0, oWrittenBytes = 0;
-        size_t i = 0, j = sorted.size() - 1;
+        ssize_t i = 0, j = sorted.size() - 1;
         TString* lastLeft = nullptr, *lastRight = nullptr;
         while (i <= j) {
             auto& lhs = sorted[i];
@@ -207,7 +211,7 @@ public:
         if (oWrittenBytes >= lWrittenBytes || oWrittenBytes >= rWrittenBytes) {
             // The volume of entries in the partition with the SourceID manually linked to the partition is significant.
             // We divide the partition in half.
-            return MiddleOf(partition->GetKeyRange().GetFromBound(), partition->GetKeyRange().GetToBound());
+            return MiddleOf(keyRange.GetFromBound(), keyRange.GetToBound());
         }
 
         return MiddleOf(*lastLeft, *lastRight);

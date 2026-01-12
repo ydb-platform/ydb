@@ -1,5 +1,7 @@
 #include "scheme_pathid.h"
 
+#include <ydb/core/protos/subdomains.pb.h>
+
 #include <util/stream/str.h>
 
 namespace NKikimr {
@@ -114,6 +116,10 @@ NKikimrProto::TPathID TPathId::ToProto() const {
     NKikimrProto::TPathID proto;
     ToProto(proto);
     return proto;
+}
+
+TPathId TPathId::FromDomainKey(const NKikimrSubDomains::TDomainKey& proto) {
+    return TPathId(proto.GetSchemeShard(), proto.GetPathId());
 }
 
 } // NKikimr

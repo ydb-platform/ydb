@@ -11,13 +11,27 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TFuture<void> VoidFuture = NDetail::MakeWellKnownFuture(TError());
-const TFuture<bool> TrueFuture = NDetail::MakeWellKnownFuture(TErrorOr<bool>(true));
-const TFuture<bool> FalseFuture = NDetail::MakeWellKnownFuture(TErrorOr<bool>(false));
+namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NDetail {
+class TOKPromiseState
+    : public TPromiseState<void>
+{
+public:
+    constexpr TOKPromiseState()
+        : TPromiseState(TOKFutureTag())
+    { }
+
+    void DestroyRefCounted() final
+    {
+        YT_ABORT();
+    }
+};
+
+constinit NDetail::TOKPromiseState OKPromiseState;
+
+////////////////////////////////////////////////////////////////////////////////
 
 TFutureCallbackCookie TFutureState<void>::Subscribe(TVoidResultHandler handler)
 {
@@ -40,6 +54,15 @@ TFutureCallbackCookie TFutureState<void>::Subscribe(TVoidResultHandler handler)
             return VoidResultHandlers_.Add(std::move(handler));
         }
     }
+}
+
+TFutureCallbackCookie TFutureState<void>::SubscribeUnique(TUniqueVoidResultHandler handler)
+{
+    // TODO(babenko): consider optimizing this (rare) case.
+    return Subscribe(BIND([handler = std::move(handler)] (const TError& error) {
+        auto errorCopy = error;
+        handler(std::move(errorCopy));
+    }));
 }
 
 void TFutureState<void>::Unsubscribe(TFutureCallbackCookie cookie)
@@ -69,20 +92,17 @@ bool TFutureState<void>::Cancel(const TError& error) noexcept
     // The reference is acquired above.
     TIntrusivePtr<TFutureState<void>> this_(this, /*addReference*/ false);
 
-    {
-        auto guard = Guard(SpinLock_);
-        if (Set_ || AbandonedUnset_ || Canceled_) {
-            return false;
-        }
-        CancelationError_ = error;
-        Canceled_ = true;
+    auto guard = Guard(SpinLock_);
+    if (Set_ || AbandonedUnset_ || Canceled_) {
+        return false;
     }
+    CancelationError_ = error;
+    Canceled_ = true;
 
     if (CancelHandlers_.empty()) {
-        if (!TrySetError(NDetail::WrapIntoCancelationError(error))) {
-            return false;
-        }
+        SetErrorGuarded(NDetail::WrapIntoCancelationError(error), std::move(guard));
     } else {
+        guard.Release();
         for (const auto& handler : CancelHandlers_) {
             RunNoExcept(handler, error);
         }
@@ -175,6 +195,11 @@ void TFutureState<void>::SetResultError(const TError& error)
 bool TFutureState<void>::TrySetError(const TError& error)
 {
     return TrySet(error);
+}
+
+void TFutureState<void>::SetErrorGuarded(const TError& error, TGuard<NThreading::TSpinLock>&& guard)
+{
+    DoTrySet<true>(error, std::move(guard));
 }
 
 bool TFutureState<void>::DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard)
@@ -275,7 +300,13 @@ void TFutureState<void>::OnLastPromiseRefLost()
     }));
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+constinit const TFuture<void> OKFuture(NDetail::TOKFutureTag(), &NDetail::OKPromiseState);
 
 ////////////////////////////////////////////////////////////////////////////////
 

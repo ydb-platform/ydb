@@ -68,6 +68,7 @@ namespace NKikimrConfig {
     class TDomainsConfig;
     class TBootstrap;
     class TAwsCompatibilityConfig;
+    class TAwsClientConfig;
     class TS3ProxyResolverConfig;
     class TBackgroundCleaningConfig;
     class TDataErasureConfig;
@@ -81,6 +82,8 @@ namespace NKikimrConfig {
     class TBridgeConfig;
     class TStatisticsConfig;
     class TSystemTabletBackupConfig;
+    class TRecoveryShardConfig;
+    class TClusterDiagnosticsConfig;
 }
 
 namespace NKikimrReplication {
@@ -254,6 +257,7 @@ struct TAppData {
     NKikimrConfig::TDomainsConfig& DomainsConfig;
     NKikimrConfig::TBootstrap& BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig& AwsCompatibilityConfig;
+    NKikimrConfig::TAwsClientConfig& AwsClientConfig;
     NKikimrConfig::TS3ProxyResolverConfig& S3ProxyResolverConfig;
     NKikimrConfig::TBackgroundCleaningConfig& BackgroundCleaningConfig;
     NKikimrConfig::TGraphConfig& GraphConfig;
@@ -270,6 +274,8 @@ struct TAppData {
     NKikimrConfig::TStatisticsConfig& StatisticsConfig;
     TMetricsConfig& MetricsConfig;
     NKikimrConfig::TSystemTabletBackupConfig& SystemTabletBackupConfig;
+    NKikimrConfig::TRecoveryShardConfig& RecoveryShardConfig;
+    NKikimrConfig::TClusterDiagnosticsConfig& ClusterDiagnosticsConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request

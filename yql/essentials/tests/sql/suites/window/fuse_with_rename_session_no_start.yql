@@ -1,0 +1,58 @@
+PRAGMA config.flags('OptimizerFlags', 'PayloadRenameOverWindow');
+
+$src = select * from as_table([
+<|user:null, ts:null, payload:1|>,
+<|user:"u1", ts:null, payload:2|>,
+<|user:null, ts:null, payload:3|>,
+<|user:"u1", ts:null, payload:4|>,
+<|user:null, ts:1, payload:5|>,
+<|user:"u1", ts:2, payload:6|>,
+<|user:null, ts:2, payload:7|>,
+<|user:"u1", ts:3, payload:8|>,
+<|user:null, ts:3, payload:9|>,
+<|user:"u1", ts:4, payload:10|>,
+<|user:null, ts:10, payload:11|>,
+<|user:"u1", ts:11, payload:12|>,
+<|user:null, ts:21, payload:13|>,
+<|user:"u1", ts:22, payload:14|>,
+<|user:null, ts:31, payload:15|>,
+<|user:"u1", ts:32, payload:16|>,
+<|user:null, ts:50, payload:17|>,
+<|user:"u1", ts:51, payload:18|>,
+]);
+
+
+$init = ($row) -> (AsStruct($row.ts ?? 0 as value, 1 as count));
+
+$calculate = ($_row, $state) -> ($state.value);
+-- split partition into two-element groups, make session key to be cumulative sum of ts from partition start
+$update = ($row, $state) -> {
+  $state = AsStruct($state.count + 1 as count, $state.value as value);
+  $state = AsStruct($state.count as count, $state.value + ($row.ts ?? 0) as value);
+  return  AsTuple(Unwrap($state.count % 2) == 1, $state);
+};
+
+
+$src = 
+SELECT
+    t.*,
+    AGGREGATE_LIST(cast(ts as string) ?? "null") over w as ts_session,
+    COUNT(1) over w as session_len,
+FROM $src as t
+WINDOW w AS (
+    PARTITION BY user, SessionWindow(ts + 1, $init, $update, $calculate)
+    ORDER BY ts
+);
+
+$src = 
+SELECT
+    t.*,
+    AGGREGATE_LIST(cast(ts as string) ?? "null") over w as ts_session2,
+    COUNT(1) over w as session_len2,
+FROM $src as t
+WINDOW w AS (
+    PARTITION BY user, SessionWindow(ts + 1, $init, $update, $calculate)
+    ORDER BY ts
+);
+
+select * from $src order by user, payload;

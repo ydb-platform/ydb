@@ -14,7 +14,10 @@ struct TTvmServiceConfig
     bool UseTvmTool;
 
     // TvmClient settings
-    TTvmId ClientSelfId = 0;
+    std::optional<TTvmId> ClientSelfId;
+    //! Name of env variable with TVM ID. Used if ClientSelfId is unset.
+    std::optional<std::string> ClientSelfIdEnv;
+
     std::optional<std::string> ClientDiskCacheDir;
 
     std::optional<std::string> TvmHost;
@@ -55,6 +58,12 @@ struct TTvmServiceConfig
     //! If EnableMock and RequireMockSecret is true, then ensures that ClientSelfSecret is equal to
     //! "SecretPrefix-" + ToString(ClientSelfId).
     bool RequireMockSecret = true;
+
+    //! Returns ClientSelfId or parsed value from ClientSelfIdEnv or just 0.
+    TTvmId GetClientSelfId() const;
+
+    // Returns ClientSelfSecret or value from env  ClientSelfSecretEnv or value from file ClientSelfSecretPath or nullopt.
+    std::optional<std::string> GetClientSelfSecret() const;
 
     REGISTER_YSON_STRUCT(TTvmServiceConfig);
 

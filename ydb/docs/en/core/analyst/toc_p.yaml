@@ -6,3 +6,7 @@ items:
     include:
       mode: link
       path: datasets/toc_p.yaml
+  - name: Practical guides
+    include:
+      mode: link
+      path: practical-guides/toc_p.yaml

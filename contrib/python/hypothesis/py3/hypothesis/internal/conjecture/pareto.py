@@ -8,10 +8,10 @@
 # v. 2.0. If a copy of the MPL was not distributed with this file, You can
 # obtain one at https://mozilla.org/MPL/2.0/.
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from enum import Enum
 from random import Random
-from typing import TYPE_CHECKING, Callable, Optional, Union
+from typing import TYPE_CHECKING
 
 from sortedcontainers import SortedList
 
@@ -87,6 +87,7 @@ def dominance(left: ConjectureResult, right: ConjectureResult) -> DominanceRelat
     # the dominance relationship.
     if (
         left.status == Status.INTERESTING
+        and right.interesting_origin is not None
         and left.interesting_origin != right.interesting_origin
     ):
         return DominanceRelation.NO_DOMINANCE
@@ -143,9 +144,9 @@ class ParetoFront:
         self.front: SortedList[ConjectureResult] = SortedList(
             key=lambda d: sort_key(d.nodes)
         )
-        self.__pending: Optional[ConjectureResult] = None
+        self.__pending: ConjectureResult | None = None
 
-    def add(self, data: Union[ConjectureData, ConjectureResult, _Overrun]) -> bool:
+    def add(self, data: ConjectureData | ConjectureResult | _Overrun) -> bool:
         """Attempts to add ``data`` to the pareto front. Returns True if
         ``data`` is now in the front, including if data is already in the
         collection, and False otherwise"""
@@ -229,7 +230,7 @@ class ParetoFront:
                             already_replaced = True
                             dominators[j] = candidate
                             j += 1
-                        else:
+                        else:  # pragma: no cover # flaky, by test_database_contains_only_pareto_front
                             dominators[j], dominators[-1] = (
                                 dominators[-1],
                                 dominators[j],
@@ -248,7 +249,7 @@ class ParetoFront:
                 i -= 1
 
             for v in to_remove:
-                self.__remove(v)
+                self._remove(v)
             return data in self.front
         finally:
             self.__pending = None
@@ -259,9 +260,14 @@ class ParetoFront:
         self.__eviction_listeners.append(f)
 
     def __contains__(self, data: object) -> bool:
-        return isinstance(data, (ConjectureData, ConjectureResult)) and (
-            data.as_result() in self.front
-        )
+        if not isinstance(data, (ConjectureData, ConjectureResult)):
+            return False
+
+        result = data.as_result()
+        if isinstance(result, _Overrun):
+            return False
+
+        return result in self.front
 
     def __iter__(self) -> Iterator[ConjectureResult]:
         return iter(self.front)
@@ -272,7 +278,7 @@ class ParetoFront:
     def __len__(self) -> int:
         return len(self.front)
 
-    def __remove(self, data: ConjectureResult) -> None:
+    def _remove(self, data: ConjectureResult) -> None:
         try:
             self.front.remove(data)
         except ValueError:
@@ -337,10 +343,7 @@ class ParetoOptimiser:
                     # must be dominated in the front - either ``destination`` is in
                     # the front, or it was not added to it because it was
                     # dominated by something in it.
-                    try:
-                        self.front.front.remove(source)
-                    except ValueError:
-                        pass
+                    self.front._remove(source)
                     return True
                 return False
 

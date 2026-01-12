@@ -8,18 +8,25 @@ namespace NYdb::inline Dev {
 
 bool IsTokenCorrect(const std::string& in) {
     for (char c : in) {
-        if (!(IsAsciiAlnum(c) || IsAsciiPunct(c) || c == ' '))
+        if (!(IsAsciiAlnum(c) || IsAsciiPunct(c) || c == ' ')) {
             return false;
+        }
     }
     return true;
 }
 
 std::string GetAuthInfo(TDbDriverStatePtr p) {
-    auto token = p->CredentialsProvider->GetAuthInfo();
-    if (!IsTokenCorrect(token)) {
-        throw TContractViolation("token is incorrect, illegal characters found");
+    try {
+        auto token = p->CredentialsProvider->GetAuthInfo();
+        if (!IsTokenCorrect(token)) {
+            throw TAuthenticationError("token is incorrect, illegal characters found");
+        }
+        return token;
+    } catch (const TAuthenticationError& e) {
+        throw e;
+    } catch (const std::exception& e) {
+        throw TAuthenticationError(TStringBuilder() << "Can't get Authentication info from CredentialsProvider. " << e.what());
     }
-    return token;
 }
 
 void SetDatabaseHeader(TCallMeta& meta, const std::string& database) {
@@ -148,7 +155,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , MaxQueuedResponses_(params->GetMaxQueuedResponses())
     , DrainOnDtors_(params->GetDrinOnDtors())
     , BalancingSettings_(params->GetBalancingSettings())
-    , GRpcKeepAliveTimeout_(params->GetGRpcKeepAliveTimeout())
+    , GRpcKeepAliveTimeout_(TDeadline::SafeDurationCast(params->GetGRpcKeepAliveTimeout()))
     , GRpcKeepAlivePermitWithoutCalls_(params->GetGRpcKeepAlivePermitWithoutCalls())
     , MemoryQuota_(params->GetMemoryQuota())
     , MaxInboundMessageSize_(params->GetMaxInboundMessageSize())
@@ -156,9 +163,9 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , MaxMessageSize_(params->GetMaxMessageSize())
     , QueuedRequests_(0)
     , TcpKeepAliveSettings_(params->GetTcpKeepAliveSettings())
-    , SocketIdleTimeout_(params->GetSocketIdleTimeout())
+    , SocketIdleTimeout_(TDeadline::SafeDurationCast(params->GetSocketIdleTimeout()))
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    , ChannelPool_(TcpKeepAliveSettings_, SocketIdleTimeout_)
+    , ChannelPool_(TcpKeepAliveSettings_, params->GetSocketIdleTimeout())
 #endif
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())
@@ -166,7 +173,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , Log(params->GetLog())
 {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    if (SocketIdleTimeout_ != TDuration::Max()) {
+    if (SocketIdleTimeout_ != TDeadline::Duration::max()) {
         auto channelPoolUpdateWrapper = [this]
             (NYdb::NIssue::TIssues&&, EStatus status) mutable
         {
@@ -177,7 +184,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
             ChannelPool_.DeleteExpiredStubsHolders();
             return true;
         };
-        AddPeriodicTask(channelPoolUpdateWrapper, SocketIdleTimeout_ * 0.1);
+        AddPeriodicTask(channelPoolUpdateWrapper, SocketIdleTimeout_ / 10);
     }
 #endif
     if (params->GetExecutor()) {
@@ -204,7 +211,7 @@ TGRpcConnectionsImpl::~TGRpcConnectionsImpl() {
     ResponseQueue_->Stop();
 }
 
-void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDuration period) {
+void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
     std::shared_ptr<IQueueClientContext> context;
     if (!TryCreateContext(context)) {
         NYdb::NIssue::TIssues issues;
@@ -219,34 +226,38 @@ void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDuration period) {
     }
 }
 
-void TGRpcConnectionsImpl::ScheduleOneTimeTask(TSimpleCb&& fn, TDuration timeout) {
-    auto cbLow = [this, fn = std::move(fn)](NYdb::NIssue::TIssues&&, EStatus status) mutable {
-        if (status != EStatus::SUCCESS) {
-            return false;
+void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline) {
+    auto cbLow = [this, fn = std::move(fn)](bool ok) mutable {
+        if (!ok) {
+            return;
         }
 
-        std::shared_ptr<IQueueClientContext> context;
-
-        if (!TryCreateContext(context)) {
-            // Shutting down, fn must handle it
-            fn();
-        } else {
-            // Enqueue to user pool
-            auto resp = new TSimpleCbResult(
-                std::move(fn),
-                this,
-                std::move(context));
-            EnqueueResponse(resp);
-        }
-
-        return false;
+        // Enqueue to user pool
+        auto resp = new TSimpleCbResult(std::move(fn));
+        EnqueueResponse(resp);
     };
 
-    if (timeout) {
-        AddPeriodicTask(std::move(cbLow), timeout);
-    } else {
-        cbLow(NYdb::NIssue::TIssues(), EStatus::SUCCESS);
+    std::shared_ptr<IQueueClientContext> context;
+    if (!TryCreateContext(context)) {
+        cbLow(false);
+        return;
     }
+
+    if (deadline <= TDeadline::Now()) {
+        cbLow(true);
+        return;
+    }
+
+    auto action = MakeIntrusive<TDelayedAction>(
+        std::move(cbLow),
+        this,
+        std::move(context),
+        deadline);
+    action->Start();
+}
+
+void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline::Duration delay) {
+    ScheduleDelayedTask(std::move(fn), TDeadline::AfterDuration(delay));
 }
 
 NThreading::TFuture<bool> TGRpcConnectionsImpl::ScheduleFuture(
@@ -315,9 +326,9 @@ void TGRpcConnectionsImpl::Stop(bool wait) {
     GRpcClientLow_.Stop(wait);
 }
 
-void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDuration& timeout, bool permitWithoutCalls) {
-    ui64 timeoutMs = timeout.MilliSeconds();
-    config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = timeoutMs >> 3;
+void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDeadline::Duration& timeout, bool permitWithoutCalls) {
+    std::uint64_t timeoutMs = std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count();
+    config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = timeoutMs;
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = timeoutMs;
     config.IntChannelParams[GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA] = 0;
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS] = permitWithoutCalls ? 1 : 0;
@@ -340,7 +351,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
         };
 
     TRpcRequestSettings rpcSettings;
-    rpcSettings.ClientTimeout = GET_ENDPOINTS_TIMEOUT;
+    rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
 
     RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
         std::move(request),
@@ -436,6 +447,42 @@ void TGRpcConnectionsImpl::EnqueueResponse(IObjectInQueue* action) {
     ResponseQueue_->Post([action]() {
         action->Process(nullptr);
     });
+}
+
+TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestSettings, const TDbDriverStatePtr& dbState) const {
+    TCallMeta meta;
+    meta.Timeout = requestSettings.Deadline;
+#ifndef YDB_GRPC_UNSECURE_AUTH
+    meta.CallCredentials = dbState->CallCredentials;
+#else
+    if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
+        meta.Aux.push_back({YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState)});
+    }
+#endif
+    if (!requestSettings.TraceId.empty()) {
+        meta.Aux.push_back({YDB_TRACE_ID_HEADER, requestSettings.TraceId});
+    }
+
+    if (!requestSettings.RequestType.empty()) {
+        meta.Aux.push_back({YDB_REQUEST_TYPE_HEADER, requestSettings.RequestType});
+    }
+
+    if (!requestSettings.TraceParent.empty()) {
+        meta.Aux.push_back({OTEL_TRACE_HEADER, requestSettings.TraceParent});
+    }
+
+    if (!dbState->Database.empty()) {
+        // See TDbDriverStateTracker::GetDriverState to find place where we do quote non ASCII characters
+        meta.Aux.push_back({YDB_DATABASE_HEADER, dbState->Database});
+    }
+
+    static const std::string clientPid = GetClientPIDHeaderValue();
+
+    meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
+    meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
+    meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
+
+    return meta;
 }
 
 } // namespace NYdb

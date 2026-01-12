@@ -14,8 +14,7 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class F, class T, class pS, class E>
-  typename std::enable_if<types::is_numexpr_arg<F>::value,
-                          types::none_type>::type
+  std::enable_if_t<types::is_numexpr_arg<F>::value, types::none_type>
   put(types::ndarray<T, pS> &expr, F const &ind, E const &v)
   {
     auto vind = asarray(ind);

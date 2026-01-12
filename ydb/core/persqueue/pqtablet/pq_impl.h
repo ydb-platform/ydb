@@ -51,7 +51,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvReadSetAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTxCalcPredicateResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvTxCommitDone::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvTxDone::TPtr& ev, const TActorContext& ctx);
 
     void InitResponseBuilder(const ui64 responseCookie, const ui32 count, const ui32 counterId);
     void Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext&);
@@ -93,8 +93,18 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
+
+    template<typename TEventHandle>
+    bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
+    void ProcessMLPQueue();
+
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
-    bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx);
+    bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     TString RenderSendReadSetHtmlForms(const TDistributedTransaction& tx, const TMaybe<TConstArrayRef<ui64>> tabletSourcesFilter) const;
 
@@ -168,10 +178,17 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void TryReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status = NKikimrProto::OK);
     void ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status);
 
-    void SchedulePlanStepAck(ui64 step,
-                             const THashMap<TActorId, TVector<ui64>>& txAcks);
-    void SchedulePlanStepAccepted(const TActorId& target,
-                                  ui64 step);
+    void SendPlanStepAcks(const TActorContext& ctx,
+                          const TDistributedTransaction& tx);
+    void SendPlanStepAcks(const TActorContext& ctx,
+                          const TActorId& receiver,
+                          const TEvTxProcessing::TEvPlanStep& ev);
+    void SendPlanStepAck(const TActorContext& ctx,
+                         ui64 step,
+                         const THashMap<TActorId, TVector<ui64>>& txAcks);
+    void SendPlanStepAccepted(const TActorContext& ctx,
+                              const TActorId& actorId,
+                              ui64 step);
 
     ui64 GetAllowedStep() const;
 
@@ -248,6 +265,15 @@ private:
     TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
     TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
 
+    using TMLPRequest = std::variant<
+        TEvPQ::TEvMLPReadRequest::TPtr,
+        TEvPQ::TEvMLPCommitRequest::TPtr,
+        TEvPQ::TEvMLPUnlockRequest::TPtr,
+        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr,
+        TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
+    >;
+    TDeque<TMLPRequest> MLPRequests;
+
 public:
     struct TPipeInfo {
         TActorId PartActor;
@@ -287,7 +313,6 @@ private:
     ui64 ExecTxId = 0;
 
     TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
-    TDeque<std::pair<TActorId, std::unique_ptr<TEvTxProcessing::TEvPlanStep>>> EvPlanStepQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
     THashSet<ui64> DeleteTxs;
     TSet<std::pair<ui64, ui64>> ChangedTxs;
@@ -330,7 +355,8 @@ private:
     void TryWriteTxs(const TActorContext& ctx);
 
     void ProcessProposeTransactionQueue(const TActorContext& ctx);
-    void ProcessPlanStepQueue(const TActorContext& ctx);
+    void ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& ev,
+                         const TActorContext& ctx);
     void ProcessWriteTxs(const TActorContext& ctx,
                          NKikimrClient::TKeyValueRequest& request);
     void ProcessDeleteTxs(const TActorContext& ctx,
@@ -476,7 +502,6 @@ private:
     void SetTxInFlyCounter();
 
     bool CanProcessProposeTransactionQueue() const;
-    bool CanProcessPlanStepQueue() const;
     bool CanProcessWriteTxs() const;
     bool CanProcessDeleteTxs() const;
     bool CanProcessTxWrites() const;
@@ -549,7 +574,7 @@ private:
     void Handle(TEvPQ::TEvDeletePartitionDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvTransactionCompleted::TPtr& ev, const TActorContext& ctx);
 
-    void BeginDeletePartitions(TTxWriteInfo& writeInfo);
+    void BeginDeletePartitions(const TWriteId& writeId, TTxWriteInfo& writeInfo);
     void BeginDeletePartitions(const TDistributedTransaction& tx);
 
     bool CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
@@ -582,8 +607,9 @@ private:
 
     bool AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const;
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
+    void TryDeleteWriteId(const TWriteId& writeId, const TTxWriteInfo& writeInfo, const TActorContext& ctx);
 
-    void UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const;
+    void UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg);
 
     void ResendEvReadSetToReceivers(const TActorContext& ctx);
     void ResendEvReadSetToReceiversForState(const TActorContext& ctx, NKikimrPQ::TTransaction::EState state);

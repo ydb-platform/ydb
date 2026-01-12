@@ -21,16 +21,20 @@ public:
         TypeNone = 0,
         TypeInfo = 'm',
         TypeData = 'd',
+        TypeDeduplicator = 'e',
         TypeTmpData = 'x',
         TypeMeta = 'i',
-        TypeTxMeta = 'I'
+        TypeTxMeta = 'I',
+        TypeMLPConsumerData = 'c',
     };
 
     enum EMark : char {
         MarkUser = 'c',
         MarkProtoSourceId = 'p',
         MarkSourceId = 's',
-        MarkUserDeprecated = 'u'
+        MarkUserDeprecated = 'u',
+        MarkMLPSnapshot = 'S',
+        MarkMLPWAL = 'w',
     };
 
     enum EServiceType : char {

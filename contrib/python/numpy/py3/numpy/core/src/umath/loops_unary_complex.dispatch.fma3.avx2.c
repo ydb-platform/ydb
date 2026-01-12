@@ -15,4 +15,4 @@
 #define NPY__CPU_TARGET_F16C
 #define NPY__CPU_TARGET_FMA3
 #define NPY__CPU_TARGET_AVX2
-#include "numpy/core/src/umath/loops_unary_complex.dispatch.c"
+#include "contrib/python/numpy/py3/numpy/core/src/umath/loops_unary_complex.dispatch.c"

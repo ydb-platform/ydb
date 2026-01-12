@@ -1,11 +1,12 @@
 #pragma once
 
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
-#include <ydb/core/protos/feature_flags.pb.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NKikimrConfig {
     enum TTableServiceConfig_EBlockChannelsMode : int;
@@ -62,8 +63,10 @@ public:
     NCommon::TConfSetting<bool, Static> UseBlockHashJoin;
     NCommon::TConfSetting<bool, Static> EnableOrderPreservingLookupJoin;
     NCommon::TConfSetting<bool, Static> OptEnableParallelUnionAllConnectionsForExtend;
+    NCommon::TConfSetting<ui32, Static> DqChannelVersion;
 
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
+    NCommon::TConfSetting<bool, Static> UseDqHashAggregate;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
@@ -92,12 +95,16 @@ public:
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> ColumnShardHashShuffleFuncType;
 
     NCommon::TConfSetting<ui32, Static> MaxDPHypDPTableSize;
+    NCommon::TConfSetting<ui32, Static> ShuffleEliminationJoinNumCutoff;
 
     NCommon::TConfSetting<ui32, Static> MaxTasksPerStage;
     NCommon::TConfSetting<ui64, Static> DataSizePerPartition;
     NCommon::TConfSetting<ui32, Static> MaxSequentialReadsInFlight;
 
     NCommon::TConfSetting<ui32, Static> KMeansTreeSearchTopSize;
+    NCommon::TConfSetting<bool, Static> DisableCheckpoints;
+
+    NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
 
     /* Runtime */
     NCommon::TConfSetting<bool, Dynamic> ScanQuery;
@@ -193,6 +200,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOltpSink = false;
     bool EnableHtapTx = false;
     bool EnableStreamWrite = false;
+    bool EnableBatchUpdates = false;
     NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
     bool EnableSpilling = true;
     ui32 DefaultCostBasedOptimizationLevel = 4;
@@ -223,6 +231,14 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
     bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
     bool EnableDqHashCombineByDefault = true;
+    bool EnableDqHashAggregateByDefault = false;
+    bool EnableWatermarks = false;
+    ui32 DefaultDqChannelVersion = 1u;
+    bool EnableDiscardSelect = false;
+
+    bool Antlr4ParserIsAmbiguityError = false;
+
+    bool EnableFallbackToYqlOptimizer = false;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
@@ -236,6 +252,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
     bool GetEnableOlapPushdownAggregate() const;
     bool GetUseDqHashCombine() const;
+    bool GetUseDqHashAggregate() const;
 };
 
 }

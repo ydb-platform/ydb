@@ -1,6 +1,5 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
@@ -292,7 +291,6 @@ bool TOlapColumnBase::IsAllowedType(ui32 typeId) {
     }
 
     switch (typeId) {
-        case NYql::NProto::Bool:
         case NYql::NProto::Interval:
         case NYql::NProto::DyNumber:
         case NYql::NProto::Uuid:
@@ -319,6 +317,7 @@ bool TOlapColumnBase::IsAllowedPgType(ui32 pgTypeId) {
 
 bool TOlapColumnBase::IsAllowedPkType(ui32 typeId) {
     switch (typeId) {
+        case NYql::NProto::Bool:
         case NYql::NProto::Int8:
         case NYql::NProto::Uint8:  // Byte
         case NYql::NProto::Int16:

@@ -90,7 +90,7 @@ CREATE TABLE `mytable` (
   expire_at Timestamp,
   PRIMARY KEY (id)
 ) WITH (
-  TTL = Interval("PT0S") ON expire_at
+  TTL = Interval("PT1H") ON expire_at
 );
 ```
 

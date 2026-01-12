@@ -13,7 +13,7 @@ struct TActorFactory : public IActorFactory {
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
-        const NKikimrConfig::TSharedReadingConfig& config,
+        const TRowDispatcherSettings& config,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         NActors::TActorId rowDispatcherActorId,
         NActors::TActorId compileServiceActorId,
@@ -23,7 +23,8 @@ struct TActorFactory : public IActorFactory {
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
-        ui64 maxBufferSize) const override {
+        ui64 maxBufferSize,
+        bool enableStreamingQueriesCounters) const override {
 
         auto actorPtr = NFq::NewTopicSession(
             readGroup,
@@ -40,7 +41,8 @@ struct TActorFactory : public IActorFactory {
             counters,
             countersRoot,
             pqGateway,
-            maxBufferSize
+            maxBufferSize,
+            enableStreamingQueriesCounters
         );
         return NActors::TActivationContext::Register(actorPtr.release(), {}, NActors::TMailboxType::HTSwap, Max<ui32>());
     }

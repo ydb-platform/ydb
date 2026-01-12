@@ -81,7 +81,8 @@ namespace NYql::NDq {
             const NKikimr::NMiniKQL::TStructType* payloadType,
             const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-            const size_t maxKeysInRequest)
+            const size_t maxKeysInRequest,
+            bool isMultiMatches = false)
             : Connector(connectorClient)
             , CredentialsProvider(std::move(credentialsProvider))
             , ParentId(std::move(parentId))
@@ -94,6 +95,7 @@ namespace NYql::NDq {
             , HolderFactory(holderFactory)
             , ColumnDestinations(CreateColumnDestination())
             , MaxKeysInRequest(std::min(maxKeysInRequest, size_t{100}))
+            , IsMultiMatches(isMultiMatches)
             , RetryPolicy(
                     ILookupRetryPolicy::GetExponentialBackoffPolicy(
                         /* retryClassFunction */
@@ -174,16 +176,18 @@ namespace NYql::NDq {
         }
 
     private: // events
-        STRICT_STFUNC(StateFunc,
-                      hFunc(TEvLookupRequest, Handle);
-                      hFunc(TEvListSplitsIterator, Handle);
-                      hFunc(TEvListSplitsPart, Handle);
-                      hFunc(TEvReadSplitsIterator, Handle);
-                      hFunc(TEvReadSplitsPart, Handle);
-                      hFunc(TEvReadSplitsFinished, Handle);
-                      hFunc(TEvError, Handle);
-                      hFunc(TEvLookupRetry, Handle);
-                      hFunc(NActors::TEvents::TEvPoison, Handle);)
+        STRICT_STFUNC_EXC(StateFunc,
+            hFunc(TEvLookupRequest, Handle)
+            hFunc(TEvListSplitsIterator, Handle)
+            hFunc(TEvListSplitsPart, Handle)
+            hFunc(TEvReadSplitsIterator, Handle)
+            hFunc(TEvReadSplitsPart, Handle)
+            hFunc(TEvReadSplitsFinished, Handle)
+            hFunc(TEvError, Handle)
+            hFunc(TEvLookupRetry, Handle)
+            hFunc(NActors::TEvents::TEvPoison, Handle)
+            , ExceptionFunc(std::exception, HandleException)
+        )
 
         void Handle(TEvListSplitsIterator::TPtr ev) {
             auto& iterator = ev->Get()->Iterator;
@@ -252,13 +256,17 @@ namespace NYql::NDq {
         }
 
         void Handle(TEvError::TPtr ev) {
-            auto actorSystem = TActivationContext::ActorSystem();
-            auto error = ev->Get()->Error;
-            auto errEv = std::make_unique<IDqComputeActorAsyncInput::TEvAsyncInputError>(
-                                  -1,
-                                  NConnector::ErrorToIssues(error),
-                                  NConnector::ErrorToDqStatus(error));
-            actorSystem->Send(new NActors::IEventHandle(ParentId, SelfId(), errEv.release()));
+            const auto error = ev->Get()->Error;
+            auto issues = NConnector::ErrorToIssues(error);
+            auto fatalCode = NDqProto::StatusIds::INTERNAL_ERROR;
+
+            try {
+                fatalCode = NConnector::ErrorToDqStatus(error);
+            } catch (const std::exception& e) {
+                issues.AddIssue(TStringBuilder() << "Failed to convert YDB status code: " << e.what());
+            }
+
+            Send(ParentId, new IDqComputeActorAsyncInput::TEvAsyncInputError(-1, std::move(issues), fatalCode));
         }
 
         void Handle(TEvLookupRetry::TPtr) {
@@ -273,6 +281,11 @@ namespace NYql::NDq {
         void Handle(TEvLookupRequest::TPtr ev) {
             auto guard = Guard(*Alloc);
             CreateRequest(ev->Get()->Request.lock());
+        }
+
+        void HandleException(const std::exception& e) {
+            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << SelfId() << " Got unexpected exception: " << e.what();
+            SendError(TActivationContext::ActorSystem(), SelfId(), TStringBuilder() << "Internal error. Got unexpected exception: " << e.what());
         }
 
     private:
@@ -390,7 +403,11 @@ namespace NYql::NDq {
                     (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second] = columns[j][i];
                 }
                 if (auto* v = Request->FindPtr(key)) {
-                    *v = std::move(output); // duplicates will be overwritten
+                    if (IsMultiMatches) {
+                        *v = HolderFactory.CreateDirectListHolder((*v ? *NKikimr::NMiniKQL::GetDefaultListRepresentation(*v) : NKikimr::NMiniKQL::TDefaultListRepresentation{}).Append(std::move(output)));
+                    } else {
+                        *v = std::move(output); // duplicates will be overwritten
+                    }
                 }
             }
             if (CpuTime) {
@@ -413,7 +430,7 @@ namespace NYql::NDq {
         }
 
         static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NConnector::NApi::TError& error) {
-            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << selfId << " Got GrpcError from Connector:" << error.Getmessage();
+            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << selfId << " Got GrpcError from Connector: " << error.Getmessage();
             actorSystem->Send(
                 selfId,
                 new TEvError(std::move(error)));
@@ -432,6 +449,7 @@ namespace NYql::NDq {
         static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TString error) {
             NConnector::NApi::TError dst;
             *dst.mutable_message() = error;
+            dst.set_status(Ydb::StatusIds::INTERNAL_ERROR);
             SendError(actorSystem, selfId, std::move(dst));
         }
 
@@ -521,6 +539,7 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
         const size_t MaxKeysInRequest;
+        const bool IsMultiMatches;
         std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> Request;
         NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator; // TODO move me to TEvReadSplitsPart
         NKikimr::NMiniKQL::TKeyPayloadPairVector LookupResult;
@@ -550,14 +569,12 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const size_t maxKeysInRequest,
-        const THashMap<TString, TString>& secureParams
+        const THashMap<TString, TString>& secureParams,
+        const bool isMultiMatches
     )
     {
         auto credentialsProvider = NYql::NDq::CreateGenericCredentialsProvider(
             secureParams.Value(lookupSource.GetTokenName(), TString()),
-            lookupSource.GetToken(),
-            lookupSource.GetServiceAccountId(),
-            lookupSource.GetServiceAccountIdSignature(),
             securedServiceAccountCredentialsFactory);
         auto guard = Guard(*alloc);
         const auto actor = new TGenericLookupActor(
@@ -572,7 +589,8 @@ namespace NYql::NDq {
             payloadType,
             typeEnv,
             holderFactory,
-            maxKeysInRequest);
+            maxKeysInRequest,
+            isMultiMatches);
         return {actor, actor};
     }
 

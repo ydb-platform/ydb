@@ -240,4 +240,40 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 }
 
+TDqStageBase ReadInputToStage(const TExprBase& expr, TExprContext& ctx) {
+    if (expr.Maybe<TDqStageBase>()) {
+        return expr.Cast<TDqStageBase>();
+    }
+    if (expr.Maybe<TDqCnUnionAll>()) {
+        return expr.Cast<TDqCnUnionAll>().Output().Stage();
+    }
+    auto pos = expr.Pos();
+    TVector<TExprNode::TPtr> inputs;
+    TVector<TExprNode::TPtr> args;
+    TNodeOnNodeOwnedMap replaces;
+    int i = 1;
+    VisitExpr(expr.Ptr(), [&](const TExprNode::TPtr& node) {
+        TExprBase expr(node);
+        if (auto cast = expr.Maybe<TDqCnUnionAll>()) {
+            auto newArg = ctx.NewArgument(pos, TStringBuilder() << "rows" << i);
+            inputs.emplace_back(node);
+            args.emplace_back(newArg);
+            replaces.emplace(expr.Raw(), newArg);
+            return false;
+        }
+        return true;
+    });
+    return Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(inputs)
+            .Build()
+        .Program()
+            .Args(args)
+            .Body(ctx.ReplaceNodes(expr.Ptr(), replaces))
+            .Build()
+        .Settings()
+            .Build()
+        .Done();
+}
+
 } // namespace NKikimr::NKqp::NOpt

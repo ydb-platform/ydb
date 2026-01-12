@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/util/rc_buf.h>
 
+#include <library/cpp/time_provider/monotonic.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/vector.h>
 
@@ -13,16 +14,20 @@ namespace NMonitoring {
     struct TDynamicCounters;
 }
 
+struct TMemRegCompare;
 namespace NInterconnect::NRdma {
 
     class IMemPool;
     class TMemRegion;
     class TChunk;
     class TMemPoolImpl;
+    class TSlotMemPool;
 
     using TChunkPtr = TIntrusivePtr<TChunk>;
 
     class TMemRegion: public NNonCopyable::TMoveOnly, public IContiguousChunk {
+        friend struct ::TMemRegCompare;
+        friend class TSlotMemPool;
     public:
         TMemRegion(TChunkPtr chunk, uint32_t offset, uint32_t size) noexcept;
         TMemRegion(TMemRegion&& other) noexcept = default;
@@ -34,18 +39,23 @@ namespace NInterconnect::NRdma {
         uint32_t GetLKey(size_t deviceIndex) const;
         uint32_t GetRKey(size_t deviceIndex) const;
 
-        void Resize(uint32_t newSize) noexcept;
-
     public: // IContiguousChunk
         TContiguousSpan GetData() const override;
-        TMutableContiguousSpan GetDataMut() override;
+        TMutableContiguousSpan UnsafeGetDataMut() override;
         size_t GetOccupiedMemorySize() const override;
         EInnerType GetInnerType() const noexcept override;
+        IContiguousChunk::TPtr Clone() noexcept override;
     protected:
+        void Resize(uint32_t newSize) noexcept;
         TChunkPtr Chunk;
+        ui64 Generation = 0;
         const uint32_t Offset;
         uint32_t Size;
         const uint32_t OrigSize;
+    };
+
+    struct TMemPoolSettings {
+        uint32_t SizeLimitMb = 0;
     };
 
     class TMemRegionSlice {
@@ -73,6 +83,7 @@ namespace NInterconnect::NRdma {
 
     class IMemPool {
     public:
+        // WARN: In case of addition new flags consider "Clone()" method implementation
         enum Flags : ui32 {
             EMPTY = 0,
             PAGE_ALIGNED = 1,    // Page alignment allocation
@@ -80,6 +91,7 @@ namespace NInterconnect::NRdma {
         
         friend class TChunk;
         friend class TMemPoolImpl;
+        friend class TCqActor;
 
         virtual ~IMemPool() = default;
 
@@ -89,11 +101,13 @@ namespace NInterconnect::NRdma {
         virtual TString GetName() const noexcept = 0;
 
     protected:
-        virtual TMemRegion* AllocImpl(int size, ui32 flags) noexcept = 0;
+        virtual TMemRegionPtr AllocImpl(int size, ui32 flags) noexcept = 0;
         virtual void Free(TMemRegion&& mr, TChunk& chunk) noexcept = 0;
-        virtual void NotifyDealocated() noexcept = 0;
+        virtual void DealocateMr(TChunk*) noexcept = 0;
+    private:
+        virtual void Tick(NMonotonic::TMonotonic time) noexcept = 0;
     };
 
     std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept;
-    std::shared_ptr<IMemPool> CreateSlotMemPool(NMonitoring::TDynamicCounters* counters) noexcept;
+    std::shared_ptr<IMemPool> CreateSlotMemPool(NMonitoring::TDynamicCounters* counters, std::optional<TMemPoolSettings> settings) noexcept;
 }

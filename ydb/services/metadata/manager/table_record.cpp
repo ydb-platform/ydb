@@ -222,6 +222,7 @@ Ydb::Table::ExecuteDataQueryRequest TTableRecords::BuildSelectQuery(const TStrin
     Ydb::Table::ExecuteDataQueryRequest result;
     TStringBuilder sb;
     sb << "--!syntax_v1\n";
+    sb << "/*UI-QUERY-EXCLUDE*/" << Endl;
     sb << "DECLARE $ids AS List<" << BuildColumnsSchemaTuple() << ">;" << Endl;
     sb << "SELECT * FROM `" + tablePath + "`" << Endl;
     if (GetColumnIds().size() > 1) {

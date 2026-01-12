@@ -32,6 +32,19 @@ Y_UNIT_TEST(AlterDatabase) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(TruncateTable) {
+    TCases cases{
+        {"use plato;truncate table `/Root/test/table`;",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table`;\n"},
+
+        {"use plato;truncate table `/Root/test/table` with();",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH ();\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(GrantPermissions) {
     TCases cases{
         {"use plato;grant connect, modify tables, list on `/Root` to user;", "USE plato;\n\nGRANT CONNECT, MODIFY TABLES, LIST ON `/Root` TO user;\n"},
@@ -236,6 +249,7 @@ Y_UNIT_TEST(Values) {
     TCases cases = {
         {"values (1);", "VALUES\n\t(1)\n;\n"},
         {"values (1,2),(3,4);", "VALUES\n\t(1, 2),\n\t(3, 4)\n;\n"},
+        {"values (1,2),(3,4),;", "VALUES\n\t(1, 2),\n\t(3, 4),\n;\n"},
         {"values ('a\nb');", "VALUES\n\t('a\nb')\n;\n"},
     };
 
@@ -356,7 +370,9 @@ Y_UNIT_TEST(CreateTable) {
         {"create   temporary   table    user(user int32)", "CREATE TEMPORARY TABLE user (\n\tuser int32\n);\n"},
         {"create table user(user int32 (default 0, not null))", "CREATE TABLE user (\n\tuser int32 (DEFAULT 0, NOT NULL)\n);\n"},
         {"create table user(user int32 (default 0, not null, family f))", "CREATE TABLE user (\n\tuser int32 (DEFAULT 0, NOT NULL, FAMILY f)\n);\n"},
-        {"create table user(user int32 (default 0, family f, not null))", "CREATE TABLE user (\n\tuser int32 (DEFAULT 0, FAMILY f, NOT NULL)\n);\n"}};
+        {"create table user(user int32 (default 0, family f, not null))", "CREATE TABLE user (\n\tuser int32 (DEFAULT 0, FAMILY f, NOT NULL)\n);\n"},
+        {"create  table\tuser(key int32, val int64 compression(algorithm=lz4))", "CREATE TABLE user (\n\tkey int32,\n\tval int64 COMPRESSION (algorithm = lz4)\n);\n"},
+    };
 
     TSetup setup;
     setup.Run(cases);
@@ -559,6 +575,8 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_min_active_partitions = 1)\n;\n"},
         {"alter table user add changefeed user with (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_max_active_partitions = 7)",
          "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_max_active_partitions = 7)\n;\n"},
+        {"alter table user alter column val set compression(algorithm=zstd, level=2)",
+         "ALTER TABLE user\n\tALTER COLUMN val SET COMPRESSION (algorithm = zstd, level = 2)\n;\n"},
     };
 
     TSetup setup;
@@ -916,6 +934,8 @@ Y_UNIT_TEST(Select) {
          "SELECT\n\t1\nFROM\n\tuser AS user (\n\t\tuser\n\t)\n;\n"},
         {"select 1 from user as user(user, user)",
          "SELECT\n\t1\nFROM\n\tuser AS user (\n\t\tuser,\n\t\tuser\n\t)\n;\n"},
+        {"select 1 from user as user(user, user,)",
+         "SELECT\n\t1\nFROM\n\tuser AS user (\n\t\tuser,\n\t\tuser,\n\t)\n;\n"},
         {"select 1 from user with user=user",
          "SELECT\n\t1\nFROM\n\tuser WITH user = user\n;\n"},
         {"select 1 from user with (user=user, user=user)",

@@ -21,6 +21,7 @@ extern "C" {
 #undef bind
 #undef locale_t
 #undef strtou64
+#undef ftruncate
 }
 
 #include "arrow.h"

@@ -494,7 +494,7 @@ private:
         TAllocChunkSerializer serializer;
         const bool success = message->SerializeToArcadiaStream(&serializer);
         Y_ABORT_UNLESS(success);
-        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo());
+        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo(false));
         return TPreSerializedMessage(message->Type(), data);
     }
 
@@ -616,13 +616,22 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
     app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
+    app.SetEnableReplication(opts.EnableReplication_);
     app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
     app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
     app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
     app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);
     app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
+    app.FeatureFlags.SetEnableAlterDatabase(opts.EnableAlterDatabase_);
+    app.SetEnableAccessToIndexImplTables(opts.EnableAccessToIndexImplTables_);
+    app.SetEnableIndexMaterialization(opts.EnableIndexMaterialization_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
+
+    if (!app.ColumnShardConfig.HasStatistics()) {
+        app.ColumnShardConfig.MutableStatistics()->SetReportBaseStatisticsPeriodMs(1000);
+        app.ColumnShardConfig.MutableStatistics()->SetReportExecutorStatisticsPeriodMs(1000);
+    }
 
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);
@@ -1185,8 +1194,8 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::functio
         },
         Max<ui32>(),
         Max<ui64>(),
-        0,
-        0,
+        Bucket,
+        TotalBuckets,
         KillOnCommit
     );
 }
@@ -1207,7 +1216,10 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithPipeResets(std::function<v
 
             activeZone = true;
             testScenario(*Runtime, activeZone);
-        }
+        },
+        Max<ui32>(),
+        Bucket,
+        TotalBuckets
     );
 }
 

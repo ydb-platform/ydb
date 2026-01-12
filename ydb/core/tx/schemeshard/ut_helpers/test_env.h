@@ -69,6 +69,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableParameterizedDecimal, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicAutopartitioningForCDC, std::nullopt);
         OPTION(std::optional<bool>, EnableBackupService, std::nullopt);
+        OPTION(std::optional<bool>, EnableReplication, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicTransfer, std::nullopt);
         OPTION(bool, SetupKqpProxy, false);
         OPTION(bool, EnableStrictAclCheck, false);
@@ -82,6 +83,9 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableRealSystemViewPaths, std::nullopt);
         OPTION(ui32, NStoragePools, 2);
         OPTION(std::optional<ui32>, DataShardStatsReportIntervalSeconds, std::nullopt);
+        OPTION(bool, EnableAlterDatabase, false);
+        OPTION(std::optional<bool>, EnableAccessToIndexImplTables, std::nullopt);
+        OPTION(std::optional<bool>, EnableIndexMaterialization, std::nullopt);
 
         #undef OPTION
     };
@@ -197,12 +201,14 @@ namespace NSchemeShardUT_Private {
         const ui64 CoordinatorTabletId;
         const ui64 TxAllocatorId;
         const bool KillOnCommit;
+        ui32 TotalBuckets = 0;
+        ui32 Bucket = 0;
 
         explicit TTestWithReboots(bool killOnCommit = false, TTestEnv::TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard);
         virtual ~TTestWithReboots() = default;
 
-        void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario);
-        void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario, bool allowLogBatching);
+        virtual void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario);
+        virtual void Run(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario, bool allowLogBatching);
         void RunWithTabletReboots(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario);
         void RunWithPipeResets(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario);
         void RunWithDelays(std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario);

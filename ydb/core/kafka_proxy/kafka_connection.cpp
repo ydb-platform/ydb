@@ -74,7 +74,7 @@ public:
     std::unordered_map<ui64, Msg::TPtr> PendingRequests;
     std::deque<Msg::TPtr> PendingRequestsQueue;
 
-    enum EReadSteps { SIZE_READ, SIZE_PREPARE, INFLIGTH_CHECK, HEADER_READ, HEADER_PROCESS, MESSAGE_READ, MESSAGE_PROCESS };
+    enum EReadSteps { SIZE_READ, SIZE_PREPARE, INFLIGHT_CHECK, HEADER_READ, HEADER_PROCESS, MESSAGE_READ, MESSAGE_PROCESS };
     EReadSteps Step;
 
     TReadDemand Demand;
@@ -615,6 +615,10 @@ protected:
             OnRequestProcessed(request);
         }
 
+        if (!CloseConnection && Step == INFLIGHT_CHECK) {
+            DoRead(ctx);
+        }
+
         return true;
     }
 
@@ -724,11 +728,11 @@ protected:
                             return false;
                         }
 
-                        Step = INFLIGTH_CHECK;
+                        Step = INFLIGHT_CHECK;
 
                         [[fallthrough]];
 
-                    case INFLIGTH_CHECK:
+                    case INFLIGHT_CHECK:
                         if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
                             // Allow only one message to be processed at a time for non-authenticated users
                             KAFKA_LOG_ERROR("DoRead: failed inflight check: there are " << PendingRequestsQueue.size() << " pending requests and user is not authnicated.  Only one paraller request is allowed for a non-authenticated user.");
@@ -866,6 +870,10 @@ protected:
                 OnRequestProcessed(request);
                 KAFKA_LOG_D("Sent reply (after retry): ApiKey=" << header.RequestApiKey << ", Version=" << header.RequestApiVersion << ", Correlation=" << header.CorrelationId);
                 ProcessReplyQueue(ctx);
+
+                if (!CloseConnection && Step == INFLIGHT_CHECK) {
+                    DoRead(ctx);
+                }
             }
         }
 

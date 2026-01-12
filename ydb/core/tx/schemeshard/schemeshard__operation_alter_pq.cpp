@@ -1,7 +1,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for PQGroupReserve
+#include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -252,9 +252,7 @@ public:
             if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
                 alterConfig.SetMonitoringProjectId(it->second);
             }
-            const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
-            alterConfig.SetYdbDatabasePath(databasePath);
-
+            alterConfig.SetYdbDatabasePath(CanonizePath(context.SS->RootPathElements));
 
             if (alterConfig.HasOffloadConfig()) {
                 // TODO: check validity

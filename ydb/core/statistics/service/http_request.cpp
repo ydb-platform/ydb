@@ -7,6 +7,7 @@
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <library/cpp/json/json_writer.h>
 
 
@@ -84,6 +85,7 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
     auto navigateDomainKey = [this] (TPathId domainKey) {
         auto navigate = std::make_unique<TNavigate>();
+        navigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         auto& entry = navigate->ResultSet.emplace_back();
         entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
         entry.Operation = TNavigate::EOp::OpPath;

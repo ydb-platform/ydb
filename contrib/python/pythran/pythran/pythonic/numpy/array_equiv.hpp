@@ -23,15 +23,13 @@ namespace numpy
   } // namespace
 
   template <class U, class V>
-  typename std::enable_if<U::value == V::value, bool>::type
-  array_equiv(U const &u, V const &v)
+  std::enable_if_t<U::value == V::value, bool> array_equiv(U const &u, V const &v)
   {
     return array_equal(u, v);
   }
 
   template <class U, class V>
-      typename std::enable_if <
-      U::value<V::value, bool>::type array_equiv(U const &u, V const &v)
+      std::enable_if_t < U::value<V::value, bool> array_equiv(U const &u, V const &v)
   {
     if (v.flat_size() % u.flat_size() == 0)
       // requires allocation for u' as it is used multiple times.
@@ -40,8 +38,7 @@ namespace numpy
   }
 
   template <class U, class V>
-  typename std::enable_if<(U::value > V::value), bool>::type
-  array_equiv(U const &u, V const &v)
+  std::enable_if_t<(U::value > V::value), bool> array_equiv(U const &u, V const &v)
   {
     return array_equiv(v, u);
   }

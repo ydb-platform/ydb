@@ -12,6 +12,7 @@ PEERDIR(
     library/cpp/uri
     library/cpp/retry
     yql/essentials/utils/log
+    yql/essentials/utils/fetch/proto
 )
 
 END()

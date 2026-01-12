@@ -4807,6 +4807,24 @@ TRuntimeNode TProgramBuilder::Concat(TRuntimeNode data1, TRuntimeNode data2) {
     return InvokeBinary(__func__, isOpt1 || isOpt2 ? NewOptionalType(resultType) : resultType, data1, data2);
 }
 
+TRuntimeNode TProgramBuilder::ConcatMany(const TArrayRef<const TRuntimeNode>& args) {
+    MKQL_ENSURE(args.size() >= 1, "Expected at least one argument");
+    if (args.size() == 1) {
+        return args[0];
+    }
+
+    if (args.size() == 2) {
+        return Concat(args[0], args[1]);
+    }
+
+    // TODO make a dedicated callable
+    // split into pairs
+    ui32 midPoint = args.size() / 2;
+    return Concat(
+        ConcatMany(TArrayRef<const TRuntimeNode>(args.data(), args.data() + midPoint)),
+        ConcatMany(TArrayRef<const TRuntimeNode>(args.data() + midPoint, args.end())));
+}
+
 TRuntimeNode TProgramBuilder::AggrConcat(TRuntimeNode data1, TRuntimeNode data2) {
     MKQL_ENSURE(data1.GetStaticType()->IsSameType(*data2.GetStaticType()), "Operands type mismatch.");
     const std::array<TRuntimeNode, 2> args = {{data1, data2}};
@@ -5660,7 +5678,9 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
                                                const TBinaryLambda& merge,
                                                const TTernaryLambda& finish,
                                                TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay,
-                                               TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode)
+                                               TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode,
+                                               TRuntimeNode farFutureSizeLimit, TRuntimeNode farFutureTimeLimit,
+                                               TRuntimeNode earlyPolicy, TRuntimeNode latePolicy)
 {
     auto streamType = AS_TYPE(TStreamType, list);
     auto itemType = AS_TYPE(TStructType, streamType->GetItemType());
@@ -5727,6 +5747,15 @@ TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
     callableBuilder.Add(delay);
     callableBuilder.Add(dataWatermarks);
     callableBuilder.Add(watermarksMode);
+    if (farFutureSizeLimit || farFutureTimeLimit || earlyPolicy || latePolicy) {
+        if constexpr (RuntimeVersion < 70U) {
+            THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+        }
+        callableBuilder.Add(farFutureSizeLimit);
+        callableBuilder.Add(farFutureTimeLimit);
+        callableBuilder.Add(earlyPolicy);
+        callableBuilder.Add(latePolicy);
+    }
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

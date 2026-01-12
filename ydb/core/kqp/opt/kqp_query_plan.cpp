@@ -2304,7 +2304,9 @@ private:
             lookupOps.AppendValue(std::move(lookupOp));
             lookupPlan["Operators"] = std::move(lookupOps);
 
-            newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0));
+	        if (plan.GetMapSafe().contains("Plans")) {
+                newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0));
+            }
 
             newPlans.AppendValue(std::move(lookupPlan));
 
@@ -3273,6 +3275,12 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         if (t.HasReadRows()) {
                             FillAggrStat(tableInfo, t.GetReadRows(), "ReadRows");
                         }
+                    }
+                }
+                if (const auto& mkqlStat = (*stat)->GetMkql(); !mkqlStat.empty()) {
+                    auto& mkqlStats = stats.InsertValue("Mkql", NJson::JSON_MAP);
+                    for (const auto& [name, m] : mkqlStat) {
+                        FillAggrStat(mkqlStats, m, name);
                     }
                 }
 

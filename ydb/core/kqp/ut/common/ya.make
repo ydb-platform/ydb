@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    arrow_builders.cpp
     json2_udf.cpp
     kqp_ut_common.cpp
     kqp_ut_common.h
@@ -11,6 +12,8 @@ SRCS(
     math_udf.cpp
     unicode_udf.cpp
     digest_udf.cpp
+    fulltext_udf.cpp
+    kqp_benches.cpp
 )
 
 PEERDIR(
@@ -22,6 +25,7 @@ PEERDIR(
     yql/essentials/udfs/common/string
     yql/essentials/udfs/common/math
     yql/essentials/udfs/common/unicode_base
+    ydb/library/yql/udfs/common/fulltext
     yql/essentials/utils/backtrace
     ydb/public/lib/yson_value
     ydb/core/tx/columnshard/test_helper

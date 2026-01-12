@@ -2,6 +2,7 @@
 
 #include <yql/essentials/ast/yql_errors.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/set.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/langver/yql_langver.h>
@@ -33,6 +34,10 @@ struct TCheckFilter {
     TString CheckNameGlob;
 };
 
+struct TUdfFilter {
+    THashMap<TString, THashSet<TString>> Modules;
+};
+
 struct TChecksRequest {
     TString Program;
     TString File;
@@ -44,6 +49,8 @@ struct TChecksRequest {
     TLangVersion LangVer = MinLangVersion;
     bool IsAnsiLexer = false;
     EMode Mode = EMode::Default;
+    const TUdfFilter* UdfFilter = nullptr;
+    bool WithTypeCheck = false;
     TMaybe<TVector<TCheckFilter>> Filters;
 };
 

@@ -340,7 +340,7 @@ private:
         if (input.Maybe<TResIf>()) {
             if (input.Ref().HasResult()) {
                 auto resultYsonString = input.Ref().GetResult().Content();
-                auto resultNode = NYT::NodeFromYsonString(TString(resultYsonString), ::NYson::EYsonType::Node);
+                auto resultNode = NYT::NodeFromYsonString(resultYsonString, ::NYson::EYsonType::Node);
                 YQL_ENSURE(resultNode.IsMap());
                 auto resultBoolNode = resultNode.AsMap()["Data"];
                 YQL_ENSURE(resultBoolNode.IsBool());
@@ -449,7 +449,7 @@ private:
             } else if (input.Ref().HasResult()) {
                 // parse list
                 auto resultYsonString = input.Ref().GetResult().Content();
-                auto resultNode = NYT::NodeFromYsonString(TString(resultYsonString), ::NYson::EYsonType::Node);
+                auto resultNode = NYT::NodeFromYsonString(resultYsonString, ::NYson::EYsonType::Node);
                 YQL_ENSURE(resultNode.IsMap());
                 auto resultDataNode = resultNode.AsMap()["Data"];
 

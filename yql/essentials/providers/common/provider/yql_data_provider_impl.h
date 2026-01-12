@@ -49,6 +49,8 @@ public:
     TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override;
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override;
     const THashMap<TString, TString>* GetClusterTokens() override;
+    TMaybe<TString> ResolveClusterToken(const TString& cluster) override;
+    const THashSet<TString>& GetValidClusters() override;
     IGraphTransformer& GetIODiscoveryTransformer() override;
     IGraphTransformer& GetEpochsTransformer() override;
     IGraphTransformer& GetIntentDeterminationTransformer() override;
@@ -96,11 +98,15 @@ public:
     IYtflowIntegration* GetYtflowIntegration() override;
     IYtflowOptimization* GetYtflowOptimization() override;
     NLayers::ILayersIntegrationPtr GetLayersIntegration() const override;
+    bool IsFullCaptureReady() override;
 
 protected:
     THolder<IGraphTransformer> DefConstraintTransformer_;
     TNullTransformer NullTransformer_;
     TTrackableNodeProcessorBase NullTrackableNodeProcessor_;
+
+    // TODO: remove after overriding GetValidClusters method in all descendants
+    THashSet<TString> ValidClusters_;
 };
 
 TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx);

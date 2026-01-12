@@ -5,15 +5,21 @@ SRCS(
     aggregator.cpp
     aggregator_impl.h
     aggregator_impl.cpp
+    analyze_actor.h
+    analyze_actor.cpp
+    column_statistic_eval.h
+    column_statistic_eval.cpp
     schema.h
     schema.cpp
+    select_builder.h
+    select_builder.cpp
     tx_ack_timeout.cpp
     tx_aggr_stat_response.cpp
     tx_analyze.cpp
     tx_analyze_deadline.cpp
-    tx_analyze_table_delivery_problem.cpp
-    tx_analyze_table_request.cpp
-    tx_analyze_table_response.cpp
+    tx_analyze_shard_delivery_problem.cpp
+    tx_analyze_shard_request.cpp
+    tx_analyze_shard_response.cpp
     tx_configure.cpp
     tx_datashard_scan_response.cpp
     tx_finish_trasersal.cpp

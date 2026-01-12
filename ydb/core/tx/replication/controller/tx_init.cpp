@@ -62,6 +62,10 @@ class TController::TTxInit: public TTxBase {
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
 
+            if (!database) {
+                Self->UnresolvedDatabaseReplications.emplace(replication->GetId(), ResolveDatabaseAttemptsLimit);
+            }
+
             if (!rowset.Next()) {
                 return false;
             }
@@ -244,7 +248,18 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         CLOG_D(ctx, "Complete");
-        Self->SwitchToWork(ctx);
+
+        if (Self->UnresolvedDatabaseReplications.empty()) {
+            Self->SwitchToWork(ctx);
+        } else {
+            for (auto& [rid, resolveAttempts] : Self->UnresolvedDatabaseReplications) {
+                auto replication = Self->Find(rid);
+                replication->ResolveDatabase(ctx);
+                --resolveAttempts;
+            }
+
+            Self->SwitchToDatabaseResolve(ctx);
+        }
     }
 
 }; // TTxInit

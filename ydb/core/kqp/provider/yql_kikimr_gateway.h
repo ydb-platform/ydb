@@ -21,6 +21,7 @@
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/kqp_tablemetadata.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
@@ -92,7 +93,7 @@ struct TIndexDescription {
     const ui64 LocalPathId;
     const ui64 PathOwnerId;
 
-    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription, NKikimrKqp::TFulltextIndexDescription>;
+    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription, NKikimrSchemeOp::TFulltextIndexDescription>;
     TSpecializedIndexDescription SpecializedIndexDescription;
 
     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
@@ -133,7 +134,7 @@ struct TIndexDescription {
                 break;
             }
             case EType::GlobalFulltext: {
-                NKikimrKqp::TFulltextIndexDescription fulltextIndexDescription;
+                NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
                 *fulltextIndexDescription.MutableSettings() = index.GetFulltextIndexDescription().GetSettings();
                 SpecializedIndexDescription = std::move(fulltextIndexDescription);
                 break;
@@ -236,7 +237,7 @@ struct TIndexDescription {
                 *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
                 break;
             case EType::GlobalFulltext:
-                *message->MutableFulltextIndexDescription() = std::get<NKikimrKqp::TFulltextIndexDescription>(SpecializedIndexDescription);
+                *message->MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
                 break;
         }
     }
@@ -263,12 +264,31 @@ struct TIndexDescription {
                 }
                 return true;
             case EType::GlobalFulltext:
-                return true;
+                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+                const auto& settings = fulltextDesc->GetSettings();
+                if (settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT) {
+                    // Only FLAT fulltext index update is supported at the moment
+                    return true;
+                }
+                return false;
         }
     }
 
     std::span<const std::string_view> GetImplTables() const {
-        return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
+        switch (Type) {
+            case EType::GlobalSync:
+            case EType::GlobalSyncUnique:
+            case EType::GlobalAsync:
+            case EType::GlobalSyncVectorKMeansTree:
+                return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
+            case EType::GlobalFulltext:
+                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+                const auto& settings = fulltextDesc->GetSettings();
+                return NKikimr::NTableIndex::GetFulltextImplTables(settings.layout());
+        }
+        return {};
     }
 };
 
@@ -507,6 +527,9 @@ enum class ESourceType : ui32 {
     ExternalDataSource = 2
 };
 
+struct TKikimrTableMetadata;
+typedef TIntrusivePtr<TKikimrTableMetadata> TKikimrTableMetadataPtr;
+
 struct TExternalSource {
     ESourceType SourceType = ESourceType::Unknown;
     TString Type;
@@ -522,6 +545,7 @@ struct TExternalSource {
     TString Token;
     NKikimrSchemeOp::TAuth DataSourceAuth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
+    TKikimrTableMetadataPtr UnderlyingExternalSourceMetadata;
 };
 
 enum EMetaSerializationType : ui64 {
@@ -745,10 +769,14 @@ struct TAlterDatabaseSettings {
     std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
 };
 
+struct TTruncateTableSettings {
+    TString TablePath;
+};
+
 struct TCreateUserSettings {
     TString UserName;
     TString Password;
-    bool IsHashedPassword = false;
+    TString HashedPassword;
     bool CanLogin;
 };
 
@@ -768,7 +796,7 @@ struct TModifyPermissionsSettings {
 struct TAlterUserSettings {
     TString UserName;
     std::optional<TString> Password;
-    bool IsHashedPassword = false;
+    std::optional<TString> HashedPassword;
     std::optional<bool> CanLogin;
 };
 
@@ -1052,7 +1080,8 @@ struct TAnalyzeSettings {
 };
 
 struct TBackupCollectionSettings {
-    bool IncrementalBackupEnabled;
+    bool IncrementalBackupEnabled = false;
+    bool OmitIndexes = false;
 };
 
 struct TCreateBackupCollectionSettings {
@@ -1099,8 +1128,6 @@ struct TKikimrListPathItem {
     TString Name;
     bool IsDirectory;
 };
-
-typedef TIntrusivePtr<TKikimrTableMetadata> TKikimrTableMetadataPtr;
 
 template<typename TResult>
 class IKikimrAsyncResult : public TThrRefBase {
@@ -1255,6 +1282,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false, bool replaceIfExists = false) = 0;
 

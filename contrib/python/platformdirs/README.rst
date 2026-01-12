@@ -20,11 +20,11 @@ For example, if running on macOS, you should use::
 
 If on Windows (at least English Win) that should be::
 
-    C:\Documents and Settings\<User>\Application Data\Local Settings\<AppAuthor>\<AppName>
+    C:\Users\<User>\Application Data\Local Settings\<AppAuthor>\<AppName>
 
 or possibly::
 
-    C:\Documents and Settings\<User>\Application Data\<AppAuthor>\<AppName>
+    C:\Users\<User>\Application Data\<AppAuthor>\<AppName>
 
 for `roaming profiles <https://docs.microsoft.com/en-us/previous-versions/windows/it-pro/windows-vista/cc766489(v=ws.10)>`_ but that is another story.
 

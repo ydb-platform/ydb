@@ -130,7 +130,7 @@ NThreading::TFuture<TMaybe<TString>> TFmrTableDataServiceReader::GetTableDataSer
 
 void TFmrTableDataServiceReader::SetMinChunkInNewRange() {
     if (CurrentRange_ < TableRanges_.size()) {
-        CurrentChunk_ = TableRanges_[0].MinChunk;
+        CurrentChunk_ = TableRanges_[CurrentRange_].MinChunk;
     }
 }
 

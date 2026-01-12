@@ -1,5 +1,6 @@
 #include "kqp_run_script_actor.h"
 
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
@@ -124,7 +125,10 @@ public:
         , QueryServiceConfig(std::move(queryServiceConfig))
         , SaveQueryPhysicalGraph(settings.SaveQueryPhysicalGraph)
         , DisableDefaultTimeout(settings.DisableDefaultTimeout)
+        , CheckpointId(settings.CheckpointId)
         , PhysicalGraph(std::move(settings.PhysicalGraph))
+        , StreamingQueryPath(settings.StreamingQueryPath)
+        , CustomerSuppliedId(std::move(settings.CustomerSuppliedId))
         , Counters(settings.Counters)
     {}
 
@@ -137,10 +141,12 @@ public:
             Database,
             /* SessionId*/ "",
             ExecutionId,
-            /* CustomerSuppliedId */ traceId,
+            /* CustomerSuppliedId */ CustomerSuppliedId ? CustomerSuppliedId : traceId,
             SelfId()
         );
         UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
+        UserRequestContext->CheckpointId = CheckpointId;
+        UserRequestContext->StreamingQueryPath = StreamingQueryPath;
 
         LOG_I("Bootstrap");
 
@@ -156,6 +162,7 @@ private:
         hFunc(TEvSaveScriptExternalEffectRequest, Handle);
         hFunc(TEvSaveScriptPhysicalGraphRequest, Handle);
         hFunc(TEvSaveScriptPhysicalGraphResponse, Handle);
+        hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
         hFunc(TEvKqp::TEvQueryResponse, Handle);
         hFunc(TEvKqp::TEvCreateSessionResponse, Handle);
         IgnoreFunc(TEvKqp::TEvCloseSessionResponse);
@@ -242,7 +249,7 @@ private:
         ev->SetDisableDefaultTimeout(DisableDefaultTimeout);
         ev->SetUserRequestContext(UserRequestContext);
         if (PhysicalGraph) {
-            ev->SetQueryPhysicalGraph(std::move(*PhysicalGraph));
+            ev->SetQueryPhysicalGraph(*PhysicalGraph);
         }
         if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
             ev->SetProgressStatsPeriod(ProgressStatsPeriod ? ProgressStatsPeriod : TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
@@ -263,6 +270,7 @@ private:
             ast = std::nullopt;
         }
 
+        SavedRunningStatus = true;
         const auto& updaterId = Register(CreateScriptProgressActor(ExecutionId, Database, plan, LeaseGeneration, ast, QueryServiceConfig));
         LOG_T("Start TScriptProgressActor " << updaterId);
     }
@@ -318,7 +326,7 @@ private:
     void TerminateActorExecution(Ydb::StatusIds::StatusCode replyStatus, const NYql::TIssues& replyIssues) {
         LOG_I("Script execution finalized, cancel response status: " << replyStatus << ", issues: " << replyIssues.ToOneLineString());
         for (auto& req : CancelRequests) {
-            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues));
+            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues), 0, req->Cookie);
         }
         PassAway();
     }
@@ -567,7 +575,13 @@ private:
     }
 
     void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
-        LOG_T("Got script progress from " << ev->Sender);
+        const bool isExecuting = IsExecuting();
+        LOG_T("Got script progress from " << ev->Sender << ", isExecuting: " << isExecuting);
+
+        if (!isExecuting) {
+            return;
+        }
+
         const auto& record = ev->Get()->Record;
         QueryPlan = record.GetQueryPlan();
         QueryAst = record.GetQueryAst();
@@ -606,17 +620,59 @@ private:
             return;
         }
 
+        if (PhysicalGraph) {
+            ev->Get()->PhysicalGraph.SetZeroCheckpointSaved(PhysicalGraph->GetZeroCheckpointSaved());
+        } else {
+            PhysicalGraph = ev->Get()->PhysicalGraph;
+        }
+
         PhysicalGraphSender = ev->Sender;
         const auto& saverId = Register(CreateSaveScriptExecutionPhysicalGraphActor(SelfId(), Database, ExecutionId, std::move(ev->Get()->PhysicalGraph), LeaseGeneration, QueryServiceConfig));
         LOG_D("Save script physical graph, saver id: " << saverId);
+        SaveScriptPhysicalGraphInflight++;
     }
 
     void Handle(TEvSaveScriptPhysicalGraphResponse::TPtr& ev) {
+        SaveScriptPhysicalGraphInflight--;
         LOG_D("Script physical graph saved " << ev->Sender << ", Status: " << ev->Get()->Status << ", Issues: " << ev->Get()->Issues.ToOneLineString());
 
-        Y_ABORT_UNLESS(PhysicalGraphSender);
-        Forward(ev, *PhysicalGraphSender);
-        UpdateScriptProgress("{}");
+        if (PhysicalGraphSender) {
+            Forward(ev, *PhysicalGraphSender);
+            PhysicalGraphSender = {};
+        } else if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            Issues.AddIssue("Internal error. Failed to update query physical graph");
+            if (IsExecuting()) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR);
+            }
+        }
+
+        if (!SavedRunningStatus) {
+            UpdateScriptProgress("{}");
+        }
+
+        CheckInflight();
+    }
+
+    void Handle(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone::TPtr& ev) {
+        LOG_I("Zero checkpoint saved by " << ev->Sender);
+
+        if (RunState != ERunState::Running) {
+            LOG_N("Zero checkpoint saved after finalization");
+            return;
+        }
+
+        if (!PhysicalGraph) {
+            Issues.AddIssue("Internal error. Zero checkpoint saved before physical graph saved");
+            Finish(Ydb::StatusIds::INTERNAL_ERROR);
+            return;
+        }
+
+        if (!PhysicalGraph->GetZeroCheckpointSaved()) {
+            PhysicalGraph->SetZeroCheckpointSaved(true);
+            const auto& saverId = Register(CreateSaveScriptExecutionPhysicalGraphActor(SelfId(), Database, ExecutionId, *PhysicalGraph, LeaseGeneration, QueryServiceConfig));
+            LOG_D("Save script physical graph after zero checkpoint saved, saver id: " << saverId);
+            SaveScriptPhysicalGraphInflight++;
+        }
     }
 
     void Handle(TEvKqp::TEvQueryResponse::TPtr& ev) {
@@ -632,7 +688,11 @@ private:
         NYql::IssuesFromMessage(issueMessage, issues);
         Issues.AddIssues(TruncateIssues(issues));
 
-        LOG_I("Script query finished from " << ev->Sender << " " << record.GetYdbStatus() << ", Issues: " << Issues.ToOneLineString());
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            LOG_I("Script query successfully finished from " << ev->Sender << ", Issues: " << Issues.ToOneLineString());
+        } else {
+            LOG_W("Script query failed from " << ev->Sender << " " << record.GetYdbStatus() << ", Issues: " << Issues.ToOneLineString());
+        }
 
         if (record.GetYdbStatus() == Ydb::StatusIds::TIMEOUT) {
             const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig);
@@ -673,13 +733,13 @@ private:
             CancelRequests.emplace_front(std::move(ev));
             break;
         case ERunState::Cancelled:
-            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already cancelled"));
+            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already cancelled"), 0, ev->Cookie);
             break;
         case ERunState::Finishing:
             CancelRequests.emplace_front(std::move(ev));
             break;
         case ERunState::Finished:
-            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"));
+            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"), 0, ev->Cookie);
             break;
         }
     }
@@ -843,7 +903,7 @@ private:
     }
 
     void CheckInflight() {
-        if (SaveResultMetaInflight || SaveResultInflight) {
+        if (SaveResultMetaInflight || SaveResultInflight || SaveScriptPhysicalGraphInflight) {
             return;
         }
 
@@ -920,7 +980,10 @@ private:
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     const bool SaveQueryPhysicalGraph = false;
     const bool DisableDefaultTimeout = false;
+    const TString CheckpointId;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
+    const TString StreamingQueryPath;
+    const TString CustomerSuppliedId;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;
@@ -929,6 +992,7 @@ private:
     bool FinalStatusIsSaved = false;
     bool FinishAfterLeaseUpdate = false;
     bool WaitFinalizationRequest = false;
+    bool SavedRunningStatus = false;
     ERunState RunState = ERunState::Created;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;
     ui64 CancelRequestsCount = 0;
@@ -942,6 +1006,7 @@ private:
     std::vector<TResultSetInfo> ResultSetInfos;
     TMap<ui64, TProducerState> StreamChannels;
     std::optional<TInstant> ExpireAt;
+    ui32 SaveScriptPhysicalGraphInflight = 0;
     ui32 SaveResultInflight = 0;
     ui64 SaveResultInflightBytes = 0;
     ui32 SaveResultMetaInflight = 0;

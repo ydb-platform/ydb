@@ -1,10 +1,12 @@
 #pragma once
 
-#include <yt/yt/core/misc/public.h>
+#include <yt/yt/client/api/public.h>
 
 #include <yt/yt/client/hydra/public.h>
 
 #include <yt/yt/client/transaction_client/public.h>
+
+#include <yt/yt/core/misc/public.h>
 
 namespace NYT::NHiveClient {
 
@@ -28,6 +30,9 @@ using NHydra::TCellId;
 using NHydra::NullCellId;
 
 struct TTimestampMap;
+
+template <std::derived_from<NApi::IConnection> TConnection>
+class TClusterDirectoryBase;
 
 DECLARE_REFCOUNTED_STRUCT(ITransactionParticipant)
 

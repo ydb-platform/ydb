@@ -1,0 +1,5 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:1:18: Warning: Consider using function CurrentUtcTimestamp instead to avoid performance overhead
+    	select SimplePg::now() >= Date('1970-01-01');
+	                 ^

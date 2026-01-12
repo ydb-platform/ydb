@@ -225,8 +225,14 @@ public:
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
         AFL_VERIFY(InsertedPortionsById.contains(it->second->GetPortionId()));
-        it->second->SetCommitSnapshot(ssRemove);
+        // it is better to set remove snapshot before the commit snapshot
+        // because otherwise concurrent readers may see the portion as just committed while
+        // the commit snapshot is already set, but the remove snapshot is not set yet.
+        // this problem should be addressed properly by a synchronized (or atomic) access
+        // to this part of the portion info state https://github.com/ydb-platform/ydb/issues/27205.
+        // until then, this workaround is better than nothing.
         it->second->SetRemoveSnapshot(ssRemove);
+        it->second->SetCommitSnapshot(ssRemove);
         TDbWrapper wrapper(txc.DB, nullptr);
         it->second->CommitToDatabase(wrapper);
     }
@@ -281,9 +287,9 @@ public:
 
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(
+    std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
-        return OptimizerPlanner->GetOptimizationTask(self, locksManager);
+        return OptimizerPlanner->GetOptimizationTasks(self, locksManager);
     }
 
     const NGranule::NPortionsIndex::TPortionsIndex& GetPortionsIndex() const {

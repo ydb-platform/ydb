@@ -24,6 +24,7 @@ struct TConfigItemInfo {
         ReplaceConfigWithConsoleYaml,
         ReplaceConfigWithConsoleProto,
         ReplaceConfigWithBase,
+        ReplaceConfigWithSeedNodes,
         LoadYamlConfigFromFile,
         SetExplicitly,
         UpdateExplicitly,
@@ -157,8 +158,7 @@ class IConfigurationResult {
 public:
     virtual ~IConfigurationResult() {}
     virtual const NKikimrConfig::TAppConfig& GetConfig() const = 0;
-    virtual bool HasMainYamlConfig() const = 0;
-    virtual const TString& GetMainYamlConfig() const = 0;
+    virtual const std::optional<TString>& GetMainYamlConfig() const = 0;
     virtual TMap<ui64, TString> GetVolatileYamlConfigs() const = 0;
     virtual bool HasDatabaseYamlConfig() const = 0;
     virtual const TString& GetDatabaseYamlConfig() const = 0;
@@ -180,8 +180,10 @@ public:
 class IStorageConfigResult {
 public:
     virtual ~IStorageConfigResult() {}
-    virtual const TString& GetMainYamlConfig() const = 0;
-    virtual const TString& GetStorageYamlConfig() const = 0;
+    virtual const std::optional<TString>& GetMainYamlConfig() const = 0;
+    virtual const std::optional<TString>& GetStorageYamlConfig() const = 0;
+    virtual const TString& GetSourceAddress() const = 0;
+    virtual bool IsTransient() const = 0;
 };
 
 class IConfigClient {
@@ -191,7 +193,9 @@ public:
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const IEnv& env,
-        IInitLogger& logger) const = 0;
+        IInitLogger& logger,
+        const std::vector<TString>& hostOptions,
+        int interconnectPort) const = 0;
 };
 
 // ===
@@ -252,6 +256,7 @@ struct TDebugInfo {
 struct TConfigsDispatcherInitInfo {
     NKikimrConfig::TAppConfig InitialConfig;
     TString StartupConfigYaml;
+    TString StartupStorageYaml;
     TMap<TString, TString> Labels;
     std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     std::optional<TDebugInfo> DebugInfo;
@@ -271,6 +276,7 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
+        bool& tinyMode,
         TString& clusterName,
         NConfig::TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const = 0;
 };
@@ -330,6 +336,7 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
+        bool& tinyMode,
         TString& clusterName,
         TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const
     {
@@ -339,6 +346,7 @@ public:
             scopeId,
             tenantName,
             servicesMask,
+            tinyMode,
             clusterName,
             configsDispatcherInitInfo);
     }

@@ -213,7 +213,7 @@ private:
 
 class THoppingWindow final: public INode {
 public:
-    THoppingWindow(TPosition pos, TVector<TNodePtr> args);
+    THoppingWindow(TPosition pos, TVector<TNodePtr> args, bool useNamed);
     TNodePtr BuildTraits(const TString& label) const;
     TNodePtr GetInterval() const;
     void MarkValid();
@@ -232,8 +232,13 @@ private:
     TNodePtr TimeExtractor_;
     TNodePtr Hop_;
     TNodePtr Interval_;
+    TNodePtr SizeLimit_;
+    TNodePtr TimeLimit_;
+    TNodePtr EarlyPolicy_;
+    TNodePtr LatePolicy_;
     const TNodePtr Delay_ = Y("Interval", Q("0"));
     const TString DataWatermarks_ = "true";
+    bool UseNamed_ = false;
     bool Valid_;
 };
 
@@ -245,6 +250,9 @@ TSourcePtr BuildEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources, TVector<b
 TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped);
 TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1);
 bool IsSubqueryRef(const TSourcePtr& source);
+TNodePtr BuildYqlSubquery(TNodePtr source, TString alias);
+TNodePtr BuildYqlSubqueryRef(TNodePtr subquery, TString ref);
+bool IsYqlSubqueryRef(const TNodePtr& source);
 
 TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos);
 TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false, bool withTables = false);
@@ -284,11 +292,12 @@ TSourcePtr BuildSelectCore(
 TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake);
 TSourcePtr BuildAnyColumnSource(TPosition pos);
 
-enum class ReduceMode {
+enum class EReduceMode {
     ByPartition,
     ByAll,
 };
-TSourcePtr BuildReduce(TPosition pos, ReduceMode mode, TSourcePtr source, TVector<TSortSpecificationPtr>&& orderBy,
+
+TSourcePtr BuildReduce(TPosition pos, EReduceMode mode, TSourcePtr source, TVector<TSortSpecificationPtr>&& orderBy,
                        TVector<TNodePtr>&& keys, TVector<TNodePtr>&& args, TNodePtr udf, TNodePtr having, const TWriteSettings& settings,
                        const TVector<TSortSpecificationPtr>& assumeOrderBy, bool listCall);
 TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, bool withExtFunction, TVector<TNodePtr>&& terms, bool listCall,
@@ -311,6 +320,7 @@ TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& tab
 TNodePtr BuildBatchDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source, TNodePtr options = nullptr);
 
 // Implemented in query.cpp
+TNodePtr BuildTruncateTable(TPosition pos, const TTableRef& tr, const TTruncateTableParameters& params, TScopedStatePtr scoped);
 TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped);
 TNodePtr BuildAlterDatabase(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAlterDatabaseParameters& params, TScopedStatePtr scoped);
 TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TViewDescription& view);

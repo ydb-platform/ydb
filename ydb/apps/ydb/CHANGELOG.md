@@ -1,8 +1,31 @@
+* Added the `Created by`, `Create time` and `End time` fields to the "build index" and the "execute script" operations in the `ydb operation` subcommands.
+* Added the `--include-index-data` option to the `ydb export s3` command, enabling index data export.
+* Added the `--index-population-mode` option to the `ydb import s3` command, allowing selection of the index population mode (e.g. build or import).
+
+## 2.28.0 ##
+
+* The `ydb admin cluster state fetch` command was renamed to the `ydb admin cluster diagnostics collect`.
+* Added a new `--no-sanitize` option of the `ydb admin cluster state fetch` command. The new option disable sanitization and preserve sensitive data in the output.
+* Added `snapshot-ro` and `snapshot-rw` transaction modes to `--tx-mode` option of the `ydb table query execute` command.
+* Added `NO_COLOR` environment variable support to disable ANSI colors in YDB CLI (no-color.org)
+* Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output compressed file.
+* Added a simple progress bar for non-interactive stderr.
+* Added a new `omit-indexes` property to the `--item` option of the `ydb tools copy` command, allowing tables to be copied without their indexes.
+* Fixed a bug where the `ydb tools restore` command could crash with an `mutex lock failure (Invalid argument)` error due to an internal race condition.
+* The `ydb workload vector` now supports the `import files` subcommand to populate the table from CSV or parquet files.
+* The `ydb workload vector` now supports the `import generate` subcommand to populate the table with random data.
+* Named expression-containing view restoration and restoration of views that access secondary indexes have been fixed.
+
+## 2.27.0 ##
+
+* Added a new `--exclude` option to the `ydb import s3` command, allowing objects to be excluded from the operation if their names match a pattern.
+* Added a new `ydb admin cluster state fetch` command to collect information about cluster nodes state and metrics.
 * Fixed a bug with no consumer creation for transfers with absolute topic paths when no CONNECTION_STRING is provided.
 * Added transfer objects support to the `ydb tools dump` and `ydb tools restore` commands.
 * Fixed a bug where the `ydb debug ping` command crashed in case of any error.
 * Added a new `--retention-period` option to the `ydb topic` subcommands. The new option supports various time units, such as seconds, minutes, or days. Usage of the legacy `--retention-period-hours` option is discouraged.
 * The `ydb topic consumer add` subcommand now has a new `--availability-period` option, which overrides the consumer's retention guarantee.
+* The `ydb workload vector` now supports `build-index` and `drop-index` subcommands.
 
 ## 2.26.0 ##
 

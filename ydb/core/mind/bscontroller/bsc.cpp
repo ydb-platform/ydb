@@ -188,14 +188,14 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
         if (metrics.HasMaxWriteThroughput()) {
             writeThroughput = Min(writeThroughput.value_or(Max<ui64>()), metrics.GetMaxWriteThroughput() / shareFactor);
         }
-        if (const auto& vm = vslot->Metrics; vm.HasOccupancy()) {
-            occupancy = Max(occupancy.value_or(0), vm.GetOccupancy());
+        if (const auto& vm = vslot->Metrics; vm.HasNormalizedOccupancy()) {
+            occupancy = Max(occupancy.value_or(0), vm.GetNormalizedOccupancy());
         }
 
         const bool hasAllMetrics = metrics.HasMaxIOPS()
             && metrics.HasMaxReadThroughput()
             && metrics.HasMaxWriteThroughput()
-            && vslot->Metrics.HasOccupancy();
+            && vslot->Metrics.HasNormalizedOccupancy();
         if (hasAllMetrics) {
             vdisksWithAllMetrics |= {Topology.get(), vslot->GetShortVDiskId()};
         }
@@ -238,8 +238,8 @@ bool TBlobStorageController::TGroupInfo::FillInVDiskResources(
         if (m.HasAllocatedSize()) {
             pb->SetAllocatedSize(Max<ui64>(pb->HasAllocatedSize() ? pb->GetAllocatedSize() : 0, f * m.GetAllocatedSize()));
         }
-        if (m.HasSpaceColor()) {
-            pb->SetSpaceColor(pb->HasSpaceColor() ? Max(pb->GetSpaceColor(), m.GetSpaceColor()) : m.GetSpaceColor());
+        if (m.HasCapacityAlert()) {
+            pb->SetSpaceColor(pb->HasSpaceColor() ? Max(pb->GetSpaceColor(), m.GetCapacityAlert()) : m.GetCapacityAlert());
         }
 
         const bool hasAllMetrics = m.HasAvailableSize() && m.HasAllocatedSize();
@@ -867,16 +867,6 @@ void TBlobStorageController::IssueInitialGroupContent() {
     Send(StatProcessorActorId, ev.Release());
 }
 
-void TBlobStorageController::NotifyNodesAwaitingKeysForGroups(ui32 groupId) {
-    if (const auto it = NodesAwaitingKeysForGroup.find(groupId); it != NodesAwaitingKeysForGroup.end()) {
-        TSet<ui32> nodes = std::move(it->second);
-        NodesAwaitingKeysForGroup.erase(it);
-        for (const TNodeId nodeId : nodes) {
-            Send(SelfId(), new TEvBlobStorage::TEvControllerGetGroup(nodeId, groupId));
-        }
-    }
-}
-
 void TBlobStorageController::ValidateInternalState() {
     // here we compare different structures to ensure that the memory state is sane
 #ifndef NDEBUG
@@ -1163,6 +1153,8 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateBridgeGroupInfo:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kReconfigureVirtualGroup:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kRecommissionGroups:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:
@@ -1219,7 +1211,7 @@ void TBlobStorageController::TStaticGroupInfo::UpdateStatus(TMonotonic mono, TBl
 
 void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageController *controller) {
     LayoutCorrect = true;
-    if (!Info || Info->IsBridged()) {
+    if (!Info || Info->IsBridged() || !controller->SelfManagementEnabled) {
         return;
     }
 

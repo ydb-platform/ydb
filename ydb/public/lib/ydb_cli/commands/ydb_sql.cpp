@@ -1,24 +1,10 @@
 #include "ydb_sql.h"
 
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
-#include <library/cpp/json/json_prettifier.h>
-#include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
-#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
-#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
-#include <ydb/public/lib/ydb_cli/common/print_operation.h>
-#include <ydb/public/lib/ydb_cli/common/progress_indication.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
-#include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <util/generic/queue.h>
-#include <util/string/escape.h>
-#include <google/protobuf/text_format.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 using namespace NKikimr::NOperationId;
 
@@ -35,18 +21,18 @@ void TCommandSql::Config(TConfig& config) {
         .StoreResult(&QueryFile);
     config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query logical plan. "
             "The query is not actually executed, thus does not affect the database.")
-        .StoreTrue(&ExplainMode);
+        .StoreTrue(&ExecSettings.ExplainMode);
     config.Opts->AddLongOption("explain-ast", "In addition to the query logical plan, you can get an AST (abstract syntax tree). "
             "The AST section contains a representation in the internal miniKQL language.")
-        .StoreTrue(&ExplainAst);
+        .StoreTrue(&ExecSettings.ExplainAst);
     config.Opts->AddLongOption("explain-analyze", "Execute query in explain-analyze mode. Shows query execution plan. "
             "Query results are ignored.\n"
             "Important note: The query is actually executed, so any changes will be applied to the database.")
-        .StoreTrue(&ExplainAnalyzeMode);
+        .StoreTrue(&ExecSettings.ExplainAnalyzeMode);
     config.Opts->AddLongOption("stats", "Execution statistics collection mode [none, basic, full, profile]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TStringStream description;
     description << "Print progress of query execution. Requires non-none statistics collection mode. Available options: ";
     description << "\n  " << colors.BoldColor() << "tty" << colors.OldColor()
@@ -58,7 +44,7 @@ void TCommandSql::Config(TConfig& config) {
     config.Opts->AddLongOption("progress", description.Str())
         .RequiredArgument("[String]").Hidden().DefaultValue("none").StoreResult(&Progress);
     config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
-        .RequiredArgument("[String]").StoreResult(&DiagnosticsFile);
+        .RequiredArgument("[String]").StoreResult(&ExecSettings.DiagnosticsFile);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]")
         .Hidden()
@@ -96,23 +82,23 @@ void TCommandSql::Parse(TConfig& config) {
         throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
             << "and \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
     }
-    if (ExplainMode && ExplainAnalyzeMode) {
+    if (ExecSettings.ExplainMode && ExecSettings.ExplainAnalyzeMode) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
             << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
     }
-    if (ExplainMode && ExplainAst) {
+    if (ExecSettings.ExplainMode && ExecSettings.ExplainAst) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
             << "and \"Explain-AST mode\" (\"--explain-ast\") were provided.";
     }
-    if (ExplainAst && ExplainAnalyzeMode) {
+    if (ExecSettings.ExplainAst && ExecSettings.ExplainAnalyzeMode) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain-AST mode\" (\"--explain-ast\") "
             << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
     }
-    if (ExplainAnalyzeMode && !CollectStatsMode.empty()) {
+    if (ExecSettings.ExplainAnalyzeMode && !CollectStatsMode.empty()) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain-analyze mode. "
             "Relevant for execution mode only.";
     }
-    if (ExplainMode && !CollectStatsMode.empty()) {
+    if (ExecSettings.ExplainMode && !CollectStatsMode.empty()) {
         throw TMisuseException() << "Statistics collection mode option \"--stats\" has no effect in explain mode"
             "Relevant for execution mode only.";
     }
@@ -141,6 +127,7 @@ void TCommandSql::Parse(TConfig& config) {
     }
     // Should be called after setting ReadingSomethingFromStdin
     ParseParameters(config);
+    ExecSettings.OutputFormat = OutputFormat;
 }
 
 int TCommandSql::Run(TConfig& config) {
@@ -149,179 +136,46 @@ int TCommandSql::Run(TConfig& config) {
 
 int TCommandSql::RunCommand(TConfig& config) {
     TDriver driver = CreateDriver(config);
-    NQuery::TQueryClient client(driver);
+    TExecuteGenericQuery executor(driver);
     SetInterruptHandlers();
-    // Single stream execution
-    NQuery::TExecuteQuerySettings settings;
 
-    if (ExplainMode || ExplainAst) {
+    if (ExecSettings.ExplainMode || ExecSettings.ExplainAst) {
         // Execute explain request for the query
-        settings.ExecMode(NQuery::EExecMode::Explain);
+        ExecSettings.Settings.ExecMode(NQuery::EExecMode::Explain);
     } else {
         // Execute query
-        settings.ExecMode(NQuery::EExecMode::Execute);
-        auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
+        ExecSettings.Settings.ExecMode(NQuery::EExecMode::Execute);
+        auto defaultStatsMode = ExecSettings.ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
         auto statsMode = ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode);
-        settings.StatsMode(statsMode);
+        ExecSettings.Settings.StatsMode(statsMode);
         if (Progress == "tty") {
             if (statsMode == NQuery::EStatsMode::None) {
                 throw TMisuseException() << "Non-none statistics collection mode are required to print progress.";
             }
             if (statsMode >= NQuery::EStatsMode::Full) {
-                settings.StatsCollectPeriod(std::chrono::milliseconds(3000));
+                ExecSettings.Settings.StatsCollectPeriod(std::chrono::milliseconds(3000));
             } else {
-                settings.StatsCollectPeriod(std::chrono::milliseconds(500));
+                ExecSettings.Settings.StatsCollectPeriod(std::chrono::milliseconds(500));
             }
         }
     }
 
-    settings.Syntax(SyntaxType);
+    ExecSettings.Settings.Syntax(SyntaxType);
 
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
         THolder<TParamsBuilder> paramBuilder;
         while (!IsInterrupted() && GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
-            auto asyncResult = client.StreamExecuteQuery(
-                    Query,
-                    NQuery::TTxControl::NoTx(),
-                    paramBuilder->Build(),
-                    settings
-                );
+            ExecSettings.Parameters = paramBuilder->Build();
 
-            if (!WaitInterruptible(asyncResult)) {
-                return EXIT_FAILURE;
-            }
-            auto result = asyncResult.GetValue();
-            NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-            int printResult = PrintResponse(result);
-            if (printResult != EXIT_SUCCESS) {
-                return printResult;
+            if (const auto result = executor.Execute(Query, ExecSettings); result != EXIT_SUCCESS) {
+                return result;
             }
         }
     } else {
-        // Execute query without parameters
-        auto asyncResult = client.StreamExecuteQuery(
-            Query,
-            NQuery::TTxControl::NoTx(),
-            settings
-        );
-
-        if (!WaitInterruptible(asyncResult)) {
-            return EXIT_FAILURE;
-        }
-        auto result = asyncResult.GetValue();
-        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-        return PrintResponse(result);
-    }
-    return EXIT_SUCCESS;
-}
-
-int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
-    std::optional<std::string> stats;
-    std::optional<std::string> plan;
-    std::optional<std::string> ast;
-    std::optional<std::string> meta;
-    {
-        TResultSetPrinter printer(OutputFormat, &IsInterrupted);
-
-        TProgressIndication progressIndication;
-        TMaybe<NQuery::TExecStats> execStats;
-
-        while (!IsInterrupted()) {
-            auto asyncStreamPart = result.ReadNext();
-            if (!WaitInterruptible(asyncStreamPart)) {
-                return EXIT_FAILURE;
-            }
-            auto streamPart = asyncStreamPart.ExtractValue();
-            if (ThrowOnErrorAndCheckEOS(streamPart)) {
-                break;
-            }
-
-            if (streamPart.HasStats()) {
-                execStats = streamPart.ExtractStats();
-
-                const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
-                for (const auto& queryPhase : protoStats.query_phases()) {
-                    for (const auto& tableAccessStats : queryPhase.table_access()) {
-                        progressIndication.UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes()});
-                    }
-                }
-                progressIndication.SetDurationUs(protoStats.total_duration_us());
-
-
-                progressIndication.Render();
-            }
-
-            if (streamPart.HasResultSet() && !ExplainAnalyzeMode) {
-                progressIndication.Finish();
-                printer.Print(streamPart.GetResultSet());
-            }
-        }
-
-        if (execStats) {
-            stats = execStats->ToString();
-            plan = execStats->GetPlan();
-            ast = execStats->GetAst();
-            meta = execStats->GetMeta();
-        }
-    } // TResultSetPrinter destructor should be called before printing stats
-
-    if (ExplainAst) {
-        Cout << "Query AST:" << Endl << ast << Endl;
-
-        if (IsInterrupted()) {
-            Cerr << "<INTERRUPTED>" << Endl;
-            return EXIT_FAILURE;
-        }
-        return EXIT_SUCCESS;
+        return executor.Execute(Query, ExecSettings);
     }
 
-    if (stats && !ExplainMode && !ExplainAnalyzeMode) {
-        Cout << Endl << "Statistics:" << Endl << *stats;
-    }
-
-    if (plan) {
-        if (!ExplainMode && !ExplainAnalyzeMode
-                && (OutputFormat == EDataFormat::Default || OutputFormat == EDataFormat::Pretty)) {
-            Cout << Endl << "Execution plan:" << Endl;
-        }
-        // TODO: get rid of pretty-table format, refactor TQueryPrinter to reflect that
-        EDataFormat format = (OutputFormat == EDataFormat::Default || OutputFormat == EDataFormat::Pretty)
-            && (ExplainMode || ExplainAnalyzeMode)
-            ? EDataFormat::PrettyTable : OutputFormat;
-        TQueryPlanPrinter queryPlanPrinter(format, /* show actual costs */ !ExplainMode);
-        queryPlanPrinter.Print(TString{*plan});
-    }
-
-    if (!DiagnosticsFile.empty()) {
-        TFileOutput file(DiagnosticsFile);
-
-        NJson::TJsonValue diagnosticsJson(NJson::JSON_MAP);
-
-        if (stats) {
-            diagnosticsJson.InsertValue("stats", *stats);
-        }
-        if (ast) {
-            diagnosticsJson.InsertValue("ast", *ast);
-        }
-        if (plan) {
-            NJson::TJsonValue planJson;
-            NJson::ReadJsonTree(*plan, &planJson, true);
-            diagnosticsJson.InsertValue("plan", planJson);
-        }
-        if (meta) {
-            NJson::TJsonValue metaJson;
-            NJson::ReadJsonTree(*meta, &metaJson, true);
-            metaJson.InsertValue("query_text", EscapeC(Query));
-            diagnosticsJson.InsertValue("meta", metaJson);
-        }
-        file << NJson::PrettifyJson(NJson::WriteJson(diagnosticsJson, true), false);
-    }
-
-    if (IsInterrupted()) {
-        Cerr << "<INTERRUPTED>" << Endl;
-        return EXIT_FAILURE;
-    }
     return EXIT_SUCCESS;
 }
 
@@ -343,5 +197,4 @@ void TCommandSql::SetSyntax(const TString& syntax) {
     }
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

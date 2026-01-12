@@ -9,6 +9,7 @@
 #include <yt/yt/core/actions/future.h>
 
 #include <yt/yt/core/concurrency/async_stream.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/misc/error.h>
 
@@ -27,8 +28,8 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const i64 ContextBufferSize = static_cast<i64>(128 * 7) * 1024;
-static const i64 ContextBufferCapacity = static_cast<i64>(1024) * 1024;
+static constexpr i64 ContextBufferSize = 7 * 128_KBs;
+static constexpr i64 ContextBufferCapacity = 1_MBs;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,7 +40,7 @@ TSchemalessFormatWriterBase::TSchemalessFormatWriterBase(
     TControlAttributesConfigPtr controlAttributesConfig,
     int keyColumnCount)
     : NameTable_(std::move(nameTable))
-    , Output_(std::move(output))
+    , Output_(CreateZeroCopyAdapter(std::move(output)))
     , EnableContextSaving_(enableContextSaving)
     , ControlAttributesConfig_(std::move(controlAttributesConfig))
     , KeyColumnCount_(keyColumnCount)
@@ -58,19 +59,25 @@ TSchemalessFormatWriterBase::TSchemalessFormatWriterBase(
         TableIndexId_ = NameTable_->GetIdOrRegisterName(TableIndexColumnName);
         TabletIndexId_ = NameTable_->GetIdOrRegisterName(TabletIndexColumnName);
     } catch (const std::exception& ex) {
-        Error_ = TError("Failed to add system columns to name table for a format writer") << ex;
+        SetError(TError("Failed to add system columns to name table for a format writer")
+            << ex);
     }
 }
 
 TFuture<void> TSchemalessFormatWriterBase::GetReadyEvent()
 {
-    return MakeFuture(Error_);
+    ProcessWriteFutures();
+    if (HasError()) {
+        return MakeFuture(GetError());
+    }
+    // NB: Must wait for *all* outstanding requests, not just the first (front) one.
+    return WriteFutures_.empty() ? OKFuture : WriteFutures_.back();
 }
 
 TFuture<void> TSchemalessFormatWriterBase::Close()
 {
-    if (Closed_) {
-        return MakeFuture(Error_);
+    if (std::exchange(Closed_, true)) {
+        return GetReadyEvent();
     }
 
     try {
@@ -79,12 +86,10 @@ TFuture<void> TSchemalessFormatWriterBase::Close()
         }
         DoFlushBuffer();
     } catch (const std::exception& ex) {
-        Error_ = TError(ex);
+        SetError(TError(ex));
     }
 
-    Closed_ = true;
-
-    return MakeFuture(Error_);
+    return GetReadyEvent();
 }
 
 TBlobOutput* TSchemalessFormatWriterBase::GetOutputStream()
@@ -100,7 +105,7 @@ TBlob TSchemalessFormatWriterBase::GetContext() const
     return result;
 }
 
-void TSchemalessFormatWriterBase::TryFlushBuffer(bool force)
+void TSchemalessFormatWriterBase::MaybeFlushBuffer(bool force)
 {
     if (CurrentBuffer_.Size() > ContextBufferSize || (!EnableContextSaving_ && force)) {
         DoFlushBuffer();
@@ -124,49 +129,72 @@ void TSchemalessFormatWriterBase::DoFlushBuffer()
     }
 
     WrittenSize_ += CurrentBuffer_.Size();
-
     PreviousBuffer_ = CurrentBuffer_.Flush();
-    WaitFor(Output_->Write(PreviousBuffer_))
-        .ThrowOnError();
-
     CurrentBuffer_.Reserve(ContextBufferCapacity);
+    EnqueueWriteFuture(Output_->Write(PreviousBuffer_));
+}
+
+void TSchemalessFormatWriterBase::EnqueueWriteFuture(TFuture<void> future)
+{
+    WriteFutures_.push(std::move(future));
+}
+
+void TSchemalessFormatWriterBase::ProcessWriteFutures()
+{
+    while (!WriteFutures_.empty()) {
+        auto optionalError = WriteFutures_.front().TryGet();
+        if (!optionalError) {
+            break;
+        }
+        if (!optionalError->IsOK()) {
+            SetError(*optionalError);
+        }
+        WriteFutures_.pop();
+    }
+}
+
+bool TSchemalessFormatWriterBase::CheckWritable()
+{
+    YT_VERIFY(!Closed_);
+    ProcessWriteFutures();
+    return !HasError() && WriteFutures_.empty();
 }
 
 bool TSchemalessFormatWriterBase::Write(TRange<TUnversionedRow> rows)
 {
-    if (!Error_.IsOK()) {
+    if (!CheckWritable()) {
         return false;
     }
 
     try {
         DoWrite(rows);
     } catch (const std::exception& ex) {
-        Error_ = TError(ex);
+        SetError(TError(ex));
         return false;
     }
 
-    return true;
+    return CheckWritable();
 }
 
 bool TSchemalessFormatWriterBase::WriteBatch(IUnversionedRowBatchPtr rowBatch)
 {
-    if (!Error_.IsOK()) {
+    if (!CheckWritable()) {
         return false;
     }
 
     try {
         DoWriteBatch(rowBatch);
     } catch (const std::exception& ex) {
-        Error_ = TError(ex);
+        SetError(TError(ex));
         return false;
     }
 
-    return true;
+    return CheckWritable();
 }
 
 void TSchemalessFormatWriterBase::DoWriteBatch(IUnversionedRowBatchPtr rowBatch)
 {
-    return DoWrite(rowBatch->MaterializeRows());
+    DoWrite(rowBatch->MaterializeRows());
 }
 
 bool TSchemalessFormatWriterBase::CheckKeySwitch(TUnversionedRow row, bool isLastRow)
@@ -195,7 +223,8 @@ bool TSchemalessFormatWriterBase::CheckKeySwitch(TUnversionedRow row, bool isLas
 
 bool TSchemalessFormatWriterBase::IsSystemColumnId(int id) const
 {
-    return IsTableIndexColumnId(id) ||
+    return
+        IsTableIndexColumnId(id) ||
         IsRangeIndexColumnId(id) ||
         IsRowIndexColumnId(id) ||
         IsTabletIndexColumnId(id);
@@ -300,16 +329,16 @@ void TSchemalessFormatWriterBase::WriteControlAttributes(TUnversionedRow row)
     }
 }
 
-void TSchemalessFormatWriterBase::WriteTableIndex(i64 /* tableIndex */)
+void TSchemalessFormatWriterBase::WriteTableIndex(i64 /*tableIndex*/)
 { }
 
-void TSchemalessFormatWriterBase::WriteRangeIndex(i64 /* rangeIndex */)
+void TSchemalessFormatWriterBase::WriteRangeIndex(i64 /*rangeIndex*/)
 { }
 
-void TSchemalessFormatWriterBase::WriteRowIndex(i64 /* rowIndex */)
+void TSchemalessFormatWriterBase::WriteRowIndex(i64 /*rowIndex*/)
 { }
 
-void TSchemalessFormatWriterBase::WriteTabletIndex(i64 /* tabletIndex */)
+void TSchemalessFormatWriterBase::WriteTabletIndex(i64 /*tabletIndex*/)
 { }
 
 void TSchemalessFormatWriterBase::WriteEndOfStream()
@@ -325,18 +354,21 @@ const TError& TSchemalessFormatWriterBase::GetError() const
     return Error_;
 }
 
-void TSchemalessFormatWriterBase::RegisterError(const TError& error)
+void TSchemalessFormatWriterBase::SetError(TError error)
 {
-    Error_ = error;
+    if (!HasError()) {
+        Error_ = std::move(error);
+    }
 }
 
 TFuture<void> TSchemalessFormatWriterBase::Flush()
 {
-    TryFlushBuffer(/*force*/ true);
-    return MakeFuture(Error_);
+    MaybeFlushBuffer(/*force*/ true);
+    return GetReadyEvent();
 }
 
-std::optional<TMD5Hash> TSchemalessFormatWriterBase::GetDigest() const {
+std::optional<TRowsDigest> TSchemalessFormatWriterBase::GetDigest() const
+{
     return std::nullopt;
 }
 
@@ -390,10 +422,10 @@ void TSchemalessWriterAdapter::DoWrite(TRange<TUnversionedRow> rows)
 
         ConsumeRow(rows[index]);
         FlushWriter();
-        TryFlushBuffer(false);
+        MaybeFlushBuffer(/*force*/ false);
     }
 
-    TryFlushBuffer(true);
+    MaybeFlushBuffer(/*force*/ true);
 }
 
 void TSchemalessWriterAdapter::FlushWriter()

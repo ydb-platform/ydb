@@ -19,14 +19,14 @@
 #pragma once
 
 #include <limits>
-#include "arrow/compute/api_scalar.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/util_internal.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/decimal.h"
-#include "arrow/util/int_util_overflow.h"
-#include "arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
 
 namespace arrow20 {
 

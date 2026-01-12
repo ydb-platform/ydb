@@ -123,6 +123,7 @@ from textual.screen import (
 from textual.signal import Signal
 from textual.theme import BUILTIN_THEMES, Theme, ThemeProvider
 from textual.timer import Timer
+from textual.visual import SupportsVisual, Visual
 from textual.widget import AwaitMount, Widget
 from textual.widgets._toast import ToastRack
 from textual.worker import NoActiveWorker, get_current_worker
@@ -152,7 +153,7 @@ if constants.DEBUG:
 _ASYNCIO_GET_EVENT_LOOP_IS_DEPRECATED = sys.version_info >= (3, 10, 0)
 
 ComposeResult = Iterable[Widget]
-RenderResult = "RenderableType | Visual | SupportsTextualize"
+RenderResult: TypeAlias = "RenderableType | Visual | SupportsVisual"
 """Result of Widget.render()"""
 
 AutopilotCallbackType: TypeAlias = (
@@ -395,6 +396,12 @@ class App(Generic[ReturnType], DOMNode):
     Setting to `None` or `""` disables auto focus.
     """
 
+    ALLOW_SELECT: ClassVar[bool] = True
+    """A switch to toggle arbitrary text selection for the app.
+    
+    Note that this doesn't apply to Input and TextArea which have builtin support for selection.
+    """
+
     _BASE_PATH: str | None = None
     CSS_PATH: ClassVar[CSSPathType | None] = None
     """File paths to load CSS from."""
@@ -436,8 +443,20 @@ class App(Generic[ReturnType], DOMNode):
     ALLOW_IN_MAXIMIZED_VIEW: ClassVar[str] = "Footer"
     """The default value of [Screen.ALLOW_IN_MAXIMIZED_VIEW][textual.screen.Screen.ALLOW_IN_MAXIMIZED_VIEW]."""
 
+    CLICK_CHAIN_TIME_THRESHOLD: ClassVar[float] = 0.5
+    """The maximum number of seconds between clicks to upgrade a single click to a double click, 
+    a double click to a triple click, etc."""
+
     BINDINGS: ClassVar[list[BindingType]] = [
-        Binding("ctrl+c", "quit", "Quit", show=False, priority=True)
+        Binding(
+            "ctrl+q",
+            "quit",
+            "Quit",
+            tooltip="Quit the app and return to the command prompt.",
+            show=False,
+            priority=True,
+        ),
+        Binding("ctrl+c", "help_quit", show=False, system=True),
     ]
     """The default key bindings."""
 
@@ -581,6 +600,15 @@ class App(Generic[ReturnType], DOMNode):
         self._mouse_down_widget: Widget | None = None
         """The widget that was most recently mouse downed (used to create click events)."""
 
+        self._click_chain_last_offset: Offset | None = None
+        """The last offset at which a Click occurred, in screen-space."""
+
+        self._click_chain_last_time: float | None = None
+        """The last time at which a Click occurred."""
+
+        self._chained_clicks: int = 1
+        """Counter which tracks the number of clicks received in a row."""
+
         self._previous_cursor_position = Offset(0, 0)
         """The previous cursor position"""
 
@@ -631,8 +659,6 @@ class App(Generic[ReturnType], DOMNode):
         """
 
         self._logger = Logger(self._log)
-
-        self._refresh_required = False
 
         self._css_has_errors = False
 
@@ -760,13 +786,17 @@ class App(Generic[ReturnType], DOMNode):
         self._previous_inline_height: int | None = None
         """Size of previous inline update."""
 
-        self._hover_effects_timer: Timer | None = None
-
         self._resize_event: events.Resize | None = None
         """A pending resize event, sent on idle."""
 
         self._css_update_count: int = 0
         """Incremented when CSS is invalidated."""
+
+        self._clipboard: str = ""
+        """Contents of local clipboard."""
+
+        self.supports_smooth_scrolling: bool = False
+        """Does the terminal support smooth scrolling?"""
 
         if self.ENABLE_COMMAND_PALETTE:
             for _key, binding in self._bindings:
@@ -781,7 +811,7 @@ class App(Generic[ReturnType], DOMNode):
                         show=False,
                         key_display=self.COMMAND_PALETTE_DISPLAY,
                         priority=True,
-                        tooltip="Open command palette",
+                        tooltip="Open the command palette",
                     )
                 )
 
@@ -867,6 +897,15 @@ class App(Generic[ReturnType], DOMNode):
         except StopIteration:
             return ()
 
+    @property
+    def clipboard(self) -> str:
+        """The value of the local clipboard.
+
+        Note, that this only contains text copied in the app, and not
+        text copied from elsewhere in the OS.
+        """
+        return self._clipboard
+
     @contextmanager
     def batch_update(self) -> Generator[None, None, None]:
         """A context manager to suspend all repaints until the end of the batch."""
@@ -886,6 +925,24 @@ class App(Generic[ReturnType], DOMNode):
         assert self._batch_count >= 0, "This won't happen if you use `batch_update`"
         if not self._batch_count:
             self.check_idle()
+
+    def _delay_update(self, delay: float = 0.05) -> None:
+        """Delay updates for a short period of time.
+
+        May be used to mask a brief transition.
+
+        Args:
+            delay: Delay before updating.
+        """
+        self._begin_batch()
+
+        def end_batch() -> None:
+            """Re-enable updates, and refresh screen."""
+            self._end_batch()
+            if not self._batch_count:
+                self.screen.refresh()
+
+        self.set_timer(delay, end_batch, name="_delay_update")
 
     @contextmanager
     def _context(self) -> Generator[None, None, None]:
@@ -1498,9 +1555,9 @@ class App(Generic[ReturnType], DOMNode):
         Args:
             text: Text you wish to copy to the clipboard.
         """
+        self._clipboard = text
         if self._driver is None:
             return
-
         import base64
 
         base64_text = base64.b64encode(text.encode("utf-8")).decode("utf-8")
@@ -1892,7 +1949,7 @@ class App(Generic[ReturnType], DOMNode):
             """Called when app is ready to process events."""
             app_ready_event.set()
 
-        async def run_app(app: App) -> None:
+        async def run_app(app: App[ReturnType]) -> None:
             """Run the apps message loop.
 
             Args:
@@ -1966,7 +2023,7 @@ class App(Generic[ReturnType], DOMNode):
         if auto_pilot is None and constants.PRESS:
             keys = constants.PRESS.split(",")
 
-            async def press_keys(pilot: Pilot) -> None:
+            async def press_keys(pilot: Pilot[ReturnType]) -> None:
                 """Auto press keys."""
                 await pilot.press(*keys)
 
@@ -2614,7 +2671,6 @@ class App(Generic[ReturnType], DOMNode):
 
         if self._screen_stack:
             self.screen.post_message(events.ScreenSuspend())
-            self.screen.refresh()
         next_screen, await_mount = self._get_screen(screen)
         try:
             message_pump = active_message_pump.get()
@@ -2624,7 +2680,6 @@ class App(Generic[ReturnType], DOMNode):
         next_screen._push_result_callback(message_pump, callback, future)
         self._load_screen_css(next_screen)
         self._screen_stack.append(next_screen)
-        self.stylesheet.update(next_screen)
         next_screen.post_message(events.ScreenResume())
         self.log.system(f"{self.screen} is current (PUSHED)")
         if wait_for_dismiss:
@@ -2814,7 +2869,7 @@ class App(Generic[ReturnType], DOMNode):
 
         Args:
             widget: Widget to focus.
-            scroll_visible: Scroll widget in to view.
+            scroll_visible: Scroll widget into view.
         """
         self.screen.set_focus(widget, scroll_visible)
 
@@ -2866,8 +2921,11 @@ class App(Generic[ReturnType], DOMNode):
     def capture_mouse(self, widget: Widget | None) -> None:
         """Send all mouse events to the given widget or disable mouse capture.
 
+        Normally mouse events are sent to the widget directly under the pointer.
+        Capturing the mouse allows a widget to receive mouse events even when the pointer is over another widget.
+
         Args:
-            widget: If a widget, capture mouse event, or `None` to end mouse capture.
+            widget: Widget to capture mouse events, or `None` to end mouse capture.
         """
         if widget == self.mouse_captured:
             return
@@ -3068,6 +3126,9 @@ class App(Generic[ReturnType], DOMNode):
                 try:
                     try:
                         await self._dispatch_message(events.Compose())
+                        await self._dispatch_message(
+                            events.Resize.from_dimensions(self.size, None)
+                        )
                         default_screen = self.screen
                         self.stylesheet.apply(self)
                         await self._dispatch_message(events.Mount())
@@ -3464,7 +3525,8 @@ class App(Generic[ReturnType], DOMNode):
         try:
             if renderable is None:
                 return
-
+            if self._batch_count:
+                return
             if (
                 self._running
                 and not self._closed
@@ -3603,6 +3665,20 @@ class App(Generic[ReturnType], DOMNode):
                         return True
         return False
 
+    def action_help_quit(self) -> None:
+        """Bound to ctrl+C to alert the user that it no longer quits."""
+        # Doing this because users will reflexively hit ctrl+C to exit
+        # Ctrl+C is now bound to copy if an input / textarea is focused.
+        # This makes is possible, even likely, that a user may do it accidentally -- which would be maddening.
+        # Rather than do nothing, we can make an educated guess the user was trying
+        # to quit, and inform them how you really quit.
+        for key, active_binding in self.active_bindings.items():
+            if active_binding.binding.action in ("quit", "app.quit"):
+                self.notify(
+                    f"Press [b]{key}[/b] to quit the app", title="Do you want to quit?"
+                )
+                return
+
     def set_keymap(self, keymap: Keymap) -> None:
         """Set the keymap, a mapping of binding IDs to key strings.
 
@@ -3654,14 +3730,12 @@ class App(Generic[ReturnType], DOMNode):
         if isinstance(event, events.Compose):
             await self._init_mode(self._current_mode)
             await super().on_event(event)
-
         elif isinstance(event, events.InputEvent) and not event.is_forwarded:
             if not self.app_focus and isinstance(event, (events.Key, events.MouseDown)):
                 self.app_focus = True
             if isinstance(event, events.MouseEvent):
                 # Record current mouse position on App
                 self.mouse_position = Offset(event.x, event.y)
-
                 if isinstance(event, events.MouseDown):
                     try:
                         self._mouse_down_widget, _ = self.get_widget_at(
@@ -3673,18 +3747,39 @@ class App(Generic[ReturnType], DOMNode):
 
                 self.screen._forward_event(event)
 
+                # If a MouseUp occurs at the same widget as a MouseDown, then we should
+                # consider it a click, and produce a Click event.
                 if (
                     isinstance(event, events.MouseUp)
                     and self._mouse_down_widget is not None
                 ):
                     try:
-                        if (
-                            self.get_widget_at(event.x, event.y)[0]
-                            is self._mouse_down_widget
-                        ):
-                            click_event = events.Click.from_event(
-                                self._mouse_down_widget, event
+                        screen_offset = event.screen_offset
+                        mouse_down_widget = self._mouse_down_widget
+                        mouse_up_widget, _ = self.get_widget_at(*screen_offset)
+                        if mouse_up_widget is mouse_down_widget:
+                            same_offset = (
+                                self._click_chain_last_offset is not None
+                                and self._click_chain_last_offset == screen_offset
                             )
+                            within_time_threshold = (
+                                self._click_chain_last_time is not None
+                                and event.time - self._click_chain_last_time
+                                <= self.CLICK_CHAIN_TIME_THRESHOLD
+                            )
+
+                            if same_offset and within_time_threshold:
+                                self._chained_clicks += 1
+                            else:
+                                self._chained_clicks = 1
+
+                            click_event = events.Click.from_event(
+                                mouse_down_widget, event, chain=self._chained_clicks
+                            )
+
+                            self._click_chain_last_time = event.time
+                            self._click_chain_last_offset = screen_offset
+
                             self.screen._forward_event(click_event)
                     except NoWidget:
                         pass
@@ -3985,7 +4080,9 @@ class App(Generic[ReturnType], DOMNode):
                     # ...settle focus back on that widget.
                     # Don't scroll the newly focused widget, as this can be quite jarring
                     self.screen.set_focus(
-                        self._last_focused_on_app_blur, scroll_visible=False
+                        self._last_focused_on_app_blur,
+                        scroll_visible=False,
+                        from_app_focus=True,
                     )
             except NoScreen:
                 pass
@@ -4123,6 +4220,12 @@ class App(Generic[ReturnType], DOMNode):
             self.query_one(HelpPanel)
         except NoMatches:
             self.mount(HelpPanel())
+
+    def action_notify(
+        self, message: str, title: str = "", severity: str = "information"
+    ) -> None:
+        """Show a notification."""
+        self.notify(message, title=title, severity=severity)
 
     def _on_terminal_supports_synchronized_output(
         self, message: messages.TerminalSupportsSynchronizedOutput
@@ -4296,6 +4399,7 @@ class App(Generic[ReturnType], DOMNode):
             self._driver.resume_application_mode()
             # ...and publish a resume signal.
             self._resume_signal()
+            self.refresh(layout=True)
         else:
             raise SuspendNotSupported(
                 "App.suspend is not supported in this environment."
@@ -4547,13 +4651,10 @@ class App(Generic[ReturnType], DOMNode):
                 "Failed to save screenshot", title="Screenshot", severity="error"
             )
 
-    @on(messages.TerminalSupportInBandWindowResize)
-    def _on_terminal_supports_in_band_window_resize(
-        self, message: messages.TerminalSupportInBandWindowResize
-    ) -> None:
-        """There isn't much we can do with this information currently, so
-        we will just log it.
-        """
+    @on(messages.InBandWindowResize)
+    def _on_in_band_window_resize(self, message: messages.InBandWindowResize) -> None:
+        """In band window resize enables smooth scrolling."""
+        self.supports_smooth_scrolling = message.enabled
         self.log.debug(message)
 
     def _on_idle(self) -> None:

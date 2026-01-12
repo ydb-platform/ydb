@@ -1,4 +1,4 @@
-#include "sql_ut.h"
+#include "sql_ut_antlr4.h"
 
 #include <yql/essentials/core/sql_types/match_recognize.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>

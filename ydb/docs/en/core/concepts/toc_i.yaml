@@ -16,6 +16,8 @@ items:
     mode: link
 - name: Cluster topology
   href: topology.md
+- name: Query execution
+  href: query_execution.md
 - name: Transactions
   href: transactions.md
 - name: Secondary indexes
@@ -38,6 +40,9 @@ items:
 - name: Asynchronous replication
   href: async-replication.md
   when: feature_async_replication
+- name: Data transfer
+  href: transfer.md
+  when: feature_transfer
 - name: Query optimizer
   href: optimizer.md
 - name: Federated query

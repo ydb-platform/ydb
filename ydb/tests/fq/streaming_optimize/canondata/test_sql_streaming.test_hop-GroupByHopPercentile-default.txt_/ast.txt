@@ -114,7 +114,7 @@
       (return (Just '($112 $113)))
     )))))
     (return (AsStruct '('Percentile0 (Nth $108 '0)) '('Percentile1 (Nth $108 '1)) '('"_yql_time" $107)))
-  ))) '0))
+  ))) '0 '"_yql_time"))
   (return (FlatMap (ExtractMembers $70 '('Percentile0 'Percentile1)) (lambda '($114) (block '(
     (let $115 (Udf '"Yson2.SerializeText" (Void) (VoidType) '"" $21 (VoidType) '"" $18))
     (let $116 (StructType '('"p75" $67) '('"p90" $67)))

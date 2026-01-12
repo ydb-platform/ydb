@@ -14,122 +14,120 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
     };
 
     struct TTestCtx : public TTestCtxBase {
-        TTestCtx(TEnvironmentSetup::TSettings settings)
-            : TTestCtxBase(std::move(settings)) {
+        TTestCtx(TEnvironmentSetup::TSettings settings, ui32 initialBlobs, ui32 unsyncedBlobs,
+                std::vector<ENodeState> NodeStates)
+            : TTestCtxBase(std::move(settings))
+            , InitialBlobCount(initialBlobs)
+            , UnsyncedBlobCount(unsyncedBlobs)
+            , NodeStates(NodeStates)
+        {
+            Y_VERIFY(NodeStates.size() == NodeCount);
         }
 
-        void RunTest(ui32 initialBlobs, ui32 unsyncedBlobs, std::vector<ENodeState> nodeStates) {
-            Y_VERIFY(nodeStates.size() == NodeCount);
-            const ui64 blobSize = 10;
-            const ui32 unsyncedBatchSize = 10000;
-            Initialize();
-
-            ui64 tabletId = 5000;
-            ui32 channel = 1;
-            ui32 generation = 1;
-            ui32 step = 1;
-            ui32 perGenCtr = 1;
-
+        std::vector<TLogoBlobID> WriteInitialData() {
             Ctest << "Write blobs" << Endl;
             std::vector<TLogoBlobID> blobs = WriteCompressedData(TDataProfile{
                 .GroupId = GroupId,
-                .TotalBlobs = initialBlobs,
-                .BlobSize = blobSize,
-                .TabletId = tabletId,
-                .Channel = channel,
-                .Generation = generation,
-                .Step = step,
+                .TotalBlobs = InitialBlobCount,
+                .BlobSize = BlobSize,
+                .TabletId = TabletId,
+                .Channel = Channel,
+                .Generation = Generation,
+                .Step = Step,
             });
 
-            auto collectEverything = [&](TVector<TLogoBlobID>* keepFlags, TVector<TLogoBlobID>* doNotKeepFlags) {
-                Env->Runtime->WrapInActorContext(Edge, [&] {
-                    TString data;
-                    SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvCollectGarbage(
-                            tabletId, generation, ++perGenCtr, channel, true, generation, step,
-                            keepFlags, doNotKeepFlags, TInstant::Max(), true, false));
-                });
-                Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(
-                        Edge, false, TInstant::Max());
-            };
+            return blobs;
+        }
 
-            Ctest << "Set Keep flags" << Endl;
-            collectEverything(new TVector<TLogoBlobID>(blobs.begin(), blobs.end()), nullptr);
+        void CollectBlobs(TVector<TLogoBlobID>* keepFlags, TVector<TLogoBlobID>* doNotKeepFlags) {
+            Env->Runtime->WrapInActorContext(Edge, [&] {
+                TString data;
+                SendToBSProxy(Edge, GroupId, new TEvBlobStorage::TEvCollectGarbage(
+                        TabletId, Generation, ++GenerationCtr, Channel, true, Generation, Step,
+                        keepFlags, doNotKeepFlags, TInstant::Max(), true, false));
+            });
+            Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(
+                    Edge, false, TInstant::Max());
+        }
 
-            Ctest << "Wait for sync" << Endl;
-            Env->Sim(TDuration::Minutes(30));
-
-            Ctest << "Shutdown and restart nodes" << Endl;
+        void ToggleNodes(bool stopAndRestart) {
             for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
-                switch (nodeStates[nodeId - 1]) {
+                switch (NodeStates[nodeId - 1]) {
                 case ENodeState::Alive:
                     break;
                 case ENodeState::Dead:
-                    Env->StopNode(nodeId);
+                    if (stopAndRestart) {
+                        Ctest << "Stop node# " << nodeId << Endl;
+                        Env->StopNode(nodeId);
+                    } else {
+                        Ctest << "Start node# " << nodeId << Endl;
+                        Env->StartNode(nodeId);
+                    }
                     break;
                 case ENodeState::Restart:
-                    Env->StopNode(nodeId);
-                    Env->Sim(TDuration::Minutes(1));
-                    Env->StartNode(nodeId);
+                    if (stopAndRestart) {
+                        Ctest << "Restart node# " << nodeId << Endl;
+                        Env->StopNode(nodeId);
+                        Env->Sim(TDuration::Minutes(1));
+                        Env->StartNode(nodeId);
+                    }
                     break;
                 }
                 Env->Sim(TDuration::Minutes(1));
             }
-
-            Ctest << "Wait for sync" << Endl;
-            Env->Sim(TDuration::Minutes(30));
-
             AllocateEdgeActor(); // reallocate actor, in case it lived on a restarted or dead node
+        }
 
-            Ctest << "Set DoNotKeepFlags" << Endl;
-            collectEverything(nullptr, new TVector<TLogoBlobID>(blobs.begin(), blobs.end()));
-
-            for (ui32 i = 0; i < unsyncedBlobs; i += unsyncedBatchSize) {
-                Ctest << "Write batch, blobs written# " << i << Endl;
-                generation += 10;
+        void WriteUnsyncedBlobs() {
+            for (ui32 i = 0; i < UnsyncedBlobCount; i += UnsyncedBatchSize) {
+                Ctest << "Write unsynced blobs batch, blobs written# " << i << Endl;
+                Generation += 10;
                 std::vector<TLogoBlobID> batch = WriteCompressedData(TDataProfile{
                     .GroupId = GroupId,
-                    .TotalBlobs = unsyncedBatchSize,
-                    .BlobSize = blobSize,
+                    .TotalBlobs = UnsyncedBatchSize,
+                    .BlobSize = BlobSize,
                     .BatchSize = 1000,
-                    .TabletId = tabletId,
-                    .Channel = channel,
-                    .Generation = generation,
-                    .Step = step,
+                    .TabletId = TabletId,
+                    .Channel = Channel,
+                    .Generation = Generation,
+                    .Step = Step,
                 });
-                // collectEverything(new TVector<TLogoBlobID>(batch.begin(), batch.end()), nullptr);
-                // collectEverything(nullptr, new TVector<TLogoBlobID>(batch.begin(), batch.end()));
-                collectEverything(nullptr, nullptr);
+                CollectBlobs(nullptr, nullptr);
             }
+        }
 
+        void WaitForSync() {
             Ctest << "Wait for sync" << Endl;
             Env->Sim(TDuration::Minutes(30));
+        }
 
-            Ctest << "Enable nodes" << Endl;
-            for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
-                if (nodeStates[nodeId - 1] == ENodeState::Dead) {
-                    Env->StartNode(nodeId);
+        void BaldSyncLog() {
+            Ctest << "Force syncLog trim" << Endl;
+            const TIntrusivePtr<TBlobStorageGroupInfo> groupInfo = Env->GetGroupInfo(GroupId);
+            UNIT_ASSERT(groupInfo);
+            for (ui32 orderNumber = 0; orderNumber < groupInfo->Type.BlobSubgroupSize(); ++orderNumber) {
+                const TActorId actorId = groupInfo->GetActorId(orderNumber);
+                const TVDiskID vdiskId = groupInfo->GetVDiskId(orderNumber);
+                const ui32 nodeId = actorId.NodeId();
+                if (NodeStates[nodeId - 1] == ENodeState::Dead) {
+                    continue;
                 }
+                const TActorId edge = Env->Runtime->AllocateEdgeActor(actorId.NodeId());
+                Env->Runtime->WrapInActorContext(edge, [&]{
+                    TActivationContext::Send(new IEventHandle(
+                            actorId, edge, new TEvBlobStorage::TEvVBaldSyncLog(vdiskId, true)));
+                });
+                Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVBaldSyncLogResult>(edge, false);
             }
+        }
 
-            Ctest << "Wait for sync" << Endl;
-            Env->Sim(TDuration::Minutes(30));
-
-            ++generation;
-            Ctest << "Move soft barrier" << Endl;
-            collectEverything(nullptr, nullptr);
-
-            Env->Sim(TDuration::Minutes(30));
-
-            // Env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
-            //     Cerr << " --- " << ev->Sender << "->" << ev->Recipient << ev->ToString() << Endl;
-            //     return true;
-            // };
-
+        void CheckStatus() {
             auto status = GetGroupStatus(GroupId);
             Ctest << "Group status# " << status->ToString() << Endl;
+        }
 
+        void CheckBlobs(const std::vector<TLogoBlobID>& blobs) {
             Ctest << "Get group configuration" << Endl;
-
             TIntrusivePtr<TBlobStorageGroupInfo> group = Env->GetGroupInfo(GroupId);
 
             Ctest << "Check blobs" << Endl;
@@ -152,11 +150,61 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                             UNIT_ASSERT_C(!record.GetResult(0).HasIngress(), res->ToString());
                         }
                     }
-                    TLogoBlobID from(tabletId, 0, 0, channel, 0, 0, 1);
-                    TLogoBlobID to(tabletId, generation + 100, 9000, channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId);
+                    TLogoBlobID from(TabletId, 0, 0, Channel, 0, 0, 1);
+                    TLogoBlobID to(TabletId, Generation + 100, 9000, Channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId);
                 });
             }
         }
+
+        void RunTest() {
+            Initialize();
+            const std::vector<TLogoBlobID> blobs = WriteInitialData();
+            auto itMiddle = blobs.begin() + blobs.size() / 2;
+
+            Ctest << "Set Keep flags" << Endl;
+            CollectBlobs(new TVector<TLogoBlobID>(blobs.begin(), blobs.end()), nullptr);
+            WaitForSync();
+
+            ToggleNodes(true);
+            WaitForSync();
+
+            Ctest << "Set DoNotKeepFlags on first half of blobs" << Endl;
+            CollectBlobs(nullptr, new TVector<TLogoBlobID>(blobs.begin(), itMiddle));
+            WaitForSync();
+
+            WriteUnsyncedBlobs();
+
+            BaldSyncLog();
+
+            Ctest << "Set DoNotKeepFlags on second half of blobs" << Endl;
+            CollectBlobs(nullptr, new TVector<TLogoBlobID>(itMiddle, blobs.end()));
+            WaitForSync();
+
+            ToggleNodes(false);
+            WaitForSync();
+
+            ++Generation;
+            Ctest << "Move soft barrier" << Endl;
+            CollectBlobs(nullptr, nullptr);
+            WaitForSync();
+
+            CheckStatus();
+            CheckBlobs(blobs);
+        }
+
+    public:
+        const ui64 TabletId = 5000;
+        const ui32 Channel = 1;
+        ui32 Generation = 1;
+        ui32 Step = 1;
+        ui32 GenerationCtr = 1;
+
+        const ui64 BlobSize = 10;
+        const ui32 UnsyncedBatchSize = 1000;
+
+        const ui32 InitialBlobCount;
+        const ui32 UnsyncedBlobCount;
+        const std::vector<ENodeState> NodeStates;
     };
 
     std::vector<ENodeState> GetStatesAllAlive(TBlobStorageGroupType erasure) {
@@ -182,19 +230,20 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         return states;
     }
 
-    void Test(TBlobStorageGroupType erasure, std::vector<ENodeState> nodeStates) {
-        return; // require PhantomFlagStorage implementation
-        auto it = std::find_if(nodeStates.begin(), nodeStates.end(),
+    void Test(TBlobStorageGroupType erasure, std::vector<ENodeState> NodeStates) {
+        auto it = std::find_if(NodeStates.begin(), NodeStates.end(),
                 [&](const ENodeState& state) { return state != ENodeState::Dead; } );
-        Y_VERIFY(it != nodeStates.end());
-        ui32 controllerNodeId = it - nodeStates.begin() + 1;
+        Y_VERIFY(it != NodeStates.end());
+        ui32 controllerNodeId = it - NodeStates.begin() + 1;
         TTestCtx ctx({
             .NodeCount = erasure.BlobSubgroupSize(),
             .Erasure = erasure,
             .ControllerNodeId = controllerNodeId,
             .PDiskChunkSize = 32_MB,
-        });
-        ctx.RunTest(1000, 3'000'000, nodeStates);
+            .EnablePhantomFlagStorage = true,
+            .TinySyncLog = true,
+        }, 1000, 1000, NodeStates);
+        ctx.RunTest();
     }
 
 

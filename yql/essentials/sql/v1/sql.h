@@ -4,7 +4,7 @@
 #include <yql/essentials/parser/lexer_common/lexer.h>
 #include <yql/essentials/parser/lexer_common/hints.h>
 #include <yql/essentials/parser/proto_ast/common.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/sql/settings/translation_settings.h>

@@ -27,18 +27,17 @@ restricting functionality too much.
 
 ## In A Nutshell
 
-.. code-block:: jinja
-
-    {% extends "base.html" %}
-    {% block title %}Members{% endblock %}
-    {% block content %}
-      <ul>
-      {% for user in users %}
-        <li><a href="{{ user.url }}">{{ user.username }}</a></li>
-      {% endfor %}
-      </ul>
-    {% endblock %}
-
+```jinja
+{% extends "base.html" %}
+{% block title %}Members{% endblock %}
+{% block content %}
+  <ul>
+  {% for user in users %}
+    <li><a href="{{ user.url }}">{{ user.username }}</a></li>
+  {% endfor %}
+  </ul>
+{% endblock %}
+```
 
 ## Donate
 
@@ -48,3 +47,11 @@ allow the maintainers to devote more time to the projects, [please
 donate today][].
 
 [please donate today]: https://palletsprojects.com/donate
+
+## Contributing
+
+See our [detailed contributing documentation][contrib] for many ways to
+contribute, including reporting issues, requesting features, asking or answering
+questions, and making PRs.
+
+[contrib]: https://palletsprojects.com/contributing/

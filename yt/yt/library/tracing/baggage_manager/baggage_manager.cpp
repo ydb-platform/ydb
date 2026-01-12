@@ -46,4 +46,4 @@ void TBaggageManager::Configure(const TBaggageManagerConfigPtr& config)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NConcurrency
+} // namespace NYT::NTracing

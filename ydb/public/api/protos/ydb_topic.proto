@@ -123,8 +123,6 @@ message StreamWriteMessage {
         // Explicitly request for last sequential number
         // It may be expensive, if producer wrote to many partitions before.
         bool get_last_seq_no = 6;
-
-
     }
 
     // Response to the handshake.
@@ -788,6 +786,75 @@ message MultipleWindowsStat {
     int64 per_day = 3;
 }
 
+
+message DeadLetterPolicyCondition {
+    uint32 max_processing_attempts = 1;
+}
+
+message AlterDeadLetterPolicyCondition {
+    optional uint32 set_max_processing_attempts = 1;
+}
+
+message DeleteDeadLetterPolicyAction {
+}
+
+message MoveDeadLetterPolicyAction {
+    string dead_letter_queue = 1;
+}
+
+message AlterMoveDeadLetterPolicyAction {
+    optional string set_dead_letter_queue = 1;
+}
+
+message DeadLetterPolicy {
+    bool enabled = 1;
+
+    DeadLetterPolicyCondition condition = 2;
+
+    oneof action {
+        DeleteDeadLetterPolicyAction delete_action = 4;
+        MoveDeadLetterPolicyAction move_action = 5;
+    }
+}
+
+message AlterDeadLetterPolicy {
+    optional bool set_enabled = 1;
+
+    optional AlterDeadLetterPolicyCondition alter_condition = 2;
+
+    oneof action {
+        AlterMoveDeadLetterPolicyAction alter_move_action = 3;
+        DeleteDeadLetterPolicyAction set_delete_action = 4;
+        MoveDeadLetterPolicyAction set_move_action = 5;
+    }
+}
+
+message StreamingConsumerType {
+}
+
+message AlterStreamingConsumerType {
+}
+
+message SharedConsumerType {
+    // If this is a shared consumer, then the value true means that the order of messages within the same message group will be preserved.
+    // For streaming consumers, the order of messages is always preserved.
+    optional bool keep_messages_order = 10;
+    // The duration of blocking messages for its processing. If the message is not committed during this time,
+    // it will be returned to the queue and sent for re-processing.
+    optional google.protobuf.Duration default_processing_timeout = 11;
+    // The dedad letter policy for this consumer.
+    optional DeadLetterPolicy dead_letter_policy = 12;
+}
+
+message AlterSharedConsumerType {
+    // The duration of blocking messages for its processing. If the message is not committed during this time,
+    // it will be returned to the queue and sent for re-processing.
+    google.protobuf.Duration set_default_processing_timeout = 10;
+
+    // Change dead letter policy.
+    AlterDeadLetterPolicy alter_dead_letter_policy = 11;
+}
+
 // Consumer description.
 message Consumer {
     // Must have valid not empty name as a key.
@@ -826,6 +893,11 @@ message Consumer {
 
     // Message for this consumer will not expire due to retention for at least `availability_period` if they aren't commited.
     optional google.protobuf.Duration availability_period = 8;
+
+    oneof consumer_type {
+        StreamingConsumerType streaming_consumer_type = 9;
+        SharedConsumerType shared_consumer_type = 10;
+    }
 }
 
 // Consumer alter description.
@@ -853,6 +925,11 @@ message AlterConsumer {
     oneof availability_period_action {
         google.protobuf.Duration set_availability_period = 7;
         google.protobuf.Empty reset_availability_period = 8;
+    }
+
+    oneof alter_consumer_type {
+        AlterStreamingConsumerType alter_streaming_consumer_type = 9;
+        AlterSharedConsumerType alter_shared_consumer_type = 10;
     }
 }
 

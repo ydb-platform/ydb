@@ -33,8 +33,9 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqGateway::TPtr pqGateway,
+    bool enableStreamingQueriesCounters,
     i64 freeSpace = DqPqDefaultFreeSpace);
 
-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>());
+void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), bool enableStreamingQueriesCounters = true);
 
 } // namespace NYql::NDq

@@ -5,6 +5,7 @@
 #include "client_writer.h"
 #include "file_reader.h"
 #include "file_writer.h"
+#include "file_fragment_writer.h"
 #include "format_hints.h"
 #include "init.h"
 #include "lock.h"
@@ -97,6 +98,30 @@ ITransactionPtr TClientBase::StartTransaction(
     const TStartTransactionOptions& options)
 {
     return MakeIntrusive<TTransaction>(RawClient_, GetParentClientImpl(), Context_, TransactionId_, options);
+}
+
+TDistributedWriteFileSessionWithCookies TClientBase::StartDistributedWriteFileSession(
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options)
+{
+    return RequestWithRetry<TDistributedWriteFileSessionWithCookies>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, cookieCount, &richPath, &options] (TMutationId& mutationId) {
+            return RawClient_->StartDistributedWriteFileSession(mutationId, TransactionId_, richPath, cookieCount, options);
+        });
+}
+
+TDistributedWriteTableSessionWithCookies TClientBase::StartDistributedWriteTableSession(
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options)
+{
+    return RequestWithRetry<TDistributedWriteTableSessionWithCookies>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, cookieCount, &richPath, &options] (TMutationId& mutationId) {
+            return RawClient_->StartDistributedWriteTableSession(mutationId, TransactionId_, richPath, cookieCount, options);
+        });
 }
 
 TNodeId TClientBase::Create(
@@ -399,6 +424,13 @@ IFileWriterPtr TClientBase::CreateFileWriter(
     }
 
     return new TFileWriter(realPath, RawClient_, ClientRetryPolicy_, GetTransactionPinger(), Context_, TransactionId_, options);
+}
+
+IFileFragmentWriterPtr TClientBase::CreateFileFragmentWriter(
+    const TDistributedWriteFileCookie& cookie,
+    const TFileFragmentWriterOptions& options)
+{
+    return NDetail::CreateFileFragmentWriter(RawClient_, ClientRetryPolicy_->CreatePolicyForGenericRequest(), cookie, options);
 }
 
 TTableWriterPtr<::google::protobuf::Message> TClientBase::CreateTableWriter(
@@ -978,6 +1010,70 @@ THolder<TClientWriter> TClientBase::CreateClientWriter(
     }
 }
 
+::TIntrusivePtr<ITableFragmentWriter<TNode>> TClientBase::CreateNodeFragmentWriter(
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options)
+{
+    auto format = TFormat::YsonBinary();
+
+    // TODO(achains): Make proper wrapper class with retries and auto ping.
+    auto stream = NDetail::RequestWithRetry<std::unique_ptr<IOutputStreamWithResponse>>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [&] (TMutationId /*mutationId*/) {
+            return RawClient_->WriteTableFragment(cookie, format, options);
+        }
+    );
+
+    return ::MakeIntrusive<TNodeTableFragmentWriter>(std::move(stream));
+}
+
+::TIntrusivePtr<ITableFragmentWriter<TYaMRRow>> TClientBase::CreateYaMRFragmentWriter(
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options)
+{
+    auto format = TFormat::YaMRLenval();
+
+    // TODO(achains): Make proper wrapper class with retries and auto ping.
+    auto stream = NDetail::RequestWithRetry<std::unique_ptr<IOutputStreamWithResponse>>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [&] (TMutationId /*mutationId*/) {
+            return RawClient_->WriteTableFragment(cookie, format, options);
+        }
+    );
+
+    return ::MakeIntrusive<TYaMRTableFragmentWriter>(std::move(stream));
+}
+
+::TIntrusivePtr<ITableFragmentWriter<Message>> TClientBase::CreateProtoFragmentWriter(
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options,
+    const Message* prototype)
+{
+    TVector<const ::google::protobuf::Descriptor*> descriptors;
+    descriptors.push_back(prototype->GetDescriptor());
+
+    TFormat format;
+    if (Context_.Config->UseClientProtobuf) {
+        format = TFormat::YsonBinary();
+    } else {
+        format = TFormat::Protobuf({prototype->GetDescriptor()}, Context_.Config->ProtobufFormatWithDescriptors);
+    }
+
+    // TODO(achains): Make proper wrapper class with retries and auto ping.
+    auto stream = NDetail::RequestWithRetry<std::unique_ptr<IOutputStreamWithResponse>>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [&] (TMutationId /*mutationId*/) {
+            return RawClient_->WriteTableFragment(cookie, format, options);
+        }
+    );
+
+    if (Context_.Config->UseClientProtobuf) {
+        return ::MakeIntrusive<TProtoTableFragmentWriter>(std::move(stream), std::move(descriptors));
+    }
+
+    return ::MakeIntrusive<TLenvalProtoTableFragmentWriter>(std::move(stream), std::move(descriptors));
+}
+
 TBatchRequestPtr TClientBase::CreateBatchRequest()
 {
     return MakeIntrusive<TBatchRequest>(TransactionId_, GetParentClientImpl());
@@ -1409,16 +1505,13 @@ IFileReaderPtr TClient::GetJobStderr(
     return RawClient_->GetJobStderr(operationId, jobId, options);
 }
 
-std::vector<TJobTraceEvent> TClient::GetJobTrace(
+IFileReaderPtr TClient::GetJobTrace(
     const TOperationId& operationId,
+    const TJobId& jobId,
     const TGetJobTraceOptions& options)
 {
     CheckShutdown();
-    return RequestWithRetry<std::vector<TJobTraceEvent>>(
-        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, &operationId, &options] (TMutationId /*mutationId*/) {
-            return RawClient_->GetJobTrace(operationId, options);
-        });
+    return RawClient_->GetJobTrace(operationId, jobId, options);
 }
 
 TNode::TListType TClient::SkyShareTable(
@@ -1497,6 +1590,56 @@ void TClient::ResumeOperation(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &operationId, &options] (TMutationId& mutationId) {
             RawClient_->ResumeOperation(mutationId, operationId, options);
+        });
+}
+
+void TClient::PingDistributedWriteTableSession(
+    const TDistributedWriteTableSession& session,
+    const TPingDistributedWriteTableOptions& options)
+{
+    CheckShutdown();
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &session, &options] (TMutationId& /*mutationId*/) {
+            RawClient_->PingDistributedWriteTableSession(session, options);
+        });
+}
+
+void TClient::FinishDistributedWriteTableSession(
+    const TDistributedWriteTableSession& session,
+    const TVector<TWriteTableFragmentResult>& results,
+    const TFinishDistributedWriteTableOptions& options)
+{
+    CheckShutdown();
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &session, &results, &options] (TMutationId& mutationId) {
+            RawClient_->FinishDistributedWriteTableSession(mutationId, session, results, options);
+        });
+}
+
+void TClient::PingDistributedWriteFileSession(
+    const TDistributedWriteFileSession& session,
+    const TPingDistributedWriteFileOptions& options)
+{
+    CheckShutdown();
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &session, &options] (TMutationId& /*mutationId*/) {
+            RawClient_->PingDistributedWriteFileSession(session, options);
+        });
+}
+
+void TClient::FinishDistributedWriteFileSession(
+    const TDistributedWriteFileSession& session,
+    const TVector<TWriteFileFragmentResult>& results,
+    const TFinishDistributedWriteFileOptions& options)
+{
+    CheckShutdown();
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &session, &results, &options] (TMutationId& mutationId) {
+            RawClient_->FinishDistributedWriteFileSession(mutationId, session, results, options);
         });
 }
 

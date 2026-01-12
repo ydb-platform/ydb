@@ -24,6 +24,7 @@ using TRowTypes = TVector<std::pair<TString, Ydb::Type>>;
 static void DoStartUploadTestRows(
         const Tests::TServer::TPtr& server,
         const TActorId& sender,
+        const TString& database,
         const TString& tableName,
         Ydb::Type::PrimitiveTypeId typeId,
         TBackoff backoff = TBackoff(0))
@@ -44,7 +45,7 @@ static void DoStartUploadTestRows(
         rows->emplace_back(serializedKey, serializedValue);
     }
 
-    auto actor = NTxProxy::CreateUploadRowsInternal(sender, tableName, types, rows, NTxProxy::EUploadRowsMode::Normal, false, false, 0, backoff);
+    auto actor = NTxProxy::CreateUploadRowsInternal(sender, database, tableName, types, rows, NTxProxy::EUploadRowsMode::Normal, false, false, 0, backoff);
     runtime.Register(actor);
 }
 
@@ -60,15 +61,16 @@ static void DoWaitUploadTestRows(
 }
 
 static void DoUploadTestRows(Tests::TServer::TPtr server, const TActorId& sender,
-                             const TString& tableName, Ydb::Type::PrimitiveTypeId typeId,
-                             Ydb::StatusIds::StatusCode expected)
+                             const TString& database, const TString& tableName,
+                             Ydb::Type::PrimitiveTypeId typeId, Ydb::StatusIds::StatusCode expected)
 {
-    DoStartUploadTestRows(server, sender, tableName, typeId);
+    DoStartUploadTestRows(server, sender, database, tableName, typeId);
     DoWaitUploadTestRows(server, sender, expected);
 }
 
 static TActorId DoStartUploadRows(
         TTestActorRuntime& runtime,
+        const TString& database,
         const TString& tableName,
         const std::vector<std::pair<ui32, ui32>>& data,
         NTxProxy::EUploadRowsMode mode = NTxProxy::EUploadRowsMode::Normal)
@@ -92,6 +94,7 @@ static TActorId DoStartUploadRows(
 
     auto actor = NTxProxy::CreateUploadRowsInternal(
             sender,
+            database,
             tableName,
             std::move(types),
             std::move(rows),
@@ -112,12 +115,13 @@ static void DoWaitUploadRows(
 
 static void DoUploadRows(
         TTestActorRuntime& runtime,
+        const TString& database,
         const TString& tableName,
         const std::vector<std::pair<ui32, ui32>>& data,
         NTxProxy::EUploadRowsMode mode = NTxProxy::EUploadRowsMode::Normal,
         Ydb::StatusIds::StatusCode expected = Ydb::StatusIds::SUCCESS)
 {
-    auto sender = DoStartUploadRows(runtime, tableName, data, mode);
+    auto sender = DoStartUploadRows(runtime, database, tableName, data, mode);
     DoWaitUploadRows(runtime, sender, expected);
 }
 
@@ -141,11 +145,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         CreateShardedTable(server, sender, "/Root", "table-1", 4, false);
 
-        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::SUCCESS);
+        DoUploadTestRows(server, sender, "/Root", "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::SUCCESS);
 
-        DoUploadTestRows(server, sender, "/Root/table-doesnt-exist", Ydb::Type::UINT32, Ydb::StatusIds::SCHEME_ERROR);
+        DoUploadTestRows(server, sender, "/Root", "/Root/table-doesnt-exist", Ydb::Type::UINT32, Ydb::StatusIds::SCHEME_ERROR);
 
-        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::INT32, Ydb::StatusIds::SCHEME_ERROR);
+        DoUploadTestRows(server, sender, "/Root", "/Root/table-1", Ydb::Type::INT32, Ydb::StatusIds::SCHEME_ERROR);
     }
 
     Y_UNIT_TEST(TestUploadRowsDropColumnRace) {
@@ -184,7 +188,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             uploadRequests.emplace_back(ev.Release());
         });
 
-        DoStartUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32);
+        DoStartUploadTestRows(server, sender, "/Root", "/Root/table-1", Ydb::Type::UINT32);
 
         waitFor([&]{ return uploadRequests.size() >= 3; }, "TEvUploadRowsRequest");
         observerHolder.Remove();
@@ -232,7 +236,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         }
 
         // Do some upserts using UploadRows (overwrites key 3)
-        DoUploadRows(runtime, "/Root/table-1", {
+        DoUploadRows(runtime, "/Root", "/Root/table-1", {
             { 2, 20 },
             { 3, 30 },
             { 4, 40 },
@@ -288,6 +292,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
+                    "/Root",
                     "/Root/table-1",
                     std::move(types),
                     rows,
@@ -353,6 +358,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
+                    "/Root",
                     "/Root/table-1",
                     std::move(types),
                     std::move(rows),
@@ -433,6 +439,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
+                    "/Root",
                     "/Root/table-1",
                     std::move(types),
                     std::move(rows),
@@ -531,6 +538,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
+                    "/Root",
                     "/Root/table-1",
                     std::move(types),
                     std::move(rows),
@@ -632,6 +640,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
+                    "/Root",
                     "/Root/table-1",
                     std::move(types),
                     std::move(rows),
@@ -684,6 +693,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             }
             auto actor = NTxProxy::CreateUploadRowsInternal(
                     sender,
+                    "/Root",
                     "/Root/table-1",
                     std::move(types),
                     std::move(rows),
@@ -734,7 +744,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions().Replicated(true));
 
-        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::GENERIC_ERROR);
+        DoUploadTestRows(server, sender, "/Root", "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::GENERIC_ERROR);
     }
 
     Y_UNIT_TEST(RetryUploadRowsToShard) {
@@ -758,13 +768,12 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         TVector<TActorId> requestedTablets;
         auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvUploadRowsRequest) {
-                bool firstMessage = requestedTablets.empty();
                 requestedTablets.push_back(ev->Recipient);
-
-                if (firstMessage) {
+            } else if (ev->GetTypeRewrite() == TEvDataShard::EvUploadRowsResponse) {
+                if (blockedEnqueueRecords.size() < 2) {
                     blockedEnqueueRecords.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP; // drop a message for one datashard
-                };
+                }
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -781,17 +790,27 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         };
 
 
-        DoStartUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, TBackoff(5));
+        DoStartUploadTestRows(server, sender, "/Root", "/Root/table-1", Ydb::Type::UINT32, TBackoff(5));
 
         splitShard(0, 5);
 
+        ui64 minTabletId = Max<ui64>();
         for (auto& ev : blockedEnqueueRecords) {
-            auto response = MakeHolder<TEvDataShard::TEvUploadRowsResponse>();
-            response->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
-            response->Record.SetTabletID(shards[0]);
-            runtime.Send(ev->Sender, ev->Recipient, response.Release());
+            auto shardResponse = ev->Get<TEvDataShard::TEvUploadRowsResponse>();
+            minTabletId = std::min(minTabletId, shardResponse->Record.GetTabletID());
         }
-        blockedEnqueueRecords.clear();
+
+        for (auto& ev : blockedEnqueueRecords) {
+            auto shardResponse = ev->Get<TEvDataShard::TEvUploadRowsResponse>();
+            if (shardResponse->Record.GetTabletID() == minTabletId) {
+                auto response = MakeHolder<TEvDataShard::TEvUploadRowsResponse>();
+                response->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
+                response->Record.SetTabletID(shardResponse->Record.GetTabletID());
+                runtime.Send(ev->Recipient, ev->Sender, response.Release());
+            } else {
+                runtime.Send(ev.Release(), 0, true);
+            }
+        }
 
         DoWaitUploadTestRows(server, sender, Ydb::StatusIds::SUCCESS);
         // Must receive 4 events:
@@ -800,7 +819,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         // - two shards created after split
         UNIT_ASSERT_VALUES_EQUAL(requestedTablets.size(), 4);
         THashSet<TActorId> requestedTabletsSet(requestedTablets.begin(), requestedTablets.end());
-        UNIT_ASSERT_VALUES_EQUAL(requestedTabletsSet.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL_C(requestedTabletsSet.size(), 4, JoinRange(",", requestedTabletsSet.begin(), requestedTabletsSet.end()));
 
         auto data = KqpSimpleExec(runtime, Q_(R"(
             SELECT COUNT(*) FROM `/Root/table-1`
@@ -855,14 +874,14 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::SUCCESS);
+        DoUploadTestRows(server, sender, "/Root", "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::SUCCESS);
 
         UNIT_ASSERT(!observedUploadStatus.empty());
         UNIT_ASSERT(observedUploadStatus.back() == NKikimrTxDataShard::TError::OK);
         observedUploadStatus.clear();
 
         if (!overloadSubscribe && !withBackoff) {
-            DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::OVERLOADED);
+            DoUploadTestRows(server, sender, "/Root", "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::OVERLOADED);
             return;
         }
 
@@ -878,7 +897,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         }));
 
         TBackoff backoff = withBackoff ? TBackoff(3, TDuration::Seconds(1)) : TBackoff(0);
-        DoStartUploadTestRows(server, responseAwaiter, "/Root/table-1", Ydb::Type::UINT32, backoff);
+        DoStartUploadTestRows(server, responseAwaiter, "/Root", "/Root/table-1", Ydb::Type::UINT32, backoff);
 
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(!blockedEnqueueRecords.empty());

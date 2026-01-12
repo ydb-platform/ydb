@@ -56,15 +56,15 @@ public:
 };
 
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,
-    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits,
-    NWilson::TTraceId traceId,
+    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NYql::NDq::TComputeRuntimeSettings& settings,
+    const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     NScheduler::TSchedulableActorOptions schedulableOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    const TString& database);
+    const TString& database
+);
 
 IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NYql::NDq::TComputeRuntimeSettings& settings,
@@ -75,7 +75,8 @@ IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId, NYql::N
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
     const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,
-    const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId, TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
+    const TString& database, const ui64 txId, TMaybe<ui64> lockTxId, ui32 lockNodeId,
+    TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TShardsScanningPolicy& shardsScanningPolicy,
     TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits);
 
 NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(

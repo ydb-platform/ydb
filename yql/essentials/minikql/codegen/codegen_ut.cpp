@@ -8,11 +8,13 @@
 using namespace NYql::NCodegen;
 using namespace llvm;
 
-#ifdef _win_
+#if !defined(_ubsan_enabled_) && !defined(HAVE_VALGRIND)
+
+    #ifdef _win_
 constexpr bool SupportsBitCode = false;
-#else
+    #else
 constexpr bool SupportsBitCode = true;
-#endif
+    #endif
 
 extern "C" int mul(int x, int y) {
     return x * y;
@@ -241,7 +243,6 @@ Function* CreateUseExternalFromGeneratedFunction128(const ICodegen::TPtr& codege
 
 } // namespace
 
-#if !defined(_ubsan_enabled_) && !defined(HAVE_VALGRIND)
 Y_UNIT_TEST_SUITE(TCodegenTests) {
 
 Y_UNIT_TEST(FibNative) {

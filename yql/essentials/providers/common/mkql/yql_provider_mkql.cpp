@@ -204,6 +204,15 @@ NUdf::TDataTypeId ParseDataType(const TExprNode& owner, const std::string_view& 
     ythrow TNodeException(owner) << "Unsupported data type: " << type;
 }
 
+template <typename TLayout>
+std::pair<TLayout, ui16> CutTimezone(const std::string_view& atom) {
+    const auto pos = atom.find(',');
+    MKQL_ENSURE(std::string_view::npos != pos, "Expected two components.");
+    return std::make_pair(::FromString<TLayout>(atom.substr(0, pos)), GetTimezoneId(atom.substr(pos + 1)));
+}
+
+} // namespace
+
 EJoinKind GetJoinKind(const TExprNode& owner, const std::string_view& content) {
     if (content == "Inner") {
         return EJoinKind::Inner;
@@ -229,15 +238,6 @@ EJoinKind GetJoinKind(const TExprNode& owner, const std::string_view& content) {
         ythrow TNodeException(owner) << "Unexpected join kind: " << content;
     }
 }
-
-template <typename TLayout>
-std::pair<TLayout, ui16> CutTimezone(const std::string_view& atom) {
-    const auto pos = atom.find(',');
-    MKQL_ENSURE(std::string_view::npos != pos, "Expected two components.");
-    return std::make_pair(::FromString<TLayout>(atom.substr(0, pos)), GetTimezoneId(atom.substr(pos + 1)));
-}
-
-} // namespace
 
 bool TMkqlCallableCompilerBase::HasCallable(const std::string_view& name) const {
     return Callables_.contains(name);
@@ -654,6 +654,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddSimpleCallables({
         {"NextValue", &TProgramBuilder::NextValue},
+    });
+
+    AddCallable("SqlConcat", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        TVector<TRuntimeNode> args;
+        for (const auto& child : node.Children()) {
+            args.push_back(MkqlBuildExpr(*child, ctx));
+        }
+
+        return ctx.ProgramBuilder.ConcatMany(args);
     });
 
     AddCallable({"MultiMap", "OrderedMultiMap"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -1911,10 +1920,26 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         };
 
         const auto watermarksMode = ctx.ProgramBuilder.NewDataLiteral(FromString<bool>(*node.Child(13), NUdf::EDataSlot::Bool));
-
+        TRuntimeNode sizeLimit;
+        if (NNodes::TCoMultiHoppingCore::idx_SizeLimit < node.ChildrenSize()) {
+            sizeLimit = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_SizeLimit), ctx);
+        }
+        TRuntimeNode timeLimit;
+        if (NNodes::TCoMultiHoppingCore::idx_TimeLimit < node.ChildrenSize()) {
+            timeLimit = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_TimeLimit), ctx);
+        }
+        TRuntimeNode earlyPolicy;
+        if (NNodes::TCoMultiHoppingCore::idx_EarlyPolicy < node.ChildrenSize()) {
+            earlyPolicy = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_EarlyPolicy), ctx);
+        }
+        TRuntimeNode latePolicy;
+        if (NNodes::TCoMultiHoppingCore::idx_LatePolicy < node.ChildrenSize()) {
+            latePolicy = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_LatePolicy), ctx);
+        }
         return ctx.ProgramBuilder.MultiHoppingCore(
             stream, keyExtractor, timeExtractor, init, update, save, load, merge, finish,
-            hop, interval, delay, dataWatermarks, watermarksMode);
+            hop, interval, delay, dataWatermarks, watermarksMode,
+            sizeLimit, timeLimit, earlyPolicy, latePolicy);
     });
 
     AddCallable("ToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {

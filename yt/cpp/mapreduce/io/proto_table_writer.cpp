@@ -8,10 +8,13 @@
 #include <yt/cpp/mapreduce/common/node_builder.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 
 #include <yt/cpp/mapreduce/io/job_writer.h>
 
 #include <yt/yt_proto/yt/formats/extension.pb.h>
+
+#include <library/cpp/yson/node/node_io.h>
 
 #include <google/protobuf/unknown_field_set.h>
 
@@ -244,6 +247,68 @@ void LenvalEncodeProto(IZeroCopyOutput* output, const ::google::protobuf::Messag
     if (!result) {
         ythrow yexception() << "Failed to serialize protobuf message";
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TProtoTableFragmentWriter::TProtoTableFragmentWriter(
+    std::unique_ptr<IOutputStreamWithResponse> output,
+    TVector<const ::google::protobuf::Descriptor*>&& descriptors)
+    : NodeWriter_(std::make_unique<TNodeTableFragmentWriter>(std::move(output)))
+    , Descriptors_(std::move(descriptors))
+{ }
+
+TWriteTableFragmentResult TProtoTableFragmentWriter::GetWriteFragmentResult() const
+{
+    return NodeWriter_->GetWriteFragmentResult();
+}
+
+void TProtoTableFragmentWriter::AddRow(const Message& row)
+{
+    NodeWriter_->AddRow(MakeNodeFromMessage(row));
+}
+
+void TProtoTableFragmentWriter::Finish()
+{
+    NodeWriter_->Finish();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TLenvalProtoTableFragmentWriter::TLenvalProtoTableFragmentWriter(
+    std::unique_ptr<IOutputStreamWithResponse> output,
+    TVector<const ::google::protobuf::Descriptor*>&& descriptors)
+    : Output_(std::move(output))
+    , Descriptors_(std::move(descriptors))
+{ }
+
+TWriteTableFragmentResult TLenvalProtoTableFragmentWriter::GetWriteFragmentResult() const
+{
+    return TWriteTableFragmentResult(NodeFromYsonString(Output_->GetResponse()));
+}
+
+void TLenvalProtoTableFragmentWriter::AddRow(const Message& row)
+{
+    ValidateProtoDescriptor(row, /*tableIndex*/ 0, Descriptors_, false);
+
+    Y_ABORT_UNLESS(row.GetReflection()->GetUnknownFields(row).empty(),
+        "Message has unknown fields. This probably means bug in client code.\n"
+        "Message: %s", row.DebugString().data());
+
+    i32 size = row.ByteSizeLong();
+    Output_->Write(&size, sizeof(size));
+
+    // NB: Scope is essential here since output stream adaptor flushes in destructor.
+    {
+        TProtobufOutputStreamAdaptor streamAdaptor(Output_.get());
+        auto result = row.SerializeToZeroCopyStream(&streamAdaptor);
+        Y_ENSURE(result && !streamAdaptor.HasError(), "Failed to serialize protobuf message");
+    }
+}
+
+void TLenvalProtoTableFragmentWriter::Finish()
+{
+    Output_->Finish();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

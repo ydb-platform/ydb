@@ -1,9 +1,9 @@
 |  |downloads| |stars| |forks| |contributors| |coverage|
-|  |version| |py-versions| |packages| |license|
+|  |version| |packages| |license|
 |  |github-actions-wheels|  |github-actions-bsd| |doc| |twitter| |tidelift|
 
 .. |downloads| image:: https://img.shields.io/pypi/dm/psutil.svg
-    :target: https://pepy.tech/project/psutil
+    :target: https://clickpy.clickhouse.com/dashboard/psutil
     :alt: Downloads
 
 .. |stars| image:: https://img.shields.io/github/stars/giampaolo/psutil.svg
@@ -37,9 +37,6 @@
 .. |version| image:: https://img.shields.io/pypi/v/psutil.svg?label=pypi
     :target: https://pypi.org/project/psutil
     :alt: Latest version
-
-.. |py-versions| image:: https://img.shields.io/pypi/pyversions/psutil.svg
-    :alt: Supported Python versions
 
 .. |packages| image:: https://repology.org/badge/tiny-repos/python:psutil.svg
     :target: https://repology.org/metapackage/python:psutil/versions
@@ -456,6 +453,16 @@ Further process APIs
     >>> # waits for multiple processes to terminate
     >>> gone, alive = psutil.wait_procs(procs_list, timeout=3, callback=on_terminate)
     >>>
+
+Heap info
+---------
+
+.. code-block:: python
+
+    >>> import psutil
+    >>> psutil.heap_info()
+    pheap(heap_used=5177792, mmap_used=819200)
+    >>> psutil.heap_trim()
 
 Windows services
 ----------------

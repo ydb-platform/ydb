@@ -173,6 +173,7 @@ public:
         const auto columns = input->Child(TPqReadTopic::idx_Columns);
         const auto format = input->Child(TPqReadTopic::idx_Format);
         const auto compression = input->Child(TPqReadTopic::idx_Compression);
+        const auto settings = input->Child(TPqReadTopic::idx_Settings);
 
         if (!EnsureWorldType(*world, ctx)) {
             return TStatus::Error;
@@ -205,13 +206,27 @@ public:
         if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).
             format->Content(),
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
-            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)); },
+            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)).has_value(); },
             ctx)) {
             return TStatus::Error;
         }
 
         if (!NCommon::ValidateCompressionForInput(format->Content(), compression->Content(), ctx)) {
             return TStatus::Error;
+        }
+
+        if (!EnsureTuple(*settings, ctx)) {
+            return TStatus::Error;
+        }
+
+        for (const auto& setting : settings->Children()) {
+            if (!EnsureTupleMinSize(*setting, 1, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureAtom(setting->Head(), ctx)) {
+                return TStatus::Error;
+            }
         }
 
         if (TPqReadTopic::idx_Watermark < input->ChildrenSize()) {
@@ -294,6 +309,19 @@ public:
         if (TDqPqTopicSource::idx_Watermark < input->ChildrenSize()) {
             const auto watermark = input->Child(TDqPqTopicSource::idx_Watermark);
             if (!EnsureAtom(*watermark, ctx)) {
+                return TStatus::Error;
+            }
+        }
+
+        if (const auto maybeSkipJsonErrorsSetting = FindSetting(settings, SkipJsonErrors)) {
+            const auto value = maybeSkipJsonErrorsSetting.Cast().Ptr();
+            if (!EnsureAtom(*value, ctx)) {
+                return TStatus::Error;
+            }
+            bool skipJsonErrorsSetting;
+            if (!TryFromString<bool>(value->Content(), skipJsonErrorsSetting)) {
+                ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder()
+                    << "Expected bool, but got: " << value->Content()));
                 return TStatus::Error;
             }
         }
@@ -394,7 +422,7 @@ public:
         }
 
         const auto metadataKey = TString(key->TailPtr()->Content());
-        const auto descriptor = FindPqMetaFieldDescriptorByKey(metadataKey);
+        const auto descriptor = FindPqMetaFieldDescriptorByKey(metadataKey, State_->AllowTransparentSystemColumns);
         if (!descriptor) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Metadata key " << metadataKey << " wasn't found"));
@@ -467,7 +495,7 @@ private:
     TPqState::TPtr State_;
 };
 
-}
+} // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreatePqDataSourceTypeAnnotationTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqDataSourceTypeAnnotationTransformer>(state);

@@ -219,6 +219,10 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     // advanced hidden options (mainly for developers)
 
+    auto highresHistOpt = config.Opts->AddLongOption(
+        "highres-histogram", TStringBuilder() << "Use high resolution histogram for transaction latencies")
+            .Optional().StoreTrue(&RunConfig->HighResHistogram);
+
     auto extendedStatsOpt = config.Opts->AddLongOption(
         "extended-stats", TStringBuilder() << "Print additional statistics")
             .Optional().StoreTrue(&RunConfig->ExtendedStats);
@@ -247,6 +251,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     // for now. Later might be "config.HelpCommandVerbosiltyLevel <= 1" or advanced section
     if (true) {
+        highresHistOpt.Hidden();
         extendedStatsOpt.Hidden();
         logLevelOpt.Hidden();
         connectionsOpt.Hidden();

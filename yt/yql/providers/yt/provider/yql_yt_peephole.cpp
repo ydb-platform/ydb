@@ -41,7 +41,7 @@ private:
         } else if (const auto& read = input.Maybe<TYtReadTable>()) {
             lengthRes = 0ULL;
             for (auto path: read.Cast().Input().Item(0).Paths()) {
-                if (const auto& info = TYtTableBaseInfo::Parse(path.Table()); info->Stat && info->Meta && !info->Meta->IsDynamic && path.Ranges().Maybe<TCoVoid>())
+                if (const auto& info = TYtTableBaseInfo::Parse(path.Table()); info->Stat && info->Meta && !info->Meta->IsDynamic && path.Ranges().Maybe<TCoVoid>() && path.QLFilter().Maybe<TCoVoid>())
                     lengthRes = *lengthRes + info->Stat->RecordsCount;
                 else {
                     lengthRes = std::nullopt;
@@ -104,7 +104,7 @@ private:
         YQL_ENSURE(!HasSetting(wideWrite.Settings().Ref(), "table"));
 
         TMaybeNode<TCoSecureParam> secParams;
-        if (State_->Configuration->Auth.Get().GetOrElse(TString())) {
+        if (State_->ResolveClusterToken(cluster)) {
             secParams = Build<TCoSecureParam>(ctx, node.Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
         }
 

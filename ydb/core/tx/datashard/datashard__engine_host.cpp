@@ -118,7 +118,7 @@ public:
             TSysTables::TLocksTable::GetInfo(Columns, KeyTypes, true);
             break;
         default:
-            Y_ASSERT("Unexpected system table id");
+            Y_ASSERT(false && "Unexpected system table id");
         }
     }
 
@@ -144,7 +144,7 @@ public:
         Y_UNUSED(row);
         Y_UNUSED(commands);
 
-        Y_ASSERT("Not supported");
+        Y_ASSERT(false && "Not supported");
     }
 
     void EraseRow(const TArrayRef<const TCell>& row) const {

@@ -11,8 +11,7 @@ namespace types
   class str;
 
   template <class Ty0, class Ty1>
-  struct isinstance
-      : std::conditional<std::is_same<Ty0, Ty1>::value, true_type, false_type> {
+  struct isinstance : std::conditional<std::is_same<Ty0, Ty1>::value, true_type, false_type> {
   };
 
   // some specialization
@@ -33,20 +32,17 @@ namespace builtins
   {
     template <class Obj, class Cls>
     struct isinstance {
-      using type = typename types::isinstance<
-          Obj,
-          typename std::decay<decltype(std::declval<Cls>()())>::type>::type;
+      using type =
+          typename types::isinstance<Obj, std::decay_t<decltype(std::declval<Cls>()())>>::type;
     };
 
     template <class Obj, class... Clss>
     struct isinstance<Obj, std::tuple<Clss...>> {
-      using type = typename std::conditional<
+      using type = std::conditional_t<
           utils::any_of<std::is_same<
-              typename types::isinstance<
-                  Obj, typename std::decay<
-                           decltype(std::declval<Clss>()())>::type>::type,
+              typename types::isinstance<Obj, std::decay_t<decltype(std::declval<Clss>()())>>::type,
               types::true_type>::value...>::value,
-          types::true_type, types::false_type>::type;
+          types::true_type, types::false_type>;
     };
   } // namespace details
 

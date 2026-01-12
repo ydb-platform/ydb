@@ -12,6 +12,7 @@ namespace NKikimr {
         struct TConfigFitAction {
             std::set<TBoxId> Boxes;
             std::multiset<std::tuple<TBoxStoragePoolId, std::optional<TGroupId>>> PoolsAndGroups; // nullopt goes first and means 'cover all groups in the pool'
+            THashSet<TGroupId> GroupsToAllocate;
             bool OnlyToLessOccupiedPDisk = false;
             bool PreferLessOccupiedRack = false;
             bool WithAttentionToReplication = false;
@@ -366,6 +367,8 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMovePDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TUpdateBridgeGroupInfo& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TReconfigureVirtualGroup& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TRecommissionGroups& cmd, TStatus& status);
         };
 
     } // NBsController

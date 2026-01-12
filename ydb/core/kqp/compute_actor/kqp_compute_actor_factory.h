@@ -8,9 +8,11 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 
 namespace NKikimr::NKqp {
     struct TKqpFederatedQuerySetup;
+    class TNodeState;
 }
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -92,13 +94,6 @@ public:
     }
 };
 
-struct IKqpNodeState {
-    virtual ~IKqpNodeState() = default;
-
-    virtual void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) = 0;
-};
-
-
 struct IKqpNodeComputeActorFactory {
     virtual ~IKqpNodeComputeActorFactory() = default;
 
@@ -127,7 +122,7 @@ public:
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
-        std::shared_ptr<IKqpNodeState> State = nullptr;
+        std::shared_ptr<TNodeState> State = nullptr;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
 
@@ -143,6 +138,7 @@ public:
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup);
+        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 } // namespace NKikimr::NKqp::NComputeActor

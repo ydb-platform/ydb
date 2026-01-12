@@ -107,8 +107,8 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDecommitGroups& cmd, TStatus& /*status*/) {
-        if (cmd.GetHiveDesignatorCase() == NKikimrBlobStorage::TDecommitGroups::HIVEDESIGNATOR_NOT_SET) {
-            throw TExError() << "TDecommitGroups.HiveId/Database is not specified";
+        if (!cmd.HasDatabase()) {
+            throw TExError() << "TDecommitGroups.Database is not specified, but it is mandatory";
         }
 
         for (const ui32 groupId : cmd.GetGroupIds()) {
@@ -116,12 +116,8 @@ namespace NKikimr::NBsController {
             if (!group) {
                 throw TExGroupNotFound(groupId);
             } else if (group->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
-                if (cmd.HasHiveId() && group->HiveId && *group->HiveId != cmd.GetHiveId()) {
-                    throw TExError() << "different hive specified for decommitting group" << TErrorParams::GroupId(groupId);
-                } else if (cmd.HasDatabase() && group->Database && *group->Database != cmd.GetDatabase()) {
+                if (group->Database != cmd.GetDatabase()) {
                     throw TExError() << "different database specified for decommitting group" << TErrorParams::GroupId(groupId);
-                } else if (cmd.HasHiveId() != group->HiveId.Defined() && cmd.HasDatabase() != group->Database.Defined()) {
-                    throw TExError() << "different hive designator specified for decommitting group" << TErrorParams::GroupId(groupId);
                 }
                 // group is already being decommitted -- make this operation idempotent
                 continue;
@@ -131,8 +127,7 @@ namespace NKikimr::NBsController {
 
             group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::PENDING;
             group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::NEW;
-            group->HiveId = cmd.HasHiveId() ? MakeMaybe(cmd.GetHiveId()) : Nothing();
-            group->Database = cmd.HasDatabase() ? MakeMaybe(cmd.GetDatabase()) : Nothing();
+            group->Database = cmd.GetDatabase();
             group->NeedAlter = true;
             GroupFailureModelChanged.insert(group->ID);
             group->CalculateGroupStatus();
@@ -211,6 +206,127 @@ namespace NKikimr::NBsController {
             group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
             group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::DELETING;
             group->NeedAlter = true;
+        }
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReconfigureVirtualGroup& cmd,
+            TStatus& /*status*/) {
+        if (!cmd.GetName()) {
+            throw TExError() << "TReconfigureVirtualGroup.Name must be set and be nonempty";
+        }
+
+        std::optional<TGroupId> groupId;
+        Groups.ForEach([&](TGroupId key, const TGroupInfo& value) {
+            if (value.VirtualGroupName == cmd.GetName()) {
+                if (groupId) {
+                    throw TExError() << "Duplicate virtual group name";
+                }
+                groupId.emplace(key);
+            }
+        });
+        if (!groupId) {
+            throw TExError() << "Virtual group not found by designated name";
+        }
+
+        TGroupInfo *group = Groups.FindForUpdate(*groupId);
+        if (!group->BlobDepotConfig) {
+            Y_DEBUG_ABORT(); // this should never happen
+            throw TExError() << "Virtual group does not contain BlobDepotConfig";
+        }
+
+        // parse current config
+        NKikimrBlobDepot::TBlobDepotConfig config;
+        bool success = config.ParseFromString(*group->BlobDepotConfig);
+        if (!success) {
+            Y_DEBUG_ABORT();
+            throw TExError() << "Failed to parse BlobDepotConfig";
+        }
+
+        // update fields in current config
+        if (cmd.HasS3BackendSettings()) {
+            config.MutableS3BackendSettings()->CopyFrom(cmd.GetS3BackendSettings());
+        }
+
+        // overwrite the config
+        success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
+        Y_ABORT_UNLESS(success);
+
+        // start altering machinery
+        group->NeedAlter = true;
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRecommissionGroups& cmd, TStatus& /*status*/) {
+        for (const ui32 groupId : cmd.GetGroupIds()) {
+            TGroupInfo *group = Groups.FindForUpdate(TGroupId::FromValue(groupId));
+            if (!group) {
+                throw TExGroupNotFound(groupId);
+            }
+
+            if (TGroupID(groupId).ConfigurationType() != EGroupConfigurationType::Dynamic) {
+                // group can't be recommissioned, it could never have physical slots
+                throw TExError() << "group is not dynamic one" << TErrorParams::GroupId(groupId);
+            }
+
+            if (!group->VirtualGroupState) {
+                continue; // recommissioning is not required -- group has no virtual part in it
+            }
+
+            if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING) {
+                continue; // recommissioning is already underway
+            }
+
+            if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE &&
+                    group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::DELETING) {
+                continue; // tablet is already being deleted
+            }
+
+            if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::PENDING &&
+                    (group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW ||
+                     group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED)) {
+                // the new tablet is in the process of creation, just cancel it
+                group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
+                group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::DELETING;
+            } else {
+                Y_DEBUG_ABORT_UNLESS(group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING);
+                if (group->VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::WORKING) {
+                    throw TExError() << "virtual group is not in WORKING state" << TErrorParams::GroupId(groupId);
+                }
+
+                switch (group->DecommitStatus) {
+                    case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
+                        Y_DEBUG_ABORT_UNLESS(!group->VDisksInGroup.empty());
+                        if (!group->VDisksInGroup) {
+                            throw TExError() << "group contains no VDisks despite IN_PROGRESS decommission state"
+                                << TErrorParams::GroupId(groupId);
+                        }
+                        break;
+
+                    case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
+                        Y_DEBUG_ABORT_UNLESS(group->VDisksInGroup.empty());
+                        if (group->VDisksInGroup) {
+                            throw TExError() << "group contains VDisks despite DONE decommission state"
+                                << TErrorParams::GroupId(groupId);
+                        }
+                        // kindly ask futher logic to allocate a group here
+                        Fit.PoolsAndGroups.emplace(group->StoragePoolId, group->ID);
+                        Fit.GroupsToAllocate.insert(group->ID);
+                        break;
+
+                    default:
+                        Y_DEBUG_ABORT("group is not in IN_PROGRESS/DONE decommission state");
+                        throw TExError() << "group is not in IN_PROGRESS/DONE decommission state"
+                            << TErrorParams::GroupId(groupId);
+                }
+
+                // switch group to recommissioning state, start machinery accordingly
+                group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING;
+            }
+
+            // update state with the agents
+            group->NeedAlter = true;
+
+            // spin generation to deliver decommissioning state change to proxies
+            GroupContentChanged.insert(group->ID);
         }
     }
 
@@ -428,16 +544,19 @@ namespace NKikimr::NBsController {
         ui64 RootHiveId = 0;
         bool TenantHiveInvalidated = false;
         bool TenantHiveInvalidateInProgress = false;
+        bool IsDecommittingGroup = false;
 
         void HiveCreate(TGroupInfo *group) {
             auto& config = GetConfig(group);
+            IsDecommittingGroup = config.GetIsDecommittingGroup();
+
             if (config.HasTabletId()) {
                 ConfigureBlobDepot();
             } else if (!group->HiveId) {
                 HiveResolve(group);
             } else if (TenantHiveInvalidateInProgress && TenantHivePipeId) {
                 // tenant hive storage pool invalidation still in progress, wait
-            } else if (config.GetIsDecommittingGroup() && config.HasTenantHiveId() && !TenantHiveInvalidated) {
+            } else if (IsDecommittingGroup && config.HasTenantHiveId() && !TenantHiveInvalidated) {
                 TenantHivePipeId = Register(NTabletPipe::CreateClient(SelfId(), config.GetTenantHiveId(),
                     NTabletPipe::TClientRetryPolicy::WithRetries()));
                 HiveInvalidateGroups(TenantHivePipeId, group);
@@ -445,7 +564,7 @@ namespace NKikimr::NBsController {
             } else if (!HivePipeId) {
                 Y_ABORT_UNLESS(group->HiveId);
                 HivePipeId = Register(NTabletPipe::CreateClient(SelfId(), *group->HiveId, NTabletPipe::TClientRetryPolicy::WithRetries()));
-                if (config.GetIsDecommittingGroup()) {
+                if (IsDecommittingGroup) {
                     HiveInvalidateGroups(HivePipeId, group);
                 }
             } else {
@@ -490,7 +609,10 @@ namespace NKikimr::NBsController {
                 (Result, response.ToString(*AppData()->TypeRegistry)));
 
             if (item.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok || !domainInfo || !item.DomainDescription) {
-                return CreateFailed(TStringBuilder() << "failed to resolve Hive -- erroneous reply from SchemeCache or not a domain");
+                return CreateFailed(TStringBuilder() << "failed to resolve Hive -- erroneous reply from SchemeCache or not a domain"
+                    << " Response# " << response.ToString(*AppData()->TypeRegistry)
+                    << " DomainInfo# " << static_cast<bool>(domainInfo)
+                    << " DomainDescription# " << static_cast<bool>(item.DomainDescription));
             } else if (const auto& params = domainInfo->Params; !params.HasHive() && !RootHiveId) {
                 return CreateFailed("failed to resolve Hive -- no Hive in SchemeCache reply");
             } else {
@@ -520,7 +642,7 @@ namespace NKikimr::NBsController {
                     }
                 }
 
-                const ui64 hiveId = params.HasHive() ? params.GetHive() : RootHiveId;
+                const ui64 hiveId = params.HasHive() && !IsDecommittingGroup ? params.GetHive() : RootHiveId;
                 if (!hiveId) {
                     return CreateFailed("failed to resolve Hive -- Hive is zero");
                 }
@@ -781,8 +903,8 @@ namespace NKikimr::NBsController {
                 TNodeInfo& node = Self->GetNode(nodeId);
                 node.WaitingForGroups.erase(group->ID);
                 auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
-                TSet<ui32> groups;
-                groups.insert(group->ID.GetRawId());
+                TSet<TGroupId> groups;
+                groups.insert(group->ID);
                 Self->ReadGroups(groups, false, ev.get(), nodeId);
                 Send(MakeBlobStorageNodeWardenID(nodeId), ev.release());
             }

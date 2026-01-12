@@ -65,12 +65,11 @@ namespace NKikimr {
                                                size_t size) {
         const char *pos = data;
         const char *end = data + size;
-        if (size_t(end - pos) < 24)
+        if (size_t(end - pos) < sizeof(TLogoBlobID))
             return false;
 
-        const ui64 *raw = (const ui64 *)pos;
-        Id = TLogoBlobID(raw[0], raw[1], raw[2]);
-        pos += 24;
+        Id = ReadUnaligned<TLogoBlobID>(pos);
+        pos += sizeof(TLogoBlobID);
 
         IssueKeepFlag = false;
 

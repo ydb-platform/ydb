@@ -1,36 +1,61 @@
 #include "filter.h"
 
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
+#include <type_traits>
 
 namespace NKikimr::NOlap {
 
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
-    if (SortedRanges.empty()) {
+    if (IsEmpty()) {
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
 
     auto result = NArrow::TColumnFilter::BuildDenyFilter();
+    NArrow::NMerger::TRWSortableBatchPosition iterator(data, 0, false);
+    bool reachedEnd = false;
     for (const auto& range : SortedRanges) {
-        result = result.Or(range.BuildFilter(data));
+        const ui64 initialIdx = iterator.GetPosition();
+        const auto findBegin = range.GetPredicateFrom().FindFirstIncluded(iterator);
+        const ui64 beginIdx = findBegin ? findBegin->GetPosition() : iterator.GetRecordsCount();
+
+        result.Add(false, beginIdx - initialIdx);
+        reachedEnd = !iterator.InitPosition(beginIdx);
+        if (reachedEnd) {
+            AFL_VERIFY((i64)beginIdx == iterator.GetRecordsCount());
+            break;
+        }
+
+        const auto findEnd = range.GetPredicateTo().FindFirstExcluded(iterator);
+        const ui64 endIdx = findEnd ? findEnd->GetPosition() : iterator.GetRecordsCount();
+
+        result.Add(true, endIdx - beginIdx);
+        reachedEnd = !iterator.InitPosition(endIdx);
+        if (reachedEnd) {
+            AFL_VERIFY((i64)endIdx == iterator.GetRecordsCount());
+            break;
+        }
+    }
+    if (!reachedEnd) {
+        result.Add(false, iterator.GetRecordsCount() - iterator.GetPosition());
     }
     return result;
 }
 
-TConclusionStatus TPKRangesFilter::Add(
-    std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const std::shared_ptr<arrow::Schema>& pkSchema) {
-    if ((!f || f->Empty()) && (!t || t->Empty())) {
+TConclusionStatus TPKRangesFilter::Add(std::optional<NOlap::TPredicate> f, std::optional<NOlap::TPredicate> t) {
+    if ((!f) && (!t)) {
         return TConclusionStatus::Success();
     }
-    auto fromContainerConclusion = TPredicateContainer::BuildPredicateFrom(f, pkSchema);
+    auto fromContainerConclusion = TPredicateContainer::BuildPredicateFrom(std::move(f));
     if (fromContainerConclusion.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "incorrect from container")(
             "from", fromContainerConclusion.GetErrorMessage());
         return fromContainerConclusion;
     }
-    auto toContainerConclusion = TPredicateContainer::BuildPredicateTo(t, pkSchema);
+    auto toContainerConclusion = TPredicateContainer::BuildPredicateTo(std::move(t));
     if (toContainerConclusion.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "incorrect to container")(
             "from", toContainerConclusion.GetErrorMessage());
@@ -76,7 +101,7 @@ std::set<ui32> TPKRangesFilter::GetColumnIds(const TIndexInfo& indexInfo) const 
     return result;
 }
 
-bool TPKRangesFilter::CheckPoint(const NArrow::TSimpleRow& point) const {
+bool TPKRangesFilter::CheckPoint(const NArrow::NMerger::TSortableBatchPosition& point) const {
     for (auto&& i : SortedRanges) {
         if (i.CheckPoint(point)) {
             return true;
@@ -85,14 +110,14 @@ bool TPKRangesFilter::CheckPoint(const NArrow::TSimpleRow& point) const {
     return SortedRanges.empty();
 }
 
-TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const {
+TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(
+    const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& end) const {
     if (SortedRanges.empty()) {
         return TPKRangeFilter::EUsageClass::FullUsage;
     }
 
-    const TPredicateContainer startPredicate = TPredicateContainer::BuildPredicateFrom(
-        std::make_shared<TPredicate>(NKernels::EOperation::GreaterEqual, start.ToBatch()), start.GetSchema())
-                                                   .DetachResult();
+    const TPredicateContainer startPredicate =
+        TPredicateContainer::BuildPredicateFrom(TPredicate(NKernels::EOperation::GreaterEqual, start)).DetachResult();
     const auto rangesBegin = std::lower_bound(
         SortedRanges.begin(), SortedRanges.end(), startPredicate, [](const TPKRangeFilter& range, const TPredicateContainer& predicate) {
             return !range.GetPredicateTo().CrossRanges(predicate);
@@ -104,7 +129,10 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimple
     return rangesBegin->GetUsageClass(start, end);
 }
 
-TPKRangesFilter::TPKRangesFilter() {
+TPKRangesFilter::TPKRangesFilter(const std::shared_ptr<arrow::RecordBatch>& data)
+    : Data(data)
+    , MemoryGuard(GetMemorySize())
+{
     auto range = TPKRangeFilter::Build(TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo());
     Y_ABORT_UNLESS(range.IsSuccess());
     SortedRanges.emplace_back(range.DetachResult());
@@ -115,14 +143,14 @@ std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(cons
         pkSchema->AddField(pkSchema->num_fields(), std::make_shared<arrow::Field>(".ydb_operation_type", arrow::uint32())));
     auto builders = NArrow::MakeBuilders(fullSchema, SortedRanges.size() * 2);
     for (auto&& i : SortedRanges) {
-        i.GetPredicateFrom().GetReplaceKey()->AddToBuilders(builders).Validate();
-        for (ui32 idx = i.GetPredicateFrom().GetReplaceKey()->GetColumnsCount(); idx < (ui32)pkSchema->num_fields(); ++idx) {
+        i.GetPredicateFrom().AppendPointTo(builders);
+        for (ui32 idx = i.GetPredicateFrom().NumColumns(); idx < (ui32)pkSchema->num_fields(); ++idx) {
             NArrow::TStatusValidator::Validate(builders[idx]->AppendNull());
         }
         NArrow::Append<arrow::UInt32Type>(*builders[pkSchema->num_fields()], (ui32)i.GetPredicateFrom().GetCompareType());
 
-        i.GetPredicateTo().GetReplaceKey()->AddToBuilders(builders).Validate();
-        for (ui32 idx = i.GetPredicateTo().GetReplaceKey()->GetColumnsCount(); idx < (ui32)pkSchema->num_fields(); ++idx) {
+        i.GetPredicateTo().AppendPointTo(builders);
+        for (ui32 idx = i.GetPredicateTo().NumColumns(); idx < (ui32)pkSchema->num_fields(); ++idx) {
             NArrow::TStatusValidator::Validate(builders[idx]->AppendNull());
         }
         NArrow::Append<arrow::UInt32Type>(*builders[pkSchema->num_fields()], (ui32)i.GetPredicateTo().GetCompareType());
@@ -132,53 +160,50 @@ std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(cons
 
 std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchLines(
     const std::shared_ptr<arrow::RecordBatch>& batch) {
-    std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>();
+    std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(TPKRangesFilter(batch));
     for (ui32 i = 0; i < batch->num_rows(); ++i) {
-        auto batchRow = batch->Slice(i, 1);
-        auto pFrom = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::GreaterEqual, batchRow);
-        auto pTo = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::LessEqual, batchRow);
-        result->Add(pFrom, pTo, batch->schema()).Validate();
+        NArrow::NMerger::TSortableBatchPosition batchRow(batch, i, false);
+        result->Add(TPredicate(NKernels::EOperation::GreaterEqual, batchRow), TPredicate(NKernels::EOperation::LessEqual, batchRow)).Validate();
     }
     return result;
 }
 
 std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchFull(
     const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema) {
-    std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>();
+    std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(TPKRangesFilter(batch));
     auto pkBatch = NArrow::TColumnOperator().Adapt(batch, pkSchema).DetachResult();
     auto c = batch->GetColumnByName(".ydb_operation_type");
     AFL_VERIFY(c);
     AFL_VERIFY(c->type_id() == arrow::Type::UINT32);
     auto cUi32 = static_pointer_cast<arrow::UInt32Array>(c);
     for (ui32 i = 0; i < batch->num_rows();) {
-        std::shared_ptr<NOlap::TPredicate> pFrom;
-        std::shared_ptr<NOlap::TPredicate> pTo;
-        {
-            auto batchRow = TPredicate::CutNulls(batch->Slice(i, 1));
+        NOlap::TPredicate pFrom = [&]() {
+            auto batchRow = TPredicate::CutNulls(batch, i, pkSchema);
             NKernels::EOperation op = (NKernels::EOperation)cUi32->Value(i);
-            if (op == NKernels::EOperation::GreaterEqual || op == NKernels::EOperation::Greater) {
-                pFrom = std::make_shared<NOlap::TPredicate>(op, batchRow);
-            } else if (op == NKernels::EOperation::Equal) {
-                pFrom = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::GreaterEqual, batchRow);
-            } else {
-                AFL_VERIFY(false);
-            }
             if (op != NKernels::EOperation::Equal) {
                 ++i;
             }
-        }
-        {
-            auto batchRow = TPredicate::CutNulls(batch->Slice(i, 1));
-            NKernels::EOperation op = (NKernels::EOperation)cUi32->Value(i);
-            if (op == NKernels::EOperation::LessEqual || op == NKernels::EOperation::Less) {
-                pTo = std::make_shared<NOlap::TPredicate>(op, batchRow);
+            if (op == NKernels::EOperation::GreaterEqual || op == NKernels::EOperation::Greater) {
+                return TPredicate(op, batchRow);
             } else if (op == NKernels::EOperation::Equal) {
-                pTo = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::LessEqual, batchRow);
+                return TPredicate(NKernels::EOperation::GreaterEqual, batchRow);
             } else {
                 AFL_VERIFY(false);
             }
-        }
-        result->Add(pFrom, pTo, pkSchema).Validate();
+        }();
+        NOlap::TPredicate pTo = [&]()
+        {
+            auto batchRow = TPredicate::CutNulls(batch, i, pkSchema);
+            NKernels::EOperation op = (NKernels::EOperation)cUi32->Value(i);
+            if (op == NKernels::EOperation::LessEqual || op == NKernels::EOperation::Less) {
+                return TPredicate(op, batchRow);
+            } else if (op == NKernels::EOperation::Equal) {
+                return TPredicate(NKernels::EOperation::LessEqual, batchRow);
+            } else {
+                AFL_VERIFY(false);
+            }
+        }();
+        result->Add(std::move(pFrom), std::move(pTo)).Validate();
     }
     return result;
 }
@@ -195,17 +220,156 @@ TString TPKRangesFilter::SerializeToString(const std::shared_ptr<arrow::Schema>&
 
 TConclusion<TPKRangesFilter> TPKRangesFilter::BuildFromProto(
     const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk) {
-    TPKRangesFilter result;
-    for (auto& protoRange : proto.GetRanges()) {
-        auto fromPredicate = std::make_shared<TPredicate>();
-        auto toPredicate = std::make_shared<TPredicate>();
-        std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(TSerializedTableRange{ protoRange }, ydbPk, arrPk);
-        auto status = result.Add(fromPredicate, toPredicate, arrPk);
+    TRangesBuilder builder(ydbPk, arrPk);
+    for (const auto& range : proto.GetRanges()) {
+        builder.AddRange(TSerializedTableRange(range));
+    }
+    return builder.Finish();
+}
+
+void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
+    auto addRow = [this](TConstArrayRef<TCell> cells) -> ui32 {
+        std::vector<TCell> cellsWithDefaults;
+        ui32 nonNullCount = 0;
+        const size_t size = YdbPK.size();
+        Y_ASSERT(size <= (size_t)ArrPK->num_fields());
+        cellsWithDefaults.reserve(size);
+        for (size_t i = 0; i < size; ++i) {
+            if (i < cells.size() && !cells[i].IsNull()) {
+                cellsWithDefaults.push_back(cells[i]);
+                AFL_VERIFY(nonNullCount == i)("non_null", nonNullCount)("i", i);
+                ++nonNullCount;
+            } else {
+                TConclusion<TCell> defaultCell = MakeDefaultCell(YdbPK[i]);
+                AFL_VERIFY(!!defaultCell);
+                cellsWithDefaults.push_back(defaultCell.DetachResult());
+            }
+        }
+        AFL_VERIFY(cellsWithDefaults.size() == YdbPK.size());
+        BatchBuilder.AddRow(NKikimr::TDbTupleRef(), NKikimr::TDbTupleRef(YdbPK.data(), cellsWithDefaults.data(), cellsWithDefaults.size()));
+
+        return nonNullCount;
+    };
+
+    const ui32 leftPrefix = addRow(range.From.GetCells());
+    const ui32 rightPrefix = addRow(range.To.GetCells());
+    AFL_VERIFY(BatchBuilder.Rows());
+    AFL_VERIFY(leftPrefix <= YdbPK.size());
+    AFL_VERIFY(rightPrefix <= YdbPK.size());
+
+    RangesInfo.emplace_back(TPredicateInfo(range.FromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftPrefix,
+                                BatchBuilder.Rows() - 2),
+        TPredicateInfo(range.ToInclusive ? NKernels::EOperation::LessEqual : NKernels::EOperation::Less, rightPrefix, BatchBuilder.Rows() - 1));
+}
+
+TConclusion<TPKRangesFilter> TRangesBuilder::Finish() {
+    if (RangesInfo.empty()) {
+        return TPKRangesFilter::BuildEmpty();
+    }
+
+    auto batch = BatchBuilder.FlushBatch(false, false);
+    TPKRangesFilter result(batch);
+    auto fieldNames = ArrPK->field_names();
+    for (const auto& range : RangesInfo) {
+        auto status = result.Add(range.first.BuildPredicate(ArrPK, batch), range.second.BuildPredicate(ArrPK, batch));
         if (status.IsFail()) {
             return status;
         }
     }
     return result;
+}
+
+namespace {
+template <typename T>
+TCell MakeDefaultCellByPrimitiveType() {
+    if constexpr (sizeof(T) <= TCell::MaxInlineSize()) {
+        return TCell::Make<T>(T());
+    } else {
+        alignas(T) static const T kDefault{};
+        return TCell(reinterpret_cast<const char*>(&kDefault), sizeof(T));
+    }
+}
+
+}   // namespace
+
+TConclusion<TCell> TRangesBuilder::MakeDefaultCell(const NScheme::TTypeInfo typeInfo) {
+    switch (typeInfo.GetTypeId()) {
+        case NScheme::NTypeIds::Bool:
+            return MakeDefaultCellByPrimitiveType<bool>();
+        case NScheme::NTypeIds::Int8:
+            return MakeDefaultCellByPrimitiveType<i8>();
+        case NScheme::NTypeIds::Uint8:
+            return MakeDefaultCellByPrimitiveType<ui8>();
+        case NScheme::NTypeIds::Int16:
+            return MakeDefaultCellByPrimitiveType<i16>();
+        case NScheme::NTypeIds::Date:
+        case NScheme::NTypeIds::Uint16:
+            return MakeDefaultCellByPrimitiveType<ui16>();
+        case NScheme::NTypeIds::Int32:
+        case NScheme::NTypeIds::Date32:
+            return MakeDefaultCellByPrimitiveType<i32>();
+        case NScheme::NTypeIds::Datetime:
+        case NScheme::NTypeIds::Uint32:
+            return MakeDefaultCellByPrimitiveType<ui32>();
+        case NScheme::NTypeIds::Int64:
+            return MakeDefaultCellByPrimitiveType<i64>();
+        case NScheme::NTypeIds::Uint64:
+            return MakeDefaultCellByPrimitiveType<ui64>();
+        case NScheme::NTypeIds::Float:
+            return MakeDefaultCellByPrimitiveType<float>();
+        case NScheme::NTypeIds::Double:
+            return MakeDefaultCellByPrimitiveType<double>();
+        case NScheme::NTypeIds::Utf8:
+        case NScheme::NTypeIds::Json:
+            return TCell(Default<TString>().data(), Default<TString>().size());
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::String4k:
+        case NScheme::NTypeIds::String2m:
+        case NScheme::NTypeIds::Yson:
+        case NScheme::NTypeIds::DyNumber:
+        case NScheme::NTypeIds::JsonDocument:
+            return TCell(Default<TString>().data(), Default<TString>().size());
+        case NScheme::NTypeIds::Timestamp:
+            return MakeDefaultCellByPrimitiveType<ui64>();
+        case NScheme::NTypeIds::Interval:
+            return MakeDefaultCellByPrimitiveType<i64>();
+        case NScheme::NTypeIds::Decimal:
+            return MakeDefaultCellByPrimitiveType<std::pair<ui64, i64>>();
+        case NScheme::NTypeIds::Uuid:
+            return MakeDefaultCellByPrimitiveType<ui16>();
+
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp64:
+        case NScheme::NTypeIds::Interval64:
+            return MakeDefaultCellByPrimitiveType<i64>();
+
+        case NScheme::NTypeIds::PairUi64Ui64:
+        case NScheme::NTypeIds::ActorId:
+        case NScheme::NTypeIds::StepOrderId:
+            break;   // Deprecated types
+
+        case NScheme::NTypeIds::Pg:
+            switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
+                case INT2OID:
+                    return MakeDefaultCellByPrimitiveType<i16>();
+                case INT4OID:
+                    return MakeDefaultCellByPrimitiveType<i32>();
+                case INT8OID:
+                    return MakeDefaultCellByPrimitiveType<i64>();
+                case FLOAT4OID:
+                    return MakeDefaultCellByPrimitiveType<float>();
+                case FLOAT8OID:
+                    return MakeDefaultCellByPrimitiveType<double>();
+                case BYTEAOID:
+                    return TCell(Default<TString>().data(), Default<TString>().size());
+                case TEXTOID:
+                    return TCell(Default<TString>().data(), Default<TString>().size());
+                default:
+                    break;
+            }
+            break;
+    }
+    return TConclusionStatus::Fail(TStringBuilder() << "Unsupported type: " << NScheme::TypeName(typeInfo.GetTypeId()));
 }
 
 }   // namespace NKikimr::NOlap

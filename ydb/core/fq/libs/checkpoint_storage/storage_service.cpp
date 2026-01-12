@@ -9,7 +9,7 @@ using namespace NActors;
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewCheckpointStorageService(
-    const NKikimrConfig::TCheckpointsConfig& config,
+    const TCheckpointStorageSettings& config,
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYdb::TDriver driver,

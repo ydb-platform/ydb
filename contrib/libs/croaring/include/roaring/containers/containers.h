@@ -2434,15 +2434,131 @@ roaring_container_iterator_t container_init_iterator_last(const container_t *c,
  * Moves the iterator to the next entry. Returns true and sets `value` if a
  * value is present.
  */
-bool container_iterator_next(const container_t *c, uint8_t typecode,
-                             roaring_container_iterator_t *it, uint16_t *value);
+inline bool container_iterator_next(const container_t *c, uint8_t typecode,
+                                    roaring_container_iterator_t *it,
+                                    uint16_t *value) {
+    switch (typecode) {
+        case BITSET_CONTAINER_TYPE: {
+            const bitset_container_t *bc = const_CAST_bitset(c);
+            it->index++;
+
+            uint32_t wordindex = it->index / 64;
+            if (wordindex >= BITSET_CONTAINER_SIZE_IN_WORDS) {
+                return false;
+            }
+
+            uint64_t word =
+                bc->words[wordindex] & (UINT64_MAX << (it->index % 64));
+            // next part could be optimized/simplified
+            while (word == 0 &&
+                   (wordindex + 1 < BITSET_CONTAINER_SIZE_IN_WORDS)) {
+                wordindex++;
+                word = bc->words[wordindex];
+            }
+            if (word != 0) {
+                it->index = wordindex * 64 + roaring_trailing_zeroes(word);
+                *value = it->index;
+                return true;
+            }
+            return false;
+        }
+        case ARRAY_CONTAINER_TYPE: {
+            const array_container_t *ac = const_CAST_array(c);
+            it->index++;
+            if (it->index < ac->cardinality) {
+                *value = ac->array[it->index];
+                return true;
+            }
+            return false;
+        }
+        case RUN_CONTAINER_TYPE: {
+            if (*value == UINT16_MAX) {  // Avoid overflow to zero
+                return false;
+            }
+
+            const run_container_t *rc = const_CAST_run(c);
+            uint32_t limit =
+                rc->runs[it->index].value + rc->runs[it->index].length;
+            if (*value < limit) {
+                (*value)++;
+                return true;
+            }
+
+            it->index++;
+            if (it->index < rc->n_runs) {
+                *value = rc->runs[it->index].value;
+                return true;
+            }
+            return false;
+        }
+        default:
+            assert(false);
+            roaring_unreachable;
+            return false;
+    }
+}
 
 /**
  * Moves the iterator to the previous entry. Returns true and sets `value` if a
  * value is present.
  */
-bool container_iterator_prev(const container_t *c, uint8_t typecode,
-                             roaring_container_iterator_t *it, uint16_t *value);
+inline bool container_iterator_prev(const container_t *c, uint8_t typecode,
+                                    roaring_container_iterator_t *it,
+                                    uint16_t *value) {
+    switch (typecode) {
+        case BITSET_CONTAINER_TYPE: {
+            if (--it->index < 0) {
+                return false;
+            }
+
+            const bitset_container_t *bc = const_CAST_bitset(c);
+            int32_t wordindex = it->index / 64;
+            uint64_t word =
+                bc->words[wordindex] & (UINT64_MAX >> (63 - (it->index % 64)));
+
+            while (word == 0 && --wordindex >= 0) {
+                word = bc->words[wordindex];
+            }
+            if (word == 0) {
+                return false;
+            }
+
+            it->index = (wordindex * 64) + (63 - roaring_leading_zeroes(word));
+            *value = it->index;
+            return true;
+        }
+        case ARRAY_CONTAINER_TYPE: {
+            if (--it->index < 0) {
+                return false;
+            }
+            const array_container_t *ac = const_CAST_array(c);
+            *value = ac->array[it->index];
+            return true;
+        }
+        case RUN_CONTAINER_TYPE: {
+            if (*value == 0) {
+                return false;
+            }
+
+            const run_container_t *rc = const_CAST_run(c);
+            (*value)--;
+            if (*value >= rc->runs[it->index].value) {
+                return true;
+            }
+
+            if (--it->index < 0) {
+                return false;
+            }
+
+            *value = rc->runs[it->index].value + rc->runs[it->index].length;
+            return true;
+        }
+        default:
+            assert(false);
+            roaring_unreachable;
+            return false;
+    }
+}
 
 /**
  * Moves the iterator to the smallest entry that is greater than or equal to
@@ -2476,6 +2592,40 @@ bool container_iterator_read_into_uint64(const container_t *c, uint8_t typecode,
                                          uint64_t high48, uint64_t *buf,
                                          uint32_t count, uint32_t *consumed,
                                          uint16_t *value_out);
+
+/**
+ * Skips the next `skip_count` entries in the container iterator. Returns true
+ * and sets `value_out` if a value is present after skipping. Returns false if
+ * the end of the container is reached during the skip operation. Sets
+ * consumed_count to the number of values actually skipped (which may be less
+ * than skip_count if the end of the container is reached).
+ *
+ * value_out must be initialized to the previous value yielded by the iterator.
+ *
+ * skip_count must be greater than zero.
+ */
+bool container_iterator_skip(const container_t *c, uint8_t typecode,
+                             roaring_container_iterator_t *it,
+                             uint32_t skip_count, uint32_t *consumed_count,
+                             uint16_t *value_out);
+
+/**
+ * Skips the previous `skip_count` entries in the container iterator (moves
+ * backwards). Returns true and sets `value_out` if a value is present after
+ * skipping backwards. Returns false if the beginning of the container is
+ * reached during the skip operation. Sets consumed_count to the number of
+ * values actually skipped backwards (which may be less than skip_count if
+ * the beginning of the container is reached).
+ *
+ * value_out must be initialized to the current value yielded by the iterator.
+ *
+ * skip_count must be greater than zero.
+ */
+bool container_iterator_skip_backward(const container_t *c, uint8_t typecode,
+                                      roaring_container_iterator_t *it,
+                                      uint32_t skip_count,
+                                      uint32_t *consumed_count,
+                                      uint16_t *value_out);
 
 #ifdef __cplusplus
 }

@@ -6,26 +6,39 @@
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
-
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/public/api/protos/draft/fq.pb.h>
-
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
-
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 namespace NFq {
 
-using namespace NActors;
-using namespace NFq::NConfig;
+namespace NConfig {
+
+class TCheckpointCoordinatorConfig;
+
+} // namespace NConfig
+
+class TCheckpointCoordinatorSettings {
+public:
+    inline static TDuration DefaultCheckpointingPeriod = TDuration::Seconds(30);
+
+    TCheckpointCoordinatorSettings();
+    TCheckpointCoordinatorSettings(const NFq::NConfig::TCheckpointCoordinatorConfig& config);
+
+private:
+    YDB_ACCESSOR(TDuration, CheckpointingPeriod, DefaultCheckpointingPeriod);
+    YDB_ACCESSOR(ui64, CheckpointingSnapshotRotationPeriod, 0);
+    YDB_ACCESSOR(ui64, MaxInflight, 1);
+};
 
 class TCheckpointCoordinator : public NActors::TActor<TCheckpointCoordinator>  {
 public:
     TCheckpointCoordinator(TCoordinatorId coordinatorId,
                            const TActorId& storageProxy,
                            const TActorId& runActorId,
-                           const NKikimrConfig::TCheckpointsConfig& settings,
+                           const TCheckpointCoordinatorSettings& settings,
                            const ::NMonitoring::TDynamicCounterPtr& counters,
                            const NProto::TGraphParams& graphParams,
                            const FederatedQuery::StateLoadMode& stateLoadMode,
@@ -160,8 +173,7 @@ private:
     const TActorId StorageProxy;
     const TActorId RunActorId;
     std::unique_ptr<TCheckpointIdGenerator> CheckpointIdGenerator;
-    NKikimrConfig::TCheckpointsConfig Settings;
-    const TDuration CheckpointingPeriod;
+    TCheckpointCoordinatorSettings Settings;
     ui64 CheckpointingSnapshotRotationPeriod = 0;
     ui64 CheckpointingSnapshotRotationIndex = 0;
     const NProto::TGraphParams GraphParams;
@@ -197,7 +209,7 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     TCoordinatorId coordinatorId,
     const TActorId& storageProxy,
     const TActorId& runActorId,
-    const NKikimrConfig::TCheckpointsConfig& settings,
+    const TCheckpointCoordinatorSettings& config,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
     const FederatedQuery::StateLoadMode& stateLoadMode,

@@ -232,8 +232,12 @@ public:
         str << "\n</table>";
     }
 
-    ui32 ColorFlagLimit(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    ui32 ColorFlagLimit(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
         return QuotaForOwner[id].ColorFlagLimit(color);
+    }
+
+    double GetOccupancyForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
+        return ColorLimits.GetOccupancyForColor(color, Total);
     }
 };
 
@@ -265,8 +269,6 @@ public:
     // OwnerBeginUser - per-VDisk qouta
 
     const i64 SysReserveSize = 5;
-    const i64 CommonStaticLogSize = 70;
-    i64 MaxCommonLogChunks = 200;
 
     TChunkTracker()
         : GlobalQuota(new TPerOwnerQuotaTracker())
@@ -295,7 +297,7 @@ public:
             return false;
         }
 
-        i64 staticLog = params.HasStaticGroups ? CommonStaticLogSize : 0;
+        i64 staticLog = params.HasStaticGroups ? params.CommonStaticLogChunks : 0;
         unappropriated += GlobalQuota->AddSystemOwner(OwnerCommonStaticLog, staticLog, "Common Log Static Group Bonus");
         if (unappropriated < 0) {
             outErrorReason = (TStringBuilder() << "Error adding OwnerCommonStaticLog quota, size# " << staticLog
@@ -303,9 +305,8 @@ public:
             return false;
         }
 
-        MaxCommonLogChunks = params.MaxCommonLogChunks;
         if (params.SeparateCommonLog) {
-            i64 commonLog = MaxCommonLogChunks;
+            i64 commonLog = params.MaxCommonLogChunks;
             if (commonLog + staticLog < params.CommonLogSize) {
                 commonLog = params.CommonLogSize - staticLog;
             }
@@ -367,7 +368,7 @@ public:
         }
 
         ColorBorder = params.SpaceColorBorder;
-        ColorBorderOccupancy = chunkLimits.GetOccupancyForColor(ColorBorder, GlobalQuota->GetHardLimit(OwnerBeginUser));
+        ColorBorderOccupancy = OwnerQuota->GetOccupancyForColor(ColorBorder);
         return true;
     }
 
@@ -589,7 +590,7 @@ public:
         OwnerQuota->PrintHTML(str, SharedQuota.Get(), &ColorBorder, &ColorBorderOccupancy);
     }
 
-    ui32 ColorFlagLimit(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    ui32 ColorFlagLimit(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
         if (IsOwnerUser(owner)) {
             return OwnerQuota->ColorFlagLimit(owner, color);
         } else {
@@ -615,7 +616,7 @@ public:
 
     void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
         ColorBorder = colorBorder;
-        ColorBorderOccupancy = ColorLimits.GetOccupancyForColor(ColorBorder, GlobalQuota->GetHardLimit(OwnerBeginUser));
+        ColorBorderOccupancy = OwnerQuota->GetOccupancyForColor(ColorBorder);
     }
 };
 

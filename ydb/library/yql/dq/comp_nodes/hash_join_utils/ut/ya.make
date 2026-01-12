@@ -12,10 +12,13 @@ ELSE()
 ENDIF()
 
 
+IF (ARCH_X86_64 AND OS_LINUX)
 SRCS(
-    packed_tuple_ut.cpp
     accumulator_ut.cpp
+    scalar_layout_converter_ut.cpp
     block_layout_converter_ut.cpp
+    hash_table_ut.cpp
+    packed_tuple_ut.cpp
 )
 
 PEERDIR(
@@ -33,6 +36,8 @@ CFLAGS(
     -mavx2
     -mprfchw
 )
+
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

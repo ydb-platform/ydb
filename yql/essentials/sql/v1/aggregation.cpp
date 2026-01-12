@@ -1,3 +1,5 @@
+#include "aggregation.h"
+
 #include "node.h"
 #include "source.h"
 #include "context.h"
@@ -50,8 +52,7 @@ public:
                         bool multi = false, bool validateArgs = true)
         : IAggregation(pos, name, func, aggMode)
         , Factory_(!func.empty() ? BuildBind(Pos_, aggMode == EAggregateMode::OverWindow || aggMode == EAggregateMode::OverWindowDistinct ? "window_module" : "aggregate_module", func) : nullptr)
-        ,
-        Multi_(multi)
+        , Multi_(multi)
         , ValidateArgs_(validateArgs)
         , DynamicFactory_(!Factory_)
     {
@@ -102,7 +103,8 @@ protected:
                 Expr_ = exprs.front();
             }
 
-            Name_ = src->MakeLocalName(Name_);
+            // There is no Source at YqlSelect DoInit.
+            Name_ = src ? src->MakeLocalName(Name_) : ctx.MakeName(Name_);
         }
 
         if (Expr_ && Expr_->IsAsterisk() && AggApplyName_ == "count") {
@@ -127,9 +129,9 @@ protected:
         return Factory_;
     }
 
-    TNodePtr GetExtractor(bool many, TContext& ctx) const override {
+    TNodePtr GetExtractorBody(bool many, TContext& ctx) const override {
         Y_UNUSED(ctx);
-        return BuildLambda(Pos_, Y("row"), Y("PersistableRepr", many ? Y("Unwrap", Expr_) : Expr_));
+        return Y("PersistableRepr", many ? Y("Unwrap", Expr_) : Expr_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const override {
@@ -179,6 +181,11 @@ protected:
             ctx.Error(Pos_) << "Aggregation of aggregated values is forbidden";
             return false;
         }
+
+        if (!src) { // YqlSelect
+            return true;
+        }
+
         if (AggMode_ == EAggregateMode::Distinct || AggMode_ == EAggregateMode::OverWindowDistinct) {
             const auto column = Expr_->GetColumnName();
             if (!column) {
@@ -187,7 +194,6 @@ protected:
                 return false;
             }
             DistinctKey_ = *column;
-            YQL_ENSURE(src);
             if (!IsGeneratedKeyColumn_ && src->GetJoin()) {
                 const auto sourcePtr = Expr_->GetSourceName();
                 if (!sourcePtr || !*sourcePtr) {
@@ -307,9 +313,9 @@ private:
         return new TKeyPayloadAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
-    TNodePtr GetExtractor(bool many, TContext& ctx) const final {
+    TNodePtr GetExtractorBody(bool many, TContext& ctx) const final {
         Y_UNUSED(ctx);
-        return BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Payload_) : Payload_);
+        return many ? Y("Unwrap", Payload_) : Payload_;
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
@@ -429,9 +435,9 @@ private:
         return new TPayloadPredicateAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
-    TNodePtr GetExtractor(bool many, TContext& ctx) const final {
+    TNodePtr GetExtractorBody(bool many, TContext& ctx) const final {
         Y_UNUSED(ctx);
-        return BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Payload_) : Payload_);
+        return many ? Y("Unwrap", Payload_) : Payload_;
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
@@ -518,9 +524,9 @@ private:
         return new TTwoArgsAggregationFactory(Pos_, Name_, Func_, AggMode_);
     }
 
-    TNodePtr GetExtractor(bool many, TContext& ctx) const final {
+    TNodePtr GetExtractorBody(bool many, TContext& ctx) const final {
         Y_UNUSED(ctx);
-        return BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", One_) : One_);
+        return many ? Y("Unwrap", One_) : One_;
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
@@ -1140,6 +1146,84 @@ TAggregationPtr BuildTopFactoryAggregation(TPosition pos, const TString& name, c
 template TAggregationPtr BuildTopFactoryAggregation<false>(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
 template TAggregationPtr BuildTopFactoryAggregation<true>(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
 
+class TReservoirSamplingAggregationFactory final: public TAggregationFactory {
+public:
+    TReservoirSamplingAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode, bool isValue)
+        : TAggregationFactory(pos, name, factory, aggMode)
+        , FakeSource_(BuildFakeSource(pos))
+        , IsValue_(isValue)
+    {
+    }
+
+private:
+    bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
+        ui32 adjustArgsCount = (isFactory ? 0 : 1) + !IsValue_;
+        if (exprs.size() != adjustArgsCount) {
+            ctx.Error(Pos_) << "Reservoir Samplig aggregation " << (isFactory ? "factory " : "") << " function requires exactly " << adjustArgsCount << " arguments, given: " << exprs.size();
+            return false;
+        }
+
+        if (BlockWindowAggregationWithoutFrameSpec(Pos_, GetName(), src, ctx)) {
+            return false;
+        }
+
+        Limit_ = nullptr;
+        if (!IsValue_) {
+            auto limitArgPos = exprs[1]->GetPos();
+            Limit_ = exprs[1];
+            if (!Limit_->Init(ctx, FakeSource_.Get())) {
+                return false;
+            }
+        }
+
+        if (!isFactory) {
+            Expr_ = exprs[0];
+            Name_ = src->MakeLocalName(Name_);
+        }
+
+        if (!Init(ctx, src)) {
+            return false;
+        }
+
+        if (!isFactory) {
+            node.Add("Member", "row", Q(Name_));
+            if (IsOverWindow() || IsOverWindowDistinct()) {
+                src->AddTmpWindowColumn(Name_);
+            }
+        }
+
+        return true;
+    }
+
+    TNodePtr DoClone() const final {
+        return new TReservoirSamplingAggregationFactory(Pos_, Name_, Func_, AggMode_, IsValue_);
+    }
+
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
+        Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
+        auto apply = Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Expr_) : Expr_));
+        AddFactoryArguments(apply);
+        return apply;
+    }
+
+    void AddFactoryArguments(TNodePtr& apply) const final {
+        if (IsValue_) {
+            return;
+        }
+        apply = L(apply, Limit_);
+    }
+
+private:
+    TSourcePtr FakeSource_;
+    TNodePtr Limit_;
+    bool IsValue_;
+};
+
+TAggregationPtr BuildReservoirSamplingFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode, bool isValue) {
+    return new TReservoirSamplingAggregationFactory(pos, name, factory, aggMode, isValue);
+}
+
 class TCountDistinctEstimateAggregationFactory final: public TAggregationFactory {
 public:
     TCountDistinctEstimateAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
@@ -1247,7 +1331,8 @@ private:
 
         if (!isFactory) {
             Expr_ = exprs[0];
-            Name_ = src->MakeLocalName(Name_);
+            // There is no Source at YqlSelect DoInit.
+            Name_ = src ? src->MakeLocalName(Name_) : ctx.MakeName(Name_);
         }
 
         if (!Init(ctx, src)) {
@@ -1415,7 +1500,7 @@ public:
         return ret;
     }
 
-    TNodePtr GetExtractor(bool many, TContext& ctx) const override {
+    TNodePtr GetExtractorBody(bool many, TContext& ctx) const final {
         Y_UNUSED(many);
         ctx.Error() << "Partial aggregation by PostgreSQL function isn't supported";
         return nullptr;
@@ -1519,4 +1604,69 @@ TAggregationPtr BuildNthFactoryAggregation(TPosition pos, const TString& name, c
     return new TNthValueFactoryAggregation(pos, name, factory, aggMode);
 }
 
+TAggregationPtr BuildAggregationByType(
+    EAggregationType type,
+    TPosition pos,
+    TString realFunctionName,
+    TString factoryName,
+    EAggregateMode aggMode)
+{
+    switch (type) {
+        case NORMAL:
+            return BuildFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case KEY_PAYLOAD:
+            return BuildKeyPayloadFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case PAYLOAD_PREDICATE:
+            return BuildPayloadPredicateFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case TWO_ARGS:
+            return BuildTwoArgsFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case COUNT:
+            return BuildCountAggregation(pos, realFunctionName, factoryName, aggMode);
+        case HISTOGRAM:
+            return BuildHistogramFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case LINEAR_HISTOGRAM:
+            return BuildLinearHistogramFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case PERCENTILE:
+            return BuildPercentileFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case TOPFREQ:
+            return BuildTopFreqFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case TOP:
+            return BuildTopFactoryAggregation<false>(pos, realFunctionName, factoryName, aggMode);
+        case TOP_BY:
+            return BuildTopFactoryAggregation<true>(pos, realFunctionName, factoryName, aggMode);
+        case COUNT_DISTINCT_ESTIMATE:
+            return BuildCountDistinctEstimateFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case LIST:
+            return BuildListFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case UDAF:
+            return BuildUserDefinedFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case PG:
+            return BuildPGFactoryAggregation(pos, realFunctionName, aggMode);
+        case NTH_VALUE:
+            return BuildNthFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+        case RANDOM_SAMPLE:
+            return BuildReservoirSamplingFactoryAggregation(pos, realFunctionName, factoryName, aggMode, false);
+        case RANDOM_VALUE:
+            return BuildReservoirSamplingFactoryAggregation(pos, realFunctionName, factoryName, aggMode, true);
+    }
+}
+
 } // namespace NSQLTranslationV1
+
+template <>
+void Out<NSQLTranslationV1::EAggregateMode>(IOutputStream& out, NSQLTranslationV1::EAggregateMode value) {
+    switch (value) {
+        case NSQLTranslationV1::EAggregateMode::Normal:
+            out << "Normal";
+            break;
+        case NSQLTranslationV1::EAggregateMode::Distinct:
+            out << "Distinct";
+            break;
+        case NSQLTranslationV1::EAggregateMode::OverWindow:
+            out << "OverWindow";
+            break;
+        case NSQLTranslationV1::EAggregateMode::OverWindowDistinct:
+            out << "OverWindowDistinct";
+            break;
+    }
+}

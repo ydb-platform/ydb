@@ -17,6 +17,8 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
 #include <ydb/core/kqp/executer_actor/kqp_partitioned_executer.h>
+#include <ydb/core/kqp/executer_actor/kqp_table_resolver.h>
+#include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -29,6 +31,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 #include <ydb/core/util/ulid.h>
+#include <ydb/core/util/stlog.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -38,12 +41,11 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
 
+#include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/log.h>
 
 #include <util/string/printf.h>
 
@@ -81,13 +83,13 @@ std::optional<TString> TryDecodeYdbSessionId(const TString& sessionId) {
     return std::nullopt;
 }
 
-#define LOG_C(msg) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
-#define LOG_E(msg) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
-#define LOG_W(msg) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
-#define LOG_N(msg) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
-#define LOG_I(msg) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
-#define LOG_D(msg) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
-#define LOG_T(msg) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_SESSION, LogPrefix() << msg)
+#define STLOG_C(MESSAGE, ...) STLOG(PRI_CRIT, NKikimrServices::KQP_SESSION, KQPSA, LogPrefix() << MESSAGE, __VA_ARGS__)
+#define STLOG_E(MESSAGE, ...) STLOG(PRI_ERROR, NKikimrServices::KQP_SESSION, KQPSA, LogPrefix() << MESSAGE, __VA_ARGS__)
+#define STLOG_W(MESSAGE, ...) STLOG(PRI_WARN, NKikimrServices::KQP_SESSION, KQPSA, LogPrefix() << MESSAGE, __VA_ARGS__)
+#define STLOG_N(MESSAGE, ...) STLOG(PRI_NOTICE, NKikimrServices::KQP_SESSION, KQPSA, LogPrefix() << MESSAGE, __VA_ARGS__)
+#define STLOG_I(MESSAGE, ...) STLOG(PRI_INFO, NKikimrServices::KQP_SESSION, KQPSA, LogPrefix() << MESSAGE, __VA_ARGS__)
+#define STLOG_D(MESSAGE, ...) STLOG(PRI_DEBUG, NKikimrServices::KQP_SESSION, KQPSA, LogPrefix() << MESSAGE, __VA_ARGS__)
+#define STLOG_T(MESSAGE, ...) STLOG(PRI_TRACE, NKikimrServices::KQP_SESSION, KQPSA, LogPrefix() << MESSAGE, __VA_ARGS__)
 
 void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQueryResponse& resp) {
     for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
@@ -146,7 +148,7 @@ struct TKqpCleanupCtx {
     }
 };
 
-class TKqpSessionActor : public TActorBootstrapped<TKqpSessionActor> {
+class TKqpSessionActor : public TActorBootstrapped<TKqpSessionActor>, IActorExceptionHandler {
 
     class TTimerGuard {
     public:
@@ -184,7 +186,8 @@ public:
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
             const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-            const TActorId& kqpTempTablesAgentActor)
+            const TActorId& kqpTempTablesAgentActor,
+            std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : Owner(owner)
         , QueryCache(std::move(queryCache))
         , SessionId(sessionId)
@@ -201,6 +204,7 @@ public:
         , QueryServiceConfig(queryServiceConfig)
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
         , GUCSettings(std::make_shared<TGUCSettings>())
+        , ChannelService(channelService)
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
@@ -219,11 +223,15 @@ public:
 
         TempTablesState.Database = Settings.Database;
         TempTablesState.TempDirName = TAppData::RandomProvider->GenUuid4().AsUuidString();
-        LOG_D("Create session actor with id " <<  *optSessionId << " (tmp dir name: " << TempTablesState.TempDirName << ")");
+        STLOG_D("Create session actor", 
+            (ydb_session_id, *optSessionId),
+            (temp_dir_name, TempTablesState.TempDirName),
+            (trace_id, TraceId()));
     }
 
     void Bootstrap() {
-        LOG_D("session actor bootstrapped");
+        STLOG_D("Session actor bootstrapped",
+            (trace_id, TraceId()));
         Counters->ReportSessionActorCreated(Settings.DbCounters);
         CreationTime = TInstant::Now();
 
@@ -239,9 +247,16 @@ public:
             << "ActorId: " << SelfId() << ", "
             << "ActorState: " << CurrentStateFuncName() << ", ";
         if (Y_LIKELY(QueryState)) {
-            result << "TraceId: " << QueryState->UserRequestContext->TraceId << ", ";
+            result << "LegacyTraceId: " << QueryState->UserRequestContext->TraceId << ", ";
         }
         return result;
+    }
+
+    TString TraceId() const {
+        if (QueryState && QueryState->KqpSessionSpan) {
+            return QueryState->KqpSessionSpan.GetTraceId().GetHexTraceId();
+        }
+        return TString();
     }
 
     void MakeNewQueryState(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -260,7 +275,9 @@ public:
 
     void PassRequestToResourcePool() {
         if (QueryState->UserRequestContext->PoolConfig) {
-            LOG_D("request placed into pool from cache: " << QueryState->UserRequestContext->PoolId);
+            STLOG_D("Request placed into pool from cache", 
+                (pool_id, QueryState->UserRequestContext->PoolId),
+                (trace_id, TraceId()));
             CompileQuery();
             return;
         }
@@ -305,11 +322,7 @@ public:
         auto txId = TTxId::FromString(txControl.tx_id());
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            if (!ctx->BufferActorId) {
-                Transactions.AddToBeAborted(std::move(ctx));
-            } else {
-                TerminateBufferActor(ctx);
-            }
+            Transactions.AddToBeAborted(std::move(ctx));
             ReplySuccess();
         } else {
             ReplyTransactionNotFound(txControl.tx_id());
@@ -326,7 +339,10 @@ public:
 
         auto txId = TTxId::FromString(txControl.tx_id());
         auto txCtx = Transactions.Find(txId);
-        LOG_D("queryRequest TxControl: " << txControl.DebugString() << " txCtx: " << (void*)txCtx.Get());
+        STLOG_D("QueryRequest",
+            (tx_control, txControl.DebugString()),
+            (tx_ctx, (uintptr_t)txCtx.Get()),
+            (trace_id, TraceId()));    
         if (!txCtx) {
             ReplyTransactionNotFound(txControl.tx_id());
             return;
@@ -367,8 +383,9 @@ public:
     }
 
     void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
-        LOG_D("Got ClientLost event, send AbortExecution to executer: "
-            << ExecuterId);
+        STLOG_D("Got ClientLost event, send AbortExecution to executer", 
+            (executer_id, ExecuterId),
+            (trace_id, TraceId()));
 
         if (ExecuterId) {
             auto abortEv = TEvKqp::TEvAbortExecution::Aborted("Client lost"); // any status code can be here
@@ -397,18 +414,18 @@ public:
             TString errMsg = issues.ToString();
             auto status = ev->Get()->GetYdbStatus();
 
-            LOG_N(TKqpRequestInfo("", SessionId)
-                << "Got invalid query request, reply with status: "
-                << status
-                << " msg: "
-                << errMsg <<".");
+            STLOG_N("Got invalid query request, reply with error", 
+                (status, status),
+                (error_msg, errMsg),
+                (trace_id, TraceId()));
             ReplyProcessError(ev, status, errMsg);
             return;
         }
 
         if (ShutdownState && ShutdownState->SoftTimeoutReached()) {
             // we reached the soft timeout, so at this point we don't allow to accept new queries for session.
-            LOG_N("system shutdown requested: soft timeout reached, no queries can be accepted");
+            STLOG_N("System shutdown requested: soft timeout reached, no queries can be accepted",
+                (trace_id, TraceId()));
             ReplyProcessError(ev, Ydb::StatusIds::BAD_SESSION, "Session is under shutdown");
             CleanupAndPassAway();
             return;
@@ -428,18 +445,18 @@ public:
             action,
             QueryState->GetQuery());
 
-        LOG_D("received request,"
-            << " proxyRequestId: " << proxyRequestId
-            << " prepared: " << QueryState->HasPreparedQuery()
-            << " tx_control: " << QueryState->HasTxControl()
-            << " action: " << action
-            << " type: " << QueryState->GetType()
-            << " text: " << QueryState->GetQuery()
-            << " rpcActor: " << QueryState->RequestActorId
-            << " database: " << QueryState->GetDatabase()
-            << " databaseId: " << QueryState->UserRequestContext->DatabaseId
-            << " pool id: " << QueryState->UserRequestContext->PoolId
-        );
+        STLOG_D("Received request", 
+            (proxy_request_id, proxyRequestId),
+            (prepared, QueryState->HasPreparedQuery()),
+            (has_tx_control, QueryState->HasTxControl()),
+            (action, action),
+            (type, QueryState->GetType()),
+            (text, QueryState->GetQuery()), 
+            (rpc_actor, QueryState->RequestActorId), 
+            (database, QueryState->GetDatabase()),
+            (database_id, QueryState->UserRequestContext->DatabaseId), 
+            (pool_id, QueryState->UserRequestContext->PoolId),
+            (trace_id, TraceId()));
 
         switch (action) {
             case NKikimrKqp::QUERY_ACTION_EXPLAIN:
@@ -499,7 +516,8 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool) {
-            LOG_I("Failed to deliver request to workload service");
+            STLOG_I("Failed to deliver request to workload service",
+                (trace_id, TraceId()));
             CompileQuery();
         }
     }
@@ -509,24 +527,35 @@ public:
         QueryState->ContinueTime = TInstant::Now();
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
-            LOG_T("Failed to place request in resource pool, feature flag is disabled");
+            STLOG_T("Failed to place request in resource pool, feature flag is disabled",
+                (trace_id, TraceId()));
             QueryState->UserRequestContext->PoolId.clear();
             CompileQuery();
             return;
         }
 
         const TString& poolId = ev->Get()->PoolId;
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && !ev->Get()->IsDiskFull()) {
             google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
             NYql::IssuesToMessage(std::move(ev->Get()->Issues), &issues);
             ReplyQueryError(ev->Get()->Status, TStringBuilder() << "Query failed during adding/waiting in workload pool " << poolId, issues);
             return;
         }
 
-        LOG_D("continue request, pool id: " << poolId);
+        if (ev->Get()->IsDiskFull()) {
+            STLOG_W("Database disks are without free space",
+                (pool_id, poolId),(trace_id, TraceId()));
+            FillQueryIssues(ev->Get()->Issues);
+        }
+
+        STLOG_D("Continue request", 
+            (pool_id, poolId),
+            (trace_id, TraceId()));
+
         QueryState->PoolHandlerActor = ev->Sender;
         QueryState->UserRequestContext->PoolId = poolId;
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
+
         CompileQuery();
     }
 
@@ -626,7 +655,8 @@ public:
         // for extra sanity we make extra hop to the compile service, which might handle the issue better
 
         auto ev = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings);
-        LOG_D("Sending CompileQuery request");
+        STLOG_D("Sending CompileQuery request",
+            (trace_id, TraceId()));
 
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());
@@ -635,7 +665,8 @@ public:
     void CompileSplittedQuery() {
         YQL_ENSURE(QueryState);
         auto ev = QueryState->BuildCompileSplittedRequest(CompilationCookie, GUCSettings);
-        LOG_D("Sending CompileSplittedQuery request");
+        STLOG_D("Sending CompileSplittedQuery request",
+            (trace_id, TraceId()));
 
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());
@@ -749,7 +780,8 @@ public:
         // for extra sanity we make extra hop to the compile service, which might handle the issue better
 
         auto request = QueryState->BuildCompileRequest(CompilationCookie, GUCSettings);
-        LOG_D("Sending CompileQuery request (statement)");
+        STLOG_D("Sending CompileQuery request (statement)",
+            (trace_id, TraceId()));
 
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), request.release(), 0, QueryState->QueryId,
             QueryState->KqpSessionSpan.GetTraceId());
@@ -784,14 +816,110 @@ public:
     }
 
     void OnSuccessCompileRequest() {
-        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
-            QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
-        {
-            return ReplyPrepareResult();
+        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
+            TVector<IKqpGateway::TPhysicalTxData> txs;
+            std::map<TString, TString> secureParams;
+            bool isValidParams = true;
+            auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
+            const auto& parameters = QueryState->GetYdbParameters();
+            QueryState->QueryData = std::make_shared<TQueryData>(txAlloc);
+            QueryState->QueryData->ParseParameters(parameters);
+
+            for (const auto& tx : QueryState->PreparedQuery->GetTransactions()) {
+                for (const auto& secretName : tx->GetSecretNames()) {
+                    secureParams.emplace(secretName, "");
+                }
+
+                txs.emplace_back(tx, QueryState->QueryData);
+                try {
+                    QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txAlloc->TypeEnv);
+                } catch (const yexception& ex) {
+                    // TODO: throw exception instead of silent ignore?
+                    // ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
+                    isValidParams = false;
+                }
+            }
+
+            if (!txs.empty() && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && isValidParams) {
+                auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
+                tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
+                tasksGraph.GetMeta().UserRequestContext = QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId);
+                tasksGraph.GetMeta().SecureParams = std::move(secureParams);
+
+                // Resolve tables
+                {
+                    auto kqpTableResolver = CreateKqpTableResolver(SelfId(), 0, QueryState->UserToken, tasksGraph, true);
+                    RegisterWithSameMailbox(kqpTableResolver);
+                    auto resolveEv = co_await ActorWaitForEvent<TEvKqpExecuter::TEvTableResolveStatus>(0);
+                    if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                        ReplyResolveError(*resolveEv->Get());
+                        co_return;
+                    }
+                }
+
+                // Resolve shards
+                {
+                    TSet<ui64> shardIds;
+                    for (const auto& [stageId, stageInfo] : tasksGraph.GetStagesInfo()) {
+                        if (stageInfo.Meta.ShardKey) {
+                            for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                                shardIds.insert(partition.ShardId);
+                            }
+                        }
+                    }
+
+                    if (!shardIds.empty()) {
+                        // TODO: initialize tasksGraph.GetMeta().UseFollowers ?
+                        auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), 0, false, std::move(shardIds));
+                        RegisterWithSameMailbox(kqpShardsResolver);
+                        auto resolveEv = co_await ActorWaitForEvent<NShardResolver::TEvShardsResolveStatus>(0);
+                        if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                            ReplyResolveError(*resolveEv->Get());
+                            co_return;
+                        }
+                        tasksGraph.GetMeta().ShardIdToNodeId = std::move(resolveEv->Get()->ShardNodes);
+                        for (const auto& [shardId, nodeId] : tasksGraph.GetMeta().ShardIdToNodeId) {
+                            tasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
+                        }
+                    }
+                }
+
+                bool needResourcesSnapshot = tasksGraph.GetMeta().IsScan;
+                if (!tasksGraph.GetMeta().IsScan) {
+                    for (const auto& transaction : txs) {
+                        for (const auto& stage : transaction.Body->GetStages()) {
+                            if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
+                                needResourcesSnapshot = true;
+                            }
+                        }
+                    }
+                    // TODO: better set `needResourcesSnapshot`
+                }
+
+                // Get resources snapshot
+                TVector<NKikimrKqp::TKqpNodeResources> resourcesSnapshot;
+                if (needResourcesSnapshot) {
+                    resourcesSnapshot = GetKqpResourceManager()->GetClusterResources();
+                }
+
+                try {
+                    tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
+                    // TODO: fill tasks count into result
+                    // Cerr << tasksGraph.DumpToString();
+                } catch (const std::exception&) {
+                    // TODO: send warning to user that we failed to estimate number of tasks.
+                }
+            }
+
+            co_return ReplyPrepareResult();
+        }
+
+        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE) {
+            co_return ReplyPrepareResult();
         }
 
         if (!PrepareQueryContext()) {
-            return;
+            co_return;
         }
 
         Become(&TKqpSessionActor::ExecuteState);
@@ -800,10 +928,10 @@ public:
 
         if (QueryState->NeedPersistentSnapshot()) {
             AcquirePersistentSnapshot();
-            return;
+            co_return;
         } else if (QueryState->NeedSnapshot(*Config)) {
             AcquireMvccSnapshot();
-            return;
+            co_return;
         }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
@@ -811,7 +939,8 @@ public:
     }
 
     void AcquirePersistentSnapshot() {
-        LOG_D("acquire persistent snapshot");
+        STLOG_D("Acquire persistent snapshot",
+            (trace_id, TraceId()));
         AcquireSnapshotSpan = NWilson::TSpan(TWilsonKqp::SessionAcquireSnapshot, QueryState->KqpSessionSpan.GetTraceId(),
             "SessionActor.AcquirePersistentSnapshot");
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
@@ -834,7 +963,8 @@ public:
     void AcquireMvccSnapshot() {
         AcquireSnapshotSpan = NWilson::TSpan(TWilsonKqp::SessionAcquireSnapshot, QueryState->KqpSessionSpan.GetTraceId(),
             "SessionActor.AcquireMvccSnapshot");
-        LOG_D("acquire mvcc snapshot");
+        STLOG_D("Acquire mvcc snapshot",
+            (trace_id, TraceId()));
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
 
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
@@ -871,8 +1001,11 @@ public:
             QueryState->Orbit = std::move(response->Orbit);
         }
 
-        LOG_T("read snapshot result: " << StatusForSnapshotError(response->Status) << ", step: " << response->Snapshot.Step
-            << ", tx id: " << response->Snapshot.TxId);
+        STLOG_T("Read snapshot result", 
+            (status, StatusForSnapshotError(response->Status)), 
+            (step, response->Snapshot.Step), 
+            (tx_id, response->Snapshot.TxId),
+            (trace_id, TraceId()));
         if (response->Status != NKikimrIssues::TStatusIds::SUCCESS) {
             auto& issues = response->Issues;
             AcquireSnapshotSpan.EndError(issues.ToString());
@@ -902,7 +1035,10 @@ public:
         alloc->Alloc->SetLimit(mkqlInitialLimit);
         alloc->Alloc->Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMaxLimit](ui64 currentLimit, ui64 required) {
             if (required < mkqlMaxLimit) {
-                LOG_D("Increase memory limit from " << currentLimit << " to " << required);
+                STLOG_D("Increase memory limit", 
+                    (current_limit, currentLimit), 
+                    (required, required),
+                    (trace_id, TraceId()));
                 alloc->Alloc->SetLimit(required);
             }
         });
@@ -911,7 +1047,7 @@ public:
         QueryState->TxCtx->SetIsolationLevel(settings);
         QueryState->TxCtx->OnBeginQuery();
 
-        if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
+        if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && !Settings.TableService.GetEnableSnapshotIsolationRW()) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
                 << "Writes aren't supported for Snapshot Isolation";
@@ -933,7 +1069,40 @@ public:
     Ydb::Table::TransactionControl GetTxControlWithImplicitTx() {
         if (!QueryState->ImplicitTxId) {
             Ydb::Table::TransactionSettings settings;
-            settings.mutable_serializable_read_write();
+            const auto isolation = QueryState->PreparedQuery->GetPhysicalQuery().GetDefaultTxMode() != NKqpProto::ISOLATION_LEVEL_UNDEFINED
+                ? QueryState->PreparedQuery->GetPhysicalQuery().GetDefaultTxMode()
+                : [&]() {
+                    switch (Settings.TableService.GetDefaultTxMode()) {
+                    case NKikimrConfig::TTableServiceConfig::SerializableRW:
+                        return NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+                    case NKikimrConfig::TTableServiceConfig::SnapshotRW:
+                        return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW;
+                    case NKikimrConfig::TTableServiceConfig::SnapshotRO:
+                        return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+                    case NKikimrConfig::TTableServiceConfig::StaleRO:
+                        return NKqpProto::ISOLATION_LEVEL_READ_STALE;
+                    default:
+                        ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
+                            << "Unknown DefaultTxMode";
+                    }
+                }();
+            switch (isolation) {
+                case NKqpProto::ISOLATION_LEVEL_SERIALIZABLE:
+                    settings.mutable_serializable_read_write();
+                    break;
+                case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
+                    settings.mutable_snapshot_read_write();
+                    break;
+                case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO:
+                    settings.mutable_snapshot_read_only();
+                    break;
+                case NKqpProto::ISOLATION_LEVEL_READ_STALE:
+                    settings.mutable_stale_read_only();
+                    break;
+                default:
+                    ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST)
+                        << "Unknown DefaultTxMode";
+            }
             BeginTx(settings);
             QueryState->ImplicitTxId = QueryState->TxId;
         }
@@ -977,7 +1146,7 @@ public:
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false, AppData()->FunctionRegistry,
                 AppData()->TimeProvider, AppData()->RandomProvider);
             QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
-            QueryState->TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
+            QueryState->TxCtx->EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
         }
 
         return true;
@@ -1047,29 +1216,25 @@ public:
         QueryState->TxCtx->HasOltpTable |= hasOltpWrite || hasOltpRead;
         QueryState->TxCtx->HasTableWrite |= hasOlapWrite || hasOltpWrite;
         QueryState->TxCtx->HasTableRead |= hasOlapRead || hasOltpRead;
-        if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
-                && !QueryState->TxCtx->EnableHtapTx.value_or(false) && !QueryState->IsSplitted()) {
-            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "Write transactions that use both row-oriented and column-oriented tables are disabled at current time.");
-            return false;
-        }
-        if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW
-            && QueryState->TxCtx->HasOltpTable) {
-            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                            "SnapshotRW can only be used with olap tables.");
-            return false;
-        }
 
-        if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
-                && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO
+        if (QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO
+                && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_SCAN
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_AST_SCAN
                 && QueryState->GetType() != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT
                 && QueryState->TxCtx->HasOlapTable) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             TStringBuilder()
-                                << "Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. "
+                                << "Read from column-oriented tables is not supported in Online Read-Only or Stale Read-Only transaction modes. "
                                 << "Use Serializable or Snapshot Read-Only mode instead.");
+            return false;
+        }
+
+        if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
+                && !QueryState->TxCtx->EnableHtapTx.value_or(false) && !QueryState->IsSplitted()) {
+            ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Write transactions that use both row-oriented and column-oriented tables are disabled at current time.");
             return false;
         }
 
@@ -1190,7 +1355,7 @@ public:
             request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
             request.UserTraceId = queryState->UserRequestContext->TraceId;
         } else {
-            request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+            request.IsolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
         }
 
         return request;
@@ -1209,12 +1374,9 @@ public:
     IKqpGateway::TExecPhysicalRequest PrepareGenericRequest(TKqpQueryState *queryState) {
         auto request = PrepareBaseRequest(queryState, queryState->TxCtx->TxAlloc);
 
-        if (queryState) {
-            request.Snapshot = queryState->TxCtx->GetSnapshot();
-            request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
-        } else {
-            request.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
-        }
+        AFL_ENSURE(queryState);
+        request.Snapshot = queryState->TxCtx->GetSnapshot();
+        request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
 
         return request;
     }
@@ -1222,6 +1384,7 @@ public:
     IKqpGateway::TExecPhysicalRequest PrepareRequest(const TKqpPhyTxHolder::TConstPtr& tx, bool literal,
         TKqpQueryState *queryState)
     {
+        AFL_ENSURE(queryState && QueryState);
         if (literal) {
             YQL_ENSURE(tx);
             return PrepareLiteralRequest(QueryState.get());
@@ -1246,7 +1409,7 @@ public:
     }
 
     bool CheckTransactionLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
-        auto& txCtx = *QueryState->TxCtx;
+        const auto& txCtx = *QueryState->TxCtx;
         const bool broken = txCtx.TxManager
             ? !!txCtx.TxManager->GetLockIssue()
             : txCtx.Locks.Broken();
@@ -1267,7 +1430,7 @@ public:
     }
 
     bool CheckTopicOperations() {
-        auto& txCtx = *QueryState->TxCtx;
+        const auto& txCtx = *QueryState->TxCtx;
 
         if (txCtx.TopicOperations.IsValid()) {
             return true;
@@ -1312,9 +1475,21 @@ public:
         }
 
         const auto& txCtx = *QueryState->TxCtx;
-        if (txCtx.HasTableRead || txCtx.HasTableWrite || txCtx.TopicOperations.GetSize() != 0) {
-            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table and topic operations");
+        if (txCtx.HasTableRead || txCtx.TopicOperations.GetSize() != 0) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table reads and topic operations");
             return false;
+        }
+
+        if (txCtx.HasTableWrite) {
+            if (txCtx.HasOlapTable && !txCtx.EnableOlapSink.value_or(false)) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for column table writes without enabled olap sink");
+                return false;
+            }
+
+            if (txCtx.HasOltpTable && !txCtx.EnableOltpSink.value_or(false)) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for row table writes without enabled oltp sink");
+                return false;
+            }
         }
 
         if (!tx) {
@@ -1385,9 +1560,9 @@ public:
             return;
         }
 
-        if (QueryState->TxCtx->EnableOltpSink.value_or(false) && isBatchQuery && (!tx || !tx->IsLiteralTx())) {
+        if (isBatchQuery && (!tx || !tx->IsLiteralTx())) {
             ExecutePartitioned(tx);
-        } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects(tx)) {
+        } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
             ExecuteDeferredEffectsImmediately(tx);
         } else if (auto commit = QueryState->ShouldCommitWithCurrentTx(tx); commit || tx) {
             ExecutePhyTx(tx, commit);
@@ -1399,7 +1574,12 @@ public:
     void ExecutePartitioned(const TKqpPhyTxHolder::TConstPtr& tx) {
         if (!Settings.TableService.GetEnableBatchUpdates()) {
             return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                "BATCH operations are disabled by EnableBatchUpdates flag.");
+                "BATCH operations are not supported at the current time.");
+        }
+
+        if (!QueryState->TxCtx->EnableOltpSink.value_or(false)) {
+            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                "BATCH operations are not supported at the current time.");
         }
 
         if (QueryState->TxCtx->HasOlapTable) {
@@ -1407,13 +1587,12 @@ public:
                 "BATCH operations are not supported for column tables at the current time.");
         }
 
-        if (QueryState->HasTxControl()) {
-            NYql::TIssues issues;
-            return ReplyQueryError(::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST,
+        if (!QueryState->HasImplicitTx()) {
+            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                 "BATCH operation can be executed only in the implicit transaction mode.");
         }
 
-        auto& txCtx = *QueryState->TxCtx;
+        const auto& txCtx = *QueryState->TxCtx;
         auto request = PrepareRequest(tx, false, QueryState.get());
 
         try {
@@ -1431,8 +1610,9 @@ public:
 
         for (const auto& effect : txCtx.DeferredEffects) {
             request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
-            LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"
-                   << " current Transactions.size(): " << request.Transactions.size());
+            STLOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction", 
+                (transactions_size, request.Transactions.size()),
+                (trace_id, TraceId()));
         }
 
         SendToPartitionedExecuter(QueryState->TxCtx.Get(), std::move(request));
@@ -1440,7 +1620,7 @@ public:
     }
 
     void ExecuteDeferredEffectsImmediately(const TKqpPhyTxHolder::TConstPtr& tx) {
-        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects(tx));
+        YQL_ENSURE(QueryState->TxCtx->ShouldExecuteDeferredEffects());
 
         auto& txCtx = *QueryState->TxCtx;
         auto request = PrepareRequest(/* tx */ nullptr, /* literal */ false, QueryState.get());
@@ -1448,8 +1628,9 @@ public:
         for (const auto& effect : txCtx.DeferredEffects) {
             request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
 
-            LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"
-                << " current Transactions.size(): " << request.Transactions.size());
+            STLOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction", 
+                (transactions_size, request.Transactions.size()),
+                (trace_id, TraceId()));
         }
 
         request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
@@ -1470,7 +1651,7 @@ public:
             switch (tx->GetType()) {
                 case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
                     YQL_ENSURE(tx->StagesSize() == 0);
-                    if (QueryState->HasTxControl() && !QueryState->HasImplicitTx() && QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
+                    if (QueryState->HasTxControl() && !QueryState->HasImplicitTx() && QueryState->TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Scheme operations cannot be executed inside transaction");
                         return true;
@@ -1481,12 +1662,11 @@ public:
 
                 case NKqpProto::TKqpPhyTx::TYPE_DATA:
                 case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
-                    if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
+                    if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_UNDEFINED) {
                         ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                             "Data operations cannot be executed outside of transaction");
                         return true;
                     }
-
                     break;
 
                 default:
@@ -1516,8 +1696,12 @@ public:
 
         auto request = PrepareRequest(tx, literal, QueryState.get());
 
-        LOG_D("ExecutePhyTx, tx: " << (void*)tx.get() << " literal: " << literal << " commit: " << commit
-                << " txCtx.DeferredEffects.size(): " << txCtx.DeferredEffects.Size());
+        STLOG_D("ExecutePhyTx", 
+            (literal, literal),
+            (commit, commit),
+            (deferred_effects_size, txCtx.DeferredEffects.Size()),
+            (tx, (uintptr_t)tx.get()),
+            (trace_id, TraceId()));
 
         if (!CheckTopicOperations()) {
             return true;
@@ -1562,8 +1746,9 @@ public:
             for (const auto& effect : txCtx.DeferredEffects) {
                 request.Transactions.emplace_back(effect.PhysicalTx, effect.Params);
 
-                LOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction,"
-                       << " current Transactions.size(): " << request.Transactions.size());
+                STLOG_D("TExecPhysicalRequest, add DeferredEffect to Transaction", 
+                    (transactions_size, request.Transactions.size()),
+                    (trace_id, TraceId()));
             }
 
             if (!txCtx.DeferredEffects.Empty()) {
@@ -1577,14 +1762,17 @@ public:
 
                 if (hasLocks || txCtx.TopicOperations.HasOperations()) {
                     if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
-                        LOG_D("TExecPhysicalRequest, tx has commit locks");
+                        STLOG_D("TExecPhysicalRequest, tx has commit locks",
+                            (trace_id, TraceId()));
                         request.LocksOp = ELocksOp::Commit;
                     } else {
-                        LOG_D("TExecPhysicalRequest, tx has rollback locks");
+                        STLOG_D("TExecPhysicalRequest, tx has rollback locks",
+                            (trace_id, TraceId()));
                         request.LocksOp = ELocksOp::Rollback;
                     }
                 } else if (txCtx.TxHasEffects()) {
-                    LOG_D("TExecPhysicalRequest, need commit locks");
+                    STLOG_D("TExecPhysicalRequest, need commit locks",
+                        (trace_id, TraceId()));
                     request.LocksOp = ELocksOp::Commit;
                 }
             } else {
@@ -1598,10 +1786,12 @@ public:
                         hasUncommittedEffects |=  dsLock.GetHasWrites();
                     }
                     if (!txCtx.GetSnapshot().IsValid() || (tx && txCtx.TxHasEffects()) || !txCtx.DeferredEffects.Empty() || hasUncommittedEffects || txCtx.TopicOperations.HasOperations()) {
-                        LOG_D("TExecPhysicalRequest, tx has commit locks");
+                        STLOG_D("TExecPhysicalRequest, tx has commit locks",
+                            (trace_id, TraceId()));
                         request.LocksOp = ELocksOp::Commit;
                     } else {
-                        LOG_D("TExecPhysicalRequest, tx has rollback locks");
+                        STLOG_D("TExecPhysicalRequest, tx has rollback locks",
+                            (trace_id, TraceId()));
                         request.LocksOp = ELocksOp::Rollback;
                     }
                 }
@@ -1674,7 +1864,9 @@ public:
         request.ResourceManager_ = ResourceManager_;
         request.SaveQueryPhysicalGraph = QueryState && QueryState->SaveQueryPhysicalGraph && request.Transactions.size() == 1 && !isRollback;
         request.QueryPhysicalGraph = QueryState && !isRollback ? QueryState->QueryPhysicalGraph : nullptr;
-        LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
+        STLOG_D("Sending to Executer", 
+            (span_id_size, request.TraceId.GetSpanIdSize()),
+            (trace_id, TraceId()));
 
         if (txCtx->EnableOltpSink.value_or(false) && !txCtx->TxManager) {
             txCtx->TxManager = CreateKqpTransactionManager();
@@ -1701,7 +1893,10 @@ public:
             alloc->SetLimit(writeBufferInitialMemoryLimit);
             alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc=alloc.get(), writeBufferMemoryLimit](ui64 currentLimit, ui64 required) {
                 if (required < writeBufferMemoryLimit) {
-                    LOG_D("Increase memory limit from " << currentLimit << " to " << required);
+                    STLOG_D("Increase memory limit", 
+                        (current_limit, currentLimit),
+                        (required, required),
+                        (trace_id, TraceId()));
                     alloc->SetLimit(required);
                 }
             });
@@ -1735,10 +1930,13 @@ public:
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr, {}, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
-            llvmSettings, QueryServiceConfig, QueryState ? QueryState->Generation : 0);
+            llvmSettings, QueryServiceConfig, QueryState ? QueryState->Generation : 0, ChannelService);
 
         auto exId = RegisterWithSameMailbox(executerActor);
-        LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
+        STLOG_D("Created new KQP executer", 
+            (executer_id, exId),
+            (is_rollback, isRollback),
+            (trace_id, TraceId()));
         auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
         Send(MakeTxProxyID(), ev.release());
         if (!isRollback) {
@@ -1808,10 +2006,12 @@ public:
             .WriteBufferMemoryLimit = writeBufferMemoryLimit,
         };
 
-        auto executerActor = CreateKqpPartitionedExecuter(std::move(settings));
+        auto executerActor = CreateKqpPartitionedExecuter(std::move(settings), ChannelService);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
-        LOG_D("Created new KQP partitioned executer: " << ExecuterId);
+        STLOG_D("Created new KQP partitioned executer", 
+            (executer_id, ExecuterId),
+            (trace_id, TraceId()));
     }
 
 
@@ -1885,7 +2085,8 @@ public:
                 }
             }
 
-            LOG_D("Forwarded TEvExecuterProgress to " << QueryState->RequestActorId);
+            STLOG_D("Forwarded TEvExecuterProgress to " << QueryState->RequestActorId,
+                (trace_id, TraceId()));
             Send(QueryState->RequestActorId, ev->Release().Release(), 0, QueryState->ProxyRequestId);
         }
     }
@@ -1941,14 +2142,33 @@ public:
         }
     }
 
+    void FillQueryIssues(const NYql::TIssues& issues) {
+        if (!QueryState) {
+            STLOG_W("Try to put issues into empty QueryState", 
+                (issues, issues.ToOneLineString()),
+                (trace_id, TraceId())
+            );
+            return;
+        }
+
+        if (!QueryState->Issues) {
+            QueryState->Issues = issues;
+            return;
+        }
+
+        QueryState->Issues.AddIssues(issues);
+    }
+
     void ProcessExecuterResult(TEvKqpExecuter::TEvTxResponse* ev) {
         QueryState->Orbit = std::move(ev->Orbit);
 
         auto* response = ev->Record.MutableResponse();
 
-        LOG_D("TEvTxResponse, CurrentTx: " << QueryState->CurrentTx
-            << "/" << (QueryState->PreparedQuery ? QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize() : 0)
-            << " response.status: " << response->GetStatus());
+        STLOG_D("TEvTxResponse", 
+            (current_tx, QueryState->CurrentTx),
+            (transactions_size, QueryState->PreparedQuery ? QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize() : 0),
+            (status, response->GetStatus()),
+            (trace_id, TraceId()));
 
         ExecuterId = TActorId{};
 
@@ -1957,6 +2177,9 @@ public:
             QueryState->QueryStats.Executions.emplace_back();
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
+
+        QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
+        QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
 
         if (QueryState->TxCtx->TxManager) {
             QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
@@ -1969,8 +2192,11 @@ public:
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
             const auto executionType = ev->ExecutionType;
 
-            LOG_D("TEvTxResponse has non-success status, CurrentTx: " << QueryState->CurrentTx
-                << " ExecutionType: " << executionType);
+            STLOG_D("TEvTxResponse has non-success status", 
+                (current_tx, QueryState->CurrentTx),
+                (execution_type, executionType),
+                (status, response->GetStatus()),
+                (trace_id, TraceId()));
 
             auto status = response->GetStatus();
             TIssues issues;
@@ -2038,7 +2264,9 @@ public:
         }
 
         if (!response->GetIssues().empty()){
-            NYql::IssuesFromMessage(response->GetIssues(), QueryState->Issues);
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(response->GetIssues(), issues);
+            FillQueryIssues(issues);
         }
 
         ExecuteOrDefer();
@@ -2046,7 +2274,8 @@ public:
 
     void HandleExecute(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         YQL_ENSURE(QueryState && QueryState->RequestActorId);
-        LOG_D("Forwarded TEvStreamData to " << QueryState->RequestActorId);
+        STLOG_D("Forwarded TEvStreamData to " << QueryState->RequestActorId,
+            (trace_id, TraceId()));
 
         QueryState->QueryData->AddBuiltResultIndex(ev->Get()->Record.GetQueryResultIndex());
 
@@ -2060,8 +2289,10 @@ public:
     void HandleExecute(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
 
-        TString logMsg = TStringBuilder() << "got TEvAbortExecution in " << CurrentStateFuncName();
-        LOG_I(logMsg << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode()) << " send to: " << ExecuterId);
+        STLOG_I("Got TEvAbortExecution, send it to Executer", 
+            (status_code, NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())),
+            (executer_id, ExecuterId),
+            (trace_id, TraceId()));
 
         auto issues = ev->Get()->GetIssues();
         TStringBuilder reason = TStringBuilder() << "Cancelling after " << (AppData()->MonotonicTimeProvider->Now() - QueryState->StartedAt).MilliSeconds() << "ms";
@@ -2089,17 +2320,46 @@ public:
             << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId << " from: " << ev->Sender;
 
         if (!QueryState || !QueryState->TxCtx || QueryState->TxCtx->BufferActorId != ev->Sender) {
-            LOG_E(logMsg <<  ": Ignored error.");
+            STLOG_E(logMsg << ": Ignored error.",
+                (trace_id, TraceId()));
             return;
         } else {
-            LOG_W(logMsg);
+            STLOG_W(logMsg,
+                (trace_id, TraceId()));
         }
 
         if (ExecuterId) {
-            Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues)}, IEventHandle::FlagTrackDelivery);
+            Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
         } else {
             ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), logMsg, MessageFromIssues(msg.Issues));
         }
+    }
+
+    void HandleCleanup(TEvKqpBuffer::TEvError::TPtr& ev) {
+        auto& msg = *ev->Get();
+
+        TString logMsg = TStringBuilder() << "got TEvKqpBuffer::TEvError in " << CurrentStateFuncName()
+            << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId << " from: " << ev->Sender;
+
+        if (CleanupCtx->TransactionsToBeAborted.empty()) {
+            STLOG_E(logMsg <<  ": Ignored error. TransactionsToBeAborted is empty.",
+                (trace_id, TraceId()));
+        }
+
+        AFL_ENSURE(ExecuterId); // ExecuterId can't be empty during cleanup if TransactionsToBeAborted is not empty.
+
+        const auto& txCtx = CleanupCtx->TransactionsToBeAborted.front();
+        AFL_ENSURE(txCtx);
+        if (txCtx->BufferActorId != ev->Sender) {
+            STLOG_E(logMsg <<  ": Ignored error. Current BufferActorId is not sender.",
+                (trace_id, TraceId()));
+            return;
+        } else {
+            STLOG_W(logMsg,
+                (trace_id, TraceId()));
+        }
+
+        Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
     }
 
     void CollectSystemViewQueryStats(const TKqpQueryStats* stats, TDuration queryDuration,
@@ -2134,6 +2394,8 @@ public:
 
         stats->DurationUs = ((TInstant::Now() - QueryState->StartTime).MicroSeconds());
         stats->WorkerCpuTimeUs = (QueryState->GetCpuTime().MicroSeconds());
+        stats->LocksBrokenAsBreaker = QueryState->QueryStats.LocksBrokenAsBreaker;
+        stats->LocksBrokenAsVictim = QueryState->QueryStats.LocksBrokenAsVictim;
         if (const auto continueTime = QueryState->ContinueTime) {
             stats->QueuedTimeUs = (continueTime - QueryState->StartTime).MicroSeconds();
         }
@@ -2196,7 +2458,8 @@ public:
     template<class TEvRecord>
     void AddTrailingInfo(TEvRecord& record) {
         if (ShutdownState) {
-            LOG_D("session is closing, set trailing metadata to request session shutdown");
+            STLOG_D("Session is closing, set trailing metadata to request session shutdown",
+                (trace_id, TraceId()));
             record.SetWorkerIsClosing(true);
         }
     }
@@ -2207,12 +2470,13 @@ public:
 
         if (QueryState->TxCtx) {
             auto txInfo = QueryState->TxCtx->GetInfo();
-            LOG_I("txInfo "
-                << " Status: " << txInfo.Status
-                << " Kind: " << txInfo.Kind
-                << " TotalDuration: " << txInfo.TotalDuration.SecondsFloat()*1e3
-                << " ServerDuration: " << txInfo.ServerDuration.SecondsFloat()*1e3
-                << " QueriesCount: " << txInfo.QueriesCount);
+            STLOG_I("TxInfo", 
+                (status, txInfo.Status),
+                (kind, txInfo.Kind),
+                (total_duration, txInfo.TotalDuration.SecondsFloat()*1e3),
+                (server_duration, txInfo.ServerDuration.SecondsFloat()*1e3),
+                (queries_count, txInfo.QueriesCount),
+                (trace_id, TraceId()));
             Counters->ReportTransaction(Settings.DbCounters, txInfo);
         }
     }
@@ -2275,6 +2539,7 @@ public:
         }
 
         if (QueryState->Commit) {
+            TerminateBufferActor(QueryState->TxCtx);
             ResetTxState();
             Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             QueryState->TxId.Reset();
@@ -2370,8 +2635,10 @@ public:
             }
         }
 
-        resEv->Record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
-        LOG_D("Create QueryResponse for action: " << QueryState->GetAction() << " with SUCCESS status");
+            resEv->Record.SetYdbStatus(Ydb::StatusIds::SUCCESS);
+            STLOG_D("Create QueryResponse for action with SUCCESS status", 
+                (action, QueryState->GetAction()),
+                (trace_id, TraceId()));
 
         QueryResponse = std::move(resEv);
 
@@ -2405,14 +2672,15 @@ public:
             }
         }
 
-        LOG_W("ReplyQueryCompileError, status " << QueryState->CompileResult->Status << " remove tx with tx_id: " << txId.GetHumanStr());
+        STLOG_W("ReplyQueryCompileError, remove tx",
+            (status, QueryState->CompileResult->Status),
+            (issues, Join(", ", QueryResponse->Record.GetResponse().GetQueryIssues())),
+            (tx_id, txId.GetHumanStr()),
+            (trace_id, TraceId()));
+
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            if (!ctx->BufferActorId) {
-                Transactions.AddToBeAborted(std::move(ctx));
-            } else {
-                TerminateBufferActor(ctx);
-            }
+            Transactions.AddToBeAborted(std::move(ctx));
         }
 
         auto* record = &QueryResponse->Record;
@@ -2433,11 +2701,7 @@ public:
         auto txId = TTxId();
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            if (!ctx->BufferActorId) {
-                Transactions.AddToBeAborted(std::move(ctx));
-            } else {
-                TerminateBufferActor(ctx);
-            }
+            Transactions.AddToBeAborted(std::move(ctx));
         }
 
         FillTxInfo(record.MutableResponse());
@@ -2449,7 +2713,9 @@ public:
             const TString& message)
     {
         ui64 proxyRequestId = request->Cookie;
-        LOG_W("Reply query error, msg: " << message << " proxyRequestId: " << proxyRequestId);
+        STLOG_W("Reply query error, msg: " << message,
+            (proxy_request_id, proxyRequestId),
+            (trace_id, TraceId()));
         auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
         response->Record.SetYdbStatus(ydbStatus);
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
@@ -2467,6 +2733,44 @@ public:
         );
 
         Send(request->Sender, response.release(), 0, proxyRequestId);
+    }
+
+    void ReplyResolveError(const TEvKqpExecuter::TEvTableResolveStatus& ev) {
+        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto& record = QueryResponse->Record;
+
+        record.SetYdbStatus(ev.Status);
+        auto& response = *record.MutableResponse();
+        AddQueryIssues(response, ev.Issues);
+
+        auto txId = TTxId();
+        if (auto ctx = Transactions.ReleaseTransaction(txId)) {
+            ctx->Invalidate();
+            Transactions.AddToBeAborted(std::move(ctx));
+        }
+
+        FillTxInfo(record.MutableResponse());
+
+        Cleanup(false);
+    }
+
+    void ReplyResolveError(const NShardResolver::TEvShardsResolveStatus& ev) {
+        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto& record = QueryResponse->Record;
+
+        record.SetYdbStatus(ev.Status);
+        auto& response = *record.MutableResponse();
+        AddQueryIssues(response, ev.Issues);
+
+        auto txId = TTxId();
+        if (auto ctx = Transactions.ReleaseTransaction(txId)) {
+            ctx->Invalidate();
+            Transactions.AddToBeAborted(std::move(ctx));
+        }
+
+        FillTxInfo(record.MutableResponse());
+
+        Cleanup(false);
     }
 
     void ReplyBusy(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -2527,11 +2831,15 @@ public:
         );
 
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
-        LOG_D("Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
-            << ", proxyId: " << QueryState->Sender.ToString());
+        STLOG_D("Sent query response back to proxy", 
+            (proxy_request_id, QueryState->ProxyRequestId),
+            (proxy_id, QueryState->Sender.ToString()),
+            (trace_id, TraceId()));
 
         if (IsFatalError(status)) {
-            LOG_N("SessionActor destroyed due to " << status);
+            STLOG_N("SessionActor destroyed", 
+            (status, status),
+            (trace_id, TraceId()));
             Counters->ReportSessionActorClosedError(Settings.DbCounters);
         }
     }
@@ -2573,7 +2881,8 @@ public:
     }
 
     void HandleReady(TEvKqp::TEvCloseSessionRequest::TPtr&) {
-        LOG_I("Session closed due to explicit close event");
+        STLOG_I("Session closed due to explicit close event",
+            (trace_id, TraceId()));
         Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
         CleanupAndPassAway();
     }
@@ -2597,7 +2906,8 @@ public:
 
     void Handle(TEvKqp::TEvInitiateSessionShutdown::TPtr& ev) {
         if (!ShutdownState) {
-            LOG_N("Started session shutdown");
+            STLOG_N("Started session shutdown",
+                (trace_id, TraceId()));
             ShutdownState = TSessionShutdownState(ev->Get()->SoftTimeoutMs, ev->Get()->HardTimeoutMs);
             ScheduleNextShutdownTick();
         }
@@ -2611,11 +2921,13 @@ public:
         YQL_ENSURE(ShutdownState);
         ShutdownState->MoveToNextState();
         if (ShutdownState->HardTimeoutReached()) {
-            LOG_N("Reached hard shutdown timeout");
+            STLOG_N("Reached hard shutdown timeout",
+                (trace_id, TraceId()));
             Send(SelfId(), new TEvKqp::TEvCloseSessionRequest());
         } else {
             ScheduleNextShutdownTick();
-            LOG_I("Schedule next shutdown tick");
+            STLOG_I("Schedule next shutdown tick",
+                (trace_id, TraceId()));
         }
     }
 
@@ -2643,7 +2955,6 @@ public:
 
     void ResetTxState() {
         if (QueryState->TxCtx) {
-            TerminateBufferActor(QueryState->TxCtx);
             QueryState->TxCtx->ClearDeferredEffects();
             QueryState->TxCtx->Locks.Clear();
             QueryState->TxCtx->TxManager.reset();
@@ -2661,18 +2972,11 @@ public:
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
             if (txCtx->IsInvalidated()) {
-                if (!txCtx->BufferActorId) {
-                    Transactions.AddToBeAborted(txCtx);
-                } else {
-                    TerminateBufferActor(txCtx);
-                }
+                Transactions.AddToBeAborted(txCtx);
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }
-
-        if (isFinal && QueryState)
-            TerminateBufferActor(QueryState->TxCtx);
 
         if (isFinal)
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
@@ -2732,10 +3036,13 @@ public:
             }
         }
 
-        LOG_I("Cleanup start, isFinal: " << isFinal << " CleanupCtx: " << bool{CleanupCtx}
-            << " TransactionsToBeAborted.size(): " << (CleanupCtx ? CleanupCtx->TransactionsToBeAborted.size() : 0)
-            << " WorkerId: " << (workerId ? *workerId : TActorId())
-            << " WorkloadServiceCleanup: " << (CleanupCtx ? CleanupCtx->IsWaitingForWorkloadServiceCleanup : false));
+        STLOG_I("Cleanup start", 
+            (is_final, isFinal),
+            (has_cleanup_ctx, bool{CleanupCtx}),
+            (transactions_to_be_aborted_size, CleanupCtx ? CleanupCtx->TransactionsToBeAborted.size() : 0),
+            (worker_id, workerId ? *workerId : TActorId()),
+            (workload_service_cleanup, CleanupCtx ? CleanupCtx->IsWaitingForWorkloadServiceCleanup : false),
+            (trace_id, TraceId()));
         if (CleanupCtx) {
             Become(&TKqpSessionActor::CleanupState);
         } else {
@@ -2763,12 +3070,23 @@ public:
         if (QueryState) {
             QueryState->Orbit = std::move(ev->Get()->Orbit);
         }
+        ExecuterId = {};
 
         auto& response = ev->Get()->Record.GetResponse();
         if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
             TIssues issues;
             IssuesFromMessage(response.GetIssues(), issues);
-            LOG_E("Failed to cleanup: " << issues.ToString());
+            STLOG_E("Failed to cleanup",
+                (issues, issues.ToString()),
+                (trace_id, TraceId()));
+
+            for (const auto& txCtx : CleanupCtx->TransactionsToBeAborted) {
+                AFL_ENSURE(txCtx);
+                // Terminate BufferActors without waiting
+                TerminateBufferActor(txCtx);
+            }
+            CleanupCtx->TransactionsToBeAborted.clear();
+
             EndCleanup(CleanupCtx->Final);
             return;
         }
@@ -2787,7 +3105,10 @@ public:
         CleanupCtx->IsWaitingForWorkloadServiceCleanup = false;
 
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && ev->Get()->Status != Ydb::StatusIds::NOT_FOUND) {
-            LOG_E("Failed to cleanup workload service " << ev->Get()->Status << ": " << ev->Get()->Issues.ToOneLineString());
+            STLOG_E("Failed to cleanup workload service", 
+                (status, ev->Get()->Status),
+                (issues, ev->Get()->Issues.ToOneLineString()),
+                (trace_id, TraceId()));
         }
 
         if (CleanupCtx->CleanupFinished()) {
@@ -2796,7 +3117,9 @@ public:
     }
 
     void EndCleanup(bool isFinal) {
-        LOG_D("EndCleanup, isFinal: " << isFinal);
+        STLOG_D("EndCleanup", 
+            (is_final, isFinal),
+            (trace_id, TraceId()));
 
         if (QueryResponse)
             Reply();
@@ -2808,7 +3131,9 @@ public:
             auto userToken = QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>();
             Become(&TKqpSessionActor::FinalCleanupState);
 
-            LOG_D("Cleanup temp tables: " << TempTablesState.TempTables.size());
+            STLOG_D("Cleanup temp tables", 
+                (temp_tables_size, TempTablesState.TempTables.size()),
+                (trace_id, TraceId()));
             auto tempTablesManager = CreateKqpTempTablesManager(
                 std::move(TempTablesState), std::move(userToken), SelfId(), Settings.Database);
 
@@ -2840,8 +3165,10 @@ public:
     void ReplyQueryError(Ydb::StatusIds::StatusCode ydbStatus,
         const TString& message, std::optional<google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>> issues = {})
     {
-        LOG_W("Create QueryResponse for error on request, msg: " << message);
-
+        STLOG_W("Create QueryResponse for error on request, msg: " << message,
+            (status, ydbStatus),
+            (issues, issues ? Join(", ", *issues) : TString()),
+            (trace_id, TraceId()));
         QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
         QueryResponse->Record.SetYdbStatus(ydbStatus);
 
@@ -2899,7 +3226,8 @@ public:
         closeEv->Record.MutableResponse()->SetClosed(true);
         Send(Owner, closeEv.release());
 
-        LOG_D("Session actor destroyed");
+        STLOG_D("Session actor destroyed",
+            (trace_id, TraceId()));
         PassAway();
     }
 
@@ -3012,7 +3340,7 @@ public:
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
                 hFunc(TEvKqp::TEvSplitResponse, HandleNoop);
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
-                hFunc(TEvKqpBuffer::TEvError, Handle);
+                hFunc(TEvKqpBuffer::TEvError, HandleCleanup);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
@@ -3072,7 +3400,8 @@ private:
     }
 
     void InternalError(const TString& message) {
-        LOG_E("Internal error, message: " << message);
+        STLOG_E("Internal error" << message,
+            (trace_id, TraceId()));
         if (QueryState) {
             ReplyQueryError(Ydb::StatusIds::INTERNAL_ERROR, message);
         } else {
@@ -3166,6 +3495,30 @@ private:
         }
     }
 
+    bool OnUnhandledException(const std::exception_ptr& exception) override {
+        try {
+            if (exception) {
+                std::rethrow_exception(exception);
+            }
+        } catch (const TRequestFail& ex) {
+            ReplyQueryError(ex.Status, ex.what(), ex.Issues);
+            return true;
+        } catch (const yexception& ex) {
+            InternalError(ex.what());
+            return true;
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyQueryError(Ydb::StatusIds::UNDETERMINED,
+                BuildMemoryLimitExceptionMessage());
+            return true;
+        }
+
+        return false;
+    }
+
+    bool OnUnhandledException(const std::exception&) override {
+        return false;
+    }
+
 private:
     TActorId Owner;
     TKqpQueryCachePtr QueryCache;
@@ -3205,6 +3558,7 @@ private:
     std::shared_ptr<std::atomic<bool>> CompilationCookie;
 
     TGUCSettings::TPtr GUCSettings;
+    std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
 };
 
 } // namespace
@@ -3218,13 +3572,14 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const TActorId& kqpTempTablesAgentActor)
+    const TActorId& kqpTempTablesAgentActor,
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
 {
     return new TKqpSessionActor(
         owner, std::move(queryCache),
         std::move(resourceManager), std::move(caFactory), sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
-                                queryServiceConfig, kqpTempTablesAgentActor);
+                                queryServiceConfig, kqpTempTablesAgentActor, channelService);
 }
 
 }

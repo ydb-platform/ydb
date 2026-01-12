@@ -214,8 +214,8 @@ inline arrow::Datum MakeDefaultScalarDatum() {
 
 template <typename T>
 inline std::shared_ptr<arrow::DataType> GetPrimitiveDataType() {
-    static std::shared_ptr<arrow::DataType> result = std::make_shared<typename TPrimitiveDataType<T>::TResult>();
-    return result;
+    static std::shared_ptr<arrow::DataType> Result = std::make_shared<typename TPrimitiveDataType<T>::TResult>();
+    return Result;
 }
 
 using NYql::NUdf::TTypedBufferBuilder;

@@ -50,17 +50,18 @@ def arrange(
 
     get_dock = attrgetter("styles.is_docked")
     get_split = attrgetter("styles.is_split")
+    get_display = attrgetter("styles.display")
 
     styles = widget.styles
 
     # Widgets which will be displayed
-    display_widgets = [child for child in children if child.styles.display != "none"]
+    display_widgets = [child for child in children if get_display(child) != "none"]
 
     # Widgets organized into layers
     layers = _build_layers(display_widgets)
 
     for widgets in layers.values():
-        # Partition widgets in to split widgets and non-split widgets
+        # Partition widgets into split widgets and non-split widgets
         non_split_widgets, split_widgets = partition(get_split, widgets)
         if split_widgets:
             _split_placements, dock_region = _arrange_split_widgets(
@@ -91,17 +92,20 @@ def arrange(
         if layout_widgets:
             # Arrange layout widgets (i.e. not docked)
             layout_placements = widget.layout.arrange(
-                widget,
-                layout_widgets,
-                dock_region.size,
+                widget, layout_widgets, dock_region.size
             )
             scroll_spacing = scroll_spacing.grow_maximum(dock_spacing)
             placement_offset = dock_region.offset
             # Perform any alignment of the widgets.
             if styles.align_horizontal != "left" or styles.align_vertical != "top":
                 bounding_region = WidgetPlacement.get_bounds(layout_placements)
+                container_width, container_height = dock_region.size
                 placement_offset += styles._align_size(
-                    bounding_region.size, dock_region.size
+                    bounding_region.size,
+                    Size(
+                        0 if styles.is_auto_width else container_width,
+                        0 if styles.is_auto_height else container_height,
+                    ),
                 ).clamped
 
             if placement_offset:
@@ -109,6 +113,8 @@ def arrange(
                 layout_placements = WidgetPlacement.translate(
                     layout_placements, placement_offset
                 )
+
+            WidgetPlacement.apply_absolute(layout_placements)
 
             placements.extend(layout_placements)
 
@@ -134,7 +140,6 @@ def _arrange_dock_widgets(
     size = region.size
     width, height = size
     null_spacing = NULL_SPACING
-    null_offset = NULL_OFFSET
 
     top = right = bottom = left = 0
 
@@ -167,20 +172,28 @@ def _arrange_dock_widgets(
             # Should not occur, mainly to keep Mypy happy
             raise AssertionError("invalid value for dock edge")  # pragma: no-cover
 
-        align_offset = dock_widget.styles._align_size(
-            (widget_width, widget_height), size
+        dock_region = dock_region.shrink(margin)
+        styles = dock_widget.styles
+        offset = (
+            styles.offset.resolve(
+                size,
+                viewport,
+            )
+            if styles.has_rule("offset")
+            else NULL_OFFSET
         )
-        dock_region = dock_region.shrink(margin).translate(align_offset)
         append_placement(
             _WidgetPlacement(
                 dock_region.translate(region_offset),
-                null_offset,
+                offset,
                 null_spacing,
                 dock_widget,
                 top_z,
                 True,
+                False,
             )
         )
+
     dock_spacing = Spacing(top, right, bottom, left)
     return (placements, dock_spacing)
 
@@ -230,7 +243,7 @@ def _arrange_split_widgets(
 
         append_placement(
             _WidgetPlacement(
-                split_region, null_offset, null_spacing, split_widget, 1, True
+                split_region, null_offset, null_spacing, split_widget, 1, True, False
             )
         )
 

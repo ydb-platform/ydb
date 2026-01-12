@@ -157,16 +157,43 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
         .FinishHandler(finishLambda)
         .SaveHandler(saveLambda)
         .LoadHandler(loadLambda)
-        .template WatermarkMode<TCoAtom>().Build(ToString(*enableWatermarks));
+        .WatermarkMode<TCoAtom>().Build(ToString(*enableWatermarks))
+        .HoppingColumn<TCoAtom>().Build(hopTraits.Column);
 
     if (*enableWatermarks) {
         const auto hop = hopTraits.Hop;
         const auto delay = lateArrivalDelay ? (lateArrivalDelay.MicroSeconds() + hop - 1) / hop * hop : hop;
-        multiHoppingCoreBuilder.template Delay<TCoInterval>()
+        multiHoppingCoreBuilder.Delay<TCoInterval>()
             .Literal().Build(ToString(delay))
             .Build();
     } else {
         multiHoppingCoreBuilder.Delay(hopTraits.Traits.Delay());
+    }
+    if (TCoHoppingTraits::idx_SizeLimit < hopTraits.Traits.Raw()->ChildrenSize()) {
+        if (hopTraits.Traits.SizeLimit()) {
+            multiHoppingCoreBuilder.SizeLimit(hopTraits.Traits.SizeLimit());
+        } else {
+            multiHoppingCoreBuilder.SizeLimit<TCoVoid>().Build();
+        }
+        if (hopTraits.Traits.TimeLimit()) {
+            multiHoppingCoreBuilder.TimeLimit(hopTraits.Traits.TimeLimit());
+        } else {
+            multiHoppingCoreBuilder.TimeLimit<TCoVoid>().Build();
+        }
+        if (hopTraits.EarlyPolicy) {
+            multiHoppingCoreBuilder.EarlyPolicy<TCoUint32>()
+                .Literal().Build(ToString((ui32)*hopTraits.EarlyPolicy))
+            .Build();
+        } else {
+            multiHoppingCoreBuilder.EarlyPolicy<TCoVoid>().Build();
+        }
+        if (hopTraits.LatePolicy) {
+            multiHoppingCoreBuilder.LatePolicy<TCoUint32>()
+                .Literal().Build(ToString((ui32)*hopTraits.LatePolicy))
+            .Build();
+        } else {
+            multiHoppingCoreBuilder.LatePolicy<TCoVoid>().Build();
+        }
     }
 
     if (analyticsMode) {
@@ -181,9 +208,9 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
             .SortKeySelectorLambda(timeExtractorLambda)
             .ListHandlerLambda()
                 .Args(streamArg)
-                .template Body<TCoForwardList>()
+                .Body<TCoForwardList>()
                     .Stream(multiHoppingCoreBuilder
-                        .template Input<TCoIterator>()
+                        .Input<TCoIterator>()
                             .List(streamArg)
                             .Build()
                         .Done())
@@ -208,7 +235,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
                 .Args(streamArg)
                 .Body<TCoMap>()
                     .Input(multiHoppingCoreBuilder
-                        .template Input<TCoFromFlow>()
+                        .Input<TCoFromFlow>()
                             .Input(streamArg)
                             .Build()
                         .Done())

@@ -29,7 +29,8 @@ public:
     {}
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);
+        hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle)
+        IgnoreFunc(TEvRowDispatcher::TEvPurecalcCompileAbort)
     )
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
@@ -247,7 +248,7 @@ void CheckSuccess(const TStatus& status) {
 }
 
 void CheckError(const TStatus& status, TStatusCode expectedStatusCode, const TString& expectedMessage) {
-    UNIT_ASSERT_C(status.GetStatus() == expectedStatusCode, "Expected error status " << NYql::NDqProto::StatusIds_StatusCode_Name(expectedStatusCode) << ", but got: " << status.GetErrorMessage());
+    UNIT_ASSERT_C(status.GetStatus() == expectedStatusCode, "Expected error status " << NYql::NDqProto::StatusIds_StatusCode_Name(expectedStatusCode) << ", but got: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()) << " ("<< status.GetErrorMessage() << ")");
     UNIT_ASSERT_STRING_CONTAINS_C(status.GetErrorMessage(), expectedMessage, "Unexpected error message, Status: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()));
 }
 

@@ -14,7 +14,8 @@ namespace NDataShard {
 using TKeyMap = TVector<std::pair<ui32, ui32>>; // index to main
 using TIndexes = THashMap<TTableId, TKeyMap>;
 
-IActor* CreateDistributedEraser(const TActorId& replyTo, const TTableId& mainTableId, const TIndexes& indexes);
+IActor* CreateDistributedEraser(const TActorId& replyTo, const TString& databaseName,
+    const TTableId& mainTableId, const TIndexes& indexes);
 
 template <typename TBitMapType>
 static TString SerializeBitMap(const TBitMapType& bitmap) {

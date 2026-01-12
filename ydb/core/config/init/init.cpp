@@ -2,6 +2,7 @@
 #include "mock.h"
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <ydb/core/util/backoff.h>
+#include <util/generic/overloaded.h>
 
 namespace NKikimr::NConfig {
 
@@ -293,21 +294,23 @@ class TDynConfigResultWrapper
     : public IConfigurationResult
 {
     NKikimr::NClient::TConfigurationResult Result;
+    std::optional<TString> MainYamlConfig;
+
 public:
     TDynConfigResultWrapper(NKikimr::NClient::TConfigurationResult&& result)
         : Result(std::move(result))
-    {}
+    {
+        if (Result.HasMainYamlConfig()) {
+            MainYamlConfig.emplace(Result.GetMainYamlConfig());
+        }
+    }
 
     const NKikimrConfig::TAppConfig& GetConfig() const override {
         return Result.GetConfig();
     }
 
-    bool HasMainYamlConfig() const override {
-        return Result.HasMainYamlConfig();
-    }
-
-    const TString& GetMainYamlConfig() const override {
-        return Result.GetMainYamlConfig();
+    const std::optional<TString>& GetMainYamlConfig() const override {
+        return MainYamlConfig;
     }
 
     TMap<ui64, TString> GetVolatileYamlConfigs() const override {
@@ -469,32 +472,41 @@ class TConfigResultWrapper
     : public IStorageConfigResult
 {
 public:
-    TConfigResultWrapper(const NYdb::NConfig::TFetchConfigResult& result) {
-        TString clusterConfig;
-        TString storageConfig;
+    TConfigResultWrapper(const NYdb::NConfig::TFetchConfigResult& result, const TString& sourceAddress = TString()) 
+        : SourceAddress(sourceAddress)
+        , Transient(result.Transient())
+    {
         for (const auto& entry : result.GetConfigs()) {
-            std::visit([&](auto&& arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<T, NYdb::NConfig::TMainConfigIdentity>) {
-                    MainYamlConfig = entry.Config;
-                } else if constexpr (std::is_same_v<T, NYdb::NConfig::TStorageConfigIdentity>) {
-                    StorageYamlConfig = entry.Config;
-                }
+            std::visit(TOverloaded{
+                [&](const NYdb::NConfig::TMainConfigIdentity&) { MainYamlConfig.emplace(entry.Config); },
+                [&](const NYdb::NConfig::TStorageConfigIdentity&) { StorageYamlConfig.emplace(entry.Config); },
+                [&](const NYdb::NConfig::TDatabaseConfigIdentity&) {},
+                [&](const std::monostate&) { Y_DEBUG_ABORT(); }
             }, entry.Identity);
         }
     }
 
-    const TString& GetMainYamlConfig() const override {
+    const std::optional<TString>& GetMainYamlConfig() const override {
         return MainYamlConfig;
     }
 
-    const TString& GetStorageYamlConfig() const override {
+    const std::optional<TString>& GetStorageYamlConfig() const override {
         return StorageYamlConfig;
     }
 
+    const TString& GetSourceAddress() const override {
+        return SourceAddress;
+    }
+
+    bool IsTransient() const override {
+        return Transient;
+    }
+
 private:
-    TString MainYamlConfig;
-    TString StorageYamlConfig;
+    std::optional<TString> MainYamlConfig;
+    std::optional<TString> StorageYamlConfig;
+    TString SourceAddress;
+    bool Transient;
 };
 
 class TDefaultConfigClient
@@ -504,33 +516,47 @@ private:
     static NYdb::NConfig::TFetchConfigResult TryToFetchConfig(
         const TGrpcSslSettings& grpcSettings,
         const TString& addrs,
-        const IEnv& env)
+        const IEnv& env,
+        const std::vector<TString>& hostOptions,
+        int interconnectPort)
     {
-
         NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addrs, env);
 
         auto connection = NYdb::TDriver(config);
 
         auto client = NYdb::NConfig::TConfigClient(connection);
-        NYdb::NConfig::TFetchConfigResult result = client.FetchAllConfigs().GetValueSync();
+        std::vector<std::string> hostOptionsAdopted;
+        for (const TString& host : hostOptions) {
+            hostOptionsAdopted.emplace_back(host.data(), host.size());
+        }
+        NYdb::NConfig::TFetchConfigResult result = client.FetchAllConfigs(hostOptionsAdopted, interconnectPort).GetValueSync();
         connection.Stop(true);
         return result;
     }
 
-    static NYdb::NConfig::TFetchConfigResult FetchConfigImpl(
+    struct TFetchConfigImplResult {
+        NYdb::NConfig::TFetchConfigResult Result;
+        TString SourceAddress;
+    };
+
+    static TFetchConfigImplResult FetchConfigImpl(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const IEnv& env,
-        IInitLogger& logger)
+        IInitLogger& logger,
+        const std::vector<TString>& hostOptions,
+        int interconnectPort)
     {
         std::optional<NYdb::NConfig::TFetchConfigResult> result;
+        TString sourceAddress;
         SetRandomSeed(TInstant::Now().MicroSeconds());
 
         auto attempt = [&](const TString& addr) {
             logger.Out() << "Trying to fetch config from " << addr << Endl;
-            result = TryToFetchConfig(grpcSettings, addr, env);
+            result = TryToFetchConfig(grpcSettings, addr, env, hostOptions, interconnectPort);
             if (result->IsSuccess()) {
                 logger.Out() << "Success. Fetched config from " << addr << Endl;
+                sourceAddress = addr;
                 return true;
             }
             logger.Err() << "Fetch config error: " << static_cast<NYdb::TStatus>(*result) << Endl;
@@ -544,7 +570,7 @@ private:
                         << retryResult.TotalAttempts << " attempts across " << retryResult.Rounds 
                         << " rounds. Last error: " << static_cast<NYdb::TStatus>(*result) << Endl;
         }
-        return *result;
+        return {*result, sourceAddress};
     }
 
 public:
@@ -552,13 +578,15 @@ public:
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const IEnv& env,
-        IInitLogger& logger) const override
+        IInitLogger& logger,
+        const std::vector<TString>& hostOptions,
+        int interconnectPort) const override
     {
-        auto result = FetchConfigImpl(grpcSettings, addrs, env, logger);
-        if (!result.IsSuccess()) {
+        auto fetchResult = FetchConfigImpl(grpcSettings, addrs, env, logger, hostOptions, interconnectPort);
+        if (!fetchResult.Result.IsSuccess()) {
             return nullptr;
         }
-        return std::make_shared<TConfigResultWrapper>(std::move(result));
+        return std::make_shared<TConfigResultWrapper>(std::move(fetchResult.Result), std::move(fetchResult.SourceAddress));
     }
 };
 
@@ -734,37 +762,15 @@ void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErr
     }
 }
 
-void LoadMainYamlConfig(
+void ApplyMainYamlConfig(
     TConfigRefs refs,
-    const TString& mainYamlConfigFile,
-    const TString& storageYamlConfigFile,
+    const TString& mainYamlConfigString,
+    const std::optional<TString>& storageYamlConfigString,
     bool loadedFromStore,
     NKikimrConfig::TAppConfig& appConfig,
-    NYamlConfig::IConfigSwissKnife* csk,
     const NCompat::TSourceLocation location)
 {
-    if (!mainYamlConfigFile) {
-        return;
-    }
-
     IConfigUpdateTracer& configUpdateTracer = refs.Tracer;
-    IErrorCollector& errorCollector = refs.ErrorCollector;
-    IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
-
-    std::optional<TString> storageYamlConfigString;
-    if (storageYamlConfigFile) {
-        storageYamlConfigString.emplace(protoConfigFileProvider.GetProtoFromFile(storageYamlConfigFile, errorCollector));
-
-        if (csk) {
-            csk->VerifyStorageConfig(*storageYamlConfigString);
-        }
-    }
-
-    const TString mainYamlConfigString = protoConfigFileProvider.GetProtoFromFile(mainYamlConfigFile, errorCollector);
-
-    if (csk) {
-        csk->VerifyMainConfig(mainYamlConfigString);
-    }
 
     appConfig.SetStartupConfigYaml(mainYamlConfigString);
     if (storageYamlConfigString) {
@@ -887,9 +893,9 @@ NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, cons
 
 NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels) {
     NKikimrConfig::TAppConfig appConfig;
-    if (result.HasMainYamlConfig() && !result.GetMainYamlConfig().empty()) {
+    if (const auto& config = result.GetMainYamlConfig(); config && *config) {
         NYamlConfig::ResolveAndParseYamlConfig(
-            result.GetMainYamlConfig(),
+            *config,
             result.GetVolatileYamlConfigs(),
             labels,
             appConfig,
@@ -898,9 +904,9 @@ NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& re
     return appConfig;
 }
 
-NKikimrConfig::TAppConfig GetActualDynConfig(
+TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
-    const NKikimrConfig::TAppConfig& regularConfig,
+    const TMaybe<NKikimrConfig::TAppConfig>& regularConfig,
     IConfigUpdateTracer& ConfigUpdateTracer)
 {
     if (yamlConfig.GetYamlConfigEnabled()) {
@@ -920,6 +926,14 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
     }
 
     return regularConfig;
+}
+
+void UpdateConfigUpdateTracer(
+    IConfigUpdateTracer& ConfigUpdateTracer)
+{
+    for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; kind = NextValidKind(kind)) {
+        ConfigUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::ReplaceConfigWithSeedNodes);
+    }
 }
 
 NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, const TString& addr, const IEnv& env, const std::optional<TString>& authToken) {

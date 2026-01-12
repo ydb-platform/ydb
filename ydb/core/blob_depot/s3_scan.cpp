@@ -193,6 +193,8 @@ namespace NKikimr::NBlobDepot {
                         const bool allow = locator->Generation < generation;
                         STLOG(PRI_DEBUG, BLOB_DEPOT, BDTS15, "TEvScanFound: found key", (Id, Self->GetLogId()),
                             (Locator, *locator), (Useful, useful), (Allow, allow), (Error, error));
+                        BDEV(BDEV35, "scan_S3_found_key", (BDT, Self->TabletID()), (Locator, *locator), (Useful, useful),
+                            (Allow, allow));
                         if (!useful && allow) {
                             trash.insert(*locator);
                         }

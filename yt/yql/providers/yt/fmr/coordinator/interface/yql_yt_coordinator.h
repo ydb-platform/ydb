@@ -7,6 +7,8 @@
 
 namespace NYql::NFmr {
 
+using TOperationPartitions = std::vector<TTaskParams>;
+
 struct THeartbeatRequest {
     ui32 WorkerId;
     TString VolatileId;
@@ -29,11 +31,25 @@ struct TStartOperationRequest {
     ui32 NumRetries = 1; // Not supported yet
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections = {};
     TMaybe<NYT::TNode> FmrOperationSpec = Nothing();
+    std::vector<TFileInfo> Files = {};
+    std::vector<TYtResourceInfo> YtResources = {};
+    std::vector<TFmrResourceOperationInfo> FmrResources = {};
 };
 
 struct TStartOperationResponse {
     EOperationStatus Status;
     TString OperationId;
+};
+
+struct TPrepareOperationRequest {
+    TOperationParams OperationParams;
+    std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections;
+    TMaybe<NYT::TNode> FmrOperationSpec;
+};
+
+struct TPrepareOperationResponse {
+    TString PartitionId;
+    ui64 TasksNum;
 };
 
 struct TGetOperationRequest {
@@ -44,6 +60,7 @@ struct TGetOperationResponse {
     EOperationStatus Status;
     std::vector<TFmrError> ErrorMessages = {};
     std::vector<TTableStats> OutputTablesStats = {};
+    std::vector<TString> OperationResultsYson = {};
 };
 
 struct TDeleteOperationRequest {
@@ -54,9 +71,19 @@ struct TDeleteOperationResponse {
     EOperationStatus Status;
 };
 
+struct TDropTablesRequest {
+    std::vector<TString> TableIds;
+    TString SessionId;
+};
+
+struct TDropTablesResponse {
+};
+
 struct TGetFmrTableInfoRequest {
     TString TableId;
+    TString SessionId;
 };
+
 
 struct TGetFmrTableInfoResponse {
     TTableStats TableStats;
@@ -66,6 +93,29 @@ struct TGetFmrTableInfoResponse {
 struct TClearSessionRequest {
     TString SessionId;
 };
+
+struct TOpenSessionRequest {
+    TString SessionId;
+};
+
+struct TOpenSessionResponse {
+};
+
+struct TListSessionsRequest {
+};
+
+struct TListSessionsResponse {
+    std::vector<TString> SessionIds;
+};
+
+struct TPingSessionRequest {
+    TString SessionId;
+};
+
+struct TPingSessionResponse {
+    bool Success;
+};
+
 
 class IFmrCoordinator: public TThrRefBase {
 public:
@@ -79,11 +129,21 @@ public:
 
     virtual NThreading::TFuture<TDeleteOperationResponse> DeleteOperation(const TDeleteOperationRequest& request) = 0;
 
+    virtual NThreading::TFuture<TDropTablesResponse> DropTables(const TDropTablesRequest& request) = 0;
+
     virtual NThreading::TFuture<THeartbeatResponse> SendHeartbeatResponse(const THeartbeatRequest& request) = 0;
 
     virtual NThreading::TFuture<TGetFmrTableInfoResponse> GetFmrTableInfo(const TGetFmrTableInfoRequest& request) = 0;
 
     virtual NThreading::TFuture<void> ClearSession(const TClearSessionRequest& request) = 0;
+
+    virtual NThreading::TFuture<TOpenSessionResponse> OpenSession(const TOpenSessionRequest& request) = 0;
+
+    virtual NThreading::TFuture<TPingSessionResponse> PingSession(const TPingSessionRequest& request) = 0;
+
+    virtual NThreading::TFuture<TListSessionsResponse> ListSessions(const TListSessionsRequest& request) = 0;
+
+    virtual NThreading::TFuture<TPrepareOperationResponse> PrepareOperation(const TPrepareOperationRequest& request) = 0;
 };
 
 } // namespace NYql::NFmr

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <ydb/library/arrow_kernels/operations.h>
@@ -15,11 +17,12 @@ private:
     EOperation Operation{ EOperation::Unspecified };
 
 public:
-    static std::shared_ptr<arrow::RecordBatch> CutNulls(const std::shared_ptr<arrow::RecordBatch>& batch);
+    static NArrow::NMerger::TSortableBatchPosition CutNulls(
+        const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 rowIdx, const std::shared_ptr<arrow::Schema>& pkSchema);
 
-    std::shared_ptr<arrow::RecordBatch> Batch;
+    NArrow::NMerger::TSortableBatchPosition Batch;
     bool IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const;
-    bool IsEqualTo(const TPredicate& item) const;
+    bool IsEqualPointTo(const TPredicate& item) const;
 
     NArrow::ECompareType GetCompareType() const {
         if (Operation == EOperation::GreaterEqual) {
@@ -35,25 +38,11 @@ public:
         }
     }
 
-    template <class TArrayColumn>
-    std::optional<typename TArrayColumn::value_type> Get(
-        const ui32 colIndex, const ui32 rowIndex, const std::optional<typename TArrayColumn::value_type> defaultValue = {}) const {
-        auto column = Batch->column(colIndex);
-        if (!column) {
-            return defaultValue;
-        }
-        if (rowIndex < Batch->num_rows()) {
-            return static_cast<TArrayColumn&>(*column).Value(rowIndex);
-        } else {
-            return defaultValue;
-        }
-    }
-
     bool Empty() const noexcept {
-        return Batch.get() == nullptr;
+        return false;
     }
     bool Good() const {
-        return !Empty() && Batch->num_columns() && Batch->num_rows() == 1;
+        return true;
     }
     bool IsFrom() const noexcept {
         return Operation == EOperation::Greater || Operation == EOperation::GreaterEqual;
@@ -66,20 +55,15 @@ public:
     }
 
     std::vector<TString> ColumnNames() const;
-
-    std::string ToString() const {
-        return Empty() ? "()" : Batch->schema()->ToString();
+    ui64 NumColumns() const {
+        return Batch.GetSortFields().size();
     }
 
-    static std::pair<TPredicate, TPredicate> DeserializePredicatesRange(
-        const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, 
-        const std::shared_ptr<arrow::Schema>& schema);
+    std::string ToString() const {
+        return Empty() ? "()" : Batch.DebugJson().GetStringRobust();
+    }
 
-    constexpr TPredicate() noexcept = default;
-
-    TPredicate(EOperation op, std::shared_ptr<arrow::RecordBatch> batch) noexcept;
-
-    TPredicate(EOperation op, const TString& serializedBatch, const std::shared_ptr<arrow::Schema>& schema);
+    TPredicate(EOperation op, NArrow::NMerger::TSortableBatchPosition batch) noexcept;
 
     friend IOutputStream& operator<<(IOutputStream& out, const TPredicate& pred);
 };

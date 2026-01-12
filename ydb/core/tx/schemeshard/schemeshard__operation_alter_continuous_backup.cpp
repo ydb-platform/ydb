@@ -4,7 +4,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_rotate_cdc_stream.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -91,9 +90,17 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
             std::decay_t<decltype(tablePath.Base()->GetChildren())>> == true,
         "Assume path children list is lexicographically sorted");
 
-    for (auto& [child, _] : tablePath.Base()->GetChildren()) {
-        if (child.EndsWith("_continuousBackupImpl")) {
-            lastStreamName = child;
+    for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+        if (childName.EndsWith("_continuousBackupImpl")) {
+            TPath childPath = tablePath.Child(childName);
+            if (!childPath.IsDeleted() && childPath.IsCdcStream()) {
+                if (context.SS->CdcStreams.contains(childPathId)) {
+                    const auto& streamInfo = context.SS->CdcStreams.at(childPathId);
+                    if (streamInfo->Format == NKikimrSchemeOp::ECdcStreamFormatProto) {
+                        lastStreamName = childName;
+                    }
+                }
+            }
         }
     }
 

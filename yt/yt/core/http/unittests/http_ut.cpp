@@ -25,6 +25,7 @@
 #include <yt/yt/core/rpc/public.h>
 
 #include <yt/yt/core/concurrency/async_stream.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 #include <yt/yt/core/concurrency/poller.h>
 #include <yt/yt/core/concurrency/scheduler.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
@@ -186,7 +187,7 @@ struct TFakeConnection
     TFuture<void> Write(const TSharedRef& ref) override
     {
         Output += TString(ref.Begin(), ref.Size());
-        return VoidFuture;
+        return OKFuture;
     }
 
     TFuture<void> WriteV(const TSharedRefArray& refs) override
@@ -194,7 +195,7 @@ struct TFakeConnection
         for (const auto& ref : refs) {
             Output += TString(ref.Begin(), ref.Size());
         }
-        return VoidFuture;
+        return OKFuture;
     }
 
     TFuture<void> Close() override
@@ -435,7 +436,7 @@ TEST(THttpOutputTest, LargeResponse)
                     Output += TString(ref.Begin(), ref.Size());
                 }
             }
-            return VoidFuture;
+            return OKFuture;
         }
 
         TSharedRef LargeRef;
@@ -480,10 +481,11 @@ void ExpectBodyEnd(THttpInput* in)
 
 TEST(THttpInputTest, Simple)
 {
-    using TTestCase = std::tuple<EMessageType, TString, std::function<void(THttpInput*)>>;
+    using TTestCase = std::tuple<EMessageType, std::optional<EMethod>, TString, std::function<void(THttpInput*)>>;
     std::vector<TTestCase> table = {
         TTestCase{
             EMessageType::Response,
+            EMethod::Get,
             "HTTP/1.1 200 OK\r\n"
             "\r\n",
             [] (THttpInput* in) {
@@ -493,6 +495,7 @@ TEST(THttpInputTest, Simple)
         },
         TTestCase{
             EMessageType::Response,
+            EMethod::Get,
             "HTTP/1.1 500 Internal Server Error\r\n"
             "\r\n",
             [] (THttpInput* in) {
@@ -501,7 +504,32 @@ TEST(THttpInputTest, Simple)
             }
         },
         TTestCase{
+            EMessageType::Response,
+            EMethod::Get,
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: 6\r\n"
+            "\r\n"
+            "foobar",
+            [] (THttpInput* in) {
+                EXPECT_EQ(in->GetStatusCode(), EStatusCode::OK);
+                ASSERT_EQ("foobar", in->ReadAll().ToStringBuf());
+            }
+        },
+        TTestCase{
+            EMessageType::Response,
+            EMethod::Head,
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: 6\r\n"
+            "\r\n"
+            "foobar",
+            [] (THttpInput* in) {
+                EXPECT_EQ(in->GetStatusCode(), EStatusCode::OK);
+                ASSERT_EQ("", in->ReadAll().ToStringBuf());
+            }
+        },
+        TTestCase{
             EMessageType::Request,
+            std::nullopt,
             "GET / HTTP/1.1\r\n"
             "\r\n",
             [] (THttpInput* in) {
@@ -512,6 +540,7 @@ TEST(THttpInputTest, Simple)
         },
         TTestCase{
             EMessageType::Request,
+            std::nullopt,
             "GET / HTTP/1.1\r\n"
             "X-Foo: test\r\n"
             "X-Foo0: test-test-test\r\n"
@@ -530,6 +559,7 @@ TEST(THttpInputTest, Simple)
         },
         TTestCase{
             EMessageType::Request,
+            std::nullopt,
             "POST / HTTP/1.1\r\n"
             "Content-Length: 6\r\n"
             "\r\n"
@@ -542,6 +572,7 @@ TEST(THttpInputTest, Simple)
         },
         TTestCase{
             EMessageType::Request,
+            std::nullopt,
             "POST /chunked_w_trailing_headers HTTP/1.1\r\n"
             "Transfer-Encoding: chunked\r\n"
             "X-Foo: test\r\n"
@@ -574,6 +605,7 @@ TEST(THttpInputTest, Simple)
         },
         TTestCase{
             EMessageType::Request,
+            std::nullopt,
             "GET http://yt/foo HTTP/1.1\r\n"
             "\r\n",
             [] (THttpInput* in) {
@@ -584,18 +616,18 @@ TEST(THttpInputTest, Simple)
 
     for (auto testCase : table) {
         auto fake = New<TFakeConnection>();
-        fake->Input = std::get<1>(testCase);
+        fake->Input = std::get<2>(testCase);
         auto config = New<THttpIOConfig>();
         config->ReadBufferSize = 16;
 
-        auto input = New<THttpInput>(fake, TNetworkAddress(), GetSyncInvoker(), std::get<0>(testCase), config);
+        auto input = New<THttpInput>(fake, TNetworkAddress(), GetSyncInvoker(), std::get<0>(testCase), std::get<1>(testCase), config);
 
         try {
-            std::get<2>(testCase)(input.Get());
+            std::get<3>(testCase)(input.Get());
         } catch (const std::exception& ex) {
             ADD_FAILURE() << "Failed to parse input:"
                 << std::endl << "==============" << std::endl
-                << std::get<1>(testCase)
+                << std::get<2>(testCase)
                 << std::endl << "==============" << std::endl
                 << ex.what();
         }
@@ -683,6 +715,7 @@ TEST_P(THttpServerTest, CertificateValidation)
     Server->Start();
 
     auto clientConfig = New<NHttps::TClientConfig>();
+    EXPECT_FALSE(clientConfig->AllowHTTP);
     clientConfig->Credentials = New<NHttps::TClientCredentialsConfig>();
     auto client = NHttps::CreateClient(clientConfig, Poller);
 
@@ -695,6 +728,23 @@ TEST_P(THttpServerTest, CertificateValidation)
         EXPECT_THROW_WITH_ERROR_CODE(result.ThrowOnError(), NRpc::EErrorCode::SslError);
         EXPECT_THROW_WITH_SUBSTRING(result.ThrowOnError(), "SSL_do_handshake failed");
     }
+}
+
+TEST_P(THttpServerTest, HttpInHttpsClient)
+{
+    if (GetParam()) {
+        return;
+    }
+
+    Server->AddHandler("/", New<TOKHttpHandler>());
+    Server->Start();
+
+    auto clientConfig = New<NHttps::TClientConfig>();
+    clientConfig->AllowHTTP = true;
+    auto httpsClient = NHttps::CreateClient(clientConfig, Poller);
+
+    auto rsp = WaitFor(httpsClient->Get(TestUrl)).ValueOrThrow();
+    ASSERT_EQ(EStatusCode::OK, rsp->GetStatusCode());
 }
 
 TEST_P(THttpServerTest, SimpleRequest)
@@ -1188,6 +1238,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
             connection->GetRemoteAddress(),
             Poller->GetInvoker(),
             EMessageType::Response,
+            EMethod::Post,
             New<THttpIOConfig>());
 
         for (int i = 0; i < 10; ++i) {
@@ -1222,6 +1273,7 @@ TEST_P(THttpServerTest, ConnectionKeepAlive)
             connection->GetRemoteAddress(),
             Poller->GetInvoker(),
             EMessageType::Response,
+            EMethod::Post,
             New<THttpIOConfig>());
 
         for (int i = 0; i < 10; ++i) {

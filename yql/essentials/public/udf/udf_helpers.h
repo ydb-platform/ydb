@@ -288,8 +288,8 @@ public:
 
 public:
     static const ::NYql::NUdf::TStringRef& Name() {
-        static auto name = ::NYql::NUdf::TStringRef(TFuncName, std::strlen(TFuncName));
-        return name;
+        static auto Name = ::NYql::NUdf::TStringRef(TFuncName, std::strlen(TFuncName));
+        return Name;
     }
 
     static const TType* ExtractArgFromUserType(::NYql::NUdf::TType const* userType, ::NYql::NUdf::IFunctionTypeInfoBuilder& builder) {

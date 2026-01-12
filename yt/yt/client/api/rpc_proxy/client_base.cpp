@@ -658,6 +658,7 @@ TFuture<IFileReaderPtr> TClientBase::CreateFileReader(
     const TFileReaderOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
+    PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
     auto req = proxy.ReadFile();
     InitStreamingRequest(*req);
 
@@ -751,27 +752,14 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     const TTableReaderOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
+    PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
     auto req = proxy.ReadTable();
     InitStreamingRequest(*req);
 
-    ToProto(req->mutable_path(), path);
-
-    req->set_unordered(options.Unordered);
-    req->set_omit_inaccessible_columns(options.OmitInaccessibleColumns);
-    req->set_omit_inaccessible_rows(options.OmitInaccessibleRows);
-    req->set_enable_table_index(options.EnableTableIndex);
-    req->set_enable_row_index(options.EnableRowIndex);
-    req->set_enable_range_index(options.EnableRangeIndex);
-    req->set_enable_any_unpacking(options.EnableAnyUnpacking);
-    if (options.Config) {
-        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
-    }
-
-    ToProto(req->mutable_transactional_options(), options);
-    ToProto(req->mutable_suppressable_access_tracking_options(), options);
+    FillRequest(req.Get(), path, /*format*/ std::nullopt, options);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
-        .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
+        .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
             return NRpcProxy::CreateTableReader(std::move(inputStream));
         }));
 }
@@ -803,7 +791,7 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
 
             FromProto(schema.Get(), meta.schema());
         }))
-        .ApplyUnique(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
+        .AsUnique().Apply(BIND([=] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
             return NRpcProxy::CreateTableWriter(std::move(outputStream), std::move(schema));
         })).As<ITableWriterPtr>();
 }
@@ -822,14 +810,14 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
     FillRequest(req.Get(), path, options);
 
     return req->Invoke()
-        .ApplyUnique(BIND([] (TRsp&& result) -> TDistributedWriteSessionWithCookies {
+        .AsUnique().Apply(BIND([] (TRsp&& result) -> TDistributedWriteSessionWithCookies {
             std::vector<TSignedWriteFragmentCookiePtr> cookies;
             cookies.reserve(result->signed_cookies().size());
             for (const auto& cookie : result->signed_cookies()) {
-                cookies.push_back(ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(cookie)));
+                cookies.push_back(ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonStringBuf(cookie)));
             }
             TDistributedWriteSessionWithCookies sessionWithCookies;
-            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(result->signed_session())),
+            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonStringBuf(result->signed_session())),
             sessionWithCookies.Cookies = std::move(cookies);
             return sessionWithCookies;
         }));
@@ -856,6 +844,57 @@ TFuture<void> TClientBase::FinishDistributedWriteSession(
     auto req = proxy.FinishDistributedWriteSession();
 
     FillRequest(req.Get(), sessionWithResults, options);
+    return req->Invoke().AsVoid();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TFuture<TDistributedWriteFileSessionWithCookies> TClientBase::StartDistributedWriteFileSession(
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteFileSessionStartOptions& options)
+{
+    using TRsp = TIntrusivePtr<NRpc::TTypedClientResponse<NProto::TRspStartDistributedWriteFileSession>>;
+
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StartDistributedWriteFileSession();
+    FillRequest(req.Get(), path, options);
+
+    return req->Invoke()
+        .AsUnique().Apply(BIND([] (TRsp&& result) {
+            std::vector<TSignedWriteFileFragmentCookiePtr> cookies;
+            cookies.reserve(result->signed_cookies().size());
+            for (const auto& cookie : result->signed_cookies()) {
+                cookies.push_back(ConvertTo<TSignedWriteFileFragmentCookiePtr>(TYsonStringBuf(cookie)));
+            }
+            TDistributedWriteFileSessionWithCookies sessionWithCookies;
+            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteFileSessionPtr>(TYsonStringBuf(result->signed_session())),
+            sessionWithCookies.Cookies = std::move(cookies);
+            return sessionWithCookies;
+        }));
+}
+
+TFuture<void> TClientBase::PingDistributedWriteFileSession(
+    const TSignedDistributedWriteFileSessionPtr& session,
+    const TDistributedWriteFileSessionPingOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PingDistributedWriteFileSession();
+
+    FillRequest(req.Get(), session, options);
+    return req->Invoke().AsVoid();
+}
+
+TFuture<void> TClientBase::FinishDistributedWriteFileSession(
+    const TDistributedWriteFileSessionWithResults& session,
+    const TDistributedWriteFileSessionFinishOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.FinishDistributedWriteFileSession();
+
+    FillRequest(req.Get(), session, options);
     return req->Invoke().AsVoid();
 }
 
@@ -1053,7 +1092,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
     }));
 }
 
-template<class TRequest>
+template <class TRequest>
 void FillRequestBySelectRowsOptionsBase(
     const TSelectRowsOptionsBase& options,
     const std::optional<NYPath::TYPath>& defaultUdfRegistryPath,
@@ -1066,6 +1105,9 @@ void FillRequestBySelectRowsOptionsBase(
         request->set_udf_registry_path(*defaultUdfRegistryPath);
     }
     request->set_syntax_version(options.SyntaxVersion);
+    if (options.HyperLogLogPrecision) {
+        request->set_hyper_log_log_precision(*options.HyperLogLogPrecision);
+    }
 }
 
 TFuture<TSelectRowsResult> TClientBase::SelectRows(
@@ -1120,7 +1162,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_merge_versioned_rows(options.MergeVersionedRows);
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
-    req->set_expression_builder_version(options.ExpressionBuilderVersion);
+    YT_OPTIONAL_SET_PROTO(req, expression_builder_version, options.ExpressionBuilderVersion);
     YT_OPTIONAL_SET_PROTO(req, use_order_by_in_join_subqueries, options.UseOrderByInJoinSubqueries);
     YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
     req->set_read_from(ToProto(options.ReadFrom));

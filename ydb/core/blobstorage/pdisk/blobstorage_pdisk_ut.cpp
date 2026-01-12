@@ -2,11 +2,15 @@
 
 #include "blobstorage_pdisk_abstract.h"
 #include "blobstorage_pdisk_impl.h"
+#include "blobstorage_pdisk_params.h"
 #include "blobstorage_pdisk_ut_env.h"
 
+#include <type_traits>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
+
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 #include <util/system/hp_timer.h>
 
@@ -805,8 +809,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(SpaceColor) {
-        return; // Enable test after KIKIMR-12880
-
         TActorTestContext testCtx{{}};
         TVDiskMock vdisk(&testCtx);
 
@@ -821,6 +823,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     TColor::RED,
                     //TColor::BLACK,
                 } ){
+            auto colorName = NKikimrBlobStorage::TPDiskSpaceColor::E_Name(color);
+            Cerr << (TStringBuilder() << "- Testing " << colorName << Endl);
+
             auto pdiskConfig = testCtx.GetPDiskConfig();
             pdiskConfig->SpaceColorBorder = color;
             pdiskConfig->ExpectedSlotCount = 10;
@@ -830,14 +835,19 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             auto initialSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
                     new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
                     NKikimrProto::OK);
-            for (ui32 i = 0; i < initialSpace->FreeChunks + 1; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(initialSpace->VDiskRawUsage, 0.);
+            UNIT_ASSERT_VALUES_EQUAL(initialSpace->PDiskUsage, 0.);
+
+            for (ui32 i = 0; i < initialSpace->TotalChunks + 1; ++i) {
                 vdisk.ReserveChunk();
             }
             vdisk.CommitReservedChunks();
+
             auto resultSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
                     new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
                     NKikimrProto::OK);
-            UNIT_ASSERT(color == StatusFlagToSpaceColor(resultSpace->StatusFlags));
+            UNIT_ASSERT_VALUES_EQUAL(color, StatusFlagToSpaceColor(resultSpace->StatusFlags));
+            UNIT_ASSERT_GT(resultSpace->VDiskRawUsage, 100.);
             vdisk.DeleteCommitedChunks();
         }
     }
@@ -1244,15 +1254,25 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         ui32 expectedFreeChunks,
         ui32 expectedTotalChunks,
         ui32 expectedUsedChunks,
+        double expectedNormalizedOccupancy,
+        double expectedVDiskSlotUsage,
+        double expectedPDiskUsage,
         ui32 expectedNumSlots,
         ui32 expectedNumActiveSlots,
         NKikimrBlobStorage::TPDiskSpaceColor::E expectedColor
     ) {
+        UNIT_ASSERT_GT(expectedTotalChunks, 0);
+        double expectedVDiskRawUsage = 100. * ((double)expectedUsedChunks) / expectedTotalChunks;
+
         Cerr << (TStringBuilder() << "... Checking EvCheckSpace"
             << " VDisk# " << vdisk.VDiskID
             << " FreeChunks# " << expectedFreeChunks
             << " TotalChunks# " << expectedTotalChunks
             << " UsedChunks# " << expectedUsedChunks
+            << " NormalizedOccupancy# " << expectedNormalizedOccupancy
+            << " VDiskSlotUsage# " << expectedVDiskSlotUsage
+            << " VDiskRawUsage# " << expectedVDiskRawUsage
+            << " PDiskUsage# " << expectedPDiskUsage
             << " NumSlots# " << expectedNumSlots
             << " NumActiveSlots# " << expectedNumActiveSlots
             << " Color# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(expectedColor)
@@ -1260,13 +1280,25 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         auto evCheckSpaceResult = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
             new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
             NKikimrProto::OK);
-        Cerr << (TStringBuilder() << "Got " << evCheckSpaceResult->ToString() << Endl);
+        Cerr << (TStringBuilder() << "Got " << evCheckSpaceResult->ToString()
+            << " NormalizedOccupancy# " << evCheckSpaceResult->NormalizedOccupancy
+            << " VDiskSlotUsage# " << evCheckSpaceResult->VDiskSlotUsage
+            << " VDiskRawUsage# " << evCheckSpaceResult->VDiskRawUsage
+            << " PDiskUsage# " << evCheckSpaceResult->PDiskUsage
+            << Endl);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->FreeChunks, expectedFreeChunks);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedTotalChunks);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->UsedChunks, expectedUsedChunks);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->NumSlots, expectedNumSlots);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->NumActiveSlots, expectedNumActiveSlots);
         UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(evCheckSpaceResult->StatusFlags), expectedColor);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(evCheckSpaceResult->NormalizedOccupancy, expectedNormalizedOccupancy, 0.01);
+        UNIT_ASSERT_DOUBLES_EQUAL(evCheckSpaceResult->VDiskSlotUsage, expectedVDiskSlotUsage, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(evCheckSpaceResult->PDiskUsage, expectedPDiskUsage, 0.1);
+
+        UNIT_ASSERT_DOUBLES_EQUAL(evCheckSpaceResult->VDiskRawUsage, expectedVDiskRawUsage, 0.1);
+
         return evCheckSpaceResult;
     };
 
@@ -1277,7 +1309,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         pdiskConfig->SpaceColorBorder = TColor::ORANGE;
         testCtx.UpdateConfigRecreatePDisk(pdiskConfig);
-        // The actual value of SharedQuota.HardLimit internally initialized in TActorTestContext
+        // The actual value of SharedQuota.HardLimit is initialized in TActorTestContext
+        // with quite a complex formula. The value used here was obtained experimentally.
         // Feel free to update if some day it changes
         const ui32 sharedQuota = 778;
 
@@ -1294,13 +1327,13 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         TVDiskMock vdisk0(&testCtx);
         vdisk0.InitFull(1u);
         vdisk0.SendEvLogSync();
-        CheckEvCheckSpace(testCtx, vdisk0, sharedQuota, sharedQuota, 0, 1, 1, TColor::GREEN);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedQuota, sharedQuota, 0, 0.0, 0.0, 0.0, 1, 1, TColor::GREEN);
 
         TVDiskMock vdisk1(&testCtx);
         vdisk1.InitFull(2u);
         vdisk1.SendEvLogSync();
-        CheckEvCheckSpace(testCtx, vdisk0, sharedQuota, sharedQuota/3*1, 0, 2, 3, TColor::GREEN);
-        CheckEvCheckSpace(testCtx, vdisk1, sharedQuota, sharedQuota/3*2, 0, 2, 3, TColor::GREEN);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedQuota, sharedQuota/3*1, 0, 0.0, 0.0, 0.0, 2, 3, TColor::GREEN);
+        CheckEvCheckSpace(testCtx, vdisk1, sharedQuota, sharedQuota/3*2, 0, 0.0, 0.0, 0.0, 2, 3, TColor::GREEN);
 
         // State 2:
         // PDisk.ExpectedSlotCount: 4
@@ -1315,8 +1348,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 3);
 
         ui32 fairQuota = sharedQuota / 4;
-        CheckEvCheckSpace(testCtx, vdisk0, sharedQuota, fairQuota, 0, 2, 3, TColor::GREEN);
-        CheckEvCheckSpace(testCtx, vdisk1, sharedQuota, fairQuota*2, 0, 2, 3, TColor::GREEN);
+        UNIT_ASSERT_VALUES_EQUAL(fairQuota, 194);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedQuota, fairQuota, 0, 0.0, 0.0, 0.0, 2, 3, TColor::GREEN);
+        CheckEvCheckSpace(testCtx, vdisk1, sharedQuota, fairQuota*2, 0, 0.0, 0.0, 0.0, 2, 3, TColor::GREEN);
 
         // State 3:
         // vdisk0 consumes all it's fair quota (1/4 pdisk)
@@ -1324,13 +1358,18 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         ui32 vdisk0Used = fairQuota;
         ui32 sharedFree = sharedQuota - vdisk0Used;
+        UNIT_ASSERT_VALUES_EQUAL(vdisk0Used, 194);
+        UNIT_ASSERT_VALUES_EQUAL(sharedFree, 584);
         for (ui32 i = 0; i < vdisk0Used; ++i) {
             vdisk0.ReserveChunk();
         }
         vdisk0.CommitReservedChunks();
 
-        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 2, 3, TColor::ORANGE);
-        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota*2, 0, 2, 3, TColor::GREEN);
+        ui32 vdisk0LightYellowLimit = 168;
+        double vdisk0SlotUtilization = 100. * ((double)vdisk0Used) / vdisk0LightYellowLimit;
+        UNIT_ASSERT_DOUBLES_EQUAL(vdisk0SlotUtilization, 115.5, 0.1);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 0.97, vdisk0SlotUtilization, 25.0, 2, 3, TColor::ORANGE);
+        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota*2, 0, 0.25, 0.0, 25.0, 2, 3, TColor::GREEN);
 
         // State 4:
         // PDisk.ExpectedSlotCount: 2
@@ -1348,13 +1387,18 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 2u, 2);
 
         fairQuota = sharedQuota / 2;
+        UNIT_ASSERT_VALUES_EQUAL(fairQuota, 389);
+        UNIT_ASSERT_VALUES_EQUAL(vdisk0Used, 194);
         UNIT_ASSERT_VALUES_EQUAL(vdisk0Used, fairQuota/2);
-        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 2, 2, TColor::GREEN);
-        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota, 0, 2, 2, TColor::GREEN);
+        vdisk0LightYellowLimit = 344;
+        vdisk0SlotUtilization = 100. * ((double)vdisk0Used) / vdisk0LightYellowLimit;
+        UNIT_ASSERT_DOUBLES_EQUAL(vdisk0SlotUtilization, 56.4, 0.1);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 0.5, vdisk0SlotUtilization, 25.0, 2, 2, TColor::GREEN);
+        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota, 0, 0.25, 0.0, 25.0, 2, 2, TColor::GREEN);
 
         // State 5:
         // Owners.GroupSizeInUnits: [0u, 2u, 4u]
-        // Owners.GroupSizeInUnits: [1, 1, 2]
+        // Owners.Weight: [1, 1, 2]
         Cerr << (TStringBuilder() << "- State 5" << Endl);
 
         TVDiskMock vdisk2(&testCtx);
@@ -1362,23 +1406,27 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         vdisk2.SendEvLogSync();
 
         fairQuota = sharedQuota / 4;
+        UNIT_ASSERT_VALUES_EQUAL(fairQuota, 194);
         UNIT_ASSERT_VALUES_EQUAL(vdisk0Used, fairQuota);
-        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 4, TColor::ORANGE);
-        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota, 0, 3, 4, TColor::GREEN);
-        CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota*2, 0, 3, 4, TColor::GREEN);
+        vdisk0LightYellowLimit = 168;
+        vdisk0SlotUtilization = 100. * ((double)vdisk0Used) / vdisk0LightYellowLimit;
+        UNIT_ASSERT_DOUBLES_EQUAL(vdisk0SlotUtilization, 115.5, 0.1);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 0.97, vdisk0SlotUtilization, 25.0, 3, 4, TColor::ORANGE);
+        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota, 0, 0.25, 0.0, 25.0, 3, 4, TColor::GREEN);
+        CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota*2, 0, 0.25, 0.0, 25.0, 3, 4, TColor::GREEN);
 
         auto &icb = testCtx.GetRuntime()->GetAppData().Icb;
         TControlWrapper semiStrictSpaceIsolation(0, 0, 2);
         TControlBoard::RegisterSharedControl(semiStrictSpaceIsolation, icb->PDiskControls.SemiStrictSpaceIsolation);
         semiStrictSpaceIsolation = 1;
-        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 4, TColor::LIGHT_YELLOW);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 0.90, vdisk0SlotUtilization, 25.0, 3, 4, TColor::LIGHT_YELLOW);
         semiStrictSpaceIsolation = 2;
-        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 4, TColor::YELLOW);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 0.92, vdisk0SlotUtilization, 25.0, 3, 4, TColor::YELLOW);
         semiStrictSpaceIsolation = 0;
 
         // State 6:
         // Owners.GroupSizeInUnits: [0u, 2u, 1u]
-        // Owners.GroupSizeInUnits: [1, 1, 1]
+        // Owners.Weight: [1, 1, 1]
         Cerr << (TStringBuilder() << "- State 6" << Endl);
 
         testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
@@ -1387,9 +1435,15 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 2u, 3);
 
         fairQuota = sharedQuota / 3;
-        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 3, TColor::GREEN);
-        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota, 0, 3, 3, TColor::GREEN);
-        CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 3, 3, TColor::GREEN);
+        UNIT_ASSERT_VALUES_EQUAL(fairQuota, 259);
+        vdisk0LightYellowLimit = 227;
+        vdisk0SlotUtilization = 100. * ((double)vdisk0Used) / vdisk0LightYellowLimit;
+        double vdisk0FairOccupancy = ((double)vdisk0Used) / fairQuota;
+        UNIT_ASSERT_DOUBLES_EQUAL(vdisk0FairOccupancy, 0.749, 0.001);
+        UNIT_ASSERT_DOUBLES_EQUAL(vdisk0SlotUtilization, 85.4, 0.1);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, vdisk0FairOccupancy, vdisk0SlotUtilization, 25.0, 3, 3, TColor::GREEN);
+        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota, 0, 0.25, 0.0, 25.0, 3, 3, TColor::GREEN);
+        CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 0.25, 0.0, 25.0, 3, 3, TColor::GREEN);
 
         // State 7:
         // PDisk.ExpectedSlotCount: 8
@@ -1407,28 +1461,40 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 1u, 4);
 
         fairQuota = sharedQuota / 8;
+        UNIT_ASSERT_VALUES_EQUAL(fairQuota, 97);
+        UNIT_ASSERT_VALUES_EQUAL(vdisk0Used, 194);
         UNIT_ASSERT_VALUES_EQUAL(vdisk0Used, fairQuota*2);
-        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 4, TColor::ORANGE);
-        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota*2, 0, 3, 4, TColor::GREEN);
-        CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 3, 4, TColor::GREEN);
+        vdisk0LightYellowLimit = 81;
+        vdisk0SlotUtilization = 100. * ((double)vdisk0Used) / vdisk0LightYellowLimit;
+        UNIT_ASSERT_DOUBLES_EQUAL(vdisk0FairOccupancy, 0.749, 0.001);
+        UNIT_ASSERT_DOUBLES_EQUAL(vdisk0SlotUtilization, 239.5, 0.1);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 0.965, vdisk0SlotUtilization, 25.0, 3, 4, TColor::ORANGE);
+        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota*2, 0, 0.25, 0.0, 25.0, 3, 4, TColor::GREEN);
+        CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 0.25, 0.0, 25.0, 3, 4, TColor::GREEN);
 
         // State 8:
         // vdisk1 makes the whole PDisk Red
         Cerr << (TStringBuilder() << "- State 8" << Endl);
 
         ui32 vdisk1Used = sharedFree - 3;
+        UNIT_ASSERT_VALUES_EQUAL(vdisk1Used, 581);
         sharedFree = 3;
         for (ui32 i = 0; i < vdisk1Used; ++i) {
             vdisk1.ReserveChunk();
         }
         vdisk1.CommitReservedChunks();
 
+        ui32 vdisk1LightYellowLimit = 168;
+        UNIT_ASSERT_GE(vdisk1LightYellowLimit, vdisk0LightYellowLimit*2);
+        double vdisk1SlotUtilization = 100. * ((double)vdisk1Used) / vdisk1LightYellowLimit;
+        UNIT_ASSERT_DOUBLES_EQUAL(vdisk1SlotUtilization, 345.8, 0.1);
+
         UNIT_ASSERT_VALUES_EQUAL(vdisk0Used, fairQuota*2);
         UNIT_ASSERT_VALUES_EQUAL(vdisk1Used, fairQuota*6-1);
         UNIT_ASSERT_VALUES_EQUAL(vdisk0Used + vdisk1Used, sharedQuota - sharedFree);
-        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 3, 4, TColor::RED);
-        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota*2, vdisk1Used, 3, 4, TColor::RED);
-        CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 3, 4, TColor::RED);
+        CheckEvCheckSpace(testCtx, vdisk0, sharedFree, fairQuota, vdisk0Used, 0.99, vdisk0SlotUtilization, 99.6, 3, 4, TColor::RED);
+        CheckEvCheckSpace(testCtx, vdisk1, sharedFree, fairQuota*2, vdisk1Used, 0.99, vdisk1SlotUtilization, 99.6, 3, 4, TColor::RED);
+        CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 0.99, 0.0, 99.6, 3, 4, TColor::RED);
     }
 
     Y_UNIT_TEST(TestChunkWriteCrossOwner) {
@@ -1560,9 +1626,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         return data;
     }
 
-    void ChunkWriteDifferentOffsetAndSizeImpl(bool plainDataChunks) {
+    void ChunkWriteDifferentOffsetAndSizeImpl(bool plainDataChunks, bool rdmaAlloc) {
         TActorTestContext testCtx({
             .PlainDataChunks = plainDataChunks,
+            .UseRdmaAllocator = rdmaAlloc,
         });
         Cerr << "plainDataChunks# " << plainDataChunks << Endl;
 
@@ -1606,9 +1673,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT(ConvertIPartsToString(parts.Get()) == res->Data.ToString().Slice());
         }
     }
+
     Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
-        for (int i = 0; i <= 1; ++i) {
-            ChunkWriteDifferentOffsetAndSizeImpl(i);
+        for (ui32 i = 0; i <= 1; ++i) {
+            ChunkWriteDifferentOffsetAndSizeImpl(i & 1, false);
         }
     }
 
@@ -2194,7 +2262,7 @@ Y_UNIT_TEST_SUITE(ReadOnlyPDisk) {
             NKikimrProto::OK);
 
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 4);
-        CheckEvCheckSpace(testCtx, vdisk, sharedQuota, sharedQuota, 0, 1, 4, TColor::GREEN);
+        CheckEvCheckSpace(testCtx, vdisk, sharedQuota, sharedQuota, 0, 0.0, 0.0, 0.0, 1, 4, TColor::GREEN);
 
         testCtx.TestResponse<NPDisk::TEvChangeExpectedSlotCountResult>(
             new NPDisk::TEvChangeExpectedSlotCount(8, 2u),
@@ -2204,7 +2272,7 @@ Y_UNIT_TEST_SUITE(ReadOnlyPDisk) {
         UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->SlotSizeInUnits, 2u);
 
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 2u, 2);
-        CheckEvCheckSpace(testCtx, vdisk, sharedQuota, sharedQuota/8*2, 0, 1, 2, TColor::GREEN);
+        CheckEvCheckSpace(testCtx, vdisk, sharedQuota, sharedQuota/8*2, 0, 0.0, 0.0, 0.0, 1, 2, TColor::GREEN);
     }
 }
 
@@ -2479,6 +2547,667 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
         UNIT_ASSERT_VALUES_EQUAL(res2->ShredGeneration, shredGeneration);
     }
 #endif
+}
+
+
+Y_UNIT_TEST_SUITE(TPDiskPrefailureDiskTest) {
+
+    struct TSectorInfo {
+        ui64 PatternNumber = 0;
+        TInstant WriteTimestamp;
+        bool LastReadSuccessful = false;
+        bool WasWritten = false;
+    };
+
+    struct TChunkInfo {
+        TChunkIdx ChunkIdx;
+        std::vector<TSectorInfo> Sectors;
+
+        TChunkInfo(TChunkIdx chunkIdx, ui32 sectorCount)
+            : ChunkIdx(chunkIdx)
+            , Sectors(sectorCount)
+        {}
+    };
+
+    struct TDelayedReadRequest {
+        TChunkIdx ChunkIdx;
+        ui32 SectorOffset;
+        ui32 SectorCount;
+        TInstant ScheduledTime;
+    };
+
+    struct TPdt {
+        TActorTestContext* TestCtx;
+        THolder<TVDiskMock> VDisk;
+
+        // Member variables moved from Run()
+        ui64 ChunkSize;
+        ui64 AppendBlockSize;
+        std::vector<TChunkInfo> ChunkInfos;
+        std::unordered_map<TChunkIdx, size_t> ChunkIndexMap;
+        ui64 CurrentPattern;
+        std::deque<TDelayedReadRequest> DelayedReads;
+        TReallyFastRng32 Random;
+        ui64 IterationCount;
+        ui64 WriteCount;
+        ui64 ReadCount;
+        ui64 BytesWritten;
+        ui64 BytesRead;
+        ui64 AnomalyCount;
+        ui64 UnreadableSectorCount;
+        ui64 DirectReadMismatchCount;
+        TInstant TestStartTime;
+
+        TPdt()
+            : ChunkSize(0)
+            , AppendBlockSize(0)
+            , CurrentPattern(1)
+            , Random(TInstant::Now().MicroSeconds())
+            , IterationCount(0)
+            , WriteCount(0)
+            , ReadCount(0)
+            , BytesWritten(0)
+            , BytesRead(0)
+            , AnomalyCount(0)
+            , UnreadableSectorCount(0)
+            , DirectReadMismatchCount(0)
+        {}
+
+        TString GeneratePattern(ui32 size) {
+            TString data(size, 0);
+            ui64 pattern = CurrentPattern++;
+            char* dataPtr = data.Detach();
+            for (ui32 i = 0; i < size; i += sizeof(ui64)) {
+                memcpy(dataPtr + i, &pattern, Min<ui32>(sizeof(ui64), size - i));
+            }
+            return data;
+        }
+
+        bool VerifyPattern(TRcBuf& data, ui64 expectedPattern) {
+            size_t remainingSize = data.GetSize();
+            const char* ptr = data.GetData();
+            while (remainingSize >= sizeof(ui64)) {
+                ui64 actual;
+                memcpy(&actual, ptr, sizeof(ui64));
+                if (actual != expectedPattern) {
+                    Cerr << "CRITICAL ERROR: Pattern mismatch! Expected: " << expectedPattern
+                         << " Actual: " << actual << " at offset " << (data.GetSize() - remainingSize)
+                         << " inside the buffer!" << Endl;
+                    return false;
+                }
+                ptr += sizeof(ui64);
+                remainingSize -= sizeof(ui64);
+            }
+            return true;
+        }
+
+        bool PerformDirectIo(TChunkIdx chunkIdx, ui32 sectorOffset, TString& data, bool isWrite) {
+            ui64 fileOffset = (ui64)chunkIdx * ChunkSize + (ui64)sectorOffset * 4096;
+
+            try {
+                TFile file(TestCtx->TestCtx.Path, OpenExisting | RdWr | DirectAligned | Sync);
+
+                // Check file size
+                i64 fileSize = file.GetLength();
+                if ((i64)fileOffset + (i64)data.size() > fileSize) {
+                    Cerr << "Direct I/O out of bounds: offset " << fileOffset << " + size " << data.size()
+                         << " > file size " << fileSize << Endl;
+                    return false;
+                }
+
+                // Allocate aligned buffer for direct I/O
+                constexpr size_t alignment = 4096;
+                void* alignedBuffer = nullptr;
+                if (posix_memalign(&alignedBuffer, alignment, data.size()) != 0) {
+                    Cerr << "Failed to allocate aligned buffer for direct I/O" << Endl;
+                    return false;
+                }
+
+                if (isWrite) {
+                    memcpy(alignedBuffer, data.data(), data.size());
+                    file.Pwrite(alignedBuffer, data.size(), fileOffset);
+                    free(alignedBuffer);
+                    Cerr << "Direct write at chunk " << chunkIdx << " sector " << sectorOffset
+                         << " offset " << fileOffset << " size " << data.size() << Endl;
+                } else {
+                    file.Pread(alignedBuffer, data.size(), fileOffset);
+                    memcpy(data.Detach(), alignedBuffer, data.size());
+                    free(alignedBuffer);
+                    Cerr << "Direct read at chunk " << chunkIdx << " sector " << sectorOffset
+                         << " offset " << fileOffset << " size " << data.size() << Endl;
+                }
+                return true;
+            } catch (const TFileError& e) {
+                Cerr << "Direct I/O ERROR at chunk " << chunkIdx << " sector " << sectorOffset
+                     << " offset " << fileOffset << " size " << data.size()
+                     << " operation: " << (isWrite ? "WRITE" : "READ")
+                     << " error: " << e.what() << Endl;
+                return false;
+            } catch (...) {
+                Cerr << "Direct I/O UNKNOWN ERROR at chunk " << chunkIdx << " sector " << sectorOffset
+                     << " offset " << fileOffset << " size " << data.size()
+                     << " operation: " << (isWrite ? "WRITE" : "READ") << Endl;
+                return false;
+            }
+        }
+
+        void Init() {
+            VDisk = MakeHolder<TVDiskMock>(TestCtx);
+            VDisk->InitFull();
+            VDisk->SendEvLogSync();
+            ChunkSize = VDisk->PDiskParams->ChunkSize;
+            AppendBlockSize = VDisk->PDiskParams->AppendBlockSize;
+
+            NPDisk::TDiskFormat format = TestCtx->SafeRunOnPDisk([&](NPDisk::TPDisk* pDisk) {
+                NPDisk::TDiskFormat diskFormat = pDisk->Format;
+                return diskFormat;
+            });
+
+            ui32 totalChunks = format.DiskSizeChunks();
+            Cerr << "Total chunks: " << totalChunks << Endl;
+            ui32 chunksToReserve = (totalChunks - 200) * 0.85;
+            Cerr << "Reserving " << chunksToReserve << " chunks" << Endl;
+            VDisk->ReserveChunk(chunksToReserve);
+            VDisk->CommitReservedChunks();
+            UNIT_ASSERT(VDisk->Chunks[EChunkState::COMMITTED].size() == chunksToReserve);
+
+            ChunkInfos.reserve(chunksToReserve);
+            for (const auto& chunk : VDisk->Chunks[EChunkState::COMMITTED]) {
+                ChunkIndexMap[chunk] = ChunkInfos.size();
+                ChunkInfos.emplace_back(chunk, ChunkSize / AppendBlockSize);
+            }
+
+            Cerr << "Chunk size: " << ChunkSize << ", AppendBlockSize: " << AppendBlockSize
+                 << ", Sectors per chunk: " << (ChunkSize / AppendBlockSize) << Endl;
+
+            TestStartTime = TInstant::Now();
+        }
+
+        void RecheckSector(TChunkIdx chunkIdx, ui32 sectorIdx) {
+            // Find chunk info
+            auto mapIt = ChunkIndexMap.find(chunkIdx);
+            if (mapIt == ChunkIndexMap.end()) {
+                Cerr << "CRITICAL ERROR in RecheckSector: Chunk not found in index map! Chunk: " << chunkIdx << Endl;
+                Cerr << "Now: " << TInstant::Now() << Endl;
+                return;
+            }
+            TChunkInfo& chunkInfo = ChunkInfos[mapIt->second];
+
+            // Direct I/O test sequence: read - write - read
+            Cerr << "  Performing direct I/O test..." << Endl;
+
+            TString directRead1(4096, 0);
+            bool directRead1Success = PerformDirectIo(chunkIdx, sectorIdx, directRead1, false);
+            if (!directRead1Success) {
+                Cerr << "  Direct read 1: FAILED (I/O error)" << Endl;
+            } else {
+                Cerr << "  Direct read 1 done." << Endl;
+            }
+
+            TString testData = GeneratePattern(4096);
+            ui64 testPattern = CurrentPattern - 1;
+            bool directWriteSuccess = PerformDirectIo(chunkIdx, sectorIdx, testData, true);
+            if (!directWriteSuccess) {
+                Cerr << "  Direct write: FAILED (I/O error)" << Endl;
+            } else {
+                Cerr << "  Direct write completed with test pattern " << testPattern << Endl;
+            }
+
+            TString directRead2(4096, 0);
+            bool directRead2Success = PerformDirectIo(chunkIdx, sectorIdx, directRead2, false);
+            if (!directRead2Success) {
+                Cerr << "  Direct read 2: FAILED (I/O error)" << Endl;
+            } else {
+                TRcBuf directRead2Buf{TString(directRead2)};
+                bool directRead2Valid = VerifyPattern(directRead2Buf, testPattern);
+                Cerr << "  Direct read 2: " << (directRead2Valid ? "VALID" : "INVALID") << Endl;
+
+                if (!directRead2Valid) {
+                    ++DirectReadMismatchCount;
+                }
+
+                if (directRead1Success) {
+                    bool directRead2MatchesPreWrite = true;
+                    for (size_t i = 0; i < 4096; i++) {
+                        if (directRead2[i] != directRead1[i]) {
+                            directRead2MatchesPreWrite = false;
+                            break;
+                        }
+                    }
+                    Cerr << "  Direct read 2: " << (directRead2MatchesPreWrite ? "MATCHES PRE WRITE VALUE" : "DOES NOT MATCH PRE WRITE VALUE") << Endl;
+                }
+            }
+
+            // PDisk write-read test
+            Cerr << "  Performing PDisk I/O test..." << Endl;
+            TString pdiskTestData = GeneratePattern(AppendBlockSize);
+            ui64 pdiskTestPattern = CurrentPattern - 1;
+
+            auto counter = MakeIntrusive<::NMonitoring::TCounterForPtr>();
+            TMemoryConsumer consumer(counter);
+            TTrackableBuffer pdiskWriteBuf(std::move(consumer), pdiskTestData.data(), pdiskTestData.size());
+            auto evWrite = MakeHolder<NPDisk::TEvChunkWrite>(
+                VDisk->PDiskParams->Owner, VDisk->PDiskParams->OwnerRound,
+                chunkIdx, sectorIdx * AppendBlockSize,
+                MakeIntrusive<NPDisk::TEvChunkWrite::TBufBackedUpParts>(std::move(pdiskWriteBuf)),
+                nullptr, false, 0);
+            TestCtx->TestResponse<NPDisk::TEvChunkWriteResult>(evWrite.Release(), NKikimrProto::OK);
+
+            const auto evPDiskRead = TestCtx->TestResponse<NPDisk::TEvChunkReadResult>(
+                new NPDisk::TEvChunkRead(VDisk->PDiskParams->Owner, VDisk->PDiskParams->OwnerRound,
+                    chunkIdx, sectorIdx * AppendBlockSize, AppendBlockSize, 0, nullptr),
+                NKikimrProto::OK);
+
+            TBufferWithGaps& bwg = evPDiskRead->Data;
+
+            if (!bwg.IsReadable(0, AppendBlockSize)) {
+                ui64 physicalOffset = (ui64)chunkIdx * ChunkSize + (ui64)sectorIdx * 4096;
+                Cerr << "  REREAD CRITICAL ERROR: Sector not readable!" << Endl;
+                Cerr << "    Chunk: " << chunkIdx << " Sector: " << sectorIdx << Endl;
+                Cerr << "    Physical offset: " << physicalOffset << " bytes (" << (physicalOffset / (1024*1024*1024)) << " GiB)" << Endl;
+                Cerr << "    Pattern number: " << chunkInfo.Sectors[sectorIdx].PatternNumber << Endl;
+                Cerr << "    Write timestamp: " << chunkInfo.Sectors[sectorIdx].WriteTimestamp << Endl;
+                Cerr << "    Last read successful: " << (chunkInfo.Sectors[sectorIdx].LastReadSuccessful ? "true" : "false") << Endl;
+                Cerr << "Now: " << TInstant::Now() << Endl;
+            } else {
+                TRcBuf sectorData = bwg.Substr(0, AppendBlockSize);
+
+                bool pdiskReadValid = VerifyPattern(sectorData, pdiskTestPattern);
+                Cerr << "  PDisk REREAD Chunk: " << chunkIdx << " Sector: " << sectorIdx << " after write: " << (pdiskReadValid ? "VALID" : "INVALID") << Endl;
+
+                // Output first ui64
+                if (sectorData.size() >= sizeof(ui64)) {
+                    ui64 firstValue = 0;
+                    memcpy(&firstValue, sectorData.data(), sizeof(ui64));
+                    Cerr << "  First ui64 from reread: " << firstValue << Endl;
+                }
+                Cerr << "Now: " << TInstant::Now() << Endl;
+            }
+            chunkInfo.Sectors[sectorIdx].PatternNumber = pdiskTestPattern;
+            chunkInfo.Sectors[sectorIdx].LastReadSuccessful = false;
+        }
+
+        void ReadWithPDisk(TChunkIdx chunkIdx, ui32 sectorOffset, ui32 sectorCount) {
+            ++ReadCount;
+            // Read from PDisk
+            ui32 readSize = sectorCount * AppendBlockSize;
+            ui64 offset = sectorOffset * AppendBlockSize;
+
+            const auto evReadRes = TestCtx->TestResponse<NPDisk::TEvChunkReadResult>(
+                new NPDisk::TEvChunkRead(VDisk->PDiskParams->Owner, VDisk->PDiskParams->OwnerRound,
+                    chunkIdx, offset, readSize, 0, nullptr),
+                std::nullopt);  // Don't assert status, check it manually
+
+            if (evReadRes->Status != NKikimrProto::OK) {
+                Cerr << "ERROR: Read failed with status " << NKikimrProto::EReplyStatus_Name(evReadRes->Status)
+                     << " reason: " << evReadRes->ErrorReason << Endl;
+                Cerr << "  Chunk: " << chunkIdx << " Offset: " << offset << " Size: " << readSize << Endl;
+                Cerr << "  Read is terminating due to PDisk error" << Endl;
+                Cerr << "Now: " << TInstant::Now() << Endl;
+                return;
+            }
+
+            BytesRead += readSize;
+
+            TBufferWithGaps& bwg = evReadRes->Data;
+            //const_cast<TBufferWithGaps&>(bwg).Commit();
+
+            // Find chunk info
+            auto mapIt = ChunkIndexMap.find(chunkIdx);
+            if (mapIt == ChunkIndexMap.end()) {
+                Cerr << "CRITICAL ERROR: Chunk not found in index map! Chunk: " << chunkIdx << Endl;
+                Cerr << "Read request had size: " << readSize << Endl;
+                Cerr << "Read request had offset: " << offset << Endl;
+                Cerr << "Now: " << TInstant::Now() << Endl;
+                return;
+            }
+            TChunkInfo& chunkInfo = ChunkInfos[mapIt->second];
+
+            for (ui32 i = 0; i < sectorCount; ++i) {
+                ui32 sectorIdx = sectorOffset + i;
+                if (sectorIdx < chunkInfo.Sectors.size() && chunkInfo.Sectors[sectorIdx].WasWritten) {
+                    ui64 expectedPattern = chunkInfo.Sectors[sectorIdx].PatternNumber;
+
+                    if (!bwg.IsReadable(i * AppendBlockSize, AppendBlockSize)) {
+                        ++UnreadableSectorCount;
+                        ui64 physicalOffset = (ui64)chunkIdx * ChunkSize + (ui64)sectorIdx * 4096;
+                        Cerr << "ERROR: Sector not readable!" << Endl;
+                        Cerr << "  Chunk: " << chunkIdx << " Sector: " << sectorIdx << Endl;
+                        Cerr << "  Physical offset: " << physicalOffset << " bytes (" << (physicalOffset / (1024*1024*1024)) << " GiB)" << Endl;
+                        Cerr << "  Pattern number: " << chunkInfo.Sectors[sectorIdx].PatternNumber << Endl;
+                        Cerr << "  Write timestamp: " << chunkInfo.Sectors[sectorIdx].WriteTimestamp << Endl;
+                        Cerr << "  Last read successful: " << (chunkInfo.Sectors[sectorIdx].LastReadSuccessful ? "true" : "false") << Endl;
+                        Cerr << "  Time since write: " << (TInstant::Now() - chunkInfo.Sectors[sectorIdx].WriteTimestamp).Seconds() << " seconds" << Endl;
+                        Cerr << "  Now: " << TInstant::Now() << Endl;
+
+                        RecheckSector(chunkIdx, sectorIdx);
+                        continue;
+                    }
+
+                    TRcBuf sectorData = bwg.Substr(i * AppendBlockSize, AppendBlockSize);
+
+                    if (!VerifyPattern(sectorData, expectedPattern)) {
+                        ++AnomalyCount;
+
+                        Cerr << "ANOMALY DETECTED!" << Endl;
+                        Cerr << "  Chunk: " << chunkIdx << " Sector: " << sectorIdx << Endl;
+                        Cerr << "  Expected pattern: " << expectedPattern << Endl;
+                        Cerr << "  Write time: " << chunkInfo.Sectors[sectorIdx].WriteTimestamp << Endl;
+                        Cerr << "  Read time: " << TInstant::Now() << Endl;
+                        Cerr << "  Now: " << TInstant::Now() << Endl;
+
+                        // Output first ui64 from the sector
+                        if (sectorData.size() >= sizeof(ui64)) {
+                            ui64 firstValue = 0;
+                            memcpy(&firstValue, sectorData.data(), sizeof(ui64));
+                            Cerr << "  First ui64 read: " << firstValue << " (expected: " << expectedPattern << ")" << Endl;
+                        }
+
+                        RecheckSector(chunkIdx, sectorIdx);
+                    } else {
+                        chunkInfo.Sectors[sectorIdx].LastReadSuccessful = true;
+                    }
+                }
+            }
+        }
+
+        void RandomReadWithPDisk() {
+
+            ui32 chunkIdx = Random.GenRand() % ChunkInfos.size();
+            TChunkInfo& chunkInfo = ChunkInfos[chunkIdx];
+
+            ui32 sectorsPerChunk = chunkInfo.Sectors.size();
+            ui32 sectorOffset = Random.GenRand() % sectorsPerChunk;
+            ui32 initialSectorOffset = sectorOffset;
+            while (!chunkInfo.Sectors[sectorOffset].WasWritten && sectorOffset < sectorsPerChunk) {
+                sectorOffset++;
+            }
+            if (sectorOffset >= sectorsPerChunk) {
+                for (sectorOffset = 0; sectorOffset < initialSectorOffset; sectorOffset++) {
+                    if (chunkInfo.Sectors[sectorOffset].WasWritten) {
+                        break;
+                    }
+                }
+            }
+            if (!chunkInfo.Sectors[sectorOffset].WasWritten) {
+                return;
+            }
+            ui32 maxSectors = Min<ui32>(sectorsPerChunk - sectorOffset, 2048);
+            ui32 sectorCount = 1 + Random.GenRand() % maxSectors;
+
+            ReadWithPDisk(chunkInfo.ChunkIdx, sectorOffset, sectorCount);
+        }
+
+        void RandomWriteWithPDisk() {
+            ++WriteCount;
+
+            ui32 chunkIdx = Random.GenRand() % ChunkInfos.size();
+            TChunkInfo& chunkInfo = ChunkInfos[chunkIdx];
+
+            ui32 sectorsPerChunk = chunkInfo.Sectors.size();
+            ui32 sectorOffset = Random.GenRand() % sectorsPerChunk;
+            ui32 maxSectors = Min<ui32>(sectorsPerChunk - sectorOffset, 2048);
+            ui32 sectorCount = 1 + Random.GenRand() % maxSectors;
+
+            ui32 writeSize = sectorCount * AppendBlockSize;
+            TString writeData = GeneratePattern(writeSize);
+            ui64 pattern = CurrentPattern - 1;
+
+            auto counter = MakeIntrusive<::NMonitoring::TCounterForPtr>();
+            TMemoryConsumer consumer(counter);
+            TTrackableBuffer writeBuf(std::move(consumer), writeData.data(), writeData.size());
+            auto evWrite = MakeHolder<NPDisk::TEvChunkWrite>(
+                VDisk->PDiskParams->Owner, VDisk->PDiskParams->OwnerRound,
+                chunkInfo.ChunkIdx, sectorOffset * AppendBlockSize,
+                MakeIntrusive<NPDisk::TEvChunkWrite::TBufBackedUpParts>(std::move(writeBuf)),
+                nullptr, false, 0);
+
+            const auto evWriteRes = TestCtx->TestResponse<NPDisk::TEvChunkWriteResult>(evWrite.Release(), std::nullopt);
+
+            if (evWriteRes->Status != NKikimrProto::OK) {
+                Cerr << "ERROR: Write failed with status " << NKikimrProto::EReplyStatus_Name(evWriteRes->Status)
+                     << " reason: " << evWriteRes->ErrorReason << Endl;
+                Cerr << "  Chunk: " << chunkInfo.ChunkIdx << " Offset: " << (sectorOffset * AppendBlockSize)
+                     << " Size: " << writeSize << Endl;
+                Cerr << "  Write is terminating due to PDisk error (likely out of space)" << Endl;
+                return;
+            }
+
+            BytesWritten += writeSize;
+            // Update sector info
+            TInstant writeTime = TInstant::Now();
+            for (ui32 i = 0; i < sectorCount; ++i) {
+                chunkInfo.Sectors[sectorOffset + i].PatternNumber = pattern;
+                chunkInfo.Sectors[sectorOffset + i].WriteTimestamp = writeTime;
+                chunkInfo.Sectors[sectorOffset + i].WasWritten = true;
+            }
+
+            // 50% probability: read immediately or schedule delayed read
+            if (Random.GenRand() % 2 == 0) {
+                ReadWithPDisk(chunkInfo.ChunkIdx, sectorOffset, sectorCount);
+            } else {
+                // Schedule delayed read
+                TDelayedReadRequest delayedReq;
+                delayedReq.ChunkIdx = chunkInfo.ChunkIdx;
+                delayedReq.SectorOffset = sectorOffset;
+                delayedReq.SectorCount = sectorCount;
+                delayedReq.ScheduledTime = TInstant::Now() + TDuration::Seconds(30);
+                DelayedReads.push_back(delayedReq);
+            }
+        }
+
+        void Run() {
+            Init();
+
+            Cerr << "Starting test loop..." << Endl;
+
+            TInstant lastInfoTime;
+            while (true) {
+                ++IterationCount;
+
+                if (IterationCount % 100 == 0) {
+                    if (TInstant::Now() - lastInfoTime > TDuration::Seconds(60)) {
+                        Cerr << "Time: " << TInstant::Now()
+                            << " Duration: " << (TInstant::Now() - TestStartTime).Seconds() << " seconds"
+                            << " Iteration: " << IterationCount
+                            << " writes=" << WriteCount
+                            << " reads=" << ReadCount
+                            << " anomalies=" << AnomalyCount
+                            << " unreadable_sectors=" << UnreadableSectorCount
+                            << " direct_read_mismatches=" << DirectReadMismatchCount
+                            << " bytes written=" << BytesWritten
+                            << " bytes read=" << BytesRead
+                            << Endl;
+                        lastInfoTime = TInstant::Now();
+                    }
+                }
+
+                // Process delayed reads
+                TInstant now = TInstant::Now();
+                while (!DelayedReads.empty() && DelayedReads.front().ScheduledTime <= now) {
+                    const auto& req = DelayedReads.front();
+                    ReadWithPDisk(req.ChunkIdx, req.SectorOffset, req.SectorCount);
+                    DelayedReads.pop_front();
+                }
+
+                // Random write operation
+                if (Random.GenRand() % 2 == 0) {
+                    RandomWriteWithPDisk();
+                }
+
+                // Random read operation
+                if (Random.GenRand() % 3 == 0 && ChunkInfos.size() > 0) {
+                    RandomReadWithPDisk();
+                }
+            }
+
+            Cerr << "Test completed!" << Endl;
+            Cerr << "Total iterations: " << IterationCount << Endl;
+            Cerr << "Total writes: " << WriteCount << Endl;
+            Cerr << "Total reads: " << ReadCount << Endl;
+            Cerr << "Total anomalies: " << AnomalyCount << Endl;
+            Cerr << "Total unreadable sectors: " << UnreadableSectorCount << Endl;
+            Cerr << "Total direct read mismatches: " << DirectReadMismatchCount << Endl;
+            Cerr << "Total bytes written: " << BytesWritten << Endl;
+            Cerr << "Total bytes read: " << BytesRead << Endl;
+            Cerr << "Test duration: " << (TInstant::Now() - TestStartTime).Seconds() << " seconds" << Endl;
+        }
+    };
+
+    Y_UNIT_TEST(TestWriteReadRepeat) {
+        // Check for prefailure_path.txt file
+        TString pathConfigFile = "prefailure_path.txt";
+
+        if (!NFs::Exists(pathConfigFile)) {
+            Cerr << "WARNING: " << pathConfigFile << " does not exist. Test skipped." << Endl;
+            return;  // Test completes successfully
+        }
+
+        // Read path from config file
+        TFileInput input(pathConfigFile);
+        TString path = input.ReadAll();
+        path = StripString(path);  // Remove whitespace and newlines
+
+        if (path.empty()) {
+            Cerr << "WARNING: " << pathConfigFile << " is empty. Test skipped." << Endl;
+            return;  // Test completes successfully
+        }
+
+        Cerr << "Using path from " << pathConfigFile << ": " << path << Endl;
+
+        // Detect disk size from existing file or block device
+        ui64 diskSize = 0;
+        bool isBlockDevice = false;
+
+        if (NFs::Exists(path)) {
+            // Use DetectFileParameters to handle both regular files and block devices
+            ::NKikimr::DetectFileParameters(path, diskSize, isBlockDevice);
+            Cerr << "Detected file type: " << (isBlockDevice ? "block device" : "regular file") << Endl;
+            Cerr << "Detected size: " << diskSize << " bytes ("
+                 << (diskSize / (1024*1024*1024)) << " GiB)" << Endl;
+        } else {
+            Cerr << "File does not exist, will be created with default size" << Endl;
+        }
+
+        TActorTestContext testCtx{
+            {.DiskSize = diskSize,
+             .UsePath = path,
+             .UseSectorMap = false}};
+        TPdt pdt;
+        pdt.TestCtx = &testCtx;
+        pdt.Run();
+    }
+}
+
+// RDMA use ibverbs shared library which is part of hardware vendor provided drivers and can't be linked staticaly
+// This library is not MSan-instrumented, so it causes msan fail if we run. So skip such run...
+static bool IsMsanEnabled() {
+#if defined(_msan_enabled_)
+    return true;
+#else
+    return false;
+#endif
+}
+
+Y_UNIT_TEST_SUITE(RDMA) {
+    void TestChunkReadWithRdmaAllocator(bool plainDataChunks) {
+        TActorTestContext testCtx({
+            .PlainDataChunks = plainDataChunks,
+            .UseRdmaAllocator = true,
+        });
+        TVDiskMock vdisk(&testCtx);
+
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        auto chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+
+        for (i64 writeSize: {1_KB - 123, 64_KB, 128_KB + 8765}) {
+            for (i64 readOffset: {0_KB, 0_KB + 123, 4_KB, 8_KB + 123}) {
+                for (i64 readSize: {writeSize, writeSize - 567, writeSize - i64(8_KB), writeSize - i64(8_KB) + 987}) {
+                    if (readOffset < 0 || readSize < 0 || readOffset + readSize > writeSize) {
+                        continue;
+                    }
+                    Cerr << "chunkBufSize: " << writeSize << ", readOffset: " << readOffset << ", readSize: " << readSize << Endl;
+                    auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(PrepareData(writeSize));
+                    testCtx.Send(new NPDisk::TEvChunkWrite(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, 0, parts, nullptr, false, 0));
+                    auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+
+                    testCtx.Send(new NPDisk::TEvChunkRead(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, readOffset, readSize, 0, nullptr));
+                    auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+                    TRcBuf readBuf = read->Data.ToString();
+                    NInterconnect::NRdma::TMemRegionSlice memReg = NInterconnect::NRdma::TryExtractFromRcBuf(readBuf);
+                    UNIT_ASSERT_C(!memReg.Empty(), "Failed to extract RDMA memory region from RcBuf");
+                    UNIT_ASSERT_VALUES_EQUAL_C(memReg.GetSize(), readSize, "Unexpected size of RDMA memory region");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestChunkReadWithRdmaAllocatorEncryptedChunks) {
+        if (IsMsanEnabled())
+            return;
+
+        TestChunkReadWithRdmaAllocator(false);
+    }
+
+    Y_UNIT_TEST(TestChunkReadWithRdmaAllocatorPlainChunks) {
+        if (IsMsanEnabled())
+            return;
+
+        TestChunkReadWithRdmaAllocator(true);
+    }
+
+    Y_UNIT_TEST(TestRcBuf) {
+        if (IsMsanEnabled())
+            return;
+
+        ui32 size = 129961;
+        ui32 offset = 123;
+        ui32 tailRoom = 1111;
+        ui32 totalSize = size + tailRoom;
+        UNIT_ASSERT_VALUES_EQUAL(totalSize, 131072);
+
+        auto alloc1 = [](ui32 size, ui32 headRoom, ui32 tailRoom) {
+            TRcBuf buf = TRcBuf::UninitializedPageAligned(size + headRoom + tailRoom);
+            buf.TrimFront(size + tailRoom);
+            buf.TrimBack(size);
+            Cerr << "alloc1: " << buf.Size() << " " << buf.Tailroom() << " " << buf.UnsafeTailroom() << Endl;
+            return buf;
+        };
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto alloc2 = [memPool](ui32 size, ui32 headRoom, ui32 tailRoom) -> TRcBuf {
+            TRcBuf buf = memPool->AllocRcBuf(size + headRoom + tailRoom, NInterconnect::NRdma::IMemPool::EMPTY).value();
+            buf.TrimFront(size + tailRoom);
+            buf.TrimBack(size);
+            Cerr << "alloc2: " << buf.Size() << " " << buf.Tailroom() << " " << buf.UnsafeTailroom() << Endl;
+            return buf;
+        };
+
+        auto buf1 = TBufferWithGaps(offset, alloc1(size, 0, tailRoom));
+        auto buf2 = TBufferWithGaps(offset, alloc2(size, 0, tailRoom));
+
+        Cerr << "buf1: " << buf1.PrintState() << " " << buf1.Size() << " " << buf1.SizeWithTail() << Endl;
+        Cerr << "buf2: " << buf2.PrintState() << " " << buf2.Size() << " " << buf2.SizeWithTail() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(buf1.Size(), buf2.Size(), "Buffers should have the same size");
+
+        buf1.RawDataPtr(0, totalSize);
+        buf2.RawDataPtr(0, totalSize);
+    }
+
+    Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
+        if (IsMsanEnabled())
+            return;
+
+        for (ui32 i = 0; i <= 1; ++i) {
+            NTestSuiteTPDiskTest::ChunkWriteDifferentOffsetAndSizeImpl(i & 1, true);
+        }
+    }
 }
 
 } // namespace NKikimr

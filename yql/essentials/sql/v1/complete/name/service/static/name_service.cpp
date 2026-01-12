@@ -139,6 +139,8 @@ public:
                   "Resource",
                   "Tagged",
                   "Callable",
+                  "Linear",
+                  "DynamicLinear",
               }, NormalizeName))
         , ParameterizedTypes_(BuildNameIndex(
               {
@@ -257,9 +259,9 @@ private:
 };
 
 INameService::TPtr MakeStaticNameService(TNameSet names, TFrequencyData frequency) {
-    return MakeStaticNameService(
-        Pruned(std::move(names), frequency),
-        MakeDefaultRanking(std::move(frequency)));
+    names = Pruned(std::move(names), frequency);
+    IRanking::TPtr ranking = MakeDefaultRanking(std::move(frequency));
+    return MakeStaticNameService(std::move(names), std::move(ranking));
 }
 
 INameService::TPtr MakeStaticNameService(TNameSet names, IRanking::TPtr ranking) {

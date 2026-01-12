@@ -95,7 +95,7 @@ class Workload():
 
     def write_to_input_topic(self):
         logger.info("Workload::write_to_input_topic")
-        
+
         writers = []
         for i in range(self.partitions_count):
             writers.append(self.driver.topic_client.writer(self.input_topic, partition_id=i))

@@ -6,6 +6,7 @@ SRCS(
     normalize_path_ut.cpp
     pg_dump_parser_ut.cpp
     recursive_remove_ut.cpp
+    time_ut.cpp
 )
 
 END()

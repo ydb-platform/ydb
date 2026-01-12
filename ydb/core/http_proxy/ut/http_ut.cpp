@@ -204,17 +204,10 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
             TSocketInput si(sock);
             THttpInput input(&si);
 
-            bool gotRequestId{false};
-            for (auto& header : input.Headers()) {
-                gotRequestId |= header.Name() == "x-amzn-requestid";
-            }
-            //Y_ABORT_UNLESS(gotRequestId);
-
             ui32 httpCode = ParseHttpRetCode(input.FirstLine());
             TString description(StripString(TStringBuf(input.FirstLine()).After(' ').After(' ')));
             TString responseBody = input.ReadAll();
             Cerr << "Http output full " << responseBody << Endl;
-            UNIT_ASSERT(gotRequestId || 1);
             return {httpCode, description, responseBody};
         };
 

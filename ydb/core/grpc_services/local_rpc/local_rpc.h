@@ -136,7 +136,7 @@ public:
         TString PeerName = "localhost";
         TString TraceId;
         TInstant Deadline = TInstant::Max();
-        std::shared_ptr<bool> ClientLostStatus;
+        std::shared_ptr<std::atomic_bool> ClientLostStatus;
     };
 
     template<typename TProto, typename TCb>
@@ -250,7 +250,7 @@ public:
 
     bool IsClientLost() const override {
         if (ClientLostStatus) {
-            return *ClientLostStatus;
+            return ClientLostStatus->load();
         }
         return false;
     }
@@ -360,7 +360,7 @@ private:
     const TString PeerName = "localhost";
     const TString TraceId;
     const TInstant Deadline = TInstant::Max();
-    const std::shared_ptr<bool> ClientLostStatus;
+    const std::shared_ptr<std::atomic_bool> ClientLostStatus;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken;
     const TString EmptySerializedTokenMessage;
     TMap<TString, TString> PeerMeta;

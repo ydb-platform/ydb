@@ -9,8 +9,6 @@
 namespace NKikimr::NMiniKQL {
 
 
-void PopFront(NYql::TChunkedBuffer& buff);
-
 NYql::TChunkedBuffer Serialize(TPackResult&& result);
 
 TPackResult Parse(NYql::TChunkedBuffer&& buff, const NPackedTuple::TTupleLayout* layout);

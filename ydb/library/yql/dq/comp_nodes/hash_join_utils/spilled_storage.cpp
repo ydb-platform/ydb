@@ -9,10 +9,6 @@ NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& p
     return spiller.Put(Serialize(std::move(page)));
 }
 
-void PopFront(NYql::TChunkedBuffer& buff) {
-    buff.Erase(buff.Front().Buf.size());
-}
-
 NYql::TChunkedBuffer Serialize(TPackResult&& result) {
     MKQL_ENSURE(!result.Empty(), "spilling empty page?");
     NYql::TChunkedBuffer buff{};

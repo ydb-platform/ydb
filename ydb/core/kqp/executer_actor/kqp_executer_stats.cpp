@@ -1047,6 +1047,15 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
             UpdateQueryTables(taskStats, txStats);
         }
 
+        // Extract lock stats from task extra stats (populated by read actors for broken locks)
+        if (taskStats.HasExtra()) {
+            NKqpProto::TKqpTaskExtraStats extraStats;
+            if (taskStats.GetExtra().UnpackTo(&extraStats)) {
+                LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
+                LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
+            }
+        }
+
         if (CollectBasicStats(StatsMode)) {
             if (CollectFullStats(StatsMode)) {
                 auto stageId = TasksGraph->GetTask(taskId).StageId;

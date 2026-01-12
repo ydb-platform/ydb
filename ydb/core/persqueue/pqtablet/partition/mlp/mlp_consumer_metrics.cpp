@@ -48,6 +48,43 @@ void TConsumerActor::UpdateMetrics() {
 TDetailedMetrics::TDetailedMetrics(const NKikimrPQ::TPQTabletConfig::TConsumer& consumerConfig, ::NMonitoring::TDynamicCounterPtr& root) {
     Y_UNUSED(consumerConfig);
     Y_UNUSED(root);
+
+    auto consumerGroup = root->GetSubgroup("consumer", consumerConfig.GetName());
+
+    InflightCommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.inflight.committed_messages", false);
+    InflightLockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.inflight.locked_messages", false);
+    InflightDelayedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.inflight.delayed_messages", false);
+    InflightUnlockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.inflight.unlocked_messages", false);
+    InflightScheduledToDLQCount = consumerGroup->GetExpiringNamedCounter("name", "topic.inflight.scheduled_to_dlq_messages", false);
+    CommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.committed_messages", false);
+    PurgedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.purged_messages", false);
+    
+    MessageLocks = consumerGroup->GetExpiringNamedCounter("name", "topic.message_locks", false);
+    MessageLockingDuration = consumerGroup->GetExpiringNamedCounter("name", "topic.message_locking_duration_milliseconds", false);
+
+    auto deletedMessagesGroup = consumerGroup->GetSubgroup("name", "topic.deleted_messages");
+    DeletedByRetentionPolicy = deletedMessagesGroup->GetExpiringNamedCounter("reason", "retention", false);
+    DeletedByDeadlinePolicy = consumerGroup->GetExpiringNamedCounter("reason", "delete_policy", false);
+    DeletedByMovedToDLQ = consumerGroup->GetExpiringNamedCounter("reason", "move_policy", false);
+}
+
+TDetailedMetrics::~TDetailedMetrics() {
+}
+
+void TDetailedMetrics::UpdateMetrics(const TMetrics& metrics) {
+    InflightCommittedCount->Set(metrics.CommittedMessageCount);
+    InflightLockedCount->Set(metrics.LockedMessageCount);
+    InflightDelayedCount->Set(metrics.DelayedMessageCount);
+    InflightUnlockedCount->Set(metrics.UnprocessedMessageCount);
+    InflightScheduledToDLQCount->Set(metrics.TotalScheduledToDLQMessageCount);
+    CommittedCount->Set(metrics.TotalCommittedMessageCount);
+    PurgedCount->Set(metrics.TotalPurgedMessageCount);
+    
+    MessageLocks->Set(metrics.MessageLocks.GetRangeCount());
+    MessageLockingDuration->Set(metrics.MessageLockingDuration.GetRangeCount());
+    DeletedByRetentionPolicy->Set(metrics.TotalDeletedByRetentionMessageCount);
+    DeletedByDeadlinePolicy->Set(metrics.TotalDeletedByDeadlinePolicyMessageCount);
+    DeletedByMovedToDLQ->Set(metrics.TotalMovedToDLQMessageCount);
 }
 
 

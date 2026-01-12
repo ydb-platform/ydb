@@ -1402,6 +1402,11 @@ namespace NTypeAnnImpl {
         if (!(IsSameAnnotation(*otherType, *fieldType) ||
                 isOptional && IsSameAnnotation(*otherType, *ctx.Expr.MakeType<TOptionalExprType>(fieldType))))
         {
+            if (otherType->HasUniversal() || fieldType->HasUniversal()) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Mismatch member '" << memberName
                 << "' type, expected: " << *otherType << ", got: " << *fieldType));
             return IGraphTransformer::TStatus::Error;
@@ -1626,8 +1631,14 @@ namespace NTypeAnnImpl {
         auto structObj = input->Child(0);
         bool optional = false;
         const TStructExprType* structExprType = nullptr;
-        if (!EnsureStructOrOptionalStructType(*structObj, optional, structExprType, ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureStructOrOptionalStructType(*structObj, optional, structExprType, ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalStructExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         auto status = NormalizeAtomListForDiveOrSelect(input, output, ctx);
@@ -2303,8 +2314,14 @@ namespace NTypeAnnImpl {
 
         bool isOptional;
         const TDataExprType* dataType;
-        if (!EnsureDataOrOptionalOfData(input->Head(), isOptional, dataType, ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureDataOrOptionalOfData(input->Head(), isOptional, dataType, ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (!(IsDataTypeNumeric(dataType->GetSlot()) || IsDataTypeDecimal(dataType->GetSlot()) || IsDataTypeInterval(dataType->GetSlot()))) {
@@ -3682,6 +3699,12 @@ namespace NTypeAnnImpl {
                     return IGraphTransformer::TStatus::Error;
                 }
             }
+
+            if (RemoveOptionalType(type)->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             bool isOptional = false;
             const TDataExprType* dataType = nullptr;
             if ((!IsDataOrOptionalOfData(type, isOptional, dataType) ||
@@ -9977,6 +10000,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     resultType = currentType;
                 } else {
                     if (!IsSameAnnotation(*resultType, *currentType)) {
+                        if (resultType->HasUniversal() || currentType->HasUniversal()) {
+                            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                            return IGraphTransformer::TStatus::Ok;
+                        }
+
                         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "mismatch of handler/default types: "
                             << *currentType << " != " << *resultType));
                         return IGraphTransformer::TStatus::Error;
@@ -11876,6 +11904,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             auto checkType = fieldType->GetKind() == ETypeAnnotationKind::Optional ?
                 fieldType : ctx.Expr.MakeType<TOptionalExprType>(fieldType);
             if (!IsSameAnnotation(*targetTypeExpr, *checkType)) {
+                if (targetTypeExpr->HasUniversal() || checkType->HasUniversal()) {
+                    input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                    return IGraphTransformer::TStatus::Ok;
+                }
+
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "incompatible WeakField types: "
                     << GetTypeDiff(*targetTypeExpr, *checkType)));
                 return IGraphTransformer::TStatus::Error;
@@ -12728,8 +12761,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
             bool isOptional;
             const TDataExprType* valueType;
-            if (!EnsureDataOrOptionalOfData(variableValue, isOptional, valueType, ctx.Expr)) {
+            bool isUniversal;
+            if (!EnsureDataOrOptionalOfData(variableValue, isOptional, valueType, ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
 
             const auto valueSlot = valueType->GetSlot();

@@ -163,12 +163,8 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         NYql::Generic::TLookupSource lookupSourceSettings;
         *lookupSourceSettings.mutable_data_source_instance() = dsi;
         lookupSourceSettings.Settable("lookup_test");
-<<<<<<< HEAD
         lookupSourceSettings.SetServiceAccountId("testsaid");
         lookupSourceSettings.SetServiceAccountIdSignature("fake_signature");
-=======
-        lookupSourceSettings.SetTokenName("test_token");
->>>>>>> 8661ed08c2b (dq streamlookup join: add support for non-right-ANY join (#30965))
 
         google::protobuf::Any packedLookupSource;
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));
@@ -526,12 +522,8 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         NYql::Generic::TLookupSource lookupSourceSettings;
         *lookupSourceSettings.mutable_data_source_instance() = dsi;
         lookupSourceSettings.Settable("lookup_test");
-<<<<<<< HEAD
         lookupSourceSettings.SetServiceAccountId("testsaid");
         lookupSourceSettings.SetServiceAccountIdSignature("fake_signature");
-=======
-        lookupSourceSettings.SetTokenName("test_token");
->>>>>>> 8661ed08c2b (dq streamlookup join: add support for non-right-ANY join (#30965))
 
         google::protobuf::Any packedLookupSource;
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));

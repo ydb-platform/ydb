@@ -20,6 +20,7 @@ PEERDIR(
     ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/dq/actors
+    ydb/library/yverify_stream
     yql/essentials/utils
 )
 

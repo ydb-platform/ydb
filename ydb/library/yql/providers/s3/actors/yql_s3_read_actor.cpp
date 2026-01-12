@@ -29,6 +29,7 @@
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/providers/s3/serializations/serialization_interval.h>
+#include <ydb/library/yverify_stream/exceptions.h>
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -44,7 +45,6 @@
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/util.h>
-#include <yql/essentials/utils/exceptions.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
@@ -138,6 +138,7 @@ namespace NYql::NDq {
 
 using namespace ::NActors;
 using namespace ::NYql::NS3Details;
+using namespace ::NKikimr;
 
 using ::NYql::NS3Lister::ES3PatternVariant;
 using ::NYql::NS3Lister::ES3PatternType;

@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    yverify_stream.h
+    exceptions.cpp
 )
 
 END()

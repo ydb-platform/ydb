@@ -40,6 +40,7 @@ PEERDIR(
     ydb/library/db_pool
     ydb/library/security
     ydb/library/yql/providers/s3/path_generator
+    ydb/library/yverify_stream
     ydb/public/api/protos
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/scheme

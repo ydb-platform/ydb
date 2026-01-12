@@ -43,6 +43,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/s3/range_helpers
     ydb/library/yql/udfs/common/clickhouse/client
+    ydb/library/yverify_stream
     yql/essentials/minikql
     yql/essentials/minikql/computation
     yql/essentials/providers/common/schema/mkql

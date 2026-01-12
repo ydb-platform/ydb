@@ -71,13 +71,18 @@ config:
     - "DATABASE-ADMINS"
     register_dynamic_node_allowed_sids:
     - databaseNodes@cert
-    - root@builtin    
+    - root@builtin
+    bootstrap_allowed_sids:
+    - "root"
+    - "ADMINS"
+    - "DATABASE-ADMINS"
   client_certificate_authorization:
     request_client_certificate: true
     client_certificate_definitions:
         - member_groups: ["databaseNodes@cert"]
           subject_terms:
           - short_name: "O"
+            values: ["YDB"]
 ```
 
 Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN в разделе `hosts` и пути к дискам на актуальные в разделе `hosts_configs`.
@@ -227,8 +232,10 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
 
 ```bash
 export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydb --ca-file ca.crt --client-cert-file node.crt \
-    --client-cert-key-file node.key -s grpcs://`hostname -f`:2135 -f auth_token \
+/opt/ydb/bin/ydb --ca-file ca.crt \
+    --client-cert-file node.crt \
+    --client-cert-key-file node.key \
+    -e grpcs://`hostname -f`:2135 \
     admin cluster bootstrap --uuid <строка>
 echo $?
 ```
@@ -236,7 +243,8 @@ echo $?
 После инициализации кластера для выполнения дальнейших административных команд необходимо предварительно получить аутентификационный токен.
 
 ```bash
-/opt/ydb/bin/ydb --ca-file ca.crt -e grpcs://`hostname -f`:2135 -d /Root --user root --no-password auth get-token -f > auth_token
+/opt/ydb/bin/ydb -e grpcs://`hostname -f`:2135 -d /Root --ca-file ca.crt \
+--user root --no-password auth get-token --force > token-file
 ```
 
 При успешном выполнении инициализации кластера выведенный на экран код завершения команды инициализации кластера должен быть нулевым.

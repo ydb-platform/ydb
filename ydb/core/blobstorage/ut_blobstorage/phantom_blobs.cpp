@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         states[0].Online = EOnline::Dead;
         states[0].PhantomFlagStorageEnabled = true;
         states[4].Online = EOnline::Dead;
-        states[0].PhantomFlagStorageEnabled = false;
+        states[4].PhantomFlagStorageEnabled = false;
         return states;
     }
 
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         states[0].PhantomFlagStorageEnabled = true;
         states[1].PhantomFlagStorageEnabled = true;
         states[4].Online = EOnline::Dead;
-        states[0].PhantomFlagStorageEnabled = false;
+        states[4].PhantomFlagStorageEnabled = false;
         return states;
     }
 

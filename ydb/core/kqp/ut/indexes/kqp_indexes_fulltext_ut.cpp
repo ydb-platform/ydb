@@ -32,7 +32,7 @@ void UpsertSomeTexts(NQuery::TQueryClient& db) {
     TString query = R"sql(
         UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
             (100, "Cats love cats.", "cats data"),
-            (200, "Dogs love foxes.", "cats data")
+            (200, "Dogs love foxes.", "dogs data")
     )sql";
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -491,10 +491,10 @@ Y_UNIT_TEST(InsertRowCovered) {
     auto index = ReadIndex(db);
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
-        [["cats data"];[200u];"dogs"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"dogs"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // InsertRow
@@ -509,12 +509,12 @@ Y_UNIT_TEST(InsertRowCovered) {
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
         [["foxes data"];[150u];"cats"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["foxes data"];[150u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
         [["foxes data"];[150u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 }
 
@@ -528,10 +528,10 @@ Y_UNIT_TEST(InsertRowCoveredReturning) {
     auto index = ReadIndex(db);
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
-        [["cats data"];[200u];"dogs"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"dogs"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // InsertRow
@@ -550,12 +550,12 @@ Y_UNIT_TEST(InsertRowCoveredReturning) {
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
         [["foxes data"];[150u];"cats"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["foxes data"];[150u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
         [["foxes data"];[150u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 }
 
@@ -870,10 +870,10 @@ Y_UNIT_TEST(UpsertRowCovered) {
     auto index = ReadIndex(db);
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
-        [["cats data"];[200u];"dogs"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"dogs"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // UpsertRow - insert new row
@@ -888,12 +888,12 @@ Y_UNIT_TEST(UpsertRowCovered) {
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
         [["foxes data"];[150u];"cats"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["foxes data"];[150u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
         [["foxes data"];[150u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // UpsertRow - modify existing row
@@ -908,13 +908,13 @@ Y_UNIT_TEST(UpsertRowCovered) {
     CompareYson(R"([
         [["birds data"];[100u];"birds"];
         [["foxes data"];[150u];"cats"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["birds data"];[100u];"foxes"];
         [["foxes data"];[150u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["birds data"];[100u];"love"];
         [["foxes data"];[150u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 }
 
@@ -928,10 +928,10 @@ Y_UNIT_TEST(UpsertRowCoveredReturning) {
     auto index = ReadIndex(db);
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
-        [["cats data"];[200u];"dogs"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"dogs"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // UpsertRow - insert new row
@@ -950,12 +950,12 @@ Y_UNIT_TEST(UpsertRowCoveredReturning) {
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
         [["foxes data"];[150u];"cats"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["foxes data"];[150u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
         [["foxes data"];[150u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // UpsertRow - modify existing row
@@ -1253,10 +1253,10 @@ Y_UNIT_TEST(ReplaceRowCovered) {
     auto index = ReadIndex(db);
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
-        [["cats data"];[200u];"dogs"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"dogs"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // ReplaceRow - insert new row
@@ -1271,12 +1271,12 @@ Y_UNIT_TEST(ReplaceRowCovered) {
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
         [["foxes data"];[150u];"cats"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["foxes data"];[150u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
         [["foxes data"];[150u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // ReplaceRow - replace existing row
@@ -1291,13 +1291,13 @@ Y_UNIT_TEST(ReplaceRowCovered) {
     CompareYson(R"([
         [["birds data"];[100u];"birds"];
         [["foxes data"];[150u];"cats"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["birds data"];[100u];"foxes"];
         [["foxes data"];[150u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["birds data"];[100u];"love"];
         [["foxes data"];[150u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 }
 
@@ -1311,10 +1311,10 @@ Y_UNIT_TEST(ReplaceRowCoveredReturning) {
     auto index = ReadIndex(db);
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
-        [["cats data"];[200u];"dogs"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"dogs"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // ReplaceRow - insert new row
@@ -1333,12 +1333,12 @@ Y_UNIT_TEST(ReplaceRowCoveredReturning) {
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
         [["foxes data"];[150u];"cats"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["foxes data"];[150u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
         [["foxes data"];[150u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // ReplaceRow - replace existing row
@@ -1938,10 +1938,10 @@ Y_UNIT_TEST(UpdateRowCovered) {
     auto index = ReadIndex(db);
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
-        [["cats data"];[200u];"dogs"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"dogs"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // Update Text - index key column updated
@@ -1954,11 +1954,11 @@ Y_UNIT_TEST(UpdateRowCovered) {
     index = ReadIndex(db);
     CompareYson(R"([
         [["cats data"];[100u];"birds"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["cats data"];[100u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // Update Data - covered column updated
@@ -1971,11 +1971,11 @@ Y_UNIT_TEST(UpdateRowCovered) {
     index = ReadIndex(db);
     CompareYson(R"([
         [["birds data"];[100u];"birds"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["birds data"];[100u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["birds data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // Update by ON
@@ -2120,10 +2120,10 @@ Y_UNIT_TEST(UpdateRowCoveredReturning) {
     auto index = ReadIndex(db);
     CompareYson(R"([
         [["cats data"];[100u];"cats"];
-        [["cats data"];[200u];"dogs"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"dogs"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // Update Text - index key column updated
@@ -2140,11 +2140,11 @@ Y_UNIT_TEST(UpdateRowCoveredReturning) {
     index = ReadIndex(db);
     CompareYson(R"([
         [["cats data"];[100u];"birds"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["cats data"];[100u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["cats data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // Update Data - covered column updated
@@ -2161,11 +2161,11 @@ Y_UNIT_TEST(UpdateRowCoveredReturning) {
     index = ReadIndex(db);
     CompareYson(R"([
         [["birds data"];[100u];"birds"];
-        [["cats data"];[200u];"dogs"];
+        [["dogs data"];[200u];"dogs"];
         [["birds data"];[100u];"foxes"];
-        [["cats data"];[200u];"foxes"];
+        [["dogs data"];[200u];"foxes"];
         [["birds data"];[100u];"love"];
-        [["cats data"];[200u];"love"]
+        [["dogs data"];[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
 
     { // Update by ON

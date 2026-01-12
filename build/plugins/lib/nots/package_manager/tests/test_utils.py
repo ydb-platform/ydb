@@ -1,4 +1,4 @@
-from build.plugins.lib.nots.package_manager.base import utils
+from build.plugins.lib.nots.package_manager import utils
 
 
 def test_extract_package_name_from_path():

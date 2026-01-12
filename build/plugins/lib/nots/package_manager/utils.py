@@ -1,8 +1,17 @@
 import os
 
-from .constants import NODE_MODULES_DIRNAME, NODE_MODULES_WORKSPACE_BUNDLE_FILENAME, PACKAGE_JSON_FILENAME
+from .constants import (
+    NODE_MODULES_DIRNAME,
+    NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
+    PACKAGE_JSON_FILENAME,
+    PNPM_BUILD_BACKUP_LOCKFILE_FILENAME,
+    PNPM_PRE_LOCKFILE_FILENAME,
+    PNPM_LOCKFILE_FILENAME,
+    PNPM_WS_FILENAME,
+)
 
 
+# Base utility functions
 def home_dir():
     """
     Stolen from ya (in the root of arcadia)
@@ -89,3 +98,20 @@ def extract_package_name_from_path(p):
     # if we have scope prefix then we are using the first two tokens, otherwise - only the first one
     parts = p.split("/", 2)
     return "/".join(parts[:2]) if p.startswith("@") else parts[0]
+
+
+# PNPM-specific utility functions
+def build_pre_lockfile_path(p):
+    return os.path.join(p, PNPM_PRE_LOCKFILE_FILENAME)
+
+
+def build_build_backup_lockfile_path(p):
+    return os.path.join(p, PNPM_BUILD_BACKUP_LOCKFILE_FILENAME)
+
+
+def build_lockfile_path(p):
+    return os.path.join(p, PNPM_LOCKFILE_FILENAME)
+
+
+def build_ws_config_path(p):
+    return os.path.join(p, PNPM_WS_FILENAME)

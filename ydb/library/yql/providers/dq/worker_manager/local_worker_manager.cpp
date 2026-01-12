@@ -185,6 +185,7 @@ private:
                 html << "<form method='get'>";
                 html << "<input name='tx_id' type='hidden' value='" << (traceId ? *traceId : "<unknown>") << "'/>";
                 html << "<input name='task_id' type='hidden' value='" << workerTaskId << "'/>";
+                html << "<input name='view' type='hidden' value='dump'/>";
                 html << "<button name='get' type='submit'><b>Detailed</b></button>";
                 html << "</form>";
                 html <<"</td>";

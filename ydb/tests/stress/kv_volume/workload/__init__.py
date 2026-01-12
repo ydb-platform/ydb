@@ -38,7 +38,7 @@ def parse_endpoint(endpoint):
 
 class Worker:
     class ActionRunner:
-        def __init__(self, config, workload, worker_semaphore=None, global_semaphore=None, init_keys=None, results=None, parent_chain=None):
+        def __init__(self, config, workload, worker_semaphore=None, global_semaphore=None, init_keys=None, results=None, parent_names=None, parent_chain=None):
             self.config = config
             self.workload = workload
             self.task = None
@@ -46,7 +46,8 @@ class Worker:
             self.worker_semaphore = worker_semaphore
             self.global_semaphore = global_semaphore
             self.init_keys = init_keys or set()
-            self.results = results if results is not None else {}
+            self.results = results if results is not None else defaultdict(lambda: defaultdict(set))
+            self.parent_names = parent_names or set()
             self.parent_chain = parent_chain or {}
             self.instance_id = None
 
@@ -108,16 +109,12 @@ class Worker:
                 return list(self.init_keys) if self.init_keys else []
 
         def _store_key(self, key):
-            if self.config.name not in self.results:
-                self.results[self.config.name] = {}
-            if self.instance_id not in self.results[self.config.name]:
-                self.results[self.config.name][self.instance_id] = set()
             self.results[self.config.name][self.instance_id].add(key)
         
-        async def run_commands(self, update_parent_chains=None):
+        async def run_commands(self, parent_chain_update=None):
             self.instance_id = self.workload._generate_instance_id(self.config.name)
-            if update_parent_chains:
-                update_parent_chains(self.config.name, self.instance_id)
+            if parent_chain_update:
+                parent_chain_update(self.config.name, self.instance_id)
             if self.worker_semaphore:
                 async with self.worker_semaphore:
                     if self.global_semaphore:
@@ -135,16 +132,16 @@ class Worker:
                 for cmd in self.config.action_command:
                     await self.execute_command(cmd)
 
-        async def run_periodic(self, end_time, update_parent_chains=None, on_iteration_complete=None):
+        async def run_periodic(self, end_time, parent_chain_update=None, on_iteration_complete=None):
             period = self.config.period_us / 1000000.0
             while datetime.now() < end_time:
-                await self.run_commands(update_parent_chains)
+                await self.run_commands(parent_chain_update)
                 if on_iteration_complete:
                     await on_iteration_complete()
                 await asyncio.sleep(period)
 
-        async def run_once(self, update_parent_chains=None):
-            await self.run_commands(update_parent_chains)
+        async def run_once(self, parent_chain_update=None):
+            await self.run_commands(parent_chain_update)
     
     def __init__(self, worker_id, workload):
         self.worker_id = worker_id
@@ -153,7 +150,7 @@ class Worker:
         self.runners = {}
         self.global_semaphores = {}
         self.init_keys = self._generate_init_keys()
-        self.results = {}
+        self.results = defaultdict(lambda: defaultdict(set))
         self.write_key_counter = 0
         self.instance_counter = 0
 
@@ -199,7 +196,7 @@ class Worker:
                         version=self.workload.version
                     )
 
-    def add_action(self, action_config, parent_chain=None):
+    def add_action(self, action_config, parent_names=None):
         worker_sem = None
         if action_config.HasField('worker_max_in_flight'):
             worker_sem = asyncio.Semaphore(action_config.worker_max_in_flight)
@@ -210,21 +207,12 @@ class Worker:
                 self.global_semaphores[action_config.name] = asyncio.Semaphore(action_config.global_max_in_flight)
             global_sem = self.global_semaphores[action_config.name]
 
-        parent_chain = parent_chain.copy() if parent_chain else {}
-        runner = self.ActionRunner(action_config, self.workload, worker_sem, global_sem, self.init_keys, self.results, parent_chain)
+        parent_names = parent_names.copy() if parent_names is not None else set()
+        parent_chain = {name: None for name in parent_names}
+        runner = self.ActionRunner(action_config, self.workload, worker_sem, global_sem, self.init_keys, self.results, parent_names, parent_chain)
         self.actions[action_config.name] = action_config
         self.runners[action_config.name] = runner
         
-    def _build_parent_chains(self):
-        chains = {}
-        for name, action in self.actions.items():
-            chains[name] = {}
-            current = action.parent_action if action.HasField('parent_action') else None
-            while current and current in chains:
-                chains[name][current] = None
-                current = self.actions[current].parent_action if self.actions[current].HasField('parent_action') else None
-        return chains
-
     def _update_parent_chains(self, action_name, instance_id, parent_chains):
         for child_name, child_chain in parent_chains.items():
             if action_name in child_chain:
@@ -235,7 +223,18 @@ class Worker:
         end_time = datetime.now() + timedelta(seconds=self.workload.duration)
 
         task_map = {}
-        parent_chains = self._build_parent_chains()
+        parent_chains = {}
+        
+        parent_names_map = {}
+        for name, action in self.actions.items():
+            parent_names_map[name] = set()
+            current = action.parent_action if action.HasField('parent_action') else None
+            while current and current in self.actions:
+                parent_names_map[name].add(current)
+                current = self.actions[current].parent_action if self.actions[current].HasField('parent_action') else None
+
+        for name in self.actions:
+            parent_chains[name] = {parent: None for parent in parent_names_map[name]}
 
         child_actions_map = defaultdict(list)
 
@@ -252,7 +251,7 @@ class Worker:
             for child_name in child_actions_map[parent_name]:
                 child_action = self.actions[child_name]
                 runner = self.runners[child_name]
-                runner.parent_chain = parent_chains[child_name]
+                runner.parent_chain = parent_chains[child_name].copy()
                 if child_action.HasField('period_us'):
                     child_task = asyncio.create_task(runner.run_periodic(end_time, update_parent_chains))
                 else:
@@ -263,9 +262,8 @@ class Worker:
         for name, action in self.actions.items():
             parent = action.parent_action if action.HasField('parent_action') else None
             if parent is None:
-                parent_chains[name] = {}
                 if action.HasField('period_us'):
-                    async def run_periodic_with_children(runner=self.runners[name], end_time=end_time, update_parent_chains=update_parent_chains, action_name=name):
+                    async def run_periodic_with_children(runner=self.runners[name], end_time=end_time, action_name=name):
                         await runner.run_periodic(end_time, update_parent_chains, lambda an=action_name: run_child_actions(an))
                     task_map[name] = asyncio.create_task(run_periodic_with_children())
                 else:
@@ -290,10 +288,18 @@ class WorkerBuilder:
 
     def build(self, worker_id):
         worker = Worker(worker_id, self.workload)
-        parent_chains = worker._build_parent_chains()
+        
+        parent_names_map = {}
         for action in self.config.actions:
-            parent_chain = parent_chains[action.name].copy()
-            worker.add_action(action, parent_chain)
+            parent_names_map[action.name] = set()
+            current = action.parent_action if action.HasField('parent_action') else None
+            while current:
+                parent_names_map[action.name].add(current)
+                current = next((a.parent_action for a in self.config.actions if a.name == current and a.HasField('parent_action')), None)
+        
+        for action in self.config.actions:
+            parent_names = parent_names_map[action.name].copy()
+            worker.add_action(action, parent_names)
         return worker
         
 

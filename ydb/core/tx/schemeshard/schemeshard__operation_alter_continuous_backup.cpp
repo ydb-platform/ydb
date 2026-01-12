@@ -96,10 +96,12 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
                 if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobal) {
                     coordinatedVersion = Max(coordinatedVersion, indexInfo->AlterVersion);
                     // Include impl table version
-                    for (const auto& [implName, implPathId] : context.SS->PathsById.at(childPathId)->GetChildren()) {
-                        if (context.SS->Tables.contains(implPathId)) {
-                            auto implTable = context.SS->Tables.at(implPathId);
-                            coordinatedVersion = Max(coordinatedVersion, implTable->AlterVersion);
+                    if (context.SS->PathsById.contains(childPathId)) {
+                        for (const auto& [implName, implPathId] : context.SS->PathsById.at(childPathId)->GetChildren()) {
+                            if (context.SS->Tables.contains(implPathId)) {
+                                auto implTable = context.SS->Tables.at(implPathId);
+                                coordinatedVersion = Max(coordinatedVersion, implTable->AlterVersion);
+                            }
                         }
                     }
                 }

@@ -281,7 +281,7 @@ public:
 
             if (!hasCdcChanges) {
                 for (const auto& [name, id] : srcPath->GetChildren()) {
-                    if (context.SS->CdcStreams.contains(id)) {
+                    if (context.SS->CdcStreams.contains(id) && context.SS->PathsById.contains(id)) {
                         auto streamPath = context.SS->PathsById.at(id);
                         if (streamPath->IsCdcStream() &&
                             streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
@@ -294,10 +294,11 @@ public:
             }
 
             if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
+                context.MemChanges.GrabTable(context.SS, srcPathId);
                 auto srcTable = context.SS->Tables.at(srcPathId);
 
                 if (txState->CoordinatedSchemaVersion.Defined()) {
-                    srcTable->AlterVersion = *txState->CoordinatedSchemaVersion;
+                    srcTable->AlterVersion = Max(srcTable->AlterVersion, *txState->CoordinatedSchemaVersion);
                 } else {
                     srcTable->AlterVersion += 1;
                 }
@@ -308,6 +309,7 @@ public:
                 if (parentPathId && context.SS->PathsById.contains(parentPathId)) {
                     auto parentPath = context.SS->PathsById.at(parentPathId);
                     if (parentPath->IsTableIndex() && context.SS->Indexes.contains(parentPathId)) {
+                        context.MemChanges.GrabIndex(context.SS, parentPathId);
                         auto index = context.SS->Indexes.at(parentPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;
@@ -323,11 +325,15 @@ public:
                 }
 
                 for (const auto& [childName, childPathId] : srcPath->GetChildren()) {
+                    if (!context.SS->PathsById.contains(childPathId)) {
+                        continue;
+                    }
                     auto childPath = context.SS->PathsById.at(childPathId);
                     if (!childPath->IsTableIndex() || childPath->Dropped()) {
                         continue;
                     }
                     if (context.SS->Indexes.contains(childPathId)) {
+                        context.MemChanges.GrabIndex(context.SS, childPathId);
                         auto index = context.SS->Indexes.at(childPathId);
                         if (index->AlterVersion < srcTable->AlterVersion) {
                             index->AlterVersion = srcTable->AlterVersion;

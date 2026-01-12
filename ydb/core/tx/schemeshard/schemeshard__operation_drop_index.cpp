@@ -84,12 +84,7 @@ public:
 
             auto notice = tx.MutableDropIndexNotice();
             pathId.ToProto(notice->MutablePathId());
-            // Use coordinated version if available (from backup operations)
-            if (txState->CoordinatedSchemaVersion.Defined()) {
-                notice->SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
-            } else {
-                notice->SetTableSchemaVersion(table->AlterVersion + 1);
-            }
+            notice->SetTableSchemaVersion(table->AlterVersion + 1);
 
             bool found = false;
             for (const auto& [_, childPathId] : path->GetChildren()) {
@@ -175,13 +170,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        // Use coordinated version if available (from backup operations)
-        // Otherwise, increment by 1 for backward compatibility
-        if (txState->CoordinatedSchemaVersion.Defined()) {
-            table->AlterVersion = *txState->CoordinatedSchemaVersion;
-        } else {
-            table->AlterVersion += 1;
-        }
+        table->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, pathId, table);
 
         // Sync remaining child index versions with main table

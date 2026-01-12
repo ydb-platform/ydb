@@ -3695,17 +3695,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             txState.CoordinatedSchemaVersion = proto.GetTxCdcStreamExtraData().GetCoordinatedSchemaVersion();
                         }
                     }
-                } else if (txState.TxType == TTxState::TxMoveTableIndex ||
-                           txState.TxType == TTxState::TxDropTableIndex ||
-                           txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
-                    if (!extraData.empty()) {
-                        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
-                        bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
-                        Y_ABORT_UNLESS(deserializeRes);
-                        if (proto.HasTxCdcStreamExtraData() && proto.GetTxCdcStreamExtraData().HasCoordinatedSchemaVersion()) {
-                            txState.CoordinatedSchemaVersion = proto.GetTxCdcStreamExtraData().GetCoordinatedSchemaVersion();
-                        }
-                    }
                 }
 
                 Y_ABORT_UNLESS(txState.TxType != TTxState::TxInvalid);

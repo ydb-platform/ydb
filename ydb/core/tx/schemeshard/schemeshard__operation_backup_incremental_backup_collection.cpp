@@ -208,8 +208,14 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
 
         if (!omitIndexes) {
             for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                if (!context.SS->PathsById.contains(childPathId)) {
+                    continue;
+                }
                 auto childPath = context.SS->PathsById.at(childPathId);
                 if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex || childPath->Dropped()) {
+                    continue;
+                }
+                if (!context.SS->Indexes.contains(childPathId)) {
                     continue;
                 }
                 auto indexInfo = context.SS->Indexes.at(childPathId);
@@ -219,7 +225,11 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 tableCoordinatedVersion = Max(tableCoordinatedVersion, indexInfo->AlterVersion);
 
                 auto indexPath = TPath::Init(childPathId, context.SS);
+                Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
                 auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
+                if (!context.SS->Tables.contains(implTablePathId)) {
+                    continue;
+                }
                 auto implTable = context.SS->Tables.at(implTablePathId);
                 tableCoordinatedVersion = Max(tableCoordinatedVersion, implTable->AlterVersion);
             }
@@ -230,7 +240,7 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
         TString err;
         if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
             result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
-            return {};
+            return result;
         }
         auto& relativeItemPath = paths.second;
 
@@ -253,6 +263,9 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
         if (!omitIndexes) {
             // Iterate through table's children to find indexes
             for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                if (!context.SS->PathsById.contains(childPathId)) {
+                    continue;
+                }
                 auto childPath = context.SS->PathsById.at(childPathId);
 
                 // Skip non-index children (CDC streams, etc.)
@@ -266,6 +279,9 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 }
 
                 // Get index info and filter for global sync only
+                if (!context.SS->Indexes.contains(childPathId)) {
+                    continue;
+                }
                 auto indexInfo = context.SS->Indexes.at(childPathId);
                 if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
                     continue;

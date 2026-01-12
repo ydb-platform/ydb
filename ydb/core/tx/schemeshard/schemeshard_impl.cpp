@@ -2670,15 +2670,6 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
-    } else if (txState.TxType == TTxState::TxMoveTableIndex ||
-               txState.TxType == TTxState::TxDropTableIndex ||
-               txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
-        if (txState.CoordinatedSchemaVersion.Defined()) {
-            NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
-            proto.MutableTxCdcStreamExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
-            bool serializeRes = proto.SerializeToString(&extraData);
-            Y_ABORT_UNLESS(serializeRes);
-        }
     }
 
     db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(

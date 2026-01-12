@@ -86,12 +86,7 @@ public:
 
             auto notice = tx.MutableMoveIndex();
             pathId.ToProto(notice->MutablePathId());
-            // Use coordinated version if available (from backup operations)
-            if (txState->CoordinatedSchemaVersion.Defined()) {
-                notice->SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
-            } else {
-                notice->SetTableSchemaVersion(table->AlterVersion + 1);
-            }
+            notice->SetTableSchemaVersion(table->AlterVersion + 1);
 
             auto remap = notice->MutableReMapIndex();
 
@@ -287,13 +282,7 @@ public:
         Y_ABORT_UNLESS(txState->PlanStep);
 
         NIceDb::TNiceDb db(context.GetDB());
-        // Use coordinated version if available (from backup operations)
-        // Otherwise, increment by 1 for backward compatibility
-        if (txState->CoordinatedSchemaVersion.Defined()) {
-            table->AlterVersion = *txState->CoordinatedSchemaVersion;
-        } else {
-            table->AlterVersion += 1;
-        }
+        table->AlterVersion += 1;
 
         context.SS->PersistTableAlterVersion(db, path->PathId, table);
 

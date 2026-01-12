@@ -160,7 +160,7 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
     // Use coordinated version if available (from backup operations)
     // Otherwise, increment by 1 for backward compatibility
     if (txState->CoordinatedSchemaVersion.Defined()) {
-        table->AlterVersion = *txState->CoordinatedSchemaVersion;
+        table->AlterVersion = Max(table->AlterVersion, *txState->CoordinatedSchemaVersion);
     } else {
         table->AlterVersion += 1;
     }

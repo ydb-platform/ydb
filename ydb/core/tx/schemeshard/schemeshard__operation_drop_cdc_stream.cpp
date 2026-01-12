@@ -346,6 +346,11 @@ public:
         : TSubOperation(id, state)
         , DropSnapshot(dropSnapshot)
     {
+        // Re-extract stream names from transaction when restored from state
+        const auto& op = Transaction.GetDropCdcStream();
+        for (const auto& name : op.GetStreamName()) {
+            StreamNames.push_back(name);
+        }
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {

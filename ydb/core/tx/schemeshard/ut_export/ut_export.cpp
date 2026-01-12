@@ -3925,7 +3925,9 @@ WITH (
             Columns { Name: "value2" Type: "Utf8" NotNull: true }
         )";
 
-        TString expectedStartsWith = R"(CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
+        TString expectedStartsWith = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
       key Uint64 NOT NULL,
     value1 Uint64?,
     value2 Utf8 NOT NULL

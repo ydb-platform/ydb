@@ -104,9 +104,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
         } else if (transactions[0].GetSchemeOperation().HasCreateExternalDataSource()) {
             const auto& createExternalDataSource = transactions[0].GetSchemeOperation().GetCreateExternalDataSource();
             return Finish(result->Status, createExternalDataSource);
-        }
-
-        if (transactions[0].GetSchemeOperation().HasCreateExternalTable()) {
+        } else if (transactions[0].GetSchemeOperation().HasCreateExternalTable()) {
             const auto& createExternalTable = transactions[0].GetSchemeOperation().GetCreateExternalTable();
             return Finish(result->Status, createExternalTable);
         }

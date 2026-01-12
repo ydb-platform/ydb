@@ -102,7 +102,7 @@ bool RewriteCreateQuery(
         return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
     }
     if (IsCreateExternalTableQuery(query)) {
-        return NYdb::NDump::RewriteCreateExternalTableQuery(query, dbPath, issues);
+        return NYdb::NDump::RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues);
     }
 
     issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);

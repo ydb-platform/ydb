@@ -6958,12 +6958,90 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             {
                 EPathTypeExternalTable,
                 R"(
+                    -- database: "/MyRoot"
+                    -- backup root: "/MyRoot"
                     CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
                         key Uint64 NOT NULL,
                         value1 Uint64?,
                         value2 Utf8 NOT NULL
                     ) WITH (
                         DATA_SOURCE = '/MyRoot/DataSource',
+                        LOCATION = 'bucket'
+                    )
+                )"
+            }
+        ));
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "ExternalTable"
+                destination_path: "/MyRoot/ExternalTable"
+              }
+              items {
+                source_prefix: "DataSource"
+                destination_path: "/MyRoot/DataSource"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), {
+            NLs::Finished,
+            NLs::IsExternalTable,
+        });
+    }
+
+    Y_UNIT_TEST(ExternalTableImportToAnotherDatabase) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(2);
+        bucketContent.emplace("/DataSource", GenerateTestData(
+            {
+                EPathTypeExternalDataSource,
+                R"(
+                    -- database: "/MyRoot"
+                    CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
+                    WITH (
+                        SOURCE_TYPE = 'ObjectStorage',
+                        LOCATION = 'https://s3.cloud.net/bucket',
+                        AUTH_METHOD = 'AWS',
+                        AWS_ACCESS_KEY_ID_SECRET_NAME = 'id_secret',
+                        AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'access_secret',
+                        AWS_REGION = 'ru-central-1'
+                    );
+                )"
+            }
+        ));
+        bucketContent.emplace("/ExternalTable", GenerateTestData(
+            {
+                EPathTypeExternalTable,
+                R"(
+                    -- database: "/AnotherRoot"
+                    -- backup root: "/AnotherRoot"
+                    CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
+                        key Uint64 NOT NULL,
+                        value1 Uint64?,
+                        value2 Utf8 NOT NULL
+                    ) WITH (
+                        DATA_SOURCE = '/AnotherRoot/DataSource',
                         LOCATION = 'bucket'
                     )
                 )"
@@ -7084,202 +7162,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImport(runtime, ++txId, "/MyRoot", importRequest);
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), {
-            NLs::Finished,
-            NLs::IsExternalTable,
-        });
-    }
-
-    Y_UNIT_TEST(SchemeObjectsImportToAnotherDirectory) {
-        TTestBasicRuntime runtime;
-        auto options = TTestEnvOptions()
-            .RunFakeConfigDispatcher(true)
-            .SetupKqpProxy(true)
-            .InitYdbDriver(true);
-        TTestEnv env(runtime, options);
-        runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
-        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateReplication(runtime, ++txId, "/MyRoot", R"(
-            Name: "Replication"
-            Config {
-                SrcConnectionParams {
-                    Endpoint: "localhost:2135"
-                    Database: "/MyRoot"
-                    StaticCredentials {
-                        User: "user"
-                        Password: "pwd"
-                        PasswordSecretName: "pwd-secret-name"
-                    }
-                }
-                Specific {
-                    Targets {
-                        SrcPath: "/MyRoot/Table"
-                        DstPath: "/MyRoot/TableReplica"
-                    }
-                }
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateTransfer(runtime, ++txId, "/MyRoot", R"(
-            Name: "Transfer"
-            Config {
-                SrcConnectionParams {
-                    Endpoint: "localhost:2135"
-                    Database: "/MyRoot"
-                }
-                TransferSpecific {
-                    Target {
-                        SrcPath: "/MyRoot/Topic"
-                        DstPath: "/MyRoot/Table"
-                        TransformLambda: "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;"
-                    }
-                }
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
-            Name: "DataSource"
-            SourceType: "ObjectStorage"
-            Location: "https://s3.cloud.net/bucket"
-            Auth {
-                Aws {
-                    AwsAccessKeyIdSecretName: "id_secret",
-                    AwsSecretAccessKeySecretName: "access_secret"
-                    AwsRegion: "ru-central-1"
-                }
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "ExternalTable"
-            SourceType: "General"
-            DataSourcePath: "/MyRoot/DataSource"
-            Location: "bucket"
-            Columns { Name: "key" Type: "Uint64" NotNull: true }
-            Columns { Name: "value1" Type: "Uint64" }
-            Columns { Name: "value2" Type: "Utf8" NotNull: true }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        TString exportRequest = Sprintf(R"(
-            ExportToS3Settings {
-                endpoint: "localhost:%d"
-                scheme: HTTP
-                items {
-                    source_path: "/MyRoot/Table"
-                    destination_prefix: "Table"
-                }
-                items {
-                    source_path: "/MyRoot/Replication"
-                    destination_prefix: "Replication"
-                }
-                items {
-                    source_path: "/MyRoot/Transfer"
-                    destination_prefix: "Transfer"
-                }
-                items {
-                    source_path: "/MyRoot/DataSource"
-                    destination_prefix: "DataSource"
-                }
-                items {
-                    source_path: "/MyRoot/ExternalTable"
-                    destination_prefix: "ExternalTable"
-                }
-            }
-        )", port);
-
-        TestExport(runtime, ++txId, "/MyRoot", exportRequest);
-        env.TestWaitNotification(runtime, txId);
-        TestGetExport(runtime, txId, "/MyRoot");
-
-        // Drop all objects
-        TestDropExternalTable(runtime, ++txId, "/MyRoot", "ExternalTable");
-        env.TestWaitNotification(runtime, txId);
-
-        TestDropExternalDataSource(runtime, ++txId, "/MyRoot", "DataSource");
-        env.TestWaitNotification(runtime, txId);
-
-        TestDropTransfer(runtime, ++txId, "/MyRoot", "Transfer");
-        env.TestWaitNotification(runtime, txId);
-
-        TestDropReplication(runtime, ++txId, "/MyRoot", "Replication");
-        env.TestWaitNotification(runtime, txId);
-
-        TestDropTable(runtime, ++txId, "/MyRoot", "Table");
-        env.TestWaitNotification(runtime, txId);
-
-        TString importRequest = Sprintf(R"(
-            ImportFromS3Settings {
-                endpoint: "localhost:%d"
-                scheme: HTTP
-                items {
-                    source_prefix: "Table"
-                    destination_path: "/MyRoot/Table"
-                }
-                items {
-                    source_prefix: "Replication"
-                    destination_path: "/MyRoot/Replication"
-                }
-                items {
-                    source_prefix: "Transfer"
-                    destination_path: "/MyRoot/Transfer"
-                }
-                items {
-                    source_prefix: "DataSource"
-                    destination_path: "/MyRoot/DataSource"
-                }
-                items {
-                    source_prefix: "ExternalTable"
-                    destination_path: "/MyRoot/ExternalTable"
-                }
-            }
-        )", port);
-
-        TestImport(runtime, ++txId, "/MyRoot", importRequest);
-        env.TestWaitNotification(runtime, txId);
-        TestGetImport(runtime, txId, "/MyRoot");
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-            NLs::Finished,
-            NLs::IsTable,
-        });
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Replication"), {
-            NLs::Finished,
-            NLs::IsReplication,
-        });
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Transfer"), {
-            NLs::Finished,
-            NLs::IsTransfer,
-        });
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DataSource"), {
-            NLs::Finished,
-            NLs::IsExternalDataSource,
-        });
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), {
             NLs::Finished,

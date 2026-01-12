@@ -123,6 +123,42 @@ class KeyValueClient(object):
             write.storage_channel = channel
         return await self.ainvoke(request, 'ExecuteTransaction', version)
 
+    def kv_delete_range(self, path, partition_id, from_key=None, to_key=None,
+                       from_inclusive=True, to_inclusive=False, version='v1'):
+        request = keyvalue_api.ExecuteTransactionRequest()
+        request.path = path
+        request.partition_id = partition_id
+        delete_range = request.commands.add().delete_range
+        if from_key is not None:
+            if from_inclusive:
+                delete_range.range.from_key_inclusive = from_key
+            else:
+                delete_range.range.from_key_exclusive = from_key
+        if to_key is not None:
+            if to_inclusive:
+                delete_range.range.to_key_inclusive = to_key
+            else:
+                delete_range.range.to_key_exclusive = to_key
+        return self.invoke(request, 'ExecuteTransaction', version)
+
+    async def a_kv_delete_range(self, path, partition_id, from_key=None, to_key=None,
+                               from_inclusive=True, to_inclusive=False, version='v1'):
+        request = keyvalue_api.ExecuteTransactionRequest()
+        request.path = path
+        request.partition_id = partition_id
+        delete_range = request.commands.add().delete_range
+        if from_key is not None:
+            if from_inclusive:
+                delete_range.range.from_key_inclusive = from_key
+            else:
+                delete_range.range.from_key_exclusive = from_key
+        if to_key is not None:
+            if to_inclusive:
+                delete_range.range.to_key_inclusive = to_key
+            else:
+                delete_range.range.to_key_exclusive = to_key
+        return await self.ainvoke(request, 'ExecuteTransaction', version)
+
     def kv_read(self, path, partition_id, key, offset=None, size=None, version='v1'):
         request = keyvalue_api.ReadRequest()
         request.path = path

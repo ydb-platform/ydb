@@ -290,6 +290,8 @@ message TPartitionConfig {
     repeated TChannelProfile ExplicitChannelProfiles = 14;
 
     optional TMirrorPartitionConfig MirrorFrom = 15;
+
+    optional string TimestampType = 32;
 };
 
 message TPartitionKeyRange {

@@ -1216,6 +1216,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
         }
 
+        if (request.has_timestamp_type()) {
+            partConfig->SetTimestampType(request.timestamp_type());
+        }
+        
         if (local) {
             auto partSpeed = request.partition_write_speed_bytes_per_second();
             if (partSpeed == 0) {

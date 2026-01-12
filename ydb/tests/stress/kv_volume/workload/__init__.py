@@ -7,7 +7,6 @@ import uuid
 import asyncio
 
 from ydb.public.api.protos import ydb_status_codes_pb2 as ydb_status_codes
-# from ibrary.python import resource
 
 
 from ydb.tests.stress.common.common import WorkloadBase
@@ -47,14 +46,17 @@ class Worker:
             self.global_semaphore = global_semaphore
             
         async def execute_command(self, cmd, data_context=None):
+            # TODO(kruall): rewrite all logic
             cmd_type = cmd.WhichOneof('Command')
             if cmd_type == 'print':
                 print(f"[Worker Action: {self.config.name}] {cmd.print.msg}")
             elif cmd_type == 'read':
                 partition_id = random.randrange(0, self.workload.partition_count)
                 key = self.workload._get_init_pair_key(random.randint(0, 63))
-                offset = random.randint(0, self.workload.INIT_DATA_VALUE_SIZE - cmd.read.size)
-                response = self.workload.client.kv_read(
+                offset = 0
+                if cmd.read.size != self.workload.INIT_DATA_VALUE_SIZE:
+                    offset = random.randint(0, self.workload.INIT_DATA_VALUE_SIZE - cmd.read.size)
+                response = await self.workload.client.a_kv_read(
                     self.workload._volume_path(),
                     partition_id,
                     key,
@@ -70,7 +72,7 @@ class Worker:
                 pattern_repeats = (cmd.write.size + len(self.workload.INIT_DATA_PATTERN)) // len(self.workload.INIT_DATA_PATTERN)
                 data = self.workload.INIT_DATA_PATTERN * pattern_repeats
                 data = data[:cmd.write.size]
-                response = self.workload.client.kv_write(
+                response = await self.workload.client.a_kv_write(
                     self.workload._volume_path(),
                     partition_id,
                     key,
@@ -239,6 +241,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
                 self._write(client, partition_id, self._get_init_pair_key(pair_id), data, channel=channel)
 
     def _fill_init_data(self, client):
+        # TODO(kruall): move this to the config
         t = type(self)
         # Reset keys set before filling
         self.init_data_keys.clear()

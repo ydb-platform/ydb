@@ -76,7 +76,9 @@ public:
                         poolId = it->second;
                     }
                 }
-                ctx.Register(NInterconnect::CreateLoadActor(params), TMailboxType::HTSwap, poolId);
+                for (ui32 i = 0; i < record.GetNumLoadActors(); ++i) {
+                    ctx.Register(NInterconnect::CreateLoadActor(params), TMailboxType::HTSwap, poolId);
+                }
             };
         }
     }

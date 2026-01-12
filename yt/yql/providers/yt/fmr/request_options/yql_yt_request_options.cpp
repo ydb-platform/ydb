@@ -68,6 +68,11 @@ TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, co
     return MakeIntrusive<TTaskState>(taskStatus, taskId, taskErrorMessage, stats);
 }
 
+void TSortedUploadOperationParams::UpdateAfterPreparation(std::vector<TString> cookies, TString partitionId) {
+    Cookies = std::move(cookies);
+    PartitionId = std::move(partitionId);
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Helper serialization functions

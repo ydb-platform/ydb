@@ -152,7 +152,7 @@ namespace NKikimr {
         void HandleInitialEventUnorderedDataProtocol(const TEventInfo& evInfo) {
             TSyncState newSyncState(Db->GetVDiskIncarnationGuid(),
                     Db->LsnMngr->GetConfirmedLsnForSyncLog());
-            
+
             std::optional<TActorId> oldActorId = DeleteUnorderedDataSession(evInfo.SessionKey);
             if (oldActorId) {
                 Send(*oldActorId, new TEvents::TEvPoisonPill);
@@ -257,7 +257,7 @@ namespace NKikimr {
                 default:
                     // unknown protocol, respond with erroneous status
                     RespondWithErroneousStatus(evInfo, {}, NKikimrProto::ERROR);
-                    
+
             }
         }
 

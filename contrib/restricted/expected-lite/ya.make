@@ -8,6 +8,6 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(0.9.0)
 
-ORIGINAL_SOURCE(https://github.com/martinmoene/expected-lite/archive/v0.9.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/nonstd-lite/expected-lite/archive/v0.9.0.tar.gz)
 
 END()

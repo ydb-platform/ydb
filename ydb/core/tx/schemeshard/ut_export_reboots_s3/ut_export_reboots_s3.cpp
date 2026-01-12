@@ -532,12 +532,18 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             return ReplicationScheme;
         }
 
+        static const TTypedScheme& Transfer() {
+            return TransferScheme;
+        }
+
         static TString Request(EPathType pathType = EPathType::EPathTypeTable) {
             switch (pathType) {
             case EPathType::EPathTypeTable:
                 return RequestStringTable;
             case EPathType::EPathTypeReplication:
                 return RequestStringReplication;
+            case EPathType::EPathTypeTransfer:
+                return RequestStringTransfer;
             default:
                 Y_ABORT("not supported");
             }
@@ -550,10 +556,12 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         static const TTypedScheme ChangefeedScheme;
         static const TTypedScheme TopicScheme;
         static const TTypedScheme ReplicationScheme;
+        static const TTypedScheme TransferScheme;
         static const TTypedScheme IndexedTableScheme;
 
         static const TString RequestStringTable;
         static const TString RequestStringReplication;
+        static const TString RequestStringTransfer;
 
     };
 
@@ -607,6 +615,23 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )"
     };
 
+    const TTypedScheme TTestData::TransferScheme = TTypedScheme {
+        EPathTypeTransfer,
+        R"(
+            Name: "Transfer"
+            Config {
+                TransferSpecific {
+                    Target {
+                        SrcPath: "/MyRoot/Topic"
+                        DstPath: "/MyRoot/Table"
+                        TransformLambda: "PRAGMA OrderedColumns;$transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };$__ydb_transfer_lambda = $transformation_lambda;"
+                        ConsumerName: "consumerName"
+                    }
+                }
+            }
+        )"
+    };
+
     const TTypedScheme TTestData::IndexedTableScheme = TTypedScheme {
         EPathTypeTableIndex, // TODO: Replace with IndexedTable
         Sprintf(R"(
@@ -638,6 +663,17 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             scheme: HTTP
             items {
                 source_path: "/MyRoot/Replication"
+                destination_prefix: ""
+            }
+        }
+    )";
+
+    const TString TTestData::RequestStringTransfer = R"(
+        ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+                source_path: "/MyRoot/Transfer"
                 destination_prefix: ""
             }
         }
@@ -829,5 +865,27 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         ForgetS3({
             TTestData::Replication()
         }, TTestData::Request(EPathTypeReplication));
+    }
+
+    // Transfer
+    Y_UNIT_TEST(ShouldSucceedOnSingleTransfer) {
+        RunS3({
+            TTestData::Table(),
+            TTestData::Transfer(),
+        }, TTestData::Request(EPathTypeTransfer));
+    }
+
+    Y_UNIT_TEST(CancelShouldSucceedOnSingleTransfer) {
+        CancelS3({
+            TTestData::Table(),
+            TTestData::Transfer(),
+        }, TTestData::Request(EPathTypeTransfer));
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnSingleTransfer) {
+        ForgetS3({
+            TTestData::Table(),
+            TTestData::Transfer(),
+        }, TTestData::Request(EPathTypeTransfer));
     }
 }

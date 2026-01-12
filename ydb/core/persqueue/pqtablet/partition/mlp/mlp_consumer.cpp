@@ -590,6 +590,7 @@ void TConsumerActor::Persist() {
     auto batch = Storage->GetBatch();
     if (batch.Empty()) {
         LOG_D("Batch is empty");
+        MoveToDLQIfPossible();
         return;
     }
 

@@ -59,7 +59,7 @@ namespace NKikimr {
                 ++ReplicatingVDisksByNode[pdiskId.NodeId];
                 ++ReplicatingVDisksByPDisk[pdiskId];
             }
-            
+
             void AddFreeSlotsForRack(const TString& rack, i32 freeSlots) {
                 FreeSlotsPerRack[rack] += freeSlots;
             }
@@ -181,7 +181,7 @@ namespace NKikimr {
                 TMisplacedVDisks(EFailLevel failLevel, std::vector<TVDiskIdShort> disks, TString errorReason = "")
                     : FailLevel(failLevel)
                     , Disks(std::move(disks))
-                    , ErrorReason(errorReason) 
+                    , ErrorReason(errorReason)
                 {}
 
                 EFailLevel FailLevel;

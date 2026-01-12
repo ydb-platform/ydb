@@ -1,5 +1,7 @@
 #include "helpers.h"
 
+#include "config.h"
+
 #include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/operation_client.h>
 #include <yt/yt/client/api/rowset.h>
@@ -31,6 +33,21 @@ using namespace NTableClient;
 using namespace NTabletClient;
 using namespace NYson;
 using namespace NYTree;
+
+////////////////////////////////////////////////////////////////////////////////
+
+void PatchProxyForStallRequests(const TConnectionConfigPtr& config, TApiServiceProxy* proxy)
+{
+    if (config->UseTotalStreamingTimeoutForHeavyReads) {
+        auto totalStreamingTimeout = config->DefaultTotalStreamingTimeout;
+        NRpc::TStreamingParameters patchedParameters{
+            .ReadTimeout = totalStreamingTimeout,
+            .WriteTimeout = totalStreamingTimeout};
+
+        proxy->DefaultClientAttachmentsStreamingParameters() = patchedParameters;
+        proxy->DefaultServerAttachmentsStreamingParameters() = patchedParameters;
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

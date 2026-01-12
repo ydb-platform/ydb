@@ -1239,7 +1239,7 @@ TFuture<void> TTransaction::InvokeBatchModifyRowsRequest()
     TApiServiceProxy::TReqBatchModifyRowsPtr batchRequest;
     batchRequest.Swap(BatchModifyRowsRequest_);
     if (batchRequest->part_counts_size() == 0) {
-        return VoidFuture;
+        return OKFuture;
     }
 
     YT_LOG_DEBUG("Invoking a batch modify rows request (Subrequests: %v)",

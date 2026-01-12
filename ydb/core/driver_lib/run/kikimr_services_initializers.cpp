@@ -1556,11 +1556,10 @@ void TBootstrapperInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
     if (Config.HasBootstrapConfig()) {
+        bool hasDynamicTablets = false;
         for (const auto &boot : Config.GetBootstrapConfig().GetTablet()) {
             if (boot.GetAllowDynamicConfiguration()) {
-                setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-                    TActorId(),
-                    TActorSetupCmd(CreateConfiguredTabletBootstrapper(boot), TMailboxType::HTSwap, appData->SystemPoolId)));
+                hasDynamicTablets = true;
             } else {
                 const bool standby = boot.HasStandBy() && boot.GetStandBy();
                 if (Find(boot.GetNode(), NodeId) != boot.GetNode().end()) {
@@ -1590,6 +1589,11 @@ void TBootstrapperInitializer::InitializeServices(
                         TActorSetupCmd(CreateBootstrapper(info.Get(), bi.Get(), standby), TMailboxType::HTSwap, appData->SystemPoolId)));
                 }
             }
+        }
+        if (hasDynamicTablets) {
+            setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+                TActorId(),
+                TActorSetupCmd(CreateConfiguredTabletBootstrapper(Config.GetBootstrapConfig()), TMailboxType::HTSwap, appData->SystemPoolId)));
         }
     }
 }

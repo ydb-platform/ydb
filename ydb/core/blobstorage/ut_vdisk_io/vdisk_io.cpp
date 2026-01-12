@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(VDiskIOTest) {
             auto rot = pDisks->GetSubgroup("pdisk", "000000001")->GetSubgroup("media", "rot");
             auto device = rot->GetSubgroup("subsystem", "device");
             auto pDisk = rot->GetSubgroup("subsystem", "pdisk");
-            
+
             ui64 deviceWrites = device->FindCounter("DeviceWrites")->GetAtomic();
             ui64 writesLog = pDisk->GetSubgroup("req", "WriteLog")->FindCounter("Requests")->GetAtomic();
             ui64 writesHugeUser = pDisk->GetSubgroup("req", "WriteHugeUser")->FindCounter("Requests")->GetAtomic();

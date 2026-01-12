@@ -218,12 +218,13 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
     RBO.AddStage(std::make_shared<TRuleBasedStage>("Inline scalar subplans", std::move(inlineScalarSubPlanStageRules)));
     RBO.AddStage(std::make_shared<TRenameStage>());
     RBO.AddStage(std::make_shared<TConstantFoldingStage>());
-    RBO.AddStage(std::make_shared<TPruneColumnsStage>());
     // Logical stage.
     TVector<std::shared_ptr<IRule>> logicalStageRules = {std::make_shared<TRemoveIdenityMapRule>(), std::make_shared<TExtractJoinExpressionsRule>(),
                                                          std::make_shared<TPushMapRule>(), std::make_shared<TPushFilterRule>(),
-                                                         std::make_shared<TPushLimitIntoSortRule>()};
+                                                         std::make_shared<TPushLimitIntoSortRule>(), 
+                                                         std::make_shared<TInlineSimpleInExistsSubplanRule>()};
     RBO.AddStage(std::make_shared<TRuleBasedStage>("Logical rewrites I", std::move(logicalStageRules)));
+    RBO.AddStage(std::make_shared<TPruneColumnsStage>());
     // Physical stage.
     TVector<std::shared_ptr<IRule>> physicalStageRules = {std::make_shared<TPeepholePredicate>(), std::make_shared<TPushOlapFilterRule>()};
     RBO.AddStage(std::make_shared<TRuleBasedStage>("Physical rewrites I", std::move(physicalStageRules)));

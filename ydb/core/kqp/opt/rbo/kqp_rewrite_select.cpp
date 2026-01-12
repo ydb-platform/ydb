@@ -157,13 +157,7 @@ TExprNode::TPtr BuildJoinKeys(const TVector<TInfoUnit> &joinKeys, const TJoinTab
     return Build<TDqJoinKeyTupleList>(ctx, pos).Add(keys).Done().Ptr();
 }
 
-TExprNode::TPtr BuildAggregationTraits(const TString& originalColName, const TString& aggFunction, TExprContext& ctx, TPositionHandle pos,
-                                       TExprNode::TPtr typeNode = nullptr) {
-    TString forceOptional = "False";
-    if (typeNode && TMaybeNode<TCoOptionalType>(typeNode.Get())) {
-        forceOptional = "True";
-    }
-
+TExprNode::TPtr BuildAggregationTraits(const TString& originalColName, const TString& aggFunction, TExprContext& ctx, TPositionHandle pos) {
     // clang-format off
     return Build<TKqpOpAggregationTraits>(ctx, pos)
         .OriginalColName<TCoAtom>()
@@ -171,9 +165,6 @@ TExprNode::TPtr BuildAggregationTraits(const TString& originalColName, const TSt
         .Build()
         .AggregationFunction<TCoAtom>()
             .Value(aggFunction)
-        .Build()
-        .ForceOptional<TCoAtom>()
-            .Value(forceOptional)
         .Build()
     .Done().Ptr();
     // clang-format on
@@ -230,17 +221,20 @@ TVector<std::pair<TInfoUnit, TExprNode::TPtr>> BuildExpressionsFromColumns(const
 }
 
 TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
-                                            const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& aggFieldsExpressionsMap,
+                                            const TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& aggFieldsExpressionsMap,
                                             const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
                                             TExprContext& ctx, TPositionHandle pos) {
     // Add expressions
     TVector<TExprNode::TPtr> mapElements;
-    for (const auto& [colName, expr] : aggFieldsExpressionsMap) {
+    for (const auto& [colName, expr, forceOptional] : aggFieldsExpressionsMap) {
         // clang-format off
         mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, pos)
             .Input(resultExpr)
             .Variable()
                 .Value(colName.GetFullName())
+            .Build()
+            .ForceOptional()
+                .Value(forceOptional ? "True" : "False")
             .Build()
             .Lambda(expr)
         .Done().Ptr());
@@ -650,6 +644,10 @@ TExprNode::TPtr BuildFilter(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, TV
     // clang-format on
 }
 
+bool IsForceOptionalNeeded(TExprNode::TPtr typeNode, const TString& aggFunc) {
+    return typeNode && TMaybeNode<TCoOptionalType>(typeNode.Get()) && (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg");
+}
+
 } // namespace
 
 namespace NKikimr {
@@ -947,10 +945,11 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         auto result = GetSetting(setItem->Tail(), "result");
         Y_ENSURE(result);
         auto finalType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        const bool IsEmptyGroupByKeys = groupByKeysExpressionsMap.empty();
 
         // Aggregations.
-        TVector<std::pair<TInfoUnit, TExprNode::TPtr>> expressionsMapPreAgg;
-        TVector<std::pair<TInfoUnit, TExprNode::TPtr>> expressionsMapPostAgg;
+        TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPreAgg;
+        TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPostAgg;
         bool distinctPreAggregate = false;
         for (ui32 i = 0; i < result->Child(1)->ChildrenSize(); ++i) {
             const auto resultItem = result->Child(1)->ChildPtr(i);
@@ -1022,7 +1021,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                     .Done().Ptr();
                     // clang-format on
 
-                    expressionsMapPreAgg.push_back({aggColName, exprLambda});
+                    // This is a special case to force optional type for non optional column.
+                    const bool forceOptional = aggHasType ? (IsEmptyGroupByKeys && IsForceOptionalNeeded(aggregation->ChildPtr(2), aggFuncName)) : false;
+                    expressionsMapPreAgg.push_back({aggColName, exprLambda, forceOptional});
                     aggregationsForReplacement[aggregation] = aggColName.GetFullName();
 
                     // Distinct for column or expression f(distinct a) => (distinct a) as b -> f(b).
@@ -1034,10 +1035,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         distinctPreAggregate = true;
                     }
 
-                    TExprNode::TPtr typeExprNode = aggHasType ? aggregation->ChildPtr(2) : nullptr;
                     // Build an aggregation traits.
                     auto aggregationTraits =
-                        BuildAggregationTraits(aggColName.GetFullName(), aggFuncName, ctx, node->Pos(), typeExprNode);
+                        BuildAggregationTraits(aggColName.GetFullName(), aggFuncName, ctx, node->Pos());
                     aggTraits.AggTraitsList.push_back(aggregationTraits);
                 }
 
@@ -1077,7 +1077,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                 // clang-format on
 
                 auto colName = TInfoUnit(resultColName);
-                expressionsMapPostAgg.push_back({colName, exprLambda});
+                expressionsMapPostAgg.push_back({colName, exprLambda, false});
 
                 // Case for distinct after aggregation.
                 if (distinctAll) {

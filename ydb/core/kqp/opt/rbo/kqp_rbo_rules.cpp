@@ -171,8 +171,8 @@ std::shared_ptr<TOpCBOTree> AddJoinToCBOTree(std::shared_ptr<TOpCBOTree> & cboTr
     } 
     else {
         join->SetRightInput(cboTree->TreeRoot);
-        treeNodes.push_back(join);
         treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
+        treeNodes.push_back(join);
     }
 
     return std::make_shared<TOpCBOTree>(join, treeNodes, join->Pos);
@@ -221,7 +221,6 @@ namespace NKqp {
 // projections
 
 std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-
     Y_UNUSED(ctx);
     Y_UNUSED(props);
     
@@ -239,12 +238,12 @@ std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std:
         return input;
     }
 
-    for (auto [toColumn, body] : map->MapElements) {
-        if (! std::holds_alternative<TInfoUnit>(body)) {
+    for (const auto& mapElement : map->MapElements) {
+        if (!mapElement.IsRename()) {
             return input;
         }
-        auto fromColumn = std::get<TInfoUnit>(body);
-        if (fromColumn != toColumn) {
+        auto fromColumn = mapElement.GetRename();
+        if (fromColumn != mapElement.GetElementName()) {
             return input;
         }
     }
@@ -255,7 +254,6 @@ std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std:
 // Currently we only extract simple expressions where there is only one variable on either side
 
 bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-
     if (input->Kind != EOperator::Filter) {
         return false;
     }
@@ -300,7 +298,7 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     }
 
     if (matchedConjuncts.size()) {
-        TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
+        TVector<TMapElement> mapElements;
         TNodeOnNodeOwnedMap replaceMap;
 
         for (auto [idx, conj] : matchedConjuncts) {
@@ -324,7 +322,7 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
                     .Done().Ptr();
                 // clang-format on
 
-                mapElements.push_back(std::make_pair(TInfoUnit(newName), mapLambda));
+                mapElements.emplace_back(TInfoUnit(newName), mapLambda);
 
                 // clang-format off
                 auto newLeftSide = Build<TCoMember>(ctx.ExprCtx, leftSide->Pos())
@@ -347,7 +345,7 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
                     .Done().Ptr();
                 // clang-format on
 
-                mapElements.push_back(std::make_pair(TInfoUnit(newName), mapLambda));
+                mapElements.emplace_back(TInfoUnit(newName), mapLambda);
 
                 // clang-format off
                 auto newRightSide = Build<TCoMember>(ctx.ExprCtx, leftSide->Pos())
@@ -374,11 +372,10 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 }
 
 // Rewrite a single scalar subplan into a cross-join
-
 bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     auto subplanIUs = input->GetSubplanIUs(props);
     TVector<TInfoUnit> scalarIUs;
-    for (auto iu : subplanIUs) {
+    for (const auto& iu : subplanIUs) {
         auto subplanEntry = props.Subplans.PlanMap.at(iu);
         if (subplanEntry.Type == ESubplanType::EXPR) {
             scalarIUs.push_back(iu);
@@ -408,15 +405,17 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
 
     // clang-format off
     auto mapLambda = Build<TCoLambda>(ctx.ExprCtx, subplan->Pos)
-                    .Args({"arg"})
-                    .Body(nullExpr)
-                    .Done().Ptr();
+        .Args({"arg"})
+        .Body(nullExpr)
+    .Done().Ptr();
     // clang-format on
 
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements = {std::make_pair(scalarIU, mapLambda)};
+    TVector<TMapElement> mapElements;
+    mapElements.emplace_back(scalarIU, mapLambda);
     auto map = std::make_shared<TOpMap>(emptySource, subplan->Pos, mapElements, true);
 
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> renameElements = {std::make_pair(scalarIU, subplanResIU)};
+    TVector<TMapElement> renameElements;
+    renameElements.emplace_back(scalarIU, subplanResIU);
     auto rename = std::make_shared<TOpMap>(subplan, subplan->Pos, renameElements, true);
     rename->Props.EnsureAtMostOne = true;
 
@@ -425,7 +424,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
     auto limitExpr = ctx.ExprCtx.NewCallable(subplan->Pos, "Uint64", {ctx.ExprCtx.NewAtom(subplan->Pos, "1")});
     auto limit = std::make_shared<TOpLimit>(unionAll, subplan->Pos, limitExpr);
 
-    TVector<std::pair<TInfoUnit,TInfoUnit>> joinKeys;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
     auto cross = std::make_shared<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
     unaryOp->SetInput(cross);
 
@@ -475,7 +474,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
             iu = TInfoUnit(name);
             if (props.Subplans.PlanMap.contains(iu)) {
                 subplan = props.Subplans.PlanMap.at(iu);
-                if (subplan.Type == ESubplanType::IN || subplan.Type == ESubplanType::EXISTS) {
+                if (subplan.Type == ESubplanType::IN_SUBPLAN || subplan.Type == ESubplanType::EXISTS) {
                     break;
                 }
             }
@@ -487,19 +486,17 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
 
     std::shared_ptr<IOperator> join;
+
     // We build a semi-join or a left-only join when processing IN subplan
-    if (subplan.Type == ESubplanType::IN) {
+    if (subplan.Type == ESubplanType::IN_SUBPLAN) {
         auto leftJoinInput = filter->GetInput();
-        TString joinKind;
-        if (subplan.Type == ESubplanType::IN) {
-            joinKind = negated ? "LeftOnly" : "LeftSemi";
-        } else {
-            joinKind = "Cross";
-        }
+        auto joinKind = negated ? "LeftOnly" : "LeftSemi";
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
         auto planIUs = subplan.Plan->GetOutputIUs();
+        YQL_CLOG(TRACE, CoreDq) << "In tuple size: " << subplan.Tuple.size() << ", subplan tuple size: " << planIUs.size();
+
         Y_ENSURE(subplan.Tuple.size() == planIUs.size());
 
         for (size_t i = 0; i < planIUs.size(); i++) {
@@ -510,45 +507,35 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         conjuncts.erase(conjuncts.begin() + conjunctIdx);
     }
     // EXISTS and NOT EXISTS
-    // FIXME: Need to reimplement this part, maybe in another rule
     else {
-        return input;
-
-        /*
-        auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
-
-        TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> countMapElements;
-
+        auto one = ctx.ExprCtx.NewCallable(filter->Pos, "Uint64", {ctx.ExprCtx.NewAtom(filter->Pos, "1")});
         auto zero = ctx.ExprCtx.NewCallable(filter->Pos, "Uint64", {ctx.ExprCtx.NewAtom(filter->Pos, "0")});
+        auto limit = std::make_shared<TOpLimit>(subplan.Plan, filter->Pos, one);
+        auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
+        TVector<TMapElement> countMapElements;
 
         // clang-format off
         auto zeroLambda = Build<TCoLambda>(ctx.ExprCtx, filter->Pos)
             .Args({"arg"})
             .Body(zero)
-            .Done().Ptr();
+        .Done().Ptr();
         // clang-format on
 
-        countMapElements.push_back(std::make_pair(countResult, zeroLambda));
-        auto countMap = std::make_shared<TOpMap>(subplan.Plan, filter->Pos, countMapElements, true);
-
-
+        countMapElements.emplace_back(countResult, zeroLambda);
+        auto countMap = std::make_shared<TOpMap>(limit, filter->Pos, countMapElements, true);
         TOpAggregationTraits aggFunction(countResult, "count");
         TVector<TOpAggregationTraits> aggs = {aggFunction};
         TVector<TInfoUnit> keyColumns;
 
         auto agg = std::make_shared<TOpAggregate>(countMap, aggs, keyColumns, EAggregationPhase::Final, false, filter->Pos);
+        const TString compareCallable = negated ? "==" : "!=";
 
-        TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
         auto arg = Build<TCoArgument>(ctx.ExprCtx, filter->Pos).Name("lambda_arg").Done();
-
-        // FIXME: Apparently count(*) on empty result return null
-        TString compareCallable = negated ? "==" : "!=";
-
         // clang-format off
         auto member = Build<TCoMember>(ctx.ExprCtx, filter->Pos)
             .Struct(arg)
             .Name().Value(countResult.GetFullName()).Build()
-            .Done().Ptr();
+        .Done().Ptr();
         // clang-format on
         
         auto body = ctx.ExprCtx.NewCallable(filter->Pos, compareCallable, {member, zero});
@@ -557,11 +544,12 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         auto lambda = Build<TCoLambda>(ctx.ExprCtx, filter->Pos)
             .Args({arg})
             .Body(body)
-            .Done().Ptr();
+        .Done().Ptr();
         // clang-format on
 
+        TVector<TMapElement> mapElements;
         auto compareResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
-        mapElements.push_back(std::make_pair(compareResult, lambda));
+        mapElements.emplace_back(compareResult, lambda);
         auto map = std::make_shared<TOpMap>(agg, filter->Pos, mapElements, true);
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
@@ -571,11 +559,10 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
         auto resultMember = Build<TCoMember>(ctx.ExprCtx, filter->Pos)
             .Struct(arg)
             .Name().Value(compareResult.GetFullName()).Build()
-            .Done().Ptr();
+        .Done().Ptr();
         // clang-format on
 
         conjuncts[conjunctIdx] = resultMember;
-        */
     }
 
     props.Subplans.Remove(iu);
@@ -622,8 +609,8 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndApply(const std::shared_p
     }
 
     // Don't handle renames at this point, just expressions that acutally compute something
-    for (auto &[var, body] : map->MapElements) {
-        if (!std::holds_alternative<TExprNode::TPtr>(body)) {
+    for (const auto &mapElement : map->MapElements) {
+        if (!mapElement.IsExpression()) {
             return input;
         }
     }
@@ -641,17 +628,17 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndApply(const std::shared_p
         return input;
     }
 
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> leftMapElements;
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> rightMapElements;
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> topMapElements;
-
+    TVector<TMapElement> leftMapElements;
+    TVector<TMapElement> rightMapElements;
+    TVector<TMapElement> topMapElements;
     TVector<int> removeElements;
 
     for (size_t i = 0; i < map->MapElements.size(); i++) {
         auto mapElement = map->MapElements[i];
 
         TVector<TInfoUnit> mapElIUs;
-        GetAllMembers(std::get<TExprNode::TPtr>(mapElement.second), mapElIUs, props, false, true);
+        auto expression = mapElement.GetExpression();
+        GetAllMembers(expression, mapElIUs, props, false, true);
 
         if (!IUSetDiff(mapElIUs, join->GetLeftInput()->GetOutputIUs()).size() && canPushLeft) {
             leftMapElements.push_back(mapElement);
@@ -1063,7 +1050,7 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const std::sh
             if (!findCBOTree(rightInput, cboTree, maybeFilter)) {
                 return input;
             } else {
-                leftSideCBOTree = true;
+                leftSideCBOTree = false;
             }
         }
 

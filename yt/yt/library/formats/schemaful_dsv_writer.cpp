@@ -195,7 +195,7 @@ public:
     TFuture<void> Close() override
     {
         DoFlushBuffer();
-        return VoidFuture;
+        return OKFuture;
     }
 
     bool Write(TRange<TUnversionedRow> rows) override

@@ -1,8 +1,8 @@
-import time
 import pytest
 import ydb
 
 from ydb.tests.sql.lib.test_base import TestBase
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import (
@@ -38,7 +38,15 @@ class TestSecondaryIndexBase(TestBase):
         dml = DMLOperations(self)
         dml.create_table(table_name, pk_types, all_types, index, ttl, unique, sync)
         dml.insert(table_name, all_types, pk_types, index, ttl)
-        time.sleep(5)
+
+        if sync == "ASYNC":
+            expected_rows = len(pk_types) + len(all_types) + len(index)
+
+            def has_rows():
+                return len(dml.query(f"select * from {table_name}")) == expected_rows
+
+            assert wait_for(has_rows, timeout_seconds=10), f"Expected {expected_rows} rows after insert"
+
         self.select_index(table_name, pk_types, index, dml)
 
     def select_index(self, table_name: str, pk_types: dict[str, str], index: dict[str, str], dml: DMLOperations):
@@ -58,7 +66,7 @@ class TestSecondaryIndexBase(TestBase):
                     )
                     if type_name in ("Bool", "pgbool"):
                         assert (
-                            len(rows) == 1 and rows[0].count == 0
+                            len(rows) == 1 and rows[0].count == (0 if i > 3 else count_col - 3)  # value is False for first 3 rows
                         ), f"there were not enough columns by type {type_name}"
                     elif type_name in ("String", "Utf8", "pgbytea", "pgtext", "pgvarchar"):
                         if i < 10:

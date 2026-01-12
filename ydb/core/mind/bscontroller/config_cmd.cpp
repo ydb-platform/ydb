@@ -274,6 +274,7 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(CancelVirtualGroup, CANCEL_VIRTUAL_GROUP)
                             MAP_TIMING(ChangeGroupSizeInUnits, CHANGE_GROUP_SIZE_IN_UNITS)
                             MAP_TIMING(ReconfigureVirtualGroup, RECONFIGURE_VIRTUAL_GROUP)
+                            MAP_TIMING(RecommissionGroups, RECOMMISSION_GROUPS)
 
                             default:
                                 break;
@@ -393,6 +394,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(MovePDisk)
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
                     HANDLE_COMMAND(ReconfigureVirtualGroup)
+                    HANDLE_COMMAND(RecommissionGroups)
                     default: break;
                 }
 

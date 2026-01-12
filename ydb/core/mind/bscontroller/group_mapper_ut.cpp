@@ -882,7 +882,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
         UNIT_ASSERT_EQUAL_C(TPDiskId(9, 1), newGroup[0][7][0], context.FormatGroup(newGroup));
     }
-    
+
     Y_UNIT_TEST(WithAttentionToRacksAndReplication) {
         TTestContext context(
             {
@@ -932,7 +932,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         context.PopulateGroupMapper(mapper, 8);
 
         ui32 groupId = context.AllocateGroup(mapper, group);
-        
+
         // All disks and racks are in the same state, so we pick a disk on node 7 (by NumDomainMatchingDisks heuristic)
         TGroupMapper::TGroupDefinition newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(1, 1)});
         UNIT_ASSERT_EQUAL_C(TPDiskId(7, 1), context.GetGroupDiskId(1), context.FormatGroup(1));
@@ -953,7 +953,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         newGroup = context.ReallocateGroup(mapper, groupId, {TPDiskId(7, 2)});
         UNIT_ASSERT_EQUAL_C(TPDiskId(2, 1), context.GetGroupDiskId(1), context.FormatGroup(1));
 
-        // Now select from the first node only. Pick the disk 
+        // Now select from the first node only. Pick the disk
         s = TPDiskSlotTracker();
         s.AddFreeSlotsForRack("DC=1/M=1/1", 1);
         // Both disks on node 1 has replicating slots, so we will pick disk 2 on node 2.

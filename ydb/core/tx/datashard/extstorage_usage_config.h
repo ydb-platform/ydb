@@ -6,9 +6,10 @@
 
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
-#include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/StorageClass.h>
 #include <util/string/printf.h>
@@ -98,6 +99,11 @@ public:
     template <>
     static TStorageSettings FromBackupTask<NKikimrSchemeOp::TS3Settings>(const NKikimrSchemeOp::TBackupTask& task) {
         return TStorageSettings(task.GetS3Settings().GetObjectKeyPattern(), task.GetShardNum(), TEncryptionSettings::FromBackupTask(task));
+    }
+
+    template <>
+    static TStorageSettings FromBackupTask<NKikimrSchemeOp::TFSSettings>(const NKikimrSchemeOp::TBackupTask& task) {
+        return TStorageSettings(TStringBuilder() << task.GetFSSettings().GetBasePath() << "/" << task.GetFSSettings().GetPath(), task.GetShardNum(), TEncryptionSettings::FromBackupTask(task));
     }
 
     template <>

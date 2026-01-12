@@ -471,6 +471,11 @@ namespace NTypeAnnImpl {
             }
 
             auto& typeNode = child->ChildRef(1);
+            if (typeNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(typeNode->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (auto status = EnsureTypeRewrite(typeNode, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                 if (status == IGraphTransformer::TStatus::Repeat) {
                     child = ctx.Expr.ShallowCopy(*child);
@@ -897,6 +902,11 @@ namespace NTypeAnnImpl {
             }
 
             auto& typeChild = child->ChildRef(0);
+            if (typeChild->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(typeChild->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (auto status = EnsureTypeRewrite(typeChild, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
                 if (status == IGraphTransformer::TStatus::Repeat) {
                     input->ChildRef(index) = ctx.Expr.ShallowCopy(*child);

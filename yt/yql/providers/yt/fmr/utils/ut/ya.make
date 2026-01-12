@@ -11,7 +11,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/test_tools/yson
     yt/yql/providers/yt/fmr/utils
     yt/yql/providers/yt/fmr/request_options
-    yt/yql/providers/yt/fmr/yt_job_service/mock
+    yt/yql/providers/yt/fmr/yt_job_service/file
     yql/essentials/parser/pg_wrapper
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/udf

@@ -162,7 +162,7 @@ namespace NKikimr {
                 LOG_DEBUG(*LoggerCtx, BS_SYNCLOG,
                         VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                             "KEEPER: TEvSyncLogBaldLog: baldLsn# %" PRIu64, baldLsn));
-    
+
                 TrimTailLsn = baldLsn;
                 DelayedActions.TrimTail = true;
             }

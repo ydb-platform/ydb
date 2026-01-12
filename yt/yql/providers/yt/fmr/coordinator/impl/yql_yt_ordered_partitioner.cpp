@@ -70,6 +70,21 @@ std::pair<std::vector<TTaskTableInputRef>, bool> TOrderedPartitioner::PartitionT
         fmrTaskSize += fmrTasksResult.ChunksNum;
         tasks.insert(tasks.end(), fmrTasksResult.TaskInputs.begin(), fmrTasksResult.TaskInputs.end());
     }
+
+    if (!ytTablesScope.empty()) {
+        auto ytTasksResult = PartitionYtTablesScope(ytTablesScope, ytCoordinatorService, clusterConnections);
+        ytTaskSize += ytTasksResult.ChunksNum;
+        tasks.insert(tasks.end(), ytTasksResult.TaskInputs.begin(), ytTasksResult.TaskInputs.end());
+    }
+
+    if (fmrTaskSize > Settings_.FmrPartitionSettings.MaxParts) {
+        YQL_CLOG(ERROR, FastMapReduce) << "The limit on the number of parts inside Ordered Partitioner for FMR tables has been exceeded";
+        return {{}, false};
+    }
+    if (ytTaskSize > Settings_.YtPartitionSettings.MaxParts) {
+        YQL_CLOG(ERROR, FastMapReduce) << "The limit on the number of parts inside Ordered Partitioner for Yt tables has been exceeded";
+        return {{}, false};
+    }
     return {tasks, true};
 }
 
@@ -166,5 +181,5 @@ TPartitionResult PartitionInputTablesIntoTasksOrdered(
 
     return TPartitionResult{.TaskInputs = tasks, .PartitionStatus = status};
 }
-}
 
+}  // namespace NYql::NFmr

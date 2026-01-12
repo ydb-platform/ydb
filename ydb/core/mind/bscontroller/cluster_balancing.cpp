@@ -95,7 +95,7 @@ namespace NKikimr::NBsController {
                 if (!NKikimr::IsDynamicGroup(TGroupId::FromValue(group.GetGroupId()))) {
                     continue;
                 }
-                
+
                 bool isHealthy = true;
 
                 for (const auto& vslotId : group.GetVSlotId()) {
@@ -299,8 +299,8 @@ namespace NKikimr::NBsController {
             auto groupSlotsOrdered = OrderVSlotsByPDiskUsage(candidateVSlots, storageInfo);
 
             // Reading the config also increments the config transaction sequence number.
-            // We need to increment it again to get the next one. Reassignment check 
-            // and actual reassignment will use this sequence number. 
+            // We need to increment it again to get the next one. Reassignment check
+            // and actual reassignment will use this sequence number.
             // Reassignment check doesn't increment the sequence number because this transaction
             // rolls back.
             ui64 expectedConfigTxSeqNo = configResponse.GetConfigTxSeqNo();
@@ -332,7 +332,7 @@ namespace NKikimr::NBsController {
             try {
                 while (true) {
                     RunBalancing();
-                    
+
                     Yield(TDuration::MilliSeconds(Settings.IterationIntervalMs));
                 }
             } catch (const TDtorException&) {
@@ -367,7 +367,7 @@ namespace NKikimr::NBsController {
         const auto& clusterBalancingSettings = bscSettings.GetClusterBalancingSettings();
 
         if (clusterBalancingSettings.HasEnable()) {
-            settings.Enable = clusterBalancingSettings.GetEnable();   
+            settings.Enable = clusterBalancingSettings.GetEnable();
         }
         if (clusterBalancingSettings.HasIterationIntervalMs()) {
             settings.IterationIntervalMs = clusterBalancingSettings.GetIterationIntervalMs();

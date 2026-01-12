@@ -491,21 +491,66 @@ TString TOpRead::ToString(TExprContext& ctx) {
     return res;
 }
 
+TMapElement::TMapElement(const TInfoUnit& elementName, TExprNode::TPtr expr)
+    : ElementName(elementName)
+    , ElementHolder(expr) {
+}
+
+TMapElement::TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename)
+    : ElementName(elementName)
+    ,ElementHolder(rename) {
+}
+
+TMapElement::TMapElement(const TInfoUnit& elementName, const std::variant<TInfoUnit, TExprNode::TPtr>& elementHolder)
+    : ElementName(elementName)
+    , ElementHolder(elementHolder) {
+}
+
+TInfoUnit TMapElement::GetElementName() const {
+    return ElementName;
+}
+
+bool TMapElement::IsExpression() const {
+    return std::holds_alternative<TExprNode::TPtr>(ElementHolder);
+}
+
+bool TMapElement::IsRename() const {
+    return std::holds_alternative<TInfoUnit>(ElementHolder);
+}
+
+TExprNode::TPtr TMapElement::GetExpression() const {
+    return std::get<TExprNode::TPtr>(ElementHolder);
+}
+
+TExprNode::TPtr& TMapElement::GetExpression() {
+    return std::get<TExprNode::TPtr>(ElementHolder);
+}
+
+TInfoUnit TMapElement::GetRename() const {
+    return std::get<TInfoUnit>(ElementHolder);
+}
+
+void TMapElement::SetExpression(TExprNode::TPtr expr) {
+    ElementHolder = expr;
+}
+
 /**
  * OpMap operator methods
  */
-
-TOpMap::TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements,
-               bool project)
-    : IUnaryOperator(EOperator::Map, pos, input), MapElements(mapElements), Project(project) {}
+TOpMap::TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project)
+    : IUnaryOperator(EOperator::Map, pos, input)
+    , MapElements(mapElements)
+    , Project(project) {
+}
 
 TVector<TInfoUnit> TOpMap::GetOutputIUs() {
     TVector<TInfoUnit> res;
     if (!Project) {
         res = GetInput()->GetOutputIUs();
     }
-    for (auto &[k, v] : MapElements) {
-        res.push_back(k);
+
+    for (const auto &mapElement : MapElements) {
+        res.push_back(mapElement.GetElementName());
     }
 
     return res;
@@ -525,9 +570,9 @@ TVector<TInfoUnit> TOpMap::GetUsedIUs(TPlanProps& props) {
 
 TVector<TExprNode::TPtr> TOpMap::GetLambdas() {
     TVector<TExprNode::TPtr> result;
-    for (auto &[_,body] : MapElements) {
-        if (std::holds_alternative<TExprNode::TPtr>(body)) {
-            result.push_back(std::get<TExprNode::TPtr>(body));
+    for (const auto& mapElement : MapElements) {
+        if (mapElement.IsExpression()) {
+            result.push_back(mapElement.GetExpression());
         }
     }
     return result;
@@ -537,9 +582,9 @@ TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
     TVector<TInfoUnit> allVars;
     TVector<TInfoUnit> res;
 
-    for (auto &[ui, body] : MapElements) {
-        if (std::holds_alternative<TExprNode::TPtr>(body)) {
-            auto lambda = std::get<TExprNode::TPtr>(body);
+    for (const auto &mapElement : MapElements) {
+        if (mapElement.IsExpression()) {
+            auto lambda = mapElement.GetExpression();
             auto lambdaBody = TCoLambda(lambda).Body();
             GetAllMembers(lambdaBody.Ptr(), allVars, props, true);
         }
@@ -557,9 +602,9 @@ TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
 
 TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
     TVector<std::pair<TInfoUnit, TInfoUnit>> result;
-    for (auto &[iu, body] : MapElements) {
-        if (std::holds_alternative<TInfoUnit>(body)) {
-            result.push_back(std::make_pair(iu, std::get<TInfoUnit>(body)));
+    for (const auto& mapElement : MapElements) {
+        if (mapElement.IsRename()) {
+            result.push_back(std::make_pair(mapElement.GetElementName(), mapElement.GetRename()));
         }
     }
     return result;
@@ -572,17 +617,17 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
 TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenamesWithTransforms(TPlanProps& props) const {
     auto result = GetRenames();
 
-    for (auto &[iu, body] : MapElements) {
-        if (std::holds_alternative<TExprNode::TPtr>(body)) {
-            auto lambda = TCoLambda(std::get<TExprNode::TPtr>(body));
+    for (const auto &mapElement : MapElements) {
+        if (mapElement.IsExpression()) {
+            auto lambda = TCoLambda(mapElement.GetExpression());
             auto expr = lambda.Body().Ptr();
 
             if (expr->IsCallable("ToPg") || expr->IsCallable("FromPg")) {
                 if (expr->ChildPtr(0)->IsCallable("Member")) {
                     TVector<TInfoUnit> transformIUs;
                     GetAllMembers(expr, transformIUs, props, true);
-                    if (transformIUs.size()==1) {
-                        result.push_back(std::make_pair(iu, transformIUs[0]));
+                    if (transformIUs.size() == 1) {
+                        result.push_back(std::make_pair(mapElement.GetElementName(), transformIUs[0]));
                     }
                 }
             }
@@ -592,62 +637,57 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenamesWithTransforms(TPlanP
     return result;
 }
 
+void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                       const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
+    TVector<TMapElement> newMapElements;
 
-void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> newMapElements;
-
-    for (auto &el : MapElements) {
-
-        TInfoUnit newIU = el.first;
-        if (renameMap.contains(el.first)) {
-            newIU = renameMap.at(el.first);
+    for (const auto& el : MapElements) {
+        TInfoUnit newIU = el.GetElementName();
+        if (renameMap.contains(el.GetElementName())) {
+            newIU = renameMap.at(el.GetElementName());
         }
 
-        std::variant<TInfoUnit, TExprNode::TPtr> newBody = el.second;
-
-        if (std::holds_alternative<TInfoUnit>(el.second)) {
-            auto from = std::get<TInfoUnit>(el.second);
+        if (el.IsRename()) {
+            auto from = el.GetRename();
+            TInfoUnit newBody = from;
             if (renameMap.contains(from) && !stopList.contains(from)) {
                 newBody = renameMap.at(from);
             }
+            newMapElements.emplace_back(newIU, newBody);
         } else {
-            auto lambda = std::get<TExprNode::TPtr>(el.second);
-            newBody = RenameMembers(lambda, renameMap, ctx);
+            auto lambda = el.GetExpression();
+            auto newBody = RenameMembers(lambda, renameMap, ctx);
+            newMapElements.emplace_back(newIU, newBody);
         }
-
-        // el.first = newIU;
-        // el.second = newBody;
-        newMapElements.push_back(std::make_pair(newIU, newBody));
     }
-    MapElements = newMapElements;
+    MapElements = std::move(newMapElements);
 }
 
-void TOpMap::ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) {
+void TOpMap::ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext& ctx) {
     TOptimizeExprSettings settings(&ctx.TypeCtx);
-    for (size_t i=0; i<MapElements.size(); i++) {
-        auto & body = MapElements[i].second;
-        if (std::holds_alternative<TExprNode::TPtr>(body)) {
-            auto bodyLambda = std::get<TExprNode::TPtr>(body);
+    for (size_t i = 0; i < MapElements.size(); i++) {
+        if (MapElements[i].IsExpression()) {
+            auto bodyLambda = MapElements[i].GetExpression();
             RemapExpr(bodyLambda, bodyLambda, map, ctx.ExprCtx, settings);
-            MapElements[i].second = std::variant<TInfoUnit,TExprNode::TPtr>(bodyLambda);
+            MapElements[i].SetExpression(bodyLambda);
         }
     }
 }
-
 
 TString TOpMap::ToString(TExprContext& ctx) {
     auto res = TStringBuilder();
     res << "Map [";
-    for (size_t i=0; i<MapElements.size(); i++) {
-        auto & [k,v] = MapElements[i];
+    for (size_t i = 0, e = MapElements.size(); i < e; i++) {
+        const auto& mapElement = MapElements[i];
+        const auto& k = mapElement.GetElementName();
 
         res << k.GetFullName() << ":";
-        if (std::holds_alternative<TInfoUnit>(v)) {
-            res << std::get<TInfoUnit>(v).GetFullName();
+        if (mapElement.IsRename()) {
+            res << mapElement.GetRename().GetFullName();
         } else {
-            res << PrintRBOExpression(std::get<TExprNode::TPtr>(v), ctx);
+            res << PrintRBOExpression(mapElement.GetExpression(), ctx);
         }
-        if (i != MapElements.size()-1) {
+        if (i != e - 1) {
             res << ", ";
         }
     }
@@ -1045,7 +1085,7 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
             strBuilder << ", ";
         }
     }
-    strBuilder << "] ";
+    strBuilder << "]]";
     if (AggregationPhase == EAggregationPhase::Intermediate) {
         strBuilder << "Initial";
     } else {
@@ -1140,6 +1180,10 @@ TString TOpRoot::ToString(TExprContext& ctx) {
 
 TString TOpRoot::PlanToString(TExprContext& ctx, ui32 printOptions) {
     auto builder = TStringBuilder();
+    for (auto & [iu, subplan] : PlanProps.Subplans.PlanMap) {
+        builder << "Subplan binding to " << iu.GetFullName() << ":\n";
+        PlanToStringRec(subplan.Plan, ctx, builder, 0, printOptions);
+    }
     PlanToStringRec(GetInput(), ctx, builder, 0, printOptions);
     return builder;
 }

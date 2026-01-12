@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: google-auth
-Version: 2.43.0
+Version: 2.45.0
 Summary: Google Authentication Library
 Home-page: https://github.com/googleapis/google-auth-library-python
 Author: Google Cloud Platform
@@ -15,6 +15,7 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: Apache Software License
@@ -28,6 +29,9 @@ License-File: LICENSE
 Requires-Dist: cachetools<7.0,>=2.0.0
 Requires-Dist: pyasn1-modules>=0.2.1
 Requires-Dist: rsa<5,>=3.1.4
+Provides-Extra: cryptography
+Requires-Dist: cryptography>=38.0.3; extra == "cryptography"
+Requires-Dist: cryptography<39.0.0; python_version < "3.8" and extra == "cryptography"
 Provides-Extra: aiohttp
 Requires-Dist: aiohttp<4.0.0,>=3.6.2; extra == "aiohttp"
 Requires-Dist: requests<3.0.0,>=2.20.0; extra == "aiohttp"

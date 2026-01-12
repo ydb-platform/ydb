@@ -62,6 +62,8 @@ struct TServerConfig
     //! CamelCase identifiers are preferred.
     std::string ServerName;
 
+    bool EnablePerPathRequestProfiling;
+
     REGISTER_YSON_STRUCT(TServerConfig);
 
     static void Register(TRegistrar registrar);

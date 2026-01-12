@@ -49,6 +49,8 @@
 
 #include <ydb/services/lib/sharding/sharding.h>
 
+#include <library/cpp/regex/pcre/regexp.h>
+
 #include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/guid.h>
@@ -3207,12 +3209,14 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;
-    int WaitingViews = 0;
+    int WaitingSchemeObjects = 0;
 
     TSet<TActorId> Subscribers;
 
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
+
+    TMaybe<std::vector<TRegExMatch>> ExcludeRegexps;
 
 private:
     template <typename TSettingsPB>
@@ -3263,6 +3267,10 @@ public:
             return settings.skip_checksum_validation();
         });
     }
+
+    bool CompileExcludeRegexps(TString& errorDescription);
+
+    bool IsExcludedFromImport(const TString& path) const;
 
     explicit TImportInfo(
             const ui64 id,

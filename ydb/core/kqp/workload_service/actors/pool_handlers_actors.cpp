@@ -704,7 +704,7 @@ private:
         LastNodesInfoRefreshTime = TInstant::Now();
         NodeCount = ev->Get()->NodeCount;
 
-        LOG_T("Updated node info, noode count: " << NodeCount);
+        LOG_T("Updated node info, node count: " << NodeCount);
     }
 
     void Handle(TEvPrivate::TEvTablesCreationFinished::TPtr& ev) {
@@ -743,7 +743,7 @@ private:
             ScheduleRefresh();
         }
         FifoCounters.UpdateGlobalState(GlobalState);
-        LOG_T("succefully refreshed pool state, in flight: " << GlobalState.RunningRequests << ", delayed: " << GlobalState.DelayedRequests);
+        LOG_T("successfully refreshed pool state, in flight: " << GlobalState.RunningRequests << ", delayed: " << GlobalState.DelayedRequests);
 
         RemoveFinishedRequests();
 
@@ -785,7 +785,7 @@ private:
 
         GlobalState.DelayedRequests++;
         FifoCounters.GlobalDelayedRequests->Inc();
-        LOG_D("succefully delayed request, session id: " << ev->Get()->SessionId);
+        LOG_D("successfully delayed request, session id: " << ev->Get()->SessionId);
 
         DoStartDelayedRequest(GetLoadCpuThreshold());
         RefreshState();

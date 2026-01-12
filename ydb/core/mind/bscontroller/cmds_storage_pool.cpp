@@ -352,10 +352,11 @@ namespace NKikimr::NBsController {
         ExecuteStep(query, status);
     }
 
-    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReassignGroupDisk& cmd, NKikimrBlobStorage::TConfigResponse::TStatus& /*status*/) {
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReassignGroupDisk& cmd,
+            NKikimrBlobStorage::TConfigResponse::TStatus& /*status*/) {
         // find matching TVSlotInfo entity
-        const TVDiskID vdiskId(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TReassignGroupDisk::GetGroupId), cmd.GetGroupGeneration(), cmd.GetFailRealmIdx(),
-                               cmd.GetFailDomainIdx(), cmd.GetVDiskIdx());
+        const TVDiskID vdiskId(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TReassignGroupDisk::GetGroupId),
+            cmd.GetGroupGeneration(), cmd.GetFailRealmIdx(), cmd.GetFailDomainIdx(), cmd.GetVDiskIdx());
 
         // validate group and generation
         const TGroupInfo *group = Groups.Find(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TReassignGroupDisk::GetGroupId));

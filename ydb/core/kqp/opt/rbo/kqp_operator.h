@@ -298,7 +298,7 @@ private:
 
 class IOperator;
 
-enum ESubplanType : ui32 { EXPR, IN, EXISTS };
+enum ESubplanType : ui32 { EXPR, IN_SUBPLAN, EXISTS };
 
 struct TSubplanEntry {
     std::shared_ptr<IOperator> Plan;
@@ -472,10 +472,27 @@ class TOpRead : public IOperator {
     TExprNode::TPtr OlapFilterLambda;
 };
 
+class TMapElement {
+public:
+    TMapElement(const TInfoUnit& elementName, TExprNode::TPtr expr);
+    TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename);
+    TMapElement(const TInfoUnit& elementName, const std::variant<TInfoUnit, TExprNode::TPtr>& elementHolder);
+    TInfoUnit GetElementName() const;
+    bool IsExpression() const;
+    bool IsRename() const;
+    TExprNode::TPtr GetExpression() const;
+    TExprNode::TPtr& GetExpression();
+    TInfoUnit GetRename() const;
+    void SetExpression(TExprNode::TPtr expr);
+
+private:
+    TInfoUnit ElementName;
+    std::variant<TInfoUnit, TExprNode::TPtr> ElementHolder;
+};
+
 class TOpMap : public IUnaryOperator {
   public:
-    TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements,
-           bool project);
+    TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
@@ -491,7 +508,7 @@ class TOpMap : public IUnaryOperator {
 
     virtual TString ToString(TExprContext& ctx) override;
 
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> MapElements;
+    TVector<TMapElement> MapElements;
     bool Project = true;
 };
 
@@ -508,26 +525,26 @@ class TOpProject : public IUnaryOperator {
 
 struct TOpAggregationTraits {
     TOpAggregationTraits() = default;
-    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction, bool forceOptional)
-        : OriginalColName(originalColName), AggFunction(aggFunction), ForceOptional(forceOptional) {}
+    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction)
+        : OriginalColName(originalColName), AggFunction(aggFunction) {}
 
     TInfoUnit OriginalColName;
     TString AggFunction;
-    bool ForceOptional;
 };
 
-class TOpAggregate : public IUnaryOperator {
-  public:
-    TOpAggregate(std::shared_ptr<IOperator> input, TVector<TOpAggregationTraits>& aggFunctions, TVector<TInfoUnit>& keyColumns,
-                 EAggregationPhase aggPhase, bool distinctAll, TPositionHandle pos);
+class TOpAggregate: public IUnaryOperator {
+public:
+    TOpAggregate(std::shared_ptr<IOperator> input, TVector<TOpAggregationTraits>& aggFunctions, TVector<TInfoUnit>& keyColumns, EAggregationPhase aggPhase,
+                 bool distinctAll, TPositionHandle pos);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
 
-    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                   const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
 
-    virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
-    virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     TVector<TOpAggregationTraits> AggregationTraitsList;
     TVector<TInfoUnit> KeyColumns;
@@ -535,8 +552,8 @@ class TOpAggregate : public IUnaryOperator {
     bool DistinctAll;
 };
 
-class TOpFilter : public IUnaryOperator {
-  public:
+class TOpFilter: public IUnaryOperator {
+public:
     TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, TExprNode::TPtr filterLambda);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;

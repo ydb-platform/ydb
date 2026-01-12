@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: psutil
-Version: 7.1.3
+Version: 7.2.0
 Summary: Cross-platform lib for process and system monitoring.
 Home-page: https://github.com/giampaolo/psutil
 Author: Giampaolo Rodola
@@ -55,7 +55,6 @@ License-File: LICENSE
 Provides-Extra: dev
 Requires-Dist: pytest ; extra == 'dev'
 Requires-Dist: pytest-instafail ; extra == 'dev'
-Requires-Dist: pytest-subtests ; extra == 'dev'
 Requires-Dist: pytest-xdist ; extra == 'dev'
 Requires-Dist: setuptools ; extra == 'dev'
 Requires-Dist: abi3audit ; extra == 'dev'
@@ -78,20 +77,11 @@ Requires-Dist: validate-pyproject[all] ; extra == 'dev'
 Requires-Dist: virtualenv ; extra == 'dev'
 Requires-Dist: vulture ; extra == 'dev'
 Requires-Dist: wheel ; extra == 'dev'
-Requires-Dist: colorama ; (os_name == "nt") and extra == 'dev'
-Requires-Dist: pyreadline ; (os_name == "nt") and extra == 'dev'
-Requires-Dist: pywin32 ; (os_name == "nt" and platform_python_implementation != "PyPy") and extra == 'dev'
-Requires-Dist: wheel ; (os_name == "nt" and platform_python_implementation != "PyPy") and extra == 'dev'
-Requires-Dist: wmi ; (os_name == "nt" and platform_python_implementation != "PyPy") and extra == 'dev'
 Provides-Extra: test
 Requires-Dist: pytest ; extra == 'test'
 Requires-Dist: pytest-instafail ; extra == 'test'
-Requires-Dist: pytest-subtests ; extra == 'test'
 Requires-Dist: pytest-xdist ; extra == 'test'
 Requires-Dist: setuptools ; extra == 'test'
-Requires-Dist: pywin32 ; (os_name == "nt" and platform_python_implementation != "PyPy") and extra == 'test'
-Requires-Dist: wheel ; (os_name == "nt" and platform_python_implementation != "PyPy") and extra == 'test'
-Requires-Dist: wmi ; (os_name == "nt" and platform_python_implementation != "PyPy") and extra == 'test'
 
 |  |downloads| |stars| |forks| |contributors| |coverage|
 |  |version| |packages| |license|
@@ -507,6 +497,16 @@ Further process APIs
     >>> # waits for multiple processes to terminate
     >>> gone, alive = psutil.wait_procs(procs_list, timeout=3, callback=on_terminate)
     >>>
+
+Heap info
+---------
+
+.. code-block:: python
+
+    >>> import psutil
+    >>> psutil.heap_info()
+    pheap(heap_used=5177792, mmap_used=819200)
+    >>> psutil.heap_trim()
 
 Windows services
 ----------------

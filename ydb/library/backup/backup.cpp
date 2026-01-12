@@ -900,6 +900,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
     TMap<TString, TAsyncStatus> copiedTablesStatuses;
+    THashSet<TString> seenEntities;
     TVector<NTable::TCopyItem> tablesToCopy;
     // Copy all tables to temporal folder and backup other scheme objects along the way.
     {
@@ -910,6 +911,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 dbIt.Next();
                 continue;
             }
+            seenEntities.insert(dbIt.GetFullPath());
 
             auto childFolderPath = CreateDirectory(folderPath, dbIt.GetRelPath());
             TFile(childFolderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
@@ -970,6 +972,11 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 dbIt.Next();
                 continue;
             }
+            if (!seenEntities.contains(dbIt.GetFullPath())) {
+                LOG_W("Skip " << dbIt.GetFullPath().Quote() << ": it was created after the dumping had started");
+                dbIt.Next();
+                continue;
+            }
 
             TFsPath childFolderPath = folderPath.Child(dbIt.GetRelPath());
             if (dbIt.IsTable()) {
@@ -997,6 +1004,11 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
         while (dbIt) {
             if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
                 LOG_D("Skip " << dbIt.GetFullPath().Quote());
+                dbIt.Next();
+                continue;
+            }
+            if (!seenEntities.contains(dbIt.GetFullPath())) {
+                LOG_W("Skip " << dbIt.GetFullPath().Quote() << ": it was created after the dumping had started");
                 dbIt.Next();
                 continue;
             }

@@ -22,9 +22,9 @@ from typing import TYPE_CHECKING, Any, Callable, TypeVar, Union
 
 from .. import _static
 from .._path import StrPath
-from ..errors import RemovedConfigError
+from ..errors import InvalidConfigError, RemovedConfigError
 from ..extension import Extension
-from ..warnings import SetuptoolsWarning
+from ..warnings import SetuptoolsDeprecationWarning, SetuptoolsWarning
 
 if TYPE_CHECKING:
     from typing_extensions import TypeAlias
@@ -58,6 +58,7 @@ def apply(dist: Distribution, config: dict, filename: StrPath) -> Distribution:
     os.chdir(root_dir)
     try:
         dist._finalize_requires()
+        dist._finalize_license_expression()
         dist._finalize_license_files()
     finally:
         os.chdir(current_directory)
@@ -87,6 +88,22 @@ def _apply_tool_table(dist: Distribution, config: dict, filename: StrPath):
     tool_table = config.get("tool", {}).get("setuptools", {})
     if not tool_table:
         return  # short-circuit
+
+    if "license-files" in tool_table:
+        if "license-files" in config.get("project", {}):
+            # https://github.com/pypa/setuptools/pull/4837#discussion_r2004983349
+            raise InvalidConfigError(
+                "'project.license-files' is defined already. "
+                "Remove 'tool.setuptools.license-files'."
+            )
+
+        pypa_guides = "guides/writing-pyproject-toml/#license-files"
+        SetuptoolsDeprecationWarning.emit(
+            "'tool.setuptools.license-files' is deprecated in favor of "
+            "'project.license-files' (available on setuptools>=77.0.0).",
+            see_url=f"https://packaging.python.org/en/latest/{pypa_guides}",
+            due_date=(2026, 2, 18),  # Warning introduced on 2025-02-18
+        )
 
     for field, value in tool_table.items():
         norm_key = json_compatible_key(field)
@@ -181,16 +198,31 @@ def _long_description(
         dist._referenced_files.add(file)
 
 
-def _license(dist: Distribution, val: dict, root_dir: StrPath | None):
+def _license(dist: Distribution, val: str | dict, root_dir: StrPath | None):
     from setuptools.config import expand
 
-    if "file" in val:
-        # XXX: Is it completely safe to assume static?
-        value = expand.read_files([val["file"]], root_dir)
-        _set_config(dist, "license", _static.Str(value))
-        dist._referenced_files.add(val["file"])
+    if isinstance(val, str):
+        if getattr(dist.metadata, "license", None):
+            SetuptoolsWarning.emit("`license` overwritten by `pyproject.toml`")
+            dist.metadata.license = None
+        _set_config(dist, "license_expression", _static.Str(val))
     else:
-        _set_config(dist, "license", _static.Str(val["text"]))
+        pypa_guides = "guides/writing-pyproject-toml/#license"
+        SetuptoolsDeprecationWarning.emit(
+            "`project.license` as a TOML table is deprecated",
+            "Please use a simple string containing a SPDX expression for "
+            "`project.license`. You can also use `project.license-files`. "
+            "(Both options available on setuptools>=77.0.0).",
+            see_url=f"https://packaging.python.org/en/latest/{pypa_guides}",
+            due_date=(2026, 2, 18),  # Introduced on 2025-02-18
+        )
+        if "file" in val:
+            # XXX: Is it completely safe to assume static?
+            value = expand.read_files([val["file"]], root_dir)
+            _set_config(dist, "license", _static.Str(value))
+            dist._referenced_files.add(val["file"])
+        else:
+            _set_config(dist, "license", _static.Str(val["text"]))
 
 
 def _people(dist: Distribution, val: list[dict], _root_dir: StrPath | None, kind: str):
@@ -419,6 +451,7 @@ SETUPTOOLS_PATCHES = {
     "provides_extras",
     "license_file",
     "license_files",
+    "license_expression",
 }
 
 _PREPROCESS = {
@@ -431,7 +464,9 @@ _PREVIOUSLY_DEFINED = {
     "description": _attrgetter("metadata.description"),
     "readme": _attrgetter("metadata.long_description"),
     "requires-python": _some_attrgetter("python_requires", "metadata.python_requires"),
-    "license": _attrgetter("metadata.license"),
+    "license": _some_attrgetter("metadata.license_expression", "metadata.license"),
+    # XXX: `license-file` is currently not considered in the context of `dynamic`.
+    #      See TestPresetField.test_license_files_exempt_from_dynamic
     "authors": _some_attrgetter("metadata.author", "metadata.author_email"),
     "maintainers": _some_attrgetter("metadata.maintainer", "metadata.maintainer_email"),
     "keywords": _attrgetter("metadata.keywords"),
@@ -447,8 +482,11 @@ _PREVIOUSLY_DEFINED = {
 
 _RESET_PREVIOUSLY_DEFINED: dict = {
     # Fix improper setting: given in `setup.py`, but not listed in `dynamic`
+    # Use "immutable" data structures to avoid in-place modification.
     # dict: pyproject name => value to which reset
-    "license": _static.EMPTY_DICT,
+    "license": "",
+    # XXX: `license-file` is currently not considered in the context of `dynamic`.
+    #      See TestPresetField.test_license_files_exempt_from_dynamic
     "authors": _static.EMPTY_LIST,
     "maintainers": _static.EMPTY_LIST,
     "keywords": _static.EMPTY_LIST,

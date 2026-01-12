@@ -7,6 +7,7 @@ import importlib.util
 import os
 import sys
 from distutils._log import log
+from typing import ClassVar
 
 from ..core import Command
 from ..errors import DistutilsFileError, DistutilsOptionError
@@ -29,8 +30,8 @@ class build_py(Command):
         ('force', 'f', "forcibly build everything (ignore file timestamps)"),
     ]
 
-    boolean_options = ['compile', 'force']
-    negative_opt = {'no-compile': 'compile'}
+    boolean_options: ClassVar[list[str]] = ['compile', 'force']
+    negative_opt: ClassVar[dict[str, str]] = {'no-compile': 'compile'}
 
     def initialize_options(self):
         self.build_lib = None
@@ -42,7 +43,7 @@ class build_py(Command):
         self.optimize = 0
         self.force = None
 
-    def finalize_options(self):
+    def finalize_options(self) -> None:
         self.set_undefined_options(
             'build', ('build_lib', 'build_lib'), ('force', 'force')
         )
@@ -67,7 +68,7 @@ class build_py(Command):
             except (ValueError, AssertionError):
                 raise DistutilsOptionError("optimize must be 0, 1, or 2")
 
-    def run(self):
+    def run(self) -> None:
         # XXX copy_file by default preserves atime and mtime.  IMHO this is
         # the right thing to do, but perhaps it should be an option -- in
         # particular, a site administrator might want installed files to
@@ -134,7 +135,7 @@ class build_py(Command):
             ])
         return files
 
-    def build_package_data(self):
+    def build_package_data(self) -> None:
         """Copy data files into build directory"""
         for _package, src_dir, build_dir, filenames in self.data_files:
             for filename in filenames:
@@ -306,7 +307,7 @@ class build_py(Command):
         outfile_path = [build_dir] + list(package) + [module + ".py"]
         return os.path.join(*outfile_path)
 
-    def get_outputs(self, include_bytecode=True):
+    def get_outputs(self, include_bytecode: bool = True) -> list[str]:
         modules = self.find_all_modules()
         outputs = []
         for package, module, _module_file in modules:
@@ -349,7 +350,7 @@ class build_py(Command):
         self.mkpath(dir)
         return self.copy_file(module_file, outfile, preserve_mode=False)
 
-    def build_modules(self):
+    def build_modules(self) -> None:
         modules = self.find_modules()
         for package, module, module_file in modules:
             # Now "build" the module -- ie. copy the source file to
@@ -358,7 +359,7 @@ class build_py(Command):
             # under self.build_lib.)
             self.build_module(module, module_file, package)
 
-    def build_packages(self):
+    def build_packages(self) -> None:
         for package in self.packages:
             # Get list of (package, module, module_file) tuples based on
             # scanning the package directory.  'package' is only included
@@ -378,7 +379,7 @@ class build_py(Command):
                 assert package == package_
                 self.build_module(module, module_file, package)
 
-    def byte_compile(self, files):
+    def byte_compile(self, files) -> None:
         if sys.dont_write_bytecode:
             self.warn('byte-compiling is disabled, skipping.')
             return

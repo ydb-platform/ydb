@@ -276,4 +276,17 @@ TDqStageBase ReadInputToStage(const TExprBase& expr, TExprContext& ctx) {
         .Done();
 }
 
+TDqPhyPrecompute ReadInputToPrecompute(const TExprBase& inputRows, const TPositionHandle& pos, TExprContext& ctx) {
+    return inputRows.Maybe<TDqPhyPrecompute>()
+        ? inputRows.Cast<TDqPhyPrecompute>()
+        : Build<TDqPhyPrecompute>(ctx, pos)
+            .Connection<TDqCnUnionAll>()
+                .Output()
+                    .Stage(ReadInputToStage(inputRows, ctx))
+                    .Index().Build("0")
+                    .Build()
+                .Build()
+            .Done();
+}
+
 } // namespace NKikimr::NKqp::NOpt

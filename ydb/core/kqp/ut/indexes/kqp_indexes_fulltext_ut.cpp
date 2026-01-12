@@ -589,6 +589,18 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
         [1u;"foxes"];
         [2u;"love"]
     ])", NYdb::FormatResultSetYson(dict));
+    auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
+    if (Covered) {
+        CompareYson(R"([
+            [["cats data"];[100u];3u];
+            [["dogs data"];[200u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    } else {
+        CompareYson(R"([
+            [[100u];3u];
+            [[200u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    }
 
     { // Insert/upsert a new row
         TString query = Sprintf(R"sql(
@@ -620,6 +632,20 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
         [2u;"foxes"];
         [3u;"love"]
     ])", NYdb::FormatResultSetYson(dict));
+    docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
+    if (Covered) {
+        CompareYson(R"([
+            [["cats data"];[100u];3u];
+            [["foxes data"];[150u];3u];
+            [["dogs data"];[200u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    } else {
+        CompareYson(R"([
+            [[100u];3u];
+            [[150u];3u];
+            [[200u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    }
 
     { // Insert/upsert more rows - now without RETURNING
         TString query = Sprintf(R"sql(
@@ -656,6 +682,24 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
         [1u;"rabbits"];
         [1u;"wolves"]
     ])", NYdb::FormatResultSetYson(dict));
+    docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
+    if (Covered) {
+        CompareYson(R"([
+            [["cats data"];[100u];3u];
+            [["foxes data"];[150u];3u];
+            [["cows data"];[151u];3u];
+            [["rabbit data"];[152u];3u];
+            [["dogs data"];[200u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    } else {
+        CompareYson(R"([
+            [[100u];3u];
+            [[150u];3u];
+            [[151u];3u];
+            [[152u];3u];
+            [[200u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    }
 }
 
 Y_UNIT_TEST(UpsertRow) {
@@ -1039,6 +1083,22 @@ Y_UNIT_TEST_TWIN(UpsertWithRelevance, Covered) {
         [1u;"rabbits"];
         [1u;"wolves"]
     ])", NYdb::FormatResultSetYson(dict));
+    auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
+    if (Covered) {
+        CompareYson(R"([
+            [["birds data"];[100u];3u];
+            [["foxes data"];[150u];3u];
+            [["cows data"];[151u];3u];
+            [["dogs data"];[200u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    } else {
+        CompareYson(R"([
+            [[100u];3u];
+            [[150u];3u];
+            [[151u];3u];
+            [[200u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    }
 }
 
 Y_UNIT_TEST(ReplaceRow) {
@@ -1776,6 +1836,22 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [2u;"love"];
         [2u;"small"]
     ])", NYdb::FormatResultSetYson(dict));
+    auto docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
+    if (Covered) {
+        CompareYson(R"([
+            [["cats data"];[100u];4u];
+            [["dogs data"];[200u];4u];
+            [["cats cats data"];[300u];3u];
+            [["foxes data"];[400u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    } else {
+        CompareYson(R"([
+            [[100u];4u];
+            [[200u];4u];
+            [[300u];3u];
+            [[400u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    }
 
     { // DeleteRow by PK
         TString query = R"sql(
@@ -1806,6 +1882,20 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [2u;"love"];
         [1u;"small"]
     ])", NYdb::FormatResultSetYson(dict));
+    docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
+    if (Covered) {
+        CompareYson(R"([
+            [["cats data"];[100u];4u];
+            [["cats cats data"];[300u];3u];
+            [["foxes data"];[400u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    } else {
+        CompareYson(R"([
+            [[100u];4u];
+            [[300u];3u];
+            [[400u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    }
 
     { // DeleteRow by filter
         TString query = R"sql(
@@ -1833,6 +1923,18 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [1u;"love"];
         [1u;"small"]
     ])", NYdb::FormatResultSetYson(dict));
+    docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
+    if (Covered) {
+        CompareYson(R"([
+            [["cats data"];[100u];4u];
+            [["cats cats data"];[300u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    } else {
+        CompareYson(R"([
+            [[100u];4u];
+            [[300u];3u]
+        ])", NYdb::FormatResultSetYson(docs));
+    }
 
     { // DeleteRow by ON
         TString query = R"sql(
@@ -1858,6 +1960,16 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
         [0u;"love"];
         [1u;"small"]
     ])", NYdb::FormatResultSetYson(dict));
+    docs = ReadIndex(db, NTableIndex::NFulltext::DocsTable);
+    if (Covered) {
+        CompareYson(R"([
+            [["cats data"];[100u];4u]
+        ])", NYdb::FormatResultSetYson(docs));
+    } else {
+        CompareYson(R"([
+            [[100u];4u]
+        ])", NYdb::FormatResultSetYson(docs));
+    }
 }
 
 Y_UNIT_TEST(UpdateRow) {

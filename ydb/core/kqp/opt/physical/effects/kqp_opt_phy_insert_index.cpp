@@ -229,7 +229,8 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             }
             case TIndexDescription::EType::GlobalFulltext: {
                 // For fulltext indexes, we need to tokenize the text and create inserted rows
-                upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, *insertRows, inputColumnsSet, indexTableColumns,
+                auto insertPrecompute = ReadInputToPrecompute(*insertRows, insert.Pos(), ctx);
+                upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertPrecompute, inputColumnsSet, indexTableColumns,
                     false /*forDelete*/, insert.Pos(), ctx);
                 const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
                 YQL_ENSURE(fulltextDesc);
@@ -240,6 +241,19 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                         << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DictTable);
                     auto dictRows = BuildFulltextDictRows(*upsertIndexRows, false /*useSum*/, true /*useStage*/, insert.Pos(), ctx);
                     effects.emplace_back(BuildFulltextDictUpsert(dictTable, dictRows, insert.Pos(), ctx));
+                    // Insert document rows
+                    const auto& docsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DocsTable);
+                    TVector<TStringBuf> docsColumns;
+                    auto docsRows = BuildFulltextDocsRows(table, indexDesc, insertPrecompute,
+                        inputColumnsSet, docsColumns, false /*forDelete*/, insert.Pos(), ctx);
+                    effects.emplace_back(Build<TKqlUpsertRows>(ctx, insert.Pos())
+                        .Table(BuildTableMeta(docsTable, insert.Pos(), ctx))
+                        .Input(docsRows)
+                        .Columns(BuildColumnsList(docsColumns, insert.Pos(), ctx))
+                        .ReturningColumns<TCoAtomList>().Build()
+                        .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+                        .Done());
                 }
                 break;
             }

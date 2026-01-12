@@ -102,6 +102,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             }
             case TIndexDescription::EType::GlobalFulltext: {
                 // For fulltext indexes, we need to tokenize the text and create deleted rows
+                deleteIndexKeys = ReadInputToPrecompute(deleteIndexKeys, del.Pos(), ctx);
                 deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet, indexTableColumns,
                     true /*forDelete*/, del.Pos(), ctx);
                 const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
@@ -115,6 +116,16 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                     effects.emplace_back(BuildFulltextDictUpsert(dictTable, dictRows, del.Pos(), ctx));
                     // Rows in deleteIndexKeys include __ydb_freq, but we don't need it for delete keys
                     deleteIndexKeys = BuildFulltextPostingKeys(table, deleteIndexKeys, del.Pos(), ctx);
+                    // Delete document rows
+                    const auto& docsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DocsTable);
+                    auto docsKeys = project(TVector<TStringBuf>(pk.begin(), pk.end())); // TVector<TString> to TVector<TStringBuf>
+                    effects.emplace_back(Build<TKqlDeleteRows>(ctx, del.Pos())
+                        .Table(BuildTableMeta(docsTable, del.Pos(), ctx))
+                        .Input(docsKeys)
+                        .ReturningColumns<TCoAtomList>().Build()
+                        .IsBatch(ctx.NewAtom(del.Pos(), "false"))
+                        .Done());
                 }
                 break;
             }

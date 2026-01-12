@@ -101,6 +101,8 @@ NYql::NNodes::TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const NYql::TKi
 
 NYql::NNodes::TDqStageBase ReadInputToStage(const NYql::NNodes::TExprBase& expr, NYql::TExprContext& ctx);
 
+NYql::NNodes::TDqPhyPrecompute ReadInputToPrecompute(const NYql::NNodes::TExprBase& expr, const NYql::TPositionHandle& pos, NYql::TExprContext& ctx);
+
 NYql::NNodes::TExprBase BuildVectorIndexPostingRows(const NYql::TKikimrTableDescription& table,
     const NYql::NNodes::TKqpTable& tableNode,
     const TString& indexName,
@@ -122,6 +124,10 @@ std::pair<NYql::NNodes::TExprBase, NYql::NNodes::TExprBase> BuildVectorIndexPref
 
 NYql::NNodes::TExprBase BuildFulltextIndexRows(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc,
     const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns,
+    bool forDelete, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+NYql::NNodes::TExprBase BuildFulltextDocsRows(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc,
+    const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& docsColumns,
     bool forDelete, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase BuildFulltextDictRows(const NYql::NNodes::TExprBase& tokenRows, bool useSum, bool useStage,

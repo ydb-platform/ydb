@@ -7,9 +7,7 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
-TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIndexDescription* indexDesc,
-    const NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns,
-    bool forDelete, TPositionHandle pos, NYql::TExprContext& ctx)
+TExprBase BuildFulltextAnalyze(const TExprBase& inputRow, const TIndexDescription* indexDesc, TPositionHandle pos, NYql::TExprContext& ctx)
 {
     // Extract fulltext index settings
     const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
@@ -20,21 +18,45 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
 
     const TString textColumn = settings.columns().at(0).column();
     const auto& analyzers = settings.columns().at(0).analyzers();
+
+    // Get text member from input row
+    auto textMember = Build<TCoMember>(ctx, pos)
+        .Struct(inputRow)
+        .Name().Build(textColumn)
+        .Done();
+
+    // Serialize analyzer settings for FulltextAnalyze
+    TString settingsProto;
+    YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
+    auto settingsLiteral = Build<TCoString>(ctx, pos)
+        .Literal().Build(settingsProto)
+        .Done();
+
+    // Create callable for fulltext tokenization
+    // Format: FulltextAnalyze(text: String, settings: String) -> List<Struct<__ydb_token, __ydb_freq>>
+    auto analyzeCallable = ctx.Builder(pos)
+        .Callable("FulltextAnalyze")
+            .Add(0, textMember.Ptr())
+            .Add(1, settingsLiteral.Ptr())
+        .Seal()
+        .Build();
+
+    return TExprBase(analyzeCallable);
+}
+
+TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIndexDescription* indexDesc,
+    const NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns,
+    bool forDelete, TPositionHandle pos, NYql::TExprContext& ctx)
+{
+    // Extract fulltext index settings
+    const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
+    YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+
+    const auto& settings = fulltextDesc->GetSettings();
     const bool withRelevance = settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
 
     auto inputRowArg = TCoArgument(ctx.NewArgument(pos, "input_row"));
     auto tokenArg = TCoArgument(ctx.NewArgument(pos, "token"));
-
-    auto readInputRows = inputRows.Maybe<TDqPhyPrecompute>()
-        ? inputRows
-        : Build<TDqPhyPrecompute>(ctx, pos)
-            .Connection<TDqCnUnionAll>()
-                .Output()
-                    .Stage(ReadInputToStage(inputRows, ctx))
-                    .Index().Build("0")
-                    .Build()
-                .Build()
-            .Done();
 
     // Build output row structure for each token
     TVector<TExprBase> tokenRowTuples;
@@ -43,25 +65,15 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
     auto addIndexColumn = [&](const TStringBuf& column) {
         indexTableColumns.emplace_back(column);
         auto columnAtom = ctx.NewAtom(pos, column);
-        if (inputColumns.contains(column)) {
-            auto tuple = Build<TCoNameValueTuple>(ctx, pos)
+        YQL_ENSURE(inputColumns.contains(column));
+        auto tuple = Build<TCoNameValueTuple>(ctx, pos)
+            .Name(columnAtom)
+            .Value<TCoMember>()
+                .Struct(inputRowArg)
                 .Name(columnAtom)
-                .Value<TCoMember>()
-                    .Struct(inputRowArg)
-                    .Name(columnAtom)
-                    .Build()
-                .Done();
-            tokenRowTuples.emplace_back(tuple);
-        } else {
-            auto columnType = table.GetColumnType(TString(column));
-            auto tuple = Build<TCoNameValueTuple>(ctx, pos)
-                .Name(columnAtom)
-                .Value<TCoNothing>()
-                    .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
-                    .Build()
-                .Done();
-            tokenRowTuples.emplace_back(tuple);
-        }
+                .Build()
+            .Done();
+        tokenRowTuples.emplace_back(tuple);
     };
 
     if (withRelevance) {
@@ -117,31 +129,11 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
             .Build()
         .Done();
 
-    // Get text member from input row
-    auto textMember = Build<TCoMember>(ctx, pos)
-        .Struct(inputRowArg)
-        .Name().Build(textColumn)
-        .Done();
-
-    // Serialize analyzer settings for FulltextAnalyze
-    TString settingsProto;
-    YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
-    auto settingsLiteral = Build<TCoString>(ctx, pos)
-        .Literal().Build(settingsProto)
-        .Done();
-
-    // Create callable for fulltext tokenization
-    // Format: FulltextAnalyze(text: String, settings: String) -> List<Struct<__ydb_token, __ydb_freq>>
-    auto analyzeCallable = ctx.Builder(pos)
-        .Callable("FulltextAnalyze")
-            .Add(0, textMember.Ptr())
-            .Add(1, settingsLiteral.Ptr())
-        .Seal()
-        .Build();
+    auto analyzeCallable = BuildFulltextAnalyze(inputRowArg, indexDesc, pos, ctx);
 
     auto analyzeStage = Build<TDqStage>(ctx, pos)
         .Inputs()
-            .Add(readInputRows)
+            .Add(inputRows)
             .Build()
         .Program()
             .Args({"rows"})
@@ -164,6 +156,103 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
     return Build<TDqCnUnionAll>(ctx, pos)
         .Output()
             .Stage(analyzeStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
+// Takes input rows, returns document table rows
+// Runs FulltextAnalyze one more time -- it's probably more efficient than precomputing
+// and grouping the previous FulltextAnalyze from BuildFulltextIndexRows()
+TExprBase BuildFulltextDocsRows(const TKikimrTableDescription& table, const TIndexDescription* indexDesc,
+    const NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& docsColumns,
+    bool forDelete, TPositionHandle pos, NYql::TExprContext& ctx)
+{
+    auto inputRowArg = TCoArgument(ctx.NewArgument(pos, "input_row"));
+
+    // Build output row structure for each token
+    TVector<TExprBase> docRowTuples;
+
+    docsColumns.clear();
+    auto addIndexColumn = [&](const TStringBuf& column) {
+        docsColumns.emplace_back(column);
+        auto columnAtom = ctx.NewAtom(pos, column);
+        YQL_ENSURE(inputColumns.contains(column));
+        auto tuple = Build<TCoNameValueTuple>(ctx, pos)
+            .Name(columnAtom)
+            .Value<TCoMember>()
+                .Struct(inputRowArg)
+                .Name(columnAtom)
+                .Build()
+            .Done();
+        docRowTuples.emplace_back(tuple);
+    };
+
+    // Add primary key columns
+    for (const auto& column : table.Metadata->KeyColumnNames) {
+        addIndexColumn(column);
+    }
+
+    // Add data columns (covered columns)
+    if (!forDelete) {
+        for (const auto& column : indexDesc->DataColumns) {
+            addIndexColumn(column);
+        }
+    }
+
+    auto analyzeCallable = BuildFulltextAnalyze(inputRowArg, indexDesc, pos, ctx);
+
+    auto tokenArg = TCoArgument(ctx.NewArgument(pos, "token"));
+    auto stateArg = TCoArgument(ctx.NewArgument(pos, "state"));
+    auto lengthTuple = Build<TCoNameValueTuple>(ctx, pos)
+        .Name().Build(NTableIndex::NFulltext::DocLengthColumn)
+        .Value<TCoFold>()
+            .Input(analyzeCallable)
+            .State<TCoUint64>()
+                .Literal().Build("0")
+                .Build()
+            .UpdateHandler()
+                .Args({tokenArg, stateArg})
+                .Body<TCoAggrAdd>()
+                    .Left(stateArg)
+                    .Right<TCoConvert>()
+                        .Input<TCoMember>()
+                            .Struct(tokenArg)
+                            .Name().Build(NTableIndex::NFulltext::FreqColumn)
+                            .Build()
+                        .Type().Build(NTableIndex::NFulltext::DocCountTypeName) // from ui32 to ui64
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+        .Done();
+    docRowTuples.emplace_back(lengthTuple);
+    docsColumns.emplace_back(NTableIndex::NFulltext::DocLengthColumn);
+
+    auto docRowStage = Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(inputRows)
+            .Build()
+        .Program()
+            .Args({"rows"})
+            .Body<TCoToStream>()
+                .Input<TCoMap>()
+                    .Input("rows")
+                    .Lambda()
+                        .Args({inputRowArg})
+                        .Body<TCoAsStruct>()
+                            .Add(docRowTuples)
+                            .Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Build()
+        .Settings().Build()
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, pos)
+        .Output()
+            .Stage(docRowStage)
             .Index().Build("0")
             .Build()
         .Done();

@@ -916,6 +916,11 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         TVector<TExprBase> fulltextDictDelta;
         const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
         const bool withRelevance = fulltextDesc && fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+        TMaybeNode<TKqpTable> docsTableNode;
+        if (withRelevance) {
+            docsTableNode = BuildTableMeta(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << mainTableNode.Path().Value()
+                << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DocsTable), pos, ctx);
+        }
 
         if (indexKeyColumnsUpdated) {
             // Have to delete old index value from index table in case when index key columns were updated
@@ -939,12 +944,21 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 }
                 case TIndexDescription::EType::GlobalFulltext: {
                     // For fulltext indexes, we need to tokenize the text and create deleted rows
-                    deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet,
+                    auto deleteKeysPrecompute = ReadInputToPrecompute(deleteIndexKeys, pos, ctx);
+                    deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet,
                         indexTableColumnsWithoutData, true /*forDelete*/, pos, ctx);
                     if (withRelevance) {
                         fulltextDictDelta.push_back(deleteIndexKeys);
                         // Rows in deleteIndexKeys include __ydb_freq, but we don't need it for delete keys
                         deleteIndexKeys = BuildFulltextPostingKeys(table, deleteIndexKeys, pos, ctx);
+                        // Delete document rows
+                        auto docsKeys = ProjectColumns(deleteKeysPrecompute, table.Metadata->KeyColumnNames, ctx);
+                        effects.emplace_back(Build<TKqlDeleteRows>(ctx, pos)
+                            .Table(docsTableNode.Cast())
+                            .Input(docsKeys)
+                            .ReturningColumns<TCoAtomList>().Build()
+                            .IsBatch(ctx.NewAtom(pos, "false"))
+                            .Done());
                     }
                     break;
                 }
@@ -996,10 +1010,22 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 }
                 case TIndexDescription::EType::GlobalFulltext: {
                     // For fulltext indexes, we need to tokenize the text and create upserted rows
-                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertIndexRows, indexTableColumnsSet,
+                    auto upsertPrecompute = ReadInputToPrecompute(upsertIndexRows, pos, ctx);
+                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertPrecompute, indexTableColumnsSet,
                         indexTableColumns, false /*forDelete*/, pos, ctx);
                     if (withRelevance) {
                         fulltextDictDelta.push_back(upsertIndexRows);
+                        // Insert document rows
+                        TVector<TStringBuf> docsColumns;
+                        auto docsRows = BuildFulltextDocsRows(table, indexDesc, upsertPrecompute,
+                            inputColumnsSet, docsColumns, false /*forDelete*/, pos, ctx);
+                        effects.emplace_back(Build<TKqlUpsertRows>(ctx, pos)
+                            .Table(docsTableNode.Cast())
+                            .Input(docsRows)
+                            .Columns(BuildColumnsList(docsColumns, pos, ctx))
+                            .ReturningColumns<TCoAtomList>().Build()
+                            .IsBatch(ctx.NewAtom(pos, "false"))
+                            .Done());
                     }
                     break;
                 }

@@ -1,4 +1,4 @@
-#include "time.h"
+#include "duration.h"
 
 namespace NYdb::NConsoleClient {
 

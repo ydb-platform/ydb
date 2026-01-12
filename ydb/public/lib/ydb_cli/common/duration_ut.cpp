@@ -1,4 +1,4 @@
-#include <ydb/public/lib/ydb_cli/common/time.h>
+#include <ydb/public/lib/ydb_cli/common/duration.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

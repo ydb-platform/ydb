@@ -3,7 +3,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
-#include <ydb/public/lib/ydb_cli/common/time.h>
+#include <ydb/public/lib/ydb_cli/common/duration.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/stream/null.h>
 #include <util/string/printf.h>

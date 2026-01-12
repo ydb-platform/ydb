@@ -636,12 +636,11 @@ private:
             return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed");
         } else if (AllDoneOrWaiting(stateCounts)) {
             if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjects) {
-                // No progress has been made since the last view creation retry.
+                // No progress has been made since the last scheme objec creation retry.
                 return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed");
             }
             RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
         }
-        return;
     }
 
     void RetrySchemeObjectsQueryExecution(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
@@ -1310,8 +1309,8 @@ private:
         Self->RunningImportSchemeQueryExecutors.erase(std::exchange(item.SchemeQueryExecutor, {}));
 
         if (message.Status == Ydb::StatusIds::SCHEME_ERROR) {
-            DelayObjectCreation(importInfo, message.ItemIdx, db, error, ctx);
-            return;
+            // Scheme error happens when the creation query depends on other objects that are not yet imported.
+            return DelayObjectCreation(importInfo, message.ItemIdx, db, error, ctx);
         }
 
         if (message.Status != Ydb::StatusIds::SUCCESS || !error.empty()) {
@@ -1456,8 +1455,7 @@ private:
 
         if (record.GetStatus() == NKikimrScheme::StatusNotAvailable) {
             // Query compiled, but execution was unsuccessful
-            DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
-            return;
+            return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
         }
 
         if (record.GetStatus() != NKikimrScheme::StatusAccepted) {

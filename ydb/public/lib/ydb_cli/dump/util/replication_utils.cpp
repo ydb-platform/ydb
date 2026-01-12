@@ -228,8 +228,8 @@ bool RewriteCreateTransferQuery(
     TString& query,
     const TString& dbRestoreRoot,
     const TString& dbPath,
-    NYql::TIssues& issues) {
-
+    NYql::TIssues& issues)
+{
     if (!RewriteQuerySecretsNoCheck(query, dbRestoreRoot, issues)) {
         return false;
     }

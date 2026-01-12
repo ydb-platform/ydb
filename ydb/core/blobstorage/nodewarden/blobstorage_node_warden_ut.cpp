@@ -1094,6 +1094,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
         runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
 
+        VERBOSE_COUT("- Test case 1 - create PDisk");
         NKikimrBlobStorage::TPDiskConfig pdiskConfig;
         pdiskConfig.SetExpectedSlotCount(13);
         CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
@@ -1116,11 +1117,36 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TActorId fakeWhiteboard = runtime.AllocateEdgeActor();
         runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), fakeWhiteboard);
 
+        VERBOSE_COUT("- Test case 1 - create PDisk");
         NKikimrBlobStorage::TPDiskConfig pdiskConfig;
         CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, inferPDiskSlotCountFromUnitSize, 16, realNodeWarden);
         CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
             pdiskId, 12, 2u);
+
+        VERBOSE_COUT("- Test case 1a - repeat the same ApplyServiceSet request");
+        auto observer = runtime.AddObserver<NPDisk::TEvChangeExpectedSlotCount>(
+            [](NPDisk::TEvChangeExpectedSlotCount::TPtr&) {
+                UNIT_FAIL(TStringBuilder() << "EvChangeExpectedSlotCount shouldn't be sent in this case");
+            });
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
+            &pdiskConfig, inferPDiskSlotCountFromUnitSize, 16, realNodeWarden);
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        observer.Remove();
+
+        VERBOSE_COUT("- Test case 2 - update InferPDiskSlotCountSettings");
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
+            &pdiskConfig, inferPDiskSlotCountFromUnitSize, 24, realNodeWarden);
+        CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 24, 1u);
+
+        VERBOSE_COUT("- Test case 3 - set ExpectedSlotCount explicitly");
+        pdiskConfig.SetExpectedSlotCount(17);
+        CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
+            &pdiskConfig, inferPDiskSlotCountFromUnitSize, 24, realNodeWarden);
+        CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 17, 0u);
     }
 
     void ChangeGroupSizeInUnits(TTestBasicRuntime& runtime, TString poolName, ui32 groupId, ui32 groupSizeInUnits) {

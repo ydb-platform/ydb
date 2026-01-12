@@ -67,6 +67,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig.emplace();
         }
         appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
+        appConfig->MutableQueryServiceConfig()->MutableS3()->SetAllowLocalFiles(true);
 
         auto settings = TKikimrSettings();
 

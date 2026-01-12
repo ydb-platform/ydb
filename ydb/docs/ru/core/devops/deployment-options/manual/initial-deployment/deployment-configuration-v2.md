@@ -72,12 +72,12 @@ config:
     register_dynamic_node_allowed_sids:
     - databaseNodes@cert
     - root@builtin    
-    client_certificate_authorization:
-  request_client_certificate: true
-  client_certificate_definitions:
-      - member_groups: ["databaseNodes@cert"]
-        subject_terms:
-        - short_name: "O"
+  client_certificate_authorization:
+    request_client_certificate: true
+    client_certificate_definitions:
+        - member_groups: ["databaseNodes@cert"]
+          subject_terms:
+          - short_name: "O"
 ```
 
 Для ускорения и упрощения первичного развёртывания {{ ydb-short-name }} конфигурационный файл уже содержит большинство настроек для установки кластера. Достаточно заменить стандартные хосты FQDN в разделе `hosts` и пути к дискам на актуальные в разделе `hosts_configs`.

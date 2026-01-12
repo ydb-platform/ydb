@@ -503,7 +503,7 @@ public:
                     hasErrors = true;
                 }
 
-                if (State_->Configuration->AsyncDecompressing.GetOrDefault()) {
+                if (State_->Configuration->AsyncDecompressing.Get().GetOrElse(false)) {
                     ctx.AddError(TIssue(ctx.GetPosition(dataSourceNode->Pos()), "Reading from files is not supported with enabled pragma s3.AsyncDecompressing, to read from files use: PRAGMA s3.AsyncDecompressing = \"FALSE\""));
                     hasErrors = true;
                 }

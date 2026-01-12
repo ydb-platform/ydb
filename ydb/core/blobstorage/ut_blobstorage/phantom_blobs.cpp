@@ -7,21 +7,36 @@ using namespace NKikimr;
 
 Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
-    enum class ENodeState {
+    enum class EOnline {
         Alive = 0,
         Dead,
         Restart,
     };
 
+    struct TNodeState {
+        EOnline Online;
+        bool PhantomFlagStorageEnabled;
+    };
+
     struct TTestCtx : public TTestCtxBase {
         TTestCtx(TEnvironmentSetup::TSettings settings, ui32 initialBlobs, ui32 unsyncedBlobs,
-                std::vector<ENodeState> NodeStates)
+                std::vector<TNodeState> nodeStates, bool expectPhantoms, ui64 memoryLimit)
             : TTestCtxBase(std::move(settings))
             , InitialBlobCount(initialBlobs)
             , UnsyncedBlobCount(unsyncedBlobs)
-            , NodeStates(NodeStates)
+            , NodeStates(nodeStates)
+            , ExpectPhantoms(expectPhantoms)
+            , MemoryLimit(memoryLimit)
         {
             Y_VERIFY(NodeStates.size() == NodeCount);
+            SetIcbControls();
+        }
+
+        void SetIcbControls() {
+            for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
+                Env->SetIcbControl(nodeId, "VDiskControls.EnablePhantomFlagStorage",
+                        NodeStates[nodeId - 1].PhantomFlagStorageEnabled);
+            }
         }
 
         std::vector<TLogoBlobID> WriteInitialData() {
@@ -50,22 +65,22 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                     Edge, false, TInstant::Max());
         }
 
-        void ToggleNodes(bool stopAndRestart) {
+        void ToggleNodes(bool stop, bool start, bool restart) {
             for (ui32 nodeId = 1; nodeId <= NodeCount; ++nodeId) {
-                switch (NodeStates[nodeId - 1]) {
-                case ENodeState::Alive:
+                switch (NodeStates[nodeId - 1].Online) {
+                case EOnline::Alive:
                     break;
-                case ENodeState::Dead:
-                    if (stopAndRestart) {
+                case EOnline::Dead:
+                    if (stop) {
                         Ctest << "Stop node# " << nodeId << Endl;
                         Env->StopNode(nodeId);
-                    } else {
+                    } else if (start) {
                         Ctest << "Start node# " << nodeId << Endl;
                         Env->StartNode(nodeId);
                     }
                     break;
-                case ENodeState::Restart:
-                    if (stopAndRestart) {
+                case EOnline::Restart:
+                    if (restart) {
                         Ctest << "Restart node# " << nodeId << Endl;
                         Env->StopNode(nodeId);
                         Env->Sim(TDuration::Minutes(1));
@@ -75,6 +90,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                 }
                 Env->Sim(TDuration::Minutes(1));
             }
+            SetIcbControls();
             AllocateEdgeActor(); // reallocate actor, in case it lived on a restarted or dead node
         }
 
@@ -109,7 +125,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                 const TActorId actorId = groupInfo->GetActorId(orderNumber);
                 const TVDiskID vdiskId = groupInfo->GetVDiskId(orderNumber);
                 const ui32 nodeId = actorId.NodeId();
-                if (NodeStates[nodeId - 1] == ENodeState::Dead) {
+                if (NodeStates[nodeId - 1].Online == EOnline::Dead) {
                     continue;
                 }
                 const TActorId edge = Env->Runtime->AllocateEdgeActor(actorId.NodeId());
@@ -156,6 +172,13 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             }
         }
 
+        void CheckMemoryConsumption(ui64 limit) {
+            ui64 consumed = Env->AggregateVDiskCounters(Env->StoragePoolName, NodeCount, NodeCount,
+                    GroupId, PDiskLayout, "phantom_flag_storage", "StoredFlagsMemoryConsumption");
+            UNIT_ASSERT_C(consumed <= limit, "PhantomFlagStorage memory consumption exceeded expected limit, "
+                    " Consumed# " << consumed << " Limit# " << limit);
+        }
+
         void RunTest() {
             Initialize();
             const std::vector<TLogoBlobID> blobs = WriteInitialData();
@@ -165,7 +188,8 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             CollectBlobs(new TVector<TLogoBlobID>(blobs.begin(), blobs.end()), nullptr);
             WaitForSync();
 
-            ToggleNodes(true);
+            Ctest << "Stop dead nodes" << Endl;
+            ToggleNodes(true, false, false);
             WaitForSync();
 
             Ctest << "Set DoNotKeepFlags on first half of blobs" << Endl;
@@ -180,7 +204,13 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             CollectBlobs(nullptr, new TVector<TLogoBlobID>(itMiddle, blobs.end()));
             WaitForSync();
 
-            ToggleNodes(false);
+            CheckMemoryConsumption(NodeCount * MemoryLimit * 2);
+
+            Ctest << "Restart nodes" << Endl;
+            ToggleNodes(false, false, true);
+
+            Ctest << "Start dead nodes" << Endl;
+            ToggleNodes(false, true, false);
             WaitForSync();
 
             ++Generation;
@@ -189,7 +219,9 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             WaitForSync();
 
             CheckStatus();
-            CheckBlobs(blobs);
+            if (!ExpectPhantoms) {
+                CheckBlobs(blobs);
+            }
         }
 
     public:
@@ -204,68 +236,121 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
         const ui32 InitialBlobCount;
         const ui32 UnsyncedBlobCount;
-        const std::vector<ENodeState> NodeStates;
+        const std::vector<TNodeState> NodeStates;
+
+        const bool ExpectPhantoms = false;
+        const ui64 MemoryLimit = 1000_GB;
     };
 
-    std::vector<ENodeState> GetStatesAllAlive(TBlobStorageGroupType erasure) {
-        return std::vector<ENodeState>(erasure.BlobSubgroupSize(), ENodeState::Alive);
+    std::vector<TNodeState> GetStates(TBlobStorageGroupType erasure, EOnline online,
+            bool phantomFlagStorageEnabled) {
+        return std::vector<TNodeState>(erasure.BlobSubgroupSize(), 
+                TNodeState{ .Online = online, .PhantomFlagStorageEnabled = phantomFlagStorageEnabled, });
     }
 
-    std::vector<ENodeState> GetStatesOneDead(TBlobStorageGroupType erasure) {
-        std::vector<ENodeState> states(erasure.BlobSubgroupSize(), ENodeState::Alive);
-        states[0] = ENodeState::Dead;
+    std::vector<TNodeState> GetStatesAllAlive(TBlobStorageGroupType erasure) {
+        return GetStates(erasure, EOnline::Alive, true);
+    }
+
+    std::vector<TNodeState> GetStatesOneDead(TBlobStorageGroupType erasure) {
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true);
+        states[0].Online = EOnline::Dead;
         return states;
     }
 
-    std::vector<ENodeState> GetStatesTwoDead(TBlobStorageGroupType erasure) {
-        std::vector<ENodeState> states(erasure.BlobSubgroupSize(), ENodeState::Alive);
-        states[0] = ENodeState::Dead;
-        states[4] = ENodeState::Dead;
+    std::vector<TNodeState> GetStatesTwoDead(TBlobStorageGroupType erasure) {
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true);
+        states[0].Online = EOnline::Dead;
+        states[4].Online = EOnline::Dead;
         return states;
     }
 
-    std::vector<ENodeState> GetStatesOneDeadAllRestart(TBlobStorageGroupType erasure) {
-        std::vector<ENodeState> states(erasure.BlobSubgroupSize(), ENodeState::Restart);
-        states[0] = ENodeState::Dead;
+    std::vector<TNodeState> GetStatesOneDeadAllRestart(TBlobStorageGroupType erasure) {
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Restart, true);
+        states[0].Online = EOnline::Dead;
         return states;
     }
 
-    void Test(TBlobStorageGroupType erasure, std::vector<ENodeState> NodeStates) {
-        auto it = std::find_if(NodeStates.begin(), NodeStates.end(),
-                [&](const ENodeState& state) { return state != ENodeState::Dead; } );
-        Y_VERIFY(it != NodeStates.end());
-        ui32 controllerNodeId = it - NodeStates.begin() + 1;
+    std::vector<TNodeState> GetStatesOneDeadActiveOneDeadInactive(TBlobStorageGroupType erasure) {
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true);
+        states[0].Online = EOnline::Dead;
+        states[0].PhantomFlagStorageEnabled = false;
+        states[4].Online = EOnline::Dead;
+        states[0].PhantomFlagStorageEnabled = true;
+        return states;
+    }
+
+    std::vector<TNodeState> GetStatesTwoDeadInactive(TBlobStorageGroupType erasure) {
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, true);
+        states[0].Online = EOnline::Dead;
+        states[0].PhantomFlagStorageEnabled = false;
+        states[4].Online = EOnline::Dead;
+        states[0].PhantomFlagStorageEnabled = false;
+        return states;
+    }
+
+    std::vector<TNodeState> GetStatesTwoDeadAllAliveInactive(TBlobStorageGroupType erasure) {
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, false);
+        states[0].Online = EOnline::Dead;
+        states[0].PhantomFlagStorageEnabled = true;
+        states[4].Online = EOnline::Dead;
+        states[0].PhantomFlagStorageEnabled = false;
+        return states;
+    }
+
+    std::vector<TNodeState> GetStatesTwoDeadSomeAliveInactive(TBlobStorageGroupType erasure) {
+        std::vector<TNodeState> states = GetStates(erasure, EOnline::Alive, false);
+        states[0].Online = EOnline::Dead;
+        states[0].PhantomFlagStorageEnabled = true;
+        states[1].PhantomFlagStorageEnabled = true;
+        states[4].Online = EOnline::Dead;
+        states[0].PhantomFlagStorageEnabled = false;
+        return states;
+    }
+
+    void Test(TBlobStorageGroupType erasure, std::vector<TNodeState> nodeStates, bool expectPhantoms,
+            ui64 memoryLimit) {
+        auto it = std::find_if(nodeStates.begin(), nodeStates.end(),
+                [&](const TNodeState& state) { return state.Online != EOnline::Dead; } );
+        Y_VERIFY(it != nodeStates.end());
+        ui32 controllerNodeId = it - nodeStates.begin() + 1;
         TTestCtx ctx({
             .NodeCount = erasure.BlobSubgroupSize(),
             .Erasure = erasure,
             .ControllerNodeId = controllerNodeId,
             .PDiskChunkSize = 32_MB,
-            .EnablePhantomFlagStorage = true,
+            .EnablePhantomFlagStorage = false,
+            .PhantomFlagStorageLimitPerVDiskBytes = memoryLimit,
             .TinySyncLog = true,
-        }, 1000, 1000, NodeStates);
+        }, 1000, 1000, nodeStates, expectPhantoms, memoryLimit);
         ctx.RunTest();
     }
 
 
-    #define TEST_PHANTOM_BLOBS(name, erasure)                   \
-    Y_UNIT_TEST(Test##name##erasure) {                          \
-        auto e = TBlobStorageGroupType::Erasure##erasure;       \
-        Test(e, GetStates##name(e));                            \
+    #define TEST_PHANTOM_BLOBS(name, erasure, expectPhantoms, memoryLimit)  \
+    Y_UNIT_TEST(Test##name##erasure##MemoryLimit##memoryLimit) {            \
+        auto e = TBlobStorageGroupType::Erasure##erasure;                   \
+        Test(e, GetStates##name(e), expectPhantoms, memoryLimit);           \
     }
 
-    // TEST_PHANTOM_BLOBS(AllAlive, Mirror3dc);
-    // TEST_PHANTOM_BLOBS(AllAlive, Mirror3of4);
-    // TEST_PHANTOM_BLOBS(AllAlive, 4Plus2Block);
-
-    TEST_PHANTOM_BLOBS(OneDead, Mirror3dc);
-    // TEST_PHANTOM_BLOBS(OneDead, Mirror3of4);
-    // TEST_PHANTOM_BLOBS(OneDead, 4Plus2Block);
+    TEST_PHANTOM_BLOBS(OneDead, Mirror3dc, false, 10_MB);
+    TEST_PHANTOM_BLOBS(OneDead, Mirror3of4, false, 10_MB);
+    TEST_PHANTOM_BLOBS(OneDead, 4Plus2Block, false, 10_MB);
 
 
-    TEST_PHANTOM_BLOBS(TwoDead, Mirror3dc);
+    TEST_PHANTOM_BLOBS(TwoDead, Mirror3dc, false, 10_MB);
 
-    // TEST_PHANTOM_BLOBS(OneDeadAllRestart, Mirror3dc);
-    // TEST_PHANTOM_BLOBS(OneDeadAllRestart, Mirror3of4);
-    // TEST_PHANTOM_BLOBS(OneDeadAllRestart, 4Plus2Block);
+    // TODO (serg-belyakov@): persistent phantom flag storage
+    // TEST_PHANTOM_BLOBS(OneDeadAllRestart, Mirror3dc, false);
+    // TEST_PHANTOM_BLOBS(OneDeadAllRestart, Mirror3of4, false);
+    // TEST_PHANTOM_BLOBS(OneDeadAllRestart, 4Plus2Block, false);
 
+    TEST_PHANTOM_BLOBS(TwoDeadInactive, Mirror3dc, false, 10_MB);
+    TEST_PHANTOM_BLOBS(OneDeadActiveOneDeadInactive, Mirror3dc, false, 10_MB);
+    TEST_PHANTOM_BLOBS(TwoDeadAllAliveInactive, Mirror3dc, true, 10_MB);
+    TEST_PHANTOM_BLOBS(TwoDeadSomeAliveInactive, Mirror3dc, false, 10_MB);
+
+    TEST_PHANTOM_BLOBS(OneDead, Mirror3dc, true, 200_B);
+
+    #undef TEST_PHANTOM_BLOBS
 }

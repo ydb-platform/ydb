@@ -15,6 +15,8 @@
 
 #include <ydb/core/protos/auth.pb.h>
 
+#include <ydb/library/security/util.h>
+
 namespace NKikimr::NSQS {
 
 bool UseMockedVersion(const NKikimrConfig::TSqsConfig& config) {
@@ -221,6 +223,7 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessSer
         return;
     }
 
+    AuthType_ = "service_account"; // see the conditions from above
     FolderId_ = ev->Get()->Response.Getsubject().Getservice_account().Getfolder_id();
 
     GetCloudIdAndAuthorize();
@@ -263,7 +266,8 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
     }
 
     UserSID_ = result.Token->GetUserSID();
-    AuthType_ = result.Token->GetAuthType();
+    MaskedToken_ = NKikimr::MaskIAMTicket(IamToken_);
+
     UserSidCallback_(UserSID_);
     OnFinishedRequest();
 }
@@ -438,6 +442,7 @@ void TBaseCloudAuthRequestProxy::ProposeStaticCreds(TProto& req) {
     req.MutableAuth()->SetFolderId(FolderId_);
     req.MutableAuth()->SetUserSID(UserSID_);
     req.MutableAuth()->SetAuthType(AuthType_);
+    req.MutableAuth()->SetMaskedToken(MaskedToken_);
 }
 
 void TBaseCloudAuthRequestProxy::Bootstrap() {

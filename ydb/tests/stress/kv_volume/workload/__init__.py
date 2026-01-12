@@ -36,6 +36,11 @@ def parse_endpoint(endpoint):
     return host, parse_int_with_default(s_port, DEFAULT_YDB_KV_PORT)
 
 
+def generate_pattern_data(size, pattern=DEFAULT_DATA_PATTERN):
+    repeats = (size + len(pattern)) // len(pattern)
+    return (pattern * repeats)[:size]
+
+
 class Worker:
     class ActionRunner:
         def __init__(self, config, workload, worker_semaphore=None, global_semaphore=None, init_keys=None, results=None, parent_names=None, parent_chain=None):
@@ -74,6 +79,16 @@ class Worker:
                 )
                 if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
                     logger.error(f"Read failed for key {key} in action {self.config.name}")
+                elif cmd.read.verify_data:
+                    from ydb.public.api.protos import ydb_keyvalue_pb2 as keyvalue_pb
+                    read_result = keyvalue_pb.ReadResult()
+                    if not response.operation.result.Unpack(read_result):
+                        logger.error(f"Failed to unpack read result for key {key} in action {self.config.name}")
+                    else:
+                        expected_data = generate_pattern_data(offset + cmd.read.size)[offset:offset + cmd.read.size]
+                        actual_data = read_result.value
+                        if actual_data != expected_data:
+                            logger.error(f"Data verification failed for key {key} in action {self.config.name}: expected pattern mismatch")
             elif cmd_type == 'delete':
                 keys_with_partitions = self._get_keys()
                 if not keys_with_partitions:
@@ -100,9 +115,7 @@ class Worker:
             elif cmd_type == 'write':
                 key = self.workload._generate_write_key()
                 partition_id = random.randrange(0, self.workload.partition_count)
-                pattern_repeats = (cmd.write.size + len(DEFAULT_DATA_PATTERN)) // len(DEFAULT_DATA_PATTERN)
-                data = DEFAULT_DATA_PATTERN * pattern_repeats
-                data = data[:cmd.write.size]
+                data = generate_pattern_data(cmd.write.size)
                 response = await self.workload.client.a_kv_write(
                     self.workload._volume_path(),
                     partition_id,
@@ -211,10 +224,7 @@ class Worker:
             return
 
         for write_cmd in self.workload.config.initial_data.write_commands:
-            pattern = DEFAULT_DATA_PATTERN
-            pattern_repeats = (write_cmd.size + len(pattern)) // len(pattern)
-            data = pattern * pattern_repeats
-            data = data[:write_cmd.size]
+            data = generate_pattern_data(write_cmd.size)
             for pair_id in range(write_cmd.count):
                 key = self._generate_init_key(pair_id)
                 partition_id = self.init_keys.get(key)

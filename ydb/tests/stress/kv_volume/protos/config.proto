@@ -35,6 +35,7 @@ message ActionCommand {
     message Read {
         uint32 size = 1;
         uint32 count = 2;
+        bool verify_data = 3;
     }
     
     message Write {

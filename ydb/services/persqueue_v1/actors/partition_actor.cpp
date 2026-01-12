@@ -159,8 +159,8 @@ void TPartitionActor::Bootstrap(const TActorContext& ctx) {
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
 }
 
-const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents() const {
-    const auto* partition = TopicHolder->PartitionGraph->GetPartition(Partition.Partition);
+const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::shared_ptr<NPQ::TPartitionGraph> partitionGraph) const {
+    const auto* partition = partitionGraph->GetPartition(Partition.Partition);
     if (partition) {
         return partition->AllParents;
     }
@@ -170,7 +170,9 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents() const
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    const auto& parents = GetParents();
+    // extend the lifetime for PartitionGraph
+    auto partitionGraph = TopicHolder->PartitionGraph;
+    const auto& parents = GetParents(partitionGraph);
     if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
         for (auto& parent: parents) {

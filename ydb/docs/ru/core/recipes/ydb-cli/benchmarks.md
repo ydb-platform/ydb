@@ -9,7 +9,7 @@
 | [TPC-DS](https://tpc.org/tpcds/)     | [tpcds](../../reference/ydb-cli/workload-tpcds.md)|
 | [ClickBench](https://benchmark.clickhouse.com/) | [clickbench](../../reference/ydb-cli/workload-click-bench.md)|
 
-Есть несколько бенчмарков YDB:
+Помимо стандартных бенчмарков есть еще несколько внутренних:
 
 | Бенчмарк                             | Справка                                                  |
 |--------------------------------------|----------------------------------------------------------|

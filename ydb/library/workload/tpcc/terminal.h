@@ -162,7 +162,7 @@ public:
         bool noDelays,
         int simulateTransactionMs,
         int simulateTransactionSelect1Count,
-        TRunConfig::ETxMode txMode,
+        NQuery::TTxSettings txMode,
         std::stop_token stopToken,
         std::atomic<bool>& stopWarmup,
         std::shared_ptr<TTerminalStats>& stats,

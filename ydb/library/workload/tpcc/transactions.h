@@ -39,22 +39,11 @@ struct TTransactionContext {
     std::shared_ptr<NQuery::TQueryClient> Client;
     const TString Path;
     std::shared_ptr<TLog> Log;
-    TRunConfig::ETxMode TxMode;
+    NQuery::TTxSettings TxMode;
 };
 
 struct TUserAbortedException : public yexception {
 };
-
-//-----------------------------------------------------------------------------
-
-inline NQuery::TTxSettings GetTxSettings(TRunConfig::ETxMode mode) {
-    switch (mode) {
-        case TRunConfig::ETxMode::SerializableRW:
-            return NQuery::TTxSettings::SerializableRW();
-        case TRunConfig::ETxMode::SnapshotRW:
-            return NQuery::TTxSettings::SnapshotRW();
-    }
-}
 
 //-----------------------------------------------------------------------------
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
 #include <library/cpp/logger/priority.h>
 
@@ -30,10 +31,6 @@ struct TRunConfig {
         Json,
     };
 
-    enum class ETxMode {
-        SerializableRW,
-        SnapshotRW
-    };
 
     TRunConfig() = default;
     void SetFullPath(const NConsoleClient::TClientCommand::TConfig& connectionConfig) {
@@ -60,7 +57,7 @@ struct TRunConfig {
     TString Path;
 
     EFormat Format = EFormat::Pretty;
-    ETxMode TxMode = ETxMode::SerializableRW;
+    NQuery::TTxSettings TxMode = NQuery::TTxSettings::SerializableRW();
 
     TString JsonResultPath;
 

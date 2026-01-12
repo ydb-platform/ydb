@@ -7,6 +7,7 @@
 #include <ydb/library/workload/tpcc/runner.h>
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
 #include <util/generic/serialized_enum.h>
 #include <util/system/info.h>
@@ -245,12 +246,12 @@ void TCommandTPCCRun::Config(TConfig& config) {
         "tx-mode", TStringBuilder() << "Transaction mode: serializable or snapshot")
             .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [](const TString& value) {
                 if (value == "serializable") {
-                    return NTPCC::TRunConfig::ETxMode::SerializableRW;
+                    return NQuery::TTxSettings::SerializableRW();
                 } else if (value == "snapshot") {
-                    return NTPCC::TRunConfig::ETxMode::SnapshotRW;
+                    return NQuery::TTxSettings::SnapshotRW();
                 }
                 throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable, snapshot";
-            }).DefaultValue("serializable");
+            }).DefaultValue(NQuery::TTxSettings::SerializableRW());
 
     auto simulateOpt = config.Opts->AddLongOption(
         "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")

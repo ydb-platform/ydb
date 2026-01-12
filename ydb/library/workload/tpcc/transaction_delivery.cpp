@@ -60,7 +60,7 @@ TAsyncExecuteQueryResult GetNewOrder(
         .AddParam("$no_w_id").Int32(warehouseID).Build()
         .Build();
 
-    auto txControl = tx ? TTxControl::Tx(*tx) : TTxControl::BeginTx(GetTxSettings(context.TxMode));
+    auto txControl = tx ? TTxControl::Tx(*tx) : TTxControl::BeginTx(context.TxMode);
     auto result = session.ExecuteQuery(
         query,
         txControl,

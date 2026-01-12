@@ -45,7 +45,7 @@ TAsyncExecuteQueryResult UpdateWarehouse(
 
     auto result = session.ExecuteQuery(
         query,
-        TTxControl::BeginTx(GetTxSettings(context.TxMode)),
+        TTxControl::BeginTx(context.TxMode),
         std::move(params));
 
     LOG_T("Terminal " << context.TerminalID << " waiting for warehouse update result");

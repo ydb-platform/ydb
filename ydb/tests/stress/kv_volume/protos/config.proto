@@ -53,20 +53,24 @@ message ActionCommand {
 message Action {
     string name = 1;
     optional string parent_action = 2;
-    
+
     optional uint32 period_us = 3;
     optional uint32 worker_max_in_flight = 4;
     optional uint32 global_max_in_flight = 5;
-    
+
     ActionDataMode action_data_mode = 6;
-    
+
     repeated ActionCommand action_command = 7;
+}
+
+message InitialData {
+    repeated ActionCommand.Write write_commands = 1;
 }
 
 message KeyValueVolumeConfig {
     string path = 1;
     uint32 partition_count = 2;
-    
+
     repeated string channel_media = 3;
 }
 
@@ -75,4 +79,5 @@ message KeyValueVolumeStressLoad {
 
     PartitionMode.Code partition_mode = 2;
     repeated Action actions = 3;
+    InitialData initial_data = 4;
 }

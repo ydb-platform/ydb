@@ -38,6 +38,7 @@ def load_config(path):
         logging.error("Failed to parse config file %s: %s", path, e)
         sys.exit(1)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Workload kv wrapper", formatter_class=argparse.RawDescriptionHelpFormatter

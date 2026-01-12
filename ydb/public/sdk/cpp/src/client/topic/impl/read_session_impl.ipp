@@ -48,7 +48,7 @@ TLog TPartitionStreamImpl<UseMigrationProtocol>::GetLog() const {
 }
 
 template<bool UseMigrationProtocol>
-void TPartitionStreamImpl<UseMigrationProtocol>::Commit(ui64 startOffset, ui64 endOffset) {
+void TPartitionStreamImpl<UseMigrationProtocol>::Commit(uint64_t startOffset, uint64_t endOffset) {
     std::vector<std::pair<ui64, ui64>> toCommit;
     if (auto sessionShared = CbContext->LockShared()) {
         Y_ABORT_UNLESS(endOffset > startOffset);
@@ -78,7 +78,7 @@ void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
 }
 
 template<bool UseMigrationProtocol>
-void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) {
+void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) {
     if (auto sessionShared = CbContext->LockShared()) {
         if (commitOffset.has_value()) {
             SetFirstNotReadOffset(commitOffset.value());
@@ -95,7 +95,7 @@ void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmDestroy() {
 }
 
 template<bool UseMigrationProtocol>
-void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmEnd(std::span<const ui32> childIds) {
+void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmEnd(std::span<const uint32_t> childIds) {
     if (auto sessionShared = CbContext->LockShared()) {
         sessionShared->ConfirmPartitionStreamEnd(this, childIds);
     }

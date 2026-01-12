@@ -1,10 +1,10 @@
 # Backup Collection
 
-A backup collection is a [schema object](index.md) that enables [point-in-time recovery](https://en.wikipedia.org/wiki/Point-in-time_recovery) for selected [row-oriented tables](table.md#row-oriented-tables). Backup collections organize full and incremental backups into managed chains, allowing efficient disaster recovery and protection against accidental data loss such as erroneous deletions or modifications.
+A backup collection is a [schema object](index.md) for selected [row-oriented tables](table.md#row-oriented-tables) that provides structured and automated backup functionality. It organizes full and incremental backups into managed chains, supporting efficient disaster recovery and protection against accidental data loss from actions like deletions or modifications.
 
 {% note info %}
 
-For practical instructions on creating and managing backup collections, see the [Backup and Recovery guide](../../devops/backup-and-recovery/index.md#backup-collections).
+For practical instructions on creating and managing backup collections, see the [Backup and Recovery guide](../../devops/backup-and-recovery/full-and-incremental-backups.md).
 
 {% endnote %}
 
@@ -14,9 +14,8 @@ Backup collections address common backup challenges for production workloads:
 
 - **Storage efficiency**: Incremental backups capture only changes since the previous backup, significantly reducing storage requirements compared to multiple full backups.
 - **Consistent recovery**: All tables in a collection are backed up from the same global snapshot, ensuring referential integrity across tables during restoration.
-- **Point-in-time recovery**: Restore data to any point when a backup was created within the chain.
 
-For a comparison with other backup methods (export/import, dump/restore), see the [Backup and Recovery guide](../../devops/backup-and-recovery/index.md).
+For a comparison with other backup methods (export/import, dump/restore), see the [Backup and Recovery](../../devops/backup-and-recovery/index.md) section.
 
 ## Key Concepts
 
@@ -170,8 +169,7 @@ During the restore operation, target tables are placed in an `EPathStateIncoming
 
 ## See Also
 
-- [Backup and Recovery guide](../../devops/backup-and-recovery/index.md#backup-collections): Practical operations guide
-- [Recipes and examples](../../recipes/backup-collections/index): Common scenarios and examples
+- [Backup and Recovery guide](../../devops/backup-and-recovery/full-and-incremental-backups.md): Practical operations guide
 - YQL reference:
   - [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md)
   - [BACKUP](../../yql/reference/syntax/backup.md)

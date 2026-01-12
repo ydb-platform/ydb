@@ -62,29 +62,7 @@ To restore data from a backup collection, use the [`RESTORE`](../../yql/referenc
 RESTORE `production_backups`;
 ```
 
-By default, this restores the most recent backup in the collection. The restore operation restores the data to exactly the same locations (paths and table names) from which the backup was originally created.
-
-#### Restoring a specific backup point
-
-You can specify a particular backup version if you need to recover to an earlier point: 
-
-1. List available backups in the collection using the CLI:
-
-```bash
-ydb scheme ls .backups/collections/production_backups/
-```
-
-Example output:
-
-```bash
-20250208141425Z_full
-20250215120000Z_full
-```
-
-2. Restore a particular backup version:
-```sql
-RESTORE `production_backups/20250215120000Z_full`;
-```
+By default, this restores the most recent backup in the collection. The restore operation restores the data to exactly the same locations (paths and table names) from which the backup was originally created. For the restore operation to succeed, there must not be any existing tables at the target paths that are being restored.
 
 ## Incremental Backups
 
@@ -100,7 +78,7 @@ An incremental backup captures only the changes (inserts, updates, deletes) that
 
 {% note info "Prerequisites" %}
 
-**Prerequisites**: Before creating incremental backups, you must have at least one full backup in the collection. The first backup in any collection is always a full backup.
+Before creating incremental backups, you must have at least one full backup in the collection. The first backup in any collection is always a full backup.
 
 {% endnote %}
 
@@ -129,31 +107,6 @@ RESTORE `production_backups`;
 ```
 
 By default, this restores the most recent backup in the collection.
-
-#### Restoring a specific backup point
-
-You can specify a particular backup version if you need to recover to an earlier point: 
-
-1. List available backups in the collection using the CLI:
-
-```bash
-ydb scheme ls .backups/collections/production_backups/
-```
-
-Example output:
-
-```bash
-20250208141425Z_full
-20250209141519Z_incremental
-20250210141612Z_incremental
-20250215120000Z_full
-20250216140000Z_incremental
-```
-
-2. Restore a particular backup version:
-```sql
-RESTORE `production_backups/20250209141519Z_incremental`;
-```
 
 ## Exporting Backups to External Storage {#s3export}
 
@@ -188,11 +141,6 @@ ydb operation list incbackup
 └────────────────────────────────────────────────────────────────────┘
 ```
 
-```
-# Check specific operation status
-ydb operation get <operation-id>
-```
-
 Browse backup structure:
 
 ```bash
@@ -223,15 +171,14 @@ Before deleting backups, understand chain dependencies:
 
 {% endnote %}
 
-#### Safe cleanup approach {#safe-cleanup}
+### Safe cleanup approach {#safe-cleanup}
 
 1. Create a new full backup
 2. Verify the new backup is complete
 3. Export old backup chains to external storage if needed
-4. Delete old backup chains (full backup + all its incrementals together)
+4. Delete old backup chains (full backup + all its incrementals together) by [CLI](../../reference/ydb-cli/commands/dir.md#rmdir)
 
 ```bash
-# Remove old backup chain
-ydb scheme rmdir -r .backups/collections/production_backups/20250208141425Z_full/
-ydb scheme rmdir -r .backups/collections/production_backups/20250209141519Z_incremental/
+ydb scheme rmdir -r .backups/collections/production_backups/path_to_old_full_backup
+ydb scheme rmdir -r .backups/collections/production_backups/path_to_old_incremental_backup
 ```

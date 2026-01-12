@@ -1698,6 +1698,13 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     if (partitionStreamIt == PartitionStreams.end()) {
         return;
     }
+
+    // We should never get an old status:
+    Y_ABORT_UNLESS(
+        partitionStreamIt->second->GetFirstNotReadOffset() <= static_cast<ui64>(msg.read_offset()) &&
+        partitionStreamIt->second->GetFirstNotReadOffset() <= static_cast<ui64>(msg.partition_offsets().end())
+    );
+
     bool pushRes = EventsQueue->PushEvent(partitionStreamIt->second,
                             TReadSessionEvent::TPartitionSessionStatusEvent(
                                 partitionStreamIt->second, msg.committed_offset(),

@@ -193,6 +193,7 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     //! AutoPartitioningSupport.
     FLUENT_SETTING_DEFAULT(bool, AutoPartitioningSupport, false);
 
+    //! Direct read from partition nodes. Experimental setting — not recommended for use.
     FLUENT_SETTING_DEFAULT(bool, DirectRead, false);
 
     //! Log.

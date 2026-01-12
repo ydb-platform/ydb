@@ -31,7 +31,6 @@ struct TRunConfig {
         Json,
     };
 
-
     TRunConfig() = default;
     void SetFullPath(const NConsoleClient::TClientCommand::TConfig& connectionConfig) {
         if (Path.empty()) {

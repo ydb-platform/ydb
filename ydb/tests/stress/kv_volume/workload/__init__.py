@@ -38,7 +38,7 @@ def parse_endpoint(endpoint):
 
 class Worker:
     class ActionRunner:
-        def __init__(self, config, workload, worker_semaphore=None, global_semaphore=None, init_keys=None):
+        def __init__(self, config, workload, worker_semaphore=None, global_semaphore=None, init_keys=None, results=None, parent_chain=None):
             self.config = config
             self.workload = workload
             self.task = None
@@ -46,18 +46,24 @@ class Worker:
             self.worker_semaphore = worker_semaphore
             self.global_semaphore = global_semaphore
             self.init_keys = init_keys or set()
+            self.results = results if results is not None else {}
+            self.parent_chain = parent_chain or {}
+            self.instance_id = None
 
         async def execute_command(self, cmd, data_context=None):
-            # TODO(kruall): rewrite all logic
             cmd_type = cmd.WhichOneof('Command')
             if cmd_type == 'print':
                 print(f"[Worker Action: {self.config.name}] {cmd.print.msg}")
             elif cmd_type == 'read':
+                keys = self._get_keys()
+                if not keys:
+                    logger.warning(f"No keys available for read in action {self.config.name}")
+                    return
                 partition_id = random.randrange(0, self.workload.partition_count)
-                key = random.choice(list(self.init_keys)) if self.init_keys else 'default_key'
+                key = random.choice(keys)
                 offset = 0
-                if cmd.read.size != 0 and len(key) > cmd.read.size:
-                    offset = random.randint(0, len(key) - cmd.read.size)
+                if cmd.read.size != 0:
+                    offset = random.randint(0, cmd.read.size - 1) if cmd.read.size > 1 else 0
                 response = await self.workload.client.a_kv_read(
                     self.workload._volume_path(),
                     partition_id,
@@ -69,8 +75,8 @@ class Worker:
                 if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
                     logger.error(f"Read failed for action {self.config.name}")
             elif cmd_type == 'write':
+                key = self.workload._generate_write_key()
                 partition_id = random.randrange(0, self.workload.partition_count)
-                key = random.choice(list(self.init_keys)) if self.init_keys else 'default_key'
                 pattern_repeats = (cmd.write.size + len(DEFAULT_DATA_PATTERN)) // len(DEFAULT_DATA_PATTERN)
                 data = DEFAULT_DATA_PATTERN * pattern_repeats
                 data = data[:cmd.write.size]
@@ -84,37 +90,59 @@ class Worker:
                 )
                 if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
                     logger.error(f"Write failed for action {self.config.name}")
+                self._store_key(key)
+
+        def _get_keys(self):
+            mode = self.config.action_data_mode.WhichOneof('Mode')
+            if mode == 'worker':
+                return list(self.init_keys) if self.init_keys else []
+            elif mode == 'from_prev_actions':
+                keys = set()
+                for action_name in self.config.action_data_mode.from_prev_actions.action_name:
+                    if action_name in self.results and action_name in self.parent_chain:
+                        instance_id = self.parent_chain[action_name]
+                        if instance_id and instance_id in self.results[action_name]:
+                            keys.update(self.results[action_name][instance_id])
+                return list(keys) if keys else []
+            else:
+                return list(self.init_keys) if self.init_keys else []
+
+        def _store_key(self, key):
+            if self.config.name not in self.results:
+                self.results[self.config.name] = {}
+            if self.instance_id not in self.results[self.config.name]:
+                self.results[self.config.name][self.instance_id] = set()
+            self.results[self.config.name][self.instance_id].add(key)
         
-        async def run_commands(self):
+        async def run_commands(self, update_parent_chains=None):
+            self.instance_id = self.workload._generate_instance_id(self.config.name)
+            if update_parent_chains:
+                update_parent_chains(self.config.name, self.instance_id)
             if self.worker_semaphore:
                 async with self.worker_semaphore:
                     if self.global_semaphore:
                         async with self.global_semaphore:
-                            data_context = {}
                             for cmd in self.config.action_command:
-                                await self.execute_command(cmd, data_context)
+                                await self.execute_command(cmd)
                     else:
-                        data_context = {}
                         for cmd in self.config.action_command:
-                            await self.execute_command(cmd, data_context)
+                            await self.execute_command(cmd)
             elif self.global_semaphore:
                 async with self.global_semaphore:
-                    data_context = {}
                     for cmd in self.config.action_command:
-                        await self.execute_command(cmd, data_context)
+                        await self.execute_command(cmd)
             else:
-                data_context = {}
                 for cmd in self.config.action_command:
-                    await self.execute_command(cmd, data_context)
-        
-        async def run_periodic(self, end_time):
+                    await self.execute_command(cmd)
+
+        async def run_periodic(self, end_time, update_parent_chains=None):
             period = self.config.period_us / 1000000.0
             while datetime.now() < end_time:
-                await self.run_commands()
+                await self.run_commands(update_parent_chains)
                 await asyncio.sleep(period)
-        
-        async def run_once(self):
-            await self.run_commands()
+
+        async def run_once(self, update_parent_chains=None):
+            await self.run_commands(update_parent_chains)
     
     def __init__(self, worker_id, workload):
         self.worker_id = worker_id
@@ -123,9 +151,20 @@ class Worker:
         self.runners = {}
         self.global_semaphores = {}
         self.init_keys = self._generate_init_keys()
+        self.results = {}
+        self.write_key_counter = 0
+        self.instance_counter = 0
 
-    def _generate_key(self, pair_id):
-        return f'worker_{self.worker_id}_pair_{pair_id}'
+    def _generate_instance_id(self, action_name):
+        self.instance_counter += 1
+        return f'{action_name}_{self.instance_counter}'
+
+    def _generate_init_key(self, pair_id):
+        return f'worker_{self.worker_id}_init_pair_{pair_id}'
+
+    def _generate_write_key(self):
+        self.write_key_counter += 1
+        return f'worker_{self.worker_id}_write_key_{self.write_key_counter}'
 
     def _generate_init_keys(self):
         init_keys = set()
@@ -134,7 +173,7 @@ class Worker:
 
         for write_cmd in self.workload.config.initial_data.write_commands:
             for pair_id in range(write_cmd.count):
-                init_keys.add(self._generate_key(pair_id))
+                init_keys.add(self._generate_init_key(pair_id))
         return init_keys
 
     async def _fill_init_data(self):
@@ -147,7 +186,7 @@ class Worker:
             data = pattern * pattern_repeats
             data = data[:write_cmd.size]
             for pair_id in range(write_cmd.count):
-                key = self._generate_key(pair_id)
+                key = self._generate_init_key(pair_id)
                 for partition_id in range(self.workload.partition_count):
                     await self.workload.client.a_kv_write(
                         self.workload._volume_path(),
@@ -157,8 +196,8 @@ class Worker:
                         channel=write_cmd.channel,
                         version=self.workload.version
                     )
-        
-    def add_action(self, action_config):
+
+    def add_action(self, action_config, parent_chain=None):
         worker_sem = None
         if action_config.HasField('worker_max_in_flight'):
             worker_sem = asyncio.Semaphore(action_config.worker_max_in_flight)
@@ -169,33 +208,58 @@ class Worker:
                 self.global_semaphores[action_config.name] = asyncio.Semaphore(action_config.global_max_in_flight)
             global_sem = self.global_semaphores[action_config.name]
 
-        runner = self.ActionRunner(action_config, self.workload, worker_sem, global_sem, self.init_keys)
+        parent_chain = parent_chain.copy() if parent_chain else {}
+        runner = self.ActionRunner(action_config, self.workload, worker_sem, global_sem, self.init_keys, self.results, parent_chain)
         self.actions[action_config.name] = action_config
         self.runners[action_config.name] = runner
         
+    def _build_parent_chains(self):
+        chains = {}
+        for name, action in self.actions.items():
+            chains[name] = {}
+            current = action.parent_action if action.HasField('parent_action') else None
+            while current and current in chains:
+                chains[name][current] = None
+                current = self.actions[current].parent_action if self.actions[current].HasField('parent_action') else None
+        return chains
+
+    def _update_parent_chains(self, action_name, instance_id, parent_chains):
+        for child_name, child_chain in parent_chains.items():
+            if action_name in child_chain:
+                child_chain[action_name] = instance_id
+
     async def arun(self):
         await self._fill_init_data()
         end_time = datetime.now() + timedelta(seconds=self.workload.duration)
 
         task_map = {}
+        parent_chains = self._build_parent_chains()
+
+        def update_parent_chains(action_name, instance_id):
+            self._update_parent_chains(action_name, instance_id, parent_chains)
+            for child_name in self.runners:
+                self.runners[child_name].parent_chain = parent_chains[child_name].copy()
 
         for name, action in self.actions.items():
             parent = action.parent_action if action.HasField('parent_action') else None
             if parent is None:
+                parent_chains[name] = {}
                 if action.HasField('period_us'):
-                    task_map[name] = asyncio.create_task(self.runners[name].run_periodic(end_time))
+                    task_map[name] = asyncio.create_task(self.runners[name].run_periodic(end_time, update_parent_chains))
                 else:
-                    task_map[name] = asyncio.create_task(self.runners[name].run_once())
+                    task_map[name] = asyncio.create_task(self.runners[name].run_once(update_parent_chains))
 
         for name, action in self.actions.items():
             parent = action.parent_action if action.HasField('parent_action') else None
             if parent is not None and parent in task_map:
-                async def wait_and_run(parent_task=task_map[parent], runner=self.runners[name]):
+                parent_chains[name] = parent_chains[parent].copy()
+                async def wait_and_run(parent_task=task_map[parent], runner=self.runners[name], action_name=name):
                     await parent_task
+                    runner.parent_chain = parent_chains[action_name].copy()
                     if action.HasField('period_us'):
-                        await runner.run_periodic(end_time)
+                        await runner.run_periodic(end_time, update_parent_chains)
                     else:
-                        await runner.run_once()
+                        await runner.run_once(update_parent_chains)
                 task_map[name] = asyncio.create_task(wait_and_run())
 
         if task_map:
@@ -208,11 +272,13 @@ class WorkerBuilder:
     def __init__(self, config, workload):
         self.config = config
         self.workload = workload
-        
+
     def build(self, worker_id):
         worker = Worker(worker_id, self.workload)
+        parent_chains = worker._build_parent_chains()
         for action in self.config.actions:
-            worker.add_action(action)
+            parent_chain = parent_chains[action.name].copy()
+            worker.add_action(action, parent_chain)
         return worker
         
 

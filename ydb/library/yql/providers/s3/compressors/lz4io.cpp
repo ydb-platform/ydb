@@ -220,8 +220,9 @@ public:
     }
 
     ~TCompressor() {
-        if (LZ4F_errorCode_t const errorCode = LZ4F_freeCompressionContext(Ctx); LZ4F_isError(errorCode))
+        if (LZ4F_errorCode_t const errorCode = LZ4F_freeCompressionContext(Ctx); LZ4F_isError(errorCode)) {
             Cerr << "Error: can't free LZ4F context resource: " << LZ4F_getErrorName(errorCode);
+        }
     }
 
 private:

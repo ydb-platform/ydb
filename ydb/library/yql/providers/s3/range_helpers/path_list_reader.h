@@ -19,8 +19,10 @@ struct TPath {
         : Path(std::move(path))
         , Size(size)
         , IsDirectory(isDirectory)
-        , PathIndex(pathIndex) { }
+        , PathIndex(pathIndex)
+    {}
 };
+
 using TPathList = std::vector<TPath>;
 
 void ReadPathsList(const THashMap<TString, TString>& taskParams, const TVector<TString>& readRanges, TPathList& paths);

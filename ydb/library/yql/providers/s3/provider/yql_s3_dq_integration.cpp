@@ -83,12 +83,11 @@ std::optional<ui64> TryExtractLimitHint(const TS3SourceSettingsBase& settings) {
 
 using namespace NYql::NS3Details;
 
-class TS3DqIntegration: public TDqIntegrationBase {
+class TS3DqIntegration : public TDqIntegrationBase {
 public:
-    TS3DqIntegration(TS3State::TPtr state)
+    explicit TS3DqIntegration(TS3State::TPtr state)
         : State_(state)
-    {
-    }
+    {}
 
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         std::vector<std::vector<TPath>> parts;
@@ -105,7 +104,11 @@ public:
                     packed.Data().Literal().Value(),
                     FromString<bool>(packed.IsText().Literal().Value()),
                     paths);
-                parts.reserve(parts.size() + paths.size());
+
+                if (parts.capacity() < paths.size()) {
+                    parts.reserve(parts.size() + paths.size());
+                }
+
                 for (const auto& path : paths) {
                     if (path.IsDirectory) {
                         hasDirectories = true;
@@ -466,14 +469,10 @@ public:
                 TPathList paths;
                 for (auto i = 0u; i < settings.Paths().Size(); ++i) {
                     const auto& packed = settings.Paths().Item(i);
-                    TPathList pathsChunk;
                     UnpackPathsList(
                         packed.Data().Literal().Value(),
                         FromString<bool>(packed.IsText().Literal().Value()),
                         paths);
-                    paths.insert(paths.end(),
-                        std::make_move_iterator(pathsChunk.begin()),
-                        std::make_move_iterator(pathsChunk.end()));
                 }
 
                 for (size_t i = 0; i < paths.size(); ++i) {
@@ -705,6 +704,7 @@ public:
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
         RegisterDqS3MkqlCompilers(compiler, State_);
     }
+
 private:
     const TS3State::TPtr State_;
 };

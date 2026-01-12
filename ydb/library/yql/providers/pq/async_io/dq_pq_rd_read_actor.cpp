@@ -562,9 +562,10 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, *holderFactory.GetFunctionRegistry());
 
     // Parse output schema (expected struct output type)
-    const auto& outputTypeYson = SourceParams.GetRowType();
-    const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(outputTypeYson), *programBuilder, Cerr);
-    YQL_ENSURE(outputItemType, "Failed to parse output type: " << outputTypeYson);
+    const TStringBuf outputTypeYson(SourceParams.GetRowType());
+    TStringStream error;
+    const auto outputItemType = NCommon::ParseTypeFromYson(outputTypeYson, *programBuilder, error);
+    YQL_ENSURE(outputItemType, "Failed to parse output type: " << outputTypeYson << ", reason: " << error.Str());
     YQL_ENSURE(outputItemType->IsStruct(), "Output type " << outputTypeYson << " is not struct");
     const auto structType = static_cast<TStructType*>(outputItemType);
 

@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         dsi.set_protocol(::NYql::EGenericProtocol::NATIVE);
         auto token = dsi.mutable_credentials()->mutable_token();
         token->Settype("IAM");
-        token->Setvalue("token_value");
+        token->Setvalue("TEST_TOKEN");
 
         auto connectorMock = std::make_shared<NYql::NConnector::NTest::TConnectorClientMock>();
 
@@ -313,7 +313,8 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         NYql::Generic::TLookupSource lookupSourceSettings;
         *lookupSourceSettings.mutable_data_source_instance() = dsi;
         lookupSourceSettings.Settable("lookup_test");
-        lookupSourceSettings.SetTokenName("test_token");
+        lookupSourceSettings.SetServiceAccountId("testsaid");
+        lookupSourceSettings.SetServiceAccountIdSignature("fake_signature");
 
         google::protobuf::Any packedLookupSource;
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));
@@ -329,7 +330,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
 
         auto [lookupSource, actor] = NYql::NDq::CreateGenericLookupActor(
             connectorMock,
-            NKikimr::NKqp::NFederatedQueryTest::CreateCredentialsFactory("token_value"),
+            std::make_shared<NYql::NTestCreds::TSecuredServiceAccountCredentialsFactory>(),
             edge,
             nullptr,
             alloc,
@@ -340,7 +341,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             typeEnv,
             holderFactory,
             1'000'000,
-            {{"test_token", "{\"token\": \"token_value\"}"}},
+            {},
             true);
         auto lookupActor = runtime.Register(actor);
 

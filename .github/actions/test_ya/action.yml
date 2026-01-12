@@ -164,6 +164,10 @@ runs:
     - name: ya build and test
       id: build
       shell: bash
+      env:
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_BASE_REF: ${{ github.base_ref }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
       run: |
         set -ex
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
@@ -291,10 +295,20 @@ runs:
         )
 
         echo "inputs.custom_branch_name = ${{ inputs.custom_branch_name }}"
-        echo "GITHUB_REF_NAME = $GITHUB_REF_NAME"
+        echo "GITHUB_REF_NAME = ${GITHUB_REF_NAME}"
+        echo "GITHUB_BASE_REF = ${GITHUB_BASE_REF}"
+        echo "GITHUB_EVENT_NAME = ${GITHUB_EVENT_NAME}"
 
         if [ -z "${{ inputs.custom_branch_name }}" ]; then
-          BRANCH_NAME="${GITHUB_REF_NAME}"
+          # For pull requests, use the target branch (base_ref) - this ensures that:
+          # - Test history is shown for the target branch (e.g., stable-25-3)
+          # - Test results are uploaded for the target branch
+          # For other events (push, workflow_dispatch), use ref_name (the branch that triggered the workflow)
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] || [ "${GITHUB_EVENT_NAME}" = "pull_request_target" ]; then
+            BRANCH_NAME="${GITHUB_BASE_REF}"
+          else
+            BRANCH_NAME="${GITHUB_REF_NAME}"
+          fi
         else
           BRANCH_NAME="${{ inputs.custom_branch_name }}"
         fi

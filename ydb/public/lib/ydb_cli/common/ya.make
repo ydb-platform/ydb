@@ -46,6 +46,7 @@ PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
     contrib/libs/ftxui
     contrib/libs/openssl
+    contrib/libs/yaml-cpp
     contrib/restricted/patched/replxx
     library/cpp/getopt
     library/cpp/json/writer

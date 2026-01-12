@@ -498,10 +498,9 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         oauth2TokenExchangeAuth
     );
 
-    const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());
+    opts.GetOpts().AddOption(GenerateCompletionOption("ydb", this, config));
 
-    opts.GetOpts().AddOption(GenerateCompletionOption(programName.data(), this, config));
-  
+    const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());
     TStringStream stream;
     stream
         << "├─ Interactive:  " << programName << " [options...]" << Endl

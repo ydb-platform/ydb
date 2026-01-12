@@ -28,3 +28,12 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    audit
+    ut_utils
+)
+
+RECURSE_FOR_TESTS(
+    ut
+)

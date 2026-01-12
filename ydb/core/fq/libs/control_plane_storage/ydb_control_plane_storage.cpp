@@ -494,7 +494,7 @@ TAsyncStatus TDbRequester::Write(
                     return future;
                 }
                 return writeHandler(session);
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
                     CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
                 } else {
@@ -605,7 +605,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                     }
                     return status;
                 });
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
                     CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
                 } else {
@@ -639,7 +639,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                     return future;
                 }
                 return readModifyWriteHandler(session);
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
                     CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
                 } else {

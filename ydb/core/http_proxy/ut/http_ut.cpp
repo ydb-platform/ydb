@@ -262,5 +262,11 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
     Y_UNIT_TEST_F(InvalidHttpStartLine5, THttpProxyTestMock) {
         TestStartLine(*this, Nothing(), {"Not a header",});
     }
+    Y_UNIT_TEST_F(InvalidHttpStartLine6, THttpProxyTestMock) {
+        TestStartLine(*this, "POST /Root\r\nHTTP/1.1 HTTP/1.1", {});
+    }
+    Y_UNIT_TEST_F(InvalidHttpStartLine7, THttpProxyTestMock) {
+        TestStartLine(*this, "POST /Root?\r\nHTTP/1.1 HTTP/1.1", {});
+    }
 
 } // Y_UNIT_TEST_SUITE(TestMalformedRequest)

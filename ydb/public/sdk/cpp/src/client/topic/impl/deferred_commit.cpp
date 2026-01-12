@@ -128,4 +128,4 @@ void TDeferredCommit::TImpl::Commit() {
     Offsets.clear();
 }
 
-}
+} // namespace NYdb::NTopic

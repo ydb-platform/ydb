@@ -454,4 +454,4 @@ std::string DebugString(const TReadSessionEvent::TEvent& event) {
     return std::visit([](const auto& ev) { return ev.DebugString(); }, event);
 }
 
-} // namespace NYdb::NPersQueue
+} // namespace NYdb::NTopic

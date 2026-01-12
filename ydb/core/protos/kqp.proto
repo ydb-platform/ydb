@@ -191,36 +191,6 @@ message TIndexDescriptionProto {
     }
 };
 
-message TCompression {
-    optional string Algorithm = 1;
-    optional int64 Level = 2;
-}
-
-message TKqpColumnMetadataProto {
-    enum EDefaultKind {
-        DEFAULT_KIND_UNSPECIFIED = 0;
-        DEFAULT_KIND_NULL = 1;
-        DEFAULT_KIND_SEQUENCE = 2;
-        DEFAULT_KIND_LITERAL = 3;
-    };
-
-    optional string Name = 1;
-    optional uint32 Id = 2;
-    optional string Type = 3;
-    optional uint32 TypeId = 4;
-    optional NKikimrProto.TTypeInfo TypeInfo = 7;
-    repeated string Family = 5;
-    optional bool NotNull = 6 [default = false];
-    optional string DefaultFromSequence = 8;
-    optional EDefaultKind DefaultKind = 9;
-    optional Ydb.TypedValue DefaultFromLiteral = 10;
-    // flag that indicates that column is currently under the build
-    // operation.
-    optional bool IsBuildInProgress = 11 [default = false];
-    optional TKqpPathIdProto DefaultFromSequencePathId = 12;
-    optional TCompression Compression = 13;
-};
-
 message TKqpTableMetadataProto {
     message TAttributeProto {
         optional string Key = 1;

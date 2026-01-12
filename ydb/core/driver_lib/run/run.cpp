@@ -117,7 +117,8 @@
 #include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/fq/ydb_over_fq.h>
 #include <ydb/services/kesus/grpc_service.h>
-#include <ydb/services/keyvalue/grpc_service.h>
+#include <ydb/services/keyvalue/grpc_service_v1.h>
+#include <ydb/services/keyvalue/grpc_service_v2.h>
 #include <ydb/services/local_discovery/grpc_service.h>
 #include <ydb/services/maintenance/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
@@ -615,6 +616,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         monConfig.CertificateFile = appConfig.GetMonitoringConfig().GetMonitoringCertificateFile();
         monConfig.PrivateKeyFile = appConfig.GetMonitoringConfig().GetMonitoringPrivateKeyFile();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
+        monConfig.RequireCountersAuthentication = appConfig.GetMonitoringConfig().GetRequireCountersAuthentication();
         if (includeHostName) {
             if (appConfig.HasNameserviceConfig() && appConfig.GetNameserviceConfig().NodeSize() > 0) {
                 for (const auto& it : appConfig.GetNameserviceConfig().GetNode()) {
@@ -1087,7 +1089,9 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         }
 
         if (hasKeyValue) {
-            server.AddService(new NGRpcService::TKeyValueGRpcService(ActorSystem.Get(), Counters,
+            server.AddService(new NGRpcService::TKeyValueGRpcServiceV1(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0]));
+            server.AddService(new NGRpcService::TKeyValueGRpcServiceV2(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0]));
         }
 
@@ -1572,6 +1576,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.GetBootstrapConfig().HasEnableIntrospection())
         AppData->EnableIntrospection = runConfig.AppConfig.GetBootstrapConfig().GetEnableIntrospection();
+
+    if (runConfig.AppConfig.HasClusterDiagnosticsConfig()) {
+        AppData->ClusterDiagnosticsConfig.CopyFrom(runConfig.AppConfig.GetClusterDiagnosticsConfig());
+    }
 
     TAppDataInitializersList appDataInitializers;
     // setup domain info

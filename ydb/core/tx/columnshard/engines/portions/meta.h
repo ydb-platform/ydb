@@ -21,81 +21,37 @@ class TPortionMetaBase {
 protected:
     std::vector<TUnifiedBlobId> BlobIds;
 
-    void FullValidation() const {
-        for (auto&& i : BlobIds) {
-            AFL_VERIFY(i.BlobSize());
-        }
-        AFL_VERIFY(BlobIds.size());
-    }
+    void FullValidation() const;
 
-    std::optional<TBlobRangeLink16::TLinkId> GetBlobIdxOptional(const TUnifiedBlobId& blobId) const {
-        AFL_VERIFY(blobId.IsValid());
-        TBlobRangeLink16::TLinkId idx = 0;
-        for (auto&& i : BlobIds) {
-            if (i == blobId) {
-                return idx;
-            }
-            ++idx;
-        }
-        return std::nullopt;
-    }
+    std::optional<TBlobRangeLink16::TLinkId> GetBlobIdxOptional(const TUnifiedBlobId& blobId) const;
 
-    TBlobRangeLink16::TLinkId GetBlobIdxVerified(const TUnifiedBlobId& blobId) const {
-        auto result = GetBlobIdxOptional(blobId);
-        AFL_VERIFY(result);
-        return *result;
-    }
+    TBlobRangeLink16::TLinkId GetBlobIdxVerified(const TUnifiedBlobId& blobId) const;
 
     static std::vector<ui32> DoCalcSliceBorderOffsets(const std::vector<TColumnRecord>& records, const std::vector<TIndexChunk>& indexes);
 
 public:
     TPortionMetaBase() = default;
 
-    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        AFL_VERIFY(linkId < GetBlobIds().size());
-        return BlobIds[linkId];
-    }
-    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
-        return BlobIds;
-    }
+    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const;
+    const std::vector<TUnifiedBlobId>& GetBlobIds() const;
 
-    ui32 GetBlobIdsCount() const {
-        return BlobIds.size();
-    }
+    ui32 GetBlobIdsCount() const;
 
-    TPortionMetaBase(std::vector<TUnifiedBlobId>&& blobIds)
-        : BlobIds(std::move(blobIds)) {
-    }
+    TPortionMetaBase(std::vector<TUnifiedBlobId>&& blobIds);
 
-    TPortionMetaBase(const std::vector<TUnifiedBlobId>& blobIds)
-        : BlobIds(blobIds) {
-    }
+    TPortionMetaBase(const std::vector<TUnifiedBlobId>& blobIds);
 
-    std::vector<TUnifiedBlobId> ExtractBlobIds() {
-        return std::move(BlobIds);
-    }
+    std::vector<TUnifiedBlobId> ExtractBlobIds();
 
-    TBlobRangeLink16::TLinkId GetBlobIdxVerifiedPrivate(const TUnifiedBlobId& blobId) const {
-        auto result = GetBlobIdxOptional(blobId);
-        AFL_VERIFY(result);
-        return *result;
-    }
+    TBlobRangeLink16::TLinkId GetBlobIdxVerifiedPrivate(const TUnifiedBlobId& blobId) const;
 
-    const std::vector<TUnifiedBlobId>& GetBlobIdsPrivate() const {
-        return BlobIds;
-    }
+    const std::vector<TUnifiedBlobId>& GetBlobIdsPrivate() const;
 
-    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
-    }
+    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const;
 
-    ui64 GetMetadataMemorySize() const {
-        return GetBlobIds().capacity() * sizeof(TUnifiedBlobId);
-    }
+    ui64 GetMetadataMemorySize() const;
 
-    ui64 GetMetadataDataSize() const {
-        return GetBlobIds().size() * sizeof(TUnifiedBlobId);
-    }
+    ui64 GetMetadataDataSize() const;
 };
 
 class TPortionMeta {
@@ -116,52 +72,30 @@ private:
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;
     friend class TCompactedPortionInfo;
-    TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
-        : PKSchema(pk.GetSchema())
-        , FirstPKRow(pk.GetFirst().GetContent())
-        , LastPKRow(pk.GetLast().GetContent())
-        , RecordSnapshotMin(min)
-        , RecordSnapshotMax(max) {
-        AFL_VERIFY_DEBUG(IndexKeyStart() <= IndexKeyEnd())("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
-    }
+    TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max);
     TSnapshot RecordSnapshotMin;
     TSnapshot RecordSnapshotMax;
 
 public:
-    void FullValidation() const {
-        AFL_VERIFY(RecordsCount);
-        AFL_VERIFY(ColumnRawBytes);
-        AFL_VERIFY(ColumnBlobBytes);
-    }
+    void FullValidation() const;
 
-    NArrow::TSimpleRow IndexKeyStart() const {
-        return FirstPKRow.Build(PKSchema);
-    }
+    NArrow::TSimpleRow IndexKeyStart() const;
 
-    NArrow::TSimpleRow IndexKeyEnd() const {
-        return LastPKRow.Build(PKSchema);
-    }
+    NArrow::TSimpleRow IndexKeyEnd() const;
 
-    void ResetCompactionLevel(const ui32 level) {
-        CompactionLevel = level;
-    }
+    void ResetCompactionLevel(const ui32 level);
 
     std::optional<TString> GetTierNameOptional() const;
 
-    ui64 GetMetadataMemorySize() const {
-        return GetMemorySize();
-    }
+    ui64 GetMetadataMemorySize() const;
 
-    ui64 GetMemorySize() const {
-        return sizeof(TPortionMeta) + FirstPKRow.GetMemorySize() + LastPKRow.GetMemorySize();
-    }
+    ui64 GetMemorySize() const;
 
-    ui64 GetDataSize() const {
-        return sizeof(TPortionMeta) + FirstPKRow.GetDataSize() + LastPKRow.GetDataSize();
-    }
+    ui64 GetDataSize() const;
 
-    NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto(
-        const std::vector<TUnifiedBlobId>& blobIds, const NPortion::EProduced produced) const;
+    NKikimrTxColumnShard::TIndexPortionMeta
+    SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds,
+                     const NPortion::EProduced produced) const;
 
     TString DebugString() const;
 };
@@ -172,27 +106,20 @@ private:
     YDB_READONLY(ui64, PortionId, 0);
 
 public:
-    TPortionAddress(const TInternalPathId pathId, const ui64 portionId)
-        : PathId(pathId)
-        , PortionId(portionId) {
-    }
+    TPortionAddress(const TInternalPathId pathId, const ui64 portionId);
 
     TString DebugString() const;
 
-    bool operator<(const TPortionAddress& item) const {
-        return std::tie(PathId, PortionId) < std::tie(item.PathId, item.PortionId);
-    }
+    bool operator<(const TPortionAddress& item) const;
 
-    bool operator==(const TPortionAddress& item) const {
-        return std::tie(PathId, PortionId) == std::tie(item.PathId, item.PortionId);
-    }
+    bool operator==(const TPortionAddress& item) const;
+
+    const TString Debug() const;
 };
 
 }   // namespace NKikimr::NOlap
 
 template <>
 struct THash<NKikimr::NOlap::TPortionAddress> {
-    inline ui64 operator()(const NKikimr::NOlap::TPortionAddress& x) const noexcept {
-        return CombineHashes(x.GetPortionId(), x.GetPathId().GetRawValue());
-    }
+    ui64 operator()(const NKikimr::NOlap::TPortionAddress& x) const noexcept;
 };

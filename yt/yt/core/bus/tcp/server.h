@@ -10,26 +10,33 @@ namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TCertProfiler
+{
+    //! Profiler to output certificate data.
+    NProfiling::TProfiler Profiler;
+    //! Invoker to read certificate data periodically.
+    IInvokerPtr Invoker;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 IBusServerPtr CreatePublicTcpBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),
     IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker(),
-    std::optional<NProfiling::TProfiler> profiler = std::nullopt,
-    IInvokerPtr invoker = nullptr);
+    std::optional<TCertProfiler> certProfiler = std::nullopt);
 
 IBusServerPtr CreateLocalTcpBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),
     IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker(),
-    std::optional<NProfiling::TProfiler> profiler = std::nullopt,
-    IInvokerPtr invoker = nullptr);
+    std::optional<TCertProfiler> certProfiler = std::nullopt);
 
 IBusServerPtr CreateBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),
     IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker(),
-    std::optional<NProfiling::TProfiler> profiler = std::nullopt,
-    IInvokerPtr invoker = nullptr);
+    std::optional<TCertProfiler> certProfiler = std::nullopt);
 
 ////////////////////////////////////////////////////////////////////////////////
 

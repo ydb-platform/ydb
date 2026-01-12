@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerOldFormat) {
             }
         )";
 
-        auto result = THashesChecker().OldFormatCheck(hash);
+        auto result = THashesChecker::OldFormatCheck(hash);
         UNIT_ASSERT(result.Success);
     }
 
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerOldFormat) {
             }
         )";
 
-        auto result = THashesChecker().OldFormatCheck(hash);
+        auto result = THashesChecker::OldFormatCheck(hash);
         UNIT_ASSERT(!result.Success);
         UNIT_ASSERT_STRING_CONTAINS(result.Error, "Length of field \'salt\' is 15, but it must be equal 24");
     }
@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerOldFormat) {
             }
         )";
 
-        auto result = THashesChecker().OldFormatCheck(hash);
+        auto result = THashesChecker::OldFormatCheck(hash);
         UNIT_ASSERT(!result.Success);
         UNIT_ASSERT_STRING_CONTAINS(result.Error, "Length of field \'hash\' is 15, but it must be equal 44");
     }
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerOldFormat) {
             }
         )";
 
-        auto result = THashesChecker().OldFormatCheck(hash);
+        auto result = THashesChecker::OldFormatCheck(hash);
         UNIT_ASSERT(!result.Success);
         UNIT_ASSERT_STRING_CONTAINS(result.Error, "Field 'type' must be equal 'argon2id'");
     }
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerOldFormat) {
                 "type": "argon2id"
         )";
 
-        auto result = THashesChecker().OldFormatCheck(hash);
+        auto result = THashesChecker::OldFormatCheck(hash);
         UNIT_ASSERT(!result.Success);
         UNIT_ASSERT_STRING_CONTAINS(result.Error, "Cannot parse hash value; it should be in JSON-format");
     }
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerOldFormat) {
             }
         )";
 
-        auto result = THashesChecker().OldFormatCheck(hash);
+        auto result = THashesChecker::OldFormatCheck(hash);
         UNIT_ASSERT(!result.Success);
         UNIT_ASSERT_STRING_CONTAINS(result.Error, "There should be strictly three fields here: salt, hash and type");
     }
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerOldFormat) {
             }
         )";
 
-        auto result = THashesChecker().OldFormatCheck(hash);
+        auto result = THashesChecker::OldFormatCheck(hash);
         UNIT_ASSERT(!result.Success);
         UNIT_ASSERT_STRING_CONTAINS(result.Error, "Field \'hash\' must be in base64 format");
     }
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerOldFormat) {
             }
         )";
 
-        auto result = THashesChecker().OldFormatCheck(hash);
+        auto result = THashesChecker::OldFormatCheck(hash);
         UNIT_ASSERT(!result.Success);
         UNIT_ASSERT_STRING_CONTAINS(result.Error, "Field \'salt\' must be in base64 format");
     }
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
             }
         )";
 
-        auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+        auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
         UNIT_ASSERT(result.Success);
     }
 
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 "argon2id": "U+tzBtgo06EBQCjlARA6Jg==$p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "Cannot parse hashes value; it should be JSON in base64 encoding");
         }
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(hashes);
+            auto result = THashesChecker::NewFormatCheck(hashes);
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "Cannot parse hashes value; it should be JSON in base64 encoding");
         }
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
             }
         )";
 
-        auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+        auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
         UNIT_ASSERT(!result.Success);
         UNIT_ASSERT_STRING_CONTAINS(result.Error, "Field 'version' must be in JSON map and have numeric type");
     }
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
             }
         )";
 
-        auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+        auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
         UNIT_ASSERT(!result.Success);
         UNIT_ASSERT_STRING_CONTAINS(result.Error, "Unknown field name");
     }
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "Argon hash has to have '<salt>$<hash>' format");
         }
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "Salt in Argon hash must be in base64 encoding");
         }
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "Hash in Argon hash must be in base64 encoding");
         }
@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "Salt in Argon hash must be 16 bytes long");
         }
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "Hash in Argon hash must be 32 bytes long");
         }
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "Scram hash has to have '<iterations>:<salt>$<storedkey>:<serverkey>' format");
         }
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "Iterations in Scram hash must be equal to 4096");
         }
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "Salt in Scram hash must be in base64 encoding");
         }
@@ -300,7 +300,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "ServerKey in Scram hash must be in base64 encoding");
         }
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "Salt in Scram hash must be 16 bytes long");
         }
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "StoredKey in Scram hash must be 32 bytes long");
         }
@@ -339,7 +339,7 @@ Y_UNIT_TEST_SUITE(HashesCheckerNewFormat) {
                 }
             )";
 
-            auto result = THashesChecker().NewFormatCheck(Base64Encode(hashes));
+            auto result = THashesChecker::NewFormatCheck(Base64Encode(hashes));
             UNIT_ASSERT(!result.Success);
             UNIT_ASSERT_STRING_CONTAINS(result.Error, "ServerKey in Scram hash must be 32 bytes long");
         }

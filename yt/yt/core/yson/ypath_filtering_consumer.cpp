@@ -194,7 +194,7 @@ public:
                 .Tokenizer = NYPath::TTokenizer(Paths_[i]),
                 .MaxMatchedDepth = 0,
                 .Fulfilled = false,
-                .Index = i
+                .Index = i,
             });
         }
 

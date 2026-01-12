@@ -32,6 +32,7 @@ SRCS(
     ut_column_filter.cpp
     ut_dictionary.cpp
     ut_hash.cpp
+    ut_printer.cpp
     ut_program_step.cpp
     ut_reader.cpp
     ut_slicer.cpp

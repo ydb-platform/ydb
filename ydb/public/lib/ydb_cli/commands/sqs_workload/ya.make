@@ -17,6 +17,8 @@ SRCS(
     sqs_workload_clean.cpp
     sqs_workload_clean_scenario.cpp
     http_client.cpp
+    sqs_client_wrapper.cpp
+    message_groups_locker.cpp
 )
 
 PEERDIR(

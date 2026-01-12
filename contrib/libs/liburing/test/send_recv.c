@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -18,7 +19,7 @@
 
 #define MAX_MSG	4096
 
-static unsigned long str[MAX_MSG / sizeof(unsigned long)];
+static uint64_t str[MAX_MSG / sizeof(uint64_t)];
 
 #define PORT	10202
 #define HOST	"127.0.0.1"
@@ -89,7 +90,7 @@ err:
 static int do_recv(struct io_uring *ring, struct iovec *iov, int enobufs)
 {
 	struct io_uring_cqe *cqe;
-	unsigned long *ptr;
+	uint64_t *ptr;
 	int i, ret;
 
 	ret = io_uring_wait_cqe(ring, &cqe);
@@ -119,10 +120,10 @@ static int do_recv(struct io_uring *ring, struct iovec *iov, int enobufs)
 	}
 
 	ptr = iov->iov_base;
-	for (i = 0; i < MAX_MSG / sizeof(unsigned long); i++) {
+	for (i = 0; i < MAX_MSG / sizeof(uint64_t); i++) {
 		if (ptr[i] == str[i])
 			continue;
-		fprintf(stderr, "data mismatch at %d: %lu\n", i, ptr[i]);
+		fprintf(stderr, "data mismatch at %d: %llu\n", i, (unsigned long long) ptr[i]);
 		goto err;
 	}
 
@@ -225,7 +226,7 @@ retry:
 	sqe = io_uring_get_sqe(&ring);
 	if (vec) {
 		size_t total = MAX_MSG;
-		unsigned long *ptr = str;
+		uint64_t *ptr = str;
 		int i, nvecs;
 
 		if (!big_vec) {
@@ -240,7 +241,7 @@ retry:
 			for (i = 0; i < 32; i++) {
 				vecs[i].iov_base = ptr;
 				vecs[i].iov_len = total;
-				ptr += total / sizeof(unsigned long);
+				ptr += total / sizeof(uint64_t);
 			}
 			nvecs = 32;
 		}
@@ -372,7 +373,7 @@ int main(int argc, char *argv[])
 	if (argc > 1)
 		return T_EXIT_SKIP;
 
-	for (i = 0; i < MAX_MSG / sizeof(unsigned long); i++)
+	for (i = 0; i < MAX_MSG / sizeof(uint64_t); i++)
 		str[i] = i + 1;
 
 	ret = test_invalid();

@@ -7,6 +7,8 @@ SRCS(
     aggregator_impl.cpp
     analyze_actor.h
     analyze_actor.cpp
+    column_statistic_eval.h
+    column_statistic_eval.cpp
     schema.h
     schema.cpp
     select_builder.h

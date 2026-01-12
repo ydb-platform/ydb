@@ -28,6 +28,8 @@ protected:
     void SaveVoidType();
     void SaveNullType();
     void SaveUnitType();
+    void SaveUniversalType();
+    void SaveUniversalStructType();
     void SaveGenericType();
     void SaveEmptyListType();
     void SaveEmptyDictType();
@@ -249,6 +251,10 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
         return loader.LoadNullType(level);
     } else if (typeName == "UnitType") {
         return loader.LoadUnitType(level);
+    } else if (typeName == "UniversalType") {
+        return loader.LoadUniversalType(level);
+    } else if (typeName == "UniversalStructType") {
+        return loader.LoadUniversalStructType(level);
     } else if (typeName == "GenericType") {
         return loader.LoadGenericType(level);
     } else if (typeName == "EmptyListType") {

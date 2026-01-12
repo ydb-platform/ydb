@@ -74,6 +74,8 @@ public:
         const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
         TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode);
 
+    ~TKqpScanComputeActor();
+
     STFUNC(StateFunc) {
         try {
             switch (ev->GetTypeRewrite()) {

@@ -6,9 +6,9 @@
 namespace NKikimr {
 namespace NKqp {
 
-bool ISimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool ISimplifiedRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
-    auto output = SimpleTestAndApply(input, ctx, props);
+    auto output = SimpleMatchAndApply(input, ctx, props);
     if (input != output) {
         input = output;
         return true;
@@ -17,15 +17,15 @@ bool ISimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContex
     }
 }
 
-TRuleBasedStage::TRuleBasedStage(TString stageName, TVector<std::shared_ptr<IRule>> rules) : 
-    IRBOStage(stageName),
-    Rules(rules) {
-    for (auto & r : Rules) {
+TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::shared_ptr<IRule>>&& rules)
+    : IRBOStage(std::move(stageName))
+    , Rules(std::move(rules)) {
+    for (const auto& r : Rules) {
         Props |= r->Props;
     }
 }
 
-void ComputeRequiredProps(TOpRoot &root, ui32 props, TRBOContext &ctx) {
+void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx) {
     if (props & ERuleProperties::RequireParents) {
         root.ComputeParents();
     }
@@ -55,18 +55,18 @@ void ComputeRequiredProps(TOpRoot &root, ui32 props, TRBOContext &ctx) {
  */
 void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     bool fired = true;
-    int nMatches = 0;
+    ui32 numMatches = 0;
+    const ui32 maxNumOfMatches = 1000;
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
 
-
-    while (fired && nMatches < 1000) {
+    while (fired && numMatches < maxNumOfMatches) {
         fired = false;
 
         for (auto iter : root) {
-            for (auto rule : Rules) {
+            for (const auto& rule : Rules) {
                 auto op = iter.Current;
 
-                if (rule->TestAndApply(op, ctx, root.PlanProps)) {
+                if (rule->MatchAndApply(op, ctx, root.PlanProps)) {
                     fired = true;
 
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
@@ -82,8 +82,7 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                     }
 
                     ComputeRequiredProps(root, Props, ctx);
-
-                    nMatches++;
+                    ++numMatches;
                     break;
                 }
             }
@@ -94,7 +93,7 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         }
     }
 
-    Y_ENSURE(nMatches < 100);
+    Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
 TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) {
@@ -104,7 +103,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) 
         YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
     }
 
-    auto context = TRBOContext(KqpCtx, ctx, TypeCtx, RBOTypeAnnTransformer, FuncRegistry);
+    auto context = TRBOContext(KqpCtx, ctx, TypeCtx, std::move(RBOTypeAnnTransformer), std::move(PeepholeTypeAnnTransformer), FuncRegistry);
 
     for (size_t idx = 0; idx < Stages.size(); idx++) {
         auto stage = Stages[idx];
@@ -127,7 +126,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) 
         YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
     }
 
-    return ConvertToPhysical(root, context, TypeAnnTransformer, PeepholeTransformer);
+    return ConvertToPhysical(root, context);
 }
 } // namespace NKqp
 } // namespace NKikimr

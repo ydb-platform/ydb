@@ -32,6 +32,20 @@ public:
         return Build(partial);
     }
 
+    TNodeResult Build(const TRule_select_unparenthesized_stmt& rule) {
+        const auto& intersect = rule.GetRule_select_unparenthesized_stmt_intersect1();
+        if (!rule.GetBlock2().empty()) {
+            return Unsupported("(union_op select_stmt_intersect)*");
+        }
+
+        const auto& partial = intersect.GetRule_select_kind_partial1();
+        if (!intersect.GetBlock2().empty()) {
+            return Unsupported("(intersect_op select_kind_parenthesis)*");
+        }
+
+        return Build(partial);
+    }
+
     TNodeResult Build(const TRule_values_stmt& rule) {
         TYqlValuesArgs values;
 
@@ -559,42 +573,63 @@ private:
     }
 
     TNodeResult Build(const TRule_table_ref& rule) {
+        const bool isCluterExplicit = rule.HasBlock1();
+
         TString service = Ctx_.Scoped->CurrService;
         TDeferredAtom cluster = Ctx_.Scoped->CurrCluster;
 
-        if (rule.HasBlock1()) {
+        if (isCluterExplicit) {
             const auto& expr = rule.GetBlock1().GetRule_cluster_expr1();
             if (!ClusterExpr(expr, /* allowWildcard = */ false, service, cluster)) {
                 return std::unexpected(ESQLError::Basic);
             }
         }
 
-        if (rule.HasBlock2()) {
-            Token(rule.GetBlock2().GetToken1());
-            return Unsupported("COMMAT");
-        }
+        const bool isAnonymous = rule.HasBlock2();
 
         if (rule.HasBlock4()) {
             return Unsupported("table_hints");
         }
 
-        return Build(rule.GetBlock3(), std::move(service), std::move(cluster));
+        return Build(
+            rule.GetBlock3(),
+            std::move(service),
+            std::move(cluster),
+            isAnonymous,
+            isCluterExplicit);
     }
 
-    TNodeResult Build(const TRule_table_ref::TBlock3& block, TString service, TDeferredAtom cluster) {
+    TNodeResult Build(
+        const TRule_table_ref::TBlock3& block,
+        TString service,
+        TDeferredAtom cluster,
+        bool isAnonymous,
+        bool isClusterExplicit)
+    {
         switch (block.GetAltCase()) {
             case TRule_table_ref_TBlock3::kAlt1:
-                return Build(block.GetAlt1().GetRule_table_key1(), std::move(service), std::move(cluster));
+                return Build(
+                    block.GetAlt1().GetRule_table_key1(),
+                    std::move(service),
+                    std::move(cluster),
+                    isAnonymous);
             case TRule_table_ref_TBlock3::kAlt2:
                 return Unsupported("an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
             case TRule_table_ref_TBlock3::kAlt3:
-                return Unsupported("bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?");
+                return Build(
+                    block.GetAlt3(),
+                    isAnonymous,
+                    isClusterExplicit);
             case TRule_table_ref_TBlock3::ALT_NOT_SET:
                 Y_UNREACHABLE();
         }
     }
 
-    TNodeResult Build(const TRule_table_key& rule, TString service, TDeferredAtom cluster) {
+    TNodeResult Build(
+        const TRule_table_key& rule,
+        TString service,
+        TDeferredAtom cluster,
+        bool isAnonymous) {
         if (cluster.Empty()) {
             Ctx_.Error() << "No cluster name given and no default cluster is selected";
             return std::unexpected(ESQLError::Basic);
@@ -614,9 +649,39 @@ private:
             .Service = std::move(service),
             .Cluster = *cluster.GetLiteral(),
             .Key = std::move(key),
+            .IsAnonymous = isAnonymous,
         };
 
         return TNonNull(BuildYqlTableRef(Ctx_.Pos(), std::move(args)));
+    }
+
+    TNodeResult Build(
+        const TRule_table_ref::TBlock3::TAlt3& alt,
+        bool isAnonymous,
+        bool isClusterExplicit)
+    {
+        const auto& bindParameter = alt.GetRule_bind_parameter1();
+        Token(bindParameter.GetToken1());
+
+        if (isAnonymous) {
+            return Unsupported("COMMAT bind_parameter");
+        }
+
+        if (isClusterExplicit) {
+            return Unsupported("cluster_expr DOT bind_parameter");
+        }
+
+        TString name;
+        if (!NamedNodeImpl(bindParameter, name, *this)) {
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        TNodePtr node = GetNamedNode(name);
+        if (!node) {
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        return TNonNull(node);
     }
 
     TSQLResult<TVector<TNodePtr>> Build(const TRule_values_source_row& rule) {
@@ -803,10 +868,22 @@ std::unexpected<ESQLError> YqlSelectUnsupported(TContext& ctx, TStringBuf messag
     return std::unexpected(ESQLError::UnsupportedYqlSelect);
 }
 
-TNodeResult BuildYqlSelect(
+TNodeResult BuildYqlSelectStatement(
     TContext& ctx,
     NSQLTranslation::ESqlMode mode,
     const NSQLv1Generated::TRule_select_stmt& rule)
+{
+    return TYqlSelect(ctx, mode)
+        .Build(rule)
+        .transform([](auto x) {
+            return TNonNull(BuildYqlStatement(std::move(x)));
+        });
+}
+
+TNodeResult BuildYqlSelectStatement(
+    TContext& ctx,
+    NSQLTranslation::ESqlMode mode,
+    const NSQLv1Generated::TRule_values_stmt& rule)
 {
     return TYqlSelect(ctx, mode)
         .Build(rule)
@@ -828,24 +905,24 @@ TNodeResult BuildYqlSelectSubExpr(
         });
 }
 
+TNodeResult BuildYqlSelectSubExpr(
+    TContext& ctx,
+    NSQLTranslation::ESqlMode mode,
+    const NSQLv1Generated::TRule_select_unparenthesized_stmt& rule)
+{
+    return TYqlSelect(ctx, mode)
+        .Build(rule)
+        .transform([](auto x) {
+            return TNonNull(WrapYqlSelectSubExpr(std::move(x)));
+        });
+}
+
 TNodeResult BuildYqlExists(
     TContext& ctx,
     NSQLTranslation::ESqlMode mode,
     const NSQLv1Generated::TRule_exists_expr& rule)
 {
     return TYqlSelect(ctx, mode).Build(rule);
-}
-
-TNodeResult BuildYqlSelect(
-    TContext& ctx,
-    NSQLTranslation::ESqlMode mode,
-    const NSQLv1Generated::TRule_values_stmt& rule)
-{
-    return TYqlSelect(ctx, mode)
-        .Build(rule)
-        .transform([](auto x) {
-            return TNonNull(BuildYqlStatement(std::move(x)));
-        });
 }
 
 } // namespace NSQLTranslationV1

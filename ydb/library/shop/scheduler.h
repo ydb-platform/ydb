@@ -501,7 +501,7 @@ void TFreezable<TRes>::Deactivate(ConsumerT* consumer)
             return;
         }
     }
-    Y_ABORT_UNLESS("trying to deactivate unknown consumer");
+    // Y_ABORT("trying to deactivate unknown consumer"); // despite the message, this code runs in tests
 }
 
 template <class TRes>

@@ -213,7 +213,7 @@ private:
 
 class THoppingWindow final: public INode {
 public:
-    THoppingWindow(TPosition pos, TVector<TNodePtr> args);
+    THoppingWindow(TPosition pos, TVector<TNodePtr> args, bool useNamed);
     TNodePtr BuildTraits(const TString& label) const;
     TNodePtr GetInterval() const;
     void MarkValid();
@@ -232,8 +232,13 @@ private:
     TNodePtr TimeExtractor_;
     TNodePtr Hop_;
     TNodePtr Interval_;
+    TNodePtr SizeLimit_;
+    TNodePtr TimeLimit_;
+    TNodePtr EarlyPolicy_;
+    TNodePtr LatePolicy_;
     const TNodePtr Delay_ = Y("Interval", Q("0"));
     const TString DataWatermarks_ = "true";
+    bool UseNamed_ = false;
     bool Valid_;
 };
 
@@ -245,6 +250,9 @@ TSourcePtr BuildEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources, TVector<b
 TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped);
 TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1);
 bool IsSubqueryRef(const TSourcePtr& source);
+TNodePtr BuildYqlSubquery(TNodePtr source, TString alias);
+TNodePtr BuildYqlSubqueryRef(TNodePtr subquery, TString ref);
+bool IsYqlSubqueryRef(const TNodePtr& source);
 
 TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos);
 TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false, bool withTables = false);

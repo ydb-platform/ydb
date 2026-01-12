@@ -109,6 +109,7 @@ class TieringTestBase(BaseTestSet):
                 'optimizer_freshness_check_duration_ms': 0,
                 'small_portion_detect_size_limit': 0,
                 'alter_object_enabled': True,
+                'bulk_upsert_require_all_columns': False,
             },
             additional_log_configs={
                 'TX_TIERING': LogLevels.DEBUG,

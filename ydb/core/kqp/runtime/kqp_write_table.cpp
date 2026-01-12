@@ -1510,7 +1510,7 @@ public:
                 if (!writeInfo.Closed) {
                     writeInfo.Serializer->Close();
                 }
-                FlushSerializer(token, true);
+                FlushSerializer(token);
                 writeInfo.Serializer = nullptr;
             }
         }
@@ -1547,7 +1547,7 @@ public:
                     .TableId = tableId,
                     .KeyColumnsMetadata = std::move(keyColumns),
                     .InputColumnsMetadata = std::move(inputColumns),
-                    .Priority = priority,
+                    .Priority = priority, // TODO: manage priority on WriteTask level.
                     .OperationType = operationType,
                 },
                 .Serializer = nullptr,
@@ -1603,7 +1603,7 @@ public:
     }
 
     void FlushBuffer(const TWriteToken token) override {
-        FlushSerializer(token, true);
+        FlushSerializer(token);
     }
 
     void FlushBuffers() override {
@@ -1624,7 +1624,7 @@ public:
             });
         
         for (const TWriteToken token : writeTokensFoFlush) {
-            FlushSerializer(token, true);
+            FlushSerializer(token);
         }
     }
 
@@ -1798,38 +1798,14 @@ public:
     }
 
 private:
-    void FlushSerializer(TWriteToken token, bool force) {
+    void FlushSerializer(TWriteToken token) {
         const auto& writeInfo = WriteInfos.at(token);
-        if (force) {
-            for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
-                for (auto& batch : batches) {
-                    if (batch && !batch->IsEmpty()) {
-                        const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
-                                || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
-                        ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
-                            .Token = token,
-                            .OperationType = writeInfo.Metadata.OperationType,
-                            .Data = std::move(batch),
-                            .HasRead = hasRead,
-                        });
-                        ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
-                            .ShardId = shardId,
-                            .HasRead = hasRead,
-                        });
-                    }
-                }
-            }
-        } else {
-            for (const ui64 shardId : writeInfo.Serializer->GetShardIds()) {
-                auto& shard = ShardsInfo.GetShard(shardId);
-                while (true) {
-                    auto batch = writeInfo.Serializer->FlushBatch(shardId);
-                    if (!batch || batch->IsEmpty()) {
-                        break;
-                    }
+        for (auto& [shardId, batches] : writeInfo.Serializer->FlushBatchesForce()) {
+            for (auto& batch : batches) {
+                if (batch && !batch->IsEmpty()) {
                     const bool hasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
-                        || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
-                    shard.PushBatch(TBatchWithMetadata{
+                            || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
+                    ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
                         .Token = token,
                         .OperationType = writeInfo.Metadata.OperationType,
                         .Data = std::move(batch),

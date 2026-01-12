@@ -57,7 +57,9 @@ namespace NYT::NPhoenix::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>()); \
+        YT_STATIC_INITIALIZER({ \
+            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
+        }); \
     }
 
 #define PHOENIX_DEFINE_TEMPLATE_TYPE(type, typeArgs) \
@@ -67,7 +69,9 @@ namespace NYT::NPhoenix::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type<PP_DEPAREN(typeArgs)>> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>()); \
+        YT_STATIC_INITIALIZER({ \
+            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>(); \
+        }); \
     }
 
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
@@ -83,7 +87,9 @@ namespace NYT::NPhoenix::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterOpaqueTypeDescriptorImpl<type>()); \
+        YT_STATIC_INITIALIZER({ \
+            ::NYT::NPhoenix::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
+        }); \
     }
 
 #define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...) \

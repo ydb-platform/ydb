@@ -11,6 +11,7 @@ Provides classes and functions for:
 import os
 import subprocess
 import logging
+import traceback
 import yatest.common
 import shutil
 import allure
@@ -18,6 +19,17 @@ from time import time
 from typing import Union, Optional, Tuple, List, Dict, Any, NamedTuple
 
 LOGGER = logging.getLogger(__name__)
+
+
+def patch_max_suffix(max_ssh_count: int = 1000000):
+    target_func = yatest.common.path.get_unique_file_path
+
+    if target_func.__defaults__:
+        defaults = list(target_func.__defaults__)
+
+        defaults[-1] = max_ssh_count
+
+        target_func.__defaults__ = tuple(defaults)
 
 
 class ExecutionResult(NamedTuple):
@@ -371,10 +383,10 @@ class RemoteExecutor:
                 return _handle_timeout_error(e, full_cmd, is_local=False)
             except yatest.common.ExecutionError as e:
                 return _handle_execution_error(e, full_cmd, is_local=False)
-            except Exception as e:
+            except Exception:
                 if raise_on_error:
                     raise
-                LOGGER.error(f"Unexpected error executing SSH command on {host}: {e}")
+                LOGGER.error(f"Unexpected error executing SSH command on {host}: {traceback.format_exc()}")
                 return ExecutionResult(
                     stdout="",
                     stderr="",
@@ -392,7 +404,7 @@ class RemoteExecutor:
 # Convenience functions for direct use
 def execute_command(
     host: str, cmd: Union[str, list], raise_on_error: bool = True,
-    timeout: Optional[float] = 10, raise_on_timeout: bool = True
+    timeout: Optional[float] = 60, raise_on_timeout: bool = True
 ) -> ExecutionResult:
     """
     Convenience function for executing a command on a host.

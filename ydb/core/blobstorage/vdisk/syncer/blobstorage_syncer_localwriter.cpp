@@ -216,7 +216,7 @@ namespace NKikimr {
             }
 
             auto addChunk = [&]() {
-                if (fragmentWriter->GetSize()) { 
+                if (fragmentWriter->GetSize()) {
                     TString chunk;
                     fragmentWriter->Finish(&chunk);
                     Chunks.emplace_back(std::move(chunk));

@@ -37,7 +37,11 @@ namespace NYdb::NConsoleClient {
         ui32 RequestTimeoutMs;
         bool UseJsonAPI;
         bool SetSubjectToken;
+        bool ValidateFifo;
 
+        void InitAwsSdk();
+        void DestroyAwsSdk();
+        void InitStatsCollector(size_t writerCount, size_t readerCount);
         void InitSqsClient();
         void DestroySqsClient();
 

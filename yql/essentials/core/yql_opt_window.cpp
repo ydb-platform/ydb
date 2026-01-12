@@ -3465,12 +3465,14 @@ bool IsCurrentRow(const NNodes::TCoFrameBound& bound) {
 }
 
 TWindowFrameSettings TWindowFrameSettings::Parse(const TExprNode& node, TExprContext& ctx) {
-    auto maybeSettings = TryParse(node, ctx);
-    YQL_ENSURE(maybeSettings);
+    bool isUniversal;
+    auto maybeSettings = TryParse(node, ctx, isUniversal);
+    YQL_ENSURE(maybeSettings && !isUniversal);
     return *maybeSettings;
 }
 
-TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& node, TExprContext& ctx) {
+TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& node, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
     TWindowFrameSettings settings;
 
     if (node.IsCallable("WinOnRows")) {
@@ -3617,6 +3619,11 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
                 boundOffset = value;
             } else if (!setting->Tail().IsCallable("Void")) {
                 const TTypeAnnotationNode* type = setting->Tail().GetTypeAnn();
+                if (type && type->GetKind() == ETypeAnnotationKind::Universal) {
+                    isUniversal = true;
+                    return TWindowFrameSettings{};
+                }
+
                 TStringBuilder errMsg;
                 if (!type) {
                     errMsg << "lambda";

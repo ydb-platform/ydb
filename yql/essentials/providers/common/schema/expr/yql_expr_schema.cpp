@@ -199,6 +199,12 @@ public:
             case ETypeAnnotationKind::Unit:
                 TBase::SaveUnitType();
                 break;
+            case ETypeAnnotationKind::Universal:
+                TBase::SaveUniversalType();
+                break;
+            case ETypeAnnotationKind::UniversalStruct:
+                TBase::SaveUniversalStructType();
+                break;
             case ETypeAnnotationKind::EmptyList:
                 TBase::SaveEmptyListType();
                 break;
@@ -297,6 +303,12 @@ struct TExprTypeLoader {
     }
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         return Ctx.MakeType<TUnitExprType>();
+    }
+    TMaybe<TType> LoadUniversalType(ui32 /*level*/) {
+        return Ctx.MakeType<TUniversalExprType>();
+    }
+    TMaybe<TType> LoadUniversalStructType(ui32 /*level*/) {
+        return Ctx.MakeType<TUniversalStructExprType>();
     }
     TMaybe<TType> LoadGenericType(ui32 /*level*/) {
         return Ctx.MakeType<TGenericExprType>();

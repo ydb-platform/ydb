@@ -132,7 +132,7 @@ namespace NKikimr {
         const ui64 RequestId;
         const TEvCompactVDisk::EMode Mode;
         THashSet<ui64> TablesToCompact;
-        const bool Force; 
+        const bool Force;
 
         TEvHullCompact(EHullDbType type, ui64 requestId, TEvCompactVDisk::EMode mode, THashSet<ui64> tablesToCompact, bool force)
             : Type(type)

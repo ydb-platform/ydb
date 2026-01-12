@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import dataclasses
+import json
+import math
 import os
+import re
 import sys
 import traceback
-import re
-import json
 from codeowners import CodeOwners
 from enum import Enum
 from operator import attrgetter
@@ -87,6 +88,7 @@ class TestResult:
     error_type: str = ""
     is_sanitizer_issue: bool = False
     is_timeout_issue: bool = False
+    is_not_launched: bool = False
 
     @property
     def status_display(self):
@@ -101,11 +103,13 @@ class TestResult:
 
     @property
     def elapsed_display(self):
-        m, s = divmod(self.elapsed, 60)
+        # Round up to 1 decimal place: 10.545s -> 10.6s (ceiling to 0.1)
+        elapsed_rounded = math.ceil(self.elapsed * 10) / 10
+        m, s = divmod(elapsed_rounded, 60)
         parts = []
         if m > 0:
             parts.append(f'{int(m)}m')
-        parts.append(f"{s:.3f}s")
+        parts.append(f"{s:.1f}s")
         return ' '.join(parts)
 
     def __str__(self):
@@ -141,7 +145,6 @@ class TestResult:
         status_description = result.get("rich-snippet")
         properties = result.get("properties")
         metrics = result.get("metrics")
-        is_muted = bool(result.get("muted"))
         
         classname = path_str
         if subtest_name and subtest_name.strip():
@@ -152,11 +155,9 @@ class TestResult:
         else:
             name = name_part or ""
         
-        if status_str == "OK":
-            status_str = "PASSED"
-        
+        # Status normalization (OK->PASSED, NOT_LAUNCHED->SKIPPED, mute->MUTE) is done by transform_build_results.py
         # Map status to TestStatus enum
-        if is_muted:
+        if status_str == "MUTE":
             status = TestStatus.MUTE
         elif status_str == "FAILED":
             status = TestStatus.FAIL
@@ -203,7 +204,9 @@ class TestResult:
             status_description=status_description or '',
             error_type=error_type or '',
             is_sanitizer_issue=is_sanitizer_issue(status_description or ''),
-            is_timeout_issue=(error_type or '').lower() == 'timeout'
+            is_timeout_issue=(error_type or '').upper() == 'TIMEOUT',
+            # NOT_LAUNCHED can be in SKIPPED or MUTE status (if muted after being NOT_LAUNCHED)
+            is_not_launched=(error_type or '').upper() == 'NOT_LAUNCHED' and status in (TestStatus.SKIP, TestStatus.MUTE)
         )
 
 
@@ -360,7 +363,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     get_codeowners_for_tests(codeowners, all_tests)
     
     # statuses for history
-    status_for_history = [TestStatus.FAIL, TestStatus.MUTE]
+    status_for_history = [TestStatus.FAIL, TestStatus.MUTE, TestStatus.ERROR]
     status_for_history = [s for s in status_for_history if s in status_test]
     
     tests_names_for_history = []
@@ -372,20 +375,66 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         tests_names_for_history.append(test.full_name)
 
     try:
-        history = get_test_history(tests_names_for_history, last_n_runs, build_preset, branch)
+        # Get history for last 4 days instead of last N runs
+        history = get_test_history(tests_names_for_history, 4, build_preset, branch)
     except Exception:
         print(traceback.format_exc())
    
-    #geting count of passed tests in history for sorting
+    # Calculate success rate for each test
+    def calculate_success_rate(test_history):
+        """Calculate success rate separately for pr-check and other runs"""
+        pr_check_runs = []
+        other_runs = []
+        
+        for timestamp, run_data in test_history.items():
+            job_name = run_data.get("job_name", "").lower()
+            # Check if it's a pr-check run (common patterns: pr-check, pr_check, pr/check, etc.)
+            is_pr_check = "pr-check" in job_name or "pr_check" in job_name or "pr/check" in job_name
+            
+            if is_pr_check:
+                pr_check_runs.append(run_data)
+            else:
+                other_runs.append(run_data)
+        
+        def calc_rate(runs):
+            if not runs:
+                return None
+            passed = sum(1 for r in runs if r.get("status") == "passed")
+            total = len(runs)
+            return {
+                "rate": round(passed / total * 100, 1) if total > 0 else 0,
+                "passed": passed,
+                "total": total
+            }
+        
+        return {
+            "pr_check": calc_rate(pr_check_runs),
+            "other": calc_rate(other_runs)
+        }
+    
+    # Calculate success rates for all tests with history
+    test_success_rates = {}
+    
+    print(f"Processing history for {len(history)} tests with history data")
+    print(f"Total tests in statuses: {len(tests_in_statuses)}")
+    
     for test in tests_in_statuses:
         if test.full_name in history:
-            test.count_of_passed = len(
-                [
-                    history[test.full_name][x]
-                    for x in history[test.full_name]
-                    if history[test.full_name][x]["status"] == "passed"
-                ]
-            )
+            test_history = history[test.full_name]
+            if test_history:  # Check that history is not empty
+                rates = calculate_success_rate(test_history)
+                test_success_rates[test.full_name] = rates
+                # Also update count_of_passed for backward compatibility
+                test.count_of_passed = len(
+                    [
+                        history[test.full_name][x]
+                        for x in history[test.full_name]
+                        if history[test.full_name][x]["status"] == "passed"
+                    ]
+                )
+    
+    print(f"Calculated success rates for {len(test_success_rates)} tests")
+    
     # sorted by test name
     for current_status in status_for_history:
         status_test.get(current_status,[]).sort(key=lambda val: (val.full_name, ))
@@ -420,12 +469,71 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     
     # Load owner to area mapping
     owner_area_mapping = load_owner_area_mapping()
+    
+    # Prepare history data for JavaScript (without status_description to reduce HTML size)
+    # Store status_description separately - only for failed/error/mute entries to save space
+    history_for_js = {}
+    history_descriptions = {}  # Separate object for status descriptions (only non-empty, failed/error/mute)
+    if history:
+        for test_name, test_history in history.items():
+            history_for_js[test_name] = {}
+            history_descriptions[test_name] = {}
+            for timestamp, hist_data in test_history.items():
+                timestamp_str = str(timestamp)
+                status = hist_data.get("status", "")
+                history_for_js[test_name][timestamp_str] = {
+                    "status": status,
+                    "date": hist_data.get("datetime", ""),
+                    "commit": hist_data.get("commit", ""),
+                    "job_name": hist_data.get("job_name", ""),
+                    "job_id": hist_data.get("job_id", ""),
+                    "branch": hist_data.get("branch", "")
+                    # status_description removed to reduce HTML size - stored separately
+                }
+                # Store description separately (only for failed/error/mute and if not empty to save space)
+                desc = hist_data.get("status_description", "")
+                if desc and desc.strip() and status in ("failure", "error", "mute"):
+                    history_descriptions[test_name][timestamp_str] = desc
+    
+    # Prepare test descriptions for current tests (without embedding in HTML to reduce size)
+    # Store only for tests with errors (FAIL, ERROR, MUTE, SKIP) and if not empty
+    test_descriptions = {}
+    for test in all_tests:
+        if test.status in (TestStatus.FAIL, TestStatus.ERROR, TestStatus.MUTE, TestStatus.SKIP):
+            desc = test.status_description
+            if desc and desc.strip():
+                test_descriptions[test.full_name] = desc
+    
+    # Save data to separate JSON file to reduce HTML size
+    # fn is the full path to HTML file (e.g., /path/to/public_dir/try_1/ya-test.html)
+    data_file = fn.replace('.html', '_data.json')
+    data_to_save = {
+        'history_for_js': history_for_js,
+        'history_descriptions': history_descriptions,
+        'test_descriptions': test_descriptions,
+        'test_success_rates': test_success_rates
+    }
+    with open(data_file, "w", encoding="utf-8") as f:
+        json.dump(data_to_save, f, separators=(',', ':'))  # Minified JSON
+    
+    # Calculate data file URL (relative to HTML file location)
+    # JSON file is in the same directory as HTML file, so we use just the filename
+    # This way fetch() in browser will load JSON from the same directory as HTML
+    # Example: if HTML is at /path/to/try_1/ya-test.html,
+    #          JSON is at /path/to/try_1/ya-test_data.json,
+    #          and URL should be "ya-test_data.json" (relative to HTML location)
+    data_file_url = os.path.basename(data_file)
         
     content = env.get_template("summary.html").render(
         status_order=status_order,
         tests=status_test,
         has_any_log=has_any_log,
-        history=history,
+        history=history,  # Keep for template checks (test.full_name in history)
+        history_for_js={},  # Empty - will be loaded from JSON
+        history_descriptions={},  # Empty - will be loaded from JSON
+        test_descriptions={},  # Empty - will be loaded from JSON
+        test_success_rates={},  # Empty - will be loaded from JSON
+        data_file_url=data_file_url,  # URL to JSON data file
         build_preset=build_preset,
         buid_preset_params=buid_preset_params,
         branch=branch,
@@ -437,7 +545,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         commit_sha=github_sha
     )
 
-    with open(fn, "w") as fp:
+    with open(fn, "w", encoding="utf-8") as fp:
         fp.write(content)
 
 
@@ -489,11 +597,13 @@ def iter_build_results_files(path):
                 report = json.load(f)
             
             for result in report.get("results") or []:
-                if result.get("type") == "test":
-                    # Skip suite-level entries (they are aggregates, not individual tests)
-                    if result.get("suite") is True:
-                        continue
-                    yield fn, result
+                # Only include results that have a status field (indicates it's a test/check)
+                # Filtering (suite, build, configure) is done by transform_build_results.py
+                status = result.get("status")
+                if not status:
+                    continue
+                
+                yield fn, result
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Warning: Unable to parse {fn}: {e}", file=sys.stderr)
             continue

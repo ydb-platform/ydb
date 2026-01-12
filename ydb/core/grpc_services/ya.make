@@ -118,6 +118,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/backup/common
+    ydb/core/backup/regexp
     ydb/core/base
     ydb/core/control/lib
     ydb/core/counters_info

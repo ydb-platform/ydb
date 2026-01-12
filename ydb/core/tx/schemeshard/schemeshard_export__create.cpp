@@ -36,9 +36,21 @@ bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& it
         || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
 }
 
+bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
+    switch (item.SourcePathType) {
+    case NKikimrSchemeOp::EPathTypeView:
+    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+    case NKikimrSchemeOp::EPathTypeReplication:
+    case NKikimrSchemeOp::EPathTypeTransfer:
+        return true;
+    default:
+        return false;
+    }
+}
+
 template <typename T>
-concept HasMaterializeIndexes = requires(const T& t) {
-    { t.materialize_indexes() } -> std::same_as<bool>;
+concept HasIncludeIndexData = requires(const T& t) {
+    { t.include_index_data() } -> std::same_as<bool>;
 };
 
 }
@@ -123,8 +135,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         auto processExportSettings = [&]<typename TSettings>(const TSettings& settings, TExportInfo::EKind kind, bool enableFeatureFlags) -> bool {
             exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());
-            if constexpr (HasMaterializeIndexes<TSettings>) {
-                exportInfo->MaterializeIndexes = settings.materialize_indexes();
+            if constexpr (HasIncludeIndexData<TSettings>) {
+                exportInfo->IncludeIndexData = settings.include_index_data();
             }
             if (enableFeatureFlags) {
                 exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
@@ -154,7 +166,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 if (!settings.scheme()) {
                     settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
                 }
-                if (settings.materialize_indexes() && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
+                if (settings.include_index_data() && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
                     return Reply(
                         std::move(response),
                         Ydb::StatusIds::PRECONDITION_FAILED,
@@ -249,6 +261,8 @@ private:
 
     template <typename TSettings>
     bool FillItems(TExportInfo& exportInfo, const TSettings& settings, TString& explain) {
+        TVector<TExportInfo::TItem> indexItems;
+
         exportInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const auto& item = settings.items(itemIdx);
@@ -260,6 +274,7 @@ private:
                     .NotDeleted()
                     .NotUnderDeleting()
                     .IsSupportedInExports()
+                    .NotAsyncReplicaTable()
                     .FailOnRestrictedCreateInTempZone();
 
                 if (!checks) {
@@ -271,7 +286,7 @@ private:
             exportInfo.Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
             exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
 
-            if (exportInfo.MaterializeIndexes && path.Base()->IsTable()) {
+            if (exportInfo.IncludeIndexData && path.Base()->IsTable()) {
                 for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
                     TVector<TString> childParts;
                     childParts.push_back(childName);
@@ -282,11 +297,17 @@ private:
                     }
                     for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
                         const auto implTableRelPath = JoinPath(ChildPath(childParts, implTableName));
-                        exportInfo.Items.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
-                        exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
+                        indexItems.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
                     }
                 }
             }
+        }
+
+        // Add materialized index items to the end
+        exportInfo.Items.reserve(exportInfo.Items.size() + indexItems.size());
+        for (auto& item : indexItems) {
+            exportInfo.Items.push_back(std::move(item));
+            exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
         }
 
         return true;
@@ -418,9 +439,7 @@ private:
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView
-            || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup)
-        {
+        if (IsPathTypeSchemeObject(item)) {
             Ydb::Export::ExportToS3Settings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
             const auto databaseRoot = CanonizePath(Self->RootPathElements);
@@ -733,8 +752,10 @@ private:
             exportInfo.EndTime = TAppData::TimeProvider->Now();
         }
     }
-
-    TMaybe<TString> GetIssues(const TPathId& itemPathId, TTxId backupTxId, const TExportInfo::TItem& item) {
+    
+    TMaybe<TString> GetIssues(const TExportInfo& exportInfo, TTxId backupTxId, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+        const auto& item = exportInfo.Items[itemIdx];
         if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
             if (!Self->ColumnTables.contains(item.SourcePathId)) {
                 return TStringBuilder() << "Cannot find table: " << item.SourcePathId;
@@ -744,6 +765,7 @@ private:
             return GetIssues(table, item.SourcePathId, backupTxId);
         }
 
+        auto itemPathId = ItemPathId(Self, exportInfo, itemIdx);
         if (!Self->Tables.contains(itemPathId)) {
             return TStringBuilder() << "Cannot find table: " << itemPathId;
         }
@@ -1434,7 +1456,7 @@ private:
 
             bool itemHasIssues = false;
             if (IsPathTypeTransferrable(item)) {
-                if (const auto issue = GetIssues(ItemPathId(Self, *exportInfo, itemIdx), txId, item)) {
+                if (const auto issue = GetIssues(*exportInfo, txId, itemIdx)) {
                     item.Issue = *issue;
                     Cancel(*exportInfo, itemIdx, "issues during backing up");
                     itemHasIssues = true;

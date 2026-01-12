@@ -16,6 +16,7 @@ SRCS(
     ydb_federation_discovery_v1.proto
     ydb_import_v1.proto
     ydb_keyvalue_v1.proto
+    ydb_keyvalue_v2.proto
     ydb_monitoring_v1.proto
     ydb_operation_v1.proto
     ydb_query_v1.proto

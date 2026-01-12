@@ -7315,6 +7315,84 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 6); // 1 groups[0], 1 historic[0], 4 cache misses before preloading
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
     }
+
+    Y_UNIT_TEST(FollowerPromoteToLeaderWithTryKeepInMemoryEnabled) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        // Start the source tablet
+        // Assume that first EvAttach is leader's attach
+        TActorId leaderExecutorActor;
+        TWaitForFirstEvent<NSharedCache::TEvAttach> leaderAttach(*env, [&](const auto& ev) {
+            leaderExecutorActor = ev->Sender;
+            Cerr << "... observed TEvAttach from " << leaderExecutorActor << " (leader)" << Endl;
+            return true;
+        });
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        Cerr << "... initializing schema" << Endl;
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{ new TTxCachingFamily(0, ECacheMode::TryKeepInMemory) });
+
+        Cerr << "... inserting rows" << Endl;
+        env.SendSync(rows.MakeRows(10, 0, 10));
+
+        Cerr << "...compacting table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        leaderAttach.Wait(TDuration::Seconds(5));
+        leaderAttach.Stop();
+
+        Cerr << "... starting follower" << Endl;
+        TActorId followerSysActor;
+        auto followerBootObserver = env->AddObserver<TEvTablet::TEvFBoot>([&](auto& ev) {
+            followerSysActor = ev->Sender;
+            Cerr << "... observed TEvTablet::TEvFBoot, followerSysActor: " << followerSysActor << Endl;
+        });
+        TActorId followerExecutorActor;
+        TWaitForFirstEvent<NSharedCache::TEvAttach> followerFirstAttach(*env, [&](const auto& ev) {
+            if (ev->Sender != leaderExecutorActor) {
+                followerExecutorActor = ev->Sender;
+                Cerr << "... observed TEvAttach from " << followerExecutorActor << " (follower)" << Endl;
+                return true;
+            } else {
+                Cerr << "... observed TEvAttach from " << ev->Sender << Endl;
+            }
+            return false;
+        });
+        env.FireFollower(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, /* followerId */ 1);
+    
+        Cerr << "... wait first follower EvAttach" << Endl;
+        followerFirstAttach.Wait(TDuration::Seconds(5));
+
+        TWaitForFirstEvent<NSharedCache::TEvAttach> followerSecondAttach(*env, [&](const auto& ev) {
+            bool fromFollower = ev->Sender == followerExecutorActor;
+            Cerr << "... observed TEvAttach from " << ev->Sender << (fromFollower ? " (follower)" : "") << Endl;
+            return fromFollower;
+        });
+
+        Cerr << "... stopping leader" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        Cerr << "... promoting follower" << Endl;
+        {
+            NFake::TStarter starter;
+            auto* info = starter.MakeTabletInfo(env.Tablet, env.StorageGroupCount);
+            auto* promote = new TEvTablet::TEvPromoteToLeader(0, info);
+            env->Send(new IEventHandle(followerSysActor, followerSysActor, promote), 0, /* viaActorSystem */ true);
+        }
+
+        Cerr << "... wait secont follower EvAttach" << Endl;
+        followerSecondAttach.Wait(TDuration::Seconds(5));
+    }
 }
 
 Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {

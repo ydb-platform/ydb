@@ -439,7 +439,7 @@ struct MainTestCase {
         std::optional<ui64> BatchSizeBytes = 8_MB;
         std::optional<std::string> ExpectedError;
         std::optional<std::string> Username;
-        std::optional<std::string> UserSecretName;
+        std::optional<std::string> UserSecret;
         std::optional<std::string> Directory;
 
         CreateTransferSettings() {};
@@ -488,9 +488,9 @@ struct MainTestCase {
             return result;
         }
 
-        static CreateTransferSettings WithSecretName(const TString& secret) {
+        static CreateTransferSettings WithSecret(const TString& secret) {
             CreateTransferSettings result;
-            result.UserSecretName = secret;
+            result.UserSecret = secret;
             return result;
         }
     };
@@ -513,8 +513,8 @@ struct MainTestCase {
         if (settings.BatchSizeBytes) {
             options.push_back(TStringBuilder() <<  "BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes);
         }
-        if (settings.UserSecretName) {
-            options.push_back(TStringBuilder() <<  "TOKEN_SECRET_NAME = '" << *settings.UserSecretName << "'");
+        if (settings.UserSecret) {
+            options.push_back(TStringBuilder() <<  "TOKEN_SECRET_PATH = '" << *settings.UserSecret << "'");
         }
         if (settings.Username) {
             options.push_back(TStringBuilder() <<  "TOKEN = '" << *settings.Username << "@builtin'");
@@ -819,10 +819,10 @@ struct MainTestCase {
                 for (size_t i = 0; i < expectations.size(); ++i) {
                     auto& row = proto.rows(i);
                     auto& rowExpectations = expectations[i];
-                    for (size_t i = 0; i < rowExpectations.size(); ++i) {
-                        auto& c = rowExpectations[i];
+                    for (size_t j = 0; j < rowExpectations.size(); ++j) {
+                        auto& c = rowExpectations[j];
                         TString msg = TStringBuilder() << "Row " << i << " column '" << c.first << "': ";
-                        c.second->Assert(msg, row.items(i));
+                        c.second->Assert(msg, row.items(j));
                     }
                 }
 

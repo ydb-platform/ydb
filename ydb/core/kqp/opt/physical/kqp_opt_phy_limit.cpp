@@ -10,6 +10,46 @@ namespace NKikimr::NKqp::NOpt {
 using namespace NYql;
 using namespace NYql::NNodes;
 
+TExprBase KqpApplyLimitToFullTextIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    Y_UNUSED(kqpCtx);
+
+    if (!node.Maybe<TCoTake>()) {
+        return node;
+    }
+    auto take = node.Cast<TCoTake>();
+
+    auto maybeSkip = take.Input().Maybe<TCoSkip>();
+    if (maybeSkip) {
+        return node;
+    }
+
+    auto input = maybeSkip ? maybeSkip.Cast().Input() : take.Input();
+
+    bool isReadTable = input.Maybe<TKqpReadTableFullTextIndex>().IsValid();
+
+    if (!isReadTable) {
+        return node;
+    }
+
+    auto settings = TKqpReadTableFullTextIndexSettings::Parse(input.Cast<TKqpReadTableFullTextIndex>().Settings());
+
+    if (settings.ItemsLimit) {
+        return node; // already set?
+    }
+
+    settings.SetItemsLimit(take.Count().Ptr());
+
+    auto newSettings = settings.BuildNode(ctx, input.Pos());
+
+    auto newInput = ctx.ChangeChild(
+        input.Ref(), TKqpReadTableFullTextIndex::idx_Settings, newSettings.Ptr());
+
+    return Build<TCoTake>(ctx, take.Pos())
+        .Input(newInput)
+        .Count(take.Count())
+        .Done();
+}
+
 TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoTake>()) {
         return node;

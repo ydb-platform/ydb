@@ -374,7 +374,7 @@ message TTableServiceConfig {
 
     optional bool EnableSnapshotIsolationRW = 76 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableStreamWrite = 77 [default = false, (InvalidateCompileCache) = true];
-    optional bool EnableBatchUpdates = 78 [default = false];
+    optional bool EnableBatchUpdates = 78 [default = true];
 
     optional bool AllowMultiBroadcasts = 79 [default = true, (InvalidateCompileCache) = true];
 
@@ -451,6 +451,25 @@ message TTableServiceConfig {
     optional EBackportMode BackportMode = 108 [ default = Released, (InvalidateCompileCache) = true];
 
     optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
-    
+
     optional bool EnableWatermarks = 110 [default = false, (InvalidateCompileCache) = true];
+
+    optional uint64 LocalChannelInflightBytes  = 111 [default = 8388608];
+    optional uint64 RemoteChannelInflightBytes = 112 [default = 16777216];
+    optional uint64 NodeSessionIcInflightBytes = 113 [default = 67108864];
+
+    optional uint32 DqChannelVersion = 114 [ default = 2, (InvalidateCompileCache) = true];
+
+    optional bool EnableDiscardSelect = 115 [default = false, (InvalidateCompileCache) = true];
+
+    enum ETxMode {
+        SerializableRW = 0;
+        SnapshotRW = 1;
+        SnapshotRO = 2;
+        StaleRO = 3;
+    }
+
+    optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
+
+    optional bool EnableDqHashAggregateByDefault = 117 [default = false, (InvalidateCompileCache) = true];
 };

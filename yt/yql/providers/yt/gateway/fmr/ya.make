@@ -17,6 +17,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/coordinator/interface
     yt/yql/providers/yt/fmr/file/metadata/interface
     yt/yql/providers/yt/fmr/file/upload/interface
+    yt/yql/providers/yt/fmr/job_preparer/interface
     yt/yql/providers/yt/lib/config_clusters
     yt/yql/providers/yt/lib/url_mapper
     yt/yql/providers/yt/lib/schema

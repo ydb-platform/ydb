@@ -96,8 +96,10 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseBlockHashJoin);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
+    REGISTER_SETTING(*this, DqChannelVersion);
 
     REGISTER_SETTING(*this, UseDqHashCombine);
+    REGISTER_SETTING(*this, UseDqHashAggregate);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -132,6 +134,21 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     REGISTER_SETTING(*this, KMeansTreeSearchTopSize);
     REGISTER_SETTING(*this, DisableCheckpoints);
+
+    REGISTER_SETTING(*this, DefaultTxMode).Parser(
+        [](const TString& mode) {
+            if (mode == "SerializableRW") {
+                return NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+            } else if (mode == "SnapshotRW") {
+                return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW;
+            } else if (mode == "SnapshotRO") {
+                return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+            } else if (mode == "StaleRO") {
+                return NKqpProto::ISOLATION_LEVEL_READ_STALE;
+            } else {
+                throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
+            }
+        });
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
@@ -236,4 +253,9 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
 bool TKikimrConfiguration::GetUseDqHashCombine() const {
     return UseDqHashCombine.Get().GetOrElse(EnableDqHashCombineByDefault);
 }
+
+bool TKikimrConfiguration::GetUseDqHashAggregate() const {
+    return UseDqHashAggregate.Get().GetOrElse(EnableDqHashAggregateByDefault);
+}
+
 }

@@ -36,11 +36,13 @@ class ParallelWorkloadTestBase:
     ignore_stderr_content: str = external_param_is_true('ignore_stderr_content')
 
     @pytest.fixture(autouse=True, scope="session")
-    def binary_deployer(self) -> StressUtilDeployer:
+    def binary_deployer(self):
         binaries_deploy_path: str = (
             "/tmp/stress_binaries/"
         )
-        return StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config)
+        deployer = StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config)
+        yield deployer
+        deployer._manage_nemesis(False, [], 'teardown')
 
     @pytest.fixture(autouse=True, scope="session")
     def health_checker_daemon(self, binary_deployer: StressUtilDeployer):

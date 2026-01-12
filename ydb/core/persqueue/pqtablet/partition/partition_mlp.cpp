@@ -67,14 +67,18 @@ void TPartition::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
 }
 
 void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPConsumerState " << ev->Get()->Metrics.ShortDebugString());
-    auto it = MLPConsumers.find(ev->Get()->Metrics.GetConsumer());
+    auto& metrics = ev->Get()->Metrics;
+
+    LOG_D("Handle TEvPQ::TEvMLPConsumerState " << metrics.ShortDebugString());
+    auto it = MLPConsumers.find(metrics.GetConsumer());
     if (it == MLPConsumers.end()) {
         return;
     }
 
+    TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE] += metrics.GetCPUUsage();
+
     auto& consumerInfo = it->second;
-    consumerInfo.Metrics = std::move(ev->Get()->Metrics);
+    consumerInfo.Metrics = std::move(metrics);
 }
 
 void TPartition::ProcessMLPPendingEvents() {

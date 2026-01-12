@@ -119,7 +119,7 @@ public:
     TFuture<void> GetReadyEvent() override
     {
         if (FlushExecutor_) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         {
@@ -252,12 +252,12 @@ private:
         {
             auto guard = Guard(SpinLock_);
             if ((checkIfFlushNeeded && !IsFlushNeeded()) && !Closed_) {
-                return VoidFuture;
+                return OKFuture;
             }
             buffer = GetBufferToFlush();
         }
         if (!buffer) {
-            return VoidFuture;
+            return OKFuture;
         }
         return FlushImpl(std::move(*buffer))
             .Apply(BIND([this, this_ = MakeStrong(this), checkIfFlushNeeded] {

@@ -34,8 +34,6 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     ETableKind TableKind = ETableKind::Unknown;
     TMaybe<NKikimrSysView::TSysViewDescription> SysViewInfo;
-    THashMap<TString, std::pair<TString, NYql::TKikimrPathId>> Sequences;
-    THashMap<TString, Ydb::TypedValue> DefaultFromLiteral;
     bool IsBuildInProgress = false;
 
     TTableConstInfo() {}
@@ -69,20 +67,6 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
         column.IsBuildInProgress = phyColumn.GetIsBuildInProgress();
 
         Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
-        if (!phyColumn.GetDefaultFromSequence().empty()) {
-            TString seq = phyColumn.GetDefaultFromSequence();
-            if (!seq.StartsWith("/")) {
-                seq = Path + "/" + seq;
-            }
-            NYql::TKikimrPathId pathId(phyColumn.GetDefaultFromSequencePathId().GetOwnerId(), phyColumn.GetDefaultFromSequencePathId().GetLocalPathId());
-            Sequences.emplace(phyColumn.GetId().GetName(), std::make_pair(seq, pathId));
-        }
-
-        if (phyColumn.HasDefaultFromLiteral()) {
-            DefaultFromLiteral.emplace(
-                phyColumn.GetId().GetName(),
-                phyColumn.GetDefaultFromLiteral());
-        }
     }
 
     void AddColumn(const TString& columnName) {

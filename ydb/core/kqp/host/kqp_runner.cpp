@@ -340,24 +340,10 @@ private:
             .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
             .Build(false));
 
-        auto kqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
-            .AddServiceTransformers()
-            .Add(Log("RBOTypeAnnotator"), "LogRBOTypeAnnotator")
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-            .Build(false);
-
         auto rboKqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("RBOTypeAnnotator"), "LogRBOTypeAnnotator")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-            .Build(false);
-
-        auto newRBOPhysicalPeepholeTransformer = TTransformationPipeline(typesCtx)
-            .AddServiceTransformers()
-            .Add(Log("PhysicalPeephole"), "LogPhysicalPeephole")
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-            .AddPostTypeAnnotation()
-            .Add(GetDqIntegrationPeepholeTransformer(false, typesCtx), "DqIntegrationPeephole")
             .Build(false);
 
         auto newRBOPhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
@@ -373,7 +359,9 @@ private:
             //.AddCommonOptimization()
 
             .Add(CreateKqpRewriteSelectTransformer(OptimizeCtx, *typesCtx), "RewriteSelect")
-            .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, rboKqpTypeAnnTransformer, kqpTypeAnnTransformer, newRBOPhysicalPeepholeTransformer, funcRegistry), "NewRBOTransformer")
+            .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, std::move(rboKqpTypeAnnTransformer),
+                    CreateTypeAnnotationTransformer(
+                        CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config), *typesCtx), funcRegistry), "NewRBOTransformer")
             .Add(CreateKqpRBOCleanupTransformer(*typesCtx), "RBOCleanupTransformer")
 
             //.Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
@@ -417,7 +405,7 @@ private:
                 "BuildPhysicalTxs")
             .Build(false));
 
-            auto physicalBuildQueryTransformer = TTransformationPipeline(typesCtx)
+        auto physicalBuildQueryTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("PhysicalBuildQuery"), "LogPhysicalBuildQuery")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))

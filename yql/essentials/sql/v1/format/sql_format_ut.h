@@ -249,6 +249,7 @@ Y_UNIT_TEST(Values) {
     TCases cases = {
         {"values (1);", "VALUES\n\t(1)\n;\n"},
         {"values (1,2),(3,4);", "VALUES\n\t(1, 2),\n\t(3, 4)\n;\n"},
+        {"values (1,2),(3,4),;", "VALUES\n\t(1, 2),\n\t(3, 4),\n;\n"},
         {"values ('a\nb');", "VALUES\n\t('a\nb')\n;\n"},
     };
 
@@ -933,6 +934,8 @@ Y_UNIT_TEST(Select) {
          "SELECT\n\t1\nFROM\n\tuser AS user (\n\t\tuser\n\t)\n;\n"},
         {"select 1 from user as user(user, user)",
          "SELECT\n\t1\nFROM\n\tuser AS user (\n\t\tuser,\n\t\tuser\n\t)\n;\n"},
+        {"select 1 from user as user(user, user,)",
+         "SELECT\n\t1\nFROM\n\tuser AS user (\n\t\tuser,\n\t\tuser,\n\t)\n;\n"},
         {"select 1 from user with user=user",
          "SELECT\n\t1\nFROM\n\tuser WITH user = user\n;\n"},
         {"select 1 from user with (user=user, user=user)",

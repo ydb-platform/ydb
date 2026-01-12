@@ -1359,6 +1359,18 @@ private:
         Out_ << TStringBuf("Unit");
     }
 
+    void Visit(const TUniversalExprType& type) final {
+        TopLevel_ = false;
+        Y_UNUSED(type);
+        Out_ << TStringBuf("Universal");
+    }
+
+    void Visit(const TUniversalStructExprType& type) final {
+        TopLevel_ = false;
+        Y_UNUSED(type);
+        Out_ << TStringBuf("UniversalStruct");
+    }
+
     void Visit(const TMultiExprType& type) final {
         TopLevel_ = false;
         Out_ << TStringBuf("Multi<");

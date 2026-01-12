@@ -48,6 +48,75 @@ constexpr int DIR_MODE_PRIVATE = S_IRUSR | S_IWUSR | S_IXUSR; // rwx------
     return "unknown";
 }
 
+// Recursively set value at path, handling yaml-cpp quirks by cloning at each level
+void SetValueAtPath(YAML::Node& parent, const TVector<TString>& parts, size_t index, const YAML::Node& value) {
+    if (index >= parts.size()) {
+        return;
+    }
+
+    const std::string key = std::string(parts[index]);
+
+    if (index == parts.size() - 1) {
+        // Last element - set the value
+        parent[key] = value;
+    } else {
+        // Intermediate element - get/create subtree
+        YAML::Node subtree;
+        if (parent[key].IsMap()) {
+            subtree = YAML::Clone(parent[key]);
+        } else {
+            subtree = YAML::Node(YAML::NodeType::Map);
+        }
+
+        // Recursively set value in subtree
+        SetValueAtPath(subtree, parts, index + 1, value);
+
+        // Assign back to parent
+        parent[key] = subtree;
+    }
+}
+
+// Recursively remove value at path
+void RemoveValueAtPath(YAML::Node& parent, const TVector<TString>& parts, size_t index) {
+    if (index >= parts.size() || !parent.IsMap()) {
+        return;
+    }
+
+    const std::string key = std::string(parts[index]);
+
+    if (index == parts.size() - 1) {
+        // Last element - remove it
+        parent.remove(key);
+    } else {
+        // Intermediate element - navigate deeper
+        if (parent[key].IsMap()) {
+            YAML::Node subtree = YAML::Clone(parent[key]);
+            RemoveValueAtPath(subtree, parts, index + 1);
+            parent[key] = subtree;
+        }
+    }
+}
+
+// Safe key lookup that doesn't corrupt yaml-cpp internal state
+// yaml-cpp has a bug where accessing nodes (even existing ones) can corrupt internal structure
+// This function iterates to find the key and returns a Clone to prevent corruption
+YAML::Node SafeGetChild(const YAML::Node& node, const std::string& key) {
+    if (!node.IsMap()) {
+        return YAML::Node();
+    }
+    for (auto it = node.begin(); it != node.end(); ++it) {
+        try {
+            if (it->first.as<std::string>() == key) {
+                // Return a clone to prevent yaml-cpp from corrupting the original structure
+                return YAML::Clone(it->second);
+            }
+        } catch (...) {
+            continue;
+        }
+    }
+    return YAML::Node();
+}
+
 void EnsureDir(const TFsPath& path, int mode) {
     if (path.Exists()) {
         return;
@@ -108,7 +177,8 @@ TConfigNode TConfigNode::GetChildBySimpleKey(const TString& key) {
         throw std::runtime_error(TStringBuilder() << "operator[] call on a scalar (key: \"" << key << "\")");
     }
 
-    YAML::Node child = Node[std::string(key)];
+    // Use safe lookup to avoid yaml-cpp corruption bug
+    YAML::Node child = SafeGetChild(Node, std::string(key));
     GetGlobalLogger().Debug() << "GetChildBySimpleKey result: childPath=\"" << childPath << "\", child=" << NodeTypeStr(child);
 
     return TConfigNode(child, Manager, childPath);
@@ -210,61 +280,10 @@ void TConfigNode::SetValueInternal(const YAML::Node& value) {
         GetGlobalLogger().Debug() << "SetValueInternal: created root as map";
     }
 
-    // Build complete subtree and assign to avoid yaml-cpp chained access issues
+    // Use recursive function to handle any nesting depth
     // yaml-cpp has bugs with chained access like root["a"]["b"] = value
-    switch (parts.size()) {
-        case 1:
-            GetGlobalLogger().Debug() << "SetValueInternal: setting root[" << parts[0] << "]";
-            root[std::string(parts[0])] = value;
-            GetGlobalLogger().Debug() << "SetValueInternal: after set, root=" << NodeTypeStr(root);
-            break;
-        case 2: {
-            GetGlobalLogger().Debug() << "SetValueInternal: building subtree for " << parts[0] << "." << parts[1];
-            // Get existing subtree or create new one
-            YAML::Node subtree;
-            if (root[std::string(parts[0])].IsMap()) {
-                // Clone existing map to preserve other keys
-                subtree = YAML::Clone(root[std::string(parts[0])]);
-                GetGlobalLogger().Debug() << "SetValueInternal: cloned existing map";
-            } else {
-                subtree = YAML::Node(YAML::NodeType::Map);
-                GetGlobalLogger().Debug() << "SetValueInternal: created new map";
-            }
-            // Set the value in subtree
-            subtree[std::string(parts[1])] = value;
-            // Assign entire subtree to root
-            root[std::string(parts[0])] = subtree;
-            GetGlobalLogger().Debug() << "SetValueInternal: after set, root=" << NodeTypeStr(root);
-            GetGlobalLogger().Debug() << "SetValueInternal: after set, root[" << parts[0] << "]=" << NodeTypeStr(root[std::string(parts[0])]);
-            break;
-        }
-        case 3: {
-            GetGlobalLogger().Debug() << "SetValueInternal: building subtree for " << parts[0] << "." << parts[1] << "." << parts[2];
-            // Level 1
-            YAML::Node level1;
-            if (root[std::string(parts[0])].IsMap()) {
-                level1 = YAML::Clone(root[std::string(parts[0])]);
-            } else {
-                level1 = YAML::Node(YAML::NodeType::Map);
-            }
-            // Level 2
-            YAML::Node level2;
-            if (level1[std::string(parts[1])].IsMap()) {
-                level2 = YAML::Clone(level1[std::string(parts[1])]);
-            } else {
-                level2 = YAML::Node(YAML::NodeType::Map);
-            }
-            // Set value
-            level2[std::string(parts[2])] = value;
-            level1[std::string(parts[1])] = level2;
-            root[std::string(parts[0])] = level1;
-            GetGlobalLogger().Debug() << "SetValueInternal: after set, root=" << NodeTypeStr(root);
-            break;
-        }
-        default:
-            GetGlobalLogger().Warning() << "Path too deep (max 3 levels): " << Path;
-            return;
-    }
+    SetValueAtPath(root, parts, 0, value);
+    GetGlobalLogger().Debug() << "SetValueInternal: after set, root=" << NodeTypeStr(root);
 
     Manager->MarkModified();
 }
@@ -298,20 +317,8 @@ void TConfigNode::Remove() {
 
     YAML::Node& root = Manager->Config;
 
-    // Navigate to parent and remove the key
-    if (parts.size() == 1) {
-        if (root.IsMap()) {
-            root.remove(std::string(parts[0]));
-        }
-    } else if (parts.size() == 2) {
-        if (root[std::string(parts[0])].IsMap()) {
-            root[std::string(parts[0])].remove(std::string(parts[1]));
-        }
-    } else if (parts.size() == 3) {
-        if (root[std::string(parts[0])][std::string(parts[1])].IsMap()) {
-            root[std::string(parts[0])][std::string(parts[1])].remove(std::string(parts[2]));
-        }
-    }
+    // Use recursive function to handle any nesting depth
+    RemoveValueAtPath(root, parts, 0);
 
     Node = YAML::Node();
     Manager->MarkModified();
@@ -402,17 +409,6 @@ void TConfigurationManager::Reload() {
 
 TConfigNode TConfigurationManager::operator[](const TString& key) {
     GetGlobalLogger().Debug() << "operator[]: key=\"" << key << "\"";
-    // Reload from file before each access to work around yaml-cpp corruption bug
-    // when accessing non-existent keys
-    TFsPath configPath = GetConfigFilePath();
-    if (configPath.Exists()) {
-        try {
-            Config = YAML::LoadFile(configPath.GetPath());
-            GetGlobalLogger().Debug() << "operator[]: reloaded Config=" << NodeTypeStr(Config);
-        } catch (...) {
-            // Keep current Config if reload fails
-        }
-    }
     return Root()[key];
 }
 

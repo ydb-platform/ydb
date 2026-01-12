@@ -19,7 +19,7 @@ void SetFtxuiBorderColor(ftxui::Color color);
 // Get the current global border color
 ftxui::Color GetFtxuiBorderColor();
 
-std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TString>& options, size_t maxPageSize = 20);
+std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TString>& options, size_t initialSelected = 0, size_t maxPageSize = 20);
 
 bool RunFtxuiMenuWithActions(const TString& title, const std::vector<TMenuEntry>& options, size_t maxPageSize = 20);
 

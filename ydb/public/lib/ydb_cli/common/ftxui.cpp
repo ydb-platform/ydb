@@ -78,7 +78,7 @@ class TFtxuiMenuRunner {
     static constexpr int MENU_EXTRA_HEIGHT = 8; // Header + footer + border
 
 public:
-    TFtxuiMenuRunner(const TString& title, const std::vector<TString>& options, size_t maxPageSize)
+    TFtxuiMenuRunner(const TString& title, const std::vector<TString>& options, size_t initialSelected, size_t maxPageSize)
         : Title(title)
         , Options(options)
         , PageSize(CalculatePageSize(std::min(options.size(), maxPageSize)))
@@ -88,6 +88,14 @@ public:
     {
         Y_VALIDATE(PageSize > 0, "PageSize must be greater than 0");
         Y_VALIDATE(!Options.empty() && Options.size() <= std::numeric_limits<int>::max(), "Unexpected Options size: " << Options.size());
+
+        // Set initial selection
+        if (initialSelected < Options.size()) {
+            PageBegin = std::max(0, static_cast<int>(initialSelected) - PageSize / 2);
+            PageBegin = std::min(PageBegin, static_cast<int>(Options.size()) - PageSize);
+            PageBegin = std::max(0, PageBegin);
+            Selected = static_cast<int>(initialSelected) - PageBegin;
+        }
 
         Screen.TrackMouse(false);
 
@@ -122,6 +130,7 @@ public:
             }
             return element;
         };
+        menuOption.focused_entry = Selected;
         Menu = ftxui::Menu(&VisibleOptions, &Selected, menuOption);
 
         auto component = ftxui::CatchEvent(Menu, [this](const ftxui::Event& event) { return CatchEventHandle(event); });
@@ -291,14 +300,14 @@ ftxui::Color GetFtxuiBorderColor() {
     return GlobalBorderColor;
 }
 
-std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TString>& options, size_t maxPageSize) {
+std::optional<size_t> RunFtxuiMenu(const TString& title, const std::vector<TString>& options, size_t initialSelected, size_t maxPageSize) {
     if (options.empty()) {
         return std::nullopt;
     }
 
     std::optional<size_t> result;
     try {
-        result = TFtxuiMenuRunner(title, options, maxPageSize).Run();
+        result = TFtxuiMenuRunner(title, options, initialSelected, maxPageSize).Run();
     } catch (const std::exception& e) {
         const auto& colors = NConsoleClient::AutoColors(Cerr);
         Cerr << colors.Yellow() << "FTXUI menu failed: " << e.what() << colors.OldColor() << Endl;
@@ -333,13 +342,21 @@ std::optional<TString> RunFtxuiInput(const TString& title, const TString& initia
         auto screen = ftxui::ScreenInteractive::FitComponent();
         screen.TrackMouse(false);
 
-        // Configure input with cursor at end
+        // Configure input with cursor at end and visible cursor
         ftxui::InputOption inputOption;
         inputOption.cursor_position = static_cast<int>(value.size());  // Cursor at end
+        inputOption.transform = [](ftxui::InputState state) {
+            // Don't use inverted style - it hides the terminal cursor
+            // Use default terminal color (works in both light and dark themes)
+            if (state.is_placeholder) {
+                state.element |= ftxui::dim;
+            }
+            return state.element;
+        };
         auto input = ftxui::Input(&value, "", inputOption);
         auto exit = screen.ExitLoopClosure();
 
-        ftxui::Component component = ftxui::CatchEvent(input, [&, exit](const ftxui::Event& event) mutable {
+        ftxui::Component inputWithEvents = ftxui::CatchEvent(input, [&, exit](const ftxui::Event& event) mutable {
             if (event == ftxui::Event::Return) {
                 TString errorMessage;
                 if (validator(TString(value), errorMessage)) {
@@ -357,7 +374,7 @@ std::optional<TString> RunFtxuiInput(const TString& title, const TString& initia
             return false;
         });
 
-        component = ftxui::Renderer(component, [&] {
+        ftxui::Component component = ftxui::Renderer(inputWithEvents, [&, inputWithEvents] {
             // Fixed size for error area to prevent layout jumping
             auto errorElement = error.empty()
                 ? ftxui::text(" ")  // Use space instead of empty to maintain height
@@ -366,7 +383,7 @@ std::optional<TString> RunFtxuiInput(const TString& title, const TString& initia
             return ApplyBorder(ftxui::vbox({
                 ftxui::text(std::string(title)) | ftxui::bold,
                 ApplySeparator(),
-                ftxui::hbox({ftxui::text("> "), input->Render()}),
+                ftxui::hbox({ftxui::text("> "), inputWithEvents->Render()}),
                 errorElement,
                 ApplySeparator(),
                 ftxui::text("Enter to confirm, Esc to cancel"),
@@ -464,13 +481,21 @@ std::optional<TString> RunFtxuiInputWithSuffix(
         auto screen = ftxui::ScreenInteractive::FitComponent();
         screen.TrackMouse(false);
 
-        // Configure input with cursor at end
+        // Configure input with cursor at end and visible cursor
         ftxui::InputOption inputOption;
         inputOption.cursor_position = static_cast<int>(value.size());  // Cursor at end
+        inputOption.transform = [](ftxui::InputState state) {
+            // Don't use inverted style - it hides the terminal cursor
+            // Use default terminal color (works in both light and dark themes)
+            if (state.is_placeholder) {
+                state.element |= ftxui::dim;
+            }
+            return state.element;
+        };
         auto input = ftxui::Input(&value, "", inputOption);
         auto exit = screen.ExitLoopClosure();
 
-        ftxui::Component component = ftxui::CatchEvent(input, [&, exit](const ftxui::Event& event) mutable {
+        ftxui::Component inputWithEvents = ftxui::CatchEvent(input, [&, exit](const ftxui::Event& event) mutable {
             if (event == ftxui::Event::Return) {
                 TString errorMessage;
                 if (validator(TString(value), errorMessage)) {
@@ -488,8 +513,8 @@ std::optional<TString> RunFtxuiInputWithSuffix(
             return false;
         });
 
-        component = ftxui::Renderer(component, [&] {
-            auto inputElement = input->Render();
+        ftxui::Component component = ftxui::Renderer(inputWithEvents, [&, inputWithEvents] {
+            auto inputElement = inputWithEvents->Render();
             ftxui::Element inputLine;
             if (suffix.empty()) {
                 inputLine = ftxui::hbox({ftxui::text("> "), inputElement});
@@ -563,7 +588,7 @@ void PrintFtxuiMessage(std::optional<ftxui::Element> message, const TString& tit
 void PrintFtxuiMessage(const TString& body, const TString& title, ftxui::Color color) {
     std::optional<ftxui::Element> message;
     if (body) {
-        message = ftxui::paragraph(std::string(body)) | ftxui::color(ftxui::Color::White);
+        message = ftxui::paragraph(std::string(body));
     }
     PrintFtxuiMessage(message, title, color);
 }

@@ -317,7 +317,10 @@ bool TConfigUI::Run(const TContext& ctx) {
 bool TConfigUI::RunEnableHints(const TContext& ctx) {
     std::vector<TString> options = {"Enable hints", "Disable hints"};
 
-    auto selected = RunFtxuiMenu("Enable hints (inline suggestions while typing):", options);
+    // Select current state: 0 = enabled, 1 = disabled
+    size_t initialSelected = TInteractiveSettings::IsHintsEnabled() ? 0 : 1;
+
+    auto selected = RunFtxuiMenu("Enable hints (inline suggestions while typing):", options, initialSelected);
     if (!selected) {
         return false;
     }
@@ -480,14 +483,20 @@ bool TConfigUI::RunCloneTheme(const TContext& ctx) {
     // Clone the theme
     if (TInteractiveSettings::CloneTheme(sourceTheme.Id, themeName, fileNameStr)) {
         TFsPath themePath = TInteractiveSettings::GetThemesDir() / fileNameStr;
+        auto& colors = AutoColors(Cout);
         Cout << Endl << "Theme \"" << themeName << "\" created." << Endl;
-        Cout << "File: " << themePath << Endl;
-        Cout << "Edit this file to customize colors." << Endl << Endl;
+        Cout << "You can edit file " << colors.BoldColor() << themePath << colors.OldColor() << " to customize colors." << Endl << Endl;
+
+        // Theme ID is the file name without .yaml extension
+        TString themeId = fileNameStr;
+        if (themeId.EndsWith(".yaml")) {
+            themeId = themeId.substr(0, themeId.size() - 5);
+        }
 
         // Ask if user wants to switch to the cloned theme
         if (AskYesNoFtxui("Switch to the cloned theme?", true)) {
-            TInteractiveSettings::SetTheme(themeName);
-            if (auto theme = TInteractiveSettings::GetThemeByName(themeName)) {
+            TInteractiveSettings::SetTheme(themeId);
+            if (auto theme = TInteractiveSettings::GetThemeByName(themeId)) {
                 if (ctx.LineReader) {
                     ctx.LineReader->SetColorSchema(theme->Schema);
                 }
@@ -512,7 +521,10 @@ bool TConfigUI::RunColorsMode(const TContext& ctx) {
 
     EGlobalColorsMode currentMode = TInteractiveSettings::GetColorsMode();
 
-    auto selected = RunFtxuiMenu("Choose colors mode:", options);
+    // Select current mode: Auto=0, Never=1, Always=2
+    size_t initialSelected = static_cast<size_t>(currentMode);
+
+    auto selected = RunFtxuiMenu("Choose colors mode:", options, initialSelected);
     if (!selected) {
         return false;
     }

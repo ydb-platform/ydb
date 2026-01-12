@@ -254,10 +254,7 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
 
                 // Get index info and filter for global sync only
                 auto indexInfo = context.SS->Indexes.at(childPathId);
-                if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal &&
-                    indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-                    continue;
-                }
+                if (!isSupportedIndex(childPathId, context)) continue;
 
 
                 // Get index implementation table (single child of index)

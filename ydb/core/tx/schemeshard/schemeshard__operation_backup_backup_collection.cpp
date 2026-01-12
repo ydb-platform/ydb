@@ -148,12 +148,8 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     if (childPath->Dropped()) {
                         continue;
                     }
-                    
-                    auto indexInfo = context.SS->Indexes.at(childPathId);
-                    if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal &&
-                        indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-                        continue;
-                    }
+
+                    if (!isSupportedIndex(childPathId, context)) continue;
                 
                     auto indexPath = TPath::Init(childPathId, context.SS);
                     for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
@@ -200,7 +196,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex && !childPath->Dropped()) {
                         auto indexInfo = context.SS->Indexes.find(childPathId);
                         if (indexInfo != context.SS->Indexes.end() && 
-                            indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobal &&
+                            indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobal ||
                             indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
                             
                             auto indexPath = TPath::Init(childPathId, context.SS);
@@ -282,12 +278,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                         continue;
                     }
                     
-                    // Get index info and filter for global sync only
-                    auto indexInfo = context.SS->Indexes.at(childPathId);
-                    if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal &&
-                        indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-                        continue;
-                    }
+                    if (!isSupportedIndex(childPathId, context)) continue;
                 
                     // Get index implementation table (the only child of index)
                     auto indexPath = TPath::Init(childPathId, context.SS);

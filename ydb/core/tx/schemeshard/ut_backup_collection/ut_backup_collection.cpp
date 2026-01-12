@@ -3168,7 +3168,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     Y_UNIT_TEST(RestoreVectorIndexBackup) {
         TTestBasicRuntime runtime;
-        
+
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
@@ -3244,7 +3244,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         });
 
         auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithVector/VectorIndex");
-        
+
         TestDescribeResult(indexDesc, {
             NLs::PathExist,
             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
@@ -3262,7 +3262,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 NLs::PathExist,
                 NLs::IsTable
             });
-            
+
             const auto& table = implDesc.GetPathDescription().GetTable();
             UNIT_ASSERT_C(table.ColumnsSize() > 0, 
                 Sprintf("Implementation table %s should have columns restored", implTable.c_str()));
@@ -3271,7 +3271,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         const auto& kmeansDesc = indexDesc.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription();
         const auto& treeSettings = kmeansDesc.GetSettings(); 
         const auto& vectorSettings = treeSettings.Getsettings();
-        
+
         UNIT_ASSERT_VALUES_EQUAL(vectorSettings.Getmetric(), Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
         UNIT_ASSERT_VALUES_EQUAL(vectorSettings.Getvector_dimension(), 1024);
         UNIT_ASSERT_VALUES_EQUAL(treeSettings.Getclusters(), 4);

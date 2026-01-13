@@ -70,7 +70,7 @@ jobs:
             else
                 s3cmd get s3://ydb-builds/$BRANCH/release/config-meta.json $BRANCH
             fi
-            if [[ $BRANCH != "prestable*" ]]; then
+            if [[ $BRANCH != prestable* ]]; then
                 BRANCH_LIST_NO_PRESTABLE+=($BRANCH)
             fi
         done

@@ -118,7 +118,7 @@ def _init_stress_utils():
             'args': [
                 "--endpoint", "{node_host}:2135",
                 "--partitions-count", "10",
-                "--prefix", "streaming_stress_{global_run_id}"
+                "--prefix", "streaming_stress/run_{global_run_id}"
             ],
             'local_path': 'ydb/tests/stress/streaming/streaming'
         },

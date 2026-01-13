@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/federated_query/local_pq_client/local_topic_client_settings.h>
 #include <ydb/library/logger/actor.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
@@ -39,7 +40,7 @@ namespace NKikimr::NKqp {
 
     std::shared_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TStreamingQueriesConfig_TExternalTopicsSettings& config);
 
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver);
+    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings = std::nullopt);
 
     struct TKqpFederatedQuerySetup {
         NYql::IHTTPGateway::TPtr HttpGateway;
@@ -102,9 +103,9 @@ namespace NKikimr::NKqp {
         NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         NYql::TPqGatewayConfig PqGatewayConfig;
-        NYql::IPqGateway::TPtr PqGateway;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
+        std::optional<TLocalTopicClientSettings> LocalTopicClientSettings;
     };
 
     struct TKqpFederatedQuerySetupFactoryMock: public IKqpFederatedQuerySetupFactory {

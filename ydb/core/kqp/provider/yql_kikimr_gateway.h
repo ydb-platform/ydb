@@ -1238,6 +1238,11 @@ public:
             return *this;
         }
 
+        TLoadTableMetadataSettings& WithTopicsIo(bool enable) {
+            AllowTopicsIo = enable;
+            return *this;
+        }
+
         NKikimr::NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
         THashMap<TString, TString> ReadAttributes;
         bool RequestStats_ = false;
@@ -1245,6 +1250,7 @@ public:
         bool WithExternalDatasources_ = false;
         bool RequestAuthInfo_ = true;
         bool SysViewRewritten_ = false;
+        bool AllowTopicsIo = false;
     };
 
     class IKqpTableMetadataLoader : public std::enable_shared_from_this<IKqpTableMetadataLoader> {

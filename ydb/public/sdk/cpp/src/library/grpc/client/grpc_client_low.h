@@ -1274,7 +1274,7 @@ public:
     }
 
     /*
-     * Start bidirectional streamming
+     * Start bidirectional streaming
      */
     template<typename TRequest, typename TResponse>
     void DoStreamRequest(TStreamConnectedCallback<TRequest, TResponse> callback,

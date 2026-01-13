@@ -18,6 +18,11 @@ public:
     //! Result will come to TPartitionSessionStatusEvent.
     virtual void RequestStatus() = 0;
 
+    virtual void Commit(ui64 startOffset, ui64 endOffset);
+    virtual void ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset);
+    virtual void ConfirmDestroy();
+    virtual void ConfirmEnd(const std::vector<ui32>& childIds);
+
     //!
     //! Properties.
     //!
@@ -249,7 +254,7 @@ struct TReadSessionEvent {
         //! This means that from now the first available
         //! message offset in current partition
         //! for current consumer is this offset.
-        //! All messages before are committed and futher never be available.
+        //! All messages before are committed and further never be available.
         uint64_t GetCommittedOffset() const {
             return CommittedOffset;
         }

@@ -122,7 +122,7 @@ void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent& da
 void TDeferredCommit::TImpl::Commit() {
     for (auto&& [partitionStream, offsetRanges] : Offsets) {
         for (auto&& [startOffset, endOffset] : offsetRanges) {
-            static_cast<NTopic::TPartitionStreamImpl<false>*>(partitionStream.Get())->Commit(startOffset, endOffset);
+            partitionStream->Commit(startOffset, endOffset);
         }
     }
     Offsets.clear();

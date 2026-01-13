@@ -85,7 +85,7 @@ public:
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
     {
         Config = BuildConfiguration(tableServiceConfig);
-        PerStatementResult = perStatementResult && Config->EnablePerStatementQueryExecution;
+        PerStatementResult = perStatementResult && Config->GetEnablePerStatementQueryExecution();
     }
 
     TKikimrConfiguration::TPtr BuildConfiguration(const TTableServiceConfig& tableServiceConfig) {

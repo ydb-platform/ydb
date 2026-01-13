@@ -1125,7 +1125,7 @@ public:
         SessionCtx = MakeIntrusive<TKikimrSessionContext>(FuncRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
         TypesCtx->LangVer = config->LangVer;
-        TypesCtx->BackportMode = config->BackportMode;
+        TypesCtx->BackportMode = config->GetYqlBackportMode();
         SessionCtx->SetDatabase(database);
         SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());
         SessionCtx->SetCluster(cluster);
@@ -1369,7 +1369,7 @@ private:
 
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
 
-        result.NeedToSplit = Config->EnableCreateTableAs && NeedToSplit(queryExpr, ctx);
+        result.NeedToSplit = Config->GetEnableCreateTableAs() && NeedToSplit(queryExpr, ctx);
         result.QueryExpr = queryExpr;
         return result;
     }
@@ -1613,7 +1613,7 @@ private:
             return nullptr;
         }
 
-        if (!CheckRewrite(compileResult.QueryExpr, Config->EnableDataShardCreateTableAs, ctx)) {
+        if (!CheckRewrite(compileResult.QueryExpr, Config->GetEnableDataShardCreateTableAs(), ctx)) {
             return nullptr;
         }
 

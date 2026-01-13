@@ -174,8 +174,8 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
     // only options that should be specified for all types of queries
     // including views and etc..
     SetLangVer(config.LangVer);
-    SetBackportMode(config.BackportMode);
-    SetIsAmbiguityError(config.Antlr4ParserIsAmbiguityError);
+    SetBackportMode(config.GetYqlBackportMode());
+    SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
     return *this;
 }
 

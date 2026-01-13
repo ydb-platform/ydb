@@ -909,10 +909,11 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    void DoUpsertWithoutIndexUpdate(bool uniq, bool useSink) {
+    void DoUpsertWithoutIndexUpdate(bool uniq, bool useSink, bool useStreamIndex) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({ setting });
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(useStreamIndex);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -958,31 +959,49 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             Cerr << stats.DebugString() << Endl;
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(),  uniqExtraStages + (useSink ? 4 : 5));
+            if (useStreamIndex) {
+                UNIT_ASSERT(useSink);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(),  1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
 
-            // One read from main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 31);
+                UNIT_ASSERT(            !stats.query_phases(0).table_access(0).has_deletes());
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 0); // Don't need to read NULLs
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().bytes(), 24);
+                UNIT_ASSERT(            !stats.query_phases(0).table_access(1).has_deletes());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(),  uniqExtraStages + (useSink ? 4 : 5));
 
-            if (!useSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
+                // One read from main table
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 0);
+
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
+
+                if (!useSink) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
+                }
+
+                const auto finalStage = useSink ? 3 : 4;
+
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), 2);
+
+                // One update of main table
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).updates().rows(), 1);
+                UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(0).has_deletes());
+
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(1).updates().rows(), 1);
+                UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(1).has_deletes());
             }
-
-            const auto finalStage = useSink ? 3 : 4;
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), 2);
-
-            // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(0).has_deletes());
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(1).has_deletes());
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -1007,26 +1026,51 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), uniqExtraStages + (useSink ? 4 : 5));
 
-            // One read from main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 1);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
+            Cerr << stats.DebugString() << Endl;
 
-            if (!useSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
+            if (useStreamIndex) {
+                UNIT_ASSERT(useSink);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), uniq ? 2 : 1);
+
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 80);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 31);
+                UNIT_ASSERT(            !stats.query_phases(0).table_access(0).has_deletes());
+
+                if (uniq) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 0); // Don't need to read NULLs
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().bytes(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().rows(), 0);
+                    UNIT_ASSERT(            !stats.query_phases(0).table_access(1).has_deletes());
+                }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), uniqExtraStages + (useSink ? 4 : 5));
+
+                // One read from main table
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 1);
+
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
+
+                if (!useSink) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
+                }
+
+                const auto finalStage = useSink ? 3 : 4;
+
+                // One update of main table
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).updates().rows(), 1);
+                UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(0).has_deletes());
             }
-
-            const auto finalStage = useSink ? 3 : 4;
-
-            // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(0).has_deletes());
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -1036,8 +1080,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(DoUpsertWithoutIndexUpdate, UniqIndex, UseSink) {
-        DoUpsertWithoutIndexUpdate(UniqIndex, UseSink);
+    Y_UNIT_TEST_QUAD(DoUpsertWithoutIndexUpdate, UniqIndex, UseStreamIndex) {
+        DoUpsertWithoutIndexUpdate(UniqIndex, true, UseStreamIndex);
     }
 
     Y_UNIT_TEST(CoveredUniqueIndexUpdateKey) {

@@ -1810,8 +1810,8 @@ private:
             AFL_ENSURE(keyToReadCellsIndex.emplace(key, readCells.size() - 1).second);
         });
 
-        const auto& mainWriteInfo = PathWriteInfo.at(PathId);
-        THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> keyChanged;
+        //const auto& mainWriteInfo = PathWriteInfo.at(PathId);
+        //THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> keyChanged;
 
         std::vector<bool> existsMask;
         existsMask.reserve(ProcessCells.size());
@@ -1824,7 +1824,7 @@ private:
                 const auto& newCells = TConstArrayRef<TCell>(readCells[keyIt->second]).last(readCells[keyIt->second].size() - KeyColumnTypes.size());
                 AFL_ENSURE(lookupColumnsCount == newCells.size());
 
-                if (mainWriteInfo.SkipEqualRows && !keyChanged.contains(key) && IsEqual(
+                /*if (mainWriteInfo.SkipEqualRows && !keyChanged.contains(key) && IsEqual(
                         processCells,
                         newCells,
                         mainWriteInfo.NewColumnsIndexes,
@@ -1833,8 +1833,8 @@ private:
                     // skip unchanged rows
                     Memory -= EstimateSize(processCells);
                     continue;
-                }
-                keyChanged.insert(key);
+                }*/
+                //keyChanged.insert(key);
 
                 for (const auto& cell : processCells) {
                     rowsBatcher->AddCell(cell);

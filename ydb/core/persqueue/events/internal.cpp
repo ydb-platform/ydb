@@ -13,7 +13,7 @@ namespace NKikimr::NPQ {
         , Cached(false)
         , CreationUnixTime(creationUnixTime)
         , Batches(nullptr)
-    {        
+    {
         AFL_ENSURE(RawValue.size() <= Size)
             ("RawValue.size()", RawValue.size())
             ("Size", Size)

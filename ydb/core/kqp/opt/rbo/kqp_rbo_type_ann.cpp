@@ -173,9 +173,8 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext& ctx, TPlanP
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
+TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext& ctx) {
     TVector<const TItemExprType*> resStructItemTypes;
-
     const TTypeAnnotationNode* inputType = map->GetInput()->Type;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto typeItems = structType->GetItems();
@@ -189,23 +188,21 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
         }
     }
 
-    for (auto & mapEl : map->MapElements) {
-        if (std::holds_alternative<TInfoUnit>(mapEl.second)) {
-            TInfoUnit from = std::get<TInfoUnit>(mapEl.second);
-            auto typeIt = std::find_if(typeItems.begin(), typeItems.end(), [&from](const TItemExprType* t){
-                return from.GetFullName() == t->GetName();
-            });
-            if (typeIt==typeItems.end()) {
-                YQL_CLOG(TRACE, CoreDq) << "Did not find column: " 
-                << from.GetFullName() << " in " << *inputType << " while processing map " << map->ToString(ctx.ExprCtx);
+    for (auto& mapElement : map->MapElements) {
+        if (mapElement.IsRename()) {
+            const TInfoUnit from = mapElement.GetRename();
+            auto typeIt = std::find_if(typeItems.begin(), typeItems.end(), [&from](const TItemExprType* t) { return from.GetFullName() == t->GetName(); });
+            if (typeIt == typeItems.end()) {
+                YQL_CLOG(TRACE, CoreDq) << "Did not find column: " << from.GetFullName() << " in " << *inputType << " while processing map "
+                                        << map->ToString(ctx.ExprCtx);
             }
-            Y_ENSURE(typeIt!=typeItems.end());
+            Y_ENSURE(typeIt != typeItems.end());
 
-            auto renameType = ctx.ExprCtx.MakeType<TItemExprType>(mapEl.first.GetFullName(), (*typeIt)->GetItemType());
+            auto renameType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), (*typeIt)->GetItemType());
             resStructItemTypes.push_back(renameType);
-        }
-        else {
-            auto& lambda = std::get<TExprNode::TPtr>(mapEl.second);
+        } else {
+            // This is type annotation update inplace, which is different comparing to yql type annotation.
+            auto& lambda = mapElement.GetExpression();
             if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -214,22 +211,23 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
             IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
             do {
                 status = ctx.TypeAnnTransformer->Transform(lambda, lambda, ctx.ExprCtx);
-
+            // Could we have an infinity loop?
             } while (status == IGraphTransformer::TStatus::Repeat);
+
+            if (status == IGraphTransformer::TStatus::Error) {
+                return status;
+            }
 
             auto lambdaType = lambda->GetTypeAnn();
             Y_ENSURE(lambdaType);
-
-            auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapEl.first.GetFullName(), lambdaType);
+            auto mapLambdaType = ctx.ExprCtx.MakeType<TItemExprType>(mapElement.GetElementName().GetFullName(), lambdaType);
             resStructItemTypes.push_back(mapLambdaType);
         }
     }
 
     auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resStructItemTypes);
     const TTypeAnnotationNode* resultAnn = ctx.ExprCtx.MakeType<TListExprType>(resultItemType);
-
     map->Type = resultAnn;
-
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Map done: " << *resultAnn;
 
     return TStatus::Ok;
@@ -246,10 +244,10 @@ TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
 TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    THashMap<TString, std::pair<TString, bool>> aggTraitsMap;
+    THashMap<TString, TString> aggTraitsMap;
     for (const auto& aggTraits : aggregate->AggregationTraitsList) {
         const auto originalColName = aggTraits.OriginalColName.GetFullName();
-        aggTraitsMap[originalColName] = {aggTraits.AggFunction, aggTraits.ForceOptional};
+        aggTraitsMap[originalColName] = aggTraits.AggFunction;
     }
 
     THashSet<TString> keyColumns;
@@ -263,8 +261,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
         const auto itemName = itemType->GetName();
         if (auto it = aggTraitsMap.find(itemName); it != aggTraitsMap.end()) {
             const auto& colName = it->first;
-            const auto& aggFunction = it->second.first;
-            const bool forceOptional = it->second.second;
+            const auto& aggFunction = it->second;
             Y_ENSURE(SupportedAggregationFunctions.count(aggFunction), "Unsupported aggregation function " + aggFunction);
             TPositionHandle dummyPos;
 
@@ -277,10 +274,6 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
             } else if (aggFunction == "avg") {
                 Y_ENSURE(GetAvgResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
                          "Unsupported type for avg aggregation function");
-            }
-
-            if (!aggFieldType->IsOptionalOrNull() && forceOptional) {
-                aggFieldType = ctx.ExprCtx.MakeType<TOptionalExprType>(aggFieldType);
             }
 
             newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(colName, aggFieldType));

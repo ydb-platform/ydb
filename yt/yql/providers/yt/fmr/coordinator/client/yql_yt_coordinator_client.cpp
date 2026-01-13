@@ -180,6 +180,22 @@ public:
         return *DoWithRetry<NThreading::TFuture<TListSessionsResponse>, yexception>(func, RetryPolicy_, true, OnFail_);
     }
 
+    NThreading::TFuture<TPrepareOperationResponse> PrepareOperation(const TPrepareOperationRequest& request) override {
+        NProto::TPrepareOperationRequest protoRequest = PrepareOperationRequestToProto(request);
+        TString url = "/prepare_partition";
+        auto httpClient = TKeepAliveHttpClient(Host_, Port_);
+        TStringStream outputStream;
+
+        auto func = [&]() {
+            httpClient.DoGet(url, &outputStream, GetHeadersWithLogContext(Headers_, false));
+            TString serializedResponse = outputStream.ReadAll();
+            NProto::TPrepareOperationResponse protoResponse;
+            YQL_ENSURE(protoResponse.ParseFromString(serializedResponse));
+            return NThreading::MakeFuture(PrepareOperationResponseFromProto(protoResponse));
+        };
+        return *DoWithRetry<NThreading::TFuture<TPrepareOperationResponse>, yexception>(func, RetryPolicy_, true, OnFail_);
+    }
+
 private:
     TString Host_;
     ui16 Port_;

@@ -267,7 +267,7 @@ Y_UNIT_TEST(RecreateConsumer) {
             .VisibilityTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1
         });
-        
+
         auto result = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
@@ -288,7 +288,7 @@ Y_UNIT_TEST(RecreateConsumer) {
             .VisibilityTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1
         });
-        
+
         auto result = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
@@ -385,8 +385,8 @@ void HtmlApp(std::string_view consumer, size_t partitionId, std::string_view exp
     Sleep(TDuration::Seconds(1));
 
     auto tabletId = GetTabletId(setup, "/Root", "/Root/topic1", 0);
-    auto url = TStringBuilder() << "/app?TabletID=" << tabletId 
-        << "&consumer=" << consumer 
+    auto url = TStringBuilder() << "/app?TabletID=" << tabletId
+        << "&consumer=" << consumer
         << "&partitionId=" << partitionId;
     runtime.SendToPipe(tabletId, runtime.AllocateEdgeActor(),
         new NMon::TEvRemoteHttpInfo(url, HTTP_METHOD_GET));

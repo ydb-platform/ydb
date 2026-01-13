@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import functools
 import io
 import itertools
 import numbers
 import os
 import re
 import sys
-from collections.abc import Iterable, MutableMapping, Sequence
-from glob import iglob
+from collections.abc import Iterable, Iterator, MutableMapping, Sequence
+from glob import glob
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Union
 
@@ -23,10 +24,12 @@ from . import (
     command as _,  # noqa: F401 # imported for side-effects
 )
 from ._importlib import metadata
+from ._normalization import _canonicalize_license_expression
 from ._path import StrPath
 from ._reqs import _StrOrIter
 from .config import pyprojecttoml, setupcfg
 from .discovery import ConfigDiscovery
+from .errors import InvalidConfigError
 from .monkey import get_unpatched
 from .warnings import InformationOnly, SetuptoolsDeprecationWarning
 
@@ -288,6 +291,7 @@ class Distribution(_Distribution):
         'long_description_content_type': lambda: None,
         'project_urls': dict,
         'provides_extras': dict,  # behaves like an ordered set
+        'license_expression': lambda: None,
         'license_file': lambda: None,
         'license_files': lambda: None,
         'install_requires': list,
@@ -402,6 +406,46 @@ class Distribution(_Distribution):
             (k, list(map(str, _reqs.parse(v or [])))) for k, v in extras_require.items()
         )
 
+    def _finalize_license_expression(self) -> None:
+        """
+        Normalize license and license_expression.
+        >>> dist = Distribution({"license_expression": _static.Str("mit aNd  gpl-3.0-OR-later")})
+        >>> _static.is_static(dist.metadata.license_expression)
+        True
+        >>> dist._finalize_license_expression()
+        >>> _static.is_static(dist.metadata.license_expression)  # preserve "static-ness"
+        True
+        >>> print(dist.metadata.license_expression)
+        MIT AND GPL-3.0-or-later
+        """
+        classifiers = self.metadata.get_classifiers()
+        license_classifiers = [cl for cl in classifiers if cl.startswith("License :: ")]
+
+        license_expr = self.metadata.license_expression
+        if license_expr:
+            str_ = _static.Str if _static.is_static(license_expr) else str
+            normalized = str_(_canonicalize_license_expression(license_expr))
+            if license_expr != normalized:
+                InformationOnly.emit(f"Normalizing '{license_expr}' to '{normalized}'")
+                self.metadata.license_expression = normalized
+            if license_classifiers:
+                raise InvalidConfigError(
+                    "License classifiers have been superseded by license expressions "
+                    "(see https://peps.python.org/pep-0639/). Please remove:\n\n"
+                    + "\n".join(license_classifiers),
+                )
+        elif license_classifiers:
+            pypa_guides = "guides/writing-pyproject-toml/#license"
+            SetuptoolsDeprecationWarning.emit(
+                "License classifiers are deprecated.",
+                "Please consider removing the following classifiers in favor of a "
+                "SPDX license expression:\n\n" + "\n".join(license_classifiers),
+                see_url=f"https://packaging.python.org/en/latest/{pypa_guides}",
+                # Warning introduced on 2025-02-17
+                # TODO: Should we add a due date? It may affect old/unmaintained
+                #       packages in the ecosystem and cause problems...
+            )
+
     def _finalize_license_files(self) -> None:
         """Compute names of all license files which should be included."""
         license_files: list[str] | None = self.metadata.license_files
@@ -416,25 +460,87 @@ class Distribution(_Distribution):
             # See https://wheel.readthedocs.io/en/stable/user_guide.html
             # -> 'Including license files in the generated wheel file'
             patterns = ['LICEN[CS]E*', 'COPYING*', 'NOTICE*', 'AUTHORS*']
+            files = self._expand_patterns(patterns, enforce_match=False)
+        else:  # Patterns explicitly given by the user
+            files = self._expand_patterns(patterns, enforce_match=True)
 
-        self.metadata.license_files = list(
-            unique_everseen(self._expand_patterns(patterns))
-        )
+        self.metadata.license_files = list(unique_everseen(files))
 
-    @staticmethod
-    def _expand_patterns(patterns):
+    @classmethod
+    def _expand_patterns(
+        cls, patterns: list[str], enforce_match: bool = True
+    ) -> Iterator[str]:
         """
         >>> list(Distribution._expand_patterns(['LICENSE']))
         ['LICENSE']
         >>> list(Distribution._expand_patterns(['pyproject.toml', 'LIC*']))
         ['pyproject.toml', 'LICENSE']
+        >>> list(Distribution._expand_patterns(['setuptools/**/pyprojecttoml.py']))
+        ['setuptools/config/pyprojecttoml.py']
         """
         return (
-            path
+            path.replace(os.sep, "/")
             for pattern in patterns
-            for path in sorted(iglob(pattern))
+            for path in sorted(cls._find_pattern(pattern, enforce_match))
             if not path.endswith('~') and os.path.isfile(path)
         )
+
+    @staticmethod
+    def _find_pattern(pattern: str, enforce_match: bool = True) -> list[str]:
+        r"""
+        >>> Distribution._find_pattern("LICENSE")
+        ['LICENSE']
+        >>> Distribution._find_pattern("/LICENSE.MIT")
+        Traceback (most recent call last):
+        ...
+        setuptools.errors.InvalidConfigError: Pattern '/LICENSE.MIT' should be relative...
+        >>> Distribution._find_pattern("../LICENSE.MIT")
+        Traceback (most recent call last):
+        ...
+        setuptools.warnings.SetuptoolsDeprecationWarning: ...Pattern '../LICENSE.MIT' cannot contain '..'...
+        >>> Distribution._find_pattern("LICEN{CSE*")
+        Traceback (most recent call last):
+        ...
+        setuptools.warnings.SetuptoolsDeprecationWarning: ...Pattern 'LICEN{CSE*' contains invalid characters...
+        """
+        pypa_guides = "specifications/glob-patterns/"
+        if ".." in pattern:
+            SetuptoolsDeprecationWarning.emit(
+                f"Pattern {pattern!r} cannot contain '..'",
+                """
+                Please ensure the files specified are contained by the root
+                of the Python package (normally marked by `pyproject.toml`).
+                """,
+                see_url=f"https://packaging.python.org/en/latest/{pypa_guides}",
+                due_date=(2026, 3, 20),  # Introduced in 2025-03-20
+                # Replace with InvalidConfigError after deprecation
+            )
+        if pattern.startswith((os.sep, "/")) or ":\\" in pattern:
+            raise InvalidConfigError(
+                f"Pattern {pattern!r} should be relative and must not start with '/'"
+            )
+        if re.match(r'^[\w\-\.\/\*\?\[\]]+$', pattern) is None:
+            SetuptoolsDeprecationWarning.emit(
+                "Please provide a valid glob pattern.",
+                "Pattern {pattern!r} contains invalid characters.",
+                pattern=pattern,
+                see_url=f"https://packaging.python.org/en/latest/{pypa_guides}",
+                due_date=(2026, 3, 20),  # Introduced in 2025-02-20
+            )
+
+        found = glob(pattern, recursive=True)
+
+        if enforce_match and not found:
+            SetuptoolsDeprecationWarning.emit(
+                "Cannot find any files for the given pattern.",
+                "Pattern {pattern!r} did not match any files.",
+                pattern=pattern,
+                due_date=(2026, 3, 20),  # Introduced in 2025-02-20
+                # PEP 639 requires us to error, but as a transition period
+                # we will only issue a warning to give people time to prepare.
+                # After the transition, this should raise an InvalidConfigError.
+            )
+        return found
 
     # FIXME: 'Distribution._parse_config_files' is too complex (14)
     def _parse_config_files(self, filenames=None):  # noqa: C901
@@ -490,8 +596,8 @@ class Distribution(_Distribution):
                         continue
 
                     val = parser.get(section, opt)
-                    opt = self.warn_dash_deprecation(opt, section)
-                    opt = self.make_option_lowercase(opt, section)
+                    opt = self._enforce_underscore(opt, section)
+                    opt = self._enforce_option_lowercase(opt, section)
                     opt_dict[opt] = (filename, val)
 
             # Make the ConfigParser forget everything (so we retain
@@ -516,64 +622,62 @@ class Distribution(_Distribution):
             except ValueError as e:
                 raise DistutilsOptionError(e) from e
 
-    def warn_dash_deprecation(self, opt: str, section: str) -> str:
-        if section in (
-            'options.extras_require',
-            'options.data_files',
-        ):
+    def _enforce_underscore(self, opt: str, section: str) -> str:
+        if "-" not in opt or self._skip_setupcfg_normalization(section):
             return opt
 
         underscore_opt = opt.replace('-', '_')
-        commands = list(
-            itertools.chain(
-                distutils.command.__all__,
-                self._setuptools_commands(),
-            )
+        affected = f"(Affected: {self.metadata.name})." if self.metadata.name else ""
+        SetuptoolsDeprecationWarning.emit(
+            f"Invalid dash-separated key {opt!r} in {section!r} (setup.cfg), "
+            f"please use the underscore name {underscore_opt!r} instead.",
+            f"""
+            Usage of dash-separated {opt!r} will not be supported in future
+            versions. Please use the underscore name {underscore_opt!r} instead.
+            {affected}
+            """,
+            see_docs="userguide/declarative_config.html",
+            due_date=(2026, 3, 3),
+            # Warning initially introduced in 3 Mar 2021
         )
-        if (
-            not section.startswith('options')
-            and section != 'metadata'
-            and section not in commands
-        ):
-            return underscore_opt
-
-        if '-' in opt:
-            SetuptoolsDeprecationWarning.emit(
-                "Invalid dash-separated options",
-                f"""
-                Usage of dash-separated {opt!r} will not be supported in future
-                versions. Please use the underscore name {underscore_opt!r} instead.
-                """,
-                see_docs="userguide/declarative_config.html",
-                due_date=(2025, 3, 3),
-                # Warning initially introduced in 3 Mar 2021
-            )
         return underscore_opt
 
-    def _setuptools_commands(self):
-        try:
-            entry_points = metadata.distribution('setuptools').entry_points
-            return {ep.name for ep in entry_points}  # Avoid newer API for compatibility
-        except metadata.PackageNotFoundError:
-            # during bootstrapping, distribution doesn't exist
-            return []
-
-    def make_option_lowercase(self, opt: str, section: str) -> str:
-        if section != 'metadata' or opt.islower():
+    def _enforce_option_lowercase(self, opt: str, section: str) -> str:
+        if opt.islower() or self._skip_setupcfg_normalization(section):
             return opt
 
         lowercase_opt = opt.lower()
+        affected = f"(Affected: {self.metadata.name})." if self.metadata.name else ""
         SetuptoolsDeprecationWarning.emit(
-            "Invalid uppercase configuration",
+            f"Invalid uppercase key {opt!r} in {section!r} (setup.cfg), "
+            f"please use lowercase {lowercase_opt!r} instead.",
             f"""
             Usage of uppercase key {opt!r} in {section!r} will not be supported in
             future versions. Please use lowercase {lowercase_opt!r} instead.
+            {affected}
             """,
             see_docs="userguide/declarative_config.html",
-            due_date=(2025, 3, 3),
+            due_date=(2026, 3, 3),
             # Warning initially introduced in 6 Mar 2021
         )
         return lowercase_opt
+
+    def _skip_setupcfg_normalization(self, section: str) -> bool:
+        skip = (
+            'options.extras_require',
+            'options.data_files',
+            'options.entry_points',
+            'options.package_data',
+            'options.exclude_package_data',
+        )
+        return section in skip or not self._is_setuptools_section(section)
+
+    def _is_setuptools_section(self, section: str) -> bool:
+        return (
+            section == "metadata"
+            or section.startswith("options")
+            or section in _setuptools_commands()
+        )
 
     # FIXME: 'Distribution._set_command_options' is too complex (14)
     def _set_command_options(self, command_obj, option_dict=None):  # noqa: C901
@@ -652,6 +756,7 @@ class Distribution(_Distribution):
             pyprojecttoml.apply_configuration(self, filename, ignore_option_errors)
 
         self._finalize_requires()
+        self._finalize_license_expression()
         self._finalize_license_files()
 
     def fetch_build_eggs(
@@ -997,6 +1102,18 @@ class Distribution(_Distribution):
         # (setup() args, config files, command line and plugins)
 
         super().run_command(command)
+
+
+@functools.cache
+def _setuptools_commands() -> set[str]:
+    try:
+        # Use older API for importlib.metadata compatibility
+        entry_points = metadata.distribution('setuptools').entry_points
+        eps: Iterable[str] = (ep.name for ep in entry_points)
+    except metadata.PackageNotFoundError:
+        # during bootstrapping, distribution doesn't exist
+        eps = []
+    return {*distutils.command.__all__, *eps}
 
 
 class DistDeprecationWarning(SetuptoolsDeprecationWarning):

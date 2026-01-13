@@ -27,11 +27,11 @@ int main(int argc, char** argv) {
     params.Flavours = {NKikimr::NMiniKQL::ETestedInputFlavour::kLittleRightTable,
                        NKikimr::NMiniKQL::ETestedInputFlavour::kSameSizeTable};
     params.Algorithms = {
-        // NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockMap,
+        NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockMap,
         NKikimr::NMiniKQL::ETestedJoinAlgo::kBlockHash,
-        // NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap, // slow
+        NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap, // slow
         NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarHash,
-        // NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarGrace,
+        NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarGrace,
     };
 
     TString presetName;

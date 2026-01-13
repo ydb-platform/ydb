@@ -319,7 +319,7 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
 TMaybe<std::pair<TCondenseInputResult, TMaybeNode<TDqPhyPrecompute>>>
 RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf> inputColumns,
     const THashSet<TString>& checkDefaults, const TKikimrTableDescription& table,
-    const TSecondaryIndexes& indexes, TPositionHandle pos, TExprContext& ctx)
+    const TSecondaryIndexes& indexes, const bool useStreamIndexes, TPositionHandle pos, TExprContext& ctx)
 {
     auto condenseResult = CondenseInput(inputRows, ctx);
     if (!condenseResult) {
@@ -336,6 +336,11 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
     THashSet<TString> usedIndexes;
     bool hasUniqIndex = false;
     for (const auto& [_, indexDesc] : indexes) {
+        if (useStreamIndexes
+                &&  (indexDesc->Type == TIndexDescription::EType::GlobalSync
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+            continue;
+        }
         hasUniqIndex |= (indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique);
         for (const auto& indexKeyCol : indexDesc->KeyColumns) {
             if (inputColumns.contains(indexKeyCol)) {
@@ -617,6 +622,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     const bool isSink = NeedSinks(table, kqpCtx);
     const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
     const bool needPrecompute = !useStreamIndex
+        || !columnsWithDefaultsSet.empty()
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
             return index.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
                 || index.second->Type == TIndexDescription::EType::GlobalFulltext;
@@ -637,7 +643,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
             .Done();
     }
 
-    auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, pos, ctx);
+    auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, useStreamIndex, pos, ctx);
 
     if (!checkedInput) {
         return {};
@@ -907,6 +913,16 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
         }
 
+        TVector<TExprBase> fulltextDictDelta;
+        const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
+        const bool withRelevance = fulltextDesc && fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+        TMaybeNode<TKqpTable> docsTableNode;
+        TMaybeNode<TExprBase> addedDocs, removedDocs;
+        if (withRelevance) {
+            docsTableNode = BuildTableMeta(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << mainTableNode.Path().Value()
+                << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DocsTable), pos, ctx);
+        }
+
         if (indexKeyColumnsUpdated) {
             // Have to delete old index value from index table in case when index key columns were updated
             auto deleteIndexKeys = optUpsert
@@ -929,8 +945,26 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 }
                 case TIndexDescription::EType::GlobalFulltext: {
                     // For fulltext indexes, we need to tokenize the text and create deleted rows
-                    deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet,
-                        indexTableColumnsWithoutData, /*includeDataColumns=*/false, pos, ctx);
+                    auto deleteKeysPrecompute = ReadInputToPrecompute(deleteIndexKeys, pos, ctx);
+                    deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet,
+                        indexTableColumnsWithoutData, true /*forDelete*/, pos, ctx);
+                    if (withRelevance) {
+                        fulltextDictDelta.push_back(deleteIndexKeys);
+                        // Rows in deleteIndexKeys include __ydb_freq, but we don't need it for delete keys
+                        deleteIndexKeys = BuildFulltextPostingKeys(table, deleteIndexKeys, pos, ctx);
+                        // Delete document rows
+                        auto docsKeys = ProjectColumns(deleteKeysPrecompute, table.Metadata->KeyColumnNames, ctx);
+                        effects.emplace_back(Build<TKqlDeleteRows>(ctx, pos)
+                            .Table(docsTableNode.Cast())
+                            .Input(docsKeys)
+                            .ReturningColumns<TCoAtomList>().Build()
+                            .IsBatch(ctx.NewAtom(pos, "false"))
+                            .Done());
+                        // Remember deleted documents for stats
+                        TVector<TStringBuf> docsColumns;
+                        removedDocs = BuildFulltextDocsRows(table, indexDesc, deleteKeysPrecompute,
+                            indexTableColumnsSet, docsColumns, true /*forDelete*/, pos, ctx);
+                    }
                     break;
                 }
             }
@@ -981,10 +1015,41 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 }
                 case TIndexDescription::EType::GlobalFulltext: {
                     // For fulltext indexes, we need to tokenize the text and create upserted rows
-                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertIndexRows, indexTableColumnsSet,
-                        indexTableColumns, /*includeDataColumns=*/true, pos, ctx);
+                    auto upsertPrecompute = ReadInputToPrecompute(upsertIndexRows, pos, ctx);
+                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertPrecompute, indexTableColumnsSet,
+                        indexTableColumns, false /*forDelete*/, pos, ctx);
+                    if (withRelevance) {
+                        fulltextDictDelta.push_back(upsertIndexRows);
+                        // Insert document rows
+                        TVector<TStringBuf> docsColumns;
+                        auto docsRows = BuildFulltextDocsRows(table, indexDesc, upsertPrecompute,
+                            inputColumnsSet, docsColumns, false /*forDelete*/, pos, ctx);
+                        effects.emplace_back(Build<TKqlUpsertRows>(ctx, pos)
+                            .Table(docsTableNode.Cast())
+                            .Input(docsRows)
+                            .Columns(BuildColumnsList(docsColumns, pos, ctx))
+                            .ReturningColumns<TCoAtomList>().Build()
+                            .IsBatch(ctx.NewAtom(pos, "false"))
+                            .Done());
+                        // Remember added documents for stats
+                        addedDocs = docsRows;
+                    }
                     break;
                 }
+            }
+
+            if (fulltextDictDelta.size()) {
+                // Update fulltext dictionary table
+                const auto& dictTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << mainTableNode.Path().Value()
+                    << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DictTable);
+                const auto mergedDelta = CombineFulltextDictRows(fulltextDictDelta, pos, ctx);
+                effects.emplace_back(BuildFulltextDictUpsert(dictTable, mergedDelta, pos, ctx));
+            }
+            if (removedDocs || addedDocs) {
+                // Update fulltext stats table
+                const auto& statsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << mainTableNode.Path().Value()
+                    << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::StatsTable);
+                effects.emplace_back(BuildFulltextStatsUpsert(statsTable, addedDocs, removedDocs, pos, ctx));
             }
 
             auto indexUpsert = Build<TKqlUpsertRows>(ctx, pos)

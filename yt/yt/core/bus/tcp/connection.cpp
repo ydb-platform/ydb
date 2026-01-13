@@ -1420,7 +1420,7 @@ TFuture<void> TTcpConnection::SendViaLocalBypass(TSharedRefArray message, const 
     LocalBypassHandler_->HandleMessage(std::move(message), LocalBypassReplyBus_);
 
     // No delivery tracking for local bypass.
-    return VoidFuture;
+    return OKFuture;
 }
 
 TTcpConnection::TPacket* TTcpConnection::EnqueuePacket(

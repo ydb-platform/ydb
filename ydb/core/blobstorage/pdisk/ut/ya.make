@@ -21,7 +21,7 @@ PEERDIR(
     ydb/core/testlib/actors
 )
 
-IF (YDB_ENABLE_PDISK_SHRED) 
+IF (YDB_ENABLE_PDISK_SHRED)
     CFLAGS(
         -DENABLE_PDISK_SHRED
     )

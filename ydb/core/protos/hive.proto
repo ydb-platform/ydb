@@ -287,6 +287,7 @@ message TEvRequestHiveInfo {
     optional uint32 FollowerID = 4;
     optional bool ReturnMetrics = 5;
     optional bool ReturnChannelHistory = 6;
+    optional NKikimrSubDomains.TDomainKey FilterTabletsByObjectDomain = 7;
 }
 
 message TEvResponseHiveInfo {

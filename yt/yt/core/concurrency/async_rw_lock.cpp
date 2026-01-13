@@ -56,7 +56,7 @@ TFuture<void> TAsyncReaderWriterLock::TImpl::AcquireReader()
 
     if (!HasActiveWriter_ && WriterPromiseQueue_.empty()) {
         ++ActiveReaderCount_;
-        return VoidFuture;
+        return OKFuture;
     }
 
     auto promise = NewPromise<void>();
@@ -75,7 +75,7 @@ TFuture<void> TAsyncReaderWriterLock::TImpl::AcquireWriter()
 
     if (ActiveReaderCount_ == 0 && !HasActiveWriter_) {
         HasActiveWriter_ = true;
-        return VoidFuture;
+        return OKFuture;
     }
 
     auto promise = NewPromise<void>();

@@ -464,7 +464,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
 
         AFL_ENSURE(blobs[pos].RawValue.size() <= blobs[pos].Size)("value for offset", offset)("count", count)
             ("size must be",  blobs[pos].Size)("got", blobs[pos].RawValue.size());
-        
+
         auto blobBatches = blobs[pos].GetBatches();
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
             Offset = offset;

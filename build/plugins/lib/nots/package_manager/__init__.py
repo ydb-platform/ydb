@@ -1,42 +1,23 @@
-from typing import Literal
-
-from .base import (
-    bundle_node_modules,
-    constants,
-    extract_node_modules,
-    PackageJson,
-    utils,
-    PackageManagerCommandError,
-    BasePackageManager,
-    BaseLockfile,
-)
-from .base.package_json import PackageJsonWorkspaceError
-from .pnpm import PnpmPackageManager
-
-
-type PackageManagerType = Literal["pnpm"]
-
-manager = PnpmPackageManager
-
-
-def get_package_manager_type(key: PackageManagerType) -> type[BasePackageManager]:
-    if key == "pnpm":
-        return PnpmPackageManager
-    raise ValueError(f"Invalid package manager key: {key}")
+from . import constants, utils
+from .lockfile import Lockfile, LockfilePackageMeta, LockfilePackageMetaInvalidError
+from .package_json import PackageJson, PackageJsonWorkspaceError
+from .package_manager import PackageManager, PackageManagerError, PackageManagerCommandError
+from .node_modules_bundler import bundle_node_modules, extract_node_modules
+from .pnpm_workspace import PnpmWorkspace
 
 
 __all__ = [
-    "BaseLockfile",
-    "BasePackageManager",
-    "PnpmPackageManager",
+    "Lockfile",
+    "LockfilePackageMeta",
+    "LockfilePackageMetaInvalidError",
+    "PackageManager",
+    "PackageManagerError",
+    "PackageManagerCommandError",
     "PackageJson",
     "PackageJsonWorkspaceError",
-    "PackageManagerCommandError",
-    "PackageManagerType",
+    "PnpmWorkspace",
     "bundle_node_modules",
     "constants",
     "extract_node_modules",
-    "get_package_manager_type",
-    "manager",
     "utils",
 ]

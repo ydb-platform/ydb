@@ -4,6 +4,7 @@
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <util/system/types.h>
+#include <util/generic/maybe.h>
 #include <util/system/unaligned_mem.h>
 #include <util/generic/yexception.h>
 #include <cmath>
@@ -82,57 +83,57 @@ xx(Double, double)
 // clang-format on
 
 template <typename T>
-inline std::optional<EHistogramValueType> GetHistogramValueType() {
-    return std::nullopt;
+inline TMaybe<EHistogramValueType> GetHistogramValueType() {
+    return Nothing();
 }
 
 template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<i8>() {
+inline TMaybe<EHistogramValueType> GetHistogramValueType<i8>() {
     return EHistogramValueType::Int8;
 }
 
 template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<i16>() {
+inline TMaybe<EHistogramValueType> GetHistogramValueType<i16>() {
     return EHistogramValueType::Int16;
 }
 
 template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<i32>() {
+inline TMaybe<EHistogramValueType> GetHistogramValueType<i32>() {
     return EHistogramValueType::Int32;
 }
 
 template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<i64>() {
+inline TMaybe<EHistogramValueType> GetHistogramValueType<i64>() {
     return EHistogramValueType::Int64;
 }
 
 template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<ui8>() {
+inline TMaybe<EHistogramValueType> GetHistogramValueType<ui8>() {
     return EHistogramValueType::Uint8;
 }
 
 template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<ui16>() {
+inline TMaybe<EHistogramValueType> GetHistogramValueType<ui16>() {
     return EHistogramValueType::Uint16;
 }
 
 template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<ui32>() {
+inline TMaybe<EHistogramValueType> GetHistogramValueType<ui32>() {
     return EHistogramValueType::Uint32;
 }
 
 template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<ui64>() {
+inline TMaybe<EHistogramValueType> GetHistogramValueType<ui64>() {
     return EHistogramValueType::Uint64;
 }
 
 template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<float>() {
+inline TMaybe<EHistogramValueType> GetHistogramValueType<float>() {
     return EHistogramValueType::Float;
 }
 
 template <>
-inline std::optional<EHistogramValueType> GetHistogramValueType<double>() {
+inline TMaybe<EHistogramValueType> GetHistogramValueType<double>() {
     return EHistogramValueType::Double;
 }
 

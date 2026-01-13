@@ -356,6 +356,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
+        include/boost/core/detail/static_assert.hpp [6:6]
         include/boost/core/yield_primitives.hpp [6:6]
 
 KEEP     BSL-1.0              d2c1802e562226f7f860cad601ecc23e
@@ -414,6 +415,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
+        include/boost/core/detail/static_assert.hpp [5:5]
         include/boost/core/yield_primitives.hpp [5:5]
 
 KEEP     BSL-1.0 AND BSL-1.0  e9df2954141aa96551bf39192c39d2fe

@@ -11,7 +11,6 @@ void CheckCancelled(std::shared_ptr<std::atomic<bool>> cancelFlag) {
     }
 }
 
-
 void ParseRecordsImpl(
     NYT::TRawTableReaderPtr reader,
     ui64 blockCount,
@@ -65,6 +64,18 @@ void ParseRecords(
             writer->Write(curYsonRow.data(), curYsonRow.size());
             writer->NotifyRowEnd();
         }
+    });
+}
+
+void ParseRecordsToYtDistributed(
+    NYT::TRawTableReaderPtr reader,
+    IOutputStream& writer,
+    ui64 blockCount,
+    ui64 blockSize,
+    std::shared_ptr<std::atomic<bool>> cancelFlag
+) {
+    ParseRecordsImpl(reader, blockCount, blockSize, cancelFlag, [&writer](const TVector<char>& curYsonRow) {
+        writer.Write(curYsonRow.data(), curYsonRow.size());
     });
 }
 

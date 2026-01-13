@@ -70,6 +70,19 @@ BELONGS ya.make
     Files with this license:
         include/boost/core/enable_if.hpp [3:3]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 141782cfd91d3722aa5ecec13beef61c
+BELONGS ya.make
+    License text:
+        // Copyright 2025 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/core/detail/static_assert.hpp [4:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 18b9bbddbcb28f4b2be6c0306fb4568c
 BELONGS ya.make
     License text:

@@ -21,6 +21,7 @@
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/kqp_tablemetadata.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
@@ -92,7 +93,7 @@ struct TIndexDescription {
     const ui64 LocalPathId;
     const ui64 PathOwnerId;
 
-    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription, NKikimrKqp::TFulltextIndexDescription>;
+    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription, NKikimrSchemeOp::TFulltextIndexDescription>;
     TSpecializedIndexDescription SpecializedIndexDescription;
 
     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
@@ -133,7 +134,7 @@ struct TIndexDescription {
                 break;
             }
             case EType::GlobalFulltext: {
-                NKikimrKqp::TFulltextIndexDescription fulltextIndexDescription;
+                NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
                 *fulltextIndexDescription.MutableSettings() = index.GetFulltextIndexDescription().GetSettings();
                 SpecializedIndexDescription = std::move(fulltextIndexDescription);
                 break;
@@ -236,7 +237,7 @@ struct TIndexDescription {
                 *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
                 break;
             case EType::GlobalFulltext:
-                *message->MutableFulltextIndexDescription() = std::get<NKikimrKqp::TFulltextIndexDescription>(SpecializedIndexDescription);
+                *message->MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
                 break;
         }
     }
@@ -263,14 +264,7 @@ struct TIndexDescription {
                 }
                 return true;
             case EType::GlobalFulltext:
-                const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&SpecializedIndexDescription);
-                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
-                const auto& settings = fulltextDesc->GetSettings();
-                if (settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT) {
-                    // Only FLAT fulltext index update is supported at the moment
-                    return true;
-                }
-                return false;
+                return true;
         }
     }
 
@@ -282,7 +276,7 @@ struct TIndexDescription {
             case EType::GlobalSyncVectorKMeansTree:
                 return NKikimr::NTableIndex::GetImplTables(NYql::TIndexDescription::ConvertIndexType(Type), KeyColumns);
             case EType::GlobalFulltext:
-                const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&SpecializedIndexDescription);
+                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
                 YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
                 const auto& settings = fulltextDesc->GetSettings();
                 return NKikimr::NTableIndex::GetFulltextImplTables(settings.layout());

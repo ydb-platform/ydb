@@ -1298,7 +1298,7 @@ private:
                 return SyncError();
             }
         }
-        if (!SessionCtx->Config().EnableDiscardSelect && SessionCtx->Query().Type == EKikimrQueryType::Query) {
+        if (!SessionCtx->Config().GetEnableDiscardSelect() && SessionCtx->Query().Type == EKikimrQueryType::Query) {
             if (fillSettings.Discard) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
                     << "DISCARD not supported in YDB queries"));

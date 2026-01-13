@@ -136,20 +136,7 @@ NYql::IAutoParamBuilderPtr TKqpAutoParamBuilderFactory::MakeBuilder() {
     return MakeIntrusive<TKqpAutoParamBuilder>();
 }
 
-NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode) {
-    switch (mode) {
-        case NKikimrConfig::TTableServiceConfig::BM_ENABLED:
-            return NSQLTranslation::EBindingsMode::ENABLED;
-        case NKikimrConfig::TTableServiceConfig::BM_DISABLED:
-            return NSQLTranslation::EBindingsMode::DISABLED;
-        case NKikimrConfig::TTableServiceConfig::BM_DROP_WITH_WARNING:
-            return NSQLTranslation::EBindingsMode::DROP_WITH_WARNING;
-        case NKikimrConfig::TTableServiceConfig::BM_DROP:
-            return NSQLTranslation::EBindingsMode::DROP;
-        default:
-            return NSQLTranslation::EBindingsMode::ENABLED;
-    }
-}
+
 
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
     switch (type) {
@@ -187,8 +174,8 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
     // only options that should be specified for all types of queries
     // including views and etc..
     SetLangVer(config.LangVer);
-    SetBackportMode(config.BackportMode);
-    SetIsAmbiguityError(config.Antlr4ParserIsAmbiguityError);
+    SetBackportMode(config.GetYqlBackportMode());
+    SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
     return *this;
 }
 

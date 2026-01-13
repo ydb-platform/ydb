@@ -688,9 +688,9 @@ TEST_F(TSchedulerTest, SerializedDoubleWaitFor)
     auto promise = NewPromise<void>();
 
     BIND([&] {
-        WaitFor(VoidFuture)
+        WaitFor(OKFuture)
             .ThrowOnError();
-        WaitFor(VoidFuture)
+        WaitFor(OKFuture)
             .ThrowOnError();
         promise.Set();
 
@@ -978,7 +978,7 @@ TEST_P(TFairShareSchedulerTest, TwoLevelFairness)
         "MyFairSharePool",
         {
             /*poolWeightProvider*/ nullptr,
-            /*verboseLogging*/ true
+            /*verboseLogging*/ true,
         });
 
     std::vector<TDuration> progresses(numWorkers);

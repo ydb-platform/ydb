@@ -141,11 +141,13 @@ private:
                 Collection->OnSourceFinished(i);
                 --SourcesCount;
             }
-            cursor = std::make_shared<TNotSortedSimpleScanCursor>(aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount());
+            cursor = std::make_shared<TNotSortedSimpleScanCursor>(
+                aggrSource->GetLastSourceIdx(), aggrSource->GetLastSourceRecordsCount(), source->GetPortionIdOptional());
         } else {
             AFL_VERIFY(source->GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);
-            cursor = std::make_shared<TNotSortedSimpleScanCursor>(source->GetSourceIdx(), source->GetRecordsCount());
+            cursor =
+                std::make_shared<TNotSortedSimpleScanCursor>(source->GetSourceIdx(), source->GetRecordsCount(), source->GetPortionIdOptional());
             --SourcesCount;
         }
         AFL_VERIFY(!source->GetStageResult().IsEmpty());

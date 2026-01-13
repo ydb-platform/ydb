@@ -129,7 +129,7 @@ public:
     TJaegerChannelManager();
     TJaegerChannelManager(
         const TJaegerTracerConfigPtr& config,
-        const TString& endpoint,
+        const std::string& endpoint,
         const NAuth::ITvmServicePtr& tvmService);
 
     bool Push(const std::vector<TSharedRef>& batches, int spanCount);
@@ -140,7 +140,7 @@ public:
 
 private:
     const NAuth::ITvmServicePtr TvmService_;
-    const TString Endpoint_;
+    const std::string Endpoint_;
 
     const TInstant ReopenTime_;
     const TDuration RpcTimeout_;
@@ -182,13 +182,13 @@ private:
 
     TInstant LastSuccessfulFlushTime_ = TInstant::Now();
 
-    THashMap<TString, TBatchInfo> BatchInfo_;
+    THashMap<std::string, TBatchInfo> BatchInfo_;
     i64 TotalMemory_ = 0;
     i64 TotalSize_ = 0;
 
     NThreading::TAtomicObject<TPromise<void>> QueueEmptyPromise_ = NewPromise<void>();
 
-    THashMap<TString, TJaegerChannelManagerPtr> CollectorChannels_;
+    THashMap<std::string, TJaegerChannelManagerPtr> CollectorChannels_;
     NRpc::NGrpc::TChannelConfigPtr OpenChannelConfig_;
 
 
@@ -196,8 +196,8 @@ private:
     void DequeueAll(const TJaegerTracerConfigPtr& config);
     void NotifyEmptyQueue();
 
-    std::tuple<std::vector<TSharedRef>, int, int> PeekQueue(const TJaegerTracerConfigPtr& config, const TString& endpoint);
-    void DropQueue(int batchCount, const TString& endpoint);
+    std::tuple<std::vector<TSharedRef>, int, int> PeekQueue(const TJaegerTracerConfigPtr& config, const std::string& endpoint);
+    void DropQueue(int batchCount, const std::string& endpoint);
     void DropFullQueue();
 
     TSharedRef GetProcessInfo(const TJaegerTracerConfigPtr& config);

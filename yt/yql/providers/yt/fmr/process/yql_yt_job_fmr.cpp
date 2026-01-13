@@ -121,7 +121,7 @@ void TFmrUserJob::FillQueueFromInputTablesUnordered() {
 void TFmrUserJob::InitializeFmrUserJob() {
     if (!YtJobService_) {
         YQL_ENSURE(YtJobServiceType_ == "native" || YtJobServiceType_ == "file");
-        YtJobService_ = YtJobServiceType_ == "native" ? MakeYtJobSerivce() : MakeFileYtJobSerivce();
+        YtJobService_ = YtJobServiceType_ == "native" ? MakeYtJobSerivce() : MakeFileYtJobService();
     }
 
     ThreadPool_ = CreateThreadPool(

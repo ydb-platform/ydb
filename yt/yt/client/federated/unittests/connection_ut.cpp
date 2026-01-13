@@ -30,7 +30,7 @@ TEST(TFederatedConnectionTest, CreateClient)
     auto mockClientVla = New<TStrictMockClient>();
 
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     // To identify best (closest) cluster.
     NYson::TYsonString nodesYsonSas(TStringBuf(R"(["a-rpc-proxy-a.sas.yp-c.yandex.net:9013"])"));
@@ -50,9 +50,9 @@ TEST(TFederatedConnectionTest, CreateClient)
         });
 
     EXPECT_CALL(*mockClientSas, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     NApi::TClientOptions clientOptions;
     EXPECT_CALL(*mockConnectionSas, CreateClient(::testing::Ref(clientOptions)))
@@ -115,9 +115,9 @@ TEST(TFederatedConnectionTest, CreateClientWhenOneClusterUnavailable)
         });
 
     EXPECT_CALL(*mockClientSas, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
     EXPECT_CALL(*mockClientVla, CheckClusterLiveness(_))
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     NApi::TClientOptions clientOptions;
     EXPECT_CALL(*mockConnectionSas, CreateClient(::testing::Ref(clientOptions)))

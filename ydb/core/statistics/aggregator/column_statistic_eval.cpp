@@ -15,7 +15,7 @@ class TCMSEval : public IColumnStatisticEval {
     ui64 Depth = DEFAULT_DEPTH;
     std::optional<ui32> Seq;
 
-    static constexpr ui64 MIN_WIDTH = 256;
+    static constexpr ui64 MIN_WIDTH = 4096;
     static constexpr ui64 DEFAULT_DEPTH = 8;
 
 public:
@@ -73,20 +73,20 @@ struct TBorder {
 };
 
 class TEWHEval : public IColumnStatisticEval {
-    ui64 NumBuckets;
+    ui32 NumBuckets;
     TBorder RangeStart;
     TBorder RangeEnd;
 
     std::optional<ui32> Seq;
 
 public:
-    TEWHEval(ui64 numBuckets, TBorder rangeStart, TBorder rangeEnd)
+    TEWHEval(ui32 numBuckets, TBorder rangeStart, TBorder rangeEnd)
         : NumBuckets(numBuckets)
         , RangeStart(std::move(rangeStart))
         , RangeEnd(std::move(rangeEnd))
     {}
 
-    static std::optional<EHistogramValueType> GetHistogramType(NScheme::TTypeId typeId) {
+    static TMaybe<EHistogramValueType> GetHistogramType(NScheme::TTypeId typeId) {
         using namespace NYql;
         switch (typeId) {
 #define MAKE_PRIMITIVE_VISITOR(type, layout)                                 \
@@ -96,7 +96,7 @@ public:
         KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_VISITOR)
 #undef MAKE_PRIMITIVE_VISITOR
         default:
-            return std::nullopt;
+            return Nothing();
         }
     }
 
@@ -163,7 +163,7 @@ public:
             return TPtr{};
         }
 
-        std::optional<EHistogramValueType> histType = GetHistogramType(type.GetTypeId());
+        TMaybe<EHistogramValueType> histType = GetHistogramType(type.GetTypeId());
         if (!histType) {
             // Unsupported column type
             return TPtr{};
@@ -235,7 +235,7 @@ IColumnStatisticEval::TPtr IColumnStatisticEval::MaybeCreate(
 }
 
 bool IColumnStatisticEval::AreMinMaxNeeded(const NScheme::TTypeInfo& typeInfo) {
-    return TEWHEval::GetHistogramType(typeInfo.GetTypeId()).has_value();
+    return TEWHEval::GetHistogramType(typeInfo.GetTypeId()).Defined();
 }
 
 } // NKikimr::NStat

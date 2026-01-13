@@ -1,16 +1,15 @@
 #pragma once
 
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
+#include <util/generic/size_literals.h>
 
-namespace NKikimrConfig {
-    enum TTableServiceConfig_EBlockChannelsMode : int;
-}
 
 namespace NYql {
 
@@ -66,6 +65,7 @@ public:
     NCommon::TConfSetting<ui32, Static> DqChannelVersion;
 
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
+    NCommon::TConfSetting<bool, Static> UseDqHashAggregate;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
@@ -132,7 +132,7 @@ public:
     bool HasOptEnableInplaceUpdate() const;
 };
 
-struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDispatcher {
+struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDispatcher, public NKikimrConfig::TTableServiceConfig {
     using TPtr = TIntrusivePtr<TKikimrConfiguration>;
 
     TKikimrConfiguration();
@@ -179,67 +179,87 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
         }
     }
 
+    void ApplyServiceConfig(const TTableServiceConfig& serviceConfig) {
+        if (serviceConfig.HasSqlVersion()) {
+            _KqpYqlSyntaxVersion = serviceConfig.GetSqlVersion();
+        }
+        if (serviceConfig.GetQueryLimits().HasResultRowsLimit()) {
+            _ResultRowsLimit = serviceConfig.GetQueryLimits().GetResultRowsLimit();
+        }
+
+        CopyFrom(serviceConfig);
+
+        AllowOlapDataQuery = serviceConfig.GetAllowOlapDataQuery();
+        EnableOlapSink = serviceConfig.GetEnableOlapSink();
+        EnableOltpSink = serviceConfig.GetEnableOltpSink();
+        EnableStreamWrite = serviceConfig.GetEnableStreamWrite();
+        DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
+        DefaultEnableShuffleElimination = serviceConfig.GetDefaultEnableShuffleElimination();
+        SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
+        EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
+        EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();
+        EnableNewRBO = serviceConfig.GetEnableNewRBO();
+        EnableIndexStreamWrite = serviceConfig.GetEnableIndexStreamWrite();
+        LangVer = serviceConfig.GetDefaultLangVer();
+
+        if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
+            _KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
+        }
+
+        switch (serviceConfig.GetBindingsMode()) {
+            case NKikimrConfig::TTableServiceConfig::BM_ENABLED:
+                BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
+                break;
+            case NKikimrConfig::TTableServiceConfig::BM_DISABLED:
+                BindingsMode = NSQLTranslation::EBindingsMode::DISABLED;
+                break;
+            case NKikimrConfig::TTableServiceConfig::BM_DROP_WITH_WARNING:
+                BindingsMode = NSQLTranslation::EBindingsMode::DROP_WITH_WARNING;
+                break;
+            case NKikimrConfig::TTableServiceConfig::BM_DROP:
+                BindingsMode = NSQLTranslation::EBindingsMode::DROP;
+                break;
+        }
+
+        if (GetFilterPushdownOverJoinOptionalSide()) {
+            YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
+            YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
+            YqlCoreOptimizerFlags.insert("sqlinwithnothingornull");
+        }
+
+        switch(serviceConfig.GetDefaultHashShuffleFuncType()) {
+            case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V1:
+                DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV1;
+                break;
+            case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2:
+                DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
+                break;
+        }
+
+    }
+
     TKikimrSettings::TConstPtr Snapshot() const;
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
-    bool EnableKqpScanQuerySourceRead = false;
-    bool EnableKqpScanQueryStreamIdxLookupJoin = false;
-    bool EnableKqpDataQueryStreamIdxLookupJoin = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
-    bool EnableAstCache = false;
-    bool EnablePgConstsToParams = false;
-    ui64 ExtractPredicateRangesLimit = 0;
-    bool EnablePerStatementQueryExecution = false;
-    bool EnableCreateTableAs = false;
-    bool EnableDataShardCreateTableAs = false;
-    ui64 IdxLookupJoinsPrefixPointLimit = 1;
     bool AllowOlapDataQuery = false;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
-    bool EnableHtapTx = false;
     bool EnableStreamWrite = false;
-    bool EnableBatchUpdates = false;
-    NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
     bool EnableSpilling = true;
     ui32 DefaultCostBasedOptimizationLevel = 4;
-    bool EnableConstantFolding = true;
-    bool EnableFoldUdfs = true;
     ui64 DefaultEnableSpillingNodes = 0;
-    bool EnableAntlr4Parser = false;
     bool EnableSnapshotIsolationRW = false;
-    bool AllowMultiBroadcasts = false;
     bool DefaultEnableShuffleElimination = false;
     bool DefaultEnableShuffleEliminationForAggregation = false;
-    bool FilterPushdownOverJoinOptionalSide = false;
     THashSet<TString> YqlCoreOptimizerFlags;
     bool EnableNewRBO = false;
-    bool EnableSpillingInHashJoinShuffleConnections = false;
-    bool EnableOlapScalarApply = false;
-    bool EnableOlapSubstringPushdown = false;
     bool EnableIndexStreamWrite = false;
-    bool EnableOlapPushdownProjections = false;
-    bool EnableParallelUnionAllConnectionsForExtend = false;
-    bool EnableTempTablesForUser = false;
-    bool EnableOlapPushdownAggregate = false;
-    bool EnableOrderOptimizaionFSM = false;
-    bool EnableBuildAggregationResultStages = false;
-
-    bool EnableTopSortSelectIndex = true;
-    bool EnablePointPredicateSortAutoSelectIndex = true;
-    bool EnableSimpleProgramsSinglePartitionOptimization = true;
-    bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
-    bool EnableDqHashCombineByDefault = true;
-    bool EnableWatermarks = false;
-    ui32 DefaultDqChannelVersion = 1u;
-    bool EnableDiscardSelect = false;
-
-    bool Antlr4ParserIsAmbiguityError = false;
-
-    bool EnableFallbackToYqlOptimizer = false;
 
     ui32 LangVer = NYql::MinLangVersion;
-    NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
+
+    NYql::EBackportCompatibleFeaturesMode GetYqlBackportMode() const;
 
     NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
     NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
@@ -250,6 +270,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
     bool GetEnableOlapPushdownAggregate() const;
     bool GetUseDqHashCombine() const;
+    bool GetUseDqHashAggregate() const;
 };
 
 }

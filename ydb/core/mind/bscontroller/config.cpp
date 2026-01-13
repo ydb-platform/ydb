@@ -318,8 +318,9 @@ namespace NKikimr::NBsController {
                     ApplyGroupCreated(groupId, cur);
                 }
                 Y_ABORT_UNLESS(prev.VDisksInGroup.size() == cur.VDisksInGroup.size() ||
-                    (cur.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE));
-                for (size_t i = 0; i < cur.VDisksInGroup.size(); ++i) {
+                    (cur.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) ||
+                    (prev.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING));
+                for (size_t i = 0; i < Min(prev.VDisksInGroup.size(), cur.VDisksInGroup.size()); ++i) {
                     const TVSlotInfo& prevSlot = *prev.VDisksInGroup[i];
                     const TVSlotInfo& curSlot = *cur.VDisksInGroup[i];
                     if (prevSlot.VSlotId != curSlot.VSlotId) {
@@ -445,9 +446,16 @@ namespace NKikimr::NBsController {
                         auto& topology = *group->Topology;
                         // fill in vector of failed disks (that are not fully operational)
                         TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
+                        bool alreadySeenReplicatingWithPhantomsOnly = false;
                         for (const TVSlotInfo *slot : group->VDisksInGroup) {
-                            if (!slot->IsReady) {
+                            bool replicatingWithPhantomsOnly = slot->IsReplicatingWithPhantomsOnly();
+                            // Allow exactly one VDisk that is REPLICATING with only phantoms remaining to be treated as nearly ready
+                            bool allowedOneReplicatingWithPhantomsOnly = replicatingWithPhantomsOnly && !alreadySeenReplicatingWithPhantomsOnly;
+                            if (!slot->IsReady && !allowedOneReplicatingWithPhantomsOnly) {
                                 failed |= {&topology, slot->GetShortVDiskId()};
+                            }
+                            if (replicatingWithPhantomsOnly) {
+                                alreadySeenReplicatingWithPhantomsOnly = true;
                             }
                         }
                         // check the failure model

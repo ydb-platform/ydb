@@ -183,6 +183,10 @@ public:
             return VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR);
         }
 
+        bool IsReplicatingWithPhantomsOnly() const {
+            return GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING && OnlyPhantomsRemain;
+        }
+
         void PutInVSlotReadyTimestampQ(TMonotonic now) {
             const TMonotonic readyAfter = now + ReadyStablePeriod; // vdisk will be treated as READY one shortly, but not now
             Y_ABORT_UNLESS(VSlotReadyTimestampIter == TVSlotReadyTimestampQ::iterator());
@@ -647,11 +651,6 @@ public:
         // nodes waiting for this group to become listable
         THashSet<TNodeId> WaitingNodes;
 
-        // group's geometry; it doesn't ever change since the group is created
-        const ui32 NumFailRealms = 0;
-        const ui32 NumFailDomainsPerFailRealm = 0;
-        const ui32 NumVDisksPerFailDomain = 0;
-
         // topology according to the geometry
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
 
@@ -784,11 +783,8 @@ public:
             , Down(PersistedDown)
             , VDisksInGroup(numFailRealms * numFailDomainsPerFailRealm * numVDisksPerFailDomain)
             , StoragePoolId(storagePoolId)
-            , NumFailRealms(numFailRealms)
-            , NumFailDomainsPerFailRealm(numFailDomainsPerFailRealm)
-            , NumVDisksPerFailDomain(numVDisksPerFailDomain)
             , Topology(std::make_shared<TBlobStorageGroupInfo::TTopology>(TBlobStorageGroupType(ErasureSpecies),
-                NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain))
+                numFailRealms, numFailDomainsPerFailRealm, numVDisksPerFailDomain))
         {
             Topology->FinalizeConstruction();
             Y_ABORT_UNLESS(VDisksInGroup.size() == Topology->GetTotalVDisksNum());
@@ -1543,7 +1539,7 @@ private:
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     TSelfHealSettings SelfHealSettings;
-    
+
     TClusterBalancingSettings ClusterBalancingSettings;
 
     TActorId SystemViewsCollectorId;

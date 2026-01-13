@@ -39,7 +39,7 @@ protected:
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-    TFuture<void> ReadyEvent_ = VoidFuture;
+    TFuture<void> ReadyEvent_ = OKFuture;
 
     //! This timer is started when GetReadyEvent() is invoked and stopped when ready event is set.
     //! In other words, it shows how much time caller spends waiting on ready event.

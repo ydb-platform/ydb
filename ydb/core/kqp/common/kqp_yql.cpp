@@ -204,6 +204,90 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
 
 } // anonymous namespace end
 
+TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(const NNodes::TCoNameValueTupleList& node) {
+
+    TKqpReadTableFullTextIndexSettings settings;
+
+    for (const auto& tuple : node) {
+        TStringBuf name = tuple.Name().Value();
+
+        if (name == TKqpReadTableFullTextIndexSettings::ItemsLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.ItemsLimit = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::SkipLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.SkipLimit = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.BFactor = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.K1Factor = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::QueryModeSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.QueryMode = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.MinimumShouldMatch = tuple.Value().Cast().Ptr();
+        } else {
+            YQL_ENSURE(false, "Unknown KqpReadTableFullTextIndex setting name '" << name << "'");
+        }
+    }
+
+    return settings;
+}
+
+NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+    settings.reserve(2);
+
+    if (ItemsLimit) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(ItemsLimitSettingName)
+            .Value(ItemsLimit)
+            .Done());
+    }
+
+    if (SkipLimit) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(SkipLimitSettingName)
+            .Value(SkipLimit)
+            .Done());
+    }
+
+    if (BFactor) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(BFactorSettingName)
+            .Value(BFactor)
+            .Done());
+    }
+
+    if (K1Factor) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(K1FactorSettingName)
+            .Value(K1Factor)
+            .Done());
+    }
+
+    if (QueryMode) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(QueryModeSettingName)
+            .Value(QueryMode)
+            .Done());
+    }
+
+    if (MinimumShouldMatch) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(MinimumShouldMatchSettingName)
+            .Value(MinimumShouldMatch)
+            .Done());
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
 TKqpReadTableSettings TKqpReadTableSettings::Parse(const NNodes::TCoNameValueTupleList& node) {
     return ParseInternal(node);
 }

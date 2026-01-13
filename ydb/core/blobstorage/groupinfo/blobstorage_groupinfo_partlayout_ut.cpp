@@ -97,15 +97,15 @@ public:
 };
 
 void TestErasureSet(ui32 firstIdx, ui32 step) {
-    for (ui32 erasure = firstIdx; erasure < TBlobStorageGroupType::ErasureSpeciesCount; erasure += step) {
-        if (erasure == TBlobStorageGroupType::ErasureMirror3dc || erasure == TBlobStorageGroupType::ErasureMirror3of4) {
+    for (auto erasure = std::advance(TBlobStorageGroupType::ErasureNames.begin(), firstIdx); erasure != TBlobStorageGroupType::ErasureNames.end(); std::advance(erasure, step)) {
+        if (erasure->first == TBlobStorageGroupType::ErasureMirror3dc || erasure->first == TBlobStorageGroupType::ErasureMirror3of4) {
             continue;
         }
         TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(erasure));
         if (gtype.BlobSubgroupSize() > 8) {
             continue;
         }
-        Cerr << "testing erasure " << TBlobStorageGroupType::ErasureSpeciesName(erasure) << Endl;
+        Cerr << "testing erasure " << erasure->second << Endl;
         const ui32 totalPartCount = gtype.TotalPartCount();
         const ui32 blobSubgroupSize = gtype.BlobSubgroupSize();
         TCheckQueue checker(gtype);

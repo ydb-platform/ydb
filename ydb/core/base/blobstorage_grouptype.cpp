@@ -35,26 +35,26 @@ struct TBlobStorageErasureParameters {
     ui32 Handoff; // number of selected hinted handoff (1 | 2)
 };
 
-static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpeciesCount>
+static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpeciesUndefined>
         BlobStorageGroupErasureSpeciesParameters{{
     {0} // 0 = ErasureSpicies::ErasureNone
     ,{1} // 1 = ErasureSpicies::ErasureMirror3
-    ,{1} // 2 = ErasureSpicies::Erasure3Plus1Block
-    ,{1} // 3 = ErasureSpicies::Erasure3Plus1Stipe
+    ,{} // 2
+    ,{} // 3
     ,{2} // 4 = ErasureSpicies::Erasure4Plus2Block
-    ,{2} // 5 = ErasureSpicies::Erasure3Plus2Block
-    ,{2} // 6 = ErasureSpicies::Erasure4Plus2Stipe
-    ,{2} // 7 = ErasureSpicies::Erasure3Plus2Stipe
-    ,{2} // 8 = ErasureSpicies::ErasureMirror3Plus2
-    ,{6} // 9 = ErasureSpicies::ErasireMirror3dc
+    ,{} // 5
+    ,{} // 6
+    ,{} // 7
+    ,{} // 8
+    ,{6} // 9 = ErasureSpicies::ErasureMirror3dc
     ,{3} // 10 = ErasureSpicies::Erasure4Plus3Block
-    ,{3} // 11 = ErasureSpicies::Erasure4Plus3Stripe
+    ,{} // 11
     ,{3} // 12 = ErasureSpicies::Erasure3Plus3Block
-    ,{3} // 13 = ErasureSpicies::Erasure3Plus3Stripe
-    ,{3} // 14 = ErasureSpicies::Erasure2Plus3Block
-    ,{3} // 15 = ErasureSpicies::Erasure2Plus3Stripe
-    ,{2} // 16 = ErasureSpicies::Erasure2Plus2Block
-    ,{2} // 17 = ErasureSpicies::Erasure2Plus2Stripe
+    ,{} // 13
+    ,{} // 14
+    ,{} // 15
+    ,{} // 16
+    ,{} // 17
     ,{5} // 18 = ErasureSpicies::ErasureMirror3of4
 }};
 

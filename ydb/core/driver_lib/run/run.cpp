@@ -462,7 +462,7 @@ public:
                 Y_ABORT_UNLESS(channel.HasPDiskCategory());
                 TString name = channel.GetErasureSpecies();
                 TBlobStorageGroupType::EErasureSpecies erasure = TBlobStorageGroupType::ErasureSpeciesByName(name);
-                if (erasure == TBlobStorageGroupType::ErasureSpeciesCount) {
+                if (!TBlobStorageGroupType::ErasureNames.contains(erasure)) {
                     ythrow yexception() << "wrong erasure species \"" << name << "\"";
                 }
                 const ui64 pDiskCategory = channel.GetPDiskCategory();

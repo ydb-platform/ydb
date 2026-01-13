@@ -13,12 +13,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 
     Y_UNIT_TEST(TestBelongsToSubgroup) {
         for (ui32 disks = 1; disks < 4; ++disks) {
-            for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {
-                if (species == TBlobStorageGroupType::ErasureMirror3dc) {
+            for (auto [erasureType, _] : TBlobStorageGroupType::ErasureNames) {
+                if (erasureType == TBlobStorageGroupType::ErasureMirror3dc) {
                     continue;
                 }
 
-                const auto erasureType = TErasureType::EErasureSpecies(species);
                 const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize();
                 TBlobStorageGroupInfo info(erasureType, disks, numFailDomains);
 
@@ -66,13 +65,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 
     Y_UNIT_TEST(SubgroupPartLayout) {
         TLogoBlobID id(1, 1, 1, 0, 100, 0);
-
-        for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {
-            if (species == TBlobStorageGroupType::ErasureMirror3dc || species == TBlobStorageGroupType::ErasureMirror3of4) {
+        for (auto [erasureType, _] : TBlobStorageGroupType::ErasureNames) {
+            if (erasureType == TBlobStorageGroupType::ErasureMirror3dc || erasureType == TBlobStorageGroupType::ErasureMirror3of4) {
                 continue;
             }
 
-            const auto erasureType = TErasureType::EErasureSpecies(species);
+            const auto erasureType = species->first;
             const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize();
             TBlobStorageGroupInfo info(erasureType, 1, numFailDomains);
 
@@ -131,16 +129,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
     }
 
     Y_UNIT_TEST(GroupQuorumCheckerOrdinary) {
-        for (ui32 i = 0; i < TBlobStorageGroupType::ErasureSpeciesCount; ++i) {
-            auto erasure = static_cast<TBlobStorageGroupType::EErasureSpecies>(i);
-            if (erasure == TBlobStorageGroupType::ErasureMirror3dc || erasure == TBlobStorageGroupType::ErasureMirror3of4) {
+        for (auto [erasureType, _] : TBlobStorageGroupType::ErasureNames) {
+            if (erasureType == TBlobStorageGroupType::ErasureMirror3dc || erasureType == TBlobStorageGroupType::ErasureMirror3of4) {
                 // separate test for mirror-3-dc
                 continue;
             }
 
             const ui32 numFailDomains = 10;
             const ui32 numVDisks = 3;
-            TBlobStorageGroupInfo info(erasure, numVDisks, numFailDomains);
+            TBlobStorageGroupInfo info(erasureType, numVDisks, numFailDomains);
 
             // calculate number of handoff disks
             const ui32 numHandoff = info.Type.Handoff();

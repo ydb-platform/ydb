@@ -89,8 +89,8 @@ public:
         : TClientCommandBase("static", {}, "Generate configuration for static group")
     {
         TStringStream erasureList("{");
-        for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {
-            erasureList << (species ? "|" : "") << TBlobStorageGroupType::ErasureName[species];
+        for (auto [erasureType, erasureName] : TBlobStorageGroupType::ErasureNames) {
+            erasureList << (erasureType ? "|" : "") << erasureName;
         }
         erasureList << "}";
         ErasureList = erasureList.Str();
@@ -142,10 +142,10 @@ public:
         TClientCommand::Parse(config);
 
         auto erasure = TBlobStorageGroupType::ErasureSpeciesByName(ErasureStr);
-        Type = TBlobStorageGroupType(erasure);
-        if (Type.GetErasure() == TBlobStorageGroupType::ErasureSpeciesCount) {
+        if (!TBlobStorageGroupType::ErasureNames.contains(erasure)) {
             ythrow TWithBackTrace<yexception>() << "unknown erasure species: \"" << ErasureStr << "\", valid values are: " << ErasureList;
         }
+        Type = TBlobStorageGroupType(erasure);
 
         if (DistinctionLevelStr) {
             BeginLevel = 0;

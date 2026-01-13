@@ -52,7 +52,7 @@ namespace NKikimr::NBsController {
 
         const TString &erasureSpecies = cmd.GetErasureSpecies();
         storagePool.ErasureSpecies = TBlobStorageGroupType::ErasureSpeciesByName(erasureSpecies);
-        if (storagePool.ErasureSpecies == TBlobStorageGroupType::ErasureSpeciesCount) {
+        if (!TBlobStorageGroupType::ErasureNames.contains(storagePool.ErasureSpecies)) {
             throw TExError() << "invalid ErasureSpecies# " << erasureSpecies;
         }
 

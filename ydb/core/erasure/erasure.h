@@ -251,37 +251,23 @@ struct TErasureType {
     enum EErasureSpecies {
         ErasureNone = 0,
         ErasureMirror3 = 1,
-        Erasure3Plus1Block = 2,
-        Erasure3Plus1Stripe = 3,
-
         Erasure4Plus2Block = 4,
-        Erasure3Plus2Block = 5,
-        Erasure4Plus2Stripe = 6,
-        Erasure3Plus2Stripe = 7,
 
-        ErasureMirror3Plus2 = 8,
         ErasureMirror3dc = 9,
 
         Erasure4Plus3Block = 10,
-        Erasure4Plus3Stripe = 11,
         Erasure3Plus3Block = 12,
-        Erasure3Plus3Stripe = 13,
-        Erasure2Plus3Block = 14,
-        Erasure2Plus3Stripe = 15,
-
-        Erasure2Plus2Block = 16,
-        Erasure2Plus2Stripe = 17,
 
         ErasureMirror3of4 = 18,
 
-        ErasureSpeciesCount = 19
+        ErasureSpeciesUndefined = 19
     };
+
 
     static const char *ErasureSpeciesToStr(EErasureSpecies es);
 
     enum EErasureFamily {
         ErasureMirror,
-        ErasureParityStripe,
         ErasureParityBlock
     };
 
@@ -302,13 +288,13 @@ struct TErasureType {
     }
 
     TString ToString() const {
-        Y_ABORT_UNLESS((ui64)ErasureSpecies < ErasureSpeciesCount);
-        return ErasureName[ErasureSpecies];
+        Y_ABORT_UNLESS(ErasureNames.contains(ErasureSpecies));
+        return ErasureNames.at(ErasureSpecies);
     }
 
     static TString ErasureSpeciesName(ui32 erasureSpecies) {
-        if (erasureSpecies < ErasureSpeciesCount) {
-            return ErasureName[erasureSpecies];
+        if (auto name = ErasureNames.find((EErasureSpecies)erasureSpecies); name != ErasureNames.end()) {
+            return name->second;
         }
         TStringStream str;
         str << "Unknown" << erasureSpecies;
@@ -316,12 +302,12 @@ struct TErasureType {
     }
 
     static EErasureSpecies ErasureSpeciesByName(TString name) {
-        for (ui32 species = 0; species < TErasureType::ErasureSpeciesCount; ++species) {
-            if (TErasureType::ErasureName[species] == name) {
-                return TErasureType::EErasureSpecies(species);
+        for (auto [speciesType, speciesName] : ErasureNames) {
+            if (speciesName == name) {
+                return EErasureSpecies(speciesType);
             }
         }
-        return TErasureType::ErasureSpeciesCount;
+        return TErasureType::ErasureSpeciesUndefined;
     }
 
     TErasureType::EErasureFamily ErasureFamily() const;
@@ -371,7 +357,7 @@ struct TErasureType {
     ui64 BlockSplitWholeOffset(ui64 dataSize, ui64 partIdx, ui64 offset) const;
     static bool IsCrcModeValid(ui32 crcModeRaw);
 
-    static const std::array<TString, ErasureSpeciesCount> ErasureName;
+    static const std::unordered_map<EErasureSpecies, TString> ErasureNames;
 protected:
     EErasureSpecies ErasureSpecies;
 

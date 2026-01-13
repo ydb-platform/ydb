@@ -27,7 +27,7 @@ namespace NKikimr::NStorage {
                 }
 
                 const auto species = TBlobStorageGroupType::ErasureSpeciesByName(smConfig.GetErasureSpecies());
-                if (species == TBlobStorageGroupType::ErasureSpeciesCount) {
+                if (!TBlobStorageGroupType::ErasureNames.contains(species)) {
                     throw TExConfigError() << "invalid erasure specified for static group"
                         << " Erasure# " << smConfig.GetErasureSpecies();
                 }

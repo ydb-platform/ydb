@@ -69,6 +69,9 @@ public:
     void ShowError(const TString& message);
     void RequestRefresh();
     void RequestExit();
+    
+    // Thread-safe UI refresh trigger
+    void PostRefresh() { Screen_.PostEvent(ftxui::Event::Custom); }
 
 private:
     ftxui::Component BuildMainComponent();

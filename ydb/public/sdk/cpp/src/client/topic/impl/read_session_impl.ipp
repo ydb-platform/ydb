@@ -1750,6 +1750,21 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::StartDecompressionTask
             break;
         }
     }
+    // If we still have items in the queue and the front item hasn't completed all tasks,
+    // give it unlimited quota to finish. This ensures at least one batch completes
+    // even under memory pressure, preventing deadlock where events never become ready.
+    if (!DecompressionQueue.empty() && !DecompressEverything) {
+        TDecompressionQueueItem& current = DecompressionQueue.front();
+        if (!current.BatchInfo->AllDecompressionTasksStarted()) {
+            auto sentToDecompress = current.BatchInfo->StartDecompressionTasks(Settings.DecompressionExecutor_,
+                                                                               std::numeric_limits<i64>::max(),
+                                                                               deferred);
+            DecompressedDataSize += sentToDecompress;
+            if (current.BatchInfo->AllDecompressionTasksStarted()) {
+                DecompressionQueue.pop_front();
+            }
+        }
+    }
 }
 
 template<bool UseMigrationProtocol>

@@ -262,7 +262,7 @@ Component TTopicTuiApp::BuildHelpBar() {
             case EViewType::MessagePreview:
                 parts = {
                     text(" [←→] Navigate Pages ") | dim,
-                    text(" [g] Go to Offset ") | dim,
+                    text(" [t] Tail ") | color(Color::Green),
                     text(" [Enter] Expand ") | dim,
                     text(" [Esc] Back ") | dim
                 };

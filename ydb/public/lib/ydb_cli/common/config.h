@@ -73,7 +73,12 @@ class TConfigurationManager {
 public:
     using TPtr = std::shared_ptr<TConfigurationManager>;
 
+    // Default constructor - uses ~/.config/ydb/config.yaml
     TConfigurationManager();
+
+    // Constructor with custom config file path (useful for testing)
+    explicit TConfigurationManager(const TFsPath& configPath);
+
     ~TConfigurationManager();
 
     // Get config node by key path (supports composite keys like "interactive.enable_hints")
@@ -93,11 +98,15 @@ public:
     static TFsPath GetConfigDir();
     static TFsPath GetConfigFilePath();
 
+    // Get current config file path
+    TFsPath GetPath() const { return ConfigPath; }
+
 private:
     friend class TConfigNode;
 
     struct TImpl;
     std::unique_ptr<TImpl> Impl;
+    TFsPath ConfigPath;
     bool Modified = false;
 
     void Load();

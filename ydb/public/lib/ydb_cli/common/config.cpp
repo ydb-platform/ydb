@@ -424,8 +424,17 @@ void TConfigNode::NotifyModified() {
 // TConfigurationManager implementation
 TConfigurationManager::TConfigurationManager()
     : Impl(std::make_unique<TImpl>())
+    , ConfigPath(GetConfigFilePath())
 {
     GetGlobalLogger().Debug() << "TConfigurationManager::ctor";
+    Load();
+}
+
+TConfigurationManager::TConfigurationManager(const TFsPath& configPath)
+    : Impl(std::make_unique<TImpl>())
+    , ConfigPath(configPath)
+{
+    GetGlobalLogger().Debug() << "TConfigurationManager::ctor with path=" << configPath.GetPath();
     Load();
 }
 
@@ -446,10 +455,9 @@ TFsPath TConfigurationManager::GetConfigFilePath() {
 
 void TConfigurationManager::Load() {
     try {
-        TFsPath configPath = GetConfigFilePath();
-        GetGlobalLogger().Debug() << "Load: path=" << configPath.GetPath() << ", exists=" << configPath.Exists();
-        if (configPath.Exists()) {
-            Impl->Config = YAML::LoadFile(configPath.GetPath());
+        GetGlobalLogger().Debug() << "Load: path=" << ConfigPath.GetPath() << ", exists=" << ConfigPath.Exists();
+        if (ConfigPath.Exists()) {
+            Impl->Config = YAML::LoadFile(ConfigPath.GetPath());
             GetGlobalLogger().Debug() << "Load: loaded Config=" << NodeTypeStr(Impl->Config);
         } else {
             Impl->Config = YAML::Node(YAML::NodeType::Map);
@@ -464,10 +472,8 @@ void TConfigurationManager::Load() {
 
 void TConfigurationManager::Save() {
     try {
-        TFsPath configDir = GetConfigDir();
+        TFsPath configDir = ConfigPath.Parent();
         EnsureDir(configDir, DIR_MODE_PRIVATE);
-
-        TFsPath configPath = GetConfigFilePath();
 
         GetGlobalLogger().Debug() << "Save: before emit, Config=" << NodeTypeStr(Impl->Config);
 
@@ -480,7 +486,7 @@ void TConfigurationManager::Save() {
         GetGlobalLogger().Debug() << "Save: emitter output:\n" << content;
 
         {
-            TFileOutput file(TFile(configPath, CreateAlways | WrOnly | AWUser | ARUser));
+            TFileOutput file(TFile(ConfigPath, CreateAlways | WrOnly | AWUser | ARUser));
             file << content;
             file.Finish();
         }
@@ -489,7 +495,7 @@ void TConfigurationManager::Save() {
 
         // Reload config from file to ensure in-memory state is consistent
         GetGlobalLogger().Debug() << "Save: reloading from file";
-        Impl->Config = YAML::LoadFile(configPath.GetPath());
+        Impl->Config = YAML::LoadFile(ConfigPath.GetPath());
         GetGlobalLogger().Debug() << "Save: after reload, Config=" << NodeTypeStr(Impl->Config);
     } catch (const std::exception& e) {
         GetGlobalLogger().Warning() << "Failed to save CLI config: " << e.what();

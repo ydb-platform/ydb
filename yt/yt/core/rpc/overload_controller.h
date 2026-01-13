@@ -36,7 +36,6 @@ bool ShouldThrottleCall(const TCongestionState& congestionState);
 struct IOverloadController
     : public TRefCounted
 {
-public:
     DECLARE_INTERFACE_SIGNAL(void(), LoadAdjusted);
 
     virtual void Start() = 0;

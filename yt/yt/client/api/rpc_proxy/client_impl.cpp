@@ -2018,6 +2018,7 @@ TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
     YT_VERIFY(cookie);
 
     auto proxy = CreateApiServiceProxy();
+    PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
     auto req = proxy.ReadTablePartition();
     InitStreamingRequest(*req);
 
@@ -2074,6 +2075,7 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTableReader(
     const TTableReaderOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
+    PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
     auto req = proxy.ReadTable();
     InitStreamingRequest(*req);
 
@@ -2101,6 +2103,7 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTablePartitionReader(
     YT_VERIFY(cookie);
 
     auto proxy = CreateApiServiceProxy();
+    PatchProxyForStallRequests(GetRpcProxyConnection()->GetConfig(), &proxy);
     auto req = proxy.ReadTablePartition();
     InitStreamingRequest(*req);
 
@@ -3096,7 +3099,7 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
 
 TFuture<TFlowExecuteResult> TClient::FlowExecute(
     const NYPath::TYPath& pipelinePath,
-    const TString& command,
+    const std::string& command,
     const NYson::TYsonString& argument,
     const TFlowExecuteOptions& options)
 {

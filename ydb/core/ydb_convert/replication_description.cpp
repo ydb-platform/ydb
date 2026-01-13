@@ -140,6 +140,28 @@ void ConvertState(const NKikimrReplication::TReplicationState& from, T& to) {
     }
 }
 
+template <NKikimrReplication::TReplicationConfig::TargetCase CorrectTargetCase>
+bool CheckConfig(
+    const NKikimrReplication::TReplicationConfig& config,
+    Ydb::StatusIds_StatusCode& status,
+    TString& error)
+{
+    switch (config.GetTargetCase()) {
+        case CorrectTargetCase:
+            return true;
+        default:
+            error = TStringBuilder() << "wrong config: "
+                << CorrectTargetCase << " expected, "
+                << config.GetTargetCase() << " provided";
+            break;
+    }
+
+    status = Ydb::StatusIds::INTERNAL_ERROR;
+    return false;
+}
+
+constexpr auto CheckReplicationConfig = CheckConfig<NKikimrReplication::TReplicationConfig::TargetCase::kSpecific>;
+
 } // anonymous namespace
 
 void FillReplicationDescription(
@@ -153,6 +175,30 @@ void FillReplicationDescription(
     for (const auto& target : inDesc.GetTargets()) {
         ConvertItem(target, *out.add_items());
     }
+}
+
+bool FillReplicationDescription(
+    Ydb::Replication::DescribeReplicationResult& out,
+    const NKikimrSchemeOp::TReplicationDescription& inDesc,
+    const NKikimrSchemeOp::TDirEntry& inDirEntry,
+    Ydb::StatusIds_StatusCode& status,
+    TString& error)
+{
+    const auto& config = inDesc.GetConfig();
+    if (!CheckReplicationConfig(config, status, error)) {
+        return false;
+    }
+
+    ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
+    ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
+    ConvertConsistencySettings(config.GetConsistencySettings(), out);
+    ConvertState(inDesc.GetState(), out);
+
+    for (const auto& target : config.GetSpecific().GetTargets()) {
+        ConvertItem(target, *out.add_items());
+    }
+
+    return true;
 }
 
 namespace {
@@ -169,6 +215,8 @@ void ConvertTransferSpecific(
     to.mutable_batch_settings()->mutable_flush_interval()->set_seconds(from.GetBatching().GetFlushIntervalMilliSeconds() / 1000);
 }
 
+constexpr auto CheckTransferConfig = CheckConfig<NKikimrReplication::TReplicationConfig::TargetCase::kTransferSpecific>;
+
 } // anonymous namespace
 
 void FillTransferDescription(
@@ -178,6 +226,26 @@ void FillTransferDescription(
     ConvertConnectionParams(inDesc.GetConnectionParams(), *out.mutable_connection_params());
     ConvertState(inDesc.GetState(), out);
     ConvertTransferSpecific(inDesc.GetTransferSpecific(), out);
+}
+
+bool FillTransferDescription(
+    Ydb::Replication::DescribeTransferResult& out,
+    const NKikimrSchemeOp::TReplicationDescription& inDesc,
+    const NKikimrSchemeOp::TDirEntry& inDirEntry,
+    Ydb::StatusIds_StatusCode& status,
+    TString& error)
+{
+    const auto& config = inDesc.GetConfig();
+    if (!CheckTransferConfig(config, status, error)) {
+        return false;
+    }
+
+    ConvertDirectoryEntry(inDirEntry, out.mutable_self(), true);
+    ConvertConnectionParams(config.GetSrcConnectionParams(), *out.mutable_connection_params());
+    ConvertState(inDesc.GetState(), out);
+    ConvertTransferSpecific(config.GetTransferSpecific(), out);
+
+    return true;
 }
 
 } // namespace NKikimr

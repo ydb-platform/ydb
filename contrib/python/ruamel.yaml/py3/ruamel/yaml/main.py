@@ -646,8 +646,8 @@ class YAML:
             except AttributeError:
                 raise
                 # self.dumper.dispose()  # cyaml
-            delattr(self, '_serializer')
-            delattr(self, '_emitter')
+            delattr(self, '_serializer')  # NOQA
+            delattr(self, '_emitter')  # NOQA
         if transform:
             val = stream.getvalue()
             if self.encoding:
@@ -923,8 +923,8 @@ class YAMLContextManager:
             raise
             # self.dumper.dispose()  # cyaml
         try:
-            delattr(self._yaml, '_serializer')
-            delattr(self._yaml, '_emitter')
+            delattr(self._yaml, '_serializer')  # NOQA
+            delattr(self._yaml, '_emitter')  # NOQA
         except AttributeError:
             raise
         if self._transform:

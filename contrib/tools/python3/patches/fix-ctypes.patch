@@ -1,5 +1,5 @@
---- contrib/tools/python3/Lib/ctypes/__init__.py	(index)
-+++ contrib/tools/python3/Lib/ctypes/__init__.py	(working tree)
+--- a/Lib/ctypes/__init__.py	(index)
++++ b/Lib/ctypes/__init__.py	(working tree)
 @@ -345,7 +345,7 @@ class CDLL(object):
                   use_errno=False,
                   use_last_error=False,

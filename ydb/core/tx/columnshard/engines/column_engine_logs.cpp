@@ -460,9 +460,10 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     }
 }
 
-std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
-    TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions) const {
-    std::vector<std::shared_ptr<TPortionInfo>> out;
+std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Select(TInternalPathId pathId, TSnapshot snapshot,
+    const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting,
+    const std::optional<THashSet<TInsertWriteId>>& ownPortions) const {
+    std::vector<TSelectedPortionInfo> out;
     using namespace NColumnShard::NLWTrace_YDB_CS;
 
     auto spg = GranulesStorage->GetGranuleOptional(pathId);
@@ -502,7 +503,8 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
         if (takePortion) {
-            out.emplace_back(portion);
+            AFL_VERIFY(nonconflicting != conflicting)("nonconflicting", nonconflicting);
+            out.emplace_back(portion, nonconflicting);
         }
     }
 
@@ -539,7 +541,8 @@ std::vector<std::shared_ptr<TPortionInfo>> TColumnEngineForLogs::Select(
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
         if (takePortion) {
-            out.emplace_back(portion);
+            AFL_VERIFY(nonconflicting != conflicting)("nonconflicting", nonconflicting);
+            out.emplace_back(portion, nonconflicting);
         }
     }
 

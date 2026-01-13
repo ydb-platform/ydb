@@ -53,6 +53,7 @@ BELONGS ya.make
         source/crc64.c [3:3]
         source/crc64_sw.c [3:3]
         source/crc_sw.c [3:3]
+        source/crc_util.c [3:3]
         source/intel/asm/crc32c_sse42_asm.c [3:3]
         source/intel/intrin/crc32c_sse42_avx512.c [3:3]
         source/intel/intrin/crc64nvme_avx512.c [3:3]

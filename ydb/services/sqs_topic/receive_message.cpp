@@ -34,7 +34,7 @@
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -159,13 +159,13 @@ namespace NKikimr::NSqsTopic::V1 {
             if (message.SentTimestamp) {
                 result.mutable_attributes()->emplace("SentTimestamp", ToString(message.SentTimestamp.MilliSeconds()));
             }
-            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageDeduplicationId)) {
+            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_DEDUPLICATION_ID)) {
                 result.mutable_attributes()->emplace("MessageDeduplicationId", *value);
             }
 
             result.set_message_id(GenerateMessageId(message.MessageId));
 
-            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageAttributes)) {
+            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_ATTRIBUTES)) {
                 NKikimr::NSQS::TMessageAttributes messageAttributes;
                 if (messageAttributes.ParseFromString(*value)) {
                     result.set_m_d_5_of_message_attributes(NSQS::CalcMD5OfMessageAttributes(messageAttributes.attributes()));

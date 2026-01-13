@@ -83,6 +83,29 @@ public:
 
             YQL_ENSURE(TransformCtx.DataQueryBlocks);
             auto compiler = CreateKqpQueryCompiler(Cluster, Database, FuncRegistry, TypesCtx, OptimizeCtx, Config);
+            if (!ctx.IssueManager.GetIssues().Empty()) {
+                bool errorFound = false;
+                bool wrongIndexUsageFound = false;
+                const auto& issues = ctx.IssueManager.GetIssues();
+                for(const auto& issue: issues) {
+                    WalkThroughIssues(issue, false, [&errorFound, &wrongIndexUsageFound](const NYql::TIssue& issue, int level) {
+                        Y_UNUSED(level);
+                        if (issue.GetSeverity() == NYql::TSeverityIds::S_FATAL || issue.GetSeverity() == NYql::TSeverityIds::S_ERROR) {
+                            errorFound = true;
+                        }
+
+                        if (issue.GetCode() == EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE) {
+                            wrongIndexUsageFound = true;
+                        }
+                    });
+                }
+
+                if (errorFound && wrongIndexUsageFound) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Failed to compile physical query."));
+                    return TStatus::Error;
+                }
+            }
+
             auto ret = compiler->CompilePhysicalQuery(physicalQuery, *TransformCtx.DataQueryBlocks, *preparedQuery.MutablePhysicalQuery(), ctx);
             if (!ret) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Failed to compile physical query."));
@@ -340,24 +363,10 @@ private:
             .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
             .Build(false));
 
-        auto kqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
-            .AddServiceTransformers()
-            .Add(Log("RBOTypeAnnotator"), "LogRBOTypeAnnotator")
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-            .Build(false);
-
         auto rboKqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("RBOTypeAnnotator"), "LogRBOTypeAnnotator")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-            .Build(false);
-
-        auto newRBOPhysicalPeepholeTransformer = TTransformationPipeline(typesCtx)
-            .AddServiceTransformers()
-            .Add(Log("PhysicalPeephole"), "LogPhysicalPeephole")
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-            .AddPostTypeAnnotation()
-            .Add(GetDqIntegrationPeepholeTransformer(false, typesCtx), "DqIntegrationPeephole")
             .Build(false);
 
         auto newRBOPhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
@@ -373,7 +382,9 @@ private:
             //.AddCommonOptimization()
 
             .Add(CreateKqpRewriteSelectTransformer(OptimizeCtx, *typesCtx), "RewriteSelect")
-            .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, rboKqpTypeAnnTransformer, kqpTypeAnnTransformer, newRBOPhysicalPeepholeTransformer, funcRegistry), "NewRBOTransformer")
+            .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, std::move(rboKqpTypeAnnTransformer),
+                    CreateTypeAnnotationTransformer(
+                        CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config), *typesCtx), funcRegistry), "NewRBOTransformer")
             .Add(CreateKqpRBOCleanupTransformer(*typesCtx), "RBOCleanupTransformer")
 
             //.Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
@@ -417,7 +428,7 @@ private:
                 "BuildPhysicalTxs")
             .Build(false));
 
-            auto physicalBuildQueryTransformer = TTransformationPipeline(typesCtx)
+        auto physicalBuildQueryTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("PhysicalBuildQuery"), "LogPhysicalBuildQuery")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))

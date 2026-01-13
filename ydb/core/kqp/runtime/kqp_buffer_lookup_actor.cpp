@@ -57,7 +57,7 @@ private:
         const ui64 LookupCookie;
         const ui64 ShardId;
         ui64 LastSeqNo = 0;
-        const bool UniqueCheck;
+        const bool IsUniqueCheck;
         const bool FailOnUniqueCheck;
         bool Blocked = false;
 
@@ -226,20 +226,14 @@ public:
     }
 
     void AddLookupTask(ui64 cookie, const std::vector<TConstArrayRef<TCell>>& keys) override {
-        auto& state = CookieToLookupState.at(cookie);
-        auto& worker = state.Worker;
-
-        AFL_ENSURE(state.ReadsInflight == 0);
-        AFL_ENSURE(state.Worker->AllRowsProcessed());
-
-        for (const auto& key : keys) {
-            worker->AddInputRow(key);
-        }
-
-        StartLookupTask(cookie, state, false, false);
+        AddTask(cookie, keys, false, false);
     }
 
     void AddUniqueCheckTask(ui64 cookie, const std::vector<TConstArrayRef<TCell>>& keys, bool immediateFail) override {
+        AddTask(cookie, keys, true, immediateFail);
+    }
+
+    void AddTask(ui64 cookie, const std::vector<TConstArrayRef<TCell>>& keys, bool isUnique, bool immediateFail) {
         auto& state = CookieToLookupState.at(cookie);
         auto& worker = state.Worker;
 
@@ -250,10 +244,10 @@ public:
             worker->AddInputRow(key);
         }
 
-        StartLookupTask(cookie, state, true, immediateFail);
+        StartLookupTask(cookie, state, isUnique, immediateFail);
     }
 
-    void StartLookupTask(ui64 cookie, TLookupState& state, bool isUniqueCheck, bool uniqueFailOnRead) {
+    void StartLookupTask(ui64 cookie, TLookupState& state, bool isUnique, bool uniqueFailOnRead) {
         auto& worker = state.Worker;
         auto reads = worker->BuildRequests(Partitioning, ReadId);
 
@@ -262,7 +256,7 @@ public:
 
         for (auto& [shardId, read] : reads) {
             ++state.ReadsInflight;
-            StartTableRead(cookie, shardId, isUniqueCheck, uniqueFailOnRead, std::move(read));
+            StartTableRead(cookie, shardId, isUnique, uniqueFailOnRead, std::move(read));
         }
     }
 
@@ -317,14 +311,17 @@ public:
             record.MutableSnapshot()->SetStep(Settings.MvccSnapshot->GetStep());
             record.MutableSnapshot()->SetTxId(Settings.MvccSnapshot->GetTxId());
         }
-        AFL_ENSURE(!failOnUniqueCheck || isUniqueCheck);
 
         AFL_ENSURE(Settings.LockTxId && Settings.LockNodeId);
         record.SetLockTxId(Settings.LockTxId);
         record.SetLockNodeId(Settings.LockNodeId);
-        record.SetLockMode(Settings.LockMode);
+        record.SetLockMode(!isUniqueCheck
+            ? Settings.LockMode
+            : NKikimrDataEvents::OPTIMISTIC);
 
-        if (isUniqueCheck) {
+        AFL_ENSURE(!failOnUniqueCheck || isUniqueCheck);
+
+        if (failOnUniqueCheck) {
             record.SetTotalRowsLimit(1);
         }
 
@@ -366,7 +363,7 @@ public:
                 .LookupCookie = cookie,
                 .ShardId = shardId,
                 .LastSeqNo = 0,
-                .UniqueCheck = isUniqueCheck,
+                .IsUniqueCheck = isUniqueCheck,
                 .FailOnUniqueCheck = failOnUniqueCheck,
                 .Blocked = false,
             }).second);
@@ -630,7 +627,7 @@ public:
         for (auto& request : requests) {
             const ui64 newReadId = request->Record.GetReadId();
             ++lookupState.ReadsInflight;
-            StartTableRead(failedRead.LookupCookie, failedRead.ShardId, failedRead.UniqueCheck, failedRead.FailOnUniqueCheck, std::move(request));
+            StartTableRead(failedRead.LookupCookie, failedRead.ShardId, failedRead.IsUniqueCheck, failedRead.FailOnUniqueCheck, std::move(request));
             ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts + 1;
         }
         ReadIdToState.erase(failedReadId);

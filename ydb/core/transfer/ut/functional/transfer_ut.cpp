@@ -1578,7 +1578,7 @@ Y_UNIT_TEST_SUITE(Transfer)
     {
         auto id = RandomNumber<ui16>();
         auto username = TStringBuilder() << "u" << id;
-        auto secretName = TStringBuilder() << "s" << id;
+        auto secret = TStringBuilder() << "s" << id;
 
         MainTestCase permissionSetup;
         permissionSetup.CreateUser(username);
@@ -1586,8 +1586,8 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         MainTestCase testCase(username);
         testCase.ExecuteDDL(Sprintf(R"(
-                CREATE OBJECT %s (TYPE SECRET) WITH value="%s@builtin"
-            )", secretName.data(), username.data()));
+                CREATE SECRET %s WITH (value="%s@builtin")
+            )", secret.data(), username.data()));
 
         permissionSetup.ExecuteDDL(Sprintf(R"(
                 CREATE TABLE `%s` (
@@ -1612,7 +1612,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )", MainTestCase::CreateTransferSettings::WithSecretName(secretName));
+            )", MainTestCase::CreateTransferSettings::WithSecret(secret));
 
         testCase.Write({"Message-1"});
 

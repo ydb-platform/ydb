@@ -37,6 +37,11 @@ ids {
   format: "Type annotation"
 }
 ids {
+  code: CORE_PARTIAL_TYPE_ANN
+  severity: S_INFO
+  format: "Partial type annotation"
+}
+ids {
   code: CORE_POST_TYPE_ANN
   severity: S_INFO
   format: "Post type annotation"

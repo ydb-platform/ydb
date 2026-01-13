@@ -3,7 +3,7 @@ import os
 import json
 import sys
 from collections import Counter
-from operator import itemgetter
+from itertools import chain, islice
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
@@ -785,6 +785,87 @@ TESTCASES = [
         "MultiGet",
         "true",
     ),
+    # 15
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            id Int32,
+                            ts String,
+                            ev_type String,
+                            user Int32,
+                        )
+                    )            ;
+
+            $formatTime = DateTime::Format("%H:%M:%S");
+
+            $enriched = select e.id as id,
+                            $formatTime(DateTime::ParseIso8601(e.ts)) as ts,
+                            e.user as user_id,
+                            u.id as uid,
+                            u.name as name,
+                            u.age as age
+                from
+                    $input as e
+                left join {streamlookup} ydb_conn_{table_name}.`users` as u
+                on(e.user = u.age)
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"ts":"20240701T113344","ev_type":"foo1","user":25}',
+                    '{"id":1,"ts":"11:33:44","uid":2,"user_id":25,"name":"Petr","age":25}',
+                ),
+                (
+                    '{"id":2,"ts":"20240701T112233","ev_type":"foo2","user":15}',
+                    '{"id":2,"ts":"11:22:33","uid":1,"user_id":15,"name":"Anya","age":15}',
+                    '{"id":2,"ts":"11:22:33","uid":5,"user_id":15,"name":"Irina","age":15}',
+                ),
+                (
+                    '{"id":3,"ts":"20240701T012233","ev_type":"foo2","user":15}',
+                    '{"id":3,"ts":"01:22:33","uid":1,"user_id":15,"name":"Anya","age":15}',
+                    '{"id":3,"ts":"01:22:33","uid":5,"user_id":15,"name":"Irina","age":15}',
+                ),
+                (
+                    '{"id":4,"ts":"20240701T113355","ev_type":"foo3","user":100}',
+                    '{"id":4,"ts":"11:33:55","uid":null,"user_id":100,"name":null,"age":null}',
+                ),
+                (
+                    '{"id":5,"ts":"20240701T113356","ev_type":"foo4","user":17}',
+                    '{"id":5,"ts":"11:33:56","uid":3,"user_id":17,"name":"Masha","age":17}',
+                ),
+                (
+                    '{"id":6,"ts":"20240701T133357","ev_type":"foo5","user":17}',
+                    '{"id":6,"ts":"13:33:57","uid":3,"user_id":17,"name":"Masha","age":17}',
+                ),
+                (
+                    '{"id":7,"ts":"20240701T153357","ev_type":"foo6","user":13}',
+                    '{"id":7,"ts":"15:33:57","uid":6,"user_id":13,"name":"Inna","age":13}',
+                ),
+                (
+                    '{"id":8,"ts":"20240701T193355","ev_type":"foo8","user":99}',
+                    '{"id":8,"ts":"19:33:55","uid":null,"user_id":99,"name":null,"age":null}',
+                ),
+                (
+                    '{"id":9,"ts":"20240701T203355","ev_type":"foo9","user":98}',
+                    '{"id":9,"ts":"20:33:55","uid":null,"user_id":98,"name":null,"age":null}',
+                ),
+            ]
+            * 100
+        ),
+        "TTL",
+        "10",
+        "MaxCachedRows",
+        "5",
+        "MaxDelayedRows",
+        "100",
+    ),
 ]
 
 
@@ -911,13 +992,14 @@ class TestJoinStreaming(TestYdsBase):
             self.write_stream(map(lambda x: x[0], chunk))
             offset += 500
 
-        read_data = self.read_stream(len(messages))
+        expected_len = sum(map(len, messages)) - len(messages)
+        read_data = self.read_stream(expected_len)
         if DEBUG:
             print(streamlookup, testcase, file=sys.stderr)
             print(sql, file=sys.stderr)
             print(*zip(messages, read_data), file=sys.stderr, sep="\n")
         read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
-        messages_ctr = Counter(map(freeze, map(json.loads, map(itemgetter(1), messages))))
+        messages_ctr = Counter(map(freeze, map(json.loads, chain(*map(lambda row: islice(row, 1, None), messages)))))
         assert read_data_ctr == messages_ctr
 
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:

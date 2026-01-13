@@ -659,7 +659,7 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
                 break;
             } else {
                 Cerr << result->Record.GetErrorReason();
-                UNIT_ASSERT_VALUES_EQUAL((ui32)result->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK);
+                UNIT_ASSERT_VALUES_EQUAL_C((ui32)result->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK, result->Record.DebugString());
             }
             UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), data.size());
 

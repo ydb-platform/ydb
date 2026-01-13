@@ -693,18 +693,18 @@ public:
                                                     .set(+EGroupFields::PDiskId)
                                                     .set(+EGroupFields::VDisk);
     const TFieldsType FieldsBsPDisks = TFieldsType().set(+EGroupFields::PDisk);
-    const TFieldsType FieldsGroupState = TFieldsType().set(+EGroupFields::Used)
-                                                      .set(+EGroupFields::MissingDisks)
+    const TFieldsType FieldsGroupState = TFieldsType().set(+EGroupFields::MissingDisks)
                                                       .set(+EGroupFields::State);
-    const TFieldsType FieldsGroupAvailableAndDiskSpace = TFieldsType().set(+EGroupFields::Available)
+    const TFieldsType FieldsGroupAvailableAndDiskSpace = TFieldsType().set(+EGroupFields::Used)
+                                                                      .set(+EGroupFields::Available)
                                                                       .set(+EGroupFields::Limit)
                                                                       .set(+EGroupFields::Usage)
-                                                                      .set(+EGroupFields::DiskSpaceUsage)
-                                                                      .set(+EGroupFields::MaxPDiskUsage)
-                                                                      .set(+EGroupFields::MaxVDiskSlotUsage)
-                                                                      .set(+EGroupFields::MaxNormalizedOccupancy)
-                                                                      .set(+EGroupFields::MaxVDiskRawUsage)
-                                                                      .set(+EGroupFields::CapacityAlert);
+                                                                      .set(+EGroupFields::DiskSpaceUsage);
+    const TFieldsType FieldsGroupCapacityMetrics = TFieldsType().set(+EGroupFields::MaxPDiskUsage)
+                                                                .set(+EGroupFields::MaxVDiskSlotUsage)
+                                                                .set(+EGroupFields::MaxNormalizedOccupancy)
+                                                                .set(+EGroupFields::MaxVDiskRawUsage)
+                                                                .set(+EGroupFields::CapacityAlert);
     const TFieldsType FieldsHive = TFieldsType().set(+EGroupFields::AllocationUnits);
     const TFieldsType FieldsWbGroups = TFieldsType().set(+EGroupFields::GroupId)
                                                     .set(+EGroupFields::Erasure)
@@ -715,12 +715,7 @@ public:
                                                    .set(+EGroupFields::VDisk)
                                                    .set(+EGroupFields::PDisk)
                                                    .set(+EGroupFields::Read)
-                                                   .set(+EGroupFields::Write)
-                                                   .set(+EGroupFields::MaxPDiskUsage)
-                                                   .set(+EGroupFields::MaxVDiskSlotUsage)
-                                                   .set(+EGroupFields::MaxNormalizedOccupancy)
-                                                   .set(+EGroupFields::MaxVDiskRawUsage)
-                                                   .set(+EGroupFields::CapacityAlert);
+                                                   .set(+EGroupFields::Write);
 
     const std::unordered_map<EGroupFields, TFieldsType> DependentFields = {
         { EGroupFields::DiskSpaceUsage, TFieldsType().set(+EGroupFields::PDisk)
@@ -729,7 +724,8 @@ public:
                                                 .set(+EGroupFields::VDisk) },
         { EGroupFields::Read, TFieldsType().set(+EGroupFields::VDisk) },
         { EGroupFields::Write, TFieldsType().set(+EGroupFields::VDisk) },
-        { EGroupFields::Used, TFieldsType().set(+EGroupFields::VDisk) },
+        { EGroupFields::Used, TFieldsType().set(+EGroupFields::PDisk)
+                                           .set(+EGroupFields::VDisk) },
         { EGroupFields::Limit, TFieldsType().set(+EGroupFields::PDisk)
                                             .set(+EGroupFields::VDisk) },
         { EGroupFields::Usage, TFieldsType().set(+EGroupFields::PDisk)
@@ -1578,7 +1574,6 @@ public:
             if (FieldsAvailable.test(+EGroupFields::PDisk)) {
                 for (TGroup* group : GroupView) {
                     group->CalcAvailableAndDiskSpace(PDisks);
-                    group->CalcCapacityMetrics();
                 }
                 FieldsAvailable |= FieldsGroupAvailableAndDiskSpace;
                 ApplyEverything();
@@ -1607,7 +1602,7 @@ public:
                 FieldsAvailable |= FieldsHive;
                 ApplyEverything();
             }
-            if (TimeToAskWhiteboard() && FieldsNeeded(FieldsWbDisks)) {
+            if (TimeToAskWhiteboard() && FieldsNeeded(FieldsWbDisks | FieldsGroupCapacityMetrics)) {
                 AddEvent("TimeToAskWhiteboard");
                 for (TGroup* group : GroupView) {
                     for (TNodeId nodeId : group->VDiskNodeIds) {
@@ -1961,6 +1956,7 @@ public:
             group->CalcCapacityMetrics();
         }
         FieldsAvailable |= FieldsGroupAvailableAndDiskSpace;
+        FieldsAvailable |= FieldsGroupCapacityMetrics;
         ApplyEverything();
     }
 
@@ -2279,10 +2275,10 @@ public:
                     jsonGroup.SetState(group->State);
                     if (group->GroupGeneration) {
                         jsonGroup.SetGroupGeneration(group->GroupGeneration);
-                    }    
+                    }
                     if (group->Overall != NKikimrViewer::Grey) {
                         jsonGroup.SetOverall(group->Overall);
-                    }    
+                    }
                 }
                 if (FieldsAvailable.test(+EGroupFields::MissingDisks) && FieldsRequested.test(+EGroupFields::MissingDisks)) {
                     jsonGroup.SetMissingDisks(group->MissingDisks);
@@ -2333,7 +2329,7 @@ public:
                 }
             }
         } else {
-            for (TGroupGroup& groupGroup : GroupGroups) {                
+            for (TGroupGroup& groupGroup : GroupGroups) {
                 NKikimrViewer::TStorageGroupGroup& jsonGroupGroup = *json.AddStorageGroupGroups();
                 jsonGroupGroup.SetGroupName(groupGroup.Name);
                 jsonGroupGroup.SetGroupCount(groupGroup.Groups.size());

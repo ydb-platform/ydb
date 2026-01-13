@@ -40,6 +40,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    library/cpp/regex/pire
     library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base

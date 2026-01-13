@@ -143,7 +143,7 @@ public:
             InitializeLogPrefix(); // re-initialize with SelfId
             CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
 
-            if (!Task.GetFastChannels()) {
+            if (Task.GetDqChannelVersion() <= 1u) {
                 Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
                     RuntimeSettings.StatsMode, MemoryLimits.ChannelBufferSize, this, this->GetActivityType());
                 this->RegisterWithSameMailbox(Channels);
@@ -532,6 +532,9 @@ protected:
                     }
                 } else {
                     for (auto& [channelId, info] : InputChannelsMap) {
+                        if (!info.HasPeer) {
+                            return;
+                        }
                         if (!info.Channel->IsFinished()) {
                             info.Channel->Finish();
                             // TBD: wait for confirmation?
@@ -1115,7 +1118,7 @@ protected:
 
                 inputChannel->HasPeer = true;
                 inputChannel->PeerId = peer;
-                if (Task.GetFastChannels()) {
+                if (Task.GetDqChannelVersion() >= 2u) {
                     Y_ENSURE(inputChannel->Channel);
                     inputChannel->Channel->Bind(peer, this->SelfId());
                 } else {
@@ -1137,7 +1140,7 @@ protected:
 
                 outputChannel->HasPeer = true;
                 outputChannel->PeerId = peer;
-                if (Task.GetFastChannels()) {
+                if (Task.GetDqChannelVersion() >= 2u) {
                     Y_ENSURE(outputChannel->Channel);
                     outputChannel->Channel->Bind(this->SelfId(), peer);
                 } else {
@@ -1594,6 +1597,8 @@ protected:
                     str << "Run";
                 }
                 str << Endl;
+                str << "  TaskId: " << Task.GetId() << Endl;
+                str << "  StageId: " << Task.GetStageId() << Endl;
                 str << "  State: " << (unsigned int)State << Endl;
 
                 TaskRunnerMonitoringInfo(str);
@@ -1609,7 +1614,14 @@ protected:
                     str << "  LastPopReturnedNoData: " << ProcessOutputsState.LastPopReturnedNoData << Endl;
                 }
 
-                str << Endl << "Input Channels:" << Endl;
+                str << Endl;
+                if (Task.GetDqChannelVersion() >= 2u) {
+                    HREF(TStringBuilder() << "/node/" << this->SelfId().NodeId() << "/actors/kqp_channels") {
+                        str << "Input Channels:" << Endl;
+                    }
+                } else {
+                    str << "Input Channels:" << Endl;
+                }
                 TABLE_SORTABLE_CLASS("table table-condensed") {
                     TABLEHEAD() {
                         TABLER() {
@@ -1683,7 +1695,14 @@ protected:
                     }
                 }
 
-                str << Endl << "Output Channels:" << Endl;
+                str << Endl;
+                if (Task.GetDqChannelVersion() >= 2u) {
+                    HREF(TStringBuilder() << "/node/" << this->SelfId().NodeId() << "/actors/kqp_channels") {
+                        str << "Output Channels:" << Endl;
+                    }
+                } else {
+                    str << "Output Channels:" << Endl;
+                }
                 TABLE_SORTABLE_CLASS("table table-condensed") {
                     TABLEHEAD() {
                         TABLER() {
@@ -1856,6 +1875,8 @@ public:
     }
 
 protected:
+    virtual TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) = 0;
+
     void FillIoMaps(
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -1925,6 +1946,7 @@ protected:
                         .TypeEnv = typeEnv,
                         .HolderFactory = holderFactory,
                         .Alloc = Alloc,
+                        .WatermarksTracker = GetInputTransformWatermarksTracker(inputIndex),
                         .TraceId = ComputeActorSpan.GetTraceId()
                     });
             } catch (const std::exception& ex) {

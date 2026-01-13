@@ -102,11 +102,10 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(BaseCase) {
-        // Without killOnCommit, the schemeshard doesn't get rebooted on TEvDataShard::Ev***KMeansResponse's,
-        // and thus the vector index build process is never interrupted at all because there are no other
-        // events to reboot on.
-        T t(true /*killOnCommit*/);
+    // Without killOnCommit, the schemeshard doesn't get rebooted on TEvDataShard::Ev***KMeansResponse's,
+    // and thus the vector index build process is never interrupted at all because there are no other
+    // events to reboot on.
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(BaseCase, 1 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, true /*killOnCommit*/) {
         DoTestIndexBuild(t, false, false);
     }
 

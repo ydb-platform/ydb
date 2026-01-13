@@ -214,6 +214,7 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
 
     NFmr::TFmrServices fmrServices;
     fmrServices.FunctionRegistry = GetFuncRegistry().Get();
+    fmrServices.FileStorage = GetFileStorage();
     fmrServices.Config = std::make_shared<TYtGatewayConfig>(GetRunOptions().GatewaysConfig->GetYt());
     fmrServices.DisableLocalFmrWorker = DisableLocalFmrWorker_;
     fmrServices.CoordinatorServerUrl = *fmrInitializationOpts.FmrCoordinatorUrl;
@@ -230,6 +231,15 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
 
     fmrServices.FileUploadService = fmrInitializationOpts.FmrFileUploadService;
     fmrServices.FileMetadataService = fmrInitializationOpts.FmrFileMetadataService;
+
+    if (!DisableLocalFmrWorker_) {
+        auto jobPreparer = NFmr::MakeFmrJobPreparer(GetFileStorage(), TableDataServiceDiscoveryFilePath_);
+        auto fmrDistCacheSettings = fmrInitializationOpts.FmrDistributedCacheSettings;
+        TString distFileCacheBaseUrl = "yt://" + fmrDistCacheSettings.YtServerName + "/" + fmrDistCacheSettings.Path;
+        jobPreparer->InitalizeDistributedCache(distFileCacheBaseUrl, fmrDistCacheSettings.YtToken);
+
+        fmrServices.JobPreparer = jobPreparer;
+    }
 
     auto [fmrGateway, worker] = NFmr::InitializeFmrGateway(ytGateway, MakeIntrusive<NFmr::TFmrServices>(fmrServices));
     FmrWorker_ = std::move(worker);

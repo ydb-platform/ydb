@@ -61,12 +61,11 @@ const std::vector<TColumnDesc>& GetColumns() {
     return ret;
 }
 
-ui16 GetTag(const std::string_view& columnName) {
+ui16 GetTag(const std::string_view& columnName, const std::vector<TColumnDesc>& columns = GetColumns()) {
     if (columnName == "Key") {
         return 1;
     }
 
-    const auto& columns = GetColumns();
     for (size_t i = 0; i < columns.size(); ++i) {
         if (columns[i].Name == columnName) {
             return i + 2; // Key column is 1, value columns go after.
@@ -76,10 +75,32 @@ ui16 GetTag(const std::string_view& columnName) {
     Y_UNREACHABLE();
 }
 
-TTableInfo PrepareTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
-    auto info = CreateColumnTable(env, databaseName, tableName, 4, GetColumns());
-    InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber, GetColumns());
+TTableInfo PrepareTable(
+        TTestEnv& env, const TString& databaseName, const TString& tableName,
+        const std::vector<TColumnDesc>& columns = GetColumns()) {
+    auto info = CreateColumnTable(env, databaseName, tableName, 4, columns);
+    InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber, columns);
     return info;
+}
+
+std::vector<TResponse> PrepareAndGetStatistics(
+        const std::vector<TColumnDesc>& columnsDesc,
+        EStatType type,
+        const std::vector<std::string>& columns) {
+    TTestEnv env(1, 1);
+    auto& runtime = *env.GetServer().GetRuntime();
+
+    CreateDatabase(env, "Database");
+    const auto tableInfo = PrepareTable(env, "Database", "Table1", columnsDesc);
+    Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+    std::vector<std::optional<ui32>> columnTags;
+    for (const auto& col : columns) {
+        columnTags.push_back(GetTag(col, columnsDesc));
+    }
+    auto responses = GetStatistics(runtime, tableInfo.PathId, type, columnTags);
+    UNIT_ASSERT_VALUES_EQUAL(responses.size(), columns.size());
+    return responses;
 }
 
 void ValidateCountMinSketch(TTestActorRuntime& runtime, const TPathId& pathId) {
@@ -130,18 +151,8 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
     }
 
     Y_UNIT_TEST(SimpleColumnStatistics) {
-        TTestEnv env(1, 1);
-        auto& runtime = *env.GetServer().GetRuntime();
-
-        CreateDatabase(env, "Database");
-        const auto tableInfo = PrepareTable(env, "Database", "Table1");
-        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
-
-        auto responses = GetStatistics(runtime, tableInfo.PathId, EStatType::SIMPLE_COLUMN, {
-            GetTag("Key"),
-            GetTag("LowCardinalityString"),
-        });
-        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 2);
+        auto responses = PrepareAndGetStatistics(
+            GetColumns(), EStatType::SIMPLE_COLUMN, { "Key", "LowCardinalityString" });
         for (const auto& resp : responses) {
             UNIT_ASSERT(resp.Success);
             UNIT_ASSERT(resp.SimpleColumn.Data);
@@ -150,7 +161,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
 
         {
             // Key column
-            const auto& data = *responses[0].SimpleColumn.Data;
+            const auto& data = *responses.at(0).SimpleColumn.Data;
             UNIT_ASSERT_VALUES_EQUAL(data.GetCountDistinct(), 1000);
             UNIT_ASSERT_VALUES_EQUAL(data.GetTypeId(), NScheme::NTypeIds::Uint64);
             UNIT_ASSERT(!data.HasTypeInfo());
@@ -160,7 +171,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
 
         {
             // LowCardinalityString column
-            const auto& data = *responses[1].SimpleColumn.Data;
+            const auto& data = *responses.at(1).SimpleColumn.Data;
             UNIT_ASSERT_VALUES_EQUAL(data.GetCountDistinct(), 10);
             UNIT_ASSERT_VALUES_EQUAL(data.GetTypeId(), NScheme::NTypeIds::String);
             UNIT_ASSERT(!data.HasTypeInfo());
@@ -170,30 +181,22 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
     }
 
     Y_UNIT_TEST(EqWidthHistogram) {
-        TTestEnv env(1, 1);
-        auto& runtime = *env.GetServer().GetRuntime();
-
-        CreateDatabase(env, "Database");
-        const auto tableInfo = PrepareTable(env, "Database", "Table1");
-        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
-
-        auto responses = GetStatistics(
-            runtime, tableInfo.PathId, EStatType::EQ_WIDTH_HISTOGRAM, {
-                GetTag("Key"),
-                GetTag("LowCardinalityString"),
-                GetTag("LowCardinalityInt"),
-                GetTag("Float"),
-                GetTag("Date"),
-                GetTag("NearNumericLimits"),
+        auto responses = PrepareAndGetStatistics(
+            GetColumns(), EStatType::EQ_WIDTH_HISTOGRAM, {
+                "Key",
+                "LowCardinalityString",
+                "LowCardinalityInt",
+                "Float",
+                "Date",
+                "NearNumericLimits",
             });
-        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 6);
 
-        UNIT_ASSERT(!responses[0].Success);
-        UNIT_ASSERT(!responses[1].Success);
+        UNIT_ASSERT(!responses.at(0).Success);
+        UNIT_ASSERT(!responses.at(1).Success);
 
         {
             // LowCardinalityInt column
-            const auto& resp = responses[2];
+            const auto& resp = responses.at(2);
             UNIT_ASSERT(resp.Success);
             const auto& histogram = resp.EqWidthHistogram.Data;
             UNIT_ASSERT(histogram);
@@ -204,7 +207,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
 
         {
             // Float column
-            const auto& resp = responses[3];
+            const auto& resp = responses.at(3);
             UNIT_ASSERT(resp.Success);
             const auto& histogram = resp.EqWidthHistogram.Data;
             UNIT_ASSERT(histogram);
@@ -219,7 +222,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
 
         {
             // Date column
-            const auto& resp = responses[4];
+            const auto& resp = responses.at(4);
             UNIT_ASSERT(resp.Success);
             const auto& histogram = resp.EqWidthHistogram.Data;
             UNIT_ASSERT(histogram);
@@ -234,7 +237,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
 
         {
             // NearNumericLimits column
-            const auto& resp = responses[5];
+            const auto& resp = responses.at(5);
             UNIT_ASSERT(resp.Success);
             const auto& histogram = resp.EqWidthHistogram.Data;
             UNIT_ASSERT(histogram);
@@ -242,6 +245,31 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
             auto estimator = TEqWidthHistogramEstimator(histogram);
             UNIT_ASSERT_VALUES_EQUAL(estimator.EstimateLess<i64>(0), 500);
         }
+    }
+
+    Y_UNIT_TEST(EqWidthHistogramSmallParamTypes) {
+        // Regression test for a bug involving serializing small min/max values
+        // as literals of incorrect type.
+        const std::vector<TColumnDesc> columns {
+            {
+                .Name = "Value",
+                .TypeId = NScheme::NTypeIds::Int64,
+                .AddValue = [](ui64 key, Ydb::Value& row) {
+                    row.add_items()->set_int64_value(key % 2 == 0 ? 1 : -1);
+                },
+            },
+        };
+
+        auto responses = PrepareAndGetStatistics(
+            columns, EStatType::EQ_WIDTH_HISTOGRAM, {"Value"});
+
+        const auto& resp = responses.at(0);
+        UNIT_ASSERT(resp.Success);
+        const auto& histogram = resp.EqWidthHistogram.Data;
+        UNIT_ASSERT(histogram);
+        UNIT_ASSERT(histogram->GetType() == EHistogramValueType::Int64);
+        auto estimator = TEqWidthHistogramEstimator(histogram);
+        UNIT_ASSERT_VALUES_EQUAL(estimator.EstimateLess<i64>(0), 500);
     }
 }
 

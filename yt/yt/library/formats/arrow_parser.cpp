@@ -1,5 +1,6 @@
 #include "arrow_parser.h"
 #include "arrow_metadata_constants.h"
+#include "arrow_helpers.h"
 
 #include <yt/yt/client/formats/parser.h>
 
@@ -135,7 +136,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::INT32
+                    arrow20::Type::INT32,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -636,32 +637,19 @@ i64 CheckAndTransformTimestamp(i64 arrowValue, arrow20::TimeUnit::type timeUnit,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<std::string> GetYTTypeFromMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
-{
-    auto columnMetadata = schemaField->metadata();
-    if (!columnMetadata) {
-        return std::nullopt;
-    }
-    auto valueResult = columnMetadata->Get(YTTypeMetadataKey);
-    if (valueResult.ok()) {
-        return *valueResult;
-    }
-    return std::nullopt;
-}
-
 bool HasEmptyStructTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
 {
-    return GetYTTypeFromMetadata(schemaField) == YTTypeMetadataValueEmptyStruct;
+    return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueEmptyStruct;
 }
 
 bool HasNestedOptionalTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
 {
-    return GetYTTypeFromMetadata(schemaField) == YTTypeMetadataValueNestedOptional;
+    return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueNestedOptional;
 }
 
 bool HasYsonTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
 {
-    return GetYTTypeFromMetadata(schemaField) == YTTypeMetadataValueYson;
+    return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueYson;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

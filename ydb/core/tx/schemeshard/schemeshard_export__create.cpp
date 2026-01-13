@@ -36,6 +36,18 @@ bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& it
         || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
 }
 
+bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
+    switch (item.SourcePathType) {
+    case NKikimrSchemeOp::EPathTypeView:
+    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+    case NKikimrSchemeOp::EPathTypeReplication:
+    case NKikimrSchemeOp::EPathTypeTransfer:
+        return true;
+    default:
+        return false;
+    }
+}
+
 template <typename T>
 concept HasIncludeIndexData = requires(const T& t) {
     { t.include_index_data() } -> std::same_as<bool>;
@@ -249,6 +261,8 @@ private:
 
     template <typename TSettings>
     bool FillItems(TExportInfo& exportInfo, const TSettings& settings, TString& explain) {
+        TVector<TExportInfo::TItem> indexItems;
+
         exportInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const auto& item = settings.items(itemIdx);
@@ -260,6 +274,7 @@ private:
                     .NotDeleted()
                     .NotUnderDeleting()
                     .IsSupportedInExports()
+                    .NotAsyncReplicaTable()
                     .FailOnRestrictedCreateInTempZone();
 
                 if (!checks) {
@@ -282,11 +297,17 @@ private:
                     }
                     for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
                         const auto implTableRelPath = JoinPath(ChildPath(childParts, implTableName));
-                        exportInfo.Items.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
-                        exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
+                        indexItems.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
                     }
                 }
             }
+        }
+
+        // Add materialized index items to the end
+        exportInfo.Items.reserve(exportInfo.Items.size() + indexItems.size());
+        for (auto& item : indexItems) {
+            exportInfo.Items.push_back(std::move(item));
+            exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
         }
 
         return true;
@@ -418,9 +439,7 @@ private:
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView
-            || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup)
-        {
+        if (IsPathTypeSchemeObject(item)) {
             Ydb::Export::ExportToS3Settings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
             const auto databaseRoot = CanonizePath(Self->RootPathElements);

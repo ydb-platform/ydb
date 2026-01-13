@@ -27,6 +27,8 @@ public:
     TSnapshotManagerActor(const TString& database, TDuration queryTimeout)
         : Database(database)
         , RequestTimeout(queryTimeout)
+        , SnapshotTimeout(MultiplyWithSaturation(RequestTimeout, SnapshotToRequestTimeoutRatio))
+        , RefreshInterval(Min(MultiplyWithSaturation(RequestTimeout, RefreshToRequestTimeoutRatio), MaxRefreshDuration))
     {}
 
     void Bootstrap() {
@@ -283,6 +285,10 @@ private:
         PassAway();
     }
 
+    static TDuration MultiplyWithSaturation(TDuration duration, double value) {
+        return TDuration::FromValue(Min(duration.GetValue() * value, MaxFloor<TDuration::TValue>()));
+    }
+
 private:
     const TString Database;
     TVector<TString> Tables;
@@ -298,10 +304,9 @@ private:
     const double SnapshotToRequestTimeoutRatio = 1.5;
     const double RefreshToRequestTimeoutRatio = 0.5;
     const TDuration MaxRefreshDuration = TDuration::Seconds(10);
-
-    TDuration RequestTimeout;
-    TDuration SnapshotTimeout = RequestTimeout * SnapshotToRequestTimeoutRatio;
-    TDuration RefreshInterval = Min(RequestTimeout * RefreshToRequestTimeoutRatio, MaxRefreshDuration);
+    const TDuration RequestTimeout;
+    const TDuration SnapshotTimeout;
+    const TDuration RefreshInterval;
 };
 
 } // anonymous namespace

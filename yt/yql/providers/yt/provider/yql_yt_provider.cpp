@@ -481,16 +481,10 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
                 return {};
             }
 
-            // todo: get token by cluster name from Auth when it will be implemented
-            if (auto token = ytState->Configuration->Auth.Get()) {
+            if (auto token = ytState->ResolveClusterToken(cluster)) {
                 return *token;
             }
 
-            if (cluster) {
-                if (auto p = ytState->Configuration->Tokens.FindPtr(cluster)) {
-                    return *p;
-                }
-            }
             return {};
         };
 
@@ -579,6 +573,27 @@ bool TYtState::IsHybridEnabledForCluster(const std::string_view& cluster) const 
 bool TYtState::HybridTakesTooLong() const {
     return TimeSpentInHybrid + (HybridInFlightOprations.empty() ? TDuration::Zero() : NMonotonic::TMonotonic::Now() - HybridStartTime)
             > Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
+}
+
+TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {
+    // todo: get token by cluster name from Auth when it will be implemented
+    if (auto token = Configuration->Auth.Get()) {
+        return *token;
+    }
+
+    if (cluster) {
+        if (auto* token = Configuration->Tokens.FindPtr(cluster)) {
+            if (*token) {
+                return *token;
+            }
+        }
+
+        if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
+            return ytTokenResolver->ResolveClusterToken(cluster);
+        }
+    }
+
+    return {};
 }
 
 }

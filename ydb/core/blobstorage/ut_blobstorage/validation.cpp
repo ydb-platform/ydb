@@ -9,7 +9,7 @@ Y_UNIT_TEST_SUITE(RequestValidation) {
             Env.reset(new TEnvironmentSetup(TEnvironmentSetup::TSettings{
                 .FeatureFlags = std::move(ff),
             }));
-        
+
             Env->CreateBoxAndPool(1, 1);
             Env->Sim(TDuration::Minutes(1));
 
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(RequestValidation) {
 
         auto ev = std::make_unique<TEvBlobStorage::TEvVMovedPatch>(ctx.GroupId.GetRawId(), ctx.GroupId.GetRawId(),
                 oldId, newId, ctx.VDiskId, false, 0, TInstant::Max());
-        
+
         ctx.Env->Runtime->Send(new IEventHandle(ctx.VDiskActorId, ctx.Edge, ev.release()), ctx.VDiskActorId.NodeId());
 
         auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVMovedPatchResult>(ctx.Edge, false, TInstant::Max());

@@ -209,7 +209,8 @@ void TCommandImportFromS3::ExtractParams(TConfig& config) {
 bool IsSupportedObject(TStringBuf& key) {
     return key.ChopSuffix(NDump::NFiles::TableScheme().FileName)
         || key.ChopSuffix(NDump::NFiles::CreateView().FileName)
-        || key.ChopSuffix(NDump::NFiles::CreateTopic().FileName);
+        || key.ChopSuffix(NDump::NFiles::CreateTopic().FileName)
+        || key.ChopSuffix(NDump::NFiles::CreateAsyncReplication().FileName);
 }
 
 void TCommandImportFromS3::FillItems(NYdb::NImport::TImportFromS3Settings& settings) const {
@@ -359,7 +360,7 @@ static int PrintListObjectResultPretty(const NImport::TListObjectsInS3ExportResu
 }
 
 static int PrintListObjectResultProtoJsonBase64(const NImport::TListObjectsInS3ExportResult& result) {
-    return PrintProtoJsonBase64(TProtoAccessor::GetProto(result));
+    return PrintProtoJsonBase64(TProtoAccessor::GetProto(result), Cout);
 }
 
 static int PrintListObjectResult(const NImport::TListObjectsInS3ExportResult& result, EDataFormat format) {

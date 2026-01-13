@@ -40,19 +40,19 @@ void TDqComputeActorWatermarks::RegisterInput(ui64 inputId, bool isChannel, TDur
     }
 }
 
-void TDqComputeActorWatermarks::UnregisterInputChannel(ui64 inputId) {
+void TDqComputeActorWatermarks::UnregisterInputChannel(ui64 inputId, bool silent) {
     LOG_D("Unregister input channel " << inputId);
-    UnregisterInput(inputId, true);
+    UnregisterInput(inputId, true, silent);
 }
 
-void TDqComputeActorWatermarks::UnregisterAsyncInput(ui64 inputId) {
+void TDqComputeActorWatermarks::UnregisterAsyncInput(ui64 inputId, bool silent) {
     LOG_D("Unregister async input " << inputId);
-    UnregisterInput(inputId, false);
+    UnregisterInput(inputId, false, silent);
 }
 
-void TDqComputeActorWatermarks::UnregisterInput(ui64 inputId, bool isChannel) {
+void TDqComputeActorWatermarks::UnregisterInput(ui64 inputId, bool isChannel, bool silent) {
     auto result = Impl.UnregisterInput(std::make_pair(inputId, isChannel));
-    if (!result) {
+    if (!result && !silent) {
         LOG_E("Unregistered " << (isChannel ? "input channel" : "async input") << " " << inputId << " was not found");
     }
 }

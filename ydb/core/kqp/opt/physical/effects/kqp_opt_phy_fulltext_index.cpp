@@ -12,15 +12,15 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
     TPositionHandle pos, NYql::TExprContext& ctx)
 {
     // Extract fulltext index settings
-    const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
+    const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
     YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
-    
+
     const auto& settings = fulltextDesc->GetSettings();
     YQL_ENSURE(settings.columns().size() == 1, "Expected single text column in fulltext index");
-    
+
     const TString textColumn = settings.columns().at(0).column();
     const auto& analyzers = settings.columns().at(0).analyzers();
-    
+
     auto inputRowArg = TCoArgument(ctx.NewArgument(pos, "input_row"));
     auto tokenArg = TCoArgument(ctx.NewArgument(pos, "token"));
 
@@ -34,10 +34,10 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
                     .Build()
                 .Build()
             .Done();
-    
+
     // Build output row structure for each token
     TVector<TExprBase> tokenRowTuples;
-    
+
     indexTableColumns.clear();
     auto addIndexColumn = [&](const TStringBuf& column) {
         indexTableColumns.emplace_back(column);
@@ -82,7 +82,7 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
             addIndexColumn(column);
         }
     }
-    
+
     // Create lambda that builds output row for each token
     // FlatMap expects lambda to return list/stream/optional, so wrap struct in Just
     auto tokenRowsLambda = Build<TCoLambda>(ctx, pos)
@@ -93,20 +93,20 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
                 .Build()
             .Build()
         .Done();
-    
+
     // Get text member from input row
     auto textMember = Build<TCoMember>(ctx, pos)
         .Struct(inputRowArg)
         .Name().Build(textColumn)
         .Done();
-    
+
     // Serialize analyzer settings for FulltextAnalyze
     TString settingsProto;
     YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
     auto settingsLiteral = Build<TCoString>(ctx, pos)
         .Literal().Build(settingsProto)
         .Done();
-    
+
     // Create callable for fulltext tokenization
     // Format: FulltextAnalyze(text: String, settings: String) -> List<String>
     auto analyzeCallable = ctx.Builder(pos)
@@ -115,7 +115,7 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
             .Add(1, settingsLiteral.Ptr())
         .Seal()
         .Build();
-    
+
     auto analyzeStage = Build<TDqStage>(ctx, pos)
         .Inputs()
             .Add(readInputRows)
@@ -137,7 +137,7 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
             .Build()
         .Settings().Build()
         .Done();
-    
+
     return Build<TDqCnUnionAll>(ctx, pos)
         .Output()
             .Stage(analyzeStage)

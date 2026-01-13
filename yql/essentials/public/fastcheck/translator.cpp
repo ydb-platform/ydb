@@ -15,6 +15,7 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/config/yql_config_provider.h>
 
 #include <library/cpp/resource/resource.h>
 
@@ -167,27 +168,9 @@ private:
     }
 
     bool DoTypeCheck(TAstNode* astRoot, TLangVersion langver, TIssues& issues) {
-        TExprContext ctx;
-        TExprNode::TPtr exprRoot;
-        if (!CompileExpr(*astRoot, exprRoot, ctx, /* resolver= */ nullptr, /* urlListerManager */ nullptr,
-                         /* hasAnnotations= */ false, /* typeAnnotationIndex= */ Max<ui32>(), /* syntaxVersion= */ 1)) {
-            issues.AddIssues(ctx.IssueManager.GetCompletedIssues());
-            return false;
-        }
-
-        TTypeAnnotationContext typeCtx;
-        typeCtx.LangVer = langver;
-        auto callableTypeAnnTransformer = CreateExtCallableTypeAnnotationTransformer(typeCtx);
-        TVector<TTransformStage> transformers;
-        transformers.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply),
-                                               "ExpandApply", TIssuesIds::CORE_PRE_TYPE_ANN));
-        transformers.push_back(TTransformStage(
-            CreatePartialTypeAnnotationTransformer(std::move(callableTypeAnnTransformer), typeCtx),
-            "PartialTypeAnn", TIssuesIds::CORE_TYPE_ANN));
-        auto transformer = CreateCompositeGraphTransformer(transformers, /* useIssueScopes= */ true);
-        auto status = InstantTransform(*transformer, exprRoot, ctx);
-        issues.AddIssues(ctx.IssueManager.GetCompletedIssues());
-        return status == IGraphTransformer::TStatus::Ok;
+        return PartialAnnonateTypes(astRoot, langver, issues, [](TTypeAnnotationContext& newTypeCtx) {
+            return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
+        });
     }
 
     void FillClusters(const TChecksRequest& request, NSQLTranslation::TTranslationSettings& settings) {

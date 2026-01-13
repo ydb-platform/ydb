@@ -715,6 +715,8 @@ Y_FORCE_INLINE void DoNotOptimizeAway(const T&) = delete;
     #define Y_LIFETIME_BOUND
 #elif Y_HAS_CPP_ATTRIBUTE(clang::lifetimebound)
     #define Y_LIFETIME_BOUND [[clang::lifetimebound]]
+#elif Y_HAS_CPP_ATTRIBUTE(msvc::lifetimebound)
+    #define Y_LIFETIME_BOUND [[msvc::lifetimebound]]
 #else
     #define Y_LIFETIME_BOUND
 #endif
@@ -793,6 +795,8 @@ Y_FORCE_INLINE void DoNotOptimizeAway(const T&) = delete;
  */
 #if Y_HAS_CPP_ATTRIBUTE(no_unique_address)
     #define Y_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#elif Y_HAS_CPP_ATTRIBUTE(msvc::no_unique_address)
+    #define Y_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
 #else
     #define Y_NO_UNIQUE_ADDRESS
 #endif

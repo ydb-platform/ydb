@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     mlp_common.cpp
     mlp_consumer.cpp
+    mlp_consumer_app.cpp
     mlp_dlq_mover.cpp
     mlp_message_enricher.cpp
     mlp_storage.cpp

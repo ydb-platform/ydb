@@ -57,6 +57,12 @@ void TServerConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("nodelay", &TThis::NoDelay)
         .Default(true);
+
+    registrar.Parameter("server_name", &TThis::ServerName)
+        .Default("Http");
+
+    registrar.Parameter("enable_per_path_request_profiling", &TThis::EnablePerPathRequestProfiling)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -26,23 +26,12 @@ public:
     }
 };
 
-#define Y_UNIT_TEST_WITH_REBOOTS(N)                         \
-    template <typename T> void N(NUnitTest::TTestContext&); \
-    struct TTestRegistration##N {                           \
-        TTestRegistration##N() {                            \
-            TCurrentTest::AddTest(#N "[TabletReboots]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithTabletReboots>), false); \
-            TCurrentTest::AddTest(#N "[PipeResets]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<TTestWithPipeResets>), false); \
-        }                                                   \
-    };                                                      \
-    static TTestRegistration##N testRegistration##N;        \
-    template <typename T>                                   \
-    void N(NUnitTest::TTestContext&)
-
 #define Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(N, REBOOT_BUCKETS, PIPE_RESET_BUCKETS, KILL_ON_COMMIT) \
     void N(TTestWithReboots& t);                                            \
     struct TTestRegistration##N {                                           \
         std::vector<std::string> names;                                     \
         TTestRegistration##N() {                                            \
+            names.reserve(REBOOT_BUCKETS + PIPE_RESET_BUCKETS);             \
             for (int i = 0; i < REBOOT_BUCKETS; i++) {                      \
                 std::string name = (REBOOT_BUCKETS > 1                      \
                     ? (#N "[TabletRebootsBucket") + std::to_string(i) + "]" \
@@ -74,3 +63,5 @@ public:
     static TTestRegistration##N testRegistration##N;                        \
     void N(TTestWithReboots& t)
 }
+
+#define Y_UNIT_TEST_WITH_REBOOTS(N) Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(N, 1, 1, false)

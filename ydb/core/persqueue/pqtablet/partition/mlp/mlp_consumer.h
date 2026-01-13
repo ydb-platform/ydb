@@ -63,6 +63,8 @@ private:
 
     void Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr&);
 
+    void Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr&);
+
     STFUNC(StateInit);
     STFUNC(StateWork);
     STFUNC(StateWrite);

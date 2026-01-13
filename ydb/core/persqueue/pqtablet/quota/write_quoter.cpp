@@ -1,5 +1,6 @@
-#include <ydb/core/persqueue/pqtablet/partition/partition_util.h>
-#include "read_quoter.h"
+#include "write_quoter.h"
+
+#include <ydb/core/persqueue/public/config.h>
 
 namespace NKikimr::NPQ  {
 
@@ -17,6 +18,8 @@ TWriteQuoter::TWriteQuoter(
             tabletId, counters, 1
     )
     , QuotingEnabled(pqConfig.GetQuotingConfig().GetEnableQuoting())
+    , PartitionDeduplicationIdQuotaTracker(config.GetPartitionConfig().GetWriteMessageDeduplicationIdPerSecond(),
+        config.GetPartitionConfig().GetWriteMessageDeduplicationIdPerSecond(), TAppData::TimeProvider->Now()) // TODO MLP config
 {
 }
 
@@ -33,6 +36,10 @@ void TWriteQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
     CheckTotalPartitionQuota(std::move(context));
 }
 
+bool TWriteQuoter::CanExaust(TInstant now) {
+    return TPartitionQuoterBase::CanExaust(now) && PartitionDeduplicationIdQuotaTracker.CanExaust(now);
+}
+
 void TWriteQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
     Y_UNUSED(context);
 }
@@ -44,6 +51,8 @@ void TWriteQuoter::HandleConsumedImpl(TEvPQ::TEvConsumed::TPtr& ev) {
             new NAccountQuoterEvents::TEvConsumed(ev->Get()->ConsumedBytes, ev->Get()->RequestCookie)
         );
     }
+
+    PartitionDeduplicationIdQuotaTracker.Exaust(ev->Get()->ConsumedDeduplicationIds, ActorContext().Now());
 }
 
 bool TWriteQuoter::GetAccountQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig) const {
@@ -116,4 +125,16 @@ TAccountQuoterHolder* TWriteQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::
     return AccountQuotaTracker.Get();
 }
 
-} //namespace
+NActors::IActor* CreateWriteQuoter(
+    const NKikimrPQ::TPQConfig& pqConfig,
+    const NPersQueue::TTopicConverterPtr& topicConverter,
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TPartitionId& partition,
+    TActorId tabletActor,
+    ui64 tabletId,
+    const std::shared_ptr<TTabletCountersBase>& counters
+) {
+    return new TWriteQuoter(topicConverter, config, pqConfig, partition, tabletActor, tabletId, counters);
+}
+
+} // namespace NKikimr::NPQ

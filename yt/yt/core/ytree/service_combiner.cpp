@@ -267,7 +267,7 @@ private:
 
     void UpdateKeys()
     {
-        std::vector<TFuture<std::vector<TString>>> serviceListFutures;
+        std::vector<TFuture<std::vector<std::string>>> serviceListFutures;
         for (const auto& service : Services_) {
             serviceListFutures.push_back(AsyncYPathList(service, TYPath()));
         }

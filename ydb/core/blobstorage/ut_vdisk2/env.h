@@ -144,10 +144,10 @@ namespace NKikimr {
             auto perfConfig = NKikimrConfig::TBlobStorageConfig_TVDiskPerformanceConfig();
             perfConfig.SetPDiskType(PDiskTypeToPDiskType(VDiskConfig->BaseInfo.DeviceType));
             perfConfig.SetMinHugeBlobSizeInBytes(minHugeBlobSize);
-            
+
             auto* vdiskTypes = request->Record.MutableConfig()->MutableBlobStorageConfig()->MutableVDiskPerformanceSettings()->MutableVDiskTypes();
             vdiskTypes->Add(std::move(perfConfig));
-            
+
             Runtime->Send(new IEventHandle(NConsole::MakeConfigsDispatcherID(NodeId), edge, request.Release()), NodeId);
             auto ev = Runtime->WaitForEdgeActorEvent({edge});
             Runtime->DestroyActor(edge);

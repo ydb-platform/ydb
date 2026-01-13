@@ -76,7 +76,7 @@ namespace NKikimr {
         }
 
         void TSyncLogRecovery::PutBlock(ui64 lsn, ui64 tabletId, ui32 gen) {
-            Y_VERIFY_S(GetLastLsnOfIndexRecord() < lsn, 
+            Y_VERIFY_S(GetLastLsnOfIndexRecord() < lsn,
                     VDiskLogPrefix << "State# " << ToString() << " lsn# " << lsn);
             ++Blocks;
 

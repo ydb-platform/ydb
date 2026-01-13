@@ -274,7 +274,7 @@ protected:
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
         }
 
-        TaskRunner->Prepare(this->Task, limits, execCtx);
+        TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker);
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
@@ -291,7 +291,7 @@ protected:
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {
             channel.Channel = TaskRunner->GetOutputChannel(channelId);
-            if (this->Task.GetFastChannels() && channel.HasPeer) {
+            if (this->Task.GetDqChannelVersion() >= 2u && channel.HasPeer) {
                 channel.Channel->Bind(this->SelfId(), channel.PeerId);
             }
         }
@@ -324,6 +324,10 @@ protected:
 
     const IDqAsyncOutputBuffer* GetSink(ui64, const typename TBase::TAsyncOutputInfoBase& sinkInfo) const override final {
         return sinkInfo.Buffer.Get();
+    }
+
+    TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) override {
+        return TaskRunner ? TaskRunner->GetInputTransformWatermarksTracker(inputId): nullptr;
     }
 
 protected:

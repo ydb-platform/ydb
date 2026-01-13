@@ -122,9 +122,11 @@ std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType*
 
 class TChannelStub : public IChannelBuffer {
 public:
-    TChannelStub(ui64 channelId) : IChannelBuffer(TChannelFullInfo(channelId, {}, {}, 0, 0)) {
-        PopStats.ChannelId = channelId;
-        PushStats.ChannelId = channelId;
+    TChannelStub(const TChannelFullInfo& info) : IChannelBuffer(info) {
+        PushStats.ChannelId = info.ChannelId;
+        PushStats.SrcStageId = info.SrcStageId;
+        PopStats.ChannelId = info.ChannelId;
+        PopStats.DstStageId = info.DstStageId;
     }
 
     ~TChannelStub() override {
@@ -147,7 +149,7 @@ public:
     }
 
     bool IsEarlyFinished() final {
-        return false;
+        return EarlyFinished;
     }
 
     bool IsFlushed() final {
@@ -163,10 +165,11 @@ public:
     }
 
     void EarlyFinish() final {
-        YQL_ENSURE(false, "Stub must be binded before EarlyFinish");
+        EarlyFinished = true;
     }
 
     std::shared_ptr<TDqFillAggregator> Aggregator;
+    bool EarlyFinished = false;
 };
 
 struct TLoadingInfo {
@@ -195,8 +198,10 @@ public:
         , InputBinded(false)
         , Finished(false)
     {
-        PopStats.ChannelId = info.ChannelId;
         PushStats.ChannelId = info.ChannelId;
+        PushStats.SrcStageId = info.SrcStageId;
+        PopStats.ChannelId = info.ChannelId;
+        PopStats.DstStageId = info.DstStageId;
     }
 
     ~TLocalBuffer() override;
@@ -355,7 +360,9 @@ public:
     TOutputBuffer(std::shared_ptr<TNodeState> nodeState, std::shared_ptr<TOutputDescriptor> descriptor)
         : IChannelBuffer(descriptor->Info), NodeState(nodeState), Descriptor(descriptor) {
         PushStats.ChannelId = descriptor->Info.ChannelId;
+        PushStats.SrcStageId = descriptor->Info.SrcStageId;
         PopStats.ChannelId = descriptor->Info.ChannelId;
+        PopStats.DstStageId = descriptor->Info.DstStageId;
     }
 
     ~TOutputBuffer() override;
@@ -439,7 +446,9 @@ public:
     TInputBuffer(const std::shared_ptr<TNodeState>& nodeState, const std::shared_ptr<TInputDescriptor>& descriptor)
         : IChannelBuffer(descriptor->Info), NodeState(nodeState), Descriptor(descriptor) {
         PushStats.ChannelId = descriptor->Info.ChannelId;
+        PushStats.SrcStageId = descriptor->Info.SrcStageId;
         PopStats.ChannelId = descriptor->Info.ChannelId;
+        PopStats.DstStageId = descriptor->Info.DstStageId;
     }
 
     ~TInputBuffer() override;
@@ -547,12 +556,13 @@ public:
     void SendAckWithError(ui64 cookie);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters(ui64 deltaBytes);
-    void Connect(NActors::TActorId& sender, ui64 genMajor);
+    void ConnectSession(NActors::TActorId& sender, ui64 genMajor);
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor, ui64 popBytes);
 
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
     void StartReconciliation(bool major);
+    bool UpdateReconciliationDelay();
     void ScheduleReconciliation();
     void DoReconciliation();
     void SendDiscovery(NActors::TActorId actorId);
@@ -652,7 +662,7 @@ public:
         LocalBufferLatency = counters->GetCounter("LocalBuffer/Latency", true);
     }
     ~TLocalBufferRegistry();
-    std::shared_ptr<TLocalBuffer> GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info);
+    std::shared_ptr<TLocalBuffer> GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info, bool& created);
     void DeleteLocalBufferInfo(const TChannelInfo& info);
 
     NActors::TActorSystem* ActorSystem;
@@ -681,8 +691,7 @@ public:
     std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
 
     // unbinded stubs
-    std::shared_ptr<IChannelBuffer> GetOutputBuffer(ui64 channelId);
-    std::shared_ptr<IChannelBuffer> GetInputBuffer(ui64 channelId);
+    std::shared_ptr<IChannelBuffer> GetUnbindedBuffer(const TChannelFullInfo& info);
     // binded helpers
     std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) final;
     std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info) final;
@@ -705,8 +714,11 @@ public:
     ui32 PoolId;
     std::weak_ptr<TDqChannelService> Self;
     std::shared_ptr<TLocalBufferRegistry> LocalBufferRegistry;
+    mutable std::unordered_map<TChannelInfo, std::shared_ptr<TLocalBuffer>> LocalBufferHolders;
+    mutable std::queue<std::pair<TChannelInfo, TInstant>> UnbindedInputs;
     mutable std::unordered_map<ui32, std::shared_ptr<TNodeState>> NodeStates;
     mutable std::mutex Mutex;
+    const TDuration UnbindedWaitPeriod = TDuration::Minutes(10);
 };
 
 class TFastDqOutputChannel : public IDqOutputChannel {
@@ -866,7 +878,7 @@ public:
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override;
 
     bool IsFinished() const override {
-        return Buffer->IsEarlyFinished() || Finished;
+        return Finished || Buffer->IsEarlyFinished();
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {
@@ -1013,7 +1025,7 @@ public:
 
 class TNodeSessionActor : public NActors::TActor<TNodeSessionActor> {
 public:
-    TNodeSessionActor(std::shared_ptr<TNodeState> nodeState)
+    TNodeSessionActor(std::shared_ptr<TNodeState>& nodeState)
         : TActor(&TThis::StateFunc)
         , NodeState(nodeState)
     {}
@@ -1068,7 +1080,7 @@ public:
 
 class TDebugNodeSessionActor : public NActors::TActor<TDebugNodeSessionActor> {
 public:
-    TDebugNodeSessionActor(std::shared_ptr<TDebugNodeState> nodeState)
+    TDebugNodeSessionActor(std::shared_ptr<TDebugNodeState>& nodeState)
         : TActor(&TThis::StateFunc)
         , NodeState(nodeState)
     {}

@@ -1337,7 +1337,7 @@ private:
             return result;
         }
 
-        if (SessionCtx->Config().EnableDiscardSelect) {
+        if (SessionCtx->Config().GetEnableDiscardSelect()) {
             bool hasDiscardWarning = false;
             for (const auto& issue : ctx.IssueManager.GetIssues()) {
                 if (issue.GetCode() == TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE) {
@@ -1813,9 +1813,12 @@ private:
         auto& configuration = *state->Configuration;
         if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->IsStreamingQuery) {
             configuration.DisablePragma(configuration.UseRuntimeListing, false, "Runtime listing is not supported for streaming queries, pragma value was ignored");
+            configuration.DisablePragma(configuration.AtomicUploadCommit, false, "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
+            configuration.DefaultOutputKeyFlushTimeout = TDuration::Minutes(1);
+        } else if (queryType != EKikimrQueryType::Script) {
+            configuration.DisablePragma(configuration.AtomicUploadCommit, false, "Atomic upload commit is supported only for script execution operations, pragma value was ignored");
         }
         configuration.WriteThroughDqIntegration = true;
-        configuration.AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
         configuration.Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
 
         state->Types = TypesCtx.Get();

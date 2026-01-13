@@ -9,8 +9,8 @@ revision: 5328556
     REVIEW: 885661
     Note: mandatory check (NEED_CHECK) was skipped
 
---- contrib/tools/python3/Lib/site.py	(018629609ef9f3ae6ca5b2a2b0070fba40016b32)
-+++ contrib/tools/python3/Lib/site.py	(6d00415ed919717959a3b801d1c71fb83b6bece8)
+--- a/Lib/site.py	(018629609ef9f3ae6ca5b2a2b0070fba40016b32)
++++ b/Lib/site.py	(6d00415ed919717959a3b801d1c71fb83b6bece8)
 @@ -590,17 +590,17 @@ def main():
      global ENABLE_USER_SITE
  
@@ -33,8 +33,8 @@ revision: 5328556
      setquit()
      setcopyright()
      sethelper()
---- contrib/tools/python3/Python/sysmodule.c	(018629609ef9f3ae6ca5b2a2b0070fba40016b32)
-+++ contrib/tools/python3/Python/sysmodule.c	(6d00415ed919717959a3b801d1c71fb83b6bece8)
+--- a/Python/sysmodule.c	(018629609ef9f3ae6ca5b2a2b0070fba40016b32)
++++ b/Python/sysmodule.c	(6d00415ed919717959a3b801d1c71fb83b6bece8)
 @@ -3307,1 +3307,1 @@ PySys_SetArgvEx(int argc, wchar_t **argv, int updatepath)
 -    PySys_SetArgvEx(argc, argv, Py_IsolatedFlag == 0);
 +    PySys_SetArgvEx(argc, argv, 0);

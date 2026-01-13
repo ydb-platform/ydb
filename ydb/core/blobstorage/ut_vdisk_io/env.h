@@ -12,7 +12,7 @@ namespace NKikimr {
                 TIntrusivePtr<TNodeDataBase> node = new TNodeDataBase();
                 TAppData* appData = new TAppData(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
                 appData->Counters = new NMonitoring::TDynamicCounters;
-                node->AppData0.reset(appData); 
+                node->AppData0.reset(appData);
                 return node;
             }
         };
@@ -117,7 +117,7 @@ namespace NKikimr {
             }
             return msg->Record;
         }
-    
+
         TMap<TString, TIntrusivePtr<NPDisk::TSectorMap>> SectorMapByPath;
 
         std::shared_ptr<NKikimr::NPDisk::TIoContextFactoryOSS> ioContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();

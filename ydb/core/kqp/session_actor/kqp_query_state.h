@@ -274,8 +274,8 @@ public:
             QueryDeadlines.CancelAt = now + cancelAfter;
         }
 
-        auto timeoutMs = GetQueryTimeout(GetType(), timeout.MilliSeconds(), tableService, queryService);
-        QueryDeadlines.TimeoutAt = now + timeoutMs;
+        auto timeoutDuration = GetQueryTimeout(GetType(), timeout.MilliSeconds(), tableService, queryService, RequestEv->GetDisableDefaultTimeout());
+        QueryDeadlines.TimeoutAt = now + timeoutDuration;
     }
 
     bool HasTopicOperations() const {
@@ -345,6 +345,9 @@ public:
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     addTable(settings.GetTable());
+                    for (const auto& index : settings.GetIndexes()) {
+                        addTable(index.GetTable());
+                    }
                 }
             }
         }

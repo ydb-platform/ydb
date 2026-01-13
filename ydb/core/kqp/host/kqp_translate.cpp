@@ -136,20 +136,7 @@ NYql::IAutoParamBuilderPtr TKqpAutoParamBuilderFactory::MakeBuilder() {
     return MakeIntrusive<TKqpAutoParamBuilder>();
 }
 
-NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode) {
-    switch (mode) {
-        case NKikimrConfig::TTableServiceConfig::BM_ENABLED:
-            return NSQLTranslation::EBindingsMode::ENABLED;
-        case NKikimrConfig::TTableServiceConfig::BM_DISABLED:
-            return NSQLTranslation::EBindingsMode::DISABLED;
-        case NKikimrConfig::TTableServiceConfig::BM_DROP_WITH_WARNING:
-            return NSQLTranslation::EBindingsMode::DROP_WITH_WARNING;
-        case NKikimrConfig::TTableServiceConfig::BM_DROP:
-            return NSQLTranslation::EBindingsMode::DROP;
-        default:
-            return NSQLTranslation::EBindingsMode::ENABLED;
-    }
-}
+
 
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
     switch (type) {

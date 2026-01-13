@@ -42,6 +42,7 @@ PEERDIR(
     ydb/library/plan2svg
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/runtime
+    ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/tasks
     ydb/library/yql/providers/common/http_gateway
     ydb/services/metadata/abstract

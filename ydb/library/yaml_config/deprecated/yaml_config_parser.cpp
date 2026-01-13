@@ -300,8 +300,8 @@ namespace NKikimr::NYaml::NDeprecated {
     }
 
     ui32 ErasureStrToNum(const TString& info) {
-        TErasureType::EErasureSpecies species = TErasureType::ErasureSpeciesByName(info);
-        Y_ENSURE_BT(TBlobStorageGroupType::ErasureNames.contains(species), "unknown erasure " << info);
+        TErasureType::EErasureSpecies species;
+        Y_ENSURE_BT(TBlobStorageGroupType::ParseErasureName(species, info), "unknown erasure " << info);
         return species;
     }
 

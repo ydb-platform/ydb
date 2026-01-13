@@ -259,8 +259,6 @@ struct TErasureType {
         Erasure3Plus3Block = 12,
 
         ErasureMirror3of4 = 18,
-
-        ErasureSpeciesUndefined = 19
     };
 
 
@@ -301,13 +299,20 @@ struct TErasureType {
         return str.Str();
     }
 
-    static EErasureSpecies ErasureSpeciesByName(TString name) {
+    static bool ParseErasureName(EErasureSpecies& erasure, const TString& name) {
         for (auto [speciesType, speciesName] : ErasureNames) {
             if (speciesName == name) {
-                return EErasureSpecies(speciesType);
+                erasure = speciesType;
+                return true;
             }
         }
-        return TErasureType::ErasureSpeciesUndefined;
+        return false;
+    }
+
+    static EErasureSpecies ErasureSpeciesByName(TString name) {
+        EErasureSpecies erasure;
+        Y_ABORT_UNLESS(ParseErasureName(erasure, name));
+        return erasure;
     }
 
     TErasureType::EErasureFamily ErasureFamily() const;

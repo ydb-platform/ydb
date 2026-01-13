@@ -51,8 +51,7 @@ namespace NKikimr::NBsController {
         storagePool.Generation = nextGen;
 
         const TString &erasureSpecies = cmd.GetErasureSpecies();
-        storagePool.ErasureSpecies = TBlobStorageGroupType::ErasureSpeciesByName(erasureSpecies);
-        if (!TBlobStorageGroupType::ErasureNames.contains(storagePool.ErasureSpecies)) {
+        if (!TBlobStorageGroupType::ParseErasureName(storagePool.ErasureSpecies, erasureSpecies)) {
             throw TExError() << "invalid ErasureSpecies# " << erasureSpecies;
         }
 

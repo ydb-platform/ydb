@@ -379,8 +379,13 @@ int main(int argc, char **argv) {
     if (rv == 9 && strncmp(link, "/dev/null", rv) == 0) {
         OutputCout = false;
     }
+    TBlobStorageGroupType::EErasureSpecies species;
+    if (!TBlobStorageGroupType::ParseErasureName(species, argv[1])) {
+        Cerr << "invalid erasure species name: " << argv[1] << Endl;
+        return 1;
+    }
 
-    TBlobStorageGroupType type(TBlobStorageGroupType::ErasureSpeciesByName(argv[1]));
+    TBlobStorageGroupType type(species);
     TotalPartCount = type.TotalPartCount();
     BlobSubgroupSize = type.BlobSubgroupSize();
 

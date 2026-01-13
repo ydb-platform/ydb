@@ -1436,7 +1436,7 @@ public:
                     group.BoxId = info.GetBoxId();
                     group.PoolId = info.GetStoragePoolId();
                     group.Erasure = info.GetErasureSpeciesV2();
-                    group.ErasureSpecies = TErasureType::ErasureSpeciesByName(group.Erasure);
+                    Y_ABORT_UNLESS(TBlobStorageGroupType::ParseErasureName(group.ErasureSpecies, group.Erasure));
                     //group.Used = info.GetAllocatedSize();
                     //group.Limit = info.GetAllocatedSize() + info.GetAvailableSize();
                     //group.Usage = group.Limit ? 100.0 * group.Used / group.Limit : 0;
@@ -1489,7 +1489,7 @@ public:
                             group->MediaType = GetMediaType(pool->GetPDiskFilter());
                             if (!group->Erasure) {
                                 group->Erasure = pool->GetErasureSpeciesV2();
-                                group->ErasureSpecies = TErasureType::ErasureSpeciesByName(group->Erasure);
+                                Y_ABORT_UNLESS(TBlobStorageGroupType::ParseErasureName(group->ErasureSpecies, group->Erasure));
                             }
                             group->EncryptionMode = pool->GetEncryptionMode();
                         } else {
@@ -1796,7 +1796,7 @@ public:
                 group.GroupId = groupId;
                 group.GroupGeneration = info->GetGroupGeneration();
                 group.Erasure = info->GetErasureSpecies();
-                group.ErasureSpecies = TErasureType::ErasureSpeciesByName(group.Erasure);
+                Y_ABORT_UNLESS(TBlobStorageGroupType::ParseErasureName(group.ErasureSpecies, group.Erasure));
                 group.PoolName = info->GetStoragePoolName();
                 group.EncryptionMode = info->GetEncryption();
                 for (auto nodeId : info->GetVDiskNodeIds()) {

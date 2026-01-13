@@ -141,8 +141,8 @@ public:
     void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
-        auto erasure = TBlobStorageGroupType::ErasureSpeciesByName(ErasureStr);
-        if (!TBlobStorageGroupType::ErasureNames.contains(erasure)) {
+        TBlobStorageGroupType::EErasureSpecies erasure;
+        if (!TBlobStorageGroupType::ParseErasureName(erasure, ErasureStr)) {
             ythrow TWithBackTrace<yexception>() << "unknown erasure species: \"" << ErasureStr << "\", valid values are: " << ErasureList;
         }
         Type = TBlobStorageGroupType(erasure);

@@ -124,7 +124,7 @@ class KeyValueClient(object):
         return await self.ainvoke(request, 'ExecuteTransaction', version)
 
     def kv_delete_range(self, path, partition_id, from_key=None, to_key=None,
-                       from_inclusive=True, to_inclusive=False, version='v1'):
+                        from_inclusive=True, to_inclusive=False, version='v1'):
         request = keyvalue_api.ExecuteTransactionRequest()
         request.path = path
         request.partition_id = partition_id
@@ -142,7 +142,7 @@ class KeyValueClient(object):
         return self.invoke(request, 'ExecuteTransaction', version)
 
     async def a_kv_delete_range(self, path, partition_id, from_key=None, to_key=None,
-                               from_inclusive=True, to_inclusive=False, version='v1'):
+                                from_inclusive=True, to_inclusive=False, version='v1'):
         request = keyvalue_api.ExecuteTransactionRequest()
         request.path = path
         request.partition_id = partition_id

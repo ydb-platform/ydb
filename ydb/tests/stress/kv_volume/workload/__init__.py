@@ -1,9 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 import random
-from collections import defaultdict, deque
-from itertools import chain
-import uuid
+from collections import defaultdict
 import asyncio
 
 from ydb.public.api.protos import ydb_status_codes_pb2 as ydb_status_codes
@@ -149,7 +147,7 @@ class Worker:
 
         def _remove_key(self, key):
             self.results[self.config.name][self.instance_id].pop(key, None)
-        
+
         async def run_commands(self, parent_chain_update=None):
             self.instance_id = self.workload._generate_instance_id(self.config.name)
             if parent_chain_update:
@@ -184,7 +182,7 @@ class Worker:
 
         async def run_once(self, parent_chain_update=None):
             await self.run_commands(parent_chain_update)
-    
+
     def __init__(self, worker_id, workload):
         self.worker_id = worker_id
         self.workload = workload
@@ -257,7 +255,7 @@ class Worker:
         if name not in self.global_semaphores:
             self.global_semaphores[name] = asyncio.Semaphore(limit)
         return self.global_semaphores[name]
-        
+
     def _update_parent_chains(self, action_name, instance_id, parent_chains):
         for child_name, child_chain in parent_chains.items():
             if action_name in child_chain:
@@ -269,7 +267,7 @@ class Worker:
 
         task_map = {}
         parent_chains = {}
-        
+
         parent_names_map = {}
         for name, action in self.actions.items():
             parent_names_map[name] = set()
@@ -313,6 +311,7 @@ class Worker:
                     task_map[name] = asyncio.create_task(run_periodic_with_children())
                 else:
                     original_task = asyncio.create_task(self.runners[name].run_once(update_parent_chains))
+
                     async def run_once_then_children(task=original_task, an=name):
                         await task
                         child_tasks = await run_child_actions(an)
@@ -326,6 +325,7 @@ class Worker:
     def run(self):
         asyncio.run(self.arun())
 
+
 class WorkerBuilder:
     def __init__(self, config, workload):
         self.config = config
@@ -333,7 +333,7 @@ class WorkerBuilder:
 
     def build(self, worker_id):
         worker = Worker(worker_id, self.workload)
-        
+
         parent_names_map = {}
         for action in self.config.actions:
             parent_names_map[action.name] = set()
@@ -341,12 +341,12 @@ class WorkerBuilder:
             while current:
                 parent_names_map[action.name].add(current)
                 current = next((a.parent_action for a in self.config.actions if a.name == current and a.HasField('parent_action')), None)
-        
+
         for action in self.config.actions:
             parent_names = parent_names_map[action.name].copy()
             worker.add_action(action, parent_names)
         return worker
-        
+
 
 class YdbKeyValueVolumeWorkload(WorkloadBase):
     def __init__(self, endpoint, database, duration, kv_load_type, worker_count, version, config):

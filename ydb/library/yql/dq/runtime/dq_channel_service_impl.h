@@ -122,9 +122,11 @@ std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType*
 
 class TChannelStub : public IChannelBuffer {
 public:
-    TChannelStub(ui64 channelId) : IChannelBuffer(TChannelFullInfo(channelId, {}, {}, 0, 0)) {
-        PopStats.ChannelId = channelId;
-        PushStats.ChannelId = channelId;
+    TChannelStub(const TChannelFullInfo& info) : IChannelBuffer(info) {
+        PushStats.ChannelId = info.ChannelId;
+        PushStats.SrcStageId = info.SrcStageId;
+        PopStats.ChannelId = info.ChannelId;
+        PopStats.DstStageId = info.DstStageId;
     }
 
     ~TChannelStub() override {
@@ -196,8 +198,10 @@ public:
         , InputBinded(false)
         , Finished(false)
     {
-        PopStats.ChannelId = info.ChannelId;
         PushStats.ChannelId = info.ChannelId;
+        PushStats.SrcStageId = info.SrcStageId;
+        PopStats.ChannelId = info.ChannelId;
+        PopStats.DstStageId = info.DstStageId;
     }
 
     ~TLocalBuffer() override;
@@ -356,7 +360,9 @@ public:
     TOutputBuffer(std::shared_ptr<TNodeState> nodeState, std::shared_ptr<TOutputDescriptor> descriptor)
         : IChannelBuffer(descriptor->Info), NodeState(nodeState), Descriptor(descriptor) {
         PushStats.ChannelId = descriptor->Info.ChannelId;
+        PushStats.SrcStageId = descriptor->Info.SrcStageId;
         PopStats.ChannelId = descriptor->Info.ChannelId;
+        PopStats.DstStageId = descriptor->Info.DstStageId;
     }
 
     ~TOutputBuffer() override;
@@ -440,7 +446,9 @@ public:
     TInputBuffer(const std::shared_ptr<TNodeState>& nodeState, const std::shared_ptr<TInputDescriptor>& descriptor)
         : IChannelBuffer(descriptor->Info), NodeState(nodeState), Descriptor(descriptor) {
         PushStats.ChannelId = descriptor->Info.ChannelId;
+        PushStats.SrcStageId = descriptor->Info.SrcStageId;
         PopStats.ChannelId = descriptor->Info.ChannelId;
+        PopStats.DstStageId = descriptor->Info.DstStageId;
     }
 
     ~TInputBuffer() override;
@@ -683,8 +691,7 @@ public:
     std::shared_ptr<TDebugNodeState> CreateDebugNodeState(ui32 nodeId);
 
     // unbinded stubs
-    std::shared_ptr<IChannelBuffer> GetOutputBuffer(ui64 channelId);
-    std::shared_ptr<IChannelBuffer> GetInputBuffer(ui64 channelId);
+    std::shared_ptr<IChannelBuffer> GetUnbindedBuffer(const TChannelFullInfo& info);
     // binded helpers
     std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) final;
     std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info) final;

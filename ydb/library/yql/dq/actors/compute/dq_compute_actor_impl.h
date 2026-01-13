@@ -1598,6 +1598,7 @@ protected:
                 }
                 str << Endl;
                 str << "  TaskId: " << Task.GetId() << Endl;
+                str << "  StageId: " << Task.GetStageId() << Endl;
                 str << "  State: " << (unsigned int)State << Endl;
 
                 TaskRunnerMonitoringInfo(str);
@@ -1613,7 +1614,14 @@ protected:
                     str << "  LastPopReturnedNoData: " << ProcessOutputsState.LastPopReturnedNoData << Endl;
                 }
 
-                str << Endl << "Input Channels:" << Endl;
+                str << Endl;
+                if (Task.GetDqChannelVersion() >= 2u) {
+                    HREF(TStringBuilder() << "/node/" << this->SelfId().NodeId() << "/actors/kqp_channels") {
+                        str << "Input Channels:" << Endl;
+                    }
+                } else {
+                    str << "Input Channels:" << Endl;
+                }
                 TABLE_SORTABLE_CLASS("table table-condensed") {
                     TABLEHEAD() {
                         TABLER() {
@@ -1687,7 +1695,14 @@ protected:
                     }
                 }
 
-                str << Endl << "Output Channels:" << Endl;
+                str << Endl;
+                if (Task.GetDqChannelVersion() >= 2u) {
+                    HREF(TStringBuilder() << "/node/" << this->SelfId().NodeId() << "/actors/kqp_channels") {
+                        str << "Output Channels:" << Endl;
+                    }
+                } else {
+                    str << "Output Channels:" << Endl;
+                }
                 TABLE_SORTABLE_CLASS("table table-condensed") {
                     TABLEHEAD() {
                         TABLER() {

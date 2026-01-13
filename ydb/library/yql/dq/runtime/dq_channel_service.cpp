@@ -107,6 +107,10 @@ void TLocalBuffer::Push(TDataChunk&& data) {
     (*Registry->LocalBufferChunks)++;
     *Registry->LocalBufferBytes += data.Bytes;
 
+    if (EarlyFinished.load()) {
+        return;
+    }
+
     std::lock_guard lock(Mutex);
 
     EDqFillLevel fillLevel = FillLevel;
@@ -236,6 +240,15 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
 
 void TLocalBuffer::EarlyFinish() {
     EarlyFinished.store(true);
+
+    std::lock_guard lock(Mutex);
+
+    if (FillLevel != EDqFillLevel::NoLimit) {
+        if (Aggregator) {
+            Aggregator->UpdateCount(FillLevel, EDqFillLevel::NoLimit);
+        }
+        FillLevel = EDqFillLevel::NoLimit;
+    }
     NotifyOutput(true);
 }
 
@@ -1692,12 +1705,8 @@ std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 no
 
 // unbinded stubs
 
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetOutputBuffer(ui64 channelId) {
-    return std::make_shared<TChannelStub>(channelId);
-}
-
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetInputBuffer(ui64 channelId) {
-    return std::make_shared<TChannelStub>(channelId);
+std::shared_ptr<IChannelBuffer> TDqChannelService::GetUnbindedBuffer(const TChannelFullInfo& info) {
+    return std::make_shared<TChannelStub>(info);
 }
 
 // binded helpers
@@ -1753,14 +1762,14 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannel
 // unbinded channels
 
 IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelSettings& settings) {
-    auto buffer  = GetOutputBuffer(settings.ChannelId);
+    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId));
     buffer->PushStats.Level = settings.Level;
     buffer->PopStats.Level = settings.Level;
     return new TFastDqOutputChannel(Self, settings, buffer, false);
 }
 
 IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelSettings& settings) {
-    auto buffer = GetInputBuffer(settings.ChannelId);
+    auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId));
     buffer->PushStats.Level = settings.Level;
     buffer->PopStats.Level = settings.Level;
     return new TFastDqInputChannel(Self, settings, buffer);

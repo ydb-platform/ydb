@@ -51,21 +51,21 @@ TDetailedMetrics::TDetailedMetrics(const NKikimrPQ::TPQTabletConfig::TConsumer& 
 
     auto consumerGroup = root->GetSubgroup("consumer", consumerConfig.GetName());
 
-    InflightCommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.inflight.committed_messages", false);
-    InflightLockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.inflight.locked_messages", false);
-    InflightDelayedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.inflight.delayed_messages", false);
-    InflightUnlockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.inflight.unlocked_messages", false);
-    InflightScheduledToDLQCount = consumerGroup->GetExpiringNamedCounter("name", "topic.inflight.scheduled_to_dlq_messages", false);
-    CommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.committed_messages", false);
-    PurgedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.purged_messages", false);
+    InflightCommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.committed_messages", false);
+    InflightLockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.locked_messages", false);
+    InflightDelayedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.delayed_messages", false);
+    InflightUnlockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.unlocked_messages", false);
+    InflightScheduledToDLQCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.scheduled_to_dlq_messages", false);
+    CommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.committed_messages", false);
+    PurgedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.purged_messages", false);
     
-    MessageLocks = consumerGroup->GetExpiringNamedCounter("name", "topic.message_locks", false);
-    MessageLockingDuration = consumerGroup->GetExpiringNamedCounter("name", "topic.message_locking_duration_milliseconds", false);
+    MessageLocks = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.message_locks", false);
+    MessageLockingDuration = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.message_locking_duration_milliseconds", false);
 
-    auto deletedMessagesGroup = consumerGroup->GetSubgroup("name", "topic.deleted_messages");
-    DeletedByRetentionPolicy = deletedMessagesGroup->GetExpiringNamedCounter("reason", "retention", false);
-    DeletedByDeadlinePolicy = consumerGroup->GetExpiringNamedCounter("reason", "delete_policy", false);
-    DeletedByMovedToDLQ = consumerGroup->GetExpiringNamedCounter("reason", "move_policy", false);
+    auto deletedMessagesGroup = consumerGroup->GetSubgroup("name", "topic.partition.deleted_messages");
+    DeletedByRetentionPolicy = deletedMessagesGroup->GetExpiringNamedCounter("reason", "retention", true);
+    DeletedByDeadlinePolicy = consumerGroup->GetExpiringNamedCounter("reason", "delete_policy", true);
+    DeletedByMovedToDLQ = consumerGroup->GetExpiringNamedCounter("reason", "move_policy", true);
 }
 
 TDetailedMetrics::~TDetailedMetrics() {
@@ -86,6 +86,5 @@ void TDetailedMetrics::UpdateMetrics(const TMetrics& metrics) {
     DeletedByDeadlinePolicy->Set(metrics.TotalDeletedByDeadlinePolicyMessageCount);
     DeletedByMovedToDLQ->Set(metrics.TotalMovedToDLQMessageCount);
 }
-
 
 }

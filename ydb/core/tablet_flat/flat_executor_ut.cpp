@@ -7368,7 +7368,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         env.FireFollower(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
             return new TTestFlatTablet(env.Edge, tablet, info);
         }, /* followerId */ 1);
-    
+
         Cerr << "... wait first follower EvAttach" << Endl;
         followerFirstAttach.Wait(TDuration::Seconds(5));
 
@@ -8882,6 +8882,108 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
         }
     }
 
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_SensitiveColumns) {
+    struct TTxSchema : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext&) override
+        {
+            const ui32 TableId = 200;
+            txc.DB.Alter()
+                .AddTable("test_sensitive", TableId)
+                .AddColumn(TableId, "key", 1, NScheme::TInt64::TypeId, false, false)
+                .AddColumn(TableId, "value", 2, NScheme::TString::TypeId, false, false)
+                .AddColumn(TableId, "sensitive", 3, NScheme::TString::TypeId, false, true) // Sensitive column
+                .AddColumnToKey(TableId, 1);
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxAddData : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext&) override
+        {
+            const ui32 TableId = 200;
+            const auto key = NScheme::TInt64::TInstance(1);
+            const auto value = NScheme::TString::TInstance("normal_value");
+            const auto sensitive = NScheme::TString::TInstance("secret_data");
+            NTable::TUpdateOp valueOp{ 2, NTable::ECellOp::Set, value };
+            NTable::TUpdateOp sensitiveOp{ 3, NTable::ECellOp::Set, sensitive };
+            txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { valueOp, sensitiveOp });
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxCheckSensitive : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext&) override
+        {
+            const ui32 TableId = 200;
+            const auto& scheme = txc.DB.GetScheme();
+            const auto* tableInfo = scheme.GetTableInfo(TableId);
+            UNIT_ASSERT(tableInfo);
+
+            // Check that sensitive column is marked
+            bool hasSensitiveColumn = false;
+            for (const auto& pr : tableInfo->Columns) {
+                if (pr.second.IsSensitive) {
+                    hasSensitiveColumn = true;
+                    UNIT_ASSERT_VALUES_EQUAL(pr.first, 3u); // sensitive column ID
+                }
+            }
+            UNIT_ASSERT(hasSensitiveColumn);
+
+            // Verify column IDs
+            UNIT_ASSERT(tableInfo->Columns.find(1) != tableInfo->Columns.end()); // key
+            UNIT_ASSERT(tableInfo->Columns.find(2) != tableInfo->Columns.end()); // value
+            UNIT_ASSERT(tableInfo->Columns.find(3) != tableInfo->Columns.end()); // sensitive
+
+            // Verify sensitive column flag
+            const auto& keyCol = tableInfo->Columns.find(1)->second;
+            const auto& valueCol = tableInfo->Columns.find(2)->second;
+            const auto& sensitiveCol = tableInfo->Columns.find(3)->second;
+
+            UNIT_ASSERT(!keyCol.IsSensitive);
+            UNIT_ASSERT(!valueCol.IsSensitive);
+            UNIT_ASSERT(sensitiveCol.IsSensitive);
+
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(TestSensitiveColumnHidden) {
+        TMyEnvBase env;
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        // Create schema with sensitive column
+        env.SendSync(new NFake::TEvExecute{ new TTxSchema });
+
+        // Add data
+        env.SendSync(new NFake::TEvExecute{ new TTxAddData });
+
+        // Check that sensitive column is properly marked in schema
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckSensitive });
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
 }
 
 }

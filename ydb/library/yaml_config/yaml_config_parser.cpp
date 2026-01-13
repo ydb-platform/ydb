@@ -282,7 +282,7 @@ namespace NKikimr::NYaml {
             return result;
         }
         TErasureType::EErasureSpecies species;
-        Y_ENSURE_BT(TBlobStorageGroupType::ParseErasureName(species, info), "unknown erasure " << info);
+        Y_ENSURE_BT(TErasureType::ParseErasureName(species, info), "unknown erasure " << info);
         return species;
     }
 

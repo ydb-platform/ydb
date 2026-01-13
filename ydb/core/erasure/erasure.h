@@ -317,13 +317,20 @@ struct TErasureType {
         return str.Str();
     }
 
-    static EErasureSpecies ErasureSpeciesByName(TString name) {
+    static bool ParseErasureName(EErasureSpecies& erasure, const TString& name) {
         for (auto [speciesType, speciesName] : ErasureNames) {
             if (speciesName == name) {
-                return speciesType;
+                erasure = speciesType;
+                return true;
             }
         }
-        return TErasureType::ErasureSpeciesCount;
+        return false;
+    }
+
+    static EErasureSpecies ErasureSpeciesByName(const TString& name) {
+        EErasureSpecies erasure;
+        Y_ABORT_UNLESS(ParseErasureName(erasure, name));
+        return erasure;
     }
 
     TErasureType::EErasureFamily ErasureFamily() const;

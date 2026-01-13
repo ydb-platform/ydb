@@ -789,9 +789,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     }
 
     Y_UNIT_TEST(TestBlockByteOrder) {
-        ui32 species = (ui32)TErasureType::Erasure4Plus2Block;
-        TErasureType groupType((TErasureType::EErasureSpecies)species);
-        TString erasureName = TErasureType::ErasureNames.at(species);
+        TErasureType groupType(TErasureType::Erasure4Plus2Block);
 
         for (ui32 dataSize = 0; dataSize <= 256; ++dataSize) {
             TString testString;

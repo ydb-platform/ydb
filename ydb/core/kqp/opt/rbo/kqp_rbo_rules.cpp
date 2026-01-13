@@ -723,15 +723,13 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
     }
 
     auto output = input;
-
     auto leftIUs = join->GetLeftInput()->GetOutputIUs();
     auto rightIUs = join->GetRightInput()->GetOutputIUs();
 
     // Break the filter into join conditions and other conjuncts
     // Join conditions can be pushed into the join operator and conjucts can either be pushed
     // or left on top of the join
-
-    auto conjunctInfo = filter->GetConjunctInfo(props);
+    const auto conjunctInfo = filter->GetConjunctInfo(props);
 
     // Check if we need a top level filter
     TVector<TFilterInfo> topLevelPreds;
@@ -739,28 +737,27 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
     TVector<TFilterInfo> pushRight;
     TVector<std::pair<TInfoUnit, TInfoUnit>> joinConditions;
 
-    for (auto f : conjunctInfo.Filters) {
-        if (!IUSetDiff(f.FilterIUs, leftIUs).size()) {
-            pushLeft.push_back(f);
-        } else if (!IUSetDiff(f.FilterIUs, rightIUs).size()) {
-            pushRight.push_back(f);
+    for (const auto& filter : conjunctInfo.Filters) {
+        if (!IUSetDiff(filter.FilterIUs, leftIUs).size()) {
+            pushLeft.push_back(filter);
+        } else if (!IUSetDiff(filter.FilterIUs, rightIUs).size()) {
+            pushRight.push_back(filter);
         } else {
-            topLevelPreds.push_back(f);
+            topLevelPreds.push_back(filter);
         }
     }
 
-    for (auto c : conjunctInfo.JoinConditions) {
-        if (!IUSetDiff({c.LeftIU}, leftIUs).size() && !IUSetDiff({c.RightIU}, rightIUs).size()) {
-            joinConditions.push_back(std::make_pair(c.LeftIU, c.RightIU));
-        } else if (!IUSetDiff({c.LeftIU}, rightIUs).size() && !IUSetDiff({c.RightIU}, leftIUs).size()) {
-            joinConditions.push_back(std::make_pair(c.RightIU, c.LeftIU));
+    for (const auto& condition : conjunctInfo.JoinConditions) {
+        if (!IUSetDiff({condition.LeftIU}, leftIUs).size() && !IUSetDiff({condition.RightIU}, rightIUs).size()) {
+            joinConditions.push_back(std::make_pair(condition.LeftIU, condition.RightIU));
+        } else if (!IUSetDiff({condition.LeftIU}, rightIUs).size() && !IUSetDiff({condition.RightIU}, leftIUs).size()) {
+            joinConditions.push_back(std::make_pair(condition.RightIU, condition.LeftIU));
         } else {
-            TVector<TInfoUnit> vars = {c.LeftIU};
-            vars.push_back(c.RightIU);
+            TVector<TInfoUnit> vars{condition.LeftIU, condition.RightIU};
             if (!IUSetDiff(vars, leftIUs).size()) {
-                pushLeft.push_back(TFilterInfo(c.ConjunctExpr, vars));
+                pushLeft.push_back(TFilterInfo(condition.ConjunctExpr, vars));
             } else {
-                pushRight.push_back(TFilterInfo(c.ConjunctExpr, vars));
+                pushRight.push_back(TFilterInfo(condition.ConjunctExpr, vars));
             }
         }
     }
@@ -1122,7 +1119,7 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
         return false;
     }
 
-    for (const auto &child : input->Children) {
+    for (const auto& child : input->Children) {
         if (!child->Props.StageId.has_value()) {
             YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName << " child with unassigned stage";
             return false;
@@ -1164,7 +1161,7 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
         else {
             TVector<TInfoUnit> leftShuffleKeys;
             TVector<TInfoUnit> rightShuffleKeys;
-            for (auto key : join->JoinKeys) {
+            for (const auto& key : join->JoinKeys) {
                 leftShuffleKeys.push_back(key.first);
                 rightShuffleKeys.push_back(key.second);
             }
@@ -1249,7 +1246,7 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
         aggregate->Props.StageId = newStageId;
         if (!aggregate->KeyColumns.empty()) {
             props.StageGraph.Connect(inputStageId, newStageId,
-                                 std::make_shared<TShuffleConnection>(aggregate->KeyColumns, props.StageGraph.GetStorageType(inputStageId)));
+                                     std::make_shared<TShuffleConnection>(aggregate->KeyColumns, props.StageGraph.GetStorageType(inputStageId)));
         } else {
             props.StageGraph.Connect(inputStageId, newStageId, std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(inputStageId)));
         }

@@ -841,7 +841,7 @@ public:
                     SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(),
                     cluster,
                     viewData.QueryText,
-                    SessionCtx->Config().BindingsMode,
+                    SessionCtx->Config().GetYqlBindingsMode(),
                     GUCSettings
                 );
                 settingsBuilder.SetFromConfig(SessionCtx->Config());

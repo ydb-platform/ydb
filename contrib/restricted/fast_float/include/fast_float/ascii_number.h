@@ -532,6 +532,9 @@ parse_int_string(UC const *p, UC const *pend, T &value,
         str[j] = static_cast<uint8_t>(p[j]);
       }
       digits = std::bit_cast<uint32_t>(str);
+#if FASTFLOAT_IS_BIG_ENDIAN
+      digits = byteswap(digits);
+#endif
     }
 #else
     if (false) {
@@ -539,6 +542,9 @@ parse_int_string(UC const *p, UC const *pend, T &value,
 #endif
     else if (len >= 4) {
       ::memcpy(&digits, p, 4);
+#if FASTFLOAT_IS_BIG_ENDIAN
+      digits = byteswap(digits);
+#endif
     } else {
       uint32_t b0 = static_cast<uint8_t>(p[0]);
       uint32_t b1 = (len > 1) ? static_cast<uint8_t>(p[1]) : 0xFFu;

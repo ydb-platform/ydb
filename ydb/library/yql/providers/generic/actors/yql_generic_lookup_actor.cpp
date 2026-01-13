@@ -163,13 +163,13 @@ namespace NYql::NDq {
 
         void Bootstrap() {
             auto dsi = LookupSource.data_source_instance();
-            YQL_CLOG(INFO, ProviderGeneric) << "New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
-                                            << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
-                                            << ", endpoint=" << dsi.endpoint().ShortDebugString()
-                                            << ", database=" << dsi.database()
-                                            << ", use_tls=" << ToString(dsi.use_tls())
-                                            << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
-                                            << ", table=" << LookupSource.table();
+            GENERIC_LOG_I("New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
+                    << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
+                    << ", endpoint=" << dsi.endpoint().ShortDebugString()
+                    << ", database=" << dsi.database()
+                    << ", use_tls=" << ToString(dsi.use_tls())
+                    << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
+                    << ", table=" << LookupSource.table());
             Become(&TGenericLookupActor::StateFunc);
         }
 
@@ -213,7 +213,7 @@ namespace NYql::NDq {
                     selfId = SelfId(),
                     state = std::move(ev->Get()->State)
                 ](const NConnector::TAsyncResult<NConnector::NApi::TListSplitsResponse>& asyncResult) {
-                    YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got TListSplitsResponse from Connector";
+                    GENERIC_LOG_D_AS(*actorSystem, "ActorId=" << selfId << " Got TListSplitsResponse from Connector");
                     auto result = ExtractFromConstFuture(asyncResult);
                     if (result.Status.Ok()) {
                         Y_ABORT_UNLESS(result.Response);
@@ -247,7 +247,7 @@ namespace NYql::NDq {
                     selfId = SelfId(),
                     state = std::move(ev->Get()->State)
             ](const NConnector::TReadSplitsStreamIteratorAsyncResult& asyncResult) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector";
+                GENERIC_LOG_D_AS(*actorSystem, "ActorId=" << selfId << " Got ReadSplitsStreamIterator from Connector");
                 auto result = ExtractFromConstFuture(asyncResult);
                 if (result.Status.Ok()) {
                     auto ev = new TEvReadSplitsIterator(std::move(result.Iterator));
@@ -295,7 +295,7 @@ namespace NYql::NDq {
 
         void Handle(TEvLookupRetry::TPtr ev) {
             if (LocalInFlight == 0) { // already passed away
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Retry after PassAway";
+                GENERIC_LOG_D("ActorId=" << SelfId() << " Retry after PassAway");
                 return;
             }
             auto guard = Guard(*Alloc);
@@ -304,7 +304,7 @@ namespace NYql::NDq {
                 if (auto request = state->Request.lock()) {
                     request->erase(request->begin(), request->end());
                 } else {
-                    YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Retry: parent MIA";
+                    GENERIC_LOG_D("ActorId=" << SelfId() << " Retry: parent MIA");
                 }
             } else if (IsMultiMatches) {
                 if (auto request = state->Request.lock()) {
@@ -312,7 +312,7 @@ namespace NYql::NDq {
                         value = NUdf::TUnboxedValue();
                     }
                 } else {
-                    YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Retry: parent MIA";
+                    GENERIC_LOG_D("ActorId=" << SelfId() << " Retry: parent MIA");
                 }
             }
             state->ResultRows = 0;
@@ -329,7 +329,7 @@ namespace NYql::NDq {
         }
 
         void HandleException(const std::exception& e) {
-            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << SelfId() << " Got unexpected exception: " << e.what();
+            GENERIC_LOG_E("ActorId=" << SelfId() << " Got unexpected exception: " << e.what());
             SendError(TActivationContext::ActorSystem(), SelfId(), TStringBuilder() << "Internal error. Got unexpected exception: " << e.what());
         }
 
@@ -340,11 +340,11 @@ namespace NYql::NDq {
 
         void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request, size_t fullscanLimit = 0) {
             if (!request) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " CreateRequest: parent MIA";
+                GENERIC_LOG_D("ActorId=" << SelfId() << " CreateRequest: parent MIA");
                 return;
             }
             Y_DEBUG_ABORT_UNLESS(request->empty() == (fullscanLimit > 0));
-            YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " Got LookupRequest for " << request->size() << " keys";
+            GENERIC_LOG_D("ActorId=" << SelfId() << " Got LookupRequest for " << request->size() << " keys, fullscan limit " << fullscanLimit);
             Y_ABORT_IF((request->empty() == (fullscanLimit == 0)) || request->size() > MaxKeysInRequest);
             if (Count) {
                 Count->Inc();
@@ -384,7 +384,7 @@ namespace NYql::NDq {
             ](const NConnector::TListSplitsStreamIteratorAsyncResult& asyncResult) {
                 auto result = ExtractFromConstFuture(asyncResult);
                 if (result.Status.Ok()) {
-                    YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got TListSplitsStreamIterator";
+                    GENERIC_LOG_D_AS(*actorSystem, "ActorId=" << selfId << " Got TListSplitsStreamIterator");
                     Y_ABORT_UNLESS(result.Iterator, "Uninitialized iterator");
                     auto ev = new TEvListSplitsIterator(std::move(result.Iterator));
                     ev->State = std::move(state);
@@ -410,7 +410,7 @@ namespace NYql::NDq {
                 ](const NConnector::TAsyncResult<NConnector::NApi::TReadSplitsResponse>& asyncResult) {
                     auto result = ExtractFromConstFuture(asyncResult);
                     if (result.Status.Ok()) {
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got DataChunk";
+                        GENERIC_LOG_D_AS(*actorSystem, "ActorId=" << selfId << " Got DataChunk");
                         Y_ABORT_UNLESS(result.Response);
                         auto& response = *result.Response;
                         // TODO: retry on some YDB errors
@@ -422,7 +422,7 @@ namespace NYql::NDq {
                             SendError(actorSystem, selfId, response.Geterror());
                         }
                     } else if (NConnector::GrpcStatusEndOfStream(result.Status)) {
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << selfId << " Got EOF";
+                        GENERIC_LOG_D_AS(*actorSystem, "ActorId=" << selfId << " Got EOF");
                         auto ev = new TEvReadSplitsFinished(std::move(result.Status));
                         ev->State = std::move(state);
                         actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
@@ -445,7 +445,7 @@ namespace NYql::NDq {
             auto guard = Guard(*Alloc);
             auto request = state->Request.lock();
             if (!request) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " ProcessReceivedData: parent MIA";
+                GENERIC_LOG_D("ActorId=" << SelfId() << " ProcessReceivedData: parent MIA");
                 return;
             }
             NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); // todo move to class' member
@@ -463,7 +463,7 @@ namespace NYql::NDq {
             auto height = columns[0].size();
             Y_DEBUG_ABORT_UNLESS(state->FullscanLimit == 0 || state->FullscanLimit > state->ResultRows);
             if (state->FullscanLimit > 0 && height > state->FullscanLimit - state->ResultRows) {
-                YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << SelfId() << " YQ-5124 Workaround for unimplemented LIMIT invoked " << height << " > " << state->FullscanLimit << " - " << state->ResultRows;
+                GENERIC_LOG_W("ActorId=" << SelfId() << " YQ-5124 Workaround for unimplemented LIMIT invoked " << height << " > " << state->FullscanLimit << " - " << state->ResultRows);
                 height = state->FullscanLimit - state->ResultRows;
             }
             state->ResultRows += height;
@@ -503,7 +503,7 @@ namespace NYql::NDq {
             }
             --LocalInFlight;
             auto guard = Guard(*Alloc);
-            YQL_CLOG(DEBUG, ProviderGeneric) << "Sending lookup results with " << state->ResultRows << " rows";
+            GENERIC_LOG_D("Sending lookup results for " << state->ResultRows << " rows");
             if (AnswerTime) {
                 AnswerTime->Add((TInstant::Now() - state->SentTime).MilliSeconds());
                 InFlight->Dec();
@@ -514,7 +514,7 @@ namespace NYql::NDq {
         }
 
         static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NConnector::NApi::TError& error) {
-            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << selfId << " Got GrpcError from Connector: " << error.Getmessage();
+            GENERIC_LOG_E_AS(*actorSystem, "ActorId=" << selfId << " Got GrpcError from Connector: " << error.Getmessage());
             actorSystem->Send(
                 selfId,
                 new TEvError(std::move(error)));
@@ -524,7 +524,7 @@ namespace NYql::NDq {
             state->ReadSplitsIterator.reset();
             auto nextRetry = state->RetryState->GetNextRetryDelay(status);
             if (nextRetry) {
-                YQL_CLOG(WARN, ProviderGeneric) << "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry;
+                GENERIC_LOG_W_AS(*actorSystem, "ActorId=" << selfId << " Got retrievable GRPC Error from Connector: " << status.ToDebugString() << ", retry scheduled in " << *nextRetry);
                 auto ev = new TEvLookupRetry();
                 ev->State = std::move(state);
                 actorSystem->Schedule(*nextRetry, new IEventHandle(selfId, selfId, ev));
@@ -609,7 +609,7 @@ namespace NYql::NDq {
             NConnector::NApi::TPredicate::TDisjunction disjunction;
             auto request = state->Request.lock();
             if (!request) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "ActorId=" << SelfId() << " FillSelect: parent MIA";
+                GENERIC_LOG_D("ActorId=" << SelfId() << " FillSelect: parent MIA");
                 return "Actor destroyed";
             }
             for (const auto& [keys, _] : *request) {

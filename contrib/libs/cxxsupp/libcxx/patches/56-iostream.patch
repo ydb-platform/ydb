@@ -1,5 +1,5 @@
 diff --git a/include/__ostream/basic_ostream.h b/include/__ostream/basic_ostream.h
-index 1f7fe83..3aadf67 100644
+index 1b1c026..7367841 100644
 --- a/include/__ostream/basic_ostream.h
 +++ b/include/__ostream/basic_ostream.h
 @@ -800,7 +800,7 @@ operator<<(basic_ostream<_CharT, _Traits>& __os, const bitset<_Size>& __x) {

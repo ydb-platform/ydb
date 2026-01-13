@@ -4183,6 +4183,47 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
     }
 }
 
+Y_UNIT_TEST(SelectWithFulltextRelevanceAndNgramWildcardTimeout) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    NYdb::NQuery::TExecuteQuerySettings querySettings;
+    querySettings.ClientTimeout(TDuration::Minutes(1));
+
+    CreateTexts(db);
+    UpsertTexts(db);
+
+    {
+        const TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext
+                ON (Text)
+                WITH (
+                    layout=flat_relevance,
+                    tokenizer=whitespace,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=3,
+                    filter_ngram_max_length=3
+                );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = R"sql(
+            select *
+            from `/Root/Texts` view `fulltext_idx`
+            where FullText::Contains(`Text`, "*at*")
+            limit 100;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 Y_UNIT_TEST(ExplainFulltextIndexContains) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();

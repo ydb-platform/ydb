@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(ParseDurationTests) {
         // Fractional plain number in hours (rounds to microseconds)
         UNIT_ASSERT_VALUES_EQUAL(ParseDurationHours("0.5"), TDuration::MicroSeconds(1800000000)); // 0.5h = 30 min = 1800000000 us
         UNIT_ASSERT_VALUES_EQUAL(ParseDurationHours("1.5"), TDuration::MicroSeconds(5400000000)); // 1.5h = 90 minutes = 5400000000 us
-        UNIT_ASSERT_VALUES_EQUAL(ParseDurationHours("0.000001"), TDuration::MicroSeconds(4)); // 0.000001h ~= 3.6 us, rounds to 4
+        UNIT_ASSERT_VALUES_EQUAL(ParseDurationHours("0.000001"), TDuration::MicroSeconds(3600)); // 0.000001h = 3600 us = 3.6 ms
     }
 
     Y_UNIT_TEST(ParseDurationMicroseconds_WithUnit) {

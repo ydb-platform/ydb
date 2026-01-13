@@ -70,7 +70,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 continue;
             }
 
-            const auto erasureType = species->first;
             const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize();
             TBlobStorageGroupInfo info(erasureType, 1, numFailDomains);
 

@@ -97,7 +97,9 @@ public:
 };
 
 void TestErasureSet(ui32 firstIdx, ui32 step) {
-    for (auto erasure = std::advance(TBlobStorageGroupType::ErasureNames.begin(), firstIdx); erasure != TBlobStorageGroupType::ErasureNames.end(); std::advance(erasure, step)) {
+    auto erasure = TBlobStorageGroupType::ErasureNames.begin();
+    std::advance(erasure, firstIdx);
+    for (; erasure != TBlobStorageGroupType::ErasureNames.end(); std::advance(erasure, step)) {
         if (erasure->first == TBlobStorageGroupType::ErasureMirror3dc || erasure->first == TBlobStorageGroupType::ErasureMirror3of4) {
             continue;
         }

@@ -284,12 +284,8 @@ protected:
             }
         }
         if (!rightAny) {
-            if (false) { // Tempoarily change to waring to allow for smooth transition
-                ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
-                return false;
-            } else {
-                ctx.AddWarning(TIssue(ctx.GetPosition(join.Pos()), "(Deprecation) Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
-            }
+            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
+            return false;
         }
         return true;
     }

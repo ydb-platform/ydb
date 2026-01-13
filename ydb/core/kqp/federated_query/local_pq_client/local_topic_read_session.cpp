@@ -202,6 +202,7 @@ public:
 
     struct TSettings {
         TString Database;
+        std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
         TReaderCounters::TPtr Counters;
     };
 
@@ -209,6 +210,7 @@ public:
         : Settings(sessionSettings)
         , ReadSettings(GetReadSettings(sessionSettings))
         , Database(actorSettings.Database)
+        , CredentialsProvider(actorSettings.CredentialsProvider)
         , MaxMemoryUsage(sessionSettings.MaxMemoryUsageBytes_)
         , Counters(actorSettings.Counters)
     {
@@ -484,8 +486,10 @@ private:
     }
 
     void StartSession() const {
+        const auto& token = CredentialsProvider ? std::optional<TString>(CredentialsProvider->GetAuthInfo()) : std::nullopt;
         auto ctx = MakeIntrusive<TLocalRpcCtx>(ActorContext().ActorSystem(), SelfId(), TLocalRpcCtx::TSettings{
             .Database = Database,
+            .Token = token,
             .PeerName = "localhost/local_topic_rpc_read",
             .RequestType = Settings.RequestType_.empty() ? std::nullopt : std::optional<TString>(Settings.RequestType_),
             .ParentTraceId = TString(Settings.TraceParent_),
@@ -497,7 +501,13 @@ private:
             ctx->PutPeerMeta(TString(key), TString(value));
         }
 
-        Send(NGRpcProxy::V1::GetPQReadServiceActorID(), new TEvStreamTopicReadRequest(std::move(ctx), {.RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMREAD}), IEventHandle::FlagTrackDelivery);
+        auto ev = std::make_unique<TEvStreamTopicReadRequest>(std::move(ctx), TRequestAuxSettings{.RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMREAD});
+
+        if (token) {
+            ev->SetInternalToken(MakeIntrusive<NACLib::TUserToken>(*token));
+        }
+
+        Send(NGRpcProxy::V1::GetPQReadServiceActorID(), ev.release(), IEventHandle::FlagTrackDelivery);
     }
 
     void SendInitMessage() {
@@ -902,6 +912,7 @@ private:
     const TRequestSettings<TReadSessionSettings> Settings;
     const TReadSettings ReadSettings;
     const TString Database;
+    const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
     const i64 MaxMemoryUsage = 0;
     const TReaderCounters::TPtr Counters;
     TInstant SessionStartedAt;
@@ -935,7 +946,7 @@ public:
     {
         Y_VALIDATE(ActorSystem, "Actor system is required for local topic read session");
         ValidateSettings(sessionSettings);
-        Start(localSettings.Database, sessionSettings);
+        Start(localSettings.Database, localSettings.CredentialsProvider, sessionSettings);
     }
 
     ~TLocalTopicReadSession() {
@@ -1068,10 +1079,11 @@ private:
         return result;
     }
 
-    void Start(const TString& database, const TReadSessionSettings& sessionSettings) {
+    void Start(const TString& database, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, const TReadSessionSettings& sessionSettings) {
         Y_VALIDATE(!ReadSessionActor, "Read session is already started");
         ReadSessionActor = ActorSystem->Register(new TLocalTopicReadSessionActor({
             .Database = database,
+            .CredentialsProvider = std::move(credentialsProvider),
             .Counters = Counters,
         }, sessionSettings), TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
     }

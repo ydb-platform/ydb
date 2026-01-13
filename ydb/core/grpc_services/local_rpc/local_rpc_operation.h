@@ -24,6 +24,7 @@ public:
         const NYdb::TOperationRequestSettings<TOperationSettings>& OperationSettings;
         TLocalRpcOperationRequestCreator RequestCreator;
         TString Database;
+        TMaybe<TString> Token;
         NThreading::TPromise<TLocalRpcOperationResult> Promise;
         TString OperationName = "local_rpc_operation";
     };
@@ -69,6 +70,7 @@ private:
         auto responsePromise = NThreading::NewPromise<typename TRpc::TResponse>();
         auto req = std::make_unique<TCtx>(std::move(proto), TCbWrapper(responsePromise), typename TCtx::TSettings{
             .DatabaseName = settings.Database,
+            .Token = settings.Token,
             .RequestType = operationSettings.RequestType_.empty() ? Nothing() : TMaybe<TString>(operationSettings.RequestType_),
             .PeerName = TStringBuilder() << "localhost/" << settings.OperationName,
             .TraceId = TString(operationSettings.TraceId_),

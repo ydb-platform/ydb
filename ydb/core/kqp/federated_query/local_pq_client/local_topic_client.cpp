@@ -20,6 +20,7 @@ public:
         : ActorSystem(localSettings.ActorSystem)
         , ChannelBufferSize(localSettings.ChannelBufferSize)
         , Database(clientSettings.Database_.value_or(""))
+        , CredentialsProvider(CreateCredentialsProvider(clientSettings.CredentialsProviderFactory_))
     {
         Y_VALIDATE(ActorSystem, "Actor system is required for local topic client");
         Y_VALIDATE(ChannelBufferSize, "Channel buffer size is not set");
@@ -69,7 +70,11 @@ public:
     }
 
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings) final {
-        return CreateLocalTopicReadSession({.ActorSystem = ActorSystem, .Database = Database}, settings);
+        return CreateLocalTopicReadSession({
+            .ActorSystem = ActorSystem,
+            .Database = Database,
+            .CredentialsProvider = CredentialsProvider,
+        }, settings);
     }
 
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings) final {
@@ -88,6 +93,13 @@ public:
     }
 
 private:
+    static std::shared_ptr<ICredentialsProvider> CreateCredentialsProvider(const std::optional<std::shared_ptr<ICredentialsProviderFactory>>& maybeFactory) {
+        if (const auto factory = maybeFactory.value_or(nullptr)) {
+            return factory->CreateProvider();
+        }
+        return nullptr;
+    }
+
     template <typename TRpc, typename TSettings>
     NThreading::TFuture<TLocalRpcOperationResult> DoLocalRpcRequest(typename TRpc::TRequest&& proto, const TOperationRequestSettings<TSettings>& settings, TLocalRpcOperationRequestCreator requestCreator) {
         const auto promise = NThreading::NewPromise<TLocalRpcOperationResult>();
@@ -96,6 +108,7 @@ private:
             .OperationSettings = settings,
             .RequestCreator = std::move(requestCreator),
             .Database = Database,
+            .Token = CredentialsProvider ? TMaybe<TString>(CredentialsProvider->GetAuthInfo()) : Nothing(),
             .Promise = promise,
             .OperationName = "local_topic_rpc_operation",
         });
@@ -106,6 +119,7 @@ private:
     TActorSystem* const ActorSystem = nullptr;
     const ui64 ChannelBufferSize = 0;
     const TString Database;
+    const std::shared_ptr<ICredentialsProvider> CredentialsProvider;
 };
 
 } // anonymous namespace

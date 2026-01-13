@@ -184,6 +184,7 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                     if (!response.IsSuccess()) {
                         setError(response.GetIssues().ToString());
                     }
+                    info.PartitionsCount = response.GetTopicDescription().GetTotalPartitionsCount();
                 } catch (...) {
                     setError(FormatCurrentException());
                 }

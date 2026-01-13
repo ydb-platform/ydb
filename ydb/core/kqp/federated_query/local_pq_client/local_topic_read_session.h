@@ -8,6 +8,7 @@ namespace NKikimr::NKqp {
 struct TLocalTopicReadSettings {
     NActors::TActorSystem* ActorSystem = nullptr;
     TString Database;
+    std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 };
 
 std::shared_ptr<NYdb::NTopic::IReadSession> CreateLocalTopicReadSession(const TLocalTopicReadSettings& localSettings, const NYdb::NTopic::TReadSessionSettings& sessionSettings);

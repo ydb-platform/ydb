@@ -1,7 +1,7 @@
 import pytest
 import io
 
-from build.plugins.lib.nots.package_manager.pnpm.pnpm_lockfile import PnpmLockfile, PnpmLockfileHelper
+from build.plugins.lib.nots.package_manager.lockfile import Lockfile, PnpmLockfileHelper
 
 
 @pytest.fixture()
@@ -41,7 +41,7 @@ def patch_open_no_version(monkeypatch):
 
 
 def test_lockfile_read_v6(patch_open_v6):
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
 
     lf.read()
 
@@ -49,7 +49,7 @@ def test_lockfile_read_v6(patch_open_v6):
 
 
 def test_lockfile_read_v9(patch_open_v9):
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
 
     lf.read()
 
@@ -57,7 +57,7 @@ def test_lockfile_read_v9(patch_open_v9):
 
 
 def test_lockfile_read_yaml_error_incorrect_lockfile_version(patch_open_incorrect_version):
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
 
     with pytest.raises(Exception) as e:
         lf.read()
@@ -69,7 +69,7 @@ def test_lockfile_read_yaml_error_incorrect_lockfile_version(patch_open_incorrec
 
 
 def test_lockfile_read_yaml_error_no_lockfile_version(patch_open_no_version):
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
 
     with pytest.raises(Exception) as e:
         lf.read()
@@ -81,7 +81,7 @@ def test_lockfile_read_yaml_error_no_lockfile_version(patch_open_no_version):
 
 
 def test_lockfile_get_packages_meta_ok():
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
             "/@babel/cli/7.6.2_@babel+core@7.6.2": {
@@ -104,7 +104,7 @@ def test_lockfile_get_packages_meta_ok():
 
 
 def test_lockfile_get_packages_skip_directory():
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
             "@plus-int/auth@file:../../packages/platform/auth": {
@@ -117,14 +117,14 @@ def test_lockfile_get_packages_skip_directory():
 
 
 def test_lockfile_get_packages_empty():
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {}
 
     assert len(list(lf.get_packages_meta())) == 0
 
 
 def test_package_meta_invalid_key():
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
             "in/valid": {},
@@ -138,7 +138,7 @@ def test_package_meta_invalid_key():
 
 
 def test_package_meta_missing_resolution():
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
             "/valid@1.2.3": {},
@@ -152,7 +152,7 @@ def test_package_meta_missing_resolution():
 
 
 def test_package_meta_missing_tarball():
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
             "/valid@1.2.3": {
@@ -329,7 +329,7 @@ def test_lockfile_convertion_to_v9():
 
 
 def test_package_meta_missing_rbtorrent():
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
             "/valid@1.2.3": {
@@ -349,7 +349,7 @@ def test_package_meta_missing_rbtorrent():
 
 
 def test_lockfile_meta_file_tarball_prohibits_file_protocol():
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
             "/@babel/cli@7.6.2": {
@@ -371,7 +371,7 @@ def test_lockfile_meta_file_tarball_prohibits_file_protocol():
 
 
 def test_lockfile_update_tarball_resolutions_ok():
-    lf = PnpmLockfile(path="/pnpm-lock.yaml")
+    lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
             "/@babel/cli@7.6.2_@babel+core@7.6.2": {
@@ -392,7 +392,7 @@ def test_lockfile_update_tarball_resolutions_ok():
 
 
 def test_lockfile_merge():
-    lf1 = PnpmLockfile(path="/foo/pnpm-lock.yaml")
+    lf1 = Lockfile(path="/foo/pnpm-lock.yaml")
     lf1.data = {
         "lockfileVersion": "9.0",
         "dependencies": {
@@ -406,7 +406,7 @@ def test_lockfile_merge():
         },
     }
 
-    lf2 = PnpmLockfile(path="/bar/pnpm-lock.yaml")
+    lf2 = Lockfile(path="/bar/pnpm-lock.yaml")
     lf2.data = {
         "lockfileVersion": "9.0",
         "dependencies": {
@@ -420,7 +420,7 @@ def test_lockfile_merge():
         },
     }
 
-    lf3 = PnpmLockfile(path="/another/baz/pnpm-lock.yaml")
+    lf3 = Lockfile(path="/another/baz/pnpm-lock.yaml")
     lf3.data = {
         "lockfileVersion": "9.0",
         "importers": {
@@ -453,7 +453,7 @@ def test_lockfile_merge():
         },
     }
 
-    lf4 = PnpmLockfile(path="/another/quux/pnpm-lock.yaml")
+    lf4 = Lockfile(path="/another/quux/pnpm-lock.yaml")
     lf4.data = {
         "lockfileVersion": "9.0",
         "importers": {
@@ -490,7 +490,7 @@ def test_lockfile_merge():
 
 
 def test_lockfile_merge_dont_overrides_packages():
-    lf1 = PnpmLockfile(path="/foo/pnpm-lock.yaml")
+    lf1 = Lockfile(path="/foo/pnpm-lock.yaml")
     lf1.data = {
         "lockfileVersion": "9.0",
         "dependencies": {
@@ -511,7 +511,7 @@ def test_lockfile_merge_dont_overrides_packages():
         },
     }
 
-    lf2 = PnpmLockfile(path="/bar/pnpm-lock.yaml")
+    lf2 = Lockfile(path="/bar/pnpm-lock.yaml")
     lf2.data = {
         "lockfileVersion": "9.0",
         "dependencies": {

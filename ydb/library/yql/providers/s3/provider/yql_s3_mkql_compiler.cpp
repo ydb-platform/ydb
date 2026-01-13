@@ -97,6 +97,7 @@ TRuntimeNode BuildSerializeCall(
 
     writer.Write("total_size_limit", ToString(config->SerializeMemoryLimit.GetOrDefault()));
     writer.Write("block_size_limit", ToString(config->BlockSizeMemoryLimit.GetOrDefault()));
+    writer.Write("key_flush_timeout_ms", ToString(config->OutputKeyFlushTimeout.Get().GetOrElse(config->DefaultOutputKeyFlushTimeout).MilliSeconds()));
 
     for (const auto& v : settings) {
         writer.Write(v.first, v.second);

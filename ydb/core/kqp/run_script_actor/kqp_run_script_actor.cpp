@@ -128,6 +128,7 @@ public:
         , CheckpointId(settings.CheckpointId)
         , PhysicalGraph(std::move(settings.PhysicalGraph))
         , StreamingQueryPath(settings.StreamingQueryPath)
+        , CustomerSuppliedId(std::move(settings.CustomerSuppliedId))
         , Counters(settings.Counters)
     {}
 
@@ -140,7 +141,7 @@ public:
             Database,
             /* SessionId*/ "",
             ExecutionId,
-            /* CustomerSuppliedId */ traceId,
+            /* CustomerSuppliedId */ CustomerSuppliedId ? CustomerSuppliedId : traceId,
             SelfId()
         );
         UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
@@ -982,6 +983,7 @@ private:
     const TString CheckpointId;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     const TString StreamingQueryPath;
+    const TString CustomerSuppliedId;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;

@@ -175,7 +175,7 @@ class TLocalS3Lister : public IS3Lister {
 public:
     TLocalS3Lister(const TListingRequest& listingRequest, const TMaybe<TString>& delimiter)
         : ListingRequest(listingRequest) {
-        Y_ENSURE(!delimiter.Defined(), "delimiter is not supported for local files");
+        Y_ENSURE(!delimiter, "Subdirectory listing is not supported for local files (can not use delimiter: '" << *delimiter << "')");
         Filter =
             MakeFilter(listingRequest.Pattern, listingRequest.PatternType, nullptr).first;
     }

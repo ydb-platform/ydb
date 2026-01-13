@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -39,6 +40,14 @@ std::unique_ptr<TDqTaskRunnerContext> CreateTaskRunnerContext(NMiniKQL::TKqpComp
         // only for _pure_ compute actors!
         if (name == "KqpEnsure"sv) {
             return WrapKqpEnsure(callable, ctx);
+        }
+
+        if (name == "DqHashCombine"sv) {
+            return WrapDqHashCombine(callable, ctx);
+        }
+
+        if (name == "DqHashAggregate"sv) {
+            return WrapDqHashAggregate(callable, ctx);
         }
         return nullptr;
     };
@@ -254,8 +263,9 @@ public:
             ui64 elapsedMicros = TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000;
             TDuration executerCpuTime = TDuration::MicroSeconds(elapsedMicros);
 
-            NYql::NDqProto::TDqComputeActorStats fakeComputeActorStats;
+            Stats->Prepare();
 
+            NYql::NDqProto::TDqComputeActorStats fakeComputeActorStats;
             for (auto& taskRunner : TaskRunners) {
                 auto* stats = taskRunner->GetStats();
                 auto taskCpuTime = stats->BuildCpuTime + stats->ComputeCpuTime;
@@ -264,17 +274,14 @@ public:
                     *stats, fakeComputeActorStats.AddTasks(), StatsModeToCollectStatsLevel(GetDqStatsMode(Request.StatsMode)));
                 fakeComputeActorStats.SetCpuTimeUs(fakeComputeActorStats.GetCpuTimeUs() + taskCpuTime.MicroSeconds());
             }
-
             fakeComputeActorStats.SetDurationUs(elapsedMicros);
 
-            Stats->AddComputeActorStats(OwnerActor.NodeId(), std::move(fakeComputeActorStats), NYql::NDqProto::COMPUTE_STATE_FINISHED);
-
+            Stats->UpdateTaskStats(0, fakeComputeActorStats, nullptr, NYql::NDqProto::COMPUTE_STATE_FINISHED, TDuration::Max());
             Stats->ExecuterCpuTime = executerCpuTime;
             Stats->FinishTs = Stats->StartTs + TDuration::MicroSeconds(elapsedMicros);
             Stats->ResultRows = ResponseEv->GetResultRowsCount();
             Stats->ResultBytes = ResponseEv->GetByteSize();
-
-            Stats->Finish();
+            Stats->ExportExecStats(*response.MutableResult()->MutableStats());
 
             if (Y_UNLIKELY(CollectFullStats(Request.StatsMode))) {
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {

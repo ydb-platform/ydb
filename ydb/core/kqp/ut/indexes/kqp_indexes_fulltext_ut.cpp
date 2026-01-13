@@ -2449,7 +2449,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
     for(const auto& [term, bfactor, expecteddoc, expectedRelevance] : searchingTerms) {
         // Query with WHERE clause using FulltextContains UDF
         TString query = Sprintf(R"sql(
-            SELECT Key, Text, FullText::Relevance(Text, "%s", %f) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            SELECT Key, Text, FullText::Relevance(Text, "%s", "and", "2", %f) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
             LIMIT 10
         )sql", term.c_str(), bfactor);
@@ -2523,7 +2523,7 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
         TString query = Sprintf(R"sql(
             DECLARE $bfactor as Double;
             DECLARE $k1factor as Double;
-            SELECT Key, Text, FullText::Relevance(Text, "собаки любят", $bfactor, $k1factor) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            SELECT Key, Text, FullText::Relevance(Text, "собаки любят", $bfactor as B, $k1factor as K1) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
             LIMIT 10
         )sql");

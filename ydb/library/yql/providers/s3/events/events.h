@@ -176,7 +176,10 @@ struct TEvS3Provider {
     };
 
     struct TEvRetryEventFunc : public NActors::TEventLocal<TEvRetryEventFunc, EvRetry> {
-        explicit TEvRetryEventFunc(std::function<void()> functor) : Functor(std::move(functor)) {}
+        explicit TEvRetryEventFunc(std::function<void()> functor)
+            : Functor(std::move(functor))
+        {}
+
         const std::function<void()> Functor;
     };
 
@@ -204,7 +207,10 @@ struct TEvS3Provider {
     };
 
     struct TEvDecompressDataRequest : public NActors::TEventLocal<TEvDecompressDataRequest, EvDecompressDataRequest> {
-        TEvDecompressDataRequest(TString&& data) : Data(std::move(data)) {}
+        explicit TEvDecompressDataRequest(TString&& data)
+            : Data(std::move(data))
+        {}
+
         TString Data;
     };
 
@@ -215,7 +221,7 @@ struct TEvS3Provider {
         {}
 
         TEvDecompressDataResult(std::exception_ptr exception, const TDuration& cpuTime) 
-            : Exception(exception)
+            : Exception(std::move(exception))
             , CpuTime(cpuTime)
         {}
 
@@ -238,8 +244,19 @@ struct TEvS3Provider {
     };
 
     struct TEvReadResult2 : public NActors::TEventLocal<TEvReadResult2, EvReadResult2> {
-        TEvReadResult2(TReadRange readRange, IHTTPGateway::TContent&& result) : ReadRange(readRange), Failure(false), Result(std::move(result)) { }
-        TEvReadResult2(TReadRange readRange, TIssues&& issues) : ReadRange(readRange), Failure(true), Result(""), Issues(std::move(issues)) { }
+        TEvReadResult2(TReadRange readRange, IHTTPGateway::TContent&& result)
+            : ReadRange(readRange)
+            , Failure(false)
+            , Result(std::move(result))
+        {}
+
+        TEvReadResult2(TReadRange readRange, TIssues&& issues)
+            : ReadRange(readRange)
+            , Failure(true)
+            , Result("")
+            , Issues(std::move(issues))
+        {}
+
         const TReadRange ReadRange;
         const bool Failure;
         IHTTPGateway::TContent Result;

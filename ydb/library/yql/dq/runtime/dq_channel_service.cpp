@@ -838,8 +838,6 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
 }
 
 void TNodeState::FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor) {
-    std::lock_guard lock(Mutex);
-
     if (InputDescriptors.empty()) {
         return;
     }

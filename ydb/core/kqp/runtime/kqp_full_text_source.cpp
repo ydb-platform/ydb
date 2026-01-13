@@ -880,7 +880,7 @@ struct TReadInfo {
     ui64 ShardId;
 };
 
-class TFullTextContainsSource : public TActorBootstrapped<TFullTextContainsSource>, public NYql::NDq::IDqComputeActorAsyncInput {
+class TFullTextContainsSource : public TActorBootstrapped<TFullTextContainsSource>, public NYql::NDq::IDqComputeActorAsyncInput, public NActors::IActorExceptionHandler {
 private:
 
     struct TEvPrivate {
@@ -1072,6 +1072,14 @@ private:
 
         if (Settings->HasBFactor() && Settings->GetBFactor() > EPSILON) {
             QueryCtx->SetBFactor(Settings->GetBFactor());
+        }
+
+        if (Settings->HasQueryMode() && to_lower(Settings->GetQueryMode()) != "and") {
+            YQL_ENSURE(false, "Unsupported query mode: " << Settings->GetQueryMode());
+        }
+
+        if (Settings->HasMinimumShouldMatch() && !Settings->GetMinimumShouldMatch().empty()) {
+            YQL_ENSURE(false, "Unsupported minimum should match: " << Settings->GetMinimumShouldMatch());
         }
 
         if (Settings->HasK1Factor() && Settings->GetK1Factor() > EPSILON) {
@@ -1339,6 +1347,26 @@ public:
         }
     }
 
+    bool OnUnhandledException(const std::exception_ptr& exception) override {
+        try {
+            if (exception) {
+                std::rethrow_exception(exception);
+            }
+        } catch (const std::exception& ex) {
+            RuntimeError(ex.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+            return true;
+        } catch (const TMemoryLimitExceededException& ex) {
+            RuntimeError("Memory limit exceeded at full text source", NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
+            return true;
+        }
+
+        return false;
+    }
+
+    bool OnUnhandledException(const std::exception&) override {
+        return false;
+    }
+
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
         // implement retry logic a bit later
         CA_LOG_D("TEvDeliveryProblem was received");
@@ -1411,13 +1439,10 @@ public:
     void DocumentDetailsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64) {
         for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
-            auto it = DocumentInfos.find(GetDocumentId(row));
-            YQL_ENSURE(it != DocumentInfos.end());
-
-            const TIntrusivePtr<NKikimr::NKqp::TDocumentInfo> documentInfoPtr = it->second;
-            documentInfoPtr->AddRow(row);
-            if (PostfilterMatchers.empty() || Postfilter(*documentInfoPtr)) {
-                ResultQueue.push_back(documentInfoPtr);
+            const auto& doc = DocumentInfos.at(GetDocumentId(row));
+            doc->AddRow(row);
+            if (PostfilterMatchers.empty() || Postfilter(*doc)) {
+                ResultQueue.push_back(doc);
             }
         }
 
@@ -1439,9 +1464,7 @@ public:
     void DocumentStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg) {
         for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
-            auto it = DocumentInfos.find(GetDocumentId(row));
-            YQL_ENSURE(it != DocumentInfos.end());
-            auto& doc = it->second;
+            auto& doc = DocumentInfos.at(GetDocumentId(row));
             doc->SetDocumentLength(DocsTableReader->GetDocumentLength(row));
 
             if (Limit > 0) {

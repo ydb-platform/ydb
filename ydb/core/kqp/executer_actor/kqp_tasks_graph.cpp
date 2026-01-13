@@ -2605,6 +2605,24 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         }
     }
 
+    if (fullTextSource.HasQueryMode()) {
+        auto value = ExtractPhyValue(
+            stageInfo, fullTextSource.GetQueryMode(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        if (value.HasValue()) {
+            settings->SetQueryMode(TString(value.AsStringRef()));
+        }
+    }
+
+    if (fullTextSource.HasMinimumShouldMatch()) {
+        auto value = ExtractPhyValue(
+            stageInfo, fullTextSource.GetMinimumShouldMatch(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        if (value.HasValue()) {
+            settings->SetMinimumShouldMatch(TString(value.AsStringRef()));
+        }
+    }
+
     if (fullTextSource.HasK1Factor()) {
         auto value = ExtractPhyValue(
             stageInfo, fullTextSource.GetK1Factor(),

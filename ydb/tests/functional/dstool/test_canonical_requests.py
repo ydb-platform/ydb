@@ -7,7 +7,6 @@ import yatest
 import time
 
 from io import StringIO
-from hamcrest import is_
 from unittest.mock import patch
 from google.protobuf import text_format
 from ydb.tests.oss.canonical import set_canondata_root
@@ -16,7 +15,7 @@ from ydb.apps.dstool.main import main as dstool_main
 from ydb.apps.dstool.lib import common
 from ydb.apps.dstool.lib import table
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.common.wait_for import wait_for_and_assert
+from ydb.tests.library.common.wait_for import retry_assertions
 from ydb.tests.library.harness.kikimr_cluster import KiKiMR
 
 logger = logging.getLogger(__name__)
@@ -79,11 +78,10 @@ class TestBase:
             if 'IcPort' in row:
                 row['IcPort'] = '<IcPort>'
 
-    def _wait_pdisk_metrics_collected(self):
-        def all_pdisk_metrics_collected():
-            base_config = self.cluster.client.query_base_config().BaseConfig
-            return all(pdisk.PDiskMetrics.HasField('UpdateTimestamp') for pdisk in base_config.PDisk)
-        wait_for_and_assert(all_pdisk_metrics_collected, is_(True), message='All pdisk metrics collected')
+    def check_pdisk_metrics_collected(self):
+        base_config = self.cluster.client.query_base_config().BaseConfig
+        for pdisk in base_config.PDisk:
+            assert pdisk.PDiskMetrics.HasField('UpdateTimestamp')
 
     def _trace(self, *args, with_grpc_calls=False, with_response=False):
         common.cache.clear()
@@ -149,7 +147,7 @@ class TestBase:
 
 class Test(TestBase):
     def test_essential(self):
-        self._wait_pdisk_metrics_collected()
+        retry_assertions(self.check_pdisk_metrics_collected)
         return [
             self._trace('--help'),
             self._trace('--unknown-arg'),

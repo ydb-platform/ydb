@@ -194,6 +194,36 @@ namespace NKikimr::NHttpProxy {
         return parsedQueueUrl->Database;
     }
 
+    static TString LogHttpRequestResponseCommonInfoString(const THttpRequestContext& httpContext, TInstant startTime, TStringBuf api, TStringBuf topicPath, TStringBuf method, TStringBuf userSid, int httpCode, TStringBuf httpResponseMessage) {
+        const TDuration duration = TInstant::Now() - startTime;
+        TStringBuilder logString;
+        logString << "Request done.";
+        if (!api.empty()) {
+            logString << " Api [" << api << "]";
+        }
+        if (!method.empty()) {
+            logString << " Action [" << method << "]";
+        }
+        if (!httpContext.UserName.empty()) {
+            logString << " User [" << httpContext.UserName << "]";
+        }
+        if (!httpContext.DatabasePath.empty()) {
+            logString << " Database [" << httpContext.DatabasePath << "]";
+        }
+        if (!topicPath.empty()) {
+            logString << " Queue [" << topicPath << "]";
+        }
+        logString << " IP [" << httpContext.SourceAddress << "] Duration [" << duration.MilliSeconds() << "ms]";
+        if (!userSid.empty()) {
+            logString << " Subject [" << userSid << "]";
+        }
+        logString << " Code [" << httpCode << "]";
+        if (httpCode != 200) {
+            logString << " Response [" << httpResponseMessage << "]";
+        }
+        return logString;
+    }
+
     constexpr TStringBuf IAM_HEADER = "x-yacloud-subjecttoken";
     constexpr TStringBuf SECURITY_TOKEN_HEADER = "x-amz-security-token";
     constexpr TStringBuf AUTHORIZATION_HEADER = "authorization";
@@ -830,12 +860,22 @@ namespace NKikimr::NHttpProxy {
 
             void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
                 ReportLatencyCounters(ctx);
+                LogHttpRequestResponse(ctx, issueCode);
 
                 if (issueCode.has_value()) {
                     HttpContext.DoReply(ctx, issueCode.value());
                 } else {
                     HttpContext.DoReply(ctx);
                 }
+            }
+
+            void LogHttpRequestResponse(const TActorContext& ctx, const std::optional<size_t> issueCode) {
+                const int httpCode = issueCode ? MapToException(HttpContext.ResponseData.Status, Method, *issueCode).second : 200;
+                const bool isServerError = IsServerError(httpCode);
+                auto priority = isServerError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
+                LOG_LOG_S_SAMPLED_BY(ctx, priority, NKikimrServices::HTTP_PROXY,
+                                     NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId),
+                                     "Request [" << HttpContext.RequestId << "] " << LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "Kinesis", HttpContext.StreamName, Method, {}, httpCode, HttpContext.ResponseData.ErrorText));
             }
 
             void ReportInputCounters(const TActorContext& ctx) {
@@ -1187,60 +1227,13 @@ namespace NKikimr::NHttpProxy {
                 }
             }
 
-            TString LogHttpRequestResponseCommonInfoString() const {
-                const TDuration duration = TInstant::Now() - StartTime;
-                TStringBuilder logString;
-                logString << "Request done.";
-                if (!HttpContext.UserName.empty()) {
-                    logString << " User [" << HttpContext.UserName << "]";
-                }
-                if (!HttpContext.DatabasePath.empty()) {
-                    logString << " Database [" << HttpContext.DatabasePath << "]";
-                }
-                if (!TopicPath.empty()) {
-                    logString << " Queue [" << TopicPath << "]";
-                }
-                if (!Method.empty()) {
-                    logString << " Action [" << Method << "]";
-                }
-                logString << " IP [" << HttpContext.SourceAddress << "] Duration [" << duration.MilliSeconds() << "ms]";
-                if (!UserSid_.empty()) {
-                    logString << " Subject [" << UserSid_ << "]";
-                }
-                return logString;
-            }
-
-            TString LogHttpRequestResponseDebugInfoString() const {
-                TStringBuilder rec;
-                rec << "Http request: {user: " << HttpContext.UserName
-                    << ", action: " << Method
-                    << ", database: " << HttpContext.DatabasePath
-                    << ", topic: " << TopicPath << "}";
-                rec << ", http response: {code=";
-                if (HttpContext.ResponseData.UseYmqStatusCode) {
-                    rec << HttpContext.ResponseData.YmqHttpCode;
-                    if (HttpContext.ResponseData.YmqHttpCode != 200) {
-                        rec << ", response=\"" << HttpContext.ResponseData.ErrorText << "\"";
-                    }
-                } else {
-                    rec << "200";
-                }
-                rec << "}";
-                return rec;
-            }
-
             void LogHttpRequestResponse(const TActorContext& ctx) {
-                LOG_INFO_S_SAMPLED_BY(ctx, NKikimrServices::SQS,
-                    NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId),
-                    "Request [" << HttpContext.RequestId << "] " << LogHttpRequestResponseCommonInfoString());
-
-                const bool is500 = HttpContext.ResponseData.UseYmqStatusCode &&
-                                   HttpContext.ResponseData.YmqHttpCode >= 500 &&
-                                   HttpContext.ResponseData.YmqHttpCode < 600;
-                auto priority = is500 ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_DEBUG;
+                const int httpCode = HttpContext.ResponseData.UseYmqStatusCode ? HttpContext.ResponseData.YmqHttpCode : 200;
+                const bool isServerError = IsServerError(httpCode);
+                auto priority = isServerError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
                 LOG_LOG_S_SAMPLED_BY(ctx, priority, NKikimrServices::SQS,
-                    NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId),
-                    "Request [" << HttpContext.RequestId << "] " << LogHttpRequestResponseDebugInfoString());
+                                     NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId),
+                                     "Request [" << HttpContext.RequestId << "] " << LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "SqsTopic", TopicPath, Method, UserSid_, httpCode, HttpContext.ResponseData.ErrorText));
             }
 
             void ReportInputCounters(const TActorContext& ctx) {

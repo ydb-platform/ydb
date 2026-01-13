@@ -2,6 +2,7 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
+#include <aws/checksums/crc.h>
 #include <aws/checksums/private/crc32_priv.h>
 #include <aws/checksums/private/crc_util.h>
 #include <stddef.h>
@@ -1289,3 +1290,71 @@ uint32_t aws_checksums_crc32c_sw(const uint8_t *input, int length, uint32_t prev
 
     return s_crc32c_no_slice(input, length, previousCrc32c);
 }
+
+#if defined(__SIZEOF_INT128__)
+static inline uint32_t s_combine_crc32_sw(
+    const aws_checksums_crc32_constants_t cc[1],
+    uint32_t crc1,
+    uint32_t crc2,
+    uint64_t len2) {
+    if (AWS_UNLIKELY(len2 == 0)) {
+        return crc1;
+    }
+
+    int idx = 0;
+    while (len2) {
+        uint8_t nibble = len2 & 0xf;
+        if (nibble) {
+            uint32_t shift_factor = (uint32_t)(cc->shift_factors[idx][nibble][1] >> 32);
+            crc1 = aws_checksums_multiply_mod_p_reflected(cc->mu_poly[1], shift_factor, crc1);
+        }
+        idx++;
+        len2 >>= 4;
+    }
+
+    return crc1 ^ crc2;
+}
+
+uint32_t aws_checksums_crc32_combine_sw(uint32_t crc1, uint32_t crc2, uint64_t len2) {
+    return s_combine_crc32_sw(&aws_checksums_crc32_constants, crc1, crc2, len2);
+}
+
+uint32_t aws_checksums_crc32c_combine_sw(uint32_t crc1, uint32_t crc2, uint64_t len2) {
+    return s_combine_crc32_sw(&aws_checksums_crc32c_constants, crc1, crc2, len2);
+}
+#else
+
+static uint32_t s_crc32_shift_one_zero(uint32_t poly, uint32_t crc) {
+    for (int i = 0; i < 8; i++) {
+        crc = (crc >> 1) ^ ((crc & 1) ? poly : 0);
+    }
+    return crc;
+}
+
+uint32_t aws_checksums_crc32_combine_sw(uint32_t crc1, uint32_t crc2, uint64_t len2) {
+    if (len2 == 0) {
+        return crc1;
+    }
+
+    static const uint32_t crc32_poly = 0xEDB88320UL;
+
+    for (size_t i = 0; i < len2; i++) {
+        crc1 = s_crc32_shift_one_zero(crc32_poly, crc1);
+    }
+    return crc1 ^ crc2;
+}
+
+uint32_t aws_checksums_crc32c_combine_sw(uint32_t crc1, uint32_t crc2, uint64_t len2) {
+    if (len2 == 0) {
+        return crc1;
+    }
+
+    static const uint32_t crc32_poly = 0x82F63B78;
+
+    for (size_t i = 0; i < len2; i++) {
+        crc1 = s_crc32_shift_one_zero(crc32_poly, crc1);
+    }
+    return crc1 ^ crc2;
+}
+
+#endif

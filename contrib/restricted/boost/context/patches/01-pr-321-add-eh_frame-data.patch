@@ -1,0 +1,19 @@
+--- contrib/restricted/boost/context/src/asm/make_x86_64_sysv_elf_gas.S	(31ebbeeeb0490b79a17c5d4e2d56f53b6089ea63)
++++ contrib/restricted/boost/context/src/asm/make_x86_64_sysv_elf_gas.S	(9fc59db160cf7bcf01b31a94b029fdcc7de2adfe)
+@@ -133,6 +133,8 @@ make_fcontext:
+     ret /* return pointer to context-data */
+
+ trampoline:
++    .cfi_startproc
++    .cfi_undefined rip
+     /* store return address on stack */
+     /* fix stack alignment */
+     _CET_ENDBR
+@@ -147,6 +149,7 @@ trampoline:
+ #endif
+     /* jump to context-function */
+     jmp *%rbx
++    .cfi_endproc
+
+ finish:
+     _CET_ENDBR

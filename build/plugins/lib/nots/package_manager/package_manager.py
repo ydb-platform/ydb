@@ -1,30 +1,47 @@
 import hashlib
 import os
 import shutil
+import subprocess
+import sys
 
 from .constants import (
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
     VIRTUAL_STORE_DIRNAME,
+    NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
+    NPM_REGISTRY_URL,
 )
-from .pnpm_lockfile import PnpmLockfile
+from .lockfile import Lockfile
 from .utils import (
     build_lockfile_path,
     build_build_backup_lockfile_path,
     build_pre_lockfile_path,
     build_ws_config_path,
-)
-from .pnpm_workspace import PnpmWorkspace
-from ..base import BasePackageManager, PackageManagerError
-from ..base.constants import NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
-from ..base.node_modules_bundler import bundle_node_modules
-from ..base.timeit import timeit
-from ..base.utils import (
     b_rooted,
     build_nm_bundle_path,
+    build_nm_path,
     build_pj_path,
     build_pnpm_store_path,
     s_rooted,
 )
+from .pnpm_workspace import PnpmWorkspace
+from .node_modules_bundler import bundle_node_modules
+from .timeit import timeit
+from .package_json import PackageJson
+
+
+class PackageManagerError(RuntimeError):
+    pass
+
+
+class PackageManagerCommandError(PackageManagerError):
+    def __init__(self, cmd, code, stdout, stderr):
+        self.cmd = cmd
+        self.code = code
+        self.stdout = stdout
+        self.stderr = stderr
+
+        msg = "package manager exited with code {} while running {}:\n{}\n{}".format(code, cmd, stdout, stderr)
+        super(PackageManagerCommandError, self).__init__(msg)
 
 
 """
@@ -130,25 +147,144 @@ def hashed_by_files(files_to_hash, paths_to_exist, hash_storage_filename):
     return decorator
 
 
-class PnpmPackageManager(BasePackageManager):
+class PackageManager(object):
+    def __init__(
+        self,
+        build_root,
+        build_path,
+        sources_path,
+        nodejs_bin_path,
+        script_path,
+        module_path=None,
+        sources_root=None,
+        verbose=False,
+    ):
+        self.module_path = build_path[len(build_root) + 1 :] if module_path is None else module_path
+        self.build_path = build_path
+        self.sources_path = sources_path
+        self.build_root = build_root
+        self.sources_root = sources_path[: -len(self.module_path) - 1] if sources_root is None else sources_root
+        self.nodejs_bin_path = nodejs_bin_path
+        self.script_path = script_path
+        self.verbose = verbose
+
+    @classmethod
+    def load_package_json(cls, path):
+        """
+        :param path: path to package.json
+        :type path: str
+        :rtype: PackageJson
+        """
+        return PackageJson.load(path)
+
+    @classmethod
+    def load_package_json_from_dir(cls, dir_path, empty_if_missing=False):
+        """
+        :param dir_path: path to directory with package.json
+        :type dir_path: str
+        :rtype: PackageJson
+        """
+        pj_path = build_pj_path(dir_path)
+        if empty_if_missing and not os.path.exists(pj_path):
+            pj = PackageJson(pj_path)
+            pj.data = {}
+            return pj
+        return cls.load_package_json(pj_path)
+
+    def _build_package_json(self):
+        """
+        :rtype: PackageJson
+        """
+        pj = self.load_package_json_from_dir(self.sources_path)
+
+        if not os.path.exists(self.build_path):
+            os.makedirs(self.build_path, exist_ok=True)
+
+        pj.path = build_pj_path(self.build_path)
+        pj.write()
+
+        return pj
 
     @classmethod
     def load_lockfile(cls, path):
         """
         :param path: path to lockfile
         :type path: str
-        :rtype: PnpmLockfile
+        :rtype: Lockfile
         """
-        return PnpmLockfile.load(path)
+        return Lockfile.load(path)
 
     @classmethod
     def load_lockfile_from_dir(cls, dir_path):
         """
         :param dir_path: path to directory with lockfile
         :type dir_path: str
-        :rtype: PnpmLockfile
+        :rtype: Lockfile
         """
         return cls.load_lockfile(build_lockfile_path(dir_path))
+
+    def get_local_peers_from_package_json(self):
+        """
+        Returns paths of direct workspace dependencies (source root related).
+        :rtype: list of str
+        """
+        return self.load_package_json_from_dir(self.sources_path).get_workspace_dep_paths(base_path=self.module_path)
+
+    @timeit
+    def _exec_command(self, args, cwd: str, include_defaults=True, script_path=None, env={}):
+        if not self.nodejs_bin_path:
+            raise PackageManagerError("Unable to execute command: nodejs_bin_path is not configured")
+
+        cmd = (
+            [self.nodejs_bin_path, script_path or self.script_path]
+            + args
+            + (self._get_default_options() if include_defaults else [])
+        )
+        p = subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            stdin=None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            text=True,
+            encoding="utf-8",
+        )
+        stdout, stderr = p.communicate()
+
+        if self.verbose:
+            print(f'cd {cwd} && {" ".join(cmd)}', file=sys.stderr)
+            print(f'stdout: {stdout}', file=sys.stderr) if stdout else None
+            print(f'stderr: {stderr}', file=sys.stderr) if stderr else None
+
+        if p.returncode != 0:
+            self._dump_debug_log()
+
+            raise PackageManagerCommandError(cmd, p.returncode, stdout, stderr)
+
+    def _nm_path(self, *parts):
+        return os.path.join(build_nm_path(self.build_path), *parts)
+
+    def _tarballs_store_path(self, pkg, store_path):
+        return os.path.join(self.module_path, store_path, pkg.tarball_path)
+
+    def _get_default_options(self):
+        return ["--registry", NPM_REGISTRY_URL, "--stream", "--reporter", "append-only", "--no-color"]
+
+    def _get_debug_log_path(self):
+        return self._nm_path(".pnpm-debug.log")
+
+    def _dump_debug_log(self):
+        log_path = self._get_debug_log_path()
+
+        if not log_path:
+            return
+
+        try:
+            with open(log_path) as f:
+                sys.stderr.write("Package manager log {}:\n{}\n".format(log_path, f.read()))
+        except Exception:
+            sys.stderr.write("Failed to dump package manager log {}.\n".format(log_path))
 
     @timeit
     def _get_pnpm_store(self):
@@ -443,16 +579,3 @@ class PnpmPackageManager(BasePackageManager):
             patch_build_path = os.path.join(self.build_path, p)
             os.makedirs(os.path.dirname(patch_build_path), exist_ok=True)
             shutil.copyfile(patch_source_path, patch_build_path)
-
-    @timeit
-    def _get_default_options(self):
-        return super(PnpmPackageManager, self)._get_default_options() + [
-            "--stream",
-            "--reporter",
-            "append-only",
-            "--no-color",
-        ]
-
-    @timeit
-    def _get_debug_log_path(self):
-        return self._nm_path(".pnpm-debug.log")

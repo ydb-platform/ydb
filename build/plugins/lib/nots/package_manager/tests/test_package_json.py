@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from build.plugins.lib.nots.package_manager.base.package_json import PackageJson, PackageJsonWorkspaceError
+from build.plugins.lib.nots.package_manager import PackageJson, PackageJsonWorkspaceError
 
 
 def test_get_name_exist():

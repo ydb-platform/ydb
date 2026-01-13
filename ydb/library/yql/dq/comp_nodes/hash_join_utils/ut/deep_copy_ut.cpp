@@ -6,7 +6,6 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/print_unboxed_value.h>
-// #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 using NYql::NUdf::TUnboxedValuePod;
 using NYql::NUdf::TUnboxedValue;
 using namespace NKikimr::NMiniKQL;
@@ -154,8 +153,6 @@ Y_UNIT_TEST_SUITE(TPackedTupleDeepCopy) {
         res.push_back(std::move(first));
         res.push_back(std::move(second));
         first = converter->GetTupleLayout()->Flatten(res);
-
-        // first.AppendTuple({.PackedData = second.PackedTuples.data(), .OverflowBegin = second.Overflow.data()}, converter->GetTupleLayout());
 
         for (int index = 0; index < 2; ++index) {
             converter->Unpack(first, index, concatOut.data() + 4*index);

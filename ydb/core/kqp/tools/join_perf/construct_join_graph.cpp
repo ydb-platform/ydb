@@ -8,6 +8,10 @@
 namespace NKikimr::NMiniKQL {
 
 namespace {
+NYql::NUdf::TUniquePtr<NYql::NUdf::ILogProvider> testLogProvider =
+    NYql::NUdf::MakeLogProvider(+[](std::string_view component, NYql::NUdf::ELogLevel level, std::string_view message) {
+        Cout << std::format("LOG: component: {}, level: {}, message: {}\n", component, static_cast<std::string_view>(LevelToString(level)),  message);
+    });
 
 TRuntimeNode BuildBlockJoin(TDqProgramBuilder& pgmBuilder, EJoinKind joinKind, TRuntimeNode leftList,
                             TArrayRef<const ui32> leftKeyColumns, const TVector<ui32>& leftKeyDrops,
@@ -239,12 +243,8 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
     }();
     auto graph = graphFrom(wideStream);
     graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
-    static/* todo(becalm): better way */ NYql::NUdf::TUniquePtr<NYql::NUdf::ILogProvider> provider =
-        NYql::NUdf::MakeLogProvider([&](std::string_view component, NYql::NUdf::ELogLevel level, std::string_view message) {
-            Cout << std::format("LOG: component: {}, level: {}, message: {}\n", component, static_cast<std::string_view>(LevelToString(level)),  message);
-        });
 
-    graph->GetContext().LogProvider = provider.Get();
+    graph->GetContext().LogProvider = testLogProvider.Get();
     return graph;
 }
 

@@ -11,7 +11,6 @@ std::string_view AsSV(TStringBuf buf) {
 template<typename T>
 struct TPrint: IPrint {
   TPrint() {
-    PrintBackTrace();
     MKQL_ENSURE(false, "priting for this type is not supported, you have to manually add it");
   }
   TString Stringify(NYql::NUdf::TUnboxedValuePod) override {

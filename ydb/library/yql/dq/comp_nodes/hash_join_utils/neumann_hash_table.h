@@ -211,7 +211,6 @@ class TNeumannHashTable {
         
         const ui32 dirsSize = (1ul << DirectoryHashBits_) + 1;
         Directories_.resize(dirsSize, TDirectory{});
-        //Directories_ = std::span((TDirectory *)DirectoriesData_.data(), dirsSize);
         for (auto& directory : Directories_) {
             directory = {};
         }
@@ -495,7 +494,6 @@ class TNeumannHashTable {
 
     void Clear() {
         Directories_.clear();
-        // DirectoriesData_.clear();
         Buffer_.clear();
 
         Tuples_ = nullptr;
@@ -551,9 +549,7 @@ class TNeumannHashTable {
     unsigned DirectoryHashShift_;
     Hash DirectoryHashMask_;
 
-    // TAllocator Allocator_;
     TMKQLVector<TDirectory> Directories_;
-    // std::vector<ui8, TAllocator> DirectoriesData_;
     TMKQLVector<ui8> Buffer_;
 };
 

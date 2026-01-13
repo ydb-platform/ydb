@@ -24,7 +24,6 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
     rm->SetSpillingPercent(reasonableTreshold);
 
     auto* spilling = ts->MutableSpillingServiceConfig()->MutableLocalFileConfig();
-    // appCfg.MutableTableServiceConfig().
 
     spilling->SetRoot("./spilling/");
     if (limitFileSize) {
@@ -34,7 +33,6 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
     return appCfg;
 }
 
-// Y_UNIT_TEST_SUITE_F(DqHashJoinSpilling)
 
 Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
     Y_UNIT_TEST(Spilling) {
@@ -75,22 +73,6 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        // {
-        //     auto status = queryClient.ExecuteQuery(
-        //         R"(
-        //             INSERT INTO `/Root/left_table` (id, data) VALUES
-        //                 (1, "1"),
-        //                 (2, "2"),
-        //                 (3, "3");
-
-        //             INSERT INTO `/Root/right_table` (id, data) VALUES
-        //                 (1, "1"),
-        //                 (2, "2"),
-        //                 (3, "3");
-        //         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
-        //     ).GetValueSync();
-        //     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-        // }
 
         {
 
@@ -111,8 +93,6 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
                 ON L.data = R.data;
             )";
 
-                // inner join `right_table` AS R2
-                // ON L.data = R2.data
             TString joinQuery = TStringBuilder() << hints << blocks << select;
             auto explainResult = queryClient.ExecuteQuery(
                 joinQuery, 

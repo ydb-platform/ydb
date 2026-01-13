@@ -216,7 +216,6 @@ struct TTupleLayout {
         std::vector<ui8, TMKQLAllocator<ui8>>& dstOverflow,
         ui32 dstCount,
         const ui8 *src, const ui8 *srcOverflow, ui32 srcCount, ui32 srcOverflowSize) const;
-    // void Concat()
         
     TPackResult Flatten(TArrayRef<TPackResult> chunks) const;
 

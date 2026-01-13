@@ -330,7 +330,6 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         NUdf::TLogComponentId LogComponent_ ;
 
         void LogDebug(TStringRef msg) const {
-            // Cerr << msg << Endl;
             UDF_LOG(Logger_, LogComponent_, NYql::NUdf::ELogLevel::Debug, msg);
         }
     };
@@ -477,8 +476,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     }
 
 
-    EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx,
-                           /*JoinMatchFn todo(becalm): uncomment constraint when scalar join supports left joins*/ auto consume) {
+    EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx, auto consume) {
         auto notEnoughMemory = [] {
             return TlsAllocState->IsMemoryYellowZoneEnabled();
         };

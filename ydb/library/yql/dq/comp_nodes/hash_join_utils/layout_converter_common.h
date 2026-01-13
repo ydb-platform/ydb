@@ -46,7 +46,7 @@ struct TPackResult {
     }
     struct Iterator{
         using difference_type = std::ptrdiff_t;
-        using element_type = const TSingleTuple; // element_type is a reserved name that must be used in the definition
+        using element_type = const TSingleTuple;
         using pointer = element_type *;
         using reference = element_type &;
     private:
@@ -76,7 +76,6 @@ struct TPackResult {
     }
 
     void AppendTuple(TSingleTuple tuple, const NPackedTuple::TTupleLayout* layout);
-    // void Append(TPackResult other, const NPackedTuple::TTupleLayout* layout);
 };
 
 using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;

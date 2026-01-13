@@ -4183,7 +4183,7 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextRelevanceAndNgramWildcardTimeout) {
+Y_UNIT_TEST(SelectWithFulltextFlatRelevanceAndNgramShortQuery) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
@@ -4213,10 +4213,22 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceAndNgramWildcardTimeout) {
 
     {
         const TString query = R"sql(
-            select *
-            from `/Root/Texts` view `fulltext_idx`
-            where FullText::Contains(`Text`, "*at*")
-            limit 100;
+            SELECT *
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "at")
+            LIMIT 100;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        const TString query = R"sql(
+            SELECT *
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains(`Text`, "*at*")
+            LIMIT 100;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

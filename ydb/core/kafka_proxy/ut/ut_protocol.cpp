@@ -388,13 +388,20 @@ void AssertMessageAvaialbleThroughLogbrokerApiAndCommit(std::shared_ptr<NTopic::
     responseFromLogbrokerApi[0].GetMessages()[0].Commit();
 }
 
-void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 minActivePartitions, std::vector<TString> consumers, std::optional<ui64> retentionSeconds = std::nullopt) {
+void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 minActivePartitions,
+                std::vector<TString> consumers,
+                std::optional<ui64> retentionSeconds = std::nullopt,
+                std::optional<TString> timestampType = std::nullopt) {
     auto topicSettings = NYdb::NTopic::TCreateTopicSettings()
                             .PartitioningSettings(minActivePartitions, 100);
 
     if(retentionSeconds) {
         Cerr << "===Create topic with retention = " << *retentionSeconds << " seconds" << Endl;
         topicSettings.RetentionPeriod(TDuration::Seconds(*retentionSeconds));
+    }
+    if (timestampType) {
+        Cerr << "===Create topic with timestampType = " << *timestampType << Endl;
+        topicSettings.TimestampType(*timestampType);
     }
     for (auto& consumer : consumers) {
         topicSettings.BeginAddConsumer(consumer).EndAddConsumer();
@@ -2489,6 +2496,43 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         RunCreateTopicsScenario(testServer, client);
     } // Y_UNIT_TEST(CreateTopicsScenarioWithoutKafkaAuth)
 
+    Y_UNIT_TEST(CreateTopicTimestampTypeScenario) {
+        TInsecureTestServer testServer("2");
+
+        TString topic1Name = "/Root/topic-1-test";
+        TString topic2Name = "/Root/topic-2-test";
+        TString topic3Name = "/Root/topic-3-test";
+        TString topic4Name = "/Root/topic-4-test";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+
+        CreateTopic(pqClient, topic1Name, 10, {});
+        CreateTopic(pqClient, topic2Name, 10, {}, std::nullopt, "CreateTime");
+        CreateTopic(pqClient, topic3Name, 10, {}, std::nullopt, "LogAppendTime");
+        CreateTopic(pqClient, topic3Name, 10, {}, std::nullopt, "Incorrect");
+
+        TKafkaTestClient client(testServer.Port);
+        client.AuthenticateToKafka();
+
+        auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
+
+        auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+        UNIT_ASSERT(result1.IsSuccess());
+        UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetTimestampType(), "CreateTime");
+
+        auto result2 = pqClient.DescribeTopic(topic2Name, describeTopicSettings).GetValueSync();
+        UNIT_ASSERT(result2.IsSuccess());
+        UNIT_ASSERT_EQUAL(result2.GetTopicDescription().GetTimestampType(), "CreateTime");
+
+        auto result3 = pqClient.DescribeTopic(topic3Name, describeTopicSettings).GetValueSync();
+        UNIT_ASSERT(result3.IsSuccess());
+        UNIT_ASSERT_EQUAL(result3.GetTopicDescription().GetTimestampType(), "LogAppendTime");
+
+        // checking that it is impossible to create a topic with incorrect timestamp type
+        auto result4 = pqClient.DescribeTopic(topic4Name, describeTopicSettings).GetValueSync();
+        UNIT_ASSERT(!result4.IsSuccess());
+    }
+
     Y_UNIT_TEST(CreatePartitionsScenario) {
 
         TInsecureTestServer testServer("2");
@@ -2507,6 +2551,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         CreateTopic(pqClient, topic1Name, 10, {});
         CreateTopic(pqClient, topic2Name, 20, {});
+
 
         TKafkaTestClient client(testServer.Port);
 

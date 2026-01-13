@@ -7,13 +7,15 @@
 #include <util/generic/size_literals.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
+#include <ydb/core/util/exceptions.h>
 
-#include <yql/essentials/utils/exceptions.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 
 namespace NYql::NBrotli {
+
+using namespace NKikimr;
 
 namespace {
 
@@ -100,7 +102,7 @@ bool TReadBuffer::nextImpl() {
                 ythrow TCodeLineException(NYql::NDqProto::StatusIds::BAD_REQUEST) << "Brotli decoder failed to decompress buffer: "
                                     << BrotliDecoderErrorString(BrotliDecoderGetErrorCode(DecoderState_));
             case BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT:
-                YQL_ENSURE_CODELINE(availableOut != OutBuffer.size(), NYql::NDqProto::StatusIds::BAD_REQUEST, "Buffer passed to read in Brotli decoder is too small");
+                Y_ENSURE_CODELINE(availableOut != OutBuffer.size(), NYql::NDqProto::StatusIds::BAD_REQUEST, "Buffer passed to read in Brotli decoder is too small");
                 break;
             default:
                 break;

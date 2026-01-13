@@ -17,6 +17,14 @@ message ESidType {
     }
 }
 
+message EHashType {
+    enum HashType {
+        Unknown = 0;
+        Argon = 1;
+        ScramSha256 = 2;
+    }
+}
+
 message TSid {
     string Name = 1;
     ESidType.SidType Type = 2;

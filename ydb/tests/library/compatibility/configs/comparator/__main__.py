@@ -109,7 +109,7 @@ class Differ:
         if old is None:
             return Resolution.INFO, f'added <b>{value_str}</b>'
         if old.id != new.id:
-            return Resolution.ERROR, f'id changed<br/>{old.id} -> {new.id}'
+            return Resolution.ERROR, f'id changed {old.id} -> {new.id}'
         if type(old.value) is not type(new.value):
             return Resolution.ERROR, 'type changed'
         if isinstance(old.value, dict) or isinstance(old.value, list):
@@ -120,7 +120,7 @@ class Differ:
                     return Resolution.INFO, 'FF switched on'
                 else:
                     return Resolution.ERROR, 'FF switched off'
-            return Resolution.WARNING, f'value changed<br/>{old.value} -> {new.value}'
+            return Resolution.WARNING, f'value changed {old.value} -> {new.value}'
         return Resolution.OK, value_str
 
     def compare(self):
@@ -140,7 +140,6 @@ class Differ:
 .tab {
     overflow: hidden;
     background-color: #AAFFAA;
-    valign
 }
 
 .tab button {
@@ -250,7 +249,7 @@ function showBranches(event) {
 Цвет означает критичность изменений в соседних ветках:
 <ul>
 <li><span style="font-weight:bold">Белый</span> означает, что поле полностью отсутствует в данной версии конфигурации.</li>
-<li><span style="background-color: #dddddd;font-weight:bold">Серый</span> - значение задано и не изменялось, в том числе путое.</li>
+<li><span style="background-color: #dddddd;font-weight:bold">Серый</span> - значение задано и не изменялось, в том числе пустое.</li>
 <li><span style="background-color: #aaffaa;font-weight:bold">Зеленый</span> - безопасное изменение, такое как добавление нового поля или включение Feature flag.</li>
 <li><span style="background-color: #ffffaa;font-weight:bold">Желтый</span> - изменение, которое может вызвать изменение поведения,
 но не должно быть критичным, например изменение значения по умолчанию.</li>
@@ -270,7 +269,7 @@ The color indicates the criticality of the changes in the neighboring branches:
 <li><span style="background-color: #dddddd;font-weight:bold">Grey</span> - the value is set and has not changed, including the empty one.</li>
 <li><span style="background-color: #aaffaa;font-weight:bold">Green</span> - a safe change, such as adding a new field or enabling the Feature flag.</li>
 <li><span style="background-color: #ffffaa;font-weight:bold">Yellow</span> - a change that may cause a change in behavior, but should not be critical, such as changing the default value.</li>
-<li><span style="background-color: #ffaaaa;font-weight:bold">Red</span> - A danger change that can break everything:
+<li><span style="background-color: #ffaaaa;font-weight:bold">Red</span> - A dangerous change that can break everything:
 removing fields, changing their type or id (in protobuf), disabling the Feature flag etc.</li>
 </ul>
 </p>
@@ -293,14 +292,14 @@ removing fields, changing their type or id (in protobuf), disabling the Feature 
             else:
                 field = res.ident.name
             print(f'<tr class="{res.result_class}"><td style="padding-left: 10; padding-right: 10; word-break: break-all; word-wrap: break-word; width: 50%;">{field}</td>')
-            for resulution, msg in res.branch_resolutions:
+            for resolution, msg in res.branch_resolutions:
                 color = {
                     Resolution.NO: '',
                     Resolution.OK: '#dddddd',
                     Resolution.INFO: '#aaffaa',
                     Resolution.WARNING: '#ffffaa',
                     Resolution.ERROR: '#ffaaaa'
-                }[resulution]
+                }[resolution]
                 print(f'<td align="center" bgcolor="{color}" style="padding-left: 10; padding-right: 10; word-break: break-all; word-wrap: break-word; width: {max_width}%;">{msg}</td>')
             print('</tr>')
         print('</tbody>')

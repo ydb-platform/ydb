@@ -29,9 +29,9 @@
 
 namespace {
 
-const TVector<NLogin::EHashType> HASHES_TO_COMPUTE = {
-    NLogin::EHashType::Argon,
-    NLogin::EHashType::ScramSha256,
+const TVector<NLoginProto::EHashType::HashType> HASHES_TO_COMPUTE = {
+    NLoginProto::EHashType::Argon,
+    NLoginProto::EHashType::ScramSha256,
 };
 
 }

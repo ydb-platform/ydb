@@ -626,7 +626,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
             newFilterBody = ctx.Builder(op->Pos).Callable("FromPg").Add(0, newFilterBody).Seal().Build();
 
             TVector<TExprBase> items;
-            for (auto iu : op->GetOutputIUs()) {
+            for (const auto& iu : op->GetOutputIUs()) {
                 auto memberName = iu.GetFullName();
                 // clang-format off
                 auto tuple = Build<TCoNameValueTuple>(ctx, op->Pos)

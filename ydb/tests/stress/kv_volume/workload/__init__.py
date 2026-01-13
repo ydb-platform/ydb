@@ -182,6 +182,9 @@ class Worker:
 
         def _remove_key(self, key):
             self.results[self.config.name][self.instance_id].pop(key, None)
+            mode = self.config.action_data_mode.WhichOneof('Mode')
+            if mode == 'worker':
+                self.init_keys.pop(key, None)
 
         async def run_commands(self, parent_chain_update=None):
             self.instance_id = self._generate_instance_id(self.config.name)

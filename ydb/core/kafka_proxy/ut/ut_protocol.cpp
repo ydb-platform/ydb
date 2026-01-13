@@ -3141,6 +3141,56 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
+            // Set valid timestamp type
+            ui64 retentionMs = 168 * 60 * 60 * 1000;
+            ui64 retentionBytes = 51'200 * 1_MB;
+
+            TString timestampType = "LogAppendTime";
+
+            auto msg = client.AlterConfigs({
+                    TTopicConfig(shortTopic0Name, 1, std::to_string(retentionMs), std::to_string(retentionBytes), {}, 1, timestampType)
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
+
+            auto result0 = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result0.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionStorageMb().value(), retentionBytes / (1024 * 1024));
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetTimestampType().value(), timestampType);
+        }
+
+        {
+            // Set invalid timestamp type
+            ui64 oldRetentionMs = 168 * 60 * 60 * 1000;
+            ui64 oldRetentionBytes = 51'200 * 1_MB;
+
+            ui64 newRetentionMs = 154 * 60 * 60 * 1000;
+            ui64 newRetentionBytes = 40'000 * 1_MB;
+
+            TString oldTimestampType = "LogAppendTime";
+            TString newTimestampType = "Invalid";
+
+            auto msg = client.AlterConfigs({
+                    TTopicConfig(shortTopic0Name, 1, std::to_string(newRetentionMs), std::to_string(newRetentionBytes), {}, 1, newTimestampType)
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_REQUEST);
+
+            auto result0 = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result0.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), oldRetentionMs);
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionStorageMb().value(), oldRetentionBytes / (1024 * 1024));
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetTimestampType().value(), oldTimestampType);
+        }
+
+        {
             // Wrong config value(retention.ms) isn't applied
             auto initialTopicDescription = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings)
                     .GetValueSync()

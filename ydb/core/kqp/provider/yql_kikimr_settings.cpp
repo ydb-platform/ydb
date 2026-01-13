@@ -152,8 +152,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
-
-    BlockChannelsMode = NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR;
 }
 
 bool TKikimrSettings::HasAllowKqpUnsafeCommit() const {
@@ -253,11 +251,21 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
 }
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {
-    return UseDqHashCombine.Get().GetOrElse(EnableDqHashCombineByDefault);
+    return UseDqHashCombine.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashCombineByDefault());
 }
 
+NYql::EBackportCompatibleFeaturesMode TKikimrConfiguration::GetYqlBackportMode() const {
+    switch(GetBackportMode()) {
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_Released:
+            return NYql::EBackportCompatibleFeaturesMode::Released;
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_All:
+            return NYql::EBackportCompatibleFeaturesMode::All;
+    }
+}
+
+
 bool TKikimrConfiguration::GetUseDqHashAggregate() const {
-    return UseDqHashAggregate.Get().GetOrElse(EnableDqHashAggregateByDefault);
+    return UseDqHashAggregate.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashAggregateByDefault());
 }
 
 }

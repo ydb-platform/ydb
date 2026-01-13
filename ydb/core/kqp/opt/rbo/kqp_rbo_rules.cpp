@@ -168,7 +168,7 @@ std::shared_ptr<TOpCBOTree> AddJoinToCBOTree(std::shared_ptr<TOpCBOTree> & cboTr
         join->SetLeftInput(cboTree->TreeRoot);
         treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
         treeNodes.push_back(join);
-    } 
+    }
     else {
         join->SetRightInput(cboTree->TreeRoot);
         treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
@@ -223,7 +223,7 @@ namespace NKqp {
 std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
-    
+
     if (input->Kind != EOperator::Map) {
         return input;
     }
@@ -537,7 +537,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
             .Name().Value(countResult.GetFullName()).Build()
         .Done().Ptr();
         // clang-format on
-        
+
         auto body = ctx.ExprCtx.NewCallable(filter->Pos, compareCallable, {member, zero});
 
         // clang-format off
@@ -901,7 +901,7 @@ std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const std::s
         return input;
     }
 
-    const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->EnableOlapScalarApply, ctx.KqpCtx.Config->EnableOlapSubstringPushdown,
+    const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.KqpCtx.Config->GetEnableOlapSubstringPushdown(),
                                            /*StripAliasPrefixForColumnName=*/true);
     if (!IsSuitableToPushPredicateToColumnTables(input)) {
         return input;
@@ -1023,15 +1023,15 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const std::sh
 
         bool leftSideCBOTree = true;
 
-        auto findCBOTree = [&join](const std::shared_ptr<IOperator>& op, 
-                std::shared_ptr<TOpCBOTree>& cboTree, 
+        auto findCBOTree = [&join](const std::shared_ptr<IOperator>& op,
+                std::shared_ptr<TOpCBOTree>& cboTree,
                 std::shared_ptr<TOpFilter>& maybeFilter) {
 
             if (op->Kind == EOperator::CBOTree) {
                 cboTree = CastOperator<TOpCBOTree>(op);
                 return true;
             }
-            if (op->Kind == EOperator::Filter && 
+            if (op->Kind == EOperator::Filter &&
                     CastOperator<TOpFilter>(op)->GetInput()->Kind == EOperator::CBOTree &&
                     join->JoinKind == "Inner") {
 

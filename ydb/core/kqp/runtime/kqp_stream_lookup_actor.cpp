@@ -874,7 +874,7 @@ private:
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
-    NKqpProto::EIsolationLevel IsolationLevel;
+    NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
     const TString Database;
 
     // stats

@@ -223,7 +223,6 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessSer
         return;
     }
 
-    AuthType_ = "service_account"; // see the conditions from above
     FolderId_ = ev->Get()->Response.Getsubject().Getservice_account().Getfolder_id();
 
     GetCloudIdAndAuthorize();
@@ -267,6 +266,12 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
 
     UserSID_ = result.Token->GetUserSID();
     MaskedToken_ = NKikimr::MaskIAMTicket(IamToken_);
+
+    // Of course, in practice the accounts that come in aren’t always of the "service_account" type.
+    // Nevertheless, this value is used only for logging, as it’s required by the cloud_events format.
+    // To determine the actual type of the cloud account, we would need to do some additional work—essentially,
+    //                                                                  make a careful request to the AccessService.
+    AuthType_ = "service_account";
 
     UserSidCallback_(UserSID_);
     OnFinishedRequest();

@@ -3557,7 +3557,6 @@ CREATE TRANSFER `Transfer`
 FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
 WITH (
   CONNECTION_STRING = 'grpc:///?database=',
-  CONSUMER = '',
   BATCH_SIZE_BYTES = 8388608,
   FLUSH_INTERVAL = Interval('PT60S')
 );)";
@@ -3591,7 +3590,6 @@ CREATE TRANSFER `Transfer`
 FROM `/MyRoot/Topic_0` TO `/MyRoot/Table` USING $transformation_lambda
 WITH (
   CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
-  CONSUMER = '',
   BATCH_SIZE_BYTES = 8388608,
   FLUSH_INTERVAL = Interval('PT60S')
 );)";

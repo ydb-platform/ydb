@@ -519,20 +519,16 @@ public:
             return;
         }
 
-<<<<<<< HEAD
-        LOG_D("continue request, pool id: " << poolId);
-=======
         if (ev->Get()->IsDiskFull()) {
             STLOG_W("Database disks are without free space",
                 (pool_id, poolId),(trace_id, TraceId()));
             FillQueryIssues(ev->Get()->Issues);
         }
 
-        STLOG_D("Continue request", 
+        STLOG_D("Continue request",
             (pool_id, poolId),
             (trace_id, TraceId()));
 
->>>>>>> 4fac30ece77 (Do not fail queries in a WM if a db does not have free space (#31561))
         QueryState->PoolHandlerActor = ev->Sender;
         QueryState->UserRequestContext->PoolId = poolId;
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;

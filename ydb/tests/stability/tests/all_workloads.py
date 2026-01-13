@@ -114,6 +114,14 @@ def _init_stress_utils():
             ],
             'local_path': 'ydb/tests/stress/backup/backup_stress'
         },
+        'Streaming': {
+            'args': [
+                "--endpoint", "{node_host}:2135",
+                "--partitions-count", "10",
+                "--prefix", "streaming_stress"
+            ],
+            'local_path': 'ydb/tests/stress/streaming/streaming'
+        },
     }
 
     for table_type in ['row', 'column']:

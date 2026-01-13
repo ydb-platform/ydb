@@ -178,54 +178,68 @@ Element TMessagePreviewView::RenderMessageContent(const TTopicMessage& msg, bool
         default: codecName = std::to_string(msg.Codec); break;
     }
     
-    // First line: offset, seqno, times
-    Element line1 = hbox({
-        text(Sprintf("#%s", FormatNumber(msg.Offset).c_str())) | bold | color(Color::Cyan),
-        text("  SeqNo: ") | dim,
-        text(std::to_string(msg.SeqNo)),
-        text("  Write: ") | dim,
-        text(writeTimeStr),
-        text("  Create: ") | dim,
-        text(createTimeStr),
-        text(Sprintf(" (+%ldms)", msg.TimestampDiff)) | dim
-    });
+    // Granular metadata tokens to allow wrapping on narrow screens.
+    // Each pair/group is a nested hflow to allow internal wrapping while grouping logically.
+    Elements tokens;
     
-    // Second line: producer, sizes, codec
-    Element line2 = hbox({
-        text("Producer: ") | dim,
-        text(msg.ProducerId.empty() ? "-" : std::string(msg.ProducerId.substr(0, 36).c_str())) | color(Color::Yellow),
-        text("  Size: ") | dim,
+    tokens.push_back(text(Sprintf("#%s  ", FormatNumber(msg.Offset).c_str())) | bold | color(Color::Cyan));
+    
+    auto addTokens = [&](const std::string& label, const std::string& value, Color valueColor = Color::White) {
+        tokens.push_back(hflow({
+            text(label) | dim,
+            text(value) | color(valueColor),
+            text("  ")
+        }));
+    };
+    
+    addTokens("SeqNo: ", std::to_string(msg.SeqNo));
+    addTokens("Write: ", writeTimeStr);
+    addTokens("Create: ", createTimeStr + Sprintf(" (+%ldms)", msg.TimestampDiff));
+    addTokens("Producer: ", msg.ProducerId.empty() ? "-" : std::string(msg.ProducerId.c_str()), Color::Yellow);
+    
+    // Unified Size token group
+    tokens.push_back(hflow({
+        text("Size: ") | dim,
         text(std::string(FormatBytes(msg.OriginalSize).c_str())),
-        text(" (stored: ") | dim,
-        text(std::string(FormatBytes(msg.StorageSize).c_str())),
-        text(", ") | dim,
-        text(codecName) | color(Color::Magenta),
-        text(")") | dim
-    });
+        text("  (stored: ") | dim,
+        text(std::string(FormatBytes(msg.StorageSize).c_str()) + ", " + codecName) | color(Color::Magenta),
+        text(")  ")
+    }));
+    
+    Element metadata = hflow(std::move(tokens));
+    
+    // Calculate adaptive width for data eliding.
+    // Ellipsis should be at the right side of the screen.
+    auto terminalSize = ftxui::Terminal::Size();
+    // 2 for borders, 1 for padding/rounding safety.
+    int availableWidth = terminalSize.dimx - 3;
+    if (availableWidth < 10) availableWidth = 80; // Fallback
     
     // Data preview or full data
     std::string dataPreview = std::string(msg.Data.c_str());
-    
-    if (!ExpandedView_ || !selected) {
-        // Compact: single line, truncated
-        const size_t maxLen = 80;
-        if (dataPreview.size() > maxLen) {
-            dataPreview = dataPreview.substr(0, maxLen) + "...";
-        }
-        // Replace newlines
-        for (size_t i = 0; i < dataPreview.size(); ++i) {
-            if (dataPreview[i] == '\n' || dataPreview[i] == '\r') {
-                dataPreview[i] = ' ';
-            }
+    // Replace newlines/carriage returns for single-line preview
+    for (size_t i = 0; i < dataPreview.size(); ++i) {
+        if (dataPreview[i] == '\n' || dataPreview[i] == '\r') {
+            dataPreview[i] = ' ';
         }
     }
-    // When expanded: show full data as-is
+    
+    Element dataElement;
+    if (!ExpandedView_ || !selected) {
+        // Compact: truncate based on terminal width with ellipsis at the very end
+        if (dataPreview.size() > (size_t)availableWidth) {
+            dataPreview = dataPreview.substr(0, std::max<int>(0, availableWidth - 3)) + "...";
+        }
+        dataElement = text(dataPreview) | color(Color::GrayLight);
+    } else {
+        // Expanded: wrap text
+        dataElement = paragraph(dataPreview) | color(Color::GrayLight);
+    }
     
     Element content = vbox({
-        line1,
-        line2,
-        paragraph(dataPreview) | color(Color::GrayLight)
-    });
+        metadata,
+        dataElement
+    }) | xflex;
     
     if (selected) {
         content = content | bgcolor(Color::GrayDark);

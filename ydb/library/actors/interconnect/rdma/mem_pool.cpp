@@ -479,6 +479,11 @@ namespace NInterconnect::NRdma {
 
             auto chunk = MakeIntrusive<TChunk>(std::move(mrs), this);
             Chunks.PushBack(chunk.Get());
+
+            if (ReclaimIt.Item() == nullptr) {
+                ReclaimIt = Chunks.Begin();
+            }
+
             return chunk;
         }
 
@@ -520,11 +525,26 @@ namespace NInterconnect::NRdma {
     private:
         TChunkPtr TryReclaim(size_t size) noexcept {
             ReclaimationRunCounter->Inc();
-            for (auto it = Chunks.Begin(); it!= Chunks.End(); it++) {
+
+            auto it = ReclaimIt;
+
+            for (; it!= Chunks.End(); it++) {
                 if (it->Size() == size && it->TryReclaim()) {
-                    return &(*it);
+                    TChunkPtr ptr = &(*it);
+                    ReclaimIt = ++it;
+                    return ptr;
                 }
             }
+
+            it = Chunks.Begin();
+            for (; it != ReclaimIt; it++) {
+                if (it->Size() == size && it->TryReclaim()) {
+                    TChunkPtr ptr = &(*it);
+                    ReclaimIt = ++it;
+                    return ptr;
+                }
+            }
+
             ReclaimationFailCounter->Inc();
             return nullptr;
         }
@@ -547,6 +567,7 @@ namespace NInterconnect::NRdma {
     private:
         std::mutex Mutex;
         TIntrusiveList<TChunk> Chunks;
+        TIntrusiveList<TChunk>::TIterator ReclaimIt;
 
         void Tick(NMonotonic::TMonotonic time) noexcept override {
             constexpr TDuration holdTime = TDuration::Seconds(15);
@@ -677,12 +698,11 @@ namespace NInterconnect::NRdma {
                 if (FullBatchesSlots.Dequeue(&res)) {
                     return res;
                 }
-                if (allowIncompleted && IncompleteBatchMutex.try_lock()) {
-                    if (IncompleteBatch.size()) {
-                        res = std::move(IncompleteBatch);
-                        IncompleteBatch.clear();
+                if (allowIncompleted) {
+                    {
+                        std::lock_guard<std::mutex> lock(IncompleteBatchMutex);
+                        res.swap(IncompleteBatch);
                     }
-                    IncompleteBatchMutex.unlock();
                     if (res.size()) {
                         return res;
                     }
@@ -699,7 +719,7 @@ namespace NInterconnect::NRdma {
                     FullBatchesSlots.Enqueue(std::move(batch));
                 }
             }
-            void PutSlot(TIntrusivePtr<TMemRegion> slot) noexcept {
+            void PutSlotUnderLock(TIntrusivePtr<TMemRegion> slot) noexcept {
                 std::lock_guard<std::mutex> lock(IncompleteBatchMutex);
                 IncompleteBatch.push_back(std::move(slot));
                 if (IncompleteBatch.size() >= SlotsInBatch) {
@@ -778,10 +798,16 @@ namespace NInterconnect::NRdma {
                 const bool allChunksAllocated = pool.GetAllocatedChunksCount() == pool.GetMaxChunks();
 
                 // If no slot in local cache, try to get from global pool
-                auto batch = pool.Chains[chainIndex].GetSlotsBatch(allChunksAllocated);
-                if (batch) {
-                    localChain.PutSlotsBatch(std::move(*batch));
-                    return localChain.TryGetSlot();
+                for (;;) {
+                    auto batch = pool.Chains[chainIndex].GetSlotsBatch(allChunksAllocated);
+                    if (batch) {
+                        localChain.PutSlotsBatch(std::move(*batch));
+                        if (auto memRegion = localChain.TryGetSlot()) {
+                            return memRegion;
+                        }
+                    } else {
+                        break;
+                    }
                 }
                 // If no slots in global pool, allocate new chunk
                 if (!AllocAndSplitNewChunk(localChain, pool)) {
@@ -795,7 +821,7 @@ namespace NInterconnect::NRdma {
                 ui32 chainIndex = GetChainIndex(mr.GetSize());
                 if (Y_UNLIKELY(Stopped)) {
                     // current thread is stopped, return mr to global pool
-                    pool.Chains[chainIndex].PutSlot(MakeIntrusive<TMemRegion>(std::move(mr)));
+                    pool.Chains[chainIndex].PutSlotUnderLock(MakeIntrusive<TMemRegion>(std::move(mr)));
                     return;
                 }
 

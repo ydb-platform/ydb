@@ -679,7 +679,9 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     }
 
     Y_UNIT_TEST(TestAllSpeciesCrcWhole2of2) {
-        for (auto erasure = TErasureType::ErasureNames.begin(), erasure++; erasure != TErasureType::ErasureNames.end(); std::advance(erasure, 2)) {
+        auto erasure = TErasureType::ErasureNames.begin();
+        erasure++;
+        for (; erasure != TErasureType::ErasureNames.end(); std::advance(erasure, 2)) {
             TestErasure(TErasureType::CrcModeWholePart, erasure->first);
         }
     }
@@ -691,7 +693,9 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     }
 
     Y_UNIT_TEST(TestAllSpecies2of2) {
-        for (auto erasure = TErasureType::ErasureNames.begin(), erasure++; erasure != TErasureType::ErasureNames.end(); std::advance(erasure, 2)) {
+        auto erasure = TErasureType::ErasureNames.begin();
+        erasure++;
+        for (; erasure != TErasureType::ErasureNames.end(); std::advance(erasure, 2)) {
             TestErasure(TErasureType::CrcModeNone, erasure->first);
         }
     }

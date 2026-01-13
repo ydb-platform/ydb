@@ -1456,6 +1456,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST(BigSortingLimitInParam) {
+        //return; // TODO: uncomment
         SetRandomSeed(42);
 
         auto settings = TKikimrSettings()

@@ -545,12 +545,14 @@ namespace NKikimr::NBsController {
             // semi-replicated disk to prevent selfheal blocking
             TBlobStorageGroupInfo::TGroupVDisks failedByReadiness(topology);
             TBlobStorageGroupInfo::TGroupVDisks failedByUnavailabilityRisk(topology);
-            ui32 numReplicatingWithPhantomsOnly = 0;
+            bool alreadySeenReplicatingWithPhantomsOnly = false;
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
+                bool replicatingWithPhantomsOnly = false;
                 switch (vdisk.VDiskStatus) {
                     case NKikimrBlobStorage::EVDiskStatus::REPLICATING:
-                        if (vdisk.OnlyPhantomsRemain && !numReplicatingWithPhantomsOnly) {
-                            ++numReplicatingWithPhantomsOnly;
+                        if (vdisk.OnlyPhantomsRemain && !alreadySeenReplicatingWithPhantomsOnly) {
+                            alreadySeenReplicatingWithPhantomsOnly = true;
+                            replicatingWithPhantomsOnly = true;
                             break;
                         }
                         [[fallthrough]];
@@ -561,7 +563,7 @@ namespace NKikimr::NBsController {
                         break;
                 }
 
-                if (!IsReady(vdisk, now)) {
+                if (!IsReady(vdisk, now) && !replicatingWithPhantomsOnly) {
                     failedByReadiness |= {topology, vdiskId};
                 }
                 if (vdisk.UnavailabilityRisk) {

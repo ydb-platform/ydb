@@ -366,7 +366,7 @@ namespace NKikimr::NBsController {
                     const auto [it, inserted] = Groups.try_emplace(groupId, groupId);
                     auto& g = it->second;
                     bool hasVDisksToReassign = false;
-                    
+
                     g.Content = std::move(*data);
 
                     UpdateGroupLayoutInformation(g);
@@ -455,7 +455,7 @@ namespace NKikimr::NBsController {
                 if (group.UpdateConfigTxSeqNo < group.ResponseConfigTxSeqNo) {
                     continue; // response from bsc was received before selfheal info update
                 }
-            
+
                 EnqueueReassign(group, EGroupRepairOperation::SelfHeal);
             }
 
@@ -547,12 +547,14 @@ namespace NKikimr::NBsController {
             // semi-replicated disk to prevent selfheal blocking
             TBlobStorageGroupInfo::TGroupVDisks failedByReadiness(topology);
             TBlobStorageGroupInfo::TGroupVDisks failedByUnavailabilityRisk(topology);
-            ui32 numReplicatingWithPhantomsOnly = 0;
+            bool alreadySeenReplicatingWithPhantomsOnly = false;
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
+                bool replicatingWithPhantomsOnly = false;
                 switch (vdisk.VDiskStatus) {
                     case NKikimrBlobStorage::EVDiskStatus::REPLICATING:
-                        if (vdisk.OnlyPhantomsRemain && !numReplicatingWithPhantomsOnly) {
-                            ++numReplicatingWithPhantomsOnly;
+                        if (vdisk.OnlyPhantomsRemain && !alreadySeenReplicatingWithPhantomsOnly) {
+                            alreadySeenReplicatingWithPhantomsOnly = true;
+                            replicatingWithPhantomsOnly = true;
                             break;
                         }
                         [[fallthrough]];
@@ -563,7 +565,7 @@ namespace NKikimr::NBsController {
                         break;
                 }
 
-                if (!IsReady(vdisk, now)) {
+                if (!IsReady(vdisk, now) && !replicatingWithPhantomsOnly) {
                     failedByReadiness |= {topology, vdiskId};
                 }
                 if (vdisk.UnavailabilityRisk) {
@@ -624,7 +626,7 @@ namespace NKikimr::NBsController {
         }
 
         using TVDiskInfo = TEvControllerUpdateSelfHealInfo::TGroupContent::TVDiskInfo;
-        TGroupMapper::TGroupDefinition MakeGroupDefinition(const TMap<TVDiskID, TVDiskInfo>& vdisks, 
+        TGroupMapper::TGroupDefinition MakeGroupDefinition(const TMap<TVDiskID, TVDiskInfo>& vdisks,
                 const TGroupGeometryInfo& geom) {
             TGroupMapper::TGroupDefinition groupDefinition;
             geom.ResizeGroup(groupDefinition);
@@ -715,7 +717,7 @@ namespace NKikimr::NBsController {
                     ss << "]";
                     return ss.Str();
                 };
-    
+
                 STLOG(PRI_INFO, BS_SELFHEAL, BSSH11, "group can't be reassigned right now " << log(), (GroupId, groupId));
             }
             return false;
@@ -895,7 +897,7 @@ namespace NKikimr::NBsController {
                                         TABLED() {
                                             out << i;
                                         }
-                                        TABLED() { 
+                                        TABLED() {
                                             auto record = GroupLayoutSanitizerOperationLog.BorrowByIdx(i);
                                             if (record) {
                                                 out << *record;

@@ -109,7 +109,7 @@ class Differ:
         if old is None:
             return Resolution.INFO, f'added <b>{value_str}</b>'
         if old.id != new.id:
-            return Resolution.ERROR, f'id changed<br/>{old.id} -> {new.id}'
+            return Resolution.ERROR, f'id changed {old.id} -> {new.id}'
         if type(old.value) is not type(new.value):
             return Resolution.ERROR, 'type changed'
         if isinstance(old.value, dict) or isinstance(old.value, list):
@@ -120,7 +120,7 @@ class Differ:
                     return Resolution.INFO, 'FF switched on'
                 else:
                     return Resolution.ERROR, 'FF switched off'
-            return Resolution.WARNING, f'value changed<br/>{old.value} -> {new.value}'
+            return Resolution.WARNING, f'value changed {old.value} -> {new.value}'
         return Resolution.OK, value_str
 
     def compare(self):

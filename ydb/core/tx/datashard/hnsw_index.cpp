@@ -88,14 +88,31 @@ public:
 
     THnswIndexImpl() = default;
 
-    bool Build(const std::vector<std::pair<ui64, TString>>& vectors) {
+    bool Build(const std::vector<std::pair<TString, TString>>& vectors) {
         if (vectors.empty()) {
             return false;
         }
 
-        // Determine dimension from first vector
+        // Deduplicate vectors by key (usearch doesn't allow duplicate keys)
+        // Keep the last vector for each key
+        THashMap<TString, size_t> keyToVectorIdx;
+        keyToVectorIdx.reserve(vectors.size());
+        for (size_t i = 0; i < vectors.size(); ++i) {
+            keyToVectorIdx[vectors[i].first] = i;
+        }
+
+        // Build list of unique indices in sorted order
+        std::vector<size_t> uniqueIndices;
+        uniqueIndices.reserve(keyToVectorIdx.size());
+        for (const auto& [key, idx] : keyToVectorIdx) {
+            uniqueIndices.push_back(idx);
+        }
+        std::sort(uniqueIndices.begin(), uniqueIndices.end());
+
+        // Determine dimension from first valid vector
         size_t floatDimension = 0;
-        for (const auto& [key, vectorData] : vectors) {
+        for (size_t idx : uniqueIndices) {
+            const auto& [key, vectorData] = vectors[idx];
             auto view = TFloatVectorView::FromSerialized(vectorData);
             if (view.IsValid()) {
                 floatDimension = view.Dimension;
@@ -125,6 +142,22 @@ public:
         }
         Index = std::move(result.index);
 
+        // Build key mapping: usearch uses internal indices (0, 1, 2, ...)
+        // We maintain a mapping from internal index to actual serialized key
+        Keys.clear();
+        Keys.reserve(uniqueIndices.size());
+        KeyToInternalIdx.clear();
+        KeyToInternalIdx.reserve(uniqueIndices.size());
+
+        for (size_t idx : uniqueIndices) {
+            const auto& [key, vectorData] = vectors[idx];
+            auto view = TFloatVectorView::FromSerialized(vectorData);
+            if (view.IsValid() && view.Dimension == floatDimension) {
+                KeyToInternalIdx[key] = Keys.size();
+                Keys.push_back(key);
+            }
+        }
+
         // Setup multi-threaded executor using all available cores
         std::size_t executor_threads = std::thread::hardware_concurrency();
         if (executor_threads == 0) {
@@ -133,19 +166,20 @@ public:
         executor_default_t executor(executor_threads);
 
         // Reserve capacity with executor size for parallel operations
-        index_limits_t limits{vectors.size(), executor.size()};
+        index_limits_t limits{Keys.size(), executor.size()};
         if (!Index.try_reserve(limits)) {
             return false;
         }
 
-        // Add all vectors in parallel (zero-copy for FloatVector, deserialized for others)
-        executor.fixed(vectors.size(), [&](std::size_t thread, std::size_t task) {
-            const auto& [key, vectorData] = vectors[task];
+        // Add all unique vectors in parallel using internal indices
+        executor.fixed(Keys.size(), [&](std::size_t thread, std::size_t internalIdx) {
+            size_t vectorIdx = uniqueIndices[internalIdx];
+            const auto& [_, vectorData] = vectors[vectorIdx];
             auto view = TFloatVectorView::FromSerialized(vectorData);
             if (!view.IsValid() || view.Dimension != floatDimension) {
                 return;  // Skip invalid vectors
             }
-            auto addResult = Index.add(key, view.Data, thread);
+            auto addResult = Index.add(internalIdx, view.Data, thread);
             if (!addResult) {
                 // Log error but continue
             }
@@ -175,34 +209,43 @@ public:
         result.Results.reserve(searchResult.size());
         for (size_t i = 0; i < searchResult.size(); ++i) {
             auto match = searchResult[i];
-            result.Results.emplace_back(match.member.key, match.distance);
+            // Convert internal index back to actual key
+            ui64 internalIdx = match.member.key;
+            if (internalIdx < Keys.size()) {
+                result.Results.emplace_back(Keys[internalIdx], match.distance);
+            }
         }
 
         return result;
     }
 
-    
-    bool GetVector(ui64 key, TString& result) const {
+    bool GetVector(const TString& key, TString& result) const {
         if (!Ready || Dimension == 0) {
             return false;
         }
-    
+
+        // Find internal index for this key
+        auto it = KeyToInternalIdx.find(key);
+        if (it == KeyToInternalIdx.end()) {
+            return false;  // Not found
+        }
+
         // Get vector data directly into the result buffer
         const size_t vectorBytes = Dimension * sizeof(float);
-        std::size_t count = Index.get(key, reinterpret_cast<float*>(result.begin()), 1);
+        std::size_t count = Index.get(it->second, reinterpret_cast<float*>(result.begin()), 1);
         if (count == 0) {
             return false;  // Not found
         }
-    
+
         // Set format byte
         result[vectorBytes] = static_cast<char>(FloatVector);
         return true;
     }
-    
+
     bool IsReady() const {
         return Ready;
     }
-    
+
     size_t Size() const {
         return Ready ? Index.size() : 0;
     }
@@ -215,6 +258,8 @@ private:
     mutable IndexType Index;
     size_t Dimension = 0;
     bool Ready = false;
+    std::vector<TString> Keys;  // Maps internal index -> actual serialized key
+    THashMap<TString, ui64> KeyToInternalIdx;  // Maps actual key -> internal index
 };
 
 // THnswIndex implementation
@@ -228,7 +273,7 @@ THnswIndex::~THnswIndex() = default;
 THnswIndex::THnswIndex(THnswIndex&&) noexcept = default;
 THnswIndex& THnswIndex::operator=(THnswIndex&&) noexcept = default;
 
-bool THnswIndex::Build(const std::vector<std::pair<ui64, TString>>& vectors) {
+bool THnswIndex::Build(const std::vector<std::pair<TString, TString>>& vectors) {
     return Impl->Build(vectors);
 }
 
@@ -236,7 +281,7 @@ THnswSearchResult THnswIndex::Search(const TString& targetVector, size_t k) cons
     return Impl->Search(targetVector, k);
 }
 
-bool THnswIndex::GetVector(ui64 key, TString& result) const {
+bool THnswIndex::GetVector(const TString& key, TString& result) const {
     return Impl->GetVector(key, result);
 }
 
@@ -383,7 +428,7 @@ bool THnswIndexManager::IsVectorColumn(const TString& columnName) {
 }
 
 bool THnswIndexManager::BuildIndex(ui64 tableId, const TString& columnName,
-                                    const std::vector<std::pair<ui64, TString>>& vectors) {
+                                    const std::vector<std::pair<TString, TString>>& vectors) {
     THnswIndexKey key{tableId, columnName};
 
     auto index = std::make_unique<THnswIndex>();

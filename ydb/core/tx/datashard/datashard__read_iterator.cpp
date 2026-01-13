@@ -57,8 +57,8 @@ struct TReadIteratorVectorTop {
     ui64 TableId = 0;
     TString ColumnName;
 
-    // HNSW search results: (key, distance) pairs
-    std::vector<std::pair<ui64, float>> HnswResults;
+    // HNSW search results: (serialized key, distance) pairs
+    std::vector<std::pair<TString, float>> HnswResults;
 
     // Perform HNSW search if index is available
     // Returns true if HNSW search was performed successfully (even if empty results)
@@ -1078,6 +1078,7 @@ private:
     template <typename TIterator>
     EReadStatus IterateRange(TIterator* iter, NTable::TKeyRange& iterRange, TTransactionContext& txc) {
         // Try to do HNSW search
+        // HNSW works for tables with any number of key columns (composite keys supported)
         if (State.VectorTopK
             && State.VectorTopK->Limit != 11    // Hack: switch to brute force to measure recall
             && State.VectorTopK->TryHnswSearch()
@@ -1103,15 +1104,18 @@ private:
             topK.TotalReadRows = 0;
             topK.TotalReadBytes = 0;
 
-            // Get the first key column ID
-            NTable::TTag firstKeyColId = TableInfo.KeyColumnIds.empty() ? 0 : TableInfo.KeyColumnIds[0];
+            // Build a set of key column IDs for quick lookup
+            THashSet<NTable::TTag> keyColIds;
+            for (ui32 keyColId : TableInfo.KeyColumnIds) {
+                keyColIds.insert(keyColId);
+            }
 
-            // Check if we only need key + embedding (can use HNSW data)
+            // Check if we only need key columns + embedding (can use HNSW data)
             // or if there are additional columns that require DB lookup
             bool hasAdditionalColumns = false;
             for (size_t colIdx = 0; colIdx < State.Columns.size(); ++colIdx) {
                 NTable::TTag colId = State.Columns[colIdx];
-                if (colId != firstKeyColId && colIdx != topK.Column) {
+                if (!keyColIds.contains(colId) && colIdx != topK.Column) {
                     hasAdditionalColumns = true;
                     break;
                 }
@@ -1122,11 +1126,23 @@ private:
                 if (topK.TableId != 0 && !topK.ColumnName.empty()) {
                     Self->GetHnswIndexManager().IncrementSlowPathReads(topK.TableId, topK.ColumnName);
                 }
+
+                // Pre-allocate rawKey outside the loop for reuse
+                TSmallVec<TRawTypeValue> rawKey;
+                rawKey.reserve(TableInfo.KeyColumnIds.size());
+
                 for (size_t i = 0; i < topK.HnswResults.size(); ++i) {
-                    const auto& [key, distance] = topK.HnswResults[i];
-                    TCell keyCell = TCell::Make(static_cast<ui64>(key));
-                    TSmallVec<TRawTypeValue> rawKey;
-                    rawKey.push_back(TRawTypeValue(keyCell.AsRef(), TableInfo.KeyColumnTypes[0].GetTypeId()));
+                    const auto& [serializedKey, distance] = topK.HnswResults[i];
+
+                    // Deserialize the composite key
+                    TSerializedCellVec keyCells(serializedKey);
+                    const auto& cells = keyCells.GetCells();
+
+                    // Build rawKey from deserialized cells
+                    rawKey.clear();
+                    for (size_t k = 0; k < cells.size(); ++k) {
+                        rawKey.push_back(TRawTypeValue(cells[k].AsRef(), TableInfo.KeyColumnTypes[k].GetTypeId()));
+                    }
 
                     NTable::TRowState rowState;
                     rowState.Init(State.Columns.size());
@@ -1143,11 +1159,14 @@ private:
                             << " of " << topK.HnswResults.size() << ", will retry after precharge");
 
                         for (size_t j = i; j < topK.HnswResults.size(); ++j) {
-                            const auto& [prechargeKey, _] = topK.HnswResults[j];
-                            TCell prechargeKeyCell = TCell::Make(static_cast<ui64>(prechargeKey));
-                            TSmallVec<TRawTypeValue> prechargeRawKey;
-                            prechargeRawKey.push_back(TRawTypeValue(prechargeKeyCell.AsRef(), TableInfo.KeyColumnTypes[0].GetTypeId()));
-                            txc.DB.Precharge(TableInfo.LocalTid, prechargeRawKey, prechargeRawKey,
+                            const auto& [prechargeSerializedKey, _] = topK.HnswResults[j];
+                            TSerializedCellVec prechargeKeyCells(prechargeSerializedKey);
+                            const auto& prechargeCells = prechargeKeyCells.GetCells();
+                            rawKey.clear();
+                            for (size_t k = 0; k < prechargeCells.size(); ++k) {
+                                rawKey.push_back(TRawTypeValue(prechargeCells[k].AsRef(), TableInfo.KeyColumnTypes[k].GetTypeId()));
+                            }
+                            txc.DB.Precharge(TableInfo.LocalTid, rawKey, rawKey,
                                 State.Columns, 0, 1, Max<ui64>(), NTable::EDirection::Forward, State.ReadVersion);
                         }
                         return EReadStatus::NeedData;
@@ -1166,7 +1185,7 @@ private:
                     );
                 }
             } else {
-                // Fast path: only key + embedding - use individual GetVector calls
+                // Fast path: only key columns + embedding - use individual GetVector calls
                 if (topK.TableId != 0 && !topK.ColumnName.empty()) {
                     Self->GetHnswIndexManager().IncrementFastPathReads(topK.TableId, topK.ColumnName);
                 }
@@ -1177,45 +1196,57 @@ private:
                 const size_t dimension = topK.HnswIndex->GetDimension();
                 const size_t vectorBytes = dimension * sizeof(float);
                 embeddingData.resize(vectorBytes + 1); // +1 for format byte
-                
+
                 // Pre-allocate cells vector once and set up constant parts
-                TSmallVec<TCell> cells;
-                cells.resize(State.Columns.size(), TCell()); // Initialize all cells as empty
-                
-                // Find indices for key and embedding columns to avoid repeated lookups
-                size_t keyColIdx = State.Columns.size(); // Invalid index
+                TSmallVec<TCell> resultCells;
+                resultCells.resize(State.Columns.size(), TCell()); // Initialize all cells as empty
+
+                // Find indices for key columns and embedding column
+                TSmallVec<size_t> keyColIndices; // Column indices in State.Columns that are key columns
+                TSmallVec<size_t> keyPositions; // Position in the key tuple for each key column
+                keyColIndices.reserve(TableInfo.KeyColumnIds.size());
+                keyPositions.reserve(TableInfo.KeyColumnIds.size());
                 size_t embeddingColIdx = State.Columns.size(); // Invalid index
-                
+
                 for (size_t colIdx = 0; colIdx < State.Columns.size(); ++colIdx) {
                     NTable::TTag colId = State.Columns[colIdx];
-                    if (colId == firstKeyColId) {
-                        keyColIdx = colIdx;
-                    } else if (colIdx == topK.Column) {
+                    for (size_t keyPos = 0; keyPos < TableInfo.KeyColumnIds.size(); ++keyPos) {
+                        if (TableInfo.KeyColumnIds[keyPos] == colId) {
+                            keyColIndices.push_back(colIdx);
+                            keyPositions.push_back(keyPos);
+                            break;
+                        }
+                    }
+                    if (colIdx == topK.Column) {
                         embeddingColIdx = colIdx;
                     }
                 }
-                
-                for (const auto& [key, distance] : topK.HnswResults) {
-                    bool found = topK.HnswIndex->GetVector(key, embeddingData);
+
+                for (const auto& [serializedKey, distance] : topK.HnswResults) {
+                    bool found = topK.HnswIndex->GetVector(serializedKey, embeddingData);
 
                     if (!found) {
                         Y_ABORT("Vector not found in HNSW - this should not happen");
                     }
 
-                    TCell keyCell = TCell::Make(static_cast<ui64>(key));
+                    // Deserialize the composite key
+                    TSerializedCellVec keyCells(serializedKey);
+                    const auto& cells = keyCells.GetCells();
 
-                    // Direct assignment to known indices - no loop needed
-                    if (keyColIdx < State.Columns.size()) {
-                        cells[keyColIdx] = keyCell;
+                    // Assign key columns from deserialized key
+                    for (size_t k = 0; k < keyColIndices.size(); ++k) {
+                        if (keyPositions[k] < cells.size()) {
+                            resultCells[keyColIndices[k]] = cells[keyPositions[k]];
+                        }
                     }
                     if (embeddingColIdx < State.Columns.size()) {
-                        cells[embeddingColIdx] = TCell(embeddingData.data(), embeddingData.size());
+                        resultCells[embeddingColIdx] = TCell(embeddingData.data(), embeddingData.size());
                     }
 
                     topK.TotalReadRows++;
-                    topK.TotalReadBytes += EstimateSize(TConstArrayRef<TCell>(cells.data(), cells.size()));
+                    topK.TotalReadBytes += EstimateSize(TConstArrayRef<TCell>(resultCells.data(), resultCells.size()));
                     topK.Rows.emplace_back(
-                        TConstArrayRef<TCell>(cells.data(), cells.size()),
+                        TConstArrayRef<TCell>(resultCells.data(), resultCells.size()),
                         static_cast<double>(distance),
                         TString()
                     );

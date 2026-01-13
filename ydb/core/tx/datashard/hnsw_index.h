@@ -15,9 +15,9 @@ namespace NKikimr::NDataShard {
 // Forward declaration of the implementation
 class THnswIndexImpl;
 
-// Result of HNSW search - pairs of (key, distance)
+// Result of HNSW search - pairs of (serialized key, distance)
 struct THnswSearchResult {
-    std::vector<std::pair<ui64, float>> Results;
+    std::vector<std::pair<TString, float>> Results;
 };
 
 // HNSW index wrapper for a single vector column
@@ -31,8 +31,9 @@ public:
     THnswIndex& operator=(THnswIndex&&) noexcept;
 
     // Build index from data
-    // vectors: vector of (row key, float vector data) pairs (serialized as string)
-    bool Build(const std::vector<std::pair<ui64, TString>>& vectors);
+    // vectors: vector of (serialized row key, float vector data) pairs
+    // For composite keys: key is serialized using TSerializedCellVec
+    bool Build(const std::vector<std::pair<TString, TString>>& vectors);
 
     // Search for top-K nearest neighbors
     // targetVector: serialized float vector
@@ -41,7 +42,7 @@ public:
 
     // Get single embedding vector into pre-allocated buffer
     // Returns true if found and copied, false if not found
-    bool GetVector(ui64 key, TString& result) const;
+    bool GetVector(const TString& key, TString& result) const;
 
     // Check if index is ready for search
     bool IsReady() const;
@@ -187,7 +188,7 @@ public:
     // Registers the built index in node cache for sharing with followers
     // Returns true if build succeeded
     bool BuildIndex(ui64 tableId, const TString& columnName,
-                    const std::vector<std::pair<ui64, TString>>& vectors);
+                    const std::vector<std::pair<TString, TString>>& vectors);
 
     // Try to get index from node cache (for leader restart or followers)
     // expectedSize=0 means don't check size (use for followers that don't know expected size)

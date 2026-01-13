@@ -177,7 +177,7 @@ static bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
         }
 
         // Collect all vectors from the table
-        std::vector<std::pair<ui64, TString>> vectors;
+        std::vector<std::pair<TString, TString>> vectors;
         vectors.reserve(prefetchResult.ItemsPrecharged);
         size_t vectorSize = 0;
 
@@ -197,12 +197,12 @@ static bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
                 }
 
                 // Process data when ready == NTable::EReady::Data
-                // Get the primary key (first key column, assuming Uint64)
+                // Get the primary key (serialize all key columns for composite key support)
                 TDbTupleRef keyData = iter->GetKey();
-                if (keyData.Cells().size() == 0 || keyData.Cells()[0].IsNull()) {
+                if (keyData.Cells().size() == 0) {
                     continue;
                 }
-                ui64 rowKey = keyData.Cells()[0].AsValue<ui64>();
+                TString serializedKey = TSerializedCellVec::Serialize(keyData.Cells());
 
                 // Get the vector column value
                 TDbTupleRef rowData = iter->GetValues();
@@ -218,7 +218,7 @@ static bool BuildHnswIndexesForTable(TDataShard* self, TTransactionContext& txc,
                         }
 
                         if (vectorData.size() == vectorSize + 1) {  // data + format byte
-                            vectors.emplace_back(rowKey, vectorData);
+                            vectors.emplace_back(serializedKey, vectorData);
                         }
                     }
                 }

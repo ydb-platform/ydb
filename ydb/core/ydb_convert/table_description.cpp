@@ -829,14 +829,14 @@ bool FillColumnFamily(
 bool FillColumnCompression(
     const Ydb::Table::ColumnMeta& from, NKikimrSchemeOp::TOlapColumnDiff* to, Ydb::StatusIds::StatusCode& status, TString& error) {
     to->SetName(from.name());
-    if (from.Hascompression()) {
-        const auto fromCompression = from.Getcompression();
+    if (from.has_compression()) {
+        const auto fromCompression = from.compression();
         auto toSerializer = to->MutableSerializer();
 
-        if (from.Getcompression().Hasalgorithm()) {
+        if (from.compression().algorithm()) {
             toSerializer->SetClassName("ARROW_SERIALIZER");
             auto arrowCompression = toSerializer->MutableArrowCompression();
-            switch (fromCompression.Getalgorithm()) {
+            switch (fromCompression.algorithm()) {
                 case Ydb::Table::ColumnCompression::ALGORITHM_OFF:
                     arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
                     break;
@@ -854,9 +854,9 @@ bool FillColumnCompression(
             }
         }
 
-        if (from.Getcompression().Hascompression_level()) {
+        if (from.compression().has_compression_level()) {
             auto arrowCompression = toSerializer->MutableArrowCompression();
-            arrowCompression->SetLevel(fromCompression.Getcompression_level());
+            arrowCompression->SetLevel(fromCompression.compression_level());
         }
     }
     return true;

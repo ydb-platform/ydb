@@ -129,6 +129,7 @@ private:
         options.ReadFrom = EMasterChannelKind::ClientSideCache;
         options.SuppressUpstreamSync = true;
         options.SuppressTransactionCoordinatorSync = true;
+        options.SuppressStronglyOrderedTransactionBarrier = true;
         options.Attributes = {BannedAttributeName, RoleAttributeName, AddressesAttributeName};
 
         TYPath path;

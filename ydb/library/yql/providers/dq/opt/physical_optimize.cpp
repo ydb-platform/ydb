@@ -264,9 +264,9 @@ protected:
         return DqRewriteLeftPureJoin(node, ctx, *getParents(), IsGlobal);
     }
 
-    bool ValidateStreamLookupJoinFlags(const TDqJoin& join, TExprContext& ctx) {
+    bool ValidateStreamLookupJoinFlags(const TDqJoin& join, TExprContext& ctx, bool& rightAny) {
         bool leftAny = false;
-        bool rightAny = false;
+        rightAny = false;
         if (const auto maybeFlags = join.Flags()) {
             for (auto&& flag: maybeFlags.Cast()) {
                 auto&& name = flag.StringValue();
@@ -283,10 +283,6 @@ protected:
                 return false;
             }
         }
-        if (!rightAny) {
-            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
-            return false;
-        }
         return true;
     }
 
@@ -302,7 +298,8 @@ protected:
             return node;
         }
 
-        if (!ValidateStreamLookupJoinFlags(join, ctx)) {
+        bool rightAny = false;
+        if (!ValidateStreamLookupJoinFlags(join, ctx, rightAny)) {
             return {};
         }
 
@@ -310,6 +307,17 @@ protected:
         TExprNode::TPtr maxCachedRows;
         TExprNode::TPtr maxDelayedRows;
         TExprNode::TPtr isMultiget;
+        TExprNode::TPtr isMultiMatches;
+
+        if (!rightAny) {
+            if (isMultiget && isMultiget->IsAtom() && FromString<bool>(isMultiget->Content())) {
+                ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: Multiget supports only LEFT JOIN /*+streamlookup(Multiget=true...)*/ ANY, other kinds of join are unimplemented"));
+                return {};
+            }
+            isMultiMatches = ctx.NewAtom(pos, true);
+            isMultiget = ctx.NewAtom(pos, false);
+        }
+
         if (const auto maybeOptions = join.JoinAlgoOptions()) {
             for (auto&& option: maybeOptions.Cast()) {
                 auto&& name = option.Name().Value();
@@ -334,6 +342,14 @@ protected:
         if (!maxDelayedRows) {
             maxDelayedRows = ctx.NewAtom(pos, 1'000'000);
         }
+        if (!rightAny) {
+            if (isMultiget && isMultiget->IsAtom() && FromString<bool>(isMultiget->Content())) {
+                ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: Multiget supports only LEFT JOIN /*+streamlookup(Multiget=true...)*/ ANY, other kinds of join are unimplemented"));
+                return {};
+            }
+            isMultiMatches = ctx.NewAtom(pos, true);
+            isMultiget = ctx.NewAtom(pos, false);
+        }
         auto rightInput = join.RightInput().Ptr();
         if (auto maybe = TExprBase(rightInput).Maybe<TCoExtractMembers>()) {
             rightInput = maybe.Cast().Input().Ptr();
@@ -355,6 +371,10 @@ protected:
 
         if (isMultiget) {
             cn.IsMultiget(isMultiget);
+        }
+
+        if (isMultiMatches) {
+            cn.IsMultiMatches(isMultiMatches);
         }
 
         auto lambda = Build<TCoLambda>(ctx, pos)

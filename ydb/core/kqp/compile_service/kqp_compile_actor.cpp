@@ -97,7 +97,7 @@ public:
             config->_KqpTablePathPrefix = QueryId.Database;
         }
 
-        ApplyServiceConfig(*config, tableServiceConfig);
+        config->ApplyServiceConfig(tableServiceConfig);
 
         if (!tableServiceConfig.HasSqlVersion() || tableServiceConfig.GetSqlVersion() != 0) {
             EnforcedSqlVersion = false;
@@ -735,93 +735,6 @@ private:
     bool EnableNewRBO;
     bool EnableFallbackToYqlOptimizer;
 };
-
-void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConfig& serviceConfig) {
-    if (serviceConfig.HasSqlVersion()) {
-        kqpConfig._KqpYqlSyntaxVersion = serviceConfig.GetSqlVersion();
-    }
-    if (serviceConfig.GetQueryLimits().HasResultRowsLimit()) {
-        kqpConfig._ResultRowsLimit = serviceConfig.GetQueryLimits().GetResultRowsLimit();
-    }
-
-    kqpConfig.EnableKqpScanQuerySourceRead = serviceConfig.GetEnableKqpScanQuerySourceRead();
-    kqpConfig.EnableKqpScanQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
-    kqpConfig.EnableKqpDataQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
-    kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
-    kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
-    kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
-    kqpConfig.EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
-    kqpConfig.EnableDiscardSelect = serviceConfig.GetEnableDiscardSelect();
-    kqpConfig.EnableCreateTableAs = serviceConfig.GetEnableCreateTableAs();
-    kqpConfig.EnableDataShardCreateTableAs = serviceConfig.GetEnableDataShardCreateTableAs();
-    kqpConfig.AllowOlapDataQuery = serviceConfig.GetAllowOlapDataQuery();
-    kqpConfig.EnableOlapSink = serviceConfig.GetEnableOlapSink();
-    kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();
-    kqpConfig.EnableHtapTx = serviceConfig.GetEnableHtapTx();
-    kqpConfig.EnableStreamWrite = serviceConfig.GetEnableStreamWrite();
-    kqpConfig.EnableBatchUpdates = serviceConfig.GetEnableBatchUpdates();
-    kqpConfig.BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
-    kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
-    kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
-    kqpConfig.DefaultEnableShuffleElimination = serviceConfig.GetDefaultEnableShuffleElimination();
-    kqpConfig.DefaultDqChannelVersion = serviceConfig.GetDqChannelVersion();
-    kqpConfig.EnableConstantFolding = serviceConfig.GetEnableConstantFolding();
-    kqpConfig.EnableFoldUdfs = serviceConfig.GetEnableFoldUdfs();
-    kqpConfig.SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
-    kqpConfig.EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
-    kqpConfig.EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();
-    kqpConfig.AllowMultiBroadcasts = serviceConfig.GetAllowMultiBroadcasts();
-    kqpConfig.EnableNewRBO = serviceConfig.GetEnableNewRBO();
-    kqpConfig.EnableSpillingInHashJoinShuffleConnections = serviceConfig.GetEnableSpillingInHashJoinShuffleConnections();
-    kqpConfig.EnableOlapScalarApply = serviceConfig.GetEnableOlapScalarApply();
-    kqpConfig.EnableOlapSubstringPushdown = serviceConfig.GetEnableOlapSubstringPushdown();
-    kqpConfig.EnableIndexStreamWrite = serviceConfig.GetEnableIndexStreamWrite();
-    kqpConfig.EnableOlapPushdownProjections = serviceConfig.GetEnableOlapPushdownProjections();
-    kqpConfig.LangVer = serviceConfig.GetDefaultLangVer();
-    kqpConfig.EnableParallelUnionAllConnectionsForExtend = serviceConfig.GetEnableParallelUnionAllConnectionsForExtend();
-    kqpConfig.EnableTempTablesForUser = serviceConfig.GetEnableTempTablesForUser();
-    kqpConfig.EnableSimpleProgramsSinglePartitionOptimization = serviceConfig.GetEnableSimpleProgramsSinglePartitionOptimization();
-    kqpConfig.EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = serviceConfig.GetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms();
-
-    kqpConfig.EnableOlapPushdownAggregate = serviceConfig.GetEnableOlapPushdownAggregate();
-    kqpConfig.EnableOrderOptimizaionFSM = serviceConfig.GetEnableOrderOptimizaionFSM();
-    kqpConfig.EnableTopSortSelectIndex = serviceConfig.GetEnableTopSortSelectIndex();
-    kqpConfig.EnablePointPredicateSortAutoSelectIndex = serviceConfig.GetEnablePointPredicateSortAutoSelectIndex();
-    kqpConfig.EnableDqHashCombineByDefault = serviceConfig.GetEnableDqHashCombineByDefault();
-    kqpConfig.EnableDqHashAggregateByDefault = serviceConfig.GetEnableDqHashAggregateByDefault();
-    kqpConfig.EnableWatermarks = serviceConfig.GetEnableWatermarks();
-    kqpConfig.EnableBuildAggregationResultStages = serviceConfig.GetEnableBuildAggregationResultStages();
-    kqpConfig.EnableFallbackToYqlOptimizer = serviceConfig.GetEnableFallbackToYqlOptimizer();
-
-    if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
-        kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
-    }
-
-    if (serviceConfig.GetFilterPushdownOverJoinOptionalSide()) {
-        kqpConfig.FilterPushdownOverJoinOptionalSide = true;
-        kqpConfig.YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
-        kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
-        kqpConfig.YqlCoreOptimizerFlags.insert("sqlinwithnothingornull");
-    }
-
-    switch(serviceConfig.GetDefaultHashShuffleFuncType()) {
-        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V1:
-            kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV1;
-            break;
-        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2:
-            kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
-            break;
-    }
-
-    switch(serviceConfig.GetBackportMode()) {
-        case NKikimrConfig::TTableServiceConfig_EBackportMode_Released:
-            kqpConfig.BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
-            break;
-        case NKikimrConfig::TTableServiceConfig_EBackportMode_All:
-            kqpConfig.BackportMode = NYql::EBackportCompatibleFeaturesMode::All;
-            break;
-    }
-}
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const TTableServiceConfig& tableServiceConfig,

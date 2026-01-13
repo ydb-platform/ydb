@@ -2329,12 +2329,6 @@ private:
     using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
 
     void ContinueExecute() {
-        if (Stats) {
-            //Stats->AffectedShards = datashardTxs.size();
-            Stats->DatashardStats.reserve(DatashardTxs.size());
-            //Stats->ComputeStats.reserve(computeTasks.size());
-        }
-
         StartCheckpointCoordinator();
         ExecuteTasks();
 

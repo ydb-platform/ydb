@@ -898,6 +898,8 @@ message TKqpFullTextSourceSettings {
 
     optional double K1Factor = 12;
     optional double BFactor = 13;
+    optional string QueryMode = 14;
+    optional string MinimumShouldMatch = 15;
 };
 
 message TKqpSequencerSettings {
@@ -951,6 +953,7 @@ message TScriptExecutionOperationMeta {
     optional bool DisableDefaultTimeout = 13;
     optional string CheckpointId = 14;
     optional string StreamingQueryPath = 15;
+    optional string CustomerSuppliedId = 16;
 }
 
 // stored in column "retry_state" of .metadata/script_executions table

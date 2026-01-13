@@ -60,7 +60,7 @@ struct TSegmentedArena
     // TODO: Account for MKQL-specific headers
     // TODO: Must be variable, Max(PageSize, AllocSize)
     // TODO: Build a proper class
-    static constexpr const size_t PageSize = 127_KB;
+    static constexpr const size_t PageSize = 64_KB - 64;
 
     struct TPageEntry {
         TPageEntry* Prev;
@@ -925,7 +925,7 @@ public:
                 MaxRowCount = GetStaticMaxRowCount(memoryHelper.KeySizeBound.value() + memoryHelper.StateSizeBound.value(), MemoryLimit);
             }
         } else {
-            MaxRowCount = 1_MB;
+            MaxRowCount = 64ULL * 1024;
             MapAutoGrowEnabled = true;
         }
 

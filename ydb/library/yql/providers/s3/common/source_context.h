@@ -44,8 +44,7 @@ struct TSourceContext {
         , HttpInflightSize(httpInflightSize)
         , HttpDataRps(httpDataRps)
         , DeferredQueueSize(deferredQueueSize)
-    {
-    }
+    {}
 
     ~TSourceContext();
 
@@ -90,6 +89,7 @@ struct TSourceContext {
     NMonitoring::TDynamicCounters::TCounterPtr HttpInflightSize;
     NMonitoring::TDynamicCounters::TCounterPtr HttpDataRps;
     NMonitoring::TDynamicCounters::TCounterPtr DeferredQueueSize;
+
 private:
     std::atomic_uint64_t Value;
     std::mutex Mutex;

@@ -101,9 +101,11 @@ public:
         auto argsBuilder = builder.Args(4);
         argsBuilder->Add<TOptional<TInputType>>();
         argsBuilder->Add<const char*>();
+        argsBuilder->Add<TOptional<const char*>>().Name(TStringRef::Of("Mode"));
+        argsBuilder->Add<TOptional<const char*>>().Name(TStringRef::Of("MinimumShouldMatch"));
         argsBuilder->Add<TOptional<double>>().Name(TStringRef::Of("B"));
         argsBuilder->Add<TOptional<double>>().Name(TStringRef::Of("K1"));
-        builder.OptionalArgs(2);
+        builder.OptionalArgs(4);
         builder
             .Returns(builder.SimpleType<double>());
 

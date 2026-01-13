@@ -277,7 +277,7 @@ public:
     size_t CallbackAfter;
     TCallback Callback;
 
-    size_t FetchCount;
+    size_t FetchCount = 0;
 };
 
 
@@ -356,6 +356,42 @@ THolder<IComputationGraph> BuildWideGraph(TDqSetup<LLVM, Spilling>& setup, const
             },
             [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
                 return {keys.front(), state.front()};
+            }
+        )),
+        [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
+    ));
+
+    return setup.BuildGraph(rootNode, {streamCallable});
+}
+
+template<bool LLVM, bool Spilling = false>
+THolder<IComputationGraph> BuildZeroWidthWideGraph(TDqSetup<LLVM, Spilling>& setup, const bool isAggregator, const bool spilling, const size_t memLimit, std::vector<TType*>& columnTypes) {
+    auto& pb = setup.GetDqProgramBuilder();
+
+    auto keyBaseType = pb.NewDataType(NUdf::TDataType<char*>::Id);
+    auto valueBaseType = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto streamItemType = pb.NewMultiType({keyBaseType, valueBaseType});
+    const auto streamType = pb.NewStreamType(streamItemType);
+    const auto streamResultItemType = pb.NewMultiType({keyBaseType, valueBaseType});
+    [[maybe_unused]] const auto streamResultType = pb.NewStreamType(streamResultItemType);
+    const auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "ExternalNode", streamType).Build();
+
+    columnTypes = {keyBaseType, valueBaseType};
+
+    const auto rootNode = pb.Collect(pb.NarrowMap(pb.ToFlow(
+        GetOperatorNode(
+            pb,
+            isAggregator,
+            spilling,
+            memLimit,
+            TRuntimeNode(streamCallable, false),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
+            [&](TRuntimeNode::TList, [[maybe_unused]] TRuntimeNode::TList items) -> TRuntimeNode::TList { return { } ; },
+            [&](TRuntimeNode::TList, [[maybe_unused]] TRuntimeNode::TList items, [[maybe_unused]] TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                return {};
+            },
+            [&]([[maybe_unused]] TRuntimeNode::TList keys, [[maybe_unused]] TRuntimeNode::TList state) -> TRuntimeNode::TList {
+                return {};
             }
         )),
         [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
@@ -475,6 +511,29 @@ void RunDqAggregateWideTest(TDqSetup<false, Spilling>& setup, StreamCreator stre
     AssertMapsEqual(refResult, graphResult);
 }
 
+template<bool Spilling, typename StreamCreator>
+void RunDqAggregateZeroWidthTest(TDqSetup<false, Spilling>& setup, StreamCreator streamCreator)
+{
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+
+    std::vector<TType*> columnTypes;
+
+    auto graph = BuildZeroWidthWideGraph(setup, true, Spilling, 0, columnTypes);
+
+    if (Spilling) {
+        graph->GetContext().SpillerFactory = std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB);
+    }
+
+    std::unordered_map<std::string, std::vector<ui64>> refResult;
+
+    auto stream = NUdf::TUnboxedValuePod(streamCreator(graph->GetContext(), columnTypes, refResult));
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(stream));
+    auto resultList = graph->GetValue();
+
+    size_t numResultItems = resultList.GetListLength();
+    UNIT_ASSERT(numResultItems == refResult.size());
+}
+
 
 } // anonymous namespace
 
@@ -542,6 +601,21 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
         {
             TDqSetup<false, false> setup(GetDqNodeFactory());
             RunDqAggregateWideTest<false>(setup, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
+                return new TWideKVStream(ctx, 1, 1, columnTypes, refMap);
+            });
+        }
+    }
+
+    Y_UNIT_TEST(TestWideModeAggregationZeroWidth) {
+        {
+            TDqSetup<false, true> setup(GetDqNodeFactory());
+            RunDqAggregateZeroWidthTest<true>(setup, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
+                return new TWideKVStream(ctx, 1, 1, columnTypes, refMap);
+            });
+        }
+        {
+            TDqSetup<false, false> setup(GetDqNodeFactory());
+            RunDqAggregateZeroWidthTest<false>(setup, [](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
                 return new TWideKVStream(ctx, 1, 1, columnTypes, refMap);
             });
         }

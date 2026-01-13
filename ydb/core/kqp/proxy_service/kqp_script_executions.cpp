@@ -572,7 +572,8 @@ public:
             .PhysicalGraph = ev.QueryPhysicalGraph,
             .DisableDefaultTimeout = ev.DisableDefaultTimeout,
             .CheckpointId = ev.CheckpointId,
-            .StreamingQueryPath = ev.StreamingQueryPath
+            .StreamingQueryPath = ev.StreamingQueryPath,
+            .CustomerSuppliedId = ev.CustomerSuppliedId,
         }, QueryServiceConfig));
 
         const auto& creatorId = Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, ev.Record, meta, MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, ev.Generation));
@@ -627,6 +628,7 @@ private:
         meta.SetResourcePoolId(request.GetPoolId());
         meta.SetCheckpointId(ev.CheckpointId);
         meta.SetStreamingQueryPath(ev.StreamingQueryPath);
+        meta.SetCustomerSuppliedId(ev.CustomerSuppliedId);
         meta.SetClientAddress(request.GetClientAddress());
         meta.SetCollectStats(request.GetCollectStats());
         meta.SetSaveQueryPhysicalGraph(ev.SaveQueryPhysicalGraph);
@@ -1103,7 +1105,8 @@ public:
             .PhysicalGraph = std::move(physicalGraph),
             .DisableDefaultTimeout = meta.GetDisableDefaultTimeout(),
             .CheckpointId = meta.GetCheckpointId(),
-            .StreamingQueryPath = meta.GetStreamingQueryPath()
+            .StreamingQueryPath = meta.GetStreamingQueryPath(),
+            .CustomerSuppliedId = meta.GetCustomerSuppliedId(),
         }, QueryServiceConfig));
 
         KQP_PROXY_LOG_D("Restart with RunScriptActorId: " << RunScriptActorId << ", has PhysicalGraph: " << hasPhysicalGraph);

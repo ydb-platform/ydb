@@ -102,6 +102,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         }
 
+        appConfig->MutableQueryServiceConfig()->MutableS3()->SetAllowLocalFiles(true);
+
         auto settings = TKikimrSettings(*appConfig);
 
         NYql::IHTTPGateway::TPtr httpGateway;

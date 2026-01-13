@@ -99,8 +99,6 @@ private:
     }
 
     static void FillOperationParams(Ydb::Operations::OperationParams& params, const NYdb::TOperationRequestSettings<TOperationSettings>& settings) {
-        Y_VALIDATE(settings.ClientTimeout_ == TDuration::Max(), "Client timeout is not supported for local rpc operation");
-
         params.set_operation_mode(Ydb::Operations::OperationParams::SYNC);
 
         if (settings.CancelAfter_) {

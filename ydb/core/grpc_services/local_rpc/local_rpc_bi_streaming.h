@@ -5,6 +5,25 @@
 
 namespace NKikimr::NRpcService {
 
+// Local rpc streaming session:
+// Owner actor        Rpc actor
+//    TEvActorAttached(Rpc actor id)
+//       <----------------
+//    TEvReadRequest()
+//       <----------------
+//    IGRpcStreamingContext::TEvReadFinished(Proto response)
+//       ---------------->
+//    TEvWriteRequest(Proto request, Is success)
+//       <----------------
+//    IGRpcStreamingContext::TEvWriteFinished(Is success)
+//       ---------------->
+//    TEvFinishRequest(Status)
+//       <----------------
+//    IGRpcStreamingContext::TEvNotifiedWhenDone(Is success)
+//       ---------------->
+//
+// To finish rpc session before TEvFinishRequest owner actor should send IGRpcStreamingContext::TEvNotifiedWhenDone to rpc actor
+
 template <class TIn, class TOut>
 class TLocalRpcBiStreamingCtx : public NGRpcServer::IGRpcStreamingContext<TIn, TOut> {
     using TBase = NGRpcServer::IGRpcStreamingContext<TIn, TOut>;
@@ -29,11 +48,9 @@ public:
             const TActorId RpcActor;
         };
 
-        // Owner should reply with IGRpcStreamingContext::TEvReadFinished
         struct TEvReadRequest : public TEventLocal<TEvReadRequest, EvReadRequest> {
         };
 
-        // Owner should reply with IGRpcStreamingContext::TEvWriteFinished
         struct TEvWriteRequest : public TEventLocal<TEvWriteRequest, EvWriteRequest> {
             TEvWriteRequest(TOut&& message, const grpc::WriteOptions& options)
                 : Message(std::move(message))
@@ -44,7 +61,6 @@ public:
             const grpc::WriteOptions Options;
         };
 
-        // Owner should reply with IGRpcStreamingContext::TEvNotifiedWhenDone
         struct TEvFinishRequest : public TEventLocal<TEvFinishRequest, EvFinishRequest> {
             explicit TEvFinishRequest(const grpc::Status& status)
                 : Status(status)

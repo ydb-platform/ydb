@@ -408,7 +408,7 @@ runs:
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             if [ -z "$GRAPH_PATH" ]; then
-              RERUN_FAILED_OPT="-X"
+              RERUN_FAILED_OPT="-X --build-only-test-deps"
             else
               RERUN_FAILED_OPT=""
             fi

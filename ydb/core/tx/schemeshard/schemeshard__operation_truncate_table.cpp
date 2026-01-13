@@ -299,25 +299,26 @@ public:
         Y_ABORT_UNLESS(table->GetPartitions().size());
 
         {
-            tablePath.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
-            tablePath.Base()->LastTxId = OperationId.GetTxId();
-
             context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
             context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
             context.DbChanges.PersistPath(tablePath.Base()->PathId);
             context.DbChanges.PersistTxState(OperationId);
 
+            tablePath.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
+            tablePath.Base()->LastTxId = OperationId.GetTxId();
+
             TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxTruncateTable, tablePath.Base()->PathId);
             txState.State = TTxState::ConfigureParts;
 
             for (const auto& shard : table->GetPartitions()) {
                 auto shardIdx = shard.ShardIdx;
+                context.MemChanges.GrabShard(context.SS, shardIdx);
+                context.DbChanges.PersistShard(shardIdx);
+
                 TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
                 txState.Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
                 shardInfo.CurrentTxId = OperationId.GetTxId();
-                context.MemChanges.GrabShard(context.SS, shardIdx);
-                context.DbChanges.PersistShard(shardIdx);
             }
 
             {

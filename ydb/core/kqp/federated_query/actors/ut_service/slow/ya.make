@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/kqp/federated_query)
+UNITTEST_FOR(ydb/core/kqp/federated_query/actors)
 
 SIZE(LARGE)
 
@@ -7,8 +7,8 @@ TAG(
 )
 
 PEERDIR(
-    ydb/core/kqp/federated_query
-    ydb/core/kqp/federated_query/ut_service/common
+    ydb/core/kqp/federated_query/actors
+    ydb/core/kqp/federated_query/actors/ut_service/common
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
 )

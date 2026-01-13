@@ -665,7 +665,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                     key: "protocol",
                     value: "NATIVE"
                 }
-				Properties {
+                Properties {
                     key: "use_tls",
                     value: "TRUE"
                 }

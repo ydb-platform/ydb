@@ -964,27 +964,18 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Seal()
         .Build();
 
-    // Check if we need to convert inputs to blocks
-    // For now, assume most inputs are scalar and need conversion to blocks
-    bool needsLeftToBlocks = true;  // TODO: check actual input types
-    bool needsRightToBlocks = true; // TODO: check actual input types
-    bool needsFromBlocks = true;    // TODO: check if output should be scalar
+    // Convert wide flows to blocks
+    leftInput = ctx.Builder(pos)
+        .Callable("WideToBlocks")
+            .Add(0, std::move(leftInput))
+        .Seal()
+        .Build();
 
-    if (needsLeftToBlocks) {
-        leftInput = ctx.Builder(pos)
-            .Callable("WideToBlocks")
-                .Add(0, std::move(leftInput))
-            .Seal()
-            .Build();
-    }
-
-    if (needsRightToBlocks) {
-        rightInput = ctx.Builder(pos)
-            .Callable("WideToBlocks")
-                .Add(0, std::move(rightInput))
-            .Seal()
-            .Build();
-    }
+    rightInput = ctx.Builder(pos)
+        .Callable("WideToBlocks")
+            .Add(0, std::move(rightInput))
+        .Seal()
+        .Build();
 
     // Build block hash join - now inputs are guaranteed to be blocks
     auto blockJoinCore = ctx.Builder(pos)
@@ -997,15 +988,12 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Seal()
         .Build();
 
-    // Convert blocks back to scalars if needed
-    auto wideResult = std::move(blockJoinCore);
-    if (needsFromBlocks) {
-        wideResult = ctx.Builder(pos)
-            .Callable("WideFromBlocks")
-                .Add(0, std::move(wideResult))
-            .Seal()
-            .Build();
-    }
+    // Convert blocks back to scalars
+    auto wideResult = ctx.Builder(pos)
+        .Callable("WideFromBlocks")
+            .Add(0, std::move(blockJoinCore))
+        .Seal()
+        .Build();
 
     // Structure the result using NarrowMap (complete processing)
     auto result = ctx.Builder(pos)

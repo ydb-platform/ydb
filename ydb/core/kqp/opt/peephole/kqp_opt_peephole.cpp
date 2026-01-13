@@ -104,9 +104,10 @@ public:
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
         AddHandler(0, &TDqPhyBlockHashJoin::Match, HNDL(RewriteBlockHashJoin));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
+        AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(EliminateIdentityWideMapInBlockHashJoin));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
-        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapForLargeOlapTable));
+        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapForOlapTable));
 #undef HNDL
     }
 
@@ -147,9 +148,15 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> EliminateWideMapForLargeOlapTable(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpEliminateWideMapForLargeOlapTable(node, ctx, *GetTypes());
-        DumpAppliedRule("EliminateWideMapForLargeOlapTable", node.Ptr(), output.Ptr(), ctx);
+    TMaybeNode<TExprBase> EliminateWideMapForOlapTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpEliminateWideMapForOlapTable(node, ctx, *GetTypes());
+        DumpAppliedRule("EliminateWideMapForOlapTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> EliminateIdentityWideMapInBlockHashJoin(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpEliminateIdentityWideMapInBlockHashJoin(node, ctx, *GetTypes());
+        DumpAppliedRule("EliminateIdentityWideMapInBlockHashJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

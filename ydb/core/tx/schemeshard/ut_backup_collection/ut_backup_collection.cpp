@@ -115,6 +115,19 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         return TestModificationResults(runtime, txId, {expectedResult});
     }
 
+    void TestAlterTable(TTestBasicRuntime& runtime, ui64 txId, const TString& workingDir, const TString& request, const TExpectedResult& expectedResult = {NKikimrScheme::StatusAccepted}) {
+        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto transaction = modifyTx->Record.AddTransaction();
+        transaction->SetWorkingDir(workingDir);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+
+        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(request, transaction->MutableAlterTable());
+        UNIT_ASSERT(parseOk);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release(), 0);
+        TestModificationResults(runtime, txId, {expectedResult});
+    }
+
     Y_UNIT_TEST(HiddenByFeatureFlag) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());

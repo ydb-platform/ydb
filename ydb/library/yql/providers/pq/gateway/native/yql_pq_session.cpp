@@ -171,14 +171,28 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, token, config->GetAddBearerToToken());
     if (!config->GetEndpoint() && LocalTopicClientFactory) {
         return LocalTopicClientFactory->CreateTopicClient(GetYdbPqClientOptions(database, *config, credentialsProviderFactory))->DescribeTopic(path)
-            .Apply([](const TAsyncDescribeTopicResult& f) {
-                const auto& response = f.GetValue();
-                return std::vector<IPqGateway::TClusterInfo>{{
-                    .Info = {
-                        .Status = TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE,
-                    },
-                    .PartitionsCount = response.GetTopicDescription().GetTotalPartitionsCount(),
-                }};
+            .Apply([path](const TAsyncDescribeTopicResult& f) {
+                IPqGateway::TClusterInfo info = {.Info = {.Status = TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE}};
+
+                TString error;
+                const auto setError = [&error, path](const TString& msg) {
+                    error = TStringBuilder() << "Failed to describe local topic `" << path << "`: " << msg;
+                };
+
+                try {
+                    const auto& response = f.GetValue();
+                    if (!response.IsSuccess()) {
+                        setError(response.GetIssues().ToString());
+                    }
+                } catch (...) {
+                    setError(FormatCurrentException());
+                }
+
+                if (error) {
+                    throw yexception() << error;
+                }
+
+                return std::vector<IPqGateway::TClusterInfo>{{std::move(info)}};
             });
     }
     YQL_ENSURE(config->GetEndpoint(), "Can't describe topic `" << cluster << "`.`" << path << "`: no endpoint, and local topics are not enabled");

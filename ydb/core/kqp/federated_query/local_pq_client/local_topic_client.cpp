@@ -53,7 +53,7 @@ public:
         return DoLocalRpcRequest<TDescribeTopicRequest, TDescribeTopicSettings>(std::move(request), settings, &DoDescribeTopicRequest).Apply([](const NThreading::TFuture<TLocalRpcOperationResult>& f) {
             const auto& [status, response] = f.GetValue();
             Ydb::Topic::DescribeTopicResult result;
-            Y_VALIDATE(response.UnpackTo(&result), "Failed to unpack describe topic response");
+            response.UnpackTo(&result);
             return TDescribeTopicResult(TStatus(status), std::move(result));
         });
     }

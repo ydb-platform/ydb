@@ -2050,6 +2050,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 backupCollection->AlterVersion = rowset.GetValue<Schema::BackupCollection::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Description.ParseFromString(rowset.GetValue<Schema::BackupCollection::Description>());
                 Self->IncrementPathDbRefCount(pathId);
+                Self->RegisterBackupCollectionTables(backupCollection);
 
                 if (!rowset.Next()) {
                     return false;

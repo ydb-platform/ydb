@@ -237,8 +237,6 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     SubscribeToTempTableOwners();
 
-    RebuildBackupCollectionCache();
-
     Become(&TThis::StateWork);
 }
 
@@ -3394,7 +3392,7 @@ void TSchemeShard::PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, 
 void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (BackupCollections.contains(pathId)) {
-        UpdateBackupCollectionCache(BackupCollections[pathId], false);
+        UnregisterBackupCollectionTables(BackupCollections[pathId]);
         BackupCollections.erase(pathId);
         DecrementPathDbRefCount(pathId);
     }
@@ -3402,26 +3400,25 @@ void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pa
     db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
-void TSchemeShard::UpdateBackupCollectionCache(const TBackupCollectionInfo::TPtr& collection, bool isAdd) {
+void TSchemeShard::RegisterBackupCollectionTables(const TBackupCollectionInfo::TPtr& collection) {
     if (!collection) return;
     const auto& desc = collection->Description;
     for (const auto& entry : desc.GetExplicitEntryList().GetEntries()) {
         TPath path = TPath::Resolve(entry.GetPath(), this);
-        if (path.IsResolved() && (path->IsTable() || path->IsTableIndex())) {
-            TPathId id = path.Base()->PathId;
-            if (isAdd) {
-                TableInBackupCollections.insert(id);
-            } else {
-                TableInBackupCollections.erase(id);
-            }
+        if (path.IsResolved() && path->IsTable()) {
+            TableInBackupCollections.insert(path.Base()->PathId);
         }
     }
 }
 
-void TSchemeShard::RebuildBackupCollectionCache() {
-    TableInBackupCollections.clear();
-    for (const auto& [id, collection] : BackupCollections) {
-        UpdateBackupCollectionCache(collection, true);
+void TSchemeShard::UnregisterBackupCollectionTables(const TBackupCollectionInfo::TPtr& collection) {
+    if (!collection) return;
+    const auto& desc = collection->Description;
+    for (const auto& entry : desc.GetExplicitEntryList().GetEntries()) {
+        TPath path = TPath::Resolve(entry.GetPath(), this);
+        if (path.IsResolved() && path->IsTable()) {
+            TableInBackupCollections.erase(path.Base()->PathId);
+        }
     }
 }
 

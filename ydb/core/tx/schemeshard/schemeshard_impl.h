@@ -908,8 +908,8 @@ public:
     // BackupCollection
     void PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection);
     void PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId);
-    void UpdateBackupCollectionCache(const TBackupCollectionInfo::TPtr& collection, bool isAdd);
-    void RebuildBackupCollectionCache();
+    void RegisterBackupCollectionTables(const TBackupCollectionInfo::TPtr& collection);
+    void UnregisterBackupCollectionTables(const TBackupCollectionInfo::TPtr& collection);
 
     // SysView
     void PersistSysView(NIceDb::TNiceDb &db, TPathId pathId);

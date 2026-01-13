@@ -192,7 +192,7 @@ public:
 
         auto backupCollection = TBackupCollectionInfo::Create(desc);
         context.SS->BackupCollections[allocatedPathId] = backupCollection;
-        context.SS->UpdateBackupCollectionCache(backupCollection, true);
+        context.SS->RegisterBackupCollectionTables(backupCollection);
         context.SS->IncrementPathDbRefCount(allocatedPathId);
 
         context.DbChanges.PersistBackupCollection(allocatedPathId, backupCollection);

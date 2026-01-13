@@ -162,6 +162,24 @@ def generate_configs_for_tests():
             .add_prepared_action()
             .return_config()
         ),
+        (  # write then delete from prev actions
+            ConfigBuilder(config_pb.PartitionMode.OnePartition)
+            .set_volume_config("kv_volume", 1, ['ssd'] * 3)
+            .init_prepared_action(name='write')
+            .add_write_to_prepared_action(size=4096, count=5, channel=0)
+            .set_periodicity_for_prepared_action(period_us=50000)
+            .set_data_mode_worker_for_prepared_action()
+            .add_prepared_action()
+            .init_prepared_action(name='read', parent_action='write')
+            .add_read_to_prepared_action(size=1024, count=5, verify_data=True)
+            .set_data_mode_from_prev_actions_for_prepared_action(['write'])
+            .add_prepared_action()
+            .init_prepared_action(name='delete', parent_action='read')
+            .add_delete_to_prepared_action(count=5)
+            .set_data_mode_from_prev_actions_for_prepared_action(['write'])
+            .add_prepared_action()
+            .return_config()
+        ),
     ]
 
 
@@ -175,7 +193,7 @@ class TestYdbKvVolumeWorkload(StressFixture):
     @pytest.mark.parametrize("version", ["v1", "v2"])
     def test(self, config, version):
         print('Test begin', file=sys.stderr)
-        workload = Workload(self.endpoint, self.database, 10, 1, version, config, verbose=True)
+        workload = Workload(self.endpoint, self.database, 10, 1, version, config, verbose=False)
         print('Workload begin', file=sys.stderr)
         workload.start()
         workload.wait_stop()

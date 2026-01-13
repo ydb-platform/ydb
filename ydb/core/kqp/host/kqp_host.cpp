@@ -1974,6 +1974,7 @@ private:
             TypesCtx->OptimizerFlags.insert("fuseequijoinsinputmultilabels");
             TypesCtx->OptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
             TypesCtx->OptimizerFlags.insert("sqlinwithnothingornull");
+            TypesCtx->OptimizerFlags.insert("filterpushdownoverjoinoptionalsideignoreonlykeys");
         }
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();

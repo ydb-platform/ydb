@@ -155,13 +155,17 @@ Element TMessagePreviewView::RenderMessages() {
     
     for (size_t i = 0; i < Messages_.size(); ++i) {
         bool selected = static_cast<int>(i) == SelectedIndex_;
-        rows.push_back(RenderMessageContent(Messages_[i], selected));
+        Element row = RenderMessageContent(Messages_[i], selected);
+        if (selected) {
+            row = row | focus;
+        }
+        rows.push_back(row);
         if (i < Messages_.size() - 1) {
             rows.push_back(separator());
         }
     }
     
-    return vbox(rows) | yframe;
+    return vbox(rows) | yframe | vscroll_indicator;
 }
 
 Element TMessagePreviewView::RenderMessageContent(const TTopicMessage& msg, bool selected) {
@@ -232,8 +236,12 @@ Element TMessagePreviewView::RenderMessageContent(const TTopicMessage& msg, bool
         }
         dataElement = text(dataPreview) | color(Color::GrayLight);
     } else {
-        // Expanded: wrap text
-        dataElement = paragraph(dataPreview) | color(Color::GrayLight);
+        // Expanded: wrap text character-by-character into multiple lines
+        Elements lines;
+        for (size_t i = 0; i < dataPreview.size(); i += availableWidth) {
+            lines.push_back(text(dataPreview.substr(i, availableWidth)) | color(Color::GrayLight));
+        }
+        dataElement = vbox(std::move(lines));
     }
     
     Element content = vbox({
@@ -242,7 +250,7 @@ Element TMessagePreviewView::RenderMessageContent(const TTopicMessage& msg, bool
     }) | xflex;
     
     if (selected) {
-        content = content | bgcolor(Color::GrayDark);
+        content = content | bgcolor(Color::RGB(40, 60, 100)) | bold;
     }
     
     return content;

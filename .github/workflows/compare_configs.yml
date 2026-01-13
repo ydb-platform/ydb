@@ -51,6 +51,7 @@ jobs:
         s3_endpoint: ${{ vars.AWS_ENDPOINT }}
         s3_key_id: ${{ secrets.AWS_KEY_ID }}
         s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+        build_preset: "release"
     
     - name: Comapare and publish result
       shell: bash

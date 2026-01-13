@@ -11,7 +11,7 @@
 
 namespace NKafka {
 
-struct TestAccessor;    
+struct TestAccessor;
 
 class TKafkaFetchActor: public NActors::TActorBootstrapped<TKafkaFetchActor> {
     friend struct TestAccessor;
@@ -40,7 +40,7 @@ private:
     TVector<NKikimr::NPQ::TPartitionFetchRequest> PrepareFetchRequestData(const size_t topicIndex);
     void HandleErrorResponse(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, TFetchResponseData::TFetchableTopicResponse& topicResponse);
     void HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, TFetchResponseData::TFetchableTopicResponse& topicResponse, const TActorContext& ctx);
-    void FillRecordsBatch(const NKikimrClient::TPersQueueFetchResponse_TPartResult& partPQResponse, TKafkaRecordBatch& recordsBatch, const TActorContext& ctx);
+    void FillRecordsBatch(const NKikimrClient::TPersQueueFetchResponse_TPartResult& partPQResponse, TKafkaRecordBatch& recordsBatch, const std::optional<TString> timestampType, const TActorContext& ctx);
     void RespondIfRequired(const TActorContext& ctx);
     size_t CheckTopicIndex(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev);
 

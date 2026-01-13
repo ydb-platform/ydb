@@ -2,6 +2,7 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/base/ticket_parser.h>
 #include "ydb/core/kafka_proxy/kafka_metrics.h"
+#include "ydb/core/kafka_proxy/kafka_constants.h"
 #include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
@@ -122,12 +123,16 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
     for (i32 partitionIndex = 0; partitionIndex < ev->Get()->Response.GetPartResult().size(); partitionIndex++) {
         auto partPQResponse = ev->Get()->Response.GetPartResult()[partitionIndex];
         auto& partKafkaResponse = topicResponse.Partitions[partitionIndex];
+        std::optional<TString> timestampType;
+        if (ev->Get()->Response.HasTimestampType()) {
+            timestampType = ev->Get()->Response.GetTimestampType();
+        }
 
         partKafkaResponse.PartitionIndex = partPQResponse.GetPartition();
         partKafkaResponse.ErrorCode = ConvertErrorCode(partPQResponse.GetReadResult().GetErrorCode());
 
         if (partPQResponse.GetReadResult().GetErrorCode() != NPersQueue::NErrorCode::EErrorCode::OK) {
-            KAFKA_LOG_ERROR("Fetch actor: Failed to get responses for topic: " << topicResponse.Topic <<
+            KAFKA_LOG_D("Fetch actor: Failed to get responses for topic: " << topicResponse.Topic <<
                 ", partition: " << partPQResponse.GetPartition() <<
                 ". Code: " << static_cast<size_t>(partPQResponse.GetReadResult().GetErrorCode()) <<
                 ". Reason: " + partPQResponse.GetReadResult().GetErrorReason());
@@ -140,11 +145,14 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
         }
 
         auto& recordsBatch = partKafkaResponse.Records.emplace();
-        FillRecordsBatch(partPQResponse, recordsBatch, ctx);
+        FillRecordsBatch(partPQResponse, recordsBatch, timestampType, ctx);
     }
 }
 
-void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResponse_TPartResult& partPQResponse, TKafkaRecordBatch& recordsBatch, const TActorContext& ctx) {
+void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResponse_TPartResult& partPQResponse,
+                                        TKafkaRecordBatch& recordsBatch,
+                                        const std::optional<TString> timestampType,
+                                        const TActorContext& ctx) {
     recordsBatch.Records.resize(partPQResponse.GetReadResult().GetResult().size());
 
     ui64 baseOffset = 0;
@@ -158,13 +166,29 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         auto& result = partPQResponse.GetReadResult().GetResult()[recordIndex];
         if (first) {
             baseOffset = result.GetOffset();
-            baseTimestamp = result.GetWriteTimestampMS();
+            if (timestampType.has_value()) {
+                if (timestampType == MESSAGE_TIMESTAMP_LOG_APPEND) {
+                    baseTimestamp = result.GetWriteTimestampMS();
+                } else if (timestampType == MESSAGE_TIMESTAMP_CREATE_TIME) {
+                    baseTimestamp = result.GetCreateTimestampMS();
+                }
+            } else {
+                baseTimestamp = result.GetCreateTimestampMS();
+            }
             baseSequense = result.GetSeqNo();
             first = false;
         }
 
         lastOffset = result.GetOffset();
-        lastTimestamp = result.GetCreateTimestampMS();
+        if (timestampType.has_value()) {
+            if (timestampType == MESSAGE_TIMESTAMP_LOG_APPEND) {
+                lastTimestamp = result.GetWriteTimestampMS();
+            } else if (timestampType == MESSAGE_TIMESTAMP_CREATE_TIME) {
+                lastTimestamp = result.GetCreateTimestampMS();
+            }
+        } else {
+            lastTimestamp = result.GetCreateTimestampMS();
+        }
         auto& record = recordsBatch.Records[recordIndex];
 
         record.DataChunk = NKikimr::GetDeserializedData(result.GetData());

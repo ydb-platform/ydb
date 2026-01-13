@@ -33,10 +33,10 @@ std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPol
 
 
 std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertTimestampType(
-        const std::optional<TString>& timestampValue, std::optional<TString>& correctTimestampType
+        const std::optional<TString>& configValue, std::optional<TString>& correctTimestampType
 ) {
-    if (timestampValue.value_or("") == MESSAGE_TIMESTAMP_CREATE_TIME || timestampValue.value_or("") == MESSAGE_TIMESTAMP_LOG_APPEND) {
-        correctTimestampType = timestampValue;
+    if (configValue.value_or("") == MESSAGE_TIMESTAMP_CREATE_TIME || configValue.value_or("") == MESSAGE_TIMESTAMP_LOG_APPEND) {
+        correctTimestampType = configValue;
         return std::nullopt;
     }
     auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
@@ -45,7 +45,7 @@ std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertTimestampT
         << "Topic-level config '"
         << MESSAGE_TIMESTAMP_TYPE
         << "' has invalid/unsupported value: "
-        << timestampValue.value_or("");
+        << configValue.value_or("");
     return result;
 }
 

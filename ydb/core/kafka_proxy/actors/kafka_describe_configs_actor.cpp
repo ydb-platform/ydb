@@ -210,7 +210,6 @@ void TKafkaDescribeConfigsActor::AddDescribeResponse(
     AddConfigEntry(singleConfig, "message.format.version", "9", EKafkaConfigType::STRING);
     AddConfigEntry(singleConfig, "file.delete.delay.ms", "0", EKafkaConfigType::LONG);
     AddConfigEntry(singleConfig, "max.message.bytes", ToString(Context->Config.GetMaxMessageSize()), EKafkaConfigType::INT);
-    AddConfigEntry(singleConfig, "message.timestamp.type", "CreateTime", EKafkaConfigType::STRING);
     AddConfigEntry(singleConfig, "message.timestamp.after.max.ms", "9223372036854775807", EKafkaConfigType::LONG);
 
 
@@ -231,6 +230,7 @@ void TKafkaDescribeConfigsActor::AddDescribeResponse(
     } else {
         AddConfigEntry(singleConfig, "cleanup.policy", "delete", EKafkaConfigType::LIST);
     }
+    AddConfigEntry(singleConfig, "message.timestamp.type", ev->Response.timestamp_type(), EKafkaConfigType::STRING);
 
     response->Results.emplace_back(std::move(singleConfig));
 }

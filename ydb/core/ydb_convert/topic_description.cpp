@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -198,6 +199,11 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
         out.set_metrics_level(config.GetMetricsLevel());
     }
 
+    if (config.GetPartitionConfig().HasTimestampType()) {
+        out.set_timestamp_type(config.GetPartitionConfig().GetTimestampType());
+    } else {
+        out.set_timestamp_type(NKafka::MESSAGE_TIMESTAMP_CREATE_TIME);
+    }
     for (const auto& consumer : config.GetConsumers()) {
         if (!FillConsumer(*out.add_consumers(), consumer, status, error)) {
             return false;

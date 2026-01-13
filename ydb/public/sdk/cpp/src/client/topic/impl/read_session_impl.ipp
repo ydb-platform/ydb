@@ -1922,8 +1922,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UnregisterPartition(ui
 
 template<bool UseMigrationProtocol>
 std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId) {
-    std::lock_guard guard(HierarchyDataLock);
-
     auto it = HierarchyData.find(partitionId);
     if (it == HierarchyData.end()) {
         return {};
@@ -1950,6 +1948,7 @@ std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParent
 
 template<bool UseMigrationProtocol>
 bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBeenRead(ui32 partitionId, ui64 partitionSessionId) {
+    std::lock_guard guard(HierarchyDataLock);
     for (auto id : GetParentPartitionSessions(partitionId, partitionSessionId)) {
         if (!ReadingFinishedData.contains(id)) {
             return false;
@@ -2021,7 +2020,10 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::SelfCheck() {
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds) {
-    ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
+    {
+        std::lock_guard guard(HierarchyDataLock);
+        ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
+    }
     for (auto& [_, s] : PartitionStreams) {
         for (auto partitionId : childIds) {
             if (s->GetPartitionId() == partitionId) {

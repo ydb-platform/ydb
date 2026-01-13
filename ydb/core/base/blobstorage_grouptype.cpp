@@ -35,37 +35,25 @@ struct TBlobStorageErasureParameters {
     ui32 Handoff; // number of selected hinted handoff (1 | 2)
 };
 
-static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpeciesUndefined>
+static const std::unordered_map<TBlobStorageGroupType::EErasureSpecies, TBlobStorageErasureParameters>
         BlobStorageGroupErasureSpeciesParameters{{
-    {0} // 0 = ErasureSpicies::ErasureNone
-    ,{1} // 1 = ErasureSpicies::ErasureMirror3
-    ,{} // 2
-    ,{} // 3
-    ,{2} // 4 = ErasureSpicies::Erasure4Plus2Block
-    ,{} // 5
-    ,{} // 6
-    ,{} // 7
-    ,{} // 8
-    ,{6} // 9 = ErasureSpicies::ErasureMirror3dc
-    ,{3} // 10 = ErasureSpicies::Erasure4Plus3Block
-    ,{} // 11
-    ,{3} // 12 = ErasureSpicies::Erasure3Plus3Block
-    ,{} // 13
-    ,{} // 14
-    ,{} // 15
-    ,{} // 16
-    ,{} // 17
-    ,{5} // 18 = ErasureSpicies::ErasureMirror3of4
+    {TBlobStorageGroupType::EErasureSpecies::ErasureNone, {0}}
+    ,{TBlobStorageGroupType::EErasureSpecies::ErasureMirror3, {1}}
+    ,{TBlobStorageGroupType::EErasureSpecies::Erasure4Plus2Block, {2}}
+    ,{TBlobStorageGroupType::EErasureSpecies::ErasureMirror3dc, {6}}
+    ,{TBlobStorageGroupType::EErasureSpecies::Erasure4Plus3Block, {3}}
+    ,{TBlobStorageGroupType::EErasureSpecies::Erasure3Plus3Block, {3}}
+    ,{TBlobStorageGroupType::EErasureSpecies::ErasureMirror3of4, {5}}
 }};
 
 
 ui32 TBlobStorageGroupType::BlobSubgroupSize() const {
-    const TBlobStorageErasureParameters& erasure = BlobStorageGroupErasureSpeciesParameters[ErasureSpecies];
+    const TBlobStorageErasureParameters& erasure = BlobStorageGroupErasureSpeciesParameters.at(ErasureSpecies);
     return DataParts() + ParityParts() + erasure.Handoff;
 }
 
 ui32 TBlobStorageGroupType::Handoff() const {
-    const TBlobStorageErasureParameters& erasure = BlobStorageGroupErasureSpeciesParameters[ErasureSpecies];
+    const TBlobStorageErasureParameters& erasure = BlobStorageGroupErasureSpeciesParameters.at(ErasureSpecies);
     return erasure.Handoff;
 }
 

@@ -309,7 +309,7 @@ struct TErasureType {
         return false;
     }
 
-    static EErasureSpecies ErasureSpeciesByName(TString name) {
+    static EErasureSpecies ErasureSpeciesByName(const TString& name) {
         EErasureSpecies erasure;
         Y_ABORT_UNLESS(ParseErasureName(erasure, name));
         return erasure;

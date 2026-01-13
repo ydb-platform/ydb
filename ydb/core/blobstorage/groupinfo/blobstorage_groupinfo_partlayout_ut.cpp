@@ -103,7 +103,7 @@ void TestErasureSet(ui32 firstIdx, ui32 step) {
         if (erasure->first == TBlobStorageGroupType::ErasureMirror3dc || erasure->first == TBlobStorageGroupType::ErasureMirror3of4) {
             continue;
         }
-        TBlobStorageGroupType gtype(static_cast<TBlobStorageGroupType::EErasureSpecies>(erasure));
+        TBlobStorageGroupType gtype(erasure->first);
         if (gtype.BlobSubgroupSize() > 8) {
             continue;
         }

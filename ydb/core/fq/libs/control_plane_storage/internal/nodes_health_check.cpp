@@ -67,10 +67,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         "WHERE `" TENANT_COLUMN_NAME"` = $tenant AND `" EXPIRE_AT_COLUMN_NAME "` >= $now;\n"
     );
 
-    auto prepareParams = [tenant, nodeId, instanceId, hostName, deadline, activeWorkers, memoryLimit, memoryAllocated, icPort, nodeAddress, dataCenter, response=response, tablePathPrefix=YdbConnection->TablePathPrefix, alive=std::weak_ptr(Alive)](const std::vector<TResultSet>& resultSets) {
-        if (alive.expired()) {
-            throw yexception() << "Actor died";
-        }
+    auto prepareParams = [tenant, nodeId, instanceId, hostName, deadline, activeWorkers, memoryLimit, memoryAllocated, icPort, nodeAddress, dataCenter, response=response, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         for (const auto& resultSet : resultSets) {
             TResultSetParser parser(resultSet);
             while (parser.TryNextRow()) {

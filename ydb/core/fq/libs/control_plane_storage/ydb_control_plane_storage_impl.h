@@ -845,7 +845,6 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     std::shared_ptr<TQueryQuotaState> Quotas = std::make_shared<TQueryQuotaState>();
 
     TString TablePathPrefix;
-    std::shared_ptr<bool> Alive = std::make_shared<bool>();
 
 public:
     TYdbControlPlaneStorageActor(

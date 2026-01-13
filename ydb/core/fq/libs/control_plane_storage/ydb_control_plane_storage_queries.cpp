@@ -267,10 +267,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         );
     }
 
-    auto prepareParams = [as=TActivationContext::ActorSystem(), commonCounters=requestCounters.Common, quotas=event.Quotas, idempotencyKey, request, response, cloudId, token, computeDatabase, queryType, query, queryId, mapResult, scope, user, jobId, startTime, tablePathPrefix=YdbConnection->TablePathPrefix, job, Config=Config, alive=std::weak_ptr(Alive)](const std::vector<TResultSet>& resultSets) mutable {
-        if (alive.expired()) {
-            throw yexception() << "Actor died";
-        }
+    auto prepareParams = [as=TActivationContext::ActorSystem(), commonCounters=requestCounters.Common, quotas=event.Quotas, idempotencyKey, request, response, cloudId, token, computeDatabase, queryType, query, queryId, mapResult, scope, user, jobId, startTime, tablePathPrefix=YdbConnection->TablePathPrefix, job, Config=Config](const std::vector<TResultSet>& resultSets) mutable {
         const size_t countSets = (idempotencyKey ? 1 : 0) + (request.execute_mode() != FederatedQuery::SAVE ? 2 : 0);
         if (resultSets.size() != countSets) {
             ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
@@ -877,10 +874,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);"
     );
 
-    auto prepareParams = [Config=Config, commonCounters=requestCounters.Common, user, token, permissions, request=std::move(request), response, executionLimitMills, computeDatabase, tablePathPrefix=YdbConnection->TablePathPrefix, mapResult=std::move(mapResult), scope, queryId, idempotencyKey, startTime, alive=std::weak_ptr(Alive)](const std::vector<TResultSet>& resultSets) {
-        if (alive.expired()) {
-            throw yexception() << "Actor died";
-        }
+    auto prepareParams = [Config=Config, commonCounters=requestCounters.Common, user, token, permissions, request=std::move(request), response, executionLimitMills, computeDatabase, tablePathPrefix=YdbConnection->TablePathPrefix, mapResult=std::move(mapResult), scope, queryId, idempotencyKey, startTime](const std::vector<TResultSet>& resultSets) {
         const size_t countSets = 1 + (request.execute_mode() != FederatedQuery::SAVE ? 2 : 0);
 
         if (resultSets.size() != countSets) {
@@ -1375,10 +1369,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
     );
 
-    auto prepareParams = [Config=Config, commonCounters=requestCounters.Common, permissions, user, action, response, idempotencyKey, scope, queryId, tablePathPrefix=YdbConnection->TablePathPrefix, alive=std::weak_ptr(Alive)](const std::vector<TResultSet>& resultSets) {
-        if (alive.expired()) {
-            throw yexception() << "Actor died";
-        }
+    auto prepareParams = [Config=Config, commonCounters=requestCounters.Common, permissions, user, action, response, idempotencyKey, scope, queryId, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
             ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }

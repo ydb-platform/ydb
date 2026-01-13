@@ -473,10 +473,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     );
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>> response = std::make_shared<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>>();
-    auto prepareParams = [response, permissions, bindingId, idempotencyKey, user, scope, request=request, tablePathPrefix=YdbConnection->TablePathPrefix, idempotencyKeyTtl=Config->IdempotencyKeyTtl, commonCounters=requestCounters.Common, alive=std::weak_ptr(Alive)](const std::vector<TResultSet>& resultSets) {
-        if (alive.expired()) {
-            throw yexception() << "Actor died";
-        }
+    auto prepareParams = [response, permissions, bindingId, idempotencyKey, user, scope, request=request, tablePathPrefix=YdbConnection->TablePathPrefix, idempotencyKeyTtl=Config->IdempotencyKeyTtl, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
             ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }

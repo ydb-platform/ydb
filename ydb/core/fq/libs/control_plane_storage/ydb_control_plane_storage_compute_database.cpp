@@ -33,10 +33,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
     );
 
-    auto prepareParams = [tablePathPrefix=YdbConnection->TablePathPrefix, scope, request, alive=std::weak_ptr(Alive)](const std::vector<TResultSet>& resultSets) {
-        if (alive.expired()) {
-            throw yexception() << "Actor died";
-        }
+    auto prepareParams = [tablePathPrefix=YdbConnection->TablePathPrefix, scope, request](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
             ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -193,10 +190,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
     );
 
-    auto prepareParams = [synchronized=ev->Get()->Synchronized, workloadManagerSynchronized=ev->Get()->WorkloadManagerSynchronized, commonCounters=requestCounters.Common, scope, tablePathPrefix=YdbConnection->TablePathPrefix, alive=std::weak_ptr(Alive)](const std::vector<TResultSet>& resultSets) {
-        if (alive.expired()) {
-            throw yexception() << "Actor died";
-        }
+    auto prepareParams = [synchronized=ev->Get()->Synchronized, workloadManagerSynchronized=ev->Get()->WorkloadManagerSynchronized, commonCounters=requestCounters.Common, scope, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
             ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }

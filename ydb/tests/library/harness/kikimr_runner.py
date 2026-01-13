@@ -563,7 +563,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 name=p['name'],
                 kind=p['kind'],
                 pdisk_user_kind=p['pdisk_user_kind'],
-                num_groups=p['num_groups']
+                num_groups=p.get('num_groups'),
             )
             pools[p['name']] = p['kind']
 

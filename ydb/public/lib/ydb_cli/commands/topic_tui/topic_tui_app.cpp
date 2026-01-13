@@ -283,12 +283,11 @@ void TTopicTuiApp::StartRefreshThread() {
     RefreshThreadRunning_ = true;
     RefreshThread_ = std::thread([this] {
         while (RefreshThreadRunning_) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(RefreshRate_.MilliSeconds()));
+            // Use short interval (100ms) for responsive spinner animation
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             
-            if (State_.ShouldRefresh || RefreshThreadRunning_) {
-                State_.ShouldRefresh = false;
-                Screen_.PostEvent(Event::Custom);
-            }
+            // Always post event to allow spinner animation and async completion checks
+            Screen_.PostEvent(Event::Custom);
         }
     });
 }

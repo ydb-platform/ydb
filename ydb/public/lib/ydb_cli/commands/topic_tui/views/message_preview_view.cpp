@@ -1,6 +1,7 @@
 #include "message_preview_view.h"
 #include "../topic_tui_app.h"
 #include "../widgets/sparkline.h"
+#include "../http_client.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
 
@@ -14,22 +15,28 @@ TMessagePreviewView::TMessagePreviewView(TTopicTuiApp& app)
 
 Component TMessagePreviewView::Build() {
     return Renderer([this] {
-        if (Loading_) {
-            return vbox({
-                text("Loading messages...") | center
-            }) | border;
-        }
-        
-        if (!App_.GetViewerEndpoint().empty() && !ErrorMessage_.empty()) {
-            return vbox({
-                text("Error: " + ErrorMessage_) | color(Color::Red) | center
-            }) | border;
-        }
+        CheckAsyncCompletion();
         
         if (App_.GetViewerEndpoint().empty()) {
             return vbox({
                 text("Message preview requires --viewer-endpoint option") | dim | center,
-                text("Example: ydb topic tui --viewer-endpoint http://localhost:8765 /local") | dim | center
+                text("Example: ydb topic tui --viewer-endpoint http://vla5-xxxx:8765 /db") | dim | center,
+                text("") ,
+                text("Press [Esc] to go back") | dim | center
+            }) | border;
+        }
+        
+        if (Loading_) {
+            return vbox({
+                RenderHeader(),
+                separator(),
+                RenderSpinner() | center | flex
+            }) | border;
+        }
+        
+        if (!ErrorMessage_.empty()) {
+            return vbox({
+                text("Error: " + std::string(ErrorMessage_.c_str())) | color(Color::Red) | center
             }) | border;
         }
         
@@ -39,8 +46,10 @@ Component TMessagePreviewView::Build() {
             RenderMessages() | flex
         }) | border;
     }) | CatchEvent([this](Event event) {
-        // Only handle events when this view is active
         if (App_.GetState().CurrentView != EViewType::MessagePreview) {
+            return false;
+        }
+        if (Loading_) {
             return false;
         }
         
@@ -68,10 +77,6 @@ Component TMessagePreviewView::Build() {
             ExpandedView_ = !ExpandedView_;
             return true;
         }
-        if (event == Event::Character('g') || event == Event::Character('G')) {
-            // TODO: Show go-to-offset dialog
-            return true;
-        }
         return false;
     });
 }
@@ -80,11 +85,39 @@ void TMessagePreviewView::SetTopic(const TString& topicPath, ui32 partition, ui6
     TopicPath_ = topicPath;
     Partition_ = partition;
     CurrentOffset_ = startOffset;
-    LoadMessages();
+    StartAsyncLoad();
 }
 
 void TMessagePreviewView::Refresh() {
-    LoadMessages();
+    StartAsyncLoad();
+}
+
+void TMessagePreviewView::CheckAsyncCompletion() {
+    SpinnerFrame_++;
+    
+    if (!Loading_ || !LoadFuture_.valid()) {
+        return;
+    }
+    
+    if (LoadFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        try {
+            Messages_ = LoadFuture_.get();
+            ErrorMessage_.clear();
+        } catch (const std::exception& e) {
+            ErrorMessage_ = e.what();
+        }
+        Loading_ = false;
+        SelectedIndex_ = 0;
+    }
+}
+
+Element TMessagePreviewView::RenderSpinner() {
+    static const std::vector<std::string> frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
+    std::string frame = frames[SpinnerFrame_ % frames.size()];
+    return hbox({
+        text(frame) | color(Color::Cyan),
+        text(" Loading messages...") | dim
+    });
 }
 
 Element TMessagePreviewView::RenderHeader() {
@@ -100,15 +133,15 @@ Element TMessagePreviewView::RenderHeader() {
     return vbox({
         hbox({
             text(" Message Preview: ") | bold,
-            text(TopicPath_) | color(Color::Cyan),
+            text(std::string(TopicPath_.c_str())) | color(Color::Cyan),
             text(" / Partition ") | dim,
-            text(ToString(Partition_)) | color(Color::White)
+            text(std::to_string(Partition_)) | color(Color::White)
         }),
         hbox({
             text(" Offset: ") | dim,
-            text(offsetRange) | bold,
+            text(std::string(offsetRange.c_str())) | bold,
             filler(),
-            text(" [←] Older  [→] Newer  [g] Go to Offset ") | dim
+            text(" [←] Older  [→] Newer  [Enter] Expand ") | dim
         })
     });
 }
@@ -132,37 +165,65 @@ Element TMessagePreviewView::RenderMessages() {
 }
 
 Element TMessagePreviewView::RenderMessageContent(const TTopicMessage& msg, bool selected) {
-    TString timeStr = msg.WriteTime.FormatLocalTime("%Y-%m-%d %H:%M:%S");
-    TString sizeStr = FormatBytes(msg.UncompressedSize);
+    std::string writeTimeStr = std::string(msg.WriteTime.FormatLocalTime("%Y-%m-%d %H:%M:%S").c_str());
+    std::string createTimeStr = std::string(msg.CreateTime.FormatLocalTime("%H:%M:%S").c_str());
     
-    // Header line
-    Element header = hbox({
-        text(Sprintf("#%s", FormatNumber(msg.Offset).c_str())) | bold,
-        text("  ") ,
-        text(timeStr) | dim,
-        text("  MsgGroup: ") | dim,
-        text(msg.MessageGroupId.empty() ? "-" : msg.MessageGroupId) | color(Color::Yellow),
-        text("  Size: ") | dim,
-        text(sizeStr)
+    // Codec name
+    std::string codecName;
+    switch (msg.Codec) {
+        case 0: codecName = "raw"; break;
+        case 1: codecName = "gzip"; break;
+        case 2: codecName = "lzop"; break;
+        case 3: codecName = "zstd"; break;
+        default: codecName = std::to_string(msg.Codec); break;
+    }
+    
+    // First line: offset, seqno, times
+    Element line1 = hbox({
+        text(Sprintf("#%s", FormatNumber(msg.Offset).c_str())) | bold | color(Color::Cyan),
+        text("  SeqNo: ") | dim,
+        text(std::to_string(msg.SeqNo)),
+        text("  Write: ") | dim,
+        text(writeTimeStr),
+        text("  Create: ") | dim,
+        text(createTimeStr),
+        text(Sprintf(" (+%ldms)", msg.TimestampDiff)) | dim
     });
     
-    // Content preview
-    TString dataPreview = msg.Data;
-    const size_t maxLen = ExpandedView_ && selected ? 500 : 100;
-    if (dataPreview.size() > maxLen) {
-        dataPreview = dataPreview.substr(0, maxLen) + "...";
-    }
+    // Second line: producer, sizes, codec
+    Element line2 = hbox({
+        text("Producer: ") | dim,
+        text(msg.ProducerId.empty() ? "-" : std::string(msg.ProducerId.substr(0, 36).c_str())) | color(Color::Yellow),
+        text("  Size: ") | dim,
+        text(std::string(FormatBytes(msg.OriginalSize).c_str())),
+        text(" (stored: ") | dim,
+        text(std::string(FormatBytes(msg.StorageSize).c_str())),
+        text(", ") | dim,
+        text(codecName) | color(Color::Magenta),
+        text(")") | dim
+    });
     
-    // Replace newlines with visible markers for compact view
+    // Data preview or full data
+    std::string dataPreview = std::string(msg.Data.c_str());
+    
     if (!ExpandedView_ || !selected) {
+        // Compact: single line, truncated
+        const size_t maxLen = 80;
+        if (dataPreview.size() > maxLen) {
+            dataPreview = dataPreview.substr(0, maxLen) + "...";
+        }
+        // Replace newlines
         for (size_t i = 0; i < dataPreview.size(); ++i) {
-            if (dataPreview[i] == '\n') dataPreview[i] = ' ';
-            if (dataPreview[i] == '\r') dataPreview[i] = ' ';
+            if (dataPreview[i] == '\n' || dataPreview[i] == '\r') {
+                dataPreview[i] = ' ';
+            }
         }
     }
+    // When expanded: show full data as-is
     
     Element content = vbox({
-        header,
+        line1,
+        line2,
         paragraph(dataPreview) | color(Color::GrayLight)
     });
     
@@ -170,50 +231,52 @@ Element TMessagePreviewView::RenderMessageContent(const TTopicMessage& msg, bool
         content = content | bgcolor(Color::GrayDark);
     }
     
-    return content | border;
+    return content;
 }
 
-void TMessagePreviewView::LoadMessages() {
+void TMessagePreviewView::StartAsyncLoad() {
     const TString& endpoint = App_.GetViewerEndpoint();
     if (endpoint.empty()) {
-        ErrorMessage_ = "Viewer endpoint not configured";
+        return;
+    }
+    
+    if (Loading_) {
         return;
     }
     
     Loading_ = true;
     ErrorMessage_.clear();
-    Messages_.clear();
-    SelectedIndex_ = 0;
+    SpinnerFrame_ = 0;
     
-    try {
+    TString topicPath = TopicPath_;
+    ui32 partition = Partition_;
+    ui64 offset = CurrentOffset_;
+    
+    LoadFuture_ = std::async(std::launch::async, [endpoint, topicPath, partition, offset]() -> TVector<TTopicMessage> {
         TViewerHttpClient client(endpoint);
-        Messages_ = client.ReadMessages(TopicPath_, Partition_, CurrentOffset_, PageSize);
-    } catch (const std::exception& e) {
-        ErrorMessage_ = e.what();
-    }
-    
-    Loading_ = false;
+        return client.ReadMessages(topicPath, partition, offset, 20);
+    });
 }
 
 void TMessagePreviewView::NavigateOlder() {
-    if (CurrentOffset_ >= PageSize) {
-        CurrentOffset_ -= PageSize;
+    if (CurrentOffset_ >= 20) {
+        CurrentOffset_ -= 20;
     } else {
         CurrentOffset_ = 0;
     }
-    LoadMessages();
+    StartAsyncLoad();
 }
 
 void TMessagePreviewView::NavigateNewer() {
     if (!Messages_.empty()) {
         CurrentOffset_ = Messages_.back().Offset + 1;
     }
-    LoadMessages();
+    StartAsyncLoad();
 }
 
 void TMessagePreviewView::GoToOffset(ui64 offset) {
     CurrentOffset_ = offset;
-    LoadMessages();
+    StartAsyncLoad();
 }
 
 } // namespace NYdb::NConsoleClient

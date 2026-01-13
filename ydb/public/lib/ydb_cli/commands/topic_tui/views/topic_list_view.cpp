@@ -14,15 +14,23 @@ TTopicListView::TTopicListView(TTopicTuiApp& app)
 
 Component TTopicListView::Build() {
     return Renderer([this] {
+        // Check if async operation completed
+        CheckAsyncCompletion();
+        
         if (Loading_) {
             return vbox({
-                text("Loading...") | center
+                hbox({
+                    text(" Topics in: ") | bold,
+                    text(std::string(App_.GetState().CurrentPath.c_str())) | color(Color::Cyan)
+                }),
+                separator(),
+                RenderSpinner() | center | flex
             }) | border;
         }
         
         if (!ErrorMessage_.empty()) {
             return vbox({
-                text("Error: " + ErrorMessage_) | color(Color::Red) | center
+                text("Error: " + std::string(ErrorMessage_.c_str())) | color(Color::Red) | center
             }) | border;
         }
         
@@ -37,11 +45,8 @@ Component TTopicListView::Build() {
         
         // Header row
         rows.push_back(hbox({
-            text(" Name") | size(WIDTH, EQUAL, 30) | bold,
-            text("Type") | size(WIDTH, EQUAL, 10) | bold,
-            text("Partitions") | size(WIDTH, EQUAL, 12) | bold | align_right,
-            text("Retention") | size(WIDTH, EQUAL, 12) | bold | align_right,
-            text("Write Speed") | size(WIDTH, EQUAL, 15) | bold | align_right
+            text(" Name") | size(WIDTH, EQUAL, 40) | bold,
+            text("Type") | size(WIDTH, EQUAL, 10) | bold
         }) | bgcolor(Color::GrayDark));
         
         rows.push_back(separator());
@@ -54,7 +59,7 @@ Component TTopicListView::Build() {
         return vbox({
             hbox({
                 text(" Topics in: ") | bold,
-                text(App_.GetState().CurrentPath) | color(Color::Cyan)
+                text(std::string(App_.GetState().CurrentPath.c_str())) | color(Color::Cyan)
             }),
             separator(),
             vbox(rows) | yframe | flex
@@ -62,6 +67,11 @@ Component TTopicListView::Build() {
     }) | CatchEvent([this](Event event) {
         // Only handle events when this view is active
         if (App_.GetState().CurrentView != EViewType::TopicList) {
+            return false;
+        }
+        
+        // Ignore events while loading
+        if (Loading_) {
             return false;
         }
         
@@ -130,34 +140,55 @@ Component TTopicListView::Build() {
 }
 
 void TTopicListView::Refresh() {
-    LoadEntries();
+    StartAsyncLoad();
+}
+
+void TTopicListView::CheckAsyncCompletion() {
+    if (!Loading_ || !LoadFuture_.valid()) {
+        return;
+    }
+    
+    // Check if future is ready (non-blocking)
+    if (LoadFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        try {
+            Entries_ = LoadFuture_.get();
+            ErrorMessage_.clear();
+        } catch (const std::exception& e) {
+            ErrorMessage_ = e.what();
+            Entries_.clear();
+        }
+        Loading_ = false;
+        SelectedIndex_ = 0;
+    } else {
+        // Still loading - advance spinner
+        SpinnerFrame_++;
+    }
+}
+
+Element TTopicListView::RenderSpinner() {
+    static const std::vector<std::string> frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
+    std::string frame = frames[SpinnerFrame_ % frames.size()];
+    return hbox({
+        text(frame) | color(Color::Cyan),
+        text(" Loading...") | dim
+    });
 }
 
 Element TTopicListView::RenderEntry(const TTopicListEntry& entry, bool selected) {
     Elements cols;
     
-    TString prefix = selected ? "> " : "  ";
-    TString name = prefix + entry.Name;
+    std::string prefix = selected ? "> " : "  ";
+    std::string name = prefix + std::string(entry.Name.c_str());
     
     if (entry.IsDirectory) {
-        cols.push_back(text(name + "/") | size(WIDTH, EQUAL, 30) | color(Color::Blue));
+        cols.push_back(text(name + "/") | size(WIDTH, EQUAL, 40) | color(Color::Blue));
         cols.push_back(text("dir") | size(WIDTH, EQUAL, 10) | dim);
-        cols.push_back(text("-") | size(WIDTH, EQUAL, 12) | align_right | dim);
-        cols.push_back(text("-") | size(WIDTH, EQUAL, 12) | align_right | dim);
-        cols.push_back(text("-") | size(WIDTH, EQUAL, 15) | align_right | dim);
     } else if (entry.IsTopic) {
-        cols.push_back(text(name) | size(WIDTH, EQUAL, 30) | color(Color::Green));
+        cols.push_back(text(name) | size(WIDTH, EQUAL, 40) | color(Color::Green));
         cols.push_back(text("topic") | size(WIDTH, EQUAL, 10) | color(Color::Green));
-        cols.push_back(text(ToString(entry.PartitionCount)) | size(WIDTH, EQUAL, 12) | align_right);
-        cols.push_back(text(FormatDuration(entry.RetentionPeriod)) | size(WIDTH, EQUAL, 12) | align_right);
-        cols.push_back(text(FormatBytes(entry.WriteSpeedBytesPerSec) + "/s") | size(WIDTH, EQUAL, 15) | align_right);
     } else {
-        // Other schema objects (tables, etc.) - show but not interactive
-        cols.push_back(text(name) | size(WIDTH, EQUAL, 30) | dim);
+        cols.push_back(text(name) | size(WIDTH, EQUAL, 40) | dim);
         cols.push_back(text("other") | size(WIDTH, EQUAL, 10) | dim);
-        cols.push_back(text("-") | size(WIDTH, EQUAL, 12) | align_right | dim);
-        cols.push_back(text("-") | size(WIDTH, EQUAL, 12) | align_right | dim);
-        cols.push_back(text("-") | size(WIDTH, EQUAL, 15) | align_right | dim);
     }
     
     Element row = hbox(cols);
@@ -169,52 +200,54 @@ Element TTopicListView::RenderEntry(const TTopicListEntry& entry, bool selected)
     return row;
 }
 
-void TTopicListView::LoadEntries() {
+void TTopicListView::StartAsyncLoad() {
+    if (Loading_) {
+        return;  // Already loading
+    }
+    
     Loading_ = true;
     ErrorMessage_.clear();
-    Entries_.clear();
-    SelectedIndex_ = 0;
+    SpinnerFrame_ = 0;
     
-    try {
-        auto& schemeClient = App_.GetSchemeClient();
-        auto result = schemeClient.ListDirectory(App_.GetState().CurrentPath).GetValueSync();
+    // Capture what we need for the async operation
+    TString path = App_.GetState().CurrentPath;
+    auto* schemeClient = &App_.GetSchemeClient();
+    
+    LoadFuture_ = std::async(std::launch::async, [path, schemeClient]() -> TVector<TTopicListEntry> {
+        TVector<TTopicListEntry> entries;
+        
+        auto result = schemeClient->ListDirectory(path).GetValueSync();
         
         if (!result.IsSuccess()) {
-            ErrorMessage_ = TString(result.GetIssues().ToString());
-            Loading_ = false;
-            return;
+            throw std::runtime_error(result.GetIssues().ToString());
         }
         
-        
         // Add parent directory if not at root
-        if (App_.GetState().CurrentPath != "/") {
+        if (path != "/") {
             TTopicListEntry parent;
             parent.Name = "..";
             parent.IsDirectory = true;
-            TString path = App_.GetState().CurrentPath;
             size_t pos = path.rfind('/');
             if (pos != TString::npos && pos > 0) {
                 parent.FullPath = path.substr(0, pos);
             } else {
                 parent.FullPath = "/";
             }
-            Entries_.push_back(parent);
+            entries.push_back(parent);
         }
         
         for (const auto& child : result.GetChildren()) {
-            TTopicListEntry listEntry;
-            listEntry.Name = TString(child.Name);
-            listEntry.FullPath = App_.GetState().CurrentPath;
-            if (!listEntry.FullPath.EndsWith("/")) {
-                listEntry.FullPath += "/";
+            TTopicListEntry entry;
+            entry.Name = TString(child.Name);
+            entry.FullPath = path;
+            if (!entry.FullPath.EndsWith("/")) {
+                entry.FullPath += "/";
             }
-            listEntry.FullPath += child.Name;
+            entry.FullPath += child.Name;
             
             switch (child.Type) {
                 case NScheme::ESchemeEntryType::Topic:
-                    listEntry.IsTopic = true;
-                    // Don't fetch details here - it's slow and blocks the UI
-                    // Details are shown when the user navigates into the topic
+                    entry.IsTopic = true;
                     break;
                 case NScheme::ESchemeEntryType::Directory:
                 case NScheme::ESchemeEntryType::SubDomain:
@@ -222,21 +255,17 @@ void TTopicListView::LoadEntries() {
                 case NScheme::ESchemeEntryType::ExternalDataSource:
                 case NScheme::ESchemeEntryType::ExternalTable:
                 case NScheme::ESchemeEntryType::View:
-                    listEntry.IsDirectory = true;
+                    entry.IsDirectory = true;
                     break;
                 default:
-                    // Show but mark as non-navigable
                     break;
             }
             
-            Entries_.push_back(listEntry);
+            entries.push_back(entry);
         }
         
-    } catch (const std::exception& e) {
-        ErrorMessage_ = e.what();
-    }
-    
-    Loading_ = false;
+        return entries;
+    });
 }
 
 } // namespace NYdb::NConsoleClient

@@ -9,15 +9,18 @@
 
 namespace NYdb::NConsoleClient {
 
-// Message from topic
+// Message from topic - all metadata from Viewer API
 struct TTopicMessage {
     ui64 Offset = 0;
     ui64 SeqNo = 0;
     TInstant WriteTime;
     TInstant CreateTime;
-    TString MessageGroupId;
+    i64 TimestampDiff = 0;  // WriteTimestamp - CreateTimestamp (ms)
+    TString ProducerId;      // Producer ID (same as MessageGroupId)
     TString Data;
-    ui64 UncompressedSize = 0;
+    ui64 StorageSize = 0;
+    ui64 OriginalSize = 0;
+    ui32 Codec = 0;          // Compression codec
 };
 
 // HTTP client for Viewer API
@@ -50,6 +53,8 @@ private:
     
 private:
     TString Endpoint_;
+    TString PathPrefix_;  // e.g., "/node/50004" if specified in endpoint URL
+    mutable TString CachedRedirectPrefix_;  // Learned from first 307 redirect
     THolder<TKeepAliveHttpClient> HttpClient_;
 };
 

@@ -11,6 +11,8 @@
 
 #include <memory>
 #include <functional>
+#include <future>
+#include <atomic>
 
 namespace NYdb::NConsoleClient {
 
@@ -35,6 +37,7 @@ public:
     
     ftxui::Component Build();
     void Refresh();
+    void CheckAsyncCompletion();  // Called from render to check if async op finished
     
     // Callbacks
     std::function<void(const TString& topicPath)> OnTopicSelected;
@@ -45,14 +48,19 @@ public:
     
 private:
     ftxui::Element RenderEntry(const TTopicListEntry& entry, bool selected);
-    void LoadEntries();
+    ftxui::Element RenderSpinner();
+    void StartAsyncLoad();
     
 private:
     TTopicTuiApp& App_;
     TVector<TTopicListEntry> Entries_;
     int SelectedIndex_ = 0;
-    bool Loading_ = false;
+    
+    // Async state
+    std::atomic<bool> Loading_{false};
+    std::future<TVector<TTopicListEntry>> LoadFuture_;
     TString ErrorMessage_;
+    int SpinnerFrame_ = 0;
 };
 
 } // namespace NYdb::NConsoleClient

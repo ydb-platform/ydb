@@ -12,6 +12,8 @@ public:
     int Run(TConfig& config) override;
 
 private:
+    TString InferViewerEndpoint(const TString& grpcAddress);
+    
     TString Path_ = "/";
     TDuration RefreshRate_ = TDuration::Seconds(2);
     TString ViewerEndpoint_;

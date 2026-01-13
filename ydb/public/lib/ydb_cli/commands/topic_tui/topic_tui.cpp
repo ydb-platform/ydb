@@ -1,6 +1,8 @@
 #include "topic_tui.h"
 #include "topic_tui_app.h"
 
+#include <util/string/builder.h>
+
 namespace NYdb::NConsoleClient {
 
 TCommandTopicTui::TCommandTopicTui()
@@ -15,7 +17,7 @@ void TCommandTopicTui::Config(TConfig& config) {
         .DefaultValue(2)
         .StoreResult(&RefreshRate_);
     
-    config.Opts->AddLongOption("viewer-endpoint", "Viewer HTTP endpoint for message preview (e.g., http://localhost:8765)")
+    config.Opts->AddLongOption("viewer-endpoint", "Viewer HTTP endpoint for message preview (auto-detected if not specified)")
         .Optional()
         .StoreResult(&ViewerEndpoint_);
     
@@ -31,10 +33,38 @@ void TCommandTopicTui::Parse(TConfig& config) {
     }
 }
 
+// Helper to infer viewer endpoint from gRPC address
+TString TCommandTopicTui::InferViewerEndpoint(const TString& grpcAddress) {
+    // grpcAddress format: grpc[s]://host:port or host:port
+    TStringBuf addr = grpcAddress;
+    
+    // Remove scheme if present
+    TStringBuf scheme, rest;
+    if (addr.TrySplit("://", scheme, rest)) {
+        addr = rest;
+    }
+    
+    // Find host (before port)
+    TStringBuf host, port;
+    if (addr.TrySplit(':', host, port)) {
+        // Replace gRPC port with viewer port 8765
+        return TStringBuilder() << "http://" << host << ":8765";
+    }
+    
+    // No port specified, just use host with viewer port
+    return TStringBuilder() << "http://" << addr << ":8765";
+}
+
 int TCommandTopicTui::Run(TConfig& config) {
     TDriver driver = CreateDriver(config);
     
-    TTopicTuiApp app(driver, Path_, RefreshRate_, ViewerEndpoint_);
+    // Auto-detect viewer endpoint if not specified
+    TString viewerEndpoint = ViewerEndpoint_;
+    if (viewerEndpoint.empty() && !config.Address.empty()) {
+        viewerEndpoint = InferViewerEndpoint(config.Address);
+    }
+    
+    TTopicTuiApp app(driver, Path_, RefreshRate_, viewerEndpoint);
     return app.Run();
 }
 

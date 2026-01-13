@@ -7,14 +7,16 @@
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/datetime/base.h>
 
 #include <functional>
+#include <future>
+#include <atomic>
 
 namespace NYdb::NConsoleClient {
 
 class TTopicTuiApp;
 
-// Per-partition consumer stats
 struct TPartitionConsumerInfo {
     ui64 PartitionId = 0;
     ui64 CommittedOffset = 0;
@@ -25,6 +27,12 @@ struct TPartitionConsumerInfo {
     TDuration CommitTimeLag;
 };
 
+struct TConsumerData {
+    TVector<TPartitionConsumerInfo> PartitionStats;
+    ui64 TotalLag = 0;
+    TDuration MaxLagTime;
+};
+
 class TConsumerView {
 public:
     explicit TConsumerView(TTopicTuiApp& app);
@@ -32,8 +40,8 @@ public:
     ftxui::Component Build();
     void Refresh();
     void SetConsumer(const TString& topicPath, const TString& consumerName);
+    void CheckAsyncCompletion();
     
-    // Callbacks
     std::function<void(ui64 partition, ui64 offset)> OnCommitOffset;
     std::function<void()> OnBack;
     
@@ -41,23 +49,24 @@ private:
     ftxui::Element RenderHeader();
     ftxui::Element RenderPartitionStats();
     ftxui::Element RenderLagGauges();
-    void LoadConsumerInfo();
+    ftxui::Element RenderSpinner();
+    void StartAsyncLoad();
     
 private:
     TTopicTuiApp& App_;
     TString TopicPath_;
     TString ConsumerName_;
     
-    // Partition stats (populated from DescribeConsumer)
     TVector<TPartitionConsumerInfo> PartitionStats_;
-    
-    // Aggregate stats
     ui64 TotalLag_ = 0;
     TDuration MaxLagTime_;
     
     int SelectedPartitionIndex_ = 0;
-    bool Loading_ = false;
+    
+    std::atomic<bool> Loading_{false};
+    std::future<TConsumerData> LoadFuture_;
     TString ErrorMessage_;
+    int SpinnerFrame_ = 0;
 };
 
 } // namespace NYdb::NConsoleClient

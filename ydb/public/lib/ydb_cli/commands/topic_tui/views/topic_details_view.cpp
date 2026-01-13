@@ -14,24 +14,9 @@ TTopicDetailsView::TTopicDetailsView(TTopicTuiApp& app)
 
 Component TTopicDetailsView::Build() {
     return Renderer([this] {
-        if (Loading_) {
-            return vbox({
-                text("Loading topic details...") | center
-            }) | border;
-        }
+        CheckAsyncCompletion();
         
-        if (!ErrorMessage_.empty()) {
-            return vbox({
-                text("Error: " + ErrorMessage_) | color(Color::Red) | center
-            }) | border;
-        }
-        
-        if (TotalPartitions_ == 0) {
-            return vbox({
-                text("No topic selected") | dim | center
-            }) | border;
-        }
-        
+        // Always render UI structure - each section shows spinner or content
         return vbox({
             RenderHeader(),
             separator(),
@@ -51,7 +36,6 @@ Component TTopicDetailsView::Build() {
             }) | flex
         });
     }) | CatchEvent([this](Event event) {
-        // Only handle events when this view is active
         if (App_.GetState().CurrentView != EViewType::TopicDetails) {
             return false;
         }
@@ -121,42 +105,106 @@ Component TTopicDetailsView::Build() {
 
 void TTopicDetailsView::SetTopic(const TString& topicPath) {
     TopicPath_ = topicPath;
-    LoadTopicInfo();
+    StartAsyncLoads();
 }
 
 void TTopicDetailsView::Refresh() {
-    LoadTopicInfo();
+    StartAsyncLoads();
+}
+
+void TTopicDetailsView::CheckAsyncCompletion() {
+    SpinnerFrame_++;
+    
+    // Check topic data future
+    if (LoadingTopic_ && TopicFuture_.valid()) {
+        if (TopicFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            try {
+                auto data = TopicFuture_.get();
+                Partitions_ = std::move(data.Partitions);
+                TotalPartitions_ = data.TotalPartitions;
+                RetentionPeriod_ = data.RetentionPeriod;
+                WriteSpeedBytesPerSec_ = data.WriteSpeedBytesPerSec;
+                
+                if (data.WriteRateBytesPerSec > 0) {
+                    WriteRateHistory_.push_back(data.WriteRateBytesPerSec);
+                    while (WriteRateHistory_.size() > 60) {
+                        WriteRateHistory_.erase(WriteRateHistory_.begin());
+                    }
+                }
+                TopicError_.clear();
+            } catch (const std::exception& e) {
+                TopicError_ = e.what();
+            }
+            LoadingTopic_ = false;
+            SelectedPartitionIndex_ = 0;
+        }
+    }
+    
+    // Check consumers data future
+    if (LoadingConsumers_ && ConsumersFuture_.valid()) {
+        if (ConsumersFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            try {
+                auto data = ConsumersFuture_.get();
+                Consumers_ = std::move(data.Consumers);
+                ConsumersError_.clear();
+            } catch (const std::exception& e) {
+                ConsumersError_ = e.what();
+            }
+            LoadingConsumers_ = false;
+            SelectedConsumerIndex_ = 0;
+        }
+    }
+}
+
+Element TTopicDetailsView::RenderSpinner(const std::string& msg) {
+    static const std::vector<std::string> frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
+    std::string frame = frames[SpinnerFrame_ % frames.size()];
+    return hbox({
+        text(frame) | color(Color::Cyan),
+        text(" " + msg) | dim
+    }) | center;
 }
 
 Element TTopicDetailsView::RenderHeader() {
-    if (TotalPartitions_ == 0) {
-        return text("No topic") | dim;
+    if (TopicPath_.empty()) {
+        return text("No topic selected") | dim;
     }
+    
+    std::string partitionsText = LoadingTopic_ ? "..." : std::to_string(TotalPartitions_);
+    std::string retentionText = LoadingTopic_ ? "..." : std::string(FormatDuration(RetentionPeriod_).c_str());
+    std::string speedText = LoadingTopic_ ? "..." : std::string(FormatBytes(WriteSpeedBytesPerSec_).c_str()) + "/s";
     
     return vbox({
         hbox({
             text(" Topic: ") | bold,
-            text(TopicPath_) | color(Color::Cyan)
+            text(std::string(TopicPath_.c_str())) | color(Color::Cyan)
         }),
         hbox({
             text(" Partitions: ") | dim,
-            text(std::to_string(TotalPartitions_)) | bold,
+            text(partitionsText) | bold,
             text("   Retention: ") | dim,
-            text(std::string(FormatDuration(RetentionPeriod_).c_str())) | bold,
+            text(retentionText) | bold,
             text("   Write Speed: ") | dim,
-            text(std::string(FormatBytes(WriteSpeedBytesPerSec_).c_str()) + "/s") | bold
+            text(speedText) | bold
         })
     });
 }
 
 Element TTopicDetailsView::RenderPartitionsTable() {
+    if (LoadingTopic_) {
+        return RenderSpinner("Loading partitions...");
+    }
+    
+    if (!TopicError_.empty()) {
+        return text("Error: " + std::string(TopicError_.c_str())) | color(Color::Red) | center;
+    }
+    
     if (Partitions_.empty()) {
         return text("No partitions") | dim | center;
     }
     
     Elements rows;
     
-    // Header
     rows.push_back(hbox({
         text("ID") | size(WIDTH, EQUAL, 5) | bold,
         text("Offset Range") | size(WIDTH, EQUAL, 25) | bold,
@@ -168,15 +216,13 @@ Element TTopicDetailsView::RenderPartitionsTable() {
         const auto& p = Partitions_[i];
         bool selected = FocusPanel_ == 0 && static_cast<int>(i) == SelectedPartitionIndex_;
         
-        TString offsetRange = Sprintf("%s - %s", 
-            FormatNumber(p.StartOffset).c_str(),
-            FormatNumber(p.EndOffset).c_str());
+        std::string offsetRange = std::string(FormatNumber(p.StartOffset).c_str()) + " - " + std::string(FormatNumber(p.EndOffset).c_str());
         
         Element row = hbox({
-            text(ToString(p.PartitionId)) | size(WIDTH, EQUAL, 5),
+            text(std::to_string(p.PartitionId)) | size(WIDTH, EQUAL, 5),
             text(offsetRange) | size(WIDTH, EQUAL, 25),
-            text(FormatBytes(p.StoreSizeBytes)) | size(WIDTH, EQUAL, 10) | align_right,
-            text(FormatDuration(p.WriteTimeLag)) | size(WIDTH, EQUAL, 8) | align_right
+            text(std::string(FormatBytes(p.StoreSizeBytes).c_str())) | size(WIDTH, EQUAL, 10) | align_right,
+            text(std::string(FormatDuration(p.WriteTimeLag).c_str())) | size(WIDTH, EQUAL, 8) | align_right
         });
         
         if (selected) {
@@ -190,6 +236,14 @@ Element TTopicDetailsView::RenderPartitionsTable() {
 }
 
 Element TTopicDetailsView::RenderConsumersList() {
+    if (LoadingConsumers_) {
+        return RenderSpinner("Loading consumers...");
+    }
+    
+    if (!ConsumersError_.empty()) {
+        return text("Error: " + std::string(ConsumersError_.c_str())) | color(Color::Red) | center;
+    }
+    
     if (Consumers_.empty()) {
         return text("No consumers") | dim | center;
     }
@@ -200,19 +254,17 @@ Element TTopicDetailsView::RenderConsumersList() {
         const auto& c = Consumers_[i];
         bool selected = FocusPanel_ == 1 && static_cast<int>(i) == SelectedConsumerIndex_;
         
-        TString prefix = selected ? "> " : "  ";
+        std::string prefix = selected ? "> " : "  ";
         
         Elements parts;
-        parts.push_back(text(prefix + c.Name) | flex);
+        parts.push_back(text(prefix + std::string(c.Name.c_str())) | flex);
         
-        // Lag gauge
         double lagRatio = 0.0;
         if (c.TotalLag > 0) {
-            // Assume max lag is 10000 for visualization
             lagRatio = std::min(1.0, c.TotalLag / 10000.0);
         }
         parts.push_back(RenderGaugeBar(lagRatio, 8, false));
-        parts.push_back(text(" " + FormatNumber(c.TotalLag)));
+        parts.push_back(text(" " + std::string(FormatNumber(c.TotalLag).c_str())));
         
         Element row = hbox(parts);
         
@@ -239,100 +291,108 @@ Element TTopicDetailsView::RenderWriteRateChart() {
     });
 }
 
-void TTopicDetailsView::LoadTopicInfo() {
-    Loading_ = true;
-    ErrorMessage_.clear();
-    Partitions_.clear();
-    Consumers_.clear();
-    TotalPartitions_ = 0;
-    RetentionPeriod_ = TDuration::Zero();
-    WriteSpeedBytesPerSec_ = 0;
+void TTopicDetailsView::StartAsyncLoads() {
+    if (TopicPath_.empty()) {
+        return;
+    }
     
-    try {
-        auto& topicClient = App_.GetTopicClient();
+    TString path = TopicPath_;
+    auto* topicClient = &App_.GetTopicClient();
+    
+    // Start topic data load (partitions + header info) - fast
+    if (!LoadingTopic_) {
+        LoadingTopic_ = true;
+        TopicError_.clear();
         
-        // Describe topic with stats
-        auto result = topicClient.DescribeTopic(TopicPath_,
-            NTopic::TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
-        
-        if (!result.IsSuccess()) {
-            ErrorMessage_ = TString(result.GetIssues().ToString());
-            Loading_ = false;
-            return;
-        }
-        
-        const auto& desc = result.GetTopicDescription();
-        
-        // Cache topic metadata for header
-        TotalPartitions_ = desc.GetPartitions().size();
-        RetentionPeriod_ = desc.GetRetentionPeriod();
-        WriteSpeedBytesPerSec_ = desc.GetPartitionWriteSpeedBytesPerSecond();
-        
-        // Extract partition info
-        for (const auto& p : desc.GetPartitions()) {
-            TPartitionDisplayInfo info;
-            info.PartitionId = p.GetPartitionId();
+        TopicFuture_ = std::async(std::launch::async, [path, topicClient]() -> TTopicBasicData {
+            TTopicBasicData data;
             
-            if (p.GetPartitionStats()) {
-                const auto& stats = *p.GetPartitionStats();
-                info.StartOffset = stats.GetStartOffset();
-                info.EndOffset = stats.GetEndOffset();
-                info.StoreSizeBytes = stats.GetStoreSizeBytes();
-                info.WriteTimeLag = stats.GetMaxWriteTimeLag();
-                info.LastWriteTime = stats.GetLastWriteTime();
+            auto result = topicClient->DescribeTopic(path,
+                NTopic::TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
+            
+            if (!result.IsSuccess()) {
+                throw std::runtime_error(result.GetIssues().ToString());
             }
             
-            Partitions_.push_back(info);
-        }
+            const auto& desc = result.GetTopicDescription();
+            
+            data.TotalPartitions = desc.GetPartitions().size();
+            data.RetentionPeriod = desc.GetRetentionPeriod();
+            data.WriteSpeedBytesPerSec = desc.GetPartitionWriteSpeedBytesPerSecond();
+            
+            const auto& topicStats = desc.GetTopicStats();
+            data.WriteRateBytesPerSec = topicStats.GetBytesWrittenPerMinute() / 60.0;
+            
+            for (const auto& p : desc.GetPartitions()) {
+                TPartitionDisplayInfo info;
+                info.PartitionId = p.GetPartitionId();
+                
+                if (p.GetPartitionStats()) {
+                    const auto& stats = *p.GetPartitionStats();
+                    info.StartOffset = stats.GetStartOffset();
+                    info.EndOffset = stats.GetEndOffset();
+                    info.StoreSizeBytes = stats.GetStoreSizeBytes();
+                    info.WriteTimeLag = stats.GetMaxWriteTimeLag();
+                    info.LastWriteTime = stats.GetLastWriteTime();
+                }
+                
+                data.Partitions.push_back(info);
+            }
+            
+            return data;
+        });
+    }
+    
+    // Start consumers load (slower - needs per-consumer DescribeConsumer calls)
+    if (!LoadingConsumers_) {
+        LoadingConsumers_ = true;
+        ConsumersError_.clear();
+        Consumers_.clear();
         
-        // Extract consumer info
-        for (const auto& c : desc.GetConsumers()) {
-            TConsumerDisplayInfo info;
-            info.Name = TString(c.GetConsumerName());
-            info.IsImportant = c.GetImportant();
+        ConsumersFuture_ = std::async(std::launch::async, [path, topicClient]() -> TConsumersData {
+            TConsumersData data;
             
-            // Need to describe consumer for detailed stats
-            auto consumerResult = topicClient.DescribeConsumer(TopicPath_, info.Name,
-                NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+            auto result = topicClient->DescribeTopic(path,
+                NTopic::TDescribeTopicSettings()).GetValueSync();
             
-            if (consumerResult.IsSuccess()) {
-                const auto& consumerDesc = consumerResult.GetConsumerDescription();
-                for (const auto& part : consumerDesc.GetPartitions()) {
-                    if (part.GetPartitionStats() && part.GetPartitionConsumerStats()) {
-                        const auto& pStats = *part.GetPartitionConsumerStats();
-                        ui64 endOffset = part.GetPartitionStats()->GetEndOffset();
-                        ui64 committedOffset = pStats.GetCommittedOffset();
-                        if (endOffset > committedOffset) {
-                            info.TotalLag += endOffset - committedOffset;
-                        }
-                        
-                        // Track max lag time
-                        if (pStats.GetMaxCommittedTimeLag() > info.MaxLagTime) {
-                            info.MaxLagTime = pStats.GetMaxCommittedTimeLag();
+            if (!result.IsSuccess()) {
+                throw std::runtime_error(result.GetIssues().ToString());
+            }
+            
+            const auto& desc = result.GetTopicDescription();
+            
+            for (const auto& c : desc.GetConsumers()) {
+                TConsumerDisplayInfo info;
+                info.Name = TString(c.GetConsumerName());
+                info.IsImportant = c.GetImportant();
+                
+                // Fetch detailed consumer stats
+                auto consumerResult = topicClient->DescribeConsumer(path, info.Name,
+                    NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+                
+                if (consumerResult.IsSuccess()) {
+                    const auto& consumerDesc = consumerResult.GetConsumerDescription();
+                    for (const auto& part : consumerDesc.GetPartitions()) {
+                        if (part.GetPartitionStats() && part.GetPartitionConsumerStats()) {
+                            ui64 endOffset = part.GetPartitionStats()->GetEndOffset();
+                            ui64 committedOffset = part.GetPartitionConsumerStats()->GetCommittedOffset();
+                            if (endOffset > committedOffset) {
+                                info.TotalLag += endOffset - committedOffset;
+                            }
+                            
+                            if (part.GetPartitionConsumerStats()->GetMaxCommittedTimeLag() > info.MaxLagTime) {
+                                info.MaxLagTime = part.GetPartitionConsumerStats()->GetMaxCommittedTimeLag();
+                            }
                         }
                     }
                 }
+                
+                data.Consumers.push_back(info);
             }
             
-            Consumers_.push_back(info);
-        }
-        
-        // Update write rate history (just add current stats)
-        const auto& topicStats = desc.GetTopicStats();
-        // Convert bytes per minute to bytes per second
-        double writeRate = topicStats.GetBytesWrittenPerMinute() / 60.0;
-        WriteRateHistory_.push_back(writeRate);
-        
-        // Keep last 60 samples
-        while (WriteRateHistory_.size() > 60) {
-            WriteRateHistory_.erase(WriteRateHistory_.begin());
-        }
-        
-    } catch (const std::exception& e) {
-        ErrorMessage_ = e.what();
+            return data;
+        });
     }
-    
-    Loading_ = false;
 }
 
 } // namespace NYdb::NConsoleClient

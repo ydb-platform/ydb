@@ -10,12 +10,13 @@
 
 #include <memory>
 #include <functional>
+#include <future>
+#include <atomic>
 
 namespace NYdb::NConsoleClient {
 
 class TTopicTuiApp;
 
-// Partition info for display
 struct TPartitionDisplayInfo {
     ui64 PartitionId = 0;
     ui64 StartOffset = 0;
@@ -25,12 +26,24 @@ struct TPartitionDisplayInfo {
     TInstant LastWriteTime;
 };
 
-// Consumer summary for display
 struct TConsumerDisplayInfo {
     TString Name;
     ui64 TotalLag = 0;
     TDuration MaxLagTime;
     bool IsImportant = false;
+};
+
+// Separate data structs for independent async loads
+struct TTopicBasicData {
+    size_t TotalPartitions = 0;
+    TDuration RetentionPeriod;
+    ui64 WriteSpeedBytesPerSec = 0;
+    double WriteRateBytesPerSec = 0.0;
+    TVector<TPartitionDisplayInfo> Partitions;
+};
+
+struct TConsumersData {
+    TVector<TConsumerDisplayInfo> Consumers;
 };
 
 class TTopicDetailsView {
@@ -40,8 +53,8 @@ public:
     ftxui::Component Build();
     void Refresh();
     void SetTopic(const TString& topicPath);
+    void CheckAsyncCompletion();
     
-    // Callbacks
     std::function<void(const TString& consumerName)> OnConsumerSelected;
     std::function<void()> OnAddConsumer;
     std::function<void(const TString& consumerName)> OnDropConsumer;
@@ -55,31 +68,36 @@ private:
     ftxui::Element RenderPartitionsTable();
     ftxui::Element RenderConsumersList();
     ftxui::Element RenderWriteRateChart();
-    void LoadTopicInfo();
+    ftxui::Element RenderSpinner(const std::string& msg);
+    void StartAsyncLoads();
     
 private:
     TTopicTuiApp& App_;
     TString TopicPath_;
     
-    // Extracted display data (we don't cache the full description)
+    // Topic basic data (partitions, header info)
     TVector<TPartitionDisplayInfo> Partitions_;
-    TVector<TConsumerDisplayInfo> Consumers_;
-    
-    // Cached topic metadata for header rendering
     size_t TotalPartitions_ = 0;
     TDuration RetentionPeriod_;
     ui64 WriteSpeedBytesPerSec_ = 0;
-    
-    // Write rate history for sparkline
     TVector<double> WriteRateHistory_;
     
-    // Selection state
+    // Consumers data (loaded separately)
+    TVector<TConsumerDisplayInfo> Consumers_;
+    
+    // Selection
     int SelectedPartitionIndex_ = 0;
     int SelectedConsumerIndex_ = 0;
-    int FocusPanel_ = 0;  // 0=partitions, 1=consumers
+    int FocusPanel_ = 0;
     
-    bool Loading_ = false;
-    TString ErrorMessage_;
+    // Separate async state for each section
+    std::atomic<bool> LoadingTopic_{false};
+    std::atomic<bool> LoadingConsumers_{false};
+    std::future<TTopicBasicData> TopicFuture_;
+    std::future<TConsumersData> ConsumersFuture_;
+    TString TopicError_;
+    TString ConsumersError_;
+    int SpinnerFrame_ = 0;
 };
 
 } // namespace NYdb::NConsoleClient

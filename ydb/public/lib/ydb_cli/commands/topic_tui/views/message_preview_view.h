@@ -7,8 +7,11 @@
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/datetime/base.h>
 
 #include <functional>
+#include <future>
+#include <atomic>
 
 namespace NYdb::NConsoleClient {
 
@@ -20,16 +23,17 @@ public:
     
     ftxui::Component Build();
     void Refresh();
-    void SetTopic(const TString& topicPath, ui32 partition, ui64 startOffset = 0);
+    void SetTopic(const TString& topicPath, ui32 partition, ui64 startOffset);
+    void CheckAsyncCompletion();
     
-    // Callbacks
     std::function<void()> OnBack;
     
 private:
     ftxui::Element RenderHeader();
     ftxui::Element RenderMessages();
     ftxui::Element RenderMessageContent(const TTopicMessage& msg, bool selected);
-    void LoadMessages();
+    ftxui::Element RenderSpinner();
+    void StartAsyncLoad();
     void NavigateOlder();
     void NavigateNewer();
     void GoToOffset(ui64 offset);
@@ -44,10 +48,12 @@ private:
     int SelectedIndex_ = 0;
     bool ExpandedView_ = false;
     
-    bool Loading_ = false;
-    TString ErrorMessage_;
+    static constexpr ui32 PageSize = 20;
     
-    static constexpr ui32 PageSize = 10;
+    std::atomic<bool> Loading_{false};
+    std::future<TVector<TTopicMessage>> LoadFuture_;
+    TString ErrorMessage_;
+    int SpinnerFrame_ = 0;
 };
 
 } // namespace NYdb::NConsoleClient

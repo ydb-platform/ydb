@@ -1337,7 +1337,7 @@ private:
             return result;
         }
 
-        if (SessionCtx->Config().EnableDiscardSelect) {
+        if (SessionCtx->Config().GetEnableDiscardSelect()) {
             bool hasDiscardWarning = false;
             for (const auto& issue : ctx.IssueManager.GetIssues()) {
                 if (issue.GetCode() == TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE) {

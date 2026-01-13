@@ -152,6 +152,9 @@ public:
             IncParentDirAlterVersionWithRepublish(OperationId, path, context);
         }
 
+        context.SS->ClearDescribePathCaches(path.Base());
+        context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
+
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
     }

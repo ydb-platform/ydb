@@ -246,4 +246,52 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
         auto afterResult = ReadTable(server, shards, tableId);
         UNIT_ASSERT_VALUES_EQUAL(afterResult, "");
     }
+
+    Y_UNIT_TEST(TruncateTableWithKqpSelects) {
+        auto serverHelper = TServerHelper();
+        auto [server, runtime, edgeSender] = serverHelper.GetObjects();
+
+        auto [shards, tableId] = CreateShardedTable(server, edgeSender, "/Root", "test_table", 1);
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/test_table` (key, value) VALUES
+                (1, 100),
+                (2, 200),
+                (3, 300);
+        )");
+
+        auto beforeResult = KqpSimpleExec(*runtime, Q_(R"(
+            SELECT * FROM `/Root/test_table` ORDER BY key;
+        )"));
+        UNIT_ASSERT_C(!beforeResult.empty(), "Table should contain data before first TRUNCATE");
+
+        ui64 txId = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
+        WaitTxNotification(server, edgeSender, txId);
+
+        auto afterFirstTruncateResult = KqpSimpleExec(*runtime, Q_(R"(
+            SELECT * FROM `/Root/test_table`;
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(afterFirstTruncateResult, "");
+
+        ExecSQL(server, edgeSender, R"(
+            UPSERT INTO `/Root/test_table` (key, value) VALUES
+                (1, 100),
+                (2, 200),
+                (3, 300);
+        )");
+
+        auto afterInsertResult = KqpSimpleExec(*runtime, Q_(R"(
+            SELECT * FROM `/Root/test_table` ORDER BY key;
+        )"));
+        UNIT_ASSERT_C(!afterInsertResult.empty(), "Table should contain new data after insert");
+
+        ui64 txId2 = AsyncTruncateTable(server, edgeSender, "/Root", "test_table");
+        WaitTxNotification(server, edgeSender, txId2);
+
+        auto afterSecondTruncateResult = KqpSimpleExec(*runtime, Q_(R"(
+            SELECT * FROM `/Root/test_table`;
+        )"));
+        UNIT_ASSERT_VALUES_EQUAL(afterSecondTruncateResult, "");
+    }
 }

@@ -1974,9 +1974,13 @@ TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    // Return type: List<String or Utf8>
+    // Return type: List<Struct<__ydb_token:String or Utf8,__ydb_freq:Uint32>>
     auto stringType = ctx.MakeType<TDataExprType>(textDataType->GetSlot());
-    auto listType = ctx.MakeType<TListExprType>(stringType);
+    TVector<const TItemExprType*> rowItems;
+    rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NFulltext::TokenColumn, stringType));
+    rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NFulltext::FreqColumn, ctx.MakeType<TDataExprType>(EDataSlot::Uint32)));
+    auto rowType = ctx.MakeType<TStructExprType>(rowItems);
+    auto listType = ctx.MakeType<TListExprType>(rowType);
     node->SetTypeAnn(listType);
 
     return TStatus::Ok;

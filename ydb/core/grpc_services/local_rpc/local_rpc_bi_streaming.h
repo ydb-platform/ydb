@@ -1,14 +1,59 @@
 #pragma once
 
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NRpcService {
 
 template <class TIn, class TOut>
-class TLocalRpcStreamingCtxBase : public NGRpcServer::IGRpcStreamingContext<TIn, TOut> {
+class TLocalRpcBiStreamingCtx : public NGRpcServer::IGRpcStreamingContext<TIn, TOut> {
     using TBase = NGRpcServer::IGRpcStreamingContext<TIn, TOut>;
 
 public:
+    struct TRpcEvents {
+        enum EEv {
+            EvActorAttached = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvReadRequest,
+            EvWriteRequest,
+            EvFinishRequest,
+            EvEnd,
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+        struct TEvActorAttached : public TEventLocal<TEvActorAttached, EvActorAttached> {
+            explicit TEvActorAttached(const TActorId& rpcActor)
+                : RpcActor(rpcActor)
+            {}
+
+            const TActorId RpcActor;
+        };
+
+        // Owner should reply with IGRpcStreamingContext::TEvReadFinished
+        struct TEvReadRequest : public TEventLocal<TEvReadRequest, EvReadRequest> {
+        };
+
+        // Owner should reply with IGRpcStreamingContext::TEvWriteFinished
+        struct TEvWriteRequest : public TEventLocal<TEvWriteRequest, EvWriteRequest> {
+            TEvWriteRequest(TOut&& message, const grpc::WriteOptions& options)
+                : Message(std::move(message))
+                , Options(options)
+            {}
+
+            TOut Message;
+            const grpc::WriteOptions Options;
+        };
+
+        // Owner should reply with IGRpcStreamingContext::TEvNotifiedWhenDone
+        struct TEvFinishRequest : public TEventLocal<TEvFinishRequest, EvFinishRequest> {
+            explicit TEvFinishRequest(const grpc::Status& status)
+                : Status(status)
+            {}
+
+            const grpc::Status Status;
+        };
+    };
+
     struct TSettings {
         TString Database;
         std::optional<TString> Token;
@@ -19,8 +64,10 @@ public:
         TString RpcMethodName;
     };
 
-    explicit TLocalRpcStreamingCtxBase(const TSettings& settings)
-        : AuthState(/* needAuth */ false)
+    explicit TLocalRpcBiStreamingCtx(const TActorSystem* actorSystem, const TActorId& owner, const TSettings& settings)
+        : ActorSystem(actorSystem)
+        , Owner(owner)
+        , AuthState(/* needAuth */ false)
         , Database(settings.Database)
         , Token(settings.Token)
         , PeerName(settings.PeerName)
@@ -29,6 +76,8 @@ public:
         , TraceId(settings.TraceId)
         , RpcMethodName(settings.RpcMethodName)
     {
+        Y_VALIDATE(ActorSystem, "ActorSystem is not set");
+        Y_VALIDATE(Owner, "Owner is not set");
         AuthState.State = NYdbGrpc::TAuthState::AS_OK;
     }
 
@@ -37,12 +86,12 @@ public:
     }
 
     void Attach(TActorId actor) override {
-        DoAttach(actor);
-        IsAttached = true;
+        RpcActor = actor;
+        ActorSystem->Send(Owner, new TRpcEvents::TEvActorAttached(actor));
     }
 
     bool Read() override {
-        if (!IsAttached) {
+        if (!RpcActor) {
             Finish(grpc::Status(grpc::StatusCode::INTERNAL, "Actor is not attached to context before read call"));
             return false;
         }
@@ -51,12 +100,12 @@ public:
             return false;
         }
 
-        DoRead();
+        ActorSystem->Send(Owner, new TRpcEvents::TEvReadRequest());
         return true;
     }
 
     bool Write(TOut&& message, const grpc::WriteOptions& options) override {
-        if (!IsAttached) {
+        if (!RpcActor) {
             Finish(grpc::Status(grpc::StatusCode::INTERNAL, "Actor is not attached to context before write call"));
             return false;
         }
@@ -65,7 +114,7 @@ public:
             return false;
         }
 
-        DoWrite(std::move(message), options);
+        ActorSystem->Send(Owner, new TRpcEvents::TEvWriteRequest(std::move(message), options));
         return true;
     }
 
@@ -86,7 +135,12 @@ public:
         }
 
         IsFinished = true;
-        DoFinish(status);
+        ActorSystem->Send(Owner, new TRpcEvents::TEvFinishRequest(status));
+
+        if (RpcActor) {
+            ActorSystem->Send(RpcActor, new TBase::TEvNotifiedWhenDone(/* success */ true));
+        }
+
         return true;
     }
 
@@ -135,19 +189,9 @@ public:
         return RpcMethodName;
     }
 
-protected:
-    virtual void DoAttach(TActorId actor) = 0;
-
-    // Should reply with IGRpcStreamingContext::TEvReadFinished
-    virtual void DoRead() = 0;
-
-    // Should reply with IGRpcStreamingContext::TEvWriteFinished
-    virtual void DoWrite(TOut&& message, const grpc::WriteOptions& options) = 0;
-
-    // Should reply with IGRpcStreamingContext::TEvNotifiedWhenDone
-    virtual void DoFinish(const grpc::Status& status) = 0;
-
 private:
+    const TActorSystem* const ActorSystem = nullptr;
+    const TActorId Owner;
     mutable NYdbGrpc::TAuthState AuthState;
     TString Database;
     const std::optional<TString> Token;
@@ -157,7 +201,7 @@ private:
     const TString ParentTraceId;
     const TString TraceId;
     const TString RpcMethodName;
-    bool IsAttached = false;
+    TActorId RpcActor;
     bool IsFinished = false;
 };
 

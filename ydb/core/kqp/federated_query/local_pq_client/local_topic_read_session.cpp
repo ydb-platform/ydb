@@ -51,14 +51,11 @@ class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicR
 
     using TRpcIn = Ydb::Topic::StreamReadMessage::FromClient;
     using TRpcOut = Ydb::Topic::StreamReadMessage::FromServer;
+    using TLocalRpcCtx = TLocalRpcBiStreamingCtx<TRpcIn, TRpcOut>;
 
     struct TEvPrivate {
         enum EEv {
-            EvRpcActorAttached = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvRpcReadRequest,
-            EvRpcWriteRequest,
-            EvRpcFinishRequest,
-            EvPartitionStatusRequest,
+            EvPartitionStatusRequest = TLocalRpcCtx::TRpcEvents::EvEnd,
             EvPartitionOffsetsCommitRequest,
             EvPartitionConfirmCreate,
             EvPartitionConfirmDestroy,
@@ -69,35 +66,6 @@ class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicR
         };
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-        // Events from local RPC actor
-
-        struct TEvRpcActorAttached : public TEventLocal<TEvRpcActorAttached, EvRpcActorAttached> {
-            explicit TEvRpcActorAttached(const TActorId& rpcActor)
-                : RpcActor(rpcActor)
-            {}
-
-            const TActorId RpcActor;
-        };
-
-        struct TEvRpcReadRequest : public TEventLocal<TEvRpcReadRequest, EvRpcReadRequest> {
-        };
-
-        struct TEvRpcWriteRequest : public TEventLocal<TEvRpcWriteRequest, EvRpcWriteRequest> {
-            explicit TEvRpcWriteRequest(TRpcOut&& message)
-                : Message(std::move(message))
-            {}
-
-            TRpcOut Message;
-        };
-
-        struct TEvRpcFinishRequest : public TEventLocal<TEvRpcFinishRequest, EvRpcFinishRequest> {
-            explicit TEvRpcFinishRequest(const grpc::Status& status)
-                : Status(status)
-            {}
-
-            const grpc::Status Status;
-        };
 
         // Events from partition session callbacks
 
@@ -140,48 +108,6 @@ class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicR
 
             const i64 PartitionSessionId;
         };
-    };
-
-    class TLocalRpcCtx final : public TLocalRpcStreamingCtxBase<TRpcIn, TRpcOut> {
-        using TBase = TLocalRpcStreamingCtxBase<TRpcIn, TRpcOut>;
-
-    public:
-        TLocalRpcCtx(const TActorSystem* actorSystem, const TActorId& selfId, const TSettings& settings)
-            : TBase(settings)
-            , ActorSystem(actorSystem)
-            , SelfId(selfId)
-        {
-            Y_VALIDATE(ActorSystem, "ActorSystem is not set");
-            Y_VALIDATE(SelfId, "SelfId is not set");
-        }
-
-    protected:
-        void DoAttach(TActorId actor) final {
-            RpcActor = actor;
-            ActorSystem->Send(SelfId, new TEvPrivate::TEvRpcActorAttached(actor));
-        }
-
-        void DoRead() final {
-            ActorSystem->Send(SelfId, new TEvPrivate::TEvRpcReadRequest());
-        }
-
-        void DoWrite(TRpcOut&& message, const grpc::WriteOptions& options) final {
-            Y_UNUSED(options);
-            ActorSystem->Send(SelfId, new TEvPrivate::TEvRpcWriteRequest(std::move(message)));
-        }
-
-        void DoFinish(const grpc::Status& status) final {
-            ActorSystem->Send(SelfId, new TEvPrivate::TEvRpcFinishRequest(status));
-
-            if (RpcActor) {
-                ActorSystem->Send(RpcActor, new TEvNotifiedWhenDone(/* success */ true));
-            }
-        }
-
-    private:
-        const TActorSystem* const ActorSystem = nullptr;
-        const TActorId SelfId;
-        TActorId RpcActor;
     };
 
     class TLocalPartitionSession final : public TPartitionSession {
@@ -279,7 +205,7 @@ public:
         TReaderCounters::TPtr Counters;
     };
 
-    explicit TLocalTopicReadSessionActor(const TSettings& actorSettings, const TReadSessionSettings& sessionSettings)
+    TLocalTopicReadSessionActor(const TSettings& actorSettings, const TReadSessionSettings& sessionSettings)
         : Settings(sessionSettings)
         , ReadSettings(GetReadSettings(sessionSettings))
         , Database(actorSettings.Database)
@@ -303,10 +229,10 @@ public:
         hFunc(TSessionEvents::TEvExtractReadyEvents, Handle);
         hFunc(TSessionEvents::TEvEventsConsumed, Handle);
         hFunc(TSessionEvents::TEvSessionFinished, Handle);
-        hFunc(TEvPrivate::TEvRpcActorAttached, Handle);
-        hFunc(TEvPrivate::TEvRpcReadRequest, Handle);
-        hFunc(TEvPrivate::TEvRpcWriteRequest, Handle);
-        hFunc(TEvPrivate::TEvRpcFinishRequest, Handle);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvActorAttached, Handle);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvReadRequest, Handle);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvWriteRequest, Handle);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvFinishRequest, Handle);
         hFunc(TEvPrivate::TEvPartitionStatusRequest, Handle);
         hFunc(TEvPrivate::TEvPartitionOffsetsCommitRequest, Handle);
         hFunc(TEvPrivate::TEvPartitionConfirmCreate, Handle);
@@ -376,7 +302,7 @@ private:
 
     // Events from local RPC session
 
-    void Handle(TEvPrivate::TEvRpcActorAttached::TPtr& ev) {
+    void Handle(TLocalRpcCtx::TRpcEvents::TEvActorAttached::TPtr& ev) {
         Y_VALIDATE(!RpcActor, "RpcActor is already set");
         RpcActor = ev->Get()->RpcActor;
 
@@ -384,7 +310,7 @@ private:
         SendInitMessage();
     }
 
-    void Handle(TEvPrivate::TEvRpcReadRequest::TPtr&) {
+    void Handle(TLocalRpcCtx::TRpcEvents::TEvReadRequest::TPtr&) {
         PendingRpcResponses++;
 
         if (SessionClosed) {
@@ -397,7 +323,7 @@ private:
         SendSessionEvents();
     }
 
-    void Handle(TEvPrivate::TEvRpcWriteRequest::TPtr& ev) {
+    void Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPtr& ev) {
         Y_VALIDATE(RpcActor, "RpcActor is not set before write request");
         auto response = std::make_unique<TLocalRpcCtx::TEvWriteFinished>();
 
@@ -457,7 +383,7 @@ private:
         }
     }
 
-    void Handle(TEvPrivate::TEvRpcFinishRequest::TPtr& ev) {
+    void Handle(TLocalRpcCtx::TRpcEvents::TEvFinishRequest::TPtr& ev) {
         const auto& status = ev->Get()->Status;
         if (!status.ok()) {
             LOG_E("Rpc session finished with error status code: " << static_cast<ui64>(status.error_code()) << ", message: " << status.error_message());

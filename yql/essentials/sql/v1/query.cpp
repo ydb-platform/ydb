@@ -4038,7 +4038,7 @@ public:
     {
     }
 
-    virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
+    INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
         options->Add(Q(Y(Q("mode"), Q("create"))));
 
         auto settings = Y();
@@ -4084,7 +4084,7 @@ public:
     {
     }
 
-    virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
+    INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const final {
         options->Add(Q(Y(Q("mode"), Q("alter"))));
 
         auto settings = Y();
@@ -4139,7 +4139,7 @@ public:
     {
     }
 
-    virtual INode::TPtr FillOptions(TContext&, INode::TPtr options) const final {
+    INode::TPtr FillOptions(TContext&, INode::TPtr options) const final {
         options->Add(Q(Y(Q("mode"), Q("drop"))));
 
         return options;

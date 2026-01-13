@@ -508,19 +508,19 @@ public:
         Stack_.push_back(std::make_unique<TDictProcessor>(std::move(innerKey), std::move(innerPayload)));
     }
 
-    void OnBeginVariant() {
+    void OnBeginVariant() override {
         IsVariant_.push_back(true);
     }
 
-    void OnEndVariant() {
+    void OnEndVariant() override {
         IsVariant_.pop_back();
     }
 
-    void OnBeginTagged(TStringBuf tag) {
+    void OnBeginTagged(TStringBuf tag) override {
         Y_UNUSED(tag);
     }
 
-    void OnEndTagged() {
+    void OnEndTagged() override {
     }
 
     void OnPg(TStringBuf name, TStringBuf category) final {

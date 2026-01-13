@@ -47,7 +47,7 @@ public:
 
 class IParserFactory: public TThrRefBase {
 public:
-    virtual ~IParserFactory() = default;
+    ~IParserFactory() override = default;
 
     virtual std::unique_ptr<IParser> MakeParser() const = 0;
 };

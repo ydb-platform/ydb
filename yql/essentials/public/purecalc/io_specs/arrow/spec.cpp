@@ -53,7 +53,7 @@ public:
     {
     }
 
-    InputItemType Fetch() {
+    InputItemType Fetch() override {
         return Underlying_->Fetch();
     }
 };

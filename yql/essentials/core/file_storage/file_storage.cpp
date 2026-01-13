@@ -72,7 +72,7 @@ public:
         Downloaders_.insert(Downloaders_.begin(), downloaders.begin(), downloaders.end());
     }
 
-    ~TFileStorageImpl() {
+    ~TFileStorageImpl() override {
     }
 
     TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) final {
@@ -316,7 +316,7 @@ public:
         // do not call MtpQueue->Start here as we have to do it _after_ fork
     }
 
-    ~TFileStorageWithAsync() {
+    ~TFileStorageWithAsync() override {
         MtpQueue_->Stop();
     }
 

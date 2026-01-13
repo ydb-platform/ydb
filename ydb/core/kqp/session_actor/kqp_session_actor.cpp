@@ -244,6 +244,13 @@ public:
         return result;
     }
 
+    TString TraceId() const {
+        if (QueryState && QueryState->KqpSessionSpan) {
+            return QueryState->KqpSessionSpan.GetTraceId().GetHexTraceId();
+        }
+        return TString();
+    }
+
     void MakeNewQueryState(TEvKqp::TEvQueryRequest::TPtr& ev) {
         ++QueryId;
         YQL_ENSURE(!QueryState);
@@ -520,14 +527,11 @@ public:
         }
 
         if (ev->Get()->IsDiskFull()) {
-            STLOG_W("Database disks are without free space",
-                (pool_id, poolId),(trace_id, TraceId()));
+            LOG_W("Database disks are without free space, pool id: " << poolId << ", trace id:" << TraceId());
             FillQueryIssues(ev->Get()->Issues);
         }
 
-        STLOG_D("Continue request",
-            (pool_id, poolId),
-            (trace_id, TraceId()));
+        LOG_D("Continue request, pool id: " << poolId << ", trace id:" << TraceId());
 
         QueryState->PoolHandlerActor = ev->Sender;
         QueryState->UserRequestContext->PoolId = poolId;
@@ -1997,10 +2001,7 @@ public:
 
     void FillQueryIssues(const NYql::TIssues& issues) {
         if (!QueryState) {
-            STLOG_W("Try to put issues into empty QueryState", 
-                (issues, issues.ToOneLineString()),
-                (trace_id, TraceId())
-            );
+            LOG_W("Try to put issues into empty QueryState, issues:" << issues.ToOneLineString() << " trace id: " << TraceId());
             return;
         }
 

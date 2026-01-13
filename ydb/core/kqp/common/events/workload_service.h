@@ -52,8 +52,7 @@ struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TKqp
 
         const auto& issue = *Issues.begin();
 
-        return issue.GetCode() == NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED ||
-            issue.GetCode() == NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE;
+        return issue.GetCode() == NYql::TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED;
     }
 
     const Ydb::StatusIds::StatusCode Status;

@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             result.GetIssues().begin()->GetCode(),
-            (ui32)NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED
+            (ui32)NYql::TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED
         );
     }
 

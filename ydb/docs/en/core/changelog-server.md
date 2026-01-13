@@ -2,7 +2,7 @@
 
 ## Version 25.2 {#25-2}
 
-### Version 25.2.1.23 {#25-2-1-23}
+### Version 25.2.1.24 {#25-2-1-24}
 
 #### Bug Fixes
 
@@ -16,6 +16,13 @@
 * Fixed an [issue](https://github.com/ydb-platform/ydb/issues/23122) with duplicates in uniq secondary index
 * Fixed an [issue](https://github.com/ydb-platform/ydb/issues/26565) with checksum mismatch error on restoration compressed backup from s3
 * Fixed [node failure](https://github.com/ydb-platform/ydb/issues/27193) on some queries
+* Fixed a couple of cluster bootstrap related issues:
+  * [Issue](https://github.com/ydb-platform/ydb/issues/25023) with enabled authentication, [fix](https://github.com/ydb-platform/ydb/pull/25678)
+  * [Issue](https://github.com/ydb-platform/ydb/issues/27228) with INACTIVE disks, [fix](https://github.com/ydb-platform/ydb/pull/28886)
+* [Fixed](https://github.com/ydb-platform/ydb/pull/28655) an [issue](https://github.com/ydb-platform/ydb/issues/28510) where race condition could occur and clients receive "Could not find correct token validator" error when mising newly issued tokens before LoginProvider state is updated. 
+* [Fixed](https://github.com/ydb-platform/ydb/pull/29940) an [issue](https://github.com/ydb-platform/ydb/issues/29903) where named expression containing another named expression caused incorrect VIEW backup
+
+
 
 ### Release candidate 25.2.1.10 {#25-2-1-10-rc}
 

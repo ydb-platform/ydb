@@ -514,9 +514,9 @@ bool TConfigUI::RunCloneTheme(const TContext& ctx) {
 
 bool TConfigUI::RunColorsMode(const TContext& ctx) {
     std::vector<TString> options = {
-        "auto - default behavior (respects NO_COLOR and TTY)",
+        "auto - default behavior (respect NO_COLOR environment variable and TTY)",
         "never - completely disable colors",
-        "always - enable colors (ignore NO_COLOR)"
+        "always - enable colors (ignore NO_COLOR environment variable)"
     };
 
     EGlobalColorsMode currentMode = TInteractiveSettings::GetColorsMode();

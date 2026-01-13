@@ -14,6 +14,19 @@ namespace {
 // Global colors mode, initialized lazily from config or set explicitly
 static std::optional<EGlobalColorsMode> GlobalColorsMode;
 
+// Singleton for disabled colors - never outputs ANSI codes
+class TDisabledColors : public NColorizer::TColors {
+public:
+    TDisabledColors()
+        : TColors(false)
+    {}
+};
+
+NColorizer::TColors& DisabledColors() {
+    static TDisabledColors instance;
+    return instance;
+}
+
 EGlobalColorsMode ParseColorsMode(const TString& value) {
     if (value == "never") {
         return EGlobalColorsMode::Never;
@@ -48,33 +61,21 @@ void SetGlobalColorsMode(EGlobalColorsMode mode) {
 }
 
 NColorizer::TColors& AutoColors(IOutputStream& out) {
-    auto& result = NColorizer::AutoColors(out);
-
     switch (GetGlobalColorsMode()) {
         case EGlobalColorsMode::Never:
-            // Always disable colors
-            result.Disable();
-            break;
-
-        case EGlobalColorsMode::Always:
-            // Enable colors, ignore NO_COLOR
-            result.Enable();
-            break;
+            return DisabledColors();
 
         case EGlobalColorsMode::Auto:
-        default:
-            // Default behavior: respect NO_COLOR
-            // no-color.org
+            // Respect NO_COLOR environment variable (no-color.org)
             if (TryGetEnv("NO_COLOR").Defined()) {
-                result.Disable();
-            } else {
-                // Re-enable colors (in case they were previously disabled)
-                result.Enable();
+                return DisabledColors();
             }
-            break;
-    }
+            [[fallthrough]];
 
-    return result;
+        case EGlobalColorsMode::Always:
+        default:
+            return NColorizer::AutoColors(out);
+    }
 }
 
 }

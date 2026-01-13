@@ -673,25 +673,25 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     }
 
     Y_UNIT_TEST(TestAllSpeciesCrcWhole1of2) {
-        for (auto erasure = BlobStorageGroupType::ErasureNames.begin(); erasure != TBlobStorageGroupType::ErasureNames.end(); std::advance(erasure, 2)) {
+        for (auto erasure = TErasureType::ErasureNames.begin(); erasure != TErasureType::ErasureNames.end(); std::advance(erasure, 2)) {
             TestErasure(TErasureType::CrcModeWholePart, erasure->first);
         }
     }
 
     Y_UNIT_TEST(TestAllSpeciesCrcWhole2of2) {
-        for (auto erasure = std::advance(TBlobStorageGroupType::ErasureNames.begin(), 1); erasure != TBlobStorageGroupType::ErasureNames.end(); std::advance(erasure, 2)) {
+        for (auto erasure = std::advance(TErasureType::ErasureNames.begin(), 1); erasure != TErasureType::ErasureNames.end(); std::advance(erasure, 2)) {
             TestErasure(TErasureType::CrcModeWholePart, erasure->first);
         }
     }
 
     Y_UNIT_TEST(TestAllSpecies1of2) {
-        for (auto erasure = BlobStorageGroupType::ErasureNames.begin(); erasure != TBlobStorageGroupType::ErasureNames.end(); std::advance(erasure, 2)) {
+        for (auto erasure = TErasureType::ErasureNames.begin(); erasure != TErasureType::ErasureNames.end(); std::advance(erasure, 2)) {
             TestErasure(TErasureType::CrcModeNone, erasure->first);
         }
     }
 
     Y_UNIT_TEST(TestAllSpecies2of2) {
-        for (auto erasure = std::advance(TBlobStorageGroupType::ErasureNames.begin(), 1); erasure != TBlobStorageGroupType::ErasureNames.end(); std::advance(erasure, 2)) {
+        for (auto erasure = std::advance(TErasureType::ErasureNames.begin(), 1); erasure != TErasureType::ErasureNames.end(); std::advance(erasure, 2)) {
             TestErasure(TErasureType::CrcModeNone, erasure->first);
         }
     }
@@ -699,7 +699,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     Y_UNIT_TEST(TestBlockByteOrder) {
         ui32 species = (ui32)TErasureType::Erasure4Plus2Block;
         TErasureType groupType((TErasureType::EErasureSpecies)species);
-        TString erasureName = TErasureType::ErasureNames[species];
+        TString erasureName = TErasureType::ErasureNames.at(species);
 
         for (ui32 dataSize = 0; dataSize <= 256; ++dataSize) {
             TString testString;

@@ -73,7 +73,8 @@ if __name__ == '__main__':
         duration=args.duration,
         worker_count=args.in_flight,
         version=args.version,
-        config=cfg
+        config=cfg,
+        verbose=False
     )
     workload.start(use_multiprocessing=True)
     workload.wait_stop()

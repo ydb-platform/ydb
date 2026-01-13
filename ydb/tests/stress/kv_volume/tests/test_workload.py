@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import pytest
+import sys
 from functools import wraps
 
 import ydb.tests.stress.kv_volume.protos.config_pb2 as config_pb
@@ -53,10 +54,11 @@ class ConfigBuilder:
         self.prepared_action.action_command.append(command)
 
     @chained_method
-    def add_read_to_prepared_action(self, size, count):
+    def add_read_to_prepared_action(self, size, count, verify_data=False):
         command = config_pb.ActionCommand()
         command.read.size = size
         command.read.count = count
+        command.read.verify_data = True
         self.prepared_action.action_command.append(command)
 
     @chained_method
@@ -68,12 +70,19 @@ class ConfigBuilder:
         self.prepared_action.action_command.append(command)
 
     @chained_method
-    def set_data_mode_for_prepared_action(self, worker=False, from_prev_actions=[]):
-        if worker:
-            self.prepared_action.action_data_mode.worker.CopyFrom(config_pb.ActionDataMode.Worker())
-        else:
-            mode = config_pb.ActionDataMode.FromPrevActions(action_name=from_prev_actions)
-            self.prepared_action.action_data_mode.from_prev_actions.CopyFrom(mode)
+    def add_delete_to_prepared_action(self, count):
+        command = config_pb.ActionCommand()
+        command.delete.count = count
+        self.prepared_action.action_command.append(command)
+
+    @chained_method
+    def set_data_mode_worker_for_prepared_action(self):
+        self.prepared_action.action_data_mode.worker.CopyFrom(config_pb.ActionDataMode.Worker())
+
+    @chained_method
+    def set_data_mode_from_prev_actions_for_prepared_action(self, action_names):
+        mode = config_pb.ActionDataMode.FromPrevActions(action_name=action_names)
+        self.prepared_action.action_data_mode.from_prev_actions.CopyFrom(mode)
 
     @chained_method
     def set_periodicity_for_prepared_action(self, period_us=None, worker_max_in_flight=None, global_max_in_flight=None):
@@ -83,6 +92,23 @@ class ConfigBuilder:
             self.prepared_action.worker_max_in_flight = worker_max_in_flight
         if global_max_in_flight is not None:
             self.prepared_action.global_max_in_flight = global_max_in_flight
+
+    @chained_method
+    def init_initial_data(self):
+        if not self.config.HasField('initial_data'):
+            self.config.initial_data.Clear()
+
+    @chained_method
+    def clear_initial_data(self):
+        self.config.initial_data.Clear()
+
+    @chained_method
+    def add_write_to_initial_data(self, size, count, channel):
+        write_cmd = config_pb.ActionCommand.Write()
+        write_cmd.size = size
+        write_cmd.count = count
+        write_cmd.channel = channel
+        self.config.initial_data.write_commands.append(write_cmd)
 
     def return_config(self):
         return self.config
@@ -96,19 +122,61 @@ def generate_configs_for_tests():
             .init_prepared_action(name='print')
             .add_print_to_prepared_action('test msg')
             .set_periodicity_for_prepared_action(period_us=1000000)
-            .set_data_mode_for_prepared_action(worker=True)
+            .set_data_mode_worker_for_prepared_action()
+            .add_prepared_action()
             .return_config()
-        )
+        ),
+        (  # common channel read
+            ConfigBuilder(config_pb.PartitionMode.OnePartition)
+            .set_volume_config("kv_volume", 1, ['ssd'] * 3)
+            .init_initial_data()
+            .add_write_to_initial_data(size=1024*1024, count=5, channel=0)
+            .init_prepared_action(name='read')
+            .add_read_to_prepared_action(size=1024, count=5, verify_data=True)
+            .set_periodicity_for_prepared_action(period_us=10000)
+            .set_data_mode_worker_for_prepared_action()
+            .add_prepared_action()
+            .return_config()
+        ),
+        (  # inline channel read
+            ConfigBuilder(config_pb.PartitionMode.OnePartition)
+            .set_volume_config("kv_volume", 1, ['ssd'] * 3)
+            .init_initial_data()
+            .add_write_to_initial_data(size=1024*1024, count=5, channel=1)
+            .init_prepared_action(name='read')
+            .add_read_to_prepared_action(size=1024, count=5, verify_data=True)
+            .set_periodicity_for_prepared_action(period_us=10000)
+            .set_data_mode_worker_for_prepared_action()
+            .add_prepared_action()
+            .return_config()
+        ),
+        (  # delete action
+            ConfigBuilder(config_pb.PartitionMode.OnePartition)
+            .set_volume_config("kv_volume", 1, ['ssd'] * 3)
+            .init_initial_data()
+            .add_write_to_initial_data(size=1024, count=10, channel=0)
+            .init_prepared_action(name='delete')
+            .add_delete_to_prepared_action(count=2)
+            .set_periodicity_for_prepared_action(period_us=100000)
+            .set_data_mode_worker_for_prepared_action()
+            .add_prepared_action()
+            .return_config()
+        ),
     ]
 
 
 class TestYdbKvVolumeWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
+        print('setup cluster', file=sys.stderr)
         yield from self.setup_cluster()
 
     @pytest.mark.parametrize("config", generate_configs_for_tests())
     @pytest.mark.parametrize("version", ["v1", "v2"])
     def test(self, config, version):
-        with Workload(self.endpoint, self.database, 60, 1, version, config) as workload:
-            workload.start()
+        print('Test begin', file=sys.stderr)
+        workload = Workload(self.endpoint, self.database, 10, 1, version, config, verbose=True)
+        print('Workload begin', file=sys.stderr)
+        workload.start()
+        workload.wait_stop()
+        print('Test end', file=sys.stderr)

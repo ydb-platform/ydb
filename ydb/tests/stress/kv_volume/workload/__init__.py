@@ -1,4 +1,4 @@
-import logging
+import sys
 from datetime import datetime, timedelta
 import random
 from collections import defaultdict
@@ -12,8 +12,6 @@ from ydb.tests.library.clients.kikimr_keyvalue_client import KeyValueClient
 
 DEFAULT_YDB_KV_PORT = 2135
 DEFAULT_DATA_PATTERN = '0123456789ABCDEF'
-
-logger = logging.getLogger("YdbKvWorkload")
 
 
 def parse_int_with_default(s, default=None):
@@ -41,9 +39,10 @@ def generate_pattern_data(size, pattern=DEFAULT_DATA_PATTERN):
 
 class Worker:
     class ActionRunner:
-        def __init__(self, config, workload, worker_semaphore=None, global_semaphore=None, init_keys=None, results=None, parent_names=None, parent_chain=None):
+        def __init__(self, config, workload, worker=None, worker_semaphore=None, global_semaphore=None, init_keys=None, results=None, parent_names=None, parent_chain=None):
             self.config = config
             self.workload = workload
+            self.worker = worker
             self.task = None
             self.completed_actions = set()
             self.worker_semaphore = worker_semaphore
@@ -54,19 +53,38 @@ class Worker:
             self.parent_chain = parent_chain or {}
             self.instance_id = None
 
+        @property
+        def verbose(self):
+            return self.workload.verbose
+
+        def _generate_instance_id(self, action_name):
+            if self.worker:
+                return self.worker._generate_instance_id(action_name)
+            instance_id = f'{action_name}_{id(self)}'
+            return instance_id
+
+        def _generate_write_key(self):
+            if self.worker:
+                return self.worker._generate_write_key()
+            return f'write_key_{id(self)}'
+
         async def execute_command(self, cmd, data_context=None):
             cmd_type = cmd.WhichOneof('Command')
             if cmd_type == 'print':
-                print(f"[Worker Action: {self.config.name}] {cmd.print.msg}")
+                print(f"[Worker Action: {self.config.name}] {cmd.print.msg}", file=sys.stderr)
             elif cmd_type == 'read':
                 keys_with_partitions = self._get_keys()
                 if not keys_with_partitions:
-                    logger.warning(f"No keys available for read in action {self.config.name}")
+                    print(f"No keys available for read in action {self.config.name}", file=sys.stderr)
                     return
-                key, partition_id = random.choice(list(keys_with_partitions.items()))
+                key, key_info = random.choice(list(keys_with_partitions.items()))
+                partition_id, key_size = key_info
                 offset = 0
                 if cmd.read.size != 0:
-                    offset = random.randint(0, cmd.read.size - 1) if cmd.read.size > 1 else 0
+                    max_offset = key_size - cmd.read.size if key_size > cmd.read.size else 0
+                    offset = random.randint(0, max_offset) if max_offset > 1 else 0
+                if self.verbose:
+                    print(f"READ action: key={key}, partition_id={partition_id}, offset={offset}, size={cmd.read.size}, version={self.workload.version}", file=sys.stderr)
                 response = await self.workload.client.a_kv_read(
                     self.workload._volume_path(),
                     partition_id,
@@ -76,27 +94,38 @@ class Worker:
                     version=self.workload.version
                 )
                 if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
-                    logger.error(f"Read failed for key {key} in action {self.config.name}")
+                    print(f"Read failed for key {key} in action {self.config.name}", file=sys.stderr)
                 elif cmd.read.verify_data:
                     from ydb.public.api.protos import ydb_keyvalue_pb2 as keyvalue_pb
-                    read_result = keyvalue_pb.ReadResult()
-                    if not response.operation.result.Unpack(read_result):
-                        logger.error(f"Failed to unpack read result for key {key} in action {self.config.name}")
+                    if self.workload.version == 'v2':
+                        read_result = response
                     else:
-                        expected_data = generate_pattern_data(offset + cmd.read.size)[offset:offset + cmd.read.size]
-                        actual_data = read_result.value
-                        if actual_data != expected_data:
-                            logger.error(f"Data verification failed for key {key} in action {self.config.name}: expected pattern mismatch")
+                        read_result = keyvalue_pb.ReadResult()
+                        if not response.operation.result.Unpack(read_result):
+                            print(f"Failed to unpack read result for key {key} in action {self.config.name}", file=sys.stderr)
+                            return
+                    expected_data = generate_pattern_data(key_size)[offset:offset + cmd.read.size]
+                    actual_data = read_result.value
+                    if actual_data != expected_data.encode():
+                        print(f"Data verification failed for key {key} in action {self.config.name}: key_size={key_size}, offset={offset}, read_size={cmd.read.size}, actual_len={len(actual_data)}, expected_len={len(expected_data)}", file=sys.stderr)
+                        if len(actual_data) > 0 and len(expected_data) > 0:
+                            print(f"  First 20 bytes of actual: {actual_data[:20]}", file=sys.stderr)
+                            print(f"  First 20 bytes of expected: {expected_data[:20]}", file=sys.stderr)
+                    elif self.verbose:
+                        print(f"READ verification: key={key}, data verified successfully", file=sys.stderr)
             elif cmd_type == 'delete':
                 keys_with_partitions = self._get_keys()
                 if not keys_with_partitions:
-                    logger.warning(f"No keys available for delete in action {self.config.name}")
+                    print(f"No keys available for delete in action {self.config.name}", file=sys.stderr)
                     return
                 count = min(cmd.delete.count, len(keys_with_partitions)) if cmd.delete.count > 0 else 0
                 if count == 0:
                     return
                 keys_to_delete = list(keys_with_partitions.items())[:count]
-                for key, partition_id in keys_to_delete:
+                for key, key_info in keys_to_delete:
+                    partition_id = key_info[0]
+                    if self.verbose:
+                        print(f"DELETE action: key={key}, partition_id={partition_id}, version={self.workload.version}", file=sys.stderr)
                     response = await self.workload.client.a_kv_delete_range(
                         self.workload._volume_path(),
                         partition_id,
@@ -108,12 +137,16 @@ class Worker:
                     )
                     if response is not None and self.workload.get_status(response) == ydb_status_codes.StatusIds.StatusCode.SUCCESS:
                         self._remove_key(key)
+                        if self.verbose:
+                            print(f"DELETE successful: key={key}", file=sys.stderr)
                     else:
-                        logger.error(f"Delete failed for key {key} in action {self.config.name}")
+                        print(f"Delete failed for key {key} in action {self.config.name}", file=sys.stderr)
             elif cmd_type == 'write':
-                key = self.workload._generate_write_key()
+                key = self._generate_write_key()
                 partition_id = random.randrange(0, self.workload.partition_count)
                 data = generate_pattern_data(cmd.write.size)
+                if self.verbose:
+                    print(f"WRITE action: key={key}, partition_id={partition_id}, size={cmd.write.size}, channel={cmd.write.channel}, version={self.workload.version}", file=sys.stderr)
                 response = await self.workload.client.a_kv_write(
                     self.workload._volume_path(),
                     partition_id,
@@ -123,9 +156,11 @@ class Worker:
                     version=self.workload.version
                 )
                 if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
-                    logger.error(f"Write failed for key {key} in action {self.config.name}")
+                    print(f"Write failed for key {key} in action {self.config.name}", file=sys.stderr)
                 else:
-                    self._store_key(key, partition_id)
+                    self._store_key(key, partition_id, cmd.write.size)
+                    if self.verbose:
+                        print(f"WRITE successful: key={key}", file=sys.stderr)
 
         def _get_keys(self):
             mode = self.config.action_data_mode.WhichOneof('Mode')
@@ -142,14 +177,16 @@ class Worker:
             else:
                 return dict(self.init_keys) if self.init_keys else {}
 
-        def _store_key(self, key, partition_id):
-            self.results[self.config.name][self.instance_id][key] = partition_id
+        def _store_key(self, key, partition_id, size):
+            self.results[self.config.name][self.instance_id][key] = (partition_id, size)
 
         def _remove_key(self, key):
             self.results[self.config.name][self.instance_id].pop(key, None)
 
         async def run_commands(self, parent_chain_update=None):
-            self.instance_id = self.workload._generate_instance_id(self.config.name)
+            self.instance_id = self._generate_instance_id(self.config.name)
+            if self.verbose:
+                print(f"ActionRunner: running commands for action '{self.config.name}', instance_id={self.instance_id}", file=sys.stderr)
             if parent_chain_update:
                 parent_chain_update(self.config.name, self.instance_id)
             if self.worker_semaphore:
@@ -168,10 +205,18 @@ class Worker:
             else:
                 for cmd in self.config.action_command:
                     await self.execute_command(cmd)
+            if self.verbose:
+                print(f"ActionRunner: completed commands for action '{self.config.name}', instance_id={self.instance_id}", file=sys.stderr)
 
         async def run_periodic(self, end_time, parent_chain_update=None, on_iteration_complete=None):
             period = self.config.period_us / 1000000.0
+            iteration = 0
+            if self.verbose:
+                print(f"ActionRunner: starting periodic action '{self.config.name}', period={period}s", file=sys.stderr)
             while datetime.now() < end_time:
+                iteration += 1
+                if self.verbose:
+                    print(f"ActionRunner: iteration {iteration} for action '{self.config.name}'", file=sys.stderr)
                 start = datetime.now()
                 await self.run_commands(parent_chain_update)
                 if on_iteration_complete:
@@ -179,6 +224,8 @@ class Worker:
                 elapsed = (datetime.now() - start).total_seconds()
                 sleep_time = max(0, period - elapsed)
                 await asyncio.sleep(sleep_time)
+            if self.verbose:
+                print(f"ActionRunner: finished periodic action '{self.config.name}', total iterations={iteration}", file=sys.stderr)
 
         async def run_once(self, parent_chain_update=None):
             await self.run_commands(parent_chain_update)
@@ -193,6 +240,12 @@ class Worker:
         self.results = defaultdict(lambda: defaultdict(dict))
         self.write_key_counter = 0
         self.instance_counter = 0
+        if self.verbose:
+            print(f"Worker {self.worker_id} initialized with {len(self.init_keys)} init keys", file=sys.stderr)
+
+    @property
+    def verbose(self):
+        return self.workload.verbose
 
     def _generate_instance_id(self, action_name):
         self.instance_counter += 1
@@ -208,25 +261,35 @@ class Worker:
     def _generate_init_keys(self):
         init_keys = {}
         if not hasattr(self.workload.config, 'initial_data'):
+            if self.verbose:
+                print(f"Worker {self.worker_id}: no initial data configured", file=sys.stderr)
             return init_keys
 
         for write_cmd in self.workload.config.initial_data.write_commands:
             for pair_id in range(write_cmd.count):
                 key = self._generate_init_key(pair_id)
                 partition_id = random.randrange(0, self.workload.partition_count)
-                init_keys[key] = partition_id
+                init_keys[key] = (partition_id, write_cmd.size)
+        if self.verbose:
+            print(f"Worker {self.worker_id}: generated {len(init_keys)} init keys", file=sys.stderr)
         return init_keys
 
     async def _fill_init_data(self):
         if not hasattr(self.workload.config, 'initial_data'):
             return
 
+        verbose = self.workload.verbose if hasattr(self.workload, 'verbose') else False
+        if verbose:
+            print(f"Worker {self.worker_id}: filling init data", file=sys.stderr)
         for write_cmd in self.workload.config.initial_data.write_commands:
             data = generate_pattern_data(write_cmd.size)
             for pair_id in range(write_cmd.count):
                 key = self._generate_init_key(pair_id)
-                partition_id = self.init_keys.get(key)
-                if partition_id is not None:
+                key_info = self.init_keys.get(key)
+                if key_info is not None:
+                    partition_id = key_info[0]
+                    if verbose:
+                        print(f"Init data WRITE: key={key}, partition_id={partition_id}, size={write_cmd.size}, channel={write_cmd.channel}", file=sys.stderr)
                     await self.workload.client.a_kv_write(
                         self.workload._volume_path(),
                         partition_id,
@@ -235,6 +298,8 @@ class Worker:
                         channel=write_cmd.channel,
                         version=self.workload.version
                     )
+        if verbose:
+            print(f"Worker {self.worker_id}: init data filled successfully", file=sys.stderr)
 
     def add_action(self, action_config, parent_names=None):
         worker_sem = None
@@ -247,9 +312,12 @@ class Worker:
 
         parent_names = parent_names or set()
         parent_chain = {name: None for name in parent_names}
-        runner = self.ActionRunner(action_config, self.workload, worker_sem, global_sem, self.init_keys, self.results, parent_names, parent_chain)
+        runner = self.ActionRunner(action_config, self.workload, self, worker_sem, global_sem, self.init_keys, self.results, parent_names, parent_chain)
         self.actions[action_config.name] = action_config
         self.runners[action_config.name] = runner
+        if self.verbose:
+            period_str = f", period={action_config.period_us}us" if action_config.HasField('period_us') else ", one-shot"
+            print(f"Worker {self.worker_id}: added action '{action_config.name}'{period_str}, commands={len(action_config.action_command)}", file=sys.stderr)
 
     def _get_or_create_global_semaphore(self, name, limit):
         if name not in self.global_semaphores:
@@ -262,6 +330,8 @@ class Worker:
                 child_chain[action_name] = instance_id
 
     async def arun(self):
+        if self.verbose:
+            print(f"Worker {self.worker_id}: starting arun", file=sys.stderr)
         await self._fill_init_data()
         end_time = datetime.now() + timedelta(seconds=self.workload.duration)
 
@@ -280,6 +350,8 @@ class Worker:
             parent_chains[name] = {parent: None for parent in parent_names_map[name]}
 
         child_actions_map = defaultdict(list)
+        if self.verbose:
+            print(f"Worker {self.worker_id}: configured {len(self.actions)} actions", file=sys.stderr)
 
         for name, action in self.actions.items():
             parent = action.parent_action if action.HasField('parent_action') else None
@@ -321,8 +393,12 @@ class Worker:
 
         if task_map:
             await asyncio.gather(*task_map.values())
+        if self.verbose:
+            print(f"Worker {self.worker_id}: finished arun", file=sys.stderr)
 
     def run(self):
+        if self.verbose:
+            print(f'Worker {self.worker_id} started', file=sys.stderr)
         asyncio.run(self.arun())
 
 
@@ -330,8 +406,14 @@ class WorkerBuilder:
     def __init__(self, config, workload):
         self.config = config
         self.workload = workload
+        
+    @property
+    def verbose(self):
+        return self.workload.verbose
 
     def build(self, worker_id):
+        if self.verbose:
+            print(f"WorkerBuilder: building worker {worker_id} with {len(self.config.actions)} actions", file=sys.stderr)
         worker = Worker(worker_id, self.workload)
 
         parent_names_map = {}
@@ -345,11 +427,13 @@ class WorkerBuilder:
         for action in self.config.actions:
             parent_names = parent_names_map[action.name].copy()
             worker.add_action(action, parent_names)
+        if self.verbose:
+            print(f"WorkerBuilder: worker {worker_id} built successfully", file=sys.stderr)
         return worker
 
 
 class YdbKeyValueVolumeWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, worker_count, version, config):
+    def __init__(self, endpoint, database, duration, worker_count, version, config, verbose=False):
         super().__init__(None, '', 'kv_volume', None)
         fqdn, port = parse_endpoint(endpoint)
         self.fqdn = fqdn
@@ -362,6 +446,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         self.version = version
         self.config = config
         self.client = None
+        self.verbose = verbose
 
     @property
     def partition_count(self):
@@ -385,7 +470,8 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         return client.drop_tablets(self._volume_path())
 
     def _pre_start(self):
-        print('Init keyvalue volume')
+        if self.verbose:
+            print(f"Initializing KeyValue volume: endpoint={self.fqdn}:{self.port}, database={self.database}, path={self._volume_path()}", file=sys.stderr)
         self.client = KeyValueClient(self.fqdn, self.port)
         create_reponse = self._create_volume(self.client)
         if create_reponse is None or create_reponse.operation.status != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
@@ -395,10 +481,16 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         self.begin_time = datetime.now()
         self.end_time = self.begin_time + timedelta(seconds=self.duration)
         print('Start Load; Begin Time:', self.begin_time, '; End Time:', self.end_time)
+        if self.verbose:
+            print(f"Start Load: duration={self.duration}s, workers={self.worker_count}, version={self.version}", file=sys.stderr)
         return True
 
-    async def _post_stop(self):
-        print('Stop Load; Drop Volume')
+    def _post_stop(self):
+        asyncio.run(self._apost_stop())
+    
+    async def _apost_stop(self):
+        if self.verbose:
+            print(f"Stop Load: dropping volume {self._volume_path()}", file=sys.stderr)
         if self.client:
             self._drop_volume(self.client)
             await self.client.aclose()
@@ -410,14 +502,6 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         if hasattr(response, 'operation'):
             return response.operation.status
         return response.status
-
-    def __enter__(self):
-        self._pre_start()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        asyncio.run(self._post_stop())
-        return False
 
     def get_workload_thread_funcs(self):
         workers = []

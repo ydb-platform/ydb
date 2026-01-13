@@ -21,10 +21,10 @@ namespace NKikimr {
             heapIt.SeekToLast();
         }
 
-        auto readHugeBlob = [&](const TDiskPart& location) {
+        auto readHugeBlob = [&](const TDiskPart& location, TLogoBlobID blobId) {
             ++MonGroup.HugeBlobsRead();
             MonGroup.HugeBlobBytesRead() += location.Size;
-            return Read(location);
+            return Read(location, blobId);
         };
 
         auto essence = GetBarriersEssence();

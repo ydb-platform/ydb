@@ -957,6 +957,7 @@ struct TEvChunkRead : TEventLocal<TEvChunkRead, TEvBlobStorage::EvChunkRead> {
     TOwnerRound OwnerRound;
     ui8 PriorityClass;
     void *Cookie;
+    TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
 
     TEvChunkRead(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, ui32 size,
             ui8 priorityClass, void *cookie)
@@ -1073,6 +1074,7 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
     ui8 PriorityClass;
     bool DoFlush;
     bool IsSeqWrite; // sequential write to this chunk (normally, it is 'true', for huge blobs -- 'false')
+    TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
 
     mutable NLWTrace::TOrbit Orbit;
 

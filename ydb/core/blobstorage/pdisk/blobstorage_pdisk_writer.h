@@ -84,14 +84,14 @@ public:
     TDiskFormat &Format;
     ui64 &Nonce;
     THolder<TBufferedWriter> BufferedWriter;
-    ui64 CurrentPosition;
+    ui64 CurrentPosition = 0;
     ui32 SectorBytesFree;
     ui64 SectorIdx;
     ui64 FirstSectorIdx;
     ui64 EndSectorIdx;
     ui32 ChunkIdx;
     std::atomic<TFirstUncommitted> FirstUncommitted = TFirstUncommitted(0, 0);
-    ui64 RecordBytesLeft;
+    ui64 RecordBytesLeft = 0;
     ui64 DataMagic;
     TDeque<TChunkIdxWithInfo> NextChunks;
     TLogChunkInfo *LogChunkInfo = nullptr;
@@ -103,7 +103,9 @@ public:
     // ui32 PDiskId;
     TDriveModel *DriveModel;
 
-    bool OnNewChunk;
+    TLogoBlobID BlobId;
+
+    bool OnNewChunk = true;
 
     bool IsEmptySector() const {
         return (SectorBytesFree == Format.SectorPayloadSize());
@@ -112,25 +114,22 @@ public:
     TSectorWriter(TPDiskMon &mon, IBlockDevice &blockDevice, TDiskFormat &format, ui64 &nonce,
             const TKey &key, TBufferPool *pool, ui64 firstSectorIdx, ui64 endSectorIdx, ui64 dataMagic, ui32 chunkIdx,
             TLogChunkInfo *logChunkInfo, ui64 sectorIdx, TBuffer *buffer, std::shared_ptr<TPDiskCtx> pCtx,
-            TDriveModel *driveModel, bool enableEncrytion)
+            TDriveModel *driveModel, bool enableEncrytion, TLogoBlobID blobId)
         : Mon(mon)
         , BlockDevice(blockDevice)
         , Format(format)
         , Nonce(nonce)
-        , CurrentPosition(0)
         , SectorBytesFree(format.SectorPayloadSize())
         , SectorIdx(sectorIdx)
         , FirstSectorIdx(firstSectorIdx)
         , EndSectorIdx(endSectorIdx)
         , ChunkIdx(chunkIdx)
-        , RecordBytesLeft(0)
         , DataMagic(dataMagic)
         , LogChunkInfo(logChunkInfo)
-        , Hash()
         , Cypher(enableEncrytion)
         , PCtx(std::move(pCtx))
         , DriveModel(driveModel)
-        , OnNewChunk(true)
+        , BlobId(blobId)
     {
         Y_VERIFY_S(!LogChunkInfo || LogChunkInfo->ChunkIdx == ChunkIdx, PCtx->PDiskLogPrefix);
         BufferedWriter.Reset(new TBufferedWriter(Format.SectorSize, BlockDevice, Format, pool,
@@ -254,7 +253,7 @@ public:
                 memcpy(sectorData, BufferedWriter->Get(), Format.SectorSize);
                 // Check sector CRC
                 const ui64 sectorHash = *(ui64*)(void*)(sectorData + Format.SectorSize - sizeof(ui64));
-                Y_VERIFY_S(Hash.CheckSectorHash(sectorOffset, dataMagic, sectorData, Format.SectorSize, sectorHash),
+                Y_VERIFY_S(Hash.CheckSectorHash(sectorOffset, dataMagic, sectorData, Format.SectorSize, sectorHash, {}),
                         PCtx->PDiskLogPrefix << "Sector hash corruption detected!");
             }
             BufferedWriter->MarkDirty();
@@ -300,7 +299,7 @@ public:
         TDataSectorFooter &sectorFooter = *(TDataSectorFooter*)(sector + Format.SectorSize - sizeof(TDataSectorFooter));
         sectorFooter.Version = PDISK_DATA_VERSION;
         sectorFooter.Nonce = Nonce;
-        sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize);
+        sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize, BlobId);
 
         BufferedWriter->MarkDirty();
         ++Nonce;
@@ -311,7 +310,7 @@ public:
         TParitySectorFooter &sectorFooter = *(TParitySectorFooter*)
             (sector + Format.SectorSize - sizeof(TParitySectorFooter));
         sectorFooter.Nonce = Nonce;
-        sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize);
+        sectorFooter.Hash = Hash.HashSector(sectorOffset, magic, sector, Format.SectorSize, {});
         if (!IsLog) {
             P_LOG(PRI_TRACE, BPD01, SelfInfo() << " PrepareParitySectorFooter",
                     (SectorOffset, sectorOffset),

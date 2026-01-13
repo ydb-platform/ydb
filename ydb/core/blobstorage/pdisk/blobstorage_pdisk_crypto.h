@@ -3,6 +3,8 @@
 
 #include <ydb/core/blobstorage/crypto/crypto.h>
 
+#include <ydb/core/base/logoblob.h>
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -19,8 +21,7 @@ public:
         : UseT1ha0Hasher(useT1ha0Hasher)
     {}
 
-    ui64 OldHashSector(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,
-            const ui32 sectorSize) {
+    ui64 OldHashSector(ui64 sectorOffset, ui64 magic, const ui8 *sector, ui32 sectorSize) {
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&sectorOffset, sizeof sectorOffset);
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&magic, sizeof magic);
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(sector, sectorSize - sizeof(ui64));
@@ -33,8 +34,7 @@ public:
     }
 
     template<class THasher>
-    ui64 T1ha0HashSector(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,
-            const ui32 sectorSize) {
+    ui64 T1ha0HashSector(ui64 sectorOffset, ui64 magic, const ui8 *sector, ui32 sectorSize) {
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&sectorOffset, sizeof sectorOffset);
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&magic, sizeof magic);
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(sector, sectorSize - sizeof(ui64));
@@ -44,21 +44,21 @@ public:
         return hasher.Hash(sector, sectorSize - sizeof(ui64));
     }
 
-    ui64 HashSector(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,
-            const ui32 sectorSize) {
+    ui64 HashSector(ui64 sectorOffset, ui64 magic, const ui8 *sector, ui32 sectorSize, TLogoBlobID blobId) {
         if (UseT1ha0Hasher) {
-            return T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sector, sectorSize);
+            return T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic ^ (blobId ? blobId.Hash() : 0), sector, sectorSize);
         } else {
             return OldHashSector(sectorOffset, magic, sector, sectorSize);
         }
     }
 
-    bool CheckSectorHash(const ui64 sectorOffset, const ui64 magic, const ui8 *sector,
-            const ui32 sectorSize, const ui64 sectorHash) {
+    bool CheckSectorHash(ui64 sectorOffset, ui64 magic, const ui8 *sector, ui32 sectorSize, ui64 sectorHash,
+            TLogoBlobID blobId) {
         // On production servers may be two versions.
         // If by default used OldHash version, then use it first
         // If by default used T1ha0NoAvx version, then use it
-        return sectorHash == T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sector, sectorSize)
+        return (blobId && sectorHash == T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic ^ blobId.Hash(), sector, sectorSize))
+            || sectorHash == T1ha0HashSector<TT1ha0NoAvxHasher>(sectorOffset, magic, sector, sectorSize)
             || sectorHash == OldHashSector(sectorOffset, magic, sector, sectorSize);
     }
 };

@@ -601,6 +601,8 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
             [[200u];3u]
         ])", NYdb::FormatResultSetYson(docs));
     }
+    auto stats = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
+    CompareYson(R"([[2u;0u;6u]])", NYdb::FormatResultSetYson(stats));
 
     { // Insert/upsert a new row
         TString query = Sprintf(R"sql(
@@ -646,6 +648,8 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
             [[200u];3u]
         ])", NYdb::FormatResultSetYson(docs));
     }
+    stats = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
+    CompareYson(R"([[3u;0u;9u]])", NYdb::FormatResultSetYson(stats));
 
     { // Insert/upsert more rows - now without RETURNING
         TString query = Sprintf(R"sql(
@@ -700,6 +704,8 @@ Y_UNIT_TEST_QUAD(InsertRowsWithRelevance, Covered, UseUpsert) {
             [[200u];3u]
         ])", NYdb::FormatResultSetYson(docs));
     }
+    stats = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
+    CompareYson(R"([[5u;0u;15u]])", NYdb::FormatResultSetYson(stats));
 }
 
 Y_UNIT_TEST(UpsertRow) {
@@ -1099,6 +1105,8 @@ Y_UNIT_TEST_TWIN(UpsertWithRelevance, Covered) {
             [[200u];3u]
         ])", NYdb::FormatResultSetYson(docs));
     }
+    auto stats = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
+    CompareYson(R"([[4u;0u;12u]])", NYdb::FormatResultSetYson(stats));
 }
 
 Y_UNIT_TEST(ReplaceRow) {
@@ -1852,6 +1860,8 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
             [[400u];3u]
         ])", NYdb::FormatResultSetYson(docs));
     }
+    auto stats = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
+    CompareYson(R"([[4u;0u;14u]])", NYdb::FormatResultSetYson(stats));
 
     { // DeleteRow by PK
         TString query = R"sql(
@@ -1896,6 +1906,8 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
             [[400u];3u]
         ])", NYdb::FormatResultSetYson(docs));
     }
+    stats = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
+    CompareYson(R"([[3u;0u;10u]])", NYdb::FormatResultSetYson(stats));
 
     { // DeleteRow by filter
         TString query = R"sql(
@@ -1935,6 +1947,8 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
             [[300u];3u]
         ])", NYdb::FormatResultSetYson(docs));
     }
+    stats = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
+    CompareYson(R"([[2u;0u;7u]])", NYdb::FormatResultSetYson(stats));
 
     { // DeleteRow by ON
         TString query = R"sql(
@@ -1970,6 +1984,8 @@ Y_UNIT_TEST_TWIN(DeleteRowWithRelevance, Covered) {
             [[100u];4u]
         ])", NYdb::FormatResultSetYson(docs));
     }
+    stats = ReadIndex(db, NTableIndex::NFulltext::StatsTable);
+    CompareYson(R"([[1u;0u;4u]])", NYdb::FormatResultSetYson(stats));
 }
 
 Y_UNIT_TEST(UpdateRow) {

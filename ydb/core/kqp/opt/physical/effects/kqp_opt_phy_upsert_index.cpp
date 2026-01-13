@@ -917,6 +917,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
         const bool withRelevance = fulltextDesc && fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
         TMaybeNode<TKqpTable> docsTableNode;
+        TMaybeNode<TExprBase> addedDocs, removedDocs;
         if (withRelevance) {
             docsTableNode = BuildTableMeta(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << mainTableNode.Path().Value()
                 << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DocsTable), pos, ctx);
@@ -959,6 +960,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                             .ReturningColumns<TCoAtomList>().Build()
                             .IsBatch(ctx.NewAtom(pos, "false"))
                             .Done());
+                        // Remember deleted documents for stats
+                        TVector<TStringBuf> docsColumns;
+                        removedDocs = BuildFulltextDocsRows(table, indexDesc, deleteKeysPrecompute,
+                            indexTableColumnsSet, docsColumns, true /*forDelete*/, pos, ctx);
                     }
                     break;
                 }
@@ -1026,6 +1031,8 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                             .ReturningColumns<TCoAtomList>().Build()
                             .IsBatch(ctx.NewAtom(pos, "false"))
                             .Done());
+                        // Remember added documents for stats
+                        addedDocs = docsRows;
                     }
                     break;
                 }
@@ -1037,6 +1044,12 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DictTable);
                 const auto mergedDelta = CombineFulltextDictRows(fulltextDictDelta, pos, ctx);
                 effects.emplace_back(BuildFulltextDictUpsert(dictTable, mergedDelta, pos, ctx));
+            }
+            if (removedDocs || addedDocs) {
+                // Update fulltext stats table
+                const auto& statsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << mainTableNode.Path().Value()
+                    << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::StatsTable);
+                effects.emplace_back(BuildFulltextStatsUpsert(statsTable, addedDocs, removedDocs, pos, ctx));
             }
 
             auto indexUpsert = Build<TKqlUpsertRows>(ctx, pos)

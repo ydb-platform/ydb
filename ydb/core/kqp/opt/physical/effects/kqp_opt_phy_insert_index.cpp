@@ -245,7 +245,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                     const auto& docsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
                         << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DocsTable);
                     TVector<TStringBuf> docsColumns;
-                    auto docsRows = BuildFulltextDocsRows(table, indexDesc, insertPrecompute,
+                    TExprBase docsRows = BuildFulltextDocsRows(table, indexDesc, insertPrecompute,
                         inputColumnsSet, docsColumns, false /*forDelete*/, insert.Pos(), ctx);
                     effects.emplace_back(Build<TKqlUpsertRows>(ctx, insert.Pos())
                         .Table(BuildTableMeta(docsTable, insert.Pos(), ctx))
@@ -254,6 +254,10 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                         .ReturningColumns<TCoAtomList>().Build()
                         .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
                         .Done());
+                    // Update statistics
+                    const auto& statsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::StatsTable);
+                    effects.emplace_back(BuildFulltextStatsUpsert(statsTable, docsRows, nullptr, insert.Pos(), ctx));
                 }
                 break;
             }

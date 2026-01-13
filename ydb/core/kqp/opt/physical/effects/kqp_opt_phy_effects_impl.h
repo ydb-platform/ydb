@@ -141,4 +141,9 @@ NYql::NNodes::TExprBase BuildFulltextPostingKeys(const NYql::TKikimrTableDescrip
 NYql::NNodes::TExprBase BuildFulltextDictUpsert(const NYql::TKikimrTableDescription& dictTable,
     const NYql::NNodes::TExprBase& tokenRows, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
+NYql::NNodes::TExprBase BuildFulltextStatsUpsert(const NYql::TKikimrTableDescription& statsTable,
+    const NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase>& addedDocs,
+    const NYql::NNodes::TMaybeNode<NYql::NNodes::TExprBase>& removedDocs,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
 } // NKikimr::NKqp::NOpt

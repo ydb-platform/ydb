@@ -101,8 +101,8 @@ class Workload():
             writers.append(self.driver.topic_client.writer(self.input_topic, partition_id=i))
 
         finished_at = time.time() + self.duration
-        for writer in writers:
-            while time.time() < finished_at:
+        while time.time() < finished_at:
+            for writer in writers:
                 messages = []
                 for i in range(100):
                     level = "error" if random.choice([True, False]) else "warn"

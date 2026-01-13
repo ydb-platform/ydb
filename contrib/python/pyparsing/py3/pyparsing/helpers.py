@@ -16,14 +16,18 @@ from .util import (
 )
 
 
+def _suppression(expr: Union[ParserElement, str]) -> ParserElement:
+    # internal helper to avoid wrapping Suppress inside another Suppress
+    if isinstance(expr, Suppress):
+        return expr
+    return Suppress(expr)
+
+
 #
 # global helpers
 #
 def counted_array(
-    expr: ParserElement,
-    int_expr: typing.Optional[ParserElement] = None,
-    *,
-    intExpr: typing.Optional[ParserElement] = None,
+    expr: ParserElement, int_expr: typing.Optional[ParserElement] = None, **kwargs
 ) -> ParserElement:
     """Helper to define a counted list of expressions.
 
@@ -71,6 +75,10 @@ def counted_array(
          - items: ['True', 'True', 'False']
          - type: 'bool'
     """
+    intExpr: typing.Optional[ParserElement] = deprecate_argument(
+        kwargs, "intExpr", None
+    )
+
     intExpr = intExpr or int_expr
     array_expr = Forward()
 
@@ -122,7 +130,7 @@ def match_previous_literal(expr: ParserElement) -> ParserElement:
         tflat = _flatten(t.as_list())
         rep << And(Literal(tt) for tt in tflat)
 
-    expr.add_parse_action(copy_token_to_repeater, callDuringTry=True)
+    expr.add_parse_action(copy_token_to_repeater, call_during_try=True)
     rep.set_name("(prev) " + str(expr))
     return rep
 
@@ -158,9 +166,9 @@ def match_previous_expr(expr: ParserElement) -> ParserElement:
                     s, l, f"Expected {matchTokens}, found{theseTokens}"
                 )
 
-        rep.set_parse_action(must_match_these_tokens, callDuringTry=True)
+        rep.set_parse_action(must_match_these_tokens, call_during_try=True)
 
-    expr.add_parse_action(copy_token_to_repeater, callDuringTry=True)
+    expr.add_parse_action(copy_token_to_repeater, call_during_try=True)
     rep.set_name("(prev) " + str(expr))
     return rep
 
@@ -170,9 +178,7 @@ def one_of(
     caseless: bool = False,
     use_regex: bool = True,
     as_keyword: bool = False,
-    *,
-    useRegex: bool = True,
-    asKeyword: bool = False,
+    **kwargs,
 ) -> ParserElement:
     """Helper to quickly define a set of alternative :class:`Literal` s,
     and makes sure to do longest-first testing when there is a conflict,
@@ -188,7 +194,7 @@ def one_of(
        ``as_keyword=True``, or if creating a :class:`Regex` raises an exception)
     :param as_keyword: bool - enforce :class:`Keyword`-style matching on the
        generated expressions
-    
+
     Parameters ``asKeyword`` and ``useRegex`` are retained for pre-PEP8
     compatibility, but will be removed in a future release.
 
@@ -209,6 +215,9 @@ def one_of(
 
        [['B', '=', '12'], ['AA', '=', '23'], ['B', '<=', 'AA'], ['AA', '>', '12']]
     """
+    useRegex: bool = deprecate_argument(kwargs, "useRegex", True)
+    asKeyword: bool = deprecate_argument(kwargs, "asKeyword", False)
+
     asKeyword = asKeyword or as_keyword
     useRegex = useRegex and use_regex
 
@@ -316,7 +325,7 @@ def dict_of(key: ParserElement, value: ParserElement) -> Dict:
     .. doctest::
 
        >>> text = "shape: SQUARE posn: upper left color: light blue texture: burlap"
-       
+
        >>> data_word = Word(alphas)
        >>> label = data_word + FollowedBy(':')
        >>> attr_expr = (
@@ -359,7 +368,7 @@ def dict_of(key: ParserElement, value: ParserElement) -> Dict:
 
 
 def original_text_for(
-    expr: ParserElement, as_string: bool = True, *, asString: bool = True
+    expr: ParserElement, as_string: bool = True, **kwargs
 ) -> ParserElement:
     """Helper to return the original, untokenized text for a given
     expression.  Useful to restore the parsed fields of an HTML start
@@ -396,6 +405,8 @@ def original_text_for(
        ['<b> bold <i>text</i> </b>']
        ['<i>text</i>']
     """
+    asString: bool = deprecate_argument(kwargs, "asString", True)
+
     asString = asString and as_string
 
     locMarker = Empty().set_parse_action(lambda s, loc, t: loc)
@@ -425,7 +436,8 @@ def ungroup(expr: ParserElement) -> ParserElement:
 def locatedExpr(expr: ParserElement) -> ParserElement:
     """
     .. deprecated:: 3.0.0
-       Use the :class:`Located` class instead.
+       Use the :class:`Located` class instead. Note that `Located`
+       returns results with one less grouping level.
 
     Helper to decorate a returned token with its starting and ending
     locations in the input string.
@@ -438,29 +450,18 @@ def locatedExpr(expr: ParserElement) -> ParserElement:
 
     Be careful if the input text contains ``<TAB>`` characters, you
     may want to call :meth:`ParserElement.parse_with_tabs`
-
-    Example:
-
-    .. testcode::
-
-       wd = Word(alphas)
-       res = locatedExpr(wd).search_string("ljsdf123lksdjjf123lkkjj1222")
-       for match in res:
-           print(match)
-
-    prints:
-
-    .. testoutput::
-
-       [[0, 'ljsdf', 5]]
-       [[8, 'lksdjjf', 15]]
-       [[18, 'lkkjj', 23]]
     """
+    warnings.warn(
+        f"{'locatedExpr'!r} deprecated - use {'Located'!r}",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     locator = Empty().set_parse_action(lambda ss, ll, tt: ll)
     return Group(
         locator("locn_start")
         + expr("value")
-        + locator.copy().leaveWhitespace()("locn_end")
+        + locator.copy().leave_whitespace()("locn_end")
     )
 
 
@@ -474,8 +475,7 @@ def nested_expr(
     closer: Union[str, ParserElement] = ")",
     content: typing.Optional[ParserElement] = None,
     ignore_expr: typing.Optional[ParserElement] = _NO_IGNORE_EXPR_GIVEN,
-    *,
-    ignoreExpr: typing.Optional[ParserElement] = _NO_IGNORE_EXPR_GIVEN,
+    **kwargs,
 ) -> ParserElement:
     """Helper method for defining nested lists enclosed in opening and
     closing delimiters (``"("`` and ``")"`` are the default).
@@ -549,8 +549,12 @@ def nested_expr(
        is_odd (int) args: [['int', 'x']]
        dec_to_hex (int) args: [['char', 'hchar']]
     """
+    ignoreExpr: ParserElement = deprecate_argument(
+        kwargs, "ignoreExpr", _NO_IGNORE_EXPR_GIVEN
+    )
+
     if ignoreExpr != ignore_expr:
-        ignoreExpr = ignore_expr if ignoreExpr is _NO_IGNORE_EXPR_GIVEN else ignoreExpr
+        ignoreExpr = ignore_expr if ignoreExpr is _NO_IGNORE_EXPR_GIVEN else ignoreExpr  # type: ignore [assignment]
 
     if ignoreExpr is _NO_IGNORE_EXPR_GIVEN:
         ignoreExpr = quoted_string()
@@ -612,10 +616,14 @@ def nested_expr(
     ret = Forward()
     if ignoreExpr is not None:
         ret <<= Group(
-            Suppress(opener) + ZeroOrMore(ignoreExpr | ret | content) + Suppress(closer)
+            _suppression(opener)
+            + ZeroOrMore(ignoreExpr | ret | content)
+            + _suppression(closer)
         )
     else:
-        ret <<= Group(Suppress(opener) + ZeroOrMore(ret | content) + Suppress(closer))
+        ret <<= Group(
+            _suppression(opener) + ZeroOrMore(ret | content) + _suppression(closer)
+        )
 
     ret.set_name(f"nested {opener}{closer} expression")
 
@@ -969,7 +977,7 @@ def infix_notation(
             else:
                 matchExpr.set_parse_action(pa)
 
-        thisExpr <<= (matchExpr | lastExpr).setName(term_name)
+        thisExpr <<= (matchExpr | lastExpr).set_name(term_name)
         lastExpr = thisExpr
 
     ret <<= lastExpr
@@ -979,7 +987,8 @@ def infix_notation(
 def indentedBlock(blockStatementExpr, indentStack, indent=True, backup_stacks=[]):
     """
     .. deprecated:: 3.0.0
-       Use the :class:`IndentedBlock` class instead.
+       Use the :class:`IndentedBlock` class instead. Note that `IndentedBlock`
+       has a difference method signature.
 
     Helper method for defining space-delimited indentation blocks,
     such as those used to define block statements in Python source code.
@@ -1066,6 +1075,12 @@ def indentedBlock(blockStatementExpr, indentStack, indent=True, backup_stacks=[]
          ':',
          [[['def', 'eggs', ['(', 'z', ')'], ':', [['pass']]]]]]]
     """
+    warnings.warn(
+        f"{'indentedBlock'!r} deprecated - use {'IndentedBlock'!r}",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     backup_stacks.append(indentStack[:])
 
     def reset_stack():

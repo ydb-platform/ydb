@@ -1,5 +1,99 @@
 # Changelog
 
+## [14.0.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v14.0.0...v14.0.1) (2025-12-20)
+
+
+### Bug Fixes
+
+* external users meta backend ([#3260](https://github.com/ydb-platform/ydb-embedded-ui/issues/3260)) ([569ba35](https://github.com/ydb-platform/ydb-embedded-ui/commit/569ba351c0f5e50f1c7221835875e3a6850a4641))
+
+## [14.0.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v13.1.0...v14.0.0) (2025-12-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* settings endpoint usage ([#3258](https://github.com/ydb-platform/ydb-embedded-ui/issues/3258))
+
+### Bug Fixes
+
+* settings endpoint usage ([#3258](https://github.com/ydb-platform/ydb-embedded-ui/issues/3258)) ([9b6921a](https://github.com/ydb-platform/ydb-embedded-ui/commit/9b6921a8a2537ad2e35e14be69253eab9c379537))
+
+## [13.1.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v13.0.1...v13.1.0) (2025-12-19)
+
+
+### Features
+
+* add databases page ([#3246](https://github.com/ydb-platform/ydb-embedded-ui/issues/3246)) ([680a6d7](https://github.com/ydb-platform/ydb-embedded-ui/commit/680a6d77d942c0ddb382b0502cb8dbd9fc21ef6d))
+
+## [13.0.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v13.0.0...v13.0.1) (2025-12-18)
+
+
+### Bug Fixes
+
+* check meta_backend ([#3250](https://github.com/ydb-platform/ydb-embedded-ui/issues/3250)) ([8267e16](https://github.com/ydb-platform/ydb-embedded-ui/commit/8267e16505479d08e0e7209139cec518ed411d46))
+
+## [13.0.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.30.1...v13.0.0) (2025-12-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* userSettings for package ([#3243](https://github.com/ydb-platform/ydb-embedded-ui/issues/3243))
+
+### Features
+
+* update Disk indicators visual design across console ([#3241](https://github.com/ydb-platform/ydb-embedded-ui/issues/3241)) ([7e2a588](https://github.com/ydb-platform/ydb-embedded-ui/commit/7e2a588157372249dbd2a57a8b0829b8fc52a474))
+* userSettings for package ([#3243](https://github.com/ydb-platform/ydb-embedded-ui/issues/3243)) ([c81534b](https://github.com/ydb-platform/ydb-embedded-ui/commit/c81534bea04c13cd23d2a3bdf4c78a1557d78727))
+
+## [12.30.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.30.0...v12.30.1) (2025-12-17)
+
+
+### Bug Fixes
+
+* **useTenantNavigation:** prevent possible collisions ([#3238](https://github.com/ydb-platform/ydb-embedded-ui/issues/3238)) ([90fb627](https://github.com/ydb-platform/ydb-embedded-ui/commit/90fb627da9b7996da3185979cfde9c73cb60a004))
+
+## [12.30.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.29.1...v12.30.0) (2025-12-17)
+
+
+### Features
+
+* add partitions progress bar to table info ([#3206](https://github.com/ydb-platform/ydb-embedded-ui/issues/3206)) ([9acc9f4](https://github.com/ydb-platform/ydb-embedded-ui/commit/9acc9f45c67f39c7b03cf19f252ac88cb998887f))
+* get rid of ReduxTooltip ([#3192](https://github.com/ydb-platform/ydb-embedded-ui/issues/3192)) ([2a6c613](https://github.com/ydb-platform/ydb-embedded-ui/commit/2a6c6138fa91379d042b54f4cdfe35a11d00bcc8))
+
+
+### Bug Fixes
+
+* possible infinite loop when navigating ([#3236](https://github.com/ydb-platform/ydb-embedded-ui/issues/3236)) ([837e521](https://github.com/ydb-platform/ydb-embedded-ui/commit/837e521abff7d90d1bd562fb01e40e745db80660))
+
+## [12.29.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.29.0...v12.29.1) (2025-12-15)
+
+
+### Bug Fixes
+
+* revert disks indicators 0859c37 ([#3225](https://github.com/ydb-platform/ydb-embedded-ui/issues/3225)) ([27d940b](https://github.com/ydb-platform/ydb-embedded-ui/commit/27d940b8eaa74e26309a813e3ae8d8fd24559e6b))
+
+## [12.29.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.28.1...v12.29.0) (2025-12-15)
+
+
+### Features
+
+* specify resource pools when launching a query ([#3198](https://github.com/ydb-platform/ydb-embedded-ui/issues/3198)) ([6c68264](https://github.com/ydb-platform/ydb-embedded-ui/commit/6c682649d17b395ad91ca29758996ace44b0c2c8))
+* **ui:** update Disk indicators visual design across console ([#3142](https://github.com/ydb-platform/ydb-embedded-ui/issues/3142)) ([0859c37](https://github.com/ydb-platform/ydb-embedded-ui/commit/0859c37b8542c32d1aac177ac4de3656ce31b8fb))
+
+
+### Bug Fixes
+
+* cpu and ram columns fallback ([#3211](https://github.com/ydb-platform/ydb-embedded-ui/issues/3211)) ([4349acc](https://github.com/ydb-platform/ydb-embedded-ui/commit/4349acc0f3bae7e4b27acf55b3e44a4d6df5babe))
+* tune databases handler call ([#3221](https://github.com/ydb-platform/ydb-embedded-ui/issues/3221)) ([79d11f0](https://github.com/ydb-platform/ydb-embedded-ui/commit/79d11f0bb46e02104a380f19965cfa95c3a9862a))
+* **ui:** handle unset memory used/limit values ([#3210](https://github.com/ydb-platform/ydb-embedded-ui/issues/3210)) ([25dff18](https://github.com/ydb-platform/ydb-embedded-ui/commit/25dff18fe270eeb7370490b0047c76504e81ce11))
+* **Versions:** always show default color ([#3216](https://github.com/ydb-platform/ydb-embedded-ui/issues/3216)) ([f7594fb](https://github.com/ydb-platform/ydb-embedded-ui/commit/f7594fbefc0537fa074f2465c3d143657b19ffb1))
+
+## [12.28.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.28.0...v12.28.1) (2025-12-11)
+
+
+### Bug Fixes
+
+* **capabilities:** capabilities loaded logic ([#3207](https://github.com/ydb-platform/ydb-embedded-ui/issues/3207)) ([8baa10e](https://github.com/ydb-platform/ydb-embedded-ui/commit/8baa10edcee09cda500bfe9475df4884c9753f31))
+
 ## [12.28.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v12.27.0...v12.28.0) (2025-12-10)
 
 

@@ -114,7 +114,11 @@ namespace NYdb::NConsoleClient {
         constexpr TDuration DefaultIdleTimeout = TDuration::Seconds(1);
 
         bool IsStreamingFormat(EMessagingFormat format) {
-            return format == EMessagingFormat::NewlineDelimited || format == EMessagingFormat::Concatenated;
+            return format == EMessagingFormat::NewlineDelimited || 
+                   format == EMessagingFormat::Concatenated ||
+                   format == EMessagingFormat::JsonStreamConcat ||
+                   format == EMessagingFormat::Csv ||
+                   format == EMessagingFormat::Tsv;
         }
     } // namespace
 
@@ -872,6 +876,10 @@ namespace NYdb::NConsoleClient {
                                EMessagingFormat::Pretty,
                                EMessagingFormat::NewlineDelimited,
                                EMessagingFormat::Concatenated,
+                               EMessagingFormat::JsonArray,
+                               EMessagingFormat::JsonStreamConcat,
+                               EMessagingFormat::Csv,
+                               EMessagingFormat::Tsv,
                            });
 
         // TODO(shmel1k@): improve help.

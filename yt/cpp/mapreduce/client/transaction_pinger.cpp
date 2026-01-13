@@ -178,14 +178,17 @@ private:
     {
         try {
             PingTx(HttpClient_, pingableTx);
-        } catch (const std::exception& e) {
-            if (auto* errorResponse = dynamic_cast<const TErrorResponse*>(&e)) {
-                if (errorResponse->GetError().ContainsErrorCode(NYT::NClusterErrorCodes::NTransactionClient::NoSuchTransaction)) {
-                    YT_UNUSED_FUTURE(periodic->Stop());
-                } else if (errorResponse->GetError().ContainsErrorCode(NYT::NClusterErrorCodes::Timeout)) {
-                    periodic->ScheduleOutOfBand();
-                }
+        } catch (const TErrorResponse& e) {
+            /// NB: No logging here, CheckError() already logged TErrorResponse.
+            if (e.GetError().ContainsErrorCode(NYT::NClusterErrorCodes::NTransactionClient::NoSuchTransaction)) {
+                YT_UNUSED_FUTURE(periodic->Stop());
+            } else if (e.GetError().ContainsErrorCode(NYT::NClusterErrorCodes::Timeout)) {
+                periodic->ScheduleOutOfBand();
             }
+        } catch (const std::exception& e) {
+            YT_LOG_ERROR("DoPingTransaction has failed (TransactionId: %v, Error: %v)",
+                GetGuidAsString(pingableTx.GetId()),
+                e.what());
         }
     }
 

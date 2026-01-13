@@ -96,8 +96,8 @@ Y_UNIT_TEST_SUITE(Bloom) {
 
         alter
             .AddTable("me", table)
-            .AddColumn(1, "name", 1, ETypes::String, false)
-            .AddColumn(1, "salt", 2, ETypes::Uint64, false)
+            .AddColumn(1, "name", 1, ETypes::String, false, false)
+            .AddColumn(1, "salt", 2, ETypes::Uint64, false, false)
             .AddColumnToKey(1, 1)
             .AddColumnToKey(1, 2);
 
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
             TAlter alter;
 
             auto name = Sprintf("sub_%04u", col);
-            alter.AddColumn(1, name, col, ETypes::String, false);
+            alter.AddColumn(1, name, col, ETypes::String, false, false);
             alter.AddColumnToKey(1, col);
             alter.SetByKeyFilter(1, col > 10); /* first 8 parts w/o filter */
 

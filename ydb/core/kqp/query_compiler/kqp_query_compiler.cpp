@@ -1425,6 +1425,26 @@ private:
                 }
             }
 
+            if (settingsObj.QueryMode) {
+                auto queryMode = TExprBase(settingsObj.QueryMode);
+                auto just = queryMode.Cast<TCoJust>().Input();
+                if (just.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableQueryMode()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    FillLiteralProto(just.Cast<TCoDataCtor>(), *fullTextProto.MutableQueryMode()->MutableLiteralValue());
+                }
+            }
+
+            if (settingsObj.MinimumShouldMatch) {
+                auto minimumShouldMatch = TExprBase(settingsObj.MinimumShouldMatch);
+                auto just = minimumShouldMatch.Cast<TCoJust>().Input();
+                if (just.Maybe<TCoParameter>()) {
+                    fullTextProto.MutableMinimumShouldMatch()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    FillLiteralProto(just.Cast<TCoDataCtor>(), *fullTextProto.MutableMinimumShouldMatch()->MutableLiteralValue());
+                }
+            }
+
             if (settingsObj.K1Factor) {
                 auto k1Factor = TExprBase(settingsObj.K1Factor);
                 auto just = k1Factor.Cast<TCoJust>().Input();

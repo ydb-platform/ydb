@@ -143,7 +143,7 @@ protected:
                 input.Cast(),
                 false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                KqpCtx.Config->EnableWatermarks,
+                KqpCtx.Config->GetEnableWatermarks(),
                 false
             );
         } else {

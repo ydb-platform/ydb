@@ -1231,7 +1231,7 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                         YQL_ENSURE(dataSource);
                         if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
                             IDqIntegration::TWrapReadSettings wrSettings;
-                            if (kqpCtx->Config->EnableWatermarks) {
+                            if (kqpCtx->Config->GetEnableWatermarks()) {
                                 wrSettings = {
                                     .WatermarksMode = "default",
                                     .WatermarksGranularityMs = 1000,

@@ -238,16 +238,18 @@ ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
 }
 
 bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
-    return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownProjections);
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) ||
+        TTableServiceConfig::GetEnableOlapPushdownProjections());
 }
 
 bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const {
     return ((GetOptionalFlagValue(OptEnableParallelUnionAllConnectionsForExtend.Get()) == EOptionalFlag::Enabled) ||
-            EnableParallelUnionAllConnectionsForExtend);
+        TTableServiceConfig::GetEnableParallelUnionAllConnectionsForExtend());
 }
 
 bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
-    return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownAggregate);
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) ||
+        TTableServiceConfig::GetEnableOlapPushdownAggregate());
 }
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {

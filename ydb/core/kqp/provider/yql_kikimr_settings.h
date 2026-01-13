@@ -192,8 +192,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
 
         CopyFrom(serviceConfig);
 
-        EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
-        ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
         EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
         EnableCreateTableAs = serviceConfig.GetEnableCreateTableAs();
         EnableDataShardCreateTableAs = serviceConfig.GetEnableDataShardCreateTableAs();
@@ -216,19 +214,10 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
         EnableOlapScalarApply = serviceConfig.GetEnableOlapScalarApply();
         EnableOlapSubstringPushdown = serviceConfig.GetEnableOlapSubstringPushdown();
         EnableIndexStreamWrite = serviceConfig.GetEnableIndexStreamWrite();
-        EnableOlapPushdownProjections = serviceConfig.GetEnableOlapPushdownProjections();
         LangVer = serviceConfig.GetDefaultLangVer();
-        EnableParallelUnionAllConnectionsForExtend = serviceConfig.GetEnableParallelUnionAllConnectionsForExtend();
-        EnableTempTablesForUser = serviceConfig.GetEnableTempTablesForUser();
-        EnableSimpleProgramsSinglePartitionOptimization = serviceConfig.GetEnableSimpleProgramsSinglePartitionOptimization();
-        EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = serviceConfig.GetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms();
 
-        EnableOlapPushdownAggregate = serviceConfig.GetEnableOlapPushdownAggregate();
-        EnableOrderOptimizaionFSM = serviceConfig.GetEnableOrderOptimizaionFSM();
         EnableDqHashCombineByDefault = serviceConfig.GetEnableDqHashCombineByDefault();
         EnableDqHashAggregateByDefault = serviceConfig.GetEnableDqHashAggregateByDefault();
-        EnableWatermarks = serviceConfig.GetEnableWatermarks();
-        EnableBuildAggregationResultStages = serviceConfig.GetEnableBuildAggregationResultStages();
         EnableFallbackToYqlOptimizer = serviceConfig.GetEnableFallbackToYqlOptimizer();
 
         if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
@@ -250,8 +239,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
                 break;
         }
 
-        if (serviceConfig.GetFilterPushdownOverJoinOptionalSide()) {
-            FilterPushdownOverJoinOptionalSide = true;
+        if (GetFilterPushdownOverJoinOptionalSide()) {
             YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
             YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
             YqlCoreOptimizerFlags.insert("sqlinwithnothingornull");
@@ -282,8 +270,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
 
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
     bool EnableAstCache = false;
-    bool EnablePgConstsToParams = false;
-    ui64 ExtractPredicateRangesLimit = 0;
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
     bool EnableDataShardCreateTableAs = false;
@@ -298,29 +284,18 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSpilling = true;
     ui32 DefaultCostBasedOptimizationLevel = 4;
     ui64 DefaultEnableSpillingNodes = 0;
-    bool EnableAntlr4Parser = false;
     bool EnableSnapshotIsolationRW = false;
     bool DefaultEnableShuffleElimination = false;
     bool DefaultEnableShuffleEliminationForAggregation = false;
-    bool FilterPushdownOverJoinOptionalSide = false;
     THashSet<TString> YqlCoreOptimizerFlags;
     bool EnableNewRBO = false;
     bool EnableSpillingInHashJoinShuffleConnections = false;
     bool EnableOlapScalarApply = false;
     bool EnableOlapSubstringPushdown = false;
     bool EnableIndexStreamWrite = false;
-    bool EnableOlapPushdownProjections = false;
-    bool EnableParallelUnionAllConnectionsForExtend = false;
-    bool EnableTempTablesForUser = false;
-    bool EnableOlapPushdownAggregate = false;
-    bool EnableOrderOptimizaionFSM = false;
-    bool EnableBuildAggregationResultStages = false;
 
-    bool EnableSimpleProgramsSinglePartitionOptimization = true;
-    bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
     bool EnableDqHashCombineByDefault = true;
     bool EnableDqHashAggregateByDefault = false;
-    bool EnableWatermarks = false;
     ui32 DefaultDqChannelVersion = 1u;
 
     bool Antlr4ParserIsAmbiguityError = false;

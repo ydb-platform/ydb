@@ -81,6 +81,7 @@ public:
     TTestActorRuntime& GetRuntime();
     NYdb::NTable::TSession& GetSession();
     void CreateTable(const TColumnTableBase& table, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
+    void CreateTableQuery(const TColumnTableBase& table, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
     void DropTable(const TString& tableName);
     void EnsureSecret(const TString& name, const TString& value);
     void CreateTier(const TString& tierName);

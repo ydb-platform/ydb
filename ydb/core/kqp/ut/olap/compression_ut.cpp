@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
 
         TTestHelper::TColumnTable standaloneTable;
         standaloneTable.SetName("/Root/CompKeyTable").SetPrimaryKey({ "key" }).SetSchema(schema);
-        testHelper.CreateTable(standaloneTable);
+        testHelper.CreateTableQuery(standaloneTable);
     }
 
     Y_UNIT_TEST(ChangeCompression) {

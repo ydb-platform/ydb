@@ -57,6 +57,12 @@ namespace NKqp {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToString());
     }
 
+    void TTestHelper::CreateTableQuery(const TColumnTableBase& table, const EStatus expectedStatus) {
+        std::cerr << (table.BuildQuery()) << std::endl;
+        auto it = QueryClient->ExecuteQuery(table.BuildQuery(), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), expectedStatus, it.GetIssues().ToString());
+    }
+
     void TTestHelper::CreateTier(const TString& tierName) {
         auto result = GetSession().ExecuteSchemeQuery(R"(
             UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);

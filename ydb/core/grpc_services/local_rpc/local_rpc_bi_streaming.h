@@ -64,7 +64,7 @@ public:
         TString RpcMethodName;
     };
 
-    explicit TLocalRpcBiStreamingCtx(const TActorSystem* actorSystem, const TActorId& owner, const TSettings& settings)
+    TLocalRpcBiStreamingCtx(const TActorSystem* actorSystem, const TActorId& owner, const TSettings& settings)
         : ActorSystem(actorSystem)
         , Owner(owner)
         , AuthState(/* needAuth */ false)

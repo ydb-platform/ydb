@@ -17,16 +17,26 @@ from ydb.apps.dstool.lib import table
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.common.wait_for import retry_assertions
 from ydb.tests.library.harness.kikimr_cluster import KiKiMR
+from ydb.tests.library.harness.util import LogLevels
+from ydb.core.protos.whiteboard_disk_states_pb2 import EVDiskState
 
 logger = logging.getLogger(__name__)
 C_4GB = 4 * 2**30
 
 # local configuration for the ydb cluster (fetched by ydb_cluster_configuration fixture)
+NODES_COUNT = 8
 CLUSTER_CONFIG = dict(
     erasure=Erasure.BLOCK_4_2,
-    nodes=8,
+    nodes=NODES_COUNT,
     dynamic_pdisks=[{'user_kind': 0}],
     dynamic_pdisk_size=C_4GB,
+    static_pdisk_config={'expected_slot_count': 9},
+    dynamic_pdisks_config={'expected_slot_count': 9},
+    dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0, num_groups=1)],
+    additional_log_configs={
+        'BS_NODE': LogLevels.DEBUG,
+        'BS_CONTROLLER': LogLevels.DEBUG,
+    },
 )
 
 
@@ -40,7 +50,7 @@ def ydb_cluster(ydb_configurator, request):
         configurator=ydb_configurator,
     )
     cluster.is_local_test = True
-    cluster.start()
+    cluster.start(timeout_seconds=20)
 
     yield cluster
 
@@ -80,8 +90,15 @@ class TestBase:
 
     def check_pdisk_metrics_collected(self):
         base_config = self.cluster.client.query_base_config().BaseConfig
+        assert len(base_config.PDisk) == 2 * NODES_COUNT
         for pdisk in base_config.PDisk:
             assert pdisk.PDiskMetrics.HasField('UpdateTimestamp')
+
+    def check_vdisks_state_ok(self):
+        base_config = self.cluster.client.query_base_config().BaseConfig
+        assert len(base_config.VSlot) == 16  # 1 static + 1 dynamic group
+        for vslot in base_config.VSlot:
+            assert vslot.VDiskMetrics.State == EVDiskState.OK
 
     def _trace(self, *args, with_grpc_calls=False, with_response=False):
         common.cache.clear()
@@ -148,6 +165,7 @@ class TestBase:
 class Test(TestBase):
     def test_essential(self):
         retry_assertions(self.check_pdisk_metrics_collected)
+        retry_assertions(self.check_vdisks_state_ok)
         return [
             self._trace('--help'),
             self._trace('--unknown-arg'),

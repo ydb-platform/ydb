@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/counters
+    ydb/core/kqp/federated_query/actors
     ydb/core/kqp/proxy_service
     ydb/core/mind
     ydb/core/tx/scheme_cache

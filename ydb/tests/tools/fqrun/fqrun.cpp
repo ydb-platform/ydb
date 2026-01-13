@@ -5,6 +5,7 @@
 
 #include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/tests/tools/fqrun/src/fq_runner.h>
 #include <ydb/tests/tools/kqprun/runlib/application.h>
 #include <ydb/tests/tools/kqprun/runlib/utils.h>

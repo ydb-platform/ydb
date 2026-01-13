@@ -4,7 +4,7 @@
 
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/tests/tools/kqprun/runlib/settings.h>
 
 #include <yql/essentials/minikql/mkql_function_registry.h>

@@ -204,151 +204,151 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
-       TestTruncateTable(runtime, ++txId, "/MyRoot", "NonExistentTable",
-                        {NKikimrScheme::StatusPathDoesNotExist});
-       env.TestWaitNotification(runtime, txId);
-   }
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "NonExistentTable",
+                         {NKikimrScheme::StatusPathDoesNotExist});
+        env.TestWaitNotification(runtime, txId);
+    }
 
-   Y_UNIT_TEST(TruncateTableWithCdcStream) {
-       TTestBasicRuntime runtime;
-       TTestEnv env(runtime);
-       ui64 txId = 100;
+    Y_UNIT_TEST(TruncateTableWithCdcStream) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
 
-       runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
-       TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-           Name: "TestTable"
-           Columns { Name: "id" Type: "Uint64" }
-           Columns { Name: "text" Type: "String" }
-           Columns { Name: "data" Type: "String" }
-           KeyColumnNames: [ "id" ]
-       )");
-       env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
 
-       TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
-           TableName: "TestTable"
-           StreamDescription {
-               Name: "Stream"
-               Mode: ECdcStreamModeKeysOnly
-               Format: ECdcStreamFormatProto
-           }
-       )");
-       env.TestWaitNotification(runtime, txId);
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "TestTable"
+            StreamDescription {
+                Name: "Stream"
+                Mode: ECdcStreamModeKeysOnly
+                Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
 
-       // Cannot truncate table with CDC stream
-       TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable",
-                        {NKikimrScheme::StatusPreconditionFailed});
-       env.TestWaitNotification(runtime, txId);
-   }
+        // Cannot truncate table with CDC stream
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable",
+                         {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId);
+    }
 
-   Y_UNIT_TEST(TruncateTableWithIndexAndCdcStream) {
-       TTestBasicRuntime runtime;
-       TTestEnv env(runtime);
-       ui64 txId = 100;
+    Y_UNIT_TEST(TruncateTableWithIndexAndCdcStream) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
 
-       runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
 
-       TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-           Name: "TestTable"
-           Columns { Name: "id" Type: "Uint64" }
-           Columns { Name: "text" Type: "String" }
-           Columns { Name: "data" Type: "String" }
-           KeyColumnNames: [ "id" ]
-       )");
-       env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
 
-       TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TestTable",
-           TBuildIndexConfig{"TestIndex", NKikimrSchemeOp::EIndexTypeGlobal, {"text"}, {}, {}});
-       env.TestWaitNotification(runtime, txId);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TestTable",
+            TBuildIndexConfig{"TestIndex", NKikimrSchemeOp::EIndexTypeGlobal, {"text"}, {}, {}});
+        env.TestWaitNotification(runtime, txId);
 
-       TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
-           TableName: "TestTable"
-           StreamDescription {
-               Name: "TestStream"
-               Mode: ECdcStreamModeKeysOnly
-               Format: ECdcStreamFormatProto
-           }
-       )");
-       env.TestWaitNotification(runtime, txId);
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "TestTable"
+            StreamDescription {
+                Name: "TestStream"
+                Mode: ECdcStreamModeKeysOnly
+                Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
 
-       TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
-           {NLs::PathExist});
-       TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TestIndex"),
-           {NLs::PathExist});
-       TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TestIndex/indexImplTable"),
-           {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
+            {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TestIndex"),
+            {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TestIndex/indexImplTable"),
+            {NLs::PathExist});
 
-       TVector<TCell> cells = {
-           TCell::Make((ui64)1), TCell(TStringBuf("row one")), TCell(TStringBuf("data one")),
-           TCell::Make((ui64)2), TCell(TStringBuf("row two")), TCell(TStringBuf("data two")),
-           TCell::Make((ui64)3), TCell(TStringBuf("row three")), TCell(TStringBuf("data three")),
-       };
-       WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
-           0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-           {1, 2, 3}, TSerializedCellMatrix(cells, 3, 3), true);
+        TVector<TCell> cells = {
+            TCell::Make((ui64)1), TCell(TStringBuf("row one")), TCell(TStringBuf("data one")),
+            TCell::Make((ui64)2), TCell(TStringBuf("row two")), TCell(TStringBuf("data two")),
+            TCell::Make((ui64)3), TCell(TStringBuf("row three")), TCell(TStringBuf("data three")),
+        };
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2, 3}, TSerializedCellMatrix(cells, 3, 3), true);
 
-       TVector<TCell> indexCells = {
-           TCell(TStringBuf("row one")), TCell::Make((ui64)1),
-           TCell(TStringBuf("row two")), TCell::Make((ui64)2),
-           TCell(TStringBuf("row three")), TCell::Make((ui64)3),
-       };
-       WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable/TestIndex/indexImplTable",
-           0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-           {1, 2}, TSerializedCellMatrix(indexCells, 3, 2), true);
+        TVector<TCell> indexCells = {
+            TCell(TStringBuf("row one")), TCell::Make((ui64)1),
+            TCell(TStringBuf("row two")), TCell::Make((ui64)2),
+            TCell(TStringBuf("row three")), TCell::Make((ui64)3),
+        };
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable/TestIndex/indexImplTable",
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2}, TSerializedCellMatrix(indexCells, 3, 2), true);
 
-       {
-           auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-           UNIT_ASSERT_VALUES_EQUAL(rows, 3);
-           auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TestIndex/indexImplTable");
-           UNIT_ASSERT_VALUES_EQUAL(indexRows, 3);
-       }
+        {
+            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(rows, 3);
+            auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TestIndex/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(indexRows, 3);
+        }
 
-       TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable",
-                        {NKikimrScheme::StatusPreconditionFailed});
-       env.TestWaitNotification(runtime, txId);
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable",
+                         {NKikimrScheme::StatusPreconditionFailed});
+        env.TestWaitNotification(runtime, txId);
 
-       {
-           auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-           UNIT_ASSERT_VALUES_EQUAL(rows, 3);
-           auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TestIndex/indexImplTable");
-           UNIT_ASSERT_VALUES_EQUAL(indexRows, 3);
-       }
+        {
+            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(rows, 3);
+            auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TestIndex/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(indexRows, 3);
+        }
 
-       TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
-           TableName: "TestTable"
-           StreamName: "TestStream"
-       )");
-       env.TestWaitNotification(runtime, txId);
+        TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "TestTable"
+            StreamName: "TestStream"
+        )");
+        env.TestWaitNotification(runtime, txId);
 
-       TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable");
-       env.TestWaitNotification(runtime, txId);
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable");
+        env.TestWaitNotification(runtime, txId);
 
-       {
-           auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-           UNIT_ASSERT_VALUES_EQUAL(rows, 0);
-           auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TestIndex/indexImplTable");
-           UNIT_ASSERT_VALUES_EQUAL(indexRows, 0);
-       }
+        {
+            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(rows, 0);
+            auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TestIndex/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(indexRows, 0);
+        }
 
-       TVector<TCell> newCells = {
-           TCell::Make((ui64)10), TCell(TStringBuf("new row")), TCell(TStringBuf("new data")),
-       };
-       WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
-           0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-           {1, 2, 3}, TSerializedCellMatrix(newCells, 1, 3), true);
+        TVector<TCell> newCells = {
+            TCell::Make((ui64)10), TCell(TStringBuf("new row")), TCell(TStringBuf("new data")),
+        };
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2, 3}, TSerializedCellMatrix(newCells, 1, 3), true);
 
-       TVector<TCell> newIndexCells = {
-           TCell(TStringBuf("new row")), TCell::Make((ui64)10),
-       };
-       WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable/TestIndex/indexImplTable",
-           0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
-           {1, 2}, TSerializedCellMatrix(newIndexCells, 1, 2), true);
+        TVector<TCell> newIndexCells = {
+            TCell(TStringBuf("new row")), TCell::Make((ui64)10),
+        };
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable/TestIndex/indexImplTable",
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2}, TSerializedCellMatrix(newIndexCells, 1, 2), true);
 
-       {
-           auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
-           UNIT_ASSERT_VALUES_EQUAL(rows, 1);
-           auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TestIndex/indexImplTable");
-           UNIT_ASSERT_VALUES_EQUAL(indexRows, 1);
-       }
-   }
+        {
+            auto rows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(rows, 1);
+            auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TestIndex/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(indexRows, 1);
+        }
+    }
 }

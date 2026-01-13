@@ -13,7 +13,7 @@ on:
         description: |
           List of branches for compare separated by space. 
           If not set, result will be upload to global store for this list: 'stable-25-3-1 stable-25-4 prestable-26-1 current'.
-        required: true
+        required: false
 defaults:
   run:
     shell: bash

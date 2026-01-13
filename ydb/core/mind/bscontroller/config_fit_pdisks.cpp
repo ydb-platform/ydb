@@ -323,10 +323,14 @@ namespace NKikimr {
                     // no, we haven't; see if it is mentioned in static configuration
                     ui32 staticSlotUsage = 0;
                     Schema::PDisk::Guid::Type guid{};
+                    std::optional<NKikimrBlobStorage::TPDiskMetrics> staticMetrics;
                     if (auto pdiskIdOptional = NKikimr::NBsController::FindStaticPDisk(disk, state)) {
                         // yes, take some data from static configuration
                         pdiskId = *pdiskIdOptional;
                         guid = GetGuidAndValidateStaticPDisk(pdiskId, disk, state, staticSlotUsage);
+                        if (auto it = state.StaticPDisks.find(pdiskId); it != state.StaticPDisks.end()) {
+                            staticMetrics = it->second.PDiskMetrics;
+                        }
                     } else if (auto info = state.DrivesSerials.Find(disk.Serial); info && info->Guid) {
                         pdiskId = FindFirstEmptyPDiskId(state.PDisks, disk.NodeId);
                         guid = *info->Guid;
@@ -336,7 +340,7 @@ namespace NKikimr {
                     }
 
                     // create PDisk
-                    state.PDisks.ConstructInplaceNewEntry(pdiskId, disk.HostId, disk.Path,
+                    auto newPDisk = state.PDisks.ConstructInplaceNewEntry(pdiskId, disk.HostId, disk.Path,
                             disk.PDiskCategory.GetRaw(), guid, disk.SharedWithOs, disk.ReadCentric,
                             /* nextVslotId */ 1000, disk.PDiskConfig, disk.BoxId, DefaultMaxSlots,
                             NKikimrBlobStorage::EDriveStatus::ACTIVE, /* statusTimestamp */ TInstant::Zero(),
@@ -346,6 +350,12 @@ namespace NKikimr {
                             NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST,
                             disk.InferPDiskSlotCountFromUnitSize,
                             disk.InferPDiskSlotCountMax);
+
+                    // Preserve metrics from static PDisk
+                    if (staticMetrics) {
+                        newPDisk->Metrics.CopyFrom(*staticMetrics);
+                        newPDisk->MetricsDirty = true;
+                    }
 
                     // Set PDiskId and Guid in DrivesSerials
                     if (auto info = state.DrivesSerials.FindForUpdate(disk.Serial)) {

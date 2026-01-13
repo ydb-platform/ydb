@@ -18,7 +18,7 @@ def parse_arguments():
     parser.add_argument('--branch', default='main', type=str, help='branch')
     parser.add_argument('--start-date', dest='start_date', type=str, help='Start date (YYYY-MM-DD), inclusive')
     parser.add_argument('--end-date', dest='end_date', type=str, help='End date (YYYY-MM-DD), inclusive')
-    
+
     args, unknown = parser.parse_known_args()
     
     start_date_override = datetime.date.fromisoformat(args.start_date) if args.start_date else None
@@ -48,15 +48,15 @@ def get_max_date_from_history(ydb_wrapper, flaky_tests_table, build_type, branch
     """Get maximum date from flaky_tests_window table."""
     query = f"""
         select max(date_window) as max_date_window from `{flaky_tests_table}`
-        where build_type = '{build_type}' and branch = '{branch}'
-    """
+            where build_type = '{build_type}' and branch = '{branch}'
+        """
     results = ydb_wrapper.execute_scan_query(query, query_name=f"get_last_date_from_history_{branch}")
     max_date_window = results[0].get('max_date_window') if results[0] else None
     return convert_ydb_date_to_python(max_date_window)
 
 
 def get_min_date_from_test_runs(ydb_wrapper, test_runs_table, build_type, branch):
-    """Get minimum date from test_results table."""
+    """Get minimum date from test_runs table."""
     query = f"""
         select min(cast(run_timestamp as Date)) as min_run_date from `{test_runs_table}`
         where build_type = '{build_type}' and branch = '{branch}'
@@ -93,9 +93,11 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     max_date_window = get_max_date_from_history(ydb_wrapper, flaky_tests_table, build_type, branch)
     
     if max_date_window is not None:
-        # Use max_date_window if it's greater than default_start_date, but not after end_date
-        if max_date_window > default_start_date:
-            start_date = min(max_date_window, end_date)
+        # Clamp max_date_window to not exceed end_date before comparison
+        max_date_clamped = min(max_date_window, end_date)
+        # Use max_date_clamped if it's greater than default_start_date
+        if max_date_clamped > default_start_date:
+            start_date = max_date_clamped
         else:
             start_date = default_start_date
         return start_date, end_date
@@ -104,12 +106,8 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     min_run_date = get_min_date_from_test_runs(ydb_wrapper, test_runs_table, build_type, branch)
     
     if min_run_date is not None:
-        # If default_start_date is later than min_run_date, use default_start_date
-        # Otherwise use max of min_run_date and default_start_date
-        if default_start_date > min_run_date:
-            start_date = default_start_date
-        else:
-            start_date = max(min_run_date, default_start_date)
+        # Use the later of min_run_date and default_start_date
+        start_date = max(min_run_date, default_start_date)
         # Ensure start_date doesn't exceed end_date
         start_date = min(start_date, end_date)
         print(f'📅 Found min date from test_runs_table: {min_run_date}, using: {start_date}')
@@ -189,7 +187,7 @@ def build_history_query(date, test_runs_table, testowners_table, build_type, bra
             GROUP BY full_name,suite_folder,test_name,date_base,build_type,branch,owners
         )
     """
-
+                
 
 def prepare_row_data(row):
     """Prepare a single row for database upsert."""
@@ -205,6 +203,7 @@ def prepare_row_data(row):
         'days_ago_window': 1,
         'build_type': row['build_type'],
         'branch': row['branch'],
+        'owners': row.get('owners'),
         'first_run': row['first_run'],
         'last_run': row['last_run'],
         'history': ','.join(history_list).encode('utf8'),
@@ -224,6 +223,7 @@ def get_column_types():
         .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("first_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
         .add_column("last_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
         .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -235,8 +235,8 @@ def get_column_types():
         .add_column("mute_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-    )
-
+                )
+                
 
 def process_date_range(ydb_wrapper, test_runs_table, testowners_table, flaky_tests_table,
                        build_type, branch, start_date, end_date):
@@ -346,7 +346,7 @@ def main():
                 print('✅ History updated successfully')
             else:
                 print('ℹ️  No data to upload')
-        
+
         except Exception as e:
             print(f'❌ Script failed: {e}')
             raise

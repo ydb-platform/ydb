@@ -199,8 +199,8 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
         out.set_metrics_level(config.GetMetricsLevel());
     }
 
-    if (config.GetPartitionConfig().HasTimestampType()) {
-        out.set_timestamp_type(config.GetPartitionConfig().GetTimestampType());
+    if (config.HasTimestampType()) {
+        out.set_timestamp_type(config.GetTimestampType());
     } else {
         out.set_timestamp_type(NKafka::MESSAGE_TIMESTAMP_CREATE_TIME);
     }

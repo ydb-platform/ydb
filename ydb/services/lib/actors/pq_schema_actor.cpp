@@ -1164,6 +1164,10 @@ namespace NKikimr::NGRpcProxy::V1 {
         pqTabletConfig->SetRequireAuthRead(true);
         pqDescr->SetPartitionPerTablet(1);
 
+        if (request.has_timestamp_type()) {
+            pqTabletConfig->SetTimestampType(request.timestamp_type());
+        }
+
         partConfig->SetMaxCountInPartition(Max<i32>());
 
         partConfig->SetSourceIdLifetimeSeconds(NKikimrPQ::TPartitionConfig().GetSourceIdLifetimeSeconds());
@@ -1215,11 +1219,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         } else {
             partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
         }
-
-        if (request.has_timestamp_type()) {
-            partConfig->SetTimestampType(request.timestamp_type());
-        }
-        
         if (local) {
             auto partSpeed = request.partition_write_speed_bytes_per_second();
             if (partSpeed == 0) {

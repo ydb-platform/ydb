@@ -75,7 +75,7 @@ public:
             partitionConfig->SetStorageLimitBytes(RetentionBytes.value());
         }
         if (TimestampType.has_value()) {
-            partitionConfig->SetTimestampType(TimestampType.value());
+            groupConfig.MutablePQTabletConfig()->SetTimestampType(TimestampType.value());
         }
         if (CleanupPolicy.has_value()) {
             groupConfig.MutablePQTabletConfig()->SetEnableCompactification(CleanupPolicy.value() == ECleanupPolicy::COMPACT);

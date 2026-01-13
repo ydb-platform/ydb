@@ -290,8 +290,6 @@ message TPartitionConfig {
     repeated TChannelProfile ExplicitChannelProfiles = 14;
 
     optional TMirrorPartitionConfig MirrorFrom = 15;
-
-    optional string TimestampType = 32;
 };
 
 message TPartitionKeyRange {
@@ -475,6 +473,8 @@ message TPQTabletConfig {
 
     // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
     optional string MonitoringProjectId = 41;
+
+    optional string TimestampType = 42;
 }
 
 message THeartbeat {

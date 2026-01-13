@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/driver_lib/run/grpc_servers_manager.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -21,6 +22,7 @@ namespace NKikimr::NKqp {
 struct TEvPrivate {
     enum EEv {
         EvFetchCacheResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvDelayedComplete,
     };
 
     struct TQueryToCompile {
@@ -38,6 +40,8 @@ struct TEvPrivate {
             , Error(std::move(error))
         {}
     };
+
+    struct TEvDelayedComplete : public NActors::TEventLocal<TEvDelayedComplete, EvDelayedComplete> {};
 };
 
 class TFetchCacheActor : public TQueryBase {
@@ -65,7 +69,6 @@ public:
             auto userSID = parser.ColumnParser("UserSID").GetOptionalUtf8();
 
             if (queryText && !queryText->empty() && userSID && !userSID->empty()) {
-                Cerr << "Got Query: " << *queryText << ", UserSID: " << *userSID << Endl;
                 TEvPrivate::TQueryToCompile query;
                 query.QueryText = TString(*queryText);
                 query.UserSID = TString(*userSID);
@@ -112,15 +115,43 @@ public:
               << ", deadline: " << Config.Deadline
               << ", maxConcurrent: " << Config.MaxConcurrentCompilations);
 
-        auto deadline = Config.Deadline != TDuration::Zero() ? Config.Deadline : TDuration::Seconds(3);
-        Schedule(deadline, new NActors::TEvents::TEvWakeup());
+        Schedule(Config.Deadline, new NActors::TEvents::TEvWakeup());
 
-        LOG_I("Spawning fetch cache actor");
-        Register(new TFetchCacheActor(Database, SelfId().NodeId()));
-        Become(&TThis::StateFetching);
+        if (Database.empty()) {
+            LOG_I("Database is empty, skipping warmup");
+            SkipReason = "Skipped: empty database";
+            ScheduleComplete();
+            return;
+        }
+
+        if (Database == "/Root" || Database == "Root") {
+            LOG_I("Root domain detected, skipping warmup");
+            SkipReason = "Skipped: root domain";
+            ScheduleComplete();
+            return;
+        }
+
+        StartFetch();
+    }
+
+    void ScheduleComplete() {
+        // to ensure that the actor system is set up and ready to process income messages
+        Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvDelayedComplete());
+        Become(&TThis::StateWaitingComplete);
     }
 
 private:
+    STFUNC(StateWaitingComplete) {
+        switch (ev->GetTypeRewrite()) {
+            cFunc(TEvPrivate::EvDelayedComplete, HandleDelayedComplete);
+            hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
+            cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
+        default:
+            LOG_W("StateWaitingComplete: unexpected event " << ev->GetTypeRewrite());
+            break;
+        }
+    }
+
     STFUNC(StateFetching) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvFetchCacheResult, HandleFetchResult);
@@ -148,12 +179,22 @@ private:
         return TStringBuilder() << "[KqpCompileCacheWarmup] ";
     }
 
+    void HandleDelayedComplete() {
+        Complete(true, SkipReason);
+    }
+
+    void StartFetch() {
+        LOG_I("Spawning fetch cache actor");
+        Register(new TFetchCacheActor(Database, SelfId().NodeId()));
+        Become(&TThis::StateFetching);
+    }
+
     void HandleFetchResult(TEvPrivate::TEvFetchCacheResult::TPtr& ev) {
         auto* result = ev->Get();
         
         if (!result->Success) {
-            LOG_W("Failed to fetch compile cache: " << result->Error);
-            Complete(false, TStringBuilder() << "Fetch cache failed: " << result->Error);
+            LOG_I("Skipping warmup, fetch failed (possibly first startup): " << result->Error);
+            Complete(true, "Skipped: fetch failed");
             return;
         }
 
@@ -277,6 +318,7 @@ private:
     ui32 EntriesLoaded = 0;
     ui32 EntriesFailed = 0;
     bool Completed = false;
+    TString SkipReason;
 };
 
 NActors::IActor* CreateKqpWarmupActor(

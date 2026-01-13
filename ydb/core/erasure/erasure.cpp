@@ -1500,7 +1500,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
         } else {
             Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
                 " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ToString().data(),
                 (ui64)partSet.FullDataSize);
         }
     }
@@ -1512,7 +1512,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
         } else {
             Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
                 " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ToString().data(),
                 (ui64)partSet.FullDataSize);
         }
     }
@@ -1701,7 +1701,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
         } else {
             Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
                 " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ToString().data(),
                 (ui64)partSet.FullDataSize);
         }
     }
@@ -1714,7 +1714,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
         } else {
             Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
                 " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ToString().data(),
                 (ui64)partSet.FullDataSize);
         }
     }
@@ -1727,7 +1727,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
         } else {
             Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
                 " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ToString().data(),
                 (ui64)partSet.FullDataSize);
         }
     }
@@ -1916,7 +1916,7 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
     ui32 totalParts = type.TotalPartCount();
     Y_ABORT_UNLESS(partSet.Parts.size() == totalParts,
         "partSet.Parts.size(): %" PRIu64 " totalParts: %" PRIu32 " erasure: %s",
-        (ui64)partSet.Parts.size(), (ui32)totalParts, type.ErasureName[type.GetErasure()].data());
+        (ui64)partSet.Parts.size(), (ui32)totalParts, type.ToString().data());
 
     ui32 missingDataPartIdx = totalParts;
     ui32 missingDataPartCount = 0;
@@ -1928,7 +1928,7 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
         } else {
             Y_ABORT_UNLESS(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
                 " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ToString().data(),
                 (ui64)partSet.FullDataSize);
         }
     }
@@ -1966,26 +1966,26 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
     p.XorRestorePart<isStripe, restoreParts, restoreFullData, restoreParityParts>(partSet, missingDataPartIdx);
 }
 
-const std::array<TString, TErasureType::ErasureSpeciesCount> TErasureType::ErasureName{{
-    "none",
-    "mirror-3",
-    "block-3-1",
-    "stripe-3-1",
-    "block-4-2",
-    "block-3-2",
-    "stripe-4-2",
-    "stripe-3-2",
-    "mirror-3-2",
-    "mirror-3-dc",
-    "block-4-3",
-    "stripe-4-3",
-    "block-3-3",
-    "stripe-3-3",
-    "block-2-3",
-    "stripe-2-3",
-    "block-2-2",
-    "stripe-2-2",
-    "mirror-3of4",
+const std::unordered_map<TErasureType::EErasureSpecies, TString> TErasureType::ErasureNames{{
+    {TErasureType::EErasureSpecies::ErasureNone, "none"},
+    {TErasureType::EErasureSpecies::ErasureMirror3 ,"mirror-3"},
+    {TErasureType::EErasureSpecies::Erasure3Plus1Block ,"block-3-1"},
+    {TErasureType::EErasureSpecies::Erasure3Plus1Stripe ,"stripe-3-1"},
+    {TErasureType::EErasureSpecies::Erasure4Plus2Block ,"block-4-2"},
+    {TErasureType::EErasureSpecies::Erasure3Plus2Block ,"block-3-2"},
+    {TErasureType::EErasureSpecies::Erasure4Plus2Stripe ,"stripe-4-2"},
+    {TErasureType::EErasureSpecies::Erasure3Plus2Stripe ,"stripe-3-2"},
+    {TErasureType::EErasureSpecies::ErasureMirror3Plus2 ,"mirror-3-2"},
+    {TErasureType::EErasureSpecies::ErasureMirror3dc ,"mirror-3-dc"},
+    {TErasureType::EErasureSpecies::Erasure4Plus3Block ,"block-4-3"},
+    {TErasureType::EErasureSpecies::Erasure4Plus3Stripe ,"stripe-4-3"},
+    {TErasureType::EErasureSpecies::Erasure3Plus3Block ,"block-3-3"},
+    {TErasureType::EErasureSpecies::Erasure3Plus3Stripe ,"stripe-3-3"},
+    {TErasureType::EErasureSpecies::Erasure2Plus3Block ,"block-2-3"},
+    {TErasureType::EErasureSpecies::Erasure2Plus3Stripe ,"stripe-2-3"},
+    {TErasureType::EErasureSpecies::Erasure2Plus2Block ,"block-2-2"},
+    {TErasureType::EErasureSpecies::Erasure2Plus2Stripe ,"stripe-2-2"},
+    {TErasureType::EErasureSpecies::ErasureMirror3of4 ,"mirror-3of4"},
 }};
 
 TErasureType::EErasureFamily TErasureType::ErasureFamily() const {

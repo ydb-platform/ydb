@@ -606,7 +606,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 
     void TestErasure(TErasureType::ECrcMode crcMode, ui32 species) {
         TErasureType groupType((TErasureType::EErasureSpecies)species);
-        TString erasureName = TErasureType::ErasureName[species];
+        TString erasureName = TErasureType::ErasureNames.at(species);
 
         ui32 startingDataSize = 0;
         ui32 maxDataSize = groupType.MinimalBlockSize() * 8;
@@ -791,7 +791,7 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     Y_UNIT_TEST(TestBlockByteOrder) {
         ui32 species = (ui32)TErasureType::Erasure4Plus2Block;
         TErasureType groupType((TErasureType::EErasureSpecies)species);
-        TString erasureName = TErasureType::ErasureName[species];
+        TString erasureName = TErasureType::ErasureNames.at(species);
 
         for (ui32 dataSize = 0; dataSize <= 256; ++dataSize) {
             TString testString;

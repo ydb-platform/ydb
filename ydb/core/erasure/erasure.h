@@ -302,13 +302,15 @@ struct TErasureType {
     }
 
     TString ToString() const {
-        Y_ABORT_UNLESS((ui64)ErasureSpecies < ErasureSpeciesCount);
-        return ErasureName[ErasureSpecies];
+        if (auto it = ErasureNames.find(ErasureSpecies); it != ErasureNames.end()) {
+            return it->second;
+        }
+        Y_ABORT("Unknown erasure %d", ErasureSpecies);
     }
 
     static TString ErasureSpeciesName(ui32 erasureSpecies) {
-        if (erasureSpecies < ErasureSpeciesCount) {
-            return ErasureName[erasureSpecies];
+        if (auto it = ErasureNames.find(EErasureSpecies(erasureSpecies)); it != ErasureNames.end()) {
+            return it->second;
         }
         TStringStream str;
         str << "Unknown" << erasureSpecies;
@@ -316,9 +318,9 @@ struct TErasureType {
     }
 
     static EErasureSpecies ErasureSpeciesByName(TString name) {
-        for (ui32 species = 0; species < TErasureType::ErasureSpeciesCount; ++species) {
-            if (TErasureType::ErasureName[species] == name) {
-                return TErasureType::EErasureSpecies(species);
+        for (auto [speciesType, speciesName] : ErasureNames) {
+            if (speciesName == name) {
+                return speciesType;
             }
         }
         return TErasureType::ErasureSpeciesCount;
@@ -371,7 +373,7 @@ struct TErasureType {
     ui64 BlockSplitWholeOffset(ui64 dataSize, ui64 partIdx, ui64 offset) const;
     static bool IsCrcModeValid(ui32 crcModeRaw);
 
-    static const std::array<TString, ErasureSpeciesCount> ErasureName;
+    static const std::unordered_map<EErasureSpecies, TString> ErasureNames;
 protected:
     EErasureSpecies ErasureSpecies;
 

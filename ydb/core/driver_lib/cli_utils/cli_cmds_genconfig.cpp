@@ -90,7 +90,7 @@ public:
     {
         TStringStream erasureList("{");
         for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {
-            erasureList << (species ? "|" : "") << TBlobStorageGroupType::ErasureName[species];
+            erasureList << (species ? "|" : "") << TBlobStorageGroupType::ErasureNames.at(species);
         }
         erasureList << "}";
         ErasureList = erasureList.Str();

@@ -169,6 +169,25 @@ index 403520e..36fd433 100644
  };
  
  }  // namespace tcmalloc
+diff --git a/tcmalloc/metadata_object_allocator.h b/tcmalloc/metadata_object_allocator.h
+index 7559253..810e0e6 100644
+--- a/tcmalloc/metadata_object_allocator.h
++++ b/tcmalloc/metadata_object_allocator.h
+@@ -83,6 +83,14 @@ class MetadataObjectAllocator {
+     return stats_;
+   }
+ 
++  void AcquireInternalLocks() {
++    metadata_lock_.Lock();
++  }
++
++  void ReleaseInternalLocks() {
++    metadata_lock_.Unlock();
++  }
++
+  private:
+   ABSL_ATTRIBUTE_RETURNS_NONNULL T* LockAndAllocMemory(size_t size,
+                                                        std::align_val_t align) {
 diff --git a/tcmalloc/static_vars.cc b/tcmalloc/static_vars.cc
 index aaacbbb..464b49a 100644
 --- a/tcmalloc/static_vars.cc
@@ -251,7 +270,7 @@ index 84280cf..06392e2 100644
    const Topology& topology_;
  
 diff --git a/tcmalloc/tcmalloc.cc b/tcmalloc/tcmalloc.cc
-index 062d257..ff569da 100644
+index 062d257..4335459 100644
 --- a/tcmalloc/tcmalloc.cc
 +++ b/tcmalloc/tcmalloc.cc
 @@ -117,6 +117,7 @@
@@ -262,7 +281,7 @@ index 062d257..ff569da 100644
  
  #if defined(TCMALLOC_HAVE_STRUCT_MALLINFO) || \
      defined(TCMALLOC_HAVE_STRUCT_MALLINFO2)
-@@ -338,6 +339,58 @@ extern "C" size_t MallocExtension_Internal_ReleaseMemoryToSystem(
+@@ -338,6 +339,60 @@ extern "C" size_t MallocExtension_Internal_ReleaseMemoryToSystem(
                            /*reason=*/PageReleaseReason::kReleaseMemoryToSystem);
  }
  
@@ -285,6 +304,7 @@ index 062d257..ff569da 100644
 +  ThreadCache::AcquireInternalLocks();
 +  Static::system_allocator().AcquireInternalLocks();
 +  Static::sampled_allocation_recorder().AcquireInternalLocks();
++  Static::span_allocator().AcquireInternalLocks();
 +
 +  /*
 +  Locking order: we have to acquire locks in some order which is consistent with the rest of TCMalloc code.
@@ -305,6 +325,7 @@ index 062d257..ff569da 100644
 +  if (!Static::ForkSupportEnabled()) {
 +    return;
 +  }
++  Static::span_allocator().ReleaseInternalLocks();
 +  Static::system_allocator().ReleaseInternalLocks();
 +  pageheap_lock.Unlock();
 +  Static::guardedpage_allocator().ReleaseInternalLocks();

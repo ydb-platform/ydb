@@ -5,6 +5,8 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(19)
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
+
 TEST_SRCS(
     test_parametrized_queries.py
 )

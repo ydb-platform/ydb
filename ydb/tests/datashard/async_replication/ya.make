@@ -5,6 +5,8 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(20)
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
+
 TEST_SRCS(
     test_async_replication.py
 )

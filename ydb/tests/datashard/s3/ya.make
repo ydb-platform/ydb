@@ -9,6 +9,8 @@ SPLIT_FACTOR(27)
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
+
 TEST_SRCS(
     test_s3.py
 )

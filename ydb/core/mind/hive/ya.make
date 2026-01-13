@@ -32,6 +32,7 @@ SRCS(
     node_info.cpp
     node_info.h
     object_distribution.h
+    reassign_actor.cpp
     sequencer.cpp
     sequencer.h
     follower_group.h

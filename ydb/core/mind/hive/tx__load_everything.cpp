@@ -178,6 +178,9 @@ public:
                     case TSchemeIds::State::TabletOwnersSynced:
                         Self->TabletOwnersSynced = (bool)stateRowset.GetValue<Schema::State::Value>();
                         break;
+                    case TSchemeIds::State::LastReassign:
+                        Self->LastReassign = stateRowset.GetValue<Schema::State::StringValue>();
+                        break;
                     }
                 }
                 stateRowset.Next();

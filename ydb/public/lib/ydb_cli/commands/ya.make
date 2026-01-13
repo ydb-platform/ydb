@@ -58,6 +58,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/command_base
     ydb/public/lib/ydb_cli/commands/interactive
     ydb/public/lib/ydb_cli/commands/sdk_core_access
+    ydb/public/lib/ydb_cli/commands/topic_tui
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
     ydb/public/lib/ydb_cli/commands/ydb_discovery
@@ -93,6 +94,7 @@ RECURSE(
     command_base
     interactive
     sdk_core_access
+    topic_tui
     topic_workload
     transfer_workload
     ydb_discovery

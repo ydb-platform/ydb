@@ -1,0 +1,61 @@
+#pragma once
+
+#include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
+#include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
+
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/generic/hash.h>
+#include <util/datetime/base.h>
+
+#include <functional>
+
+namespace NYdb::NConsoleClient {
+
+class TTopicTuiApp;
+
+// Time-series data point
+struct TMetricPoint {
+    TInstant Time;
+    double Value;
+};
+
+// Chart data for a topic
+struct TTopicMetrics {
+    TString TopicPath;
+    TVector<TMetricPoint> WriteRateBytesPerSec;
+    TVector<TMetricPoint> WriteRateMessagesPerSec;
+    THashMap<TString, ui64> ConsumerLags;  // consumer -> total lag
+};
+
+class TChartsView {
+public:
+    explicit TChartsView(TTopicTuiApp& app);
+    
+    ftxui::Component Build();
+    void Refresh();
+    void SetTopic(const TString& topicPath);
+    
+    // Callbacks
+    std::function<void()> OnBack;
+    
+private:
+    ftxui::Element RenderWriteRateChart();
+    ftxui::Element RenderConsumerLagGauges();
+    ftxui::Element RenderPartitionDistribution();
+    void UpdateMetrics();
+    
+private:
+    TTopicTuiApp& App_;
+    TString TopicPath_;
+    
+    TTopicMetrics Metrics_;
+    
+    // Historical data (last N samples)
+    static constexpr size_t MaxHistoryPoints = 60;
+    
+    bool Loading_ = false;
+    TString ErrorMessage_;
+};
+
+} // namespace NYdb::NConsoleClient

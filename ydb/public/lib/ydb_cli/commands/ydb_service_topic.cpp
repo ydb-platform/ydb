@@ -9,6 +9,7 @@
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
+#include <ydb/public/lib/ydb_cli/commands/topic_tui/topic_tui.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/set.h>
@@ -356,6 +357,7 @@ namespace NYdb::NConsoleClient {
         AddCommand(std::make_unique<TCommandTopicConsumer>());
         AddCommand(std::make_unique<TCommandTopicRead>());
         AddCommand(std::make_unique<TCommandTopicWrite>());
+        AddCommand(std::make_unique<TCommandTopicTui>());
     }
 
     TCommandTopicCreate::TCommandTopicCreate()

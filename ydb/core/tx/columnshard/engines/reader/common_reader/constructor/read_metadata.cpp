@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_finished.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
-#include <ydb/core/tx/columnshard/tracing/probes.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -31,14 +30,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     }
 
     ITableMetadataAccessor::TSelectMetadataContext context(owner->GetTablesManager(), owner->GetIndexVerified());
-
-    TInstant start = TAppData::TimeProvider->Now();
     SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, isPlain);
-
-    using namespace NColumnShard::NLWTrace_YDB_CS;
-    if (LWPROBE_ENABLED(SelectMetadata)) {
-        LWPROBE(SelectMetadata, readDescription.TableMetadataAccessor->GetTableName(), (TAppData::TimeProvider->Now() - start).MilliSeconds());
-    }
 
     if (!SourcesConstructor) {
         return TConclusionStatus::Fail("cannot build sources constructor for " + readDescription.TableMetadataAccessor->GetTablePath());

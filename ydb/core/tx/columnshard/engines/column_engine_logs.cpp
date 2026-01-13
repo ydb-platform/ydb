@@ -1,5 +1,4 @@
 #include "column_engine_logs.h"
-#include "filter.h"
 
 #include "changes/actualization/construction/context.h"
 #include "changes/cleanup_portions.h"
@@ -23,8 +22,6 @@
 
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
-
-#include <concepts>
 
 namespace NKikimr::NColumnShard {
 
@@ -423,6 +420,7 @@ bool TColumnEngineForLogs::ApplyChangesOnExecute(
 }
 
 void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo) {
+    TInstant appendPortionStart = TAppData::TimeProvider->Now();
     AFL_VERIFY(portionInfo);
     auto granule = GetGranulePtrVerified(portionInfo->GetPathId());
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
@@ -431,9 +429,11 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& po
     if (portionInfo->HasRemoveSnapshot()) {
         AddCleanupPortion(portionInfo);
     }
+    SignalCounters.OnPortionAdded((TAppData::TimeProvider->Now() - appendPortionStart));
 }
 
 void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& portionInfo) {
+    TInstant appendPortionStart = TAppData::TimeProvider->Now();
     auto granule = GetGranulePtrVerified(portionInfo->GetPortionInfo().GetPathId());
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionInfo().GetPortionId()));
     Counters->AddPortion(portionInfo->GetPortionInfo());
@@ -441,6 +441,7 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAcces
     if (portionInfo->GetPortionInfo().HasRemoveSnapshot()) {
         AddCleanupPortion(portionInfo->GetPortionInfoPtr());
     }
+    SignalCounters.OnPortionAdded((TAppData::TimeProvider->Now() - appendPortionStart));
 }
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool updateStats) {

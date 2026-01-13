@@ -1316,7 +1316,7 @@ public:
                     auto temporary = settings.Temporary.IsValid()
                         ? settings.Temporary.Cast()
                         : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
-                    
+
                     const bool isCreateTableAs = std::any_of(
                         settings.Other.Ptr()->Children().begin(),
                         settings.Other.Ptr()->Children().end(),
@@ -1330,7 +1330,7 @@ public:
                             return false;
                         });
 
-                    if (temporary.Value() == "true" && !SessionCtx->Config().EnableTempTablesForUser && !isCreateTableAs) {
+                    if (temporary.Value() == "true" && !SessionCtx->Config().GetEnableTempTablesForUser() && !isCreateTableAs) {
                         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Creating temporary table is not supported."));
                         return nullptr;
                     }

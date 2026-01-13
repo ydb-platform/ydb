@@ -12,7 +12,7 @@ on:
         default: ""
         description: |
           List of branches for compare separated by space. 
-          If not set, result will be upload to global store for this list: 'stable-25-3-1 stable-25-4 prestable-26-1 current'.
+          If not set, result will be uploaded to global store for this list: 'stable-25-3-1 stable-25-4 prestable-26-1 current'.
         required: false
 defaults:
   run:
@@ -66,7 +66,12 @@ jobs:
         BRANCH_LIST_NO_PRESTABLE=()
         for BRANCH in $BRANCH_LIST; do
             if [[ $BRANCH == 'current' ]]; then
-                ln -s -f dump/config-meta.json current
+                if [[ -e dump/config-meta.json ]]; then
+                    ln -s -f dump/config-meta.json current
+                else
+                    echo "Error: dump/config-meta.json not found for 'current' branch" >&2
+                    exit 1
+                fi
             else
                 s3cmd get s3://ydb-builds/$BRANCH/release/config-meta.json $BRANCH
             fi

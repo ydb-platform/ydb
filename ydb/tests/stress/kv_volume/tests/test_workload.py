@@ -110,5 +110,5 @@ class TestYdbKvVolumeWorkload(StressFixture):
     @pytest.mark.parametrize("config", generate_configs_for_tests())
     @pytest.mark.parametrize("version", ["v1", "v2"])
     def test(self, config, version):
-        with Workload(self.endpoint, self.database, 60, "read_inline", 1, version, config) as workload:
+        with Workload(self.endpoint, self.database, 60, 1, version, config) as workload:
             workload.start()

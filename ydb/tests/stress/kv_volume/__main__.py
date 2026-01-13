@@ -46,7 +46,6 @@ if __name__ == '__main__':
     parser.add_argument('--endpoint', default='grpc://localhost:2135', help="YDB endpoint")
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
     parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds')
-    parser.add_argument('--load-type', default="read", choices=["read", "read-inline"], help='Load type for kv volumes')
     parser.add_argument('--in-flight', default=1, type=int, help='In flight')
     parser.add_argument('--log-file', default=None, help='Append log into specified file')
     parser.add_argument('--version', default='v1', choices=['v1', 'v2'], help='Keyvalue grpc api version')
@@ -72,7 +71,6 @@ if __name__ == '__main__':
         args.endpoint,
         args.database,
         duration=args.duration,
-        kv_load_type=args.load_type,
         worker_count=args.in_flight,
         version=args.version,
         config=cfg

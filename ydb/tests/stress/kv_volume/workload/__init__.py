@@ -349,14 +349,13 @@ class WorkerBuilder:
 
 
 class YdbKeyValueVolumeWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, kv_load_type, worker_count, version, config):
+    def __init__(self, endpoint, database, duration, worker_count, version, config):
         super().__init__(None, '', 'kv_volume', None)
         fqdn, port = parse_endpoint(endpoint)
         self.fqdn = fqdn
         self.port = port
         self.database = database
         self.duration = duration
-        self.kv_load_type = kv_load_type
         self.worker_count = worker_count
         self.begin_time = None
         self.end_time = None

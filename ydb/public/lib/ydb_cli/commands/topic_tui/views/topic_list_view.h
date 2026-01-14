@@ -91,6 +91,14 @@ private:
     void CheckTopicInfoCompletion();  // Check if any topic info loads finished
     TString FormatCodecs(const TVector<NTopic::ECodec>& codecs);
     
+    // Search mode helpers
+    TVector<size_t> GetFilteredIndices() const;  // Returns indices of entries matching search
+    void ApplySearchFilter();  // Update table to show filtered entries
+    void ClearSearchFilter();  // Restore full entry list in table
+    
+    // Go-to-path helpers
+    TVector<std::string> GetPathCompletions(const std::string& prefix);  // Autocomplete suggestions
+    
 private:
     TTopicTuiApp& App_;
     TVector<TTopicListEntry> Entries_;
@@ -117,6 +125,18 @@ private:
     
     // Static cache for cursor positions per path (persists across navigation)
     static std::unordered_map<std::string, int> CursorPositionCache_;
+    
+    // Search mode state (vim-style '/' search)
+    bool SearchMode_ = false;
+    std::string SearchQuery_;
+    TVector<size_t> FilteredIndices_;  // Indices into Entries_ that match search
+    int SearchSelectedIndex_ = 0;  // Index into FilteredIndices_
+    
+    // Go-to-path mode state ('g' key)
+    bool GoToPathMode_ = false;
+    std::string GoToPathInput_;
+    TVector<std::string> PathCompletions_;  // Autocomplete suggestions
+    int CompletionIndex_ = -1;  // Currently selected completion (-1 = none)
 };
 
 } // namespace NYdb::NConsoleClient

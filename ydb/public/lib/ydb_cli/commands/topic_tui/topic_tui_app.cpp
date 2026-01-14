@@ -383,6 +383,29 @@ void TTopicTuiApp::RequestExit() {
     Screen_.Exit();
 }
 
+// Predefined refresh rates: 1s, 2s, 5s, 10s, off (infinite)
+static const TDuration RefreshRates[] = {
+    TDuration::Seconds(1),
+    TDuration::Seconds(2),
+    TDuration::Seconds(5),
+    TDuration::Seconds(10),
+    TDuration::Max()  // "off" - no auto-refresh
+};
+static const char* RefreshRateLabels[] = {"1s", "2s", "5s", "10s", "off"};
+static constexpr int NumRefreshRates = 5;
+
+void TTopicTuiApp::CycleRefreshRate() {
+    RefreshRateIndex_ = (RefreshRateIndex_ + 1) % NumRefreshRates;
+    RefreshRate_ = RefreshRates[RefreshRateIndex_];
+}
+
+TString TTopicTuiApp::GetRefreshRateLabel() const {
+    if (RefreshRateIndex_ >= 0 && RefreshRateIndex_ < NumRefreshRates) {
+        return TString(RefreshRateLabels[RefreshRateIndex_]);
+    }
+    return "?";
+}
+
 Component TTopicTuiApp::BuildMainComponent() {
     TopicListComponent_ = TopicListView_->Build();
     TopicDetailsComponent_ = TopicDetailsView_->Build();
@@ -450,7 +473,13 @@ Component TTopicTuiApp::BuildMainComponent() {
                 return true;
             }
         }
-        if (event == Event::Character('r') || event == Event::Character('R')) {
+        if (event == Event::Character('R')) {
+            // Cycle refresh rate
+            CycleRefreshRate();
+            return true;
+        }
+        if (event == Event::Character('r')) {
+            // Manual refresh
             switch (State_.CurrentView) {
                 case EViewType::TopicList:
                     TopicListView_->Refresh();
@@ -469,7 +498,7 @@ Component TTopicTuiApp::BuildMainComponent() {
                     // Let the view handle 'r' directly
                     return false;
                 default:
-                    return false;  // Let view handle if not covered here
+                    return false;
             }
         }
         return false;
@@ -559,10 +588,14 @@ Component TTopicTuiApp::BuildHelpBar() {
                 parts = {
                     text(" [↑↓] Navigate ") | dim,
                     text(" [Enter] Select ") | dim,
+                    text(" [g] Go ") | color(Color::Cyan),
+                    text(" [/] Search ") | color(Color::Cyan),
                     text(" [c] Create ") | color(Color::Green),
                     text(" [e] Edit ") | color(Color::Yellow),
                     text(" [d] Delete ") | color(Color::Red),
-                    text(" [r] Refresh ") | dim
+                    text(" [r] Refresh ") | dim,
+                    text(" [R] Rate: ") | dim,
+                    text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta)
                 };
                 break;
             case EViewType::TopicDetails:

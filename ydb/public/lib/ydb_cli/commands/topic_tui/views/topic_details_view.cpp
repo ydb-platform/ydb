@@ -343,6 +343,8 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 }
                 
                 TopicError_.clear();
+                // Re-apply current sort order before populating table
+                SortPartitions(PartitionsTable_.GetSortColumn(), PartitionsTable_.IsSortAscending());
                 PopulatePartitionsTable();
             } catch (const std::exception& e) {
                 TopicError_ = e.what();

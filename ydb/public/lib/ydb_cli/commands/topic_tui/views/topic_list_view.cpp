@@ -84,19 +84,71 @@ Component TTopicListView::Build() {
             }) | border;
         }
         
-        return vbox({
-            hbox({
-                text(" Topics in: ") | bold,
-                text(std::string(App_.GetState().CurrentPath.c_str())) | color(NTheme::AccentText),
+        // Build main content
+        Elements mainContent;
+        mainContent.push_back(hbox({
+            text(" Topics in: ") | bold,
+            text(std::string(App_.GetState().CurrentPath.c_str())) | color(NTheme::AccentText),
+            filler(),
+            Loading_ ? (text(" ⟳ ") | color(Color::Yellow) | dim) : text("")
+        }));
+        mainContent.push_back(separator());
+        mainContent.push_back(Table_.Render() | flex);
+        
+        // Add search bar at bottom if in search mode
+        if (SearchMode_) {
+            mainContent.push_back(separator());
+            mainContent.push_back(hbox({
+                text("/") | bold | color(Color::Yellow),
+                text(SearchQuery_) | color(Color::White),
+                text("█") | blink | color(Color::Yellow),  // Cursor
                 filler(),
-                Loading_ ? (text(" ⟳ ") | color(Color::Yellow) | dim) : text("")
-            }),
-            separator(),
-            Table_.Render() | flex
-        }) | border;
+                text(" ") | dim,
+                text(std::to_string(FilteredIndices_.size())) | color(Color::Cyan),
+                text("/") | dim,
+                text(std::to_string(Entries_.size())) | dim,
+                text(" matches ") | dim
+            }));
+        }
+        
+        Element content = vbox(std::move(mainContent)) | border;
+        
+        // Overlay go-to-path popup if active
+        if (GoToPathMode_) {
+            // Build completions list
+            Elements completionElements;
+            for (size_t i = 0; i < PathCompletions_.size() && i < 8; ++i) {
+                auto elem = text(" " + PathCompletions_[i] + " ");
+                if (static_cast<int>(i) == CompletionIndex_) {
+                    elem = elem | bgcolor(NTheme::HighlightBg) | color(Color::White);
+                } else {
+                    elem = elem | dim;
+                }
+                completionElements.push_back(elem);
+            }
+            
+            Element popup = vbox({
+                text(" Go to path ") | bold | center,
+                separator(),
+                hbox({
+                    text(" Path: "),
+                    text(GoToPathInput_) | color(Color::White),
+                    text("█") | blink | color(Color::Cyan)
+                }),
+                completionElements.empty() ? text("") : separator(),
+                completionElements.empty() ? text("") : vbox(std::move(completionElements))
+            }) | border | bgcolor(Color::GrayDark) | size(WIDTH, GREATER_THAN, 50);
+            
+            content = dbox({
+                content,
+                popup | center
+            });
+        }
+        
+        return content;
     }) | CatchEvent([this](Event event) {
         // Set focus state FIRST (before any event handling)
-        Table_.SetFocused(App_.GetState().CurrentView == EViewType::TopicList);
+        Table_.SetFocused(App_.GetState().CurrentView == EViewType::TopicList && !SearchMode_ && !GoToPathMode_);
         
         // Only handle events when this view is active
         if (App_.GetState().CurrentView != EViewType::TopicList) {
@@ -108,8 +160,159 @@ Component TTopicListView::Build() {
             return false;
         }
         
+        // === GO-TO-PATH MODE EVENT HANDLING ===
+        if (GoToPathMode_) {
+            if (event == Event::Escape) {
+                GoToPathMode_ = false;
+                GoToPathInput_.clear();
+                PathCompletions_.clear();
+                CompletionIndex_ = -1;
+                return true;
+            }
+            if (event == Event::Return) {
+                // Navigate to the entered path
+                TString targetPath = GoToPathInput_.empty() 
+                    ? App_.GetState().CurrentPath
+                    : TString(GoToPathInput_.c_str());
+                
+                // If completion is selected, use it
+                if (CompletionIndex_ >= 0 && CompletionIndex_ < static_cast<int>(PathCompletions_.size())) {
+                    targetPath = TString(PathCompletions_[CompletionIndex_].c_str());
+                }
+                
+                GoToPathMode_ = false;
+                GoToPathInput_.clear();
+                PathCompletions_.clear();
+                CompletionIndex_ = -1;
+                
+                if (OnDirectorySelected && !targetPath.empty()) {
+                    OnDirectorySelected(targetPath);
+                }
+                return true;
+            }
+            if (event == Event::Tab) {
+                // Cycle through completions
+                if (!PathCompletions_.empty()) {
+                    CompletionIndex_ = (CompletionIndex_ + 1) % static_cast<int>(PathCompletions_.size());
+                }
+                return true;
+            }
+            if (event == Event::ArrowDown) {
+                if (!PathCompletions_.empty()) {
+                    CompletionIndex_ = std::min(CompletionIndex_ + 1, static_cast<int>(PathCompletions_.size()) - 1);
+                }
+                return true;
+            }
+            if (event == Event::ArrowUp) {
+                if (CompletionIndex_ > 0) {
+                    CompletionIndex_--;
+                }
+                return true;
+            }
+            if (event == Event::Backspace) {
+                if (!GoToPathInput_.empty()) {
+                    GoToPathInput_.pop_back();
+                    PathCompletions_ = GetPathCompletions(GoToPathInput_);
+                    CompletionIndex_ = -1;
+                }
+                return true;
+            }
+            if (event.is_character()) {
+                GoToPathInput_ += event.character();
+                PathCompletions_ = GetPathCompletions(GoToPathInput_);
+                CompletionIndex_ = -1;
+                return true;
+            }
+            return true;  // Consume all events in go-to-path mode
+        }
+        
+        // === SEARCH MODE EVENT HANDLING ===
+        if (SearchMode_) {
+            if (event == Event::Escape) {
+                // Exit search mode, restore full list
+                SearchMode_ = false;
+                SearchQuery_.clear();
+                ClearSearchFilter();
+                return true;
+            }
+            if (event == Event::Return) {
+                // Select current item and exit search mode
+                if (!FilteredIndices_.empty() && SearchSelectedIndex_ >= 0 && 
+                    SearchSelectedIndex_ < static_cast<int>(FilteredIndices_.size())) {
+                    size_t realIndex = FilteredIndices_[SearchSelectedIndex_];
+                    if (realIndex < Entries_.size()) {
+                        const auto& entry = Entries_[realIndex];
+                        SearchMode_ = false;
+                        SearchQuery_.clear();
+                        ClearSearchFilter();
+                        
+                        if (entry.IsDirectory && OnDirectorySelected) {
+                            CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = static_cast<int>(realIndex);
+                            OnDirectorySelected(entry.FullPath);
+                        } else if (entry.IsTopic && OnTopicSelected) {
+                            CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = static_cast<int>(realIndex);
+                            OnTopicSelected(entry.FullPath);
+                        }
+                    }
+                }
+                return true;
+            }
+            if (event == Event::ArrowDown || event == Event::Character('j')) {
+                if (SearchSelectedIndex_ < static_cast<int>(FilteredIndices_.size()) - 1) {
+                    SearchSelectedIndex_++;
+                    // Update table selection to show filtered item
+                    if (SearchSelectedIndex_ < static_cast<int>(FilteredIndices_.size())) {
+                        Table_.SetSelectedRow(static_cast<int>(FilteredIndices_[SearchSelectedIndex_]));
+                    }
+                }
+                return true;
+            }
+            if (event == Event::ArrowUp || event == Event::Character('k')) {
+                if (SearchSelectedIndex_ > 0) {
+                    SearchSelectedIndex_--;
+                    if (SearchSelectedIndex_ < static_cast<int>(FilteredIndices_.size())) {
+                        Table_.SetSelectedRow(static_cast<int>(FilteredIndices_[SearchSelectedIndex_]));
+                    }
+                }
+                return true;
+            }
+            if (event == Event::Backspace) {
+                if (!SearchQuery_.empty()) {
+                    SearchQuery_.pop_back();
+                    ApplySearchFilter();
+                }
+                return true;
+            }
+            if (event.is_character()) {
+                SearchQuery_ += event.character();
+                ApplySearchFilter();
+                return true;
+            }
+            return true;  // Consume all events in search mode
+        }
+        
+        // === NORMAL MODE EVENT HANDLING ===
+        
         // Let table handle navigation
         if (Table_.HandleEvent(event)) {
+            return true;
+        }
+        
+        // Enter search mode with '/'
+        if (event == Event::Character('/')) {
+            SearchMode_ = true;
+            SearchQuery_.clear();
+            SearchSelectedIndex_ = 0;
+            FilteredIndices_ = GetFilteredIndices();  // Start with all entries
+            return true;
+        }
+        
+        // Enter go-to-path mode with 'g'
+        if (event == Event::Character('g')) {
+            GoToPathMode_ = true;
+            GoToPathInput_ = std::string(App_.GetState().CurrentPath.c_str());
+            PathCompletions_ = GetPathCompletions(GoToPathInput_);
+            CompletionIndex_ = -1;
             return true;
         }
         
@@ -628,4 +831,127 @@ void TTopicListView::CheckTopicInfoCompletion() {
     }
 }
 
+// === Search mode helpers ===
+
+TVector<size_t> TTopicListView::GetFilteredIndices() const {
+    TVector<size_t> result;
+    
+    if (SearchQuery_.empty()) {
+        // Return all indices
+        for (size_t i = 0; i < Entries_.size(); ++i) {
+            result.push_back(i);
+        }
+        return result;
+    }
+    
+    // Case-insensitive substring search
+    std::string queryLower = SearchQuery_;
+    for (auto& c : queryLower) {
+        c = std::tolower(static_cast<unsigned char>(c));
+    }
+    
+    for (size_t i = 0; i < Entries_.size(); ++i) {
+        std::string nameLower = std::string(Entries_[i].Name.c_str());
+        for (auto& c : nameLower) {
+            c = std::tolower(static_cast<unsigned char>(c));
+        }
+        
+        if (nameLower.find(queryLower) != std::string::npos) {
+            result.push_back(i);
+        }
+    }
+    
+    return result;
+}
+
+void TTopicListView::ApplySearchFilter() {
+    FilteredIndices_ = GetFilteredIndices();
+    SearchSelectedIndex_ = 0;
+    
+    // Set table selection to first match
+    if (!FilteredIndices_.empty()) {
+        Table_.SetSelectedRow(static_cast<int>(FilteredIndices_[0]));
+    }
+}
+
+void TTopicListView::ClearSearchFilter() {
+    FilteredIndices_.clear();
+    SearchSelectedIndex_ = 0;
+}
+
+// === Go-to-path helpers ===
+
+TVector<std::string> TTopicListView::GetPathCompletions(const std::string& prefix) {
+    TVector<std::string> completions;
+    
+    if (prefix.empty()) {
+        return completions;
+    }
+    
+    // Determine parent directory and prefix part
+    std::string parentDir;
+    std::string namePrefix;
+    
+    size_t lastSlash = prefix.rfind('/');
+    if (lastSlash == std::string::npos) {
+        // No slash - use current directory
+        parentDir = std::string(App_.GetState().CurrentPath.c_str());
+        namePrefix = prefix;
+    } else if (lastSlash == 0) {
+        // Slash at start - root directory
+        parentDir = "/";
+        namePrefix = prefix.substr(1);
+    } else {
+        parentDir = prefix.substr(0, lastSlash);
+        namePrefix = prefix.substr(lastSlash + 1);
+    }
+    
+    // Case-insensitive prefix matching
+    std::string namePrefixLower = namePrefix;
+    for (auto& c : namePrefixLower) {
+        c = std::tolower(static_cast<unsigned char>(c));
+    }
+    
+    // List directory synchronously (blocking, but fast for most cases)
+    auto& schemeClient = App_.GetSchemeClient();
+    auto result = schemeClient.ListDirectory(TString(parentDir.c_str())).GetValueSync();
+    
+    if (!result.IsSuccess()) {
+        return completions;
+    }
+    
+    for (const auto& child : result.GetChildren()) {
+        std::string childName = std::string(child.Name.c_str());
+        std::string childNameLower = childName;
+        for (auto& c : childNameLower) {
+            c = std::tolower(static_cast<unsigned char>(c));
+        }
+        
+        // Check if child matches the prefix
+        if (namePrefixLower.empty() || childNameLower.find(namePrefixLower) == 0) {
+            std::string fullPath = parentDir;
+            if (!fullPath.empty() && fullPath.back() != '/') {
+                fullPath += "/";
+            }
+            fullPath += childName;
+            
+            // Add trailing slash for directories
+            if (child.Type == NScheme::ESchemeEntryType::Directory ||
+                child.Type == NScheme::ESchemeEntryType::SubDomain) {
+                fullPath += "/";
+            }
+            
+            completions.push_back(fullPath);
+            
+            // Limit completions
+            if (completions.size() >= 10) {
+                break;
+            }
+        }
+    }
+    
+    return completions;
+}
+
 } // namespace NYdb::NConsoleClient
+

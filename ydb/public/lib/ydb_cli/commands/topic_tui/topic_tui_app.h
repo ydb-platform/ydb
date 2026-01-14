@@ -78,6 +78,8 @@ public:
     const TString& GetViewerEndpoint() const { return ViewerEndpoint_; }
     const TString& GetDatabaseRoot() const { return DatabaseRoot_; }
     TDuration GetRefreshRate() const { return RefreshRate_; }
+    TString GetRefreshRateLabel() const;  // Returns human readable rate
+    void CycleRefreshRate();  // Cycle through predefined rates
     
     // Navigation
     void NavigateTo(EViewType view);
@@ -105,6 +107,7 @@ private:
     
     // Configuration
     TDuration RefreshRate_;
+    int RefreshRateIndex_ = 1;  // Index into predefined rates (0=1s, 1=2s, 2=5s, 3=10s, 4=off)
     TString ViewerEndpoint_;
     TString DatabaseRoot_;  // Root path for navigation boundary
     

@@ -131,12 +131,12 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
 TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector<TInfoUnit> members) {
     TVector<TExprBase> items;
     // clang-format off
-        auto arg = Build<TCoArgument>(ctx, input->Pos())
-            .Name("arg")
-        .Done().Ptr();
+    auto arg = Build<TCoArgument>(ctx, input->Pos())
+        .Name("arg")
+    .Done().Ptr();
     // clang-format on
 
-    for (auto iu : members) {
+    for (const auto& iu : members) {
         auto name = iu.GetFullName();
         // clang-format off
             auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
@@ -151,65 +151,95 @@ TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector
     }
 
     // clang-format off
-        return Build<TCoFlatMap>(ctx, input->Pos())
-            .Input(input)
-            .Lambda<TCoLambda>()
-                .Args({arg})
-                .Body<TCoJust>()
-                    .Input<TCoAsStruct>()
-                        .Add(items)
-                    .Build()
+    return Build<TCoFlatMap>(ctx, input->Pos())
+        .Input(input)
+        .Lambda<TCoLambda>()
+            .Args({arg})
+            .Body<TCoJust>()
+                .Input<TCoAsStruct>()
+                    .Add(items)
                 .Build()
             .Build()
-        .Done().Ptr();
+        .Build()
+    .Done().Ptr();
     // clang-format on
 }
 
-[[maybe_unused]]
-TExprNode::TPtr PeepholeStageLambda(TExprNode::TPtr stageLambda, TVector<TExprNode::TPtr> inputs, TExprContext &ctx,
-                                    TTypeAnnotationContext &types, TAutoPtr<IGraphTransformer> typeAnnTransformer,
-                                    TAutoPtr<IGraphTransformer> peepholeTransformer, TKikimrConfiguration::TPtr config) {
-
-    Y_UNUSED(peepholeTransformer);
+TExprNode::TPtr KqpPeepholeStageLambda(TExprNode::TPtr stageLambda, TRBOContext& rboCtx) {
+    auto lambda = TCoLambda(stageLambda);
     // Compute types of inputs to stage lambda
     TVector<const TTypeAnnotationNode *> argTypes;
-
-    for (auto input : inputs) {
-        typeAnnTransformer->Rewind();
-
-        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
-        do {
-            status = typeAnnTransformer->Transform(input, input, ctx);
-        } while (status == IGraphTransformer::TStatus::Repeat);
-
-        if (status != IGraphTransformer::TStatus::Ok) {
-            YQL_CLOG(ERROR, ProviderKqp) << "RBO type annotation failed." << Endl << ctx.IssueManager.GetIssues().ToString();
-            return nullptr;
-        }
-
-        argTypes.push_back(input->GetTypeAnn());
+    for (const auto& arg : lambda.Args()) {
+        const auto* argTypeAnn = arg.Ptr()->GetTypeAnn();
+        Y_ENSURE(argTypeAnn);
+        argTypes.push_back(argTypeAnn);
     }
 
     // clang-format off
-    // Build a temporary KqpProgram to run peephole on
-    auto program = Build<TKqpProgram>(ctx, stageLambda->Pos())
-        .Lambda(stageLambda)
-        .ArgsType(ExpandType(stageLambda->Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
+    auto program = Build<TKqpProgram>(rboCtx.ExprCtx, stageLambda->Pos())
+        .Lambda(rboCtx.ExprCtx.DeepCopyLambda(*stageLambda.Get()))
+        .ArgsType(ExpandType(stageLambda->Pos(), *rboCtx.ExprCtx.MakeType<TTupleExprType>(argTypes), rboCtx.ExprCtx))
     .Done();
     // clang-format on
 
-    auto programPtr = program.Ptr();
-
-    const bool allowNonDeterministicFunctions = false;
     TExprNode::TPtr newProgram;
-    auto status =
-        PeepHoleOptimize(program, newProgram, ctx, typeAnnTransformer.GetRef(), types, config, allowNonDeterministicFunctions, true, {});
+    auto status = PeepHoleOptimize(program, newProgram, rboCtx.ExprCtx, rboCtx.PeepholeTypeAnnTransformer.GetRef(), rboCtx.TypeCtx, rboCtx.KqpCtx.Config, false,
+                                   false, {});
     if (status != IGraphTransformer::TStatus::Ok) {
-        ctx.AddError(TIssue(ctx.GetPosition(program.Pos()), "Peephole optimization failed for KQP transaction"));
-        return {};
+        rboCtx.ExprCtx.AddError(TIssue(rboCtx.ExprCtx.GetPosition(program.Pos()), "Peephole optimization failed for stage in NEW RBO"));
+        return nullptr;
     }
 
     return TKqpProgram(newProgram).Lambda().Ptr();
+}
+
+// This function assumes that stages already sorted in topological orders.
+bool ApplyKqpPeepholeForStages(const TVector<int>& stageIds, const THashMap<int, TPositionHandle>& stagePos, THashMap<int, TExprNode::TPtr>& finalizedStages,
+                               TRBOContext& rboCtx) {
+    bool peepholeAppliedAtLeastOnce = false;
+    for (const auto id : stageIds) {
+        auto stage = finalizedStages[id];
+        if (auto maybeDqPhyStage = TMaybeNode<TDqPhyStage>(stage)) {
+            auto dqPhyStage = maybeDqPhyStage.Cast();
+            auto stageLambdaAfterPeephole = KqpPeepholeStageLambda(dqPhyStage.Program().Ptr(), rboCtx);
+            if (stageLambdaAfterPeephole) {
+                // clang-format off
+                finalizedStages[id] = Build<TDqPhyStage>(rboCtx.ExprCtx, stagePos.at(id))
+                    .Inputs(dqPhyStage.Inputs())
+                    .Program(stageLambdaAfterPeephole)
+                    .Settings(dqPhyStage.Settings())
+                .Done().Ptr();
+                // clang-format on
+                peepholeAppliedAtLeastOnce = true;
+            }
+        }
+    }
+    return peepholeAppliedAtLeastOnce;
+}
+
+void ApplyTypeAnnotation(TExprNode::TPtr input, TRBOContext& rboCtx) {
+    rboCtx.TypeAnnTransformer->Rewind();
+    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+    do {
+        status = rboCtx.TypeAnnTransformer->Transform(input, input, rboCtx.ExprCtx);
+    } while (status == IGraphTransformer::TStatus::Repeat);
+    Y_ENSURE(status == IGraphTransformer::TStatus::Ok);
+}
+
+TExprNode::TPtr BuildDqPhyStage(const TVector<TExprNode::TPtr>& inputs, const TVector<TExprNode::TPtr>& args, TExprNode::TPtr physicalStageBody,
+                                TExprContext& ctx, TPositionHandle pos) {
+    // clang-format off
+    return Build<TDqPhyStage>(ctx, pos)
+        .Inputs()
+            .Add(inputs)
+        .Build()
+        .Program()
+            .Args(args)
+            .Body(physicalStageBody)
+        .Build()
+        .Settings().Build()
+    .Done().Ptr();
+    // clang-format on
 }
 
 bool IsMultiConsumerHandlerNeeded(const std::shared_ptr<IOperator>& op) {
@@ -238,7 +268,7 @@ TExprNode::TPtr BuildCrossJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExprNo
         keys.push_back(keyPtr);
     }
 
-    for (auto iu : join.GetRightInput()->GetOutputIUs()) {
+    for (const auto& iu : join.GetRightInput()->GetOutputIUs()) {
         YQL_CLOG(TRACE, CoreDq) << "Converting Cross Join, right key: " << iu.GetFullName();
 
         // clang-format off
@@ -373,7 +403,7 @@ TExprNode::TPtr BuildGraceJoinCore(TOpJoin &join, TExprNode::TPtr leftInput, TEx
 
     auto leftIUs = join.GetLeftInput()->GetOutputIUs();
 
-    bool leftSideOnly = (join.JoinKind == "LeftSemi" || join.JoinKind == "LeftOnly");
+    const bool leftSideOnly = (join.JoinKind == "LeftSemi" || join.JoinKind == "LeftOnly");
 
     auto rightIUs = join.GetRightInput()->GetOutputIUs();
     if (leftSideOnly) {
@@ -505,7 +535,7 @@ TExprNode::TPtr BuildDqGraceJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExpr
 }
 
 [[maybe_unused]]
-TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer & enforcer, TExprContext &ctx, TPositionHandle pos) {
+TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer& enforcer, TExprContext &ctx, TPositionHandle pos) {
     if (enforcer.Action != EOrderEnforcerAction::REQUIRE) {
         return input;
     }
@@ -917,13 +947,13 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
     THashMap<int, TExprNode::TPtr> finalizedStages;
     TVector<TExprNode::TPtr> txStages;
 
-    auto stageIds = graph.StageIds;
-    auto stageInputIds = graph.StageInputs;
+    const auto& stageIds = graph.StageIds;
+    const auto& stageInputIds = graph.StageInputs;
 
     for (const auto id : stageIds) {
         YQL_CLOG(TRACE, CoreDq) << "Finalizing stage " << id;
 
-        TVector<TExprNode::TPtr> inputs;
+        TVector<TExprNode::TPtr> inputConnections;
         THashSet<int> processedInputsIds;
         for (const auto inputStageId : stageInputIds.at(id)) {
             if (processedInputsIds.contains(inputStageId)) {
@@ -941,7 +971,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                     txStages.push_back(newStage);
                 }
                 YQL_CLOG(TRACE, CoreDq) << "Built connection: " << inputStageId << "->" << id << ", " << connection->Type;
-                inputs.push_back(dqConnection);
+                inputConnections.push_back(dqConnection);
             }
         }
 
@@ -949,32 +979,14 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
         if (graph.IsSourceStageRowType(id)) {
             stage = stages.at(id);
         } else {
-            if (graph.IsSourceStageColumnType(id)) {
-                // clang-format off
-                stage = Build<TDqPhyStage>(ctx, stagePos.at(id))
-                    .Inputs().Build()
-                    .Program()
-                        .Args({})
-                        .Body(stages.at(id))
-                    .Build()
-                    .Settings().Build()
-                .Done().Ptr();
-                // clang-format on
-            } else {
-                // clang-format off
-                stage = Build<TDqPhyStage>(ctx, stagePos.at(id))
-                    .Inputs()
-                        .Add(inputs)
-                    .Build()
-                    .Program()
-                        .Args(stageArgs.at(id))
-                        .Body(stages.at(id))
-                    .Build()
-                    .Settings().Build()
-                .Done().Ptr();
-                // clang-format on
+            TVector<TExprNode::TPtr> stageInputConnections;
+            TVector<TExprNode::TPtr> stageInputArgs;
+            if (!graph.IsSourceStageColumnType(id)) {
+                stageInputConnections = inputConnections;
+                stageInputArgs = stageArgs[id];
             }
 
+            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, stages[id], ctx, stagePos[id]);
             txStages.push_back(stage);
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
         }
@@ -984,7 +996,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
     }
 
     // Build a union all for the last stage
-    int lastStageIdx = stageIds[stageIds.size() - 1];
+    const auto lastStageIdx = stageIds[stageIds.size() - 1];
     auto lastStage = finalizedStages.at(lastStageIdx);
 
     TVector<TCoAtom> columnAtomList;
@@ -1023,29 +1035,24 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
             .Add(txSettings)
         .Build()
     .Done().Ptr();
+    // clang-format on
 
+    // Type annotation before kqp peephole.
+    ApplyTypeAnnotation(dqResult, rboCtx);
+    // Apply kqp peephole for stages.
+    if (ApplyKqpPeepholeForStages(stageIds, stagePos, finalizedStages, rboCtx)) {
+        // Type annotation after kqp peephole.
+        ApplyTypeAnnotation(dqResult, rboCtx);
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
+    // clang-format off
     TVector<TExprNode::TPtr> querySettings;
     querySettings.push_back(Build<TCoNameValueTuple>(ctx, root.Pos)
                                 .Name().Build("type")
                                 .Value<TCoAtom>().Build("data_query")
                             .Done().Ptr());
-    // clang-format on
 
-    // Build result type
-    rboCtx.TypeAnnTransformer->Rewind();
-    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
-    do {
-        status = rboCtx.TypeAnnTransformer->Transform(dqResult, dqResult, ctx);
-    } while (status == IGraphTransformer::TStatus::Repeat);
-
-    if (status != IGraphTransformer::TStatus::Ok) {
-        YQL_CLOG(ERROR, ProviderKqp) << "RBO type annotation failed." << Endl << ctx.IssueManager.GetIssues().ToString();
-        return nullptr;
-    }
-
-    YQL_CLOG(TRACE, CoreDq) << "Inferred final type: " << *dqResult->GetTypeAnn();
-
-    // clang-format off
     auto binding = Build<TKqpTxResultBinding>(ctx, root.Pos)
         .Type(ExpandType(root.Pos, *dqResult->GetTypeAnn(), ctx))
         .TxIndex().Build("0")
@@ -1066,13 +1073,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
     .Done().Ptr();
     // clang-format on
 
-    // typeAnnTransformer->Rewind();
-    // do {
-    //    status = typeAnnTransformer->Transform(physQuery, physQuery, ctx);
-    // } while (status == IGraphTransformer::TStatus::Repeat);
-
     YQL_CLOG(TRACE, CoreDq) << "Final plan built";
-
     return physQuery;
 }
 } // namespace NKqp

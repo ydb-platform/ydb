@@ -37,9 +37,6 @@ links:
   - title: Работа с SDK
     description: Справочник по YDB Software Development Kits
     href: reference/ydb-sdk/
-  - title: Совместимость с PostgreSQL
-    description: Интеграция с экосистемой PostgreSQL
-    href: postgresql/intro/
   - title: Диагностика проблем
     description: Описание диагностики проблем с базами данных YDB и приложениями
     href: troubleshooting/

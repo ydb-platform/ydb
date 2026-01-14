@@ -4,7 +4,7 @@ This section provides the main information about {{ ydb-name }} integrations wit
 
 {% note info %}
 
-In addition to its own native protocol, {{ ydb-name }} has a compatibility layer that allows external systems to connect to databases via network protocols PostgreSQL or Apache Kafka. Due to the compatibility layer, many tools designed to work with these systems can also interact with {{ ydb-name }}. The compatibility level of each specific application needs to be clarified separately.
+In addition to its own native protocol, {{ ydb-name }} has a compatibility layer that allows external systems to connect to databases via the Apache Kafka network protocol. Due to the compatibility layer, many tools designed to work with Apache Kafka can also interact with {{ ydb-name }}. The compatibility level of each specific application needs to be clarified separately.
 
 {% endnote %}
 
@@ -44,5 +44,4 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 ## See also
 
 * [{#T}](../reference/ydb-sdk/index.md)
-* [{#T}](../postgresql/intro.md)
 * [{#T}](../reference/kafka-api/index.md)

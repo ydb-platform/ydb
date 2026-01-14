@@ -6,7 +6,6 @@
 * {{ ydb-short-name }} в роли сервера:
 
   * [gRPC](../../reference/ydb-sdk/overview-grpc-api.md) — для внешнего взаимодействия с клиентскими приложениями, разработанными для нативной работы с {{ ydb-short-name }} через [SDK](../../reference/ydb-sdk/index.md) или [CLI](../../reference/ydb-cli/index.md).
-  * [Протокол PostgreSQL](../../postgresql/intro.md) — для внешнего взаимодействия с клиентскими приложениями, изначально разработанными для работы с [PostgreSQL](https://www.postgresql.org/).
   * [Протокол Kafka](../../reference/kafka-api/index.md) — для внешнего взаимодействия с клиентскими приложениями, изначально разработанными для работы с [Apache Kafka](https://kafka.apache.org/).
   * HTTP — для работы с [встроенным UI](../../reference/embedded-ui/index.md), публикации [метрик](../../devops/observability/monitoring.md) и других вспомогательных конечных эндпоинтов.
 

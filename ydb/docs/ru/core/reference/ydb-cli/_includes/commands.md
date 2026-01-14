@@ -100,7 +100,6 @@ debug ping | Проверка доступности {{ ydb-short-name }}
 [tools dump](../export-import/tools-dump.md#schema-objects) | Выгрузка отдельных схемных объектов в файловую систему
 [tools infer csv](../tools-infer.md) | Генерация текста запроса `CREATE TABLE SQL` из CSV файла
 {% if ydb-cli == "ydb" %}
-[tools pg-convert](../../../postgresql/import.md#pg-convert) | Конвертация дампа PostgreSQL, полученного утилитой pg_dump, в формат, понятный YDB
 {% endif %}
 [tools rename](../commands/tools/rename.md) | Переименование строковых [таблиц](../../../concepts/glossary.md#row-oriented-table)
 [tools restore](../export-import/tools-restore.md#schema-objects) | Восстановление отдельных схемных объектов из файловой системы

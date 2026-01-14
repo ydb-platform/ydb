@@ -103,10 +103,9 @@ void TestErasureSet(ui32 firstIdx, ui32 step) {
     }
     for (ui32 i = firstIdx; i <= maxErasureIdx; i += step) {
         auto erasure = (TBlobStorageGroupType::EErasureSpecies)i;
-        if (!TBlobStorageGroupType::ErasureNames.contains(erasure)) {
-            continue;
-        }
-        if (erasure == TBlobStorageGroupType::ErasureMirror3dc || erasure == TBlobStorageGroupType::ErasureMirror3of4) {
+        if (!TBlobStorageGroupType::ErasureNames.contains(erasure)
+        || erasure == TBlobStorageGroupType::ErasureMirror3dc
+        || erasure == TBlobStorageGroupType::ErasureMirror3of4) {
             continue;
         }
         TBlobStorageGroupType gtype(erasure);

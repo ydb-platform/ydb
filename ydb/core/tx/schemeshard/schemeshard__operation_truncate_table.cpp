@@ -251,30 +251,6 @@ public:
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
-
-            // In the initial implementation, we forbid the table to have cdc streams and asynchronous indexes.
-            // It will be fixed in the near future.
-            for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-                Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
-                TPath srcChildPath = tablePath.Child(childName);
-
-                if (srcChildPath.IsDeleted()) {
-                    continue;
-                }
-
-                if (srcChildPath->IsCdcStream()) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                        "Cannot truncate table with CDC streams");
-                    return result;
-                }
-                
-                if (srcChildPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync)) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                        "Cannot truncate table with async indexes");
-                    return result;
-                }
-
-            }
         }
 
         {
@@ -357,35 +333,103 @@ public:
     }
 };
 
-void DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, const TPathId& currentPathId, TVector<ISubOperation::TPtr>& result) {
+bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, const TPathId& currentPathId, TVector<ISubOperation::TPtr>& result) {
     TPath currentPath = TPath::Init(currentPathId, context.SS);
 
-    // The check that the main table is not deleted is performed before the DFS call.
-    // However, the indexes of this table themselves may well be in a state of dropping, there is nothing wrong with that.
-    // It is only important that do not execute TRUNCATE on such indexes.
-    bool isDeleted = currentPath.Base()->Dropped();
-    bool isTable = currentPath->IsTable();
-    bool isIndexParent = currentPath.Base()->IsTableIndex();
+    if (currentPath->IsTable()) {
+        TPath::TChecker checks = currentPath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .NotDeleted()
+            .NotBackupTable()
+            .NotUnderOperation();
 
-    if (!isDeleted && isTable) {
+        if (!checks) {
+            // We cannot return empty vector of suboperations because of technical features of schemeshard's work
+            result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return false;
+        }
+
         const auto workingDir = TString(NKikimr::ExtractParent(currentPath.PathString()));
         const auto tableName = TString(NKikimr::ExtractBase(currentPath.PathString()));
 
-        {
-            auto modifycheme = TransactionTemplate(workingDir, NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable);
-            modifycheme.SetInternal(tx.GetInternal());
-            auto truncateTable = modifycheme.MutableTruncateTable();
-            truncateTable->SetTableName(tableName);
-            result.push_back(CreateTruncateTable(NextPartId(opId, result), modifycheme));
+        auto modifycheme = TransactionTemplate(workingDir, NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable);
+        modifycheme.SetInternal(tx.GetInternal());
+        auto truncateTable = modifycheme.MutableTruncateTable();
+        truncateTable->SetTableName(tableName);
+        result.push_back(CreateTruncateTable(NextPartId(opId, result), modifycheme));
+    }
+
+    for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
+        Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
+        TPath srcChildPath = currentPath.Child(childName);
+
+        if (srcChildPath.IsDeleted()) {
+            continue;
+        }
+
+        switch (srcChildPath.Base()->PathType) {
+            case NKikimrSchemeOp::EPathType::EPathTypeTable: { // indexImplTables
+                if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result)) {
+                    return false;
+                }
+
+                break;
+            }
+
+            case NKikimrSchemeOp::EPathType::EPathTypeTableIndex: {
+                auto indexType = context.SS->Indexes.at(srcChildPath.Base()->PathId)->Type;
+
+                switch (indexType) {
+                    case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
+                        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with async indexes")};
+                        return false;
+                    }
+                    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+                        // This condition should be removed in the near future
+                        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with vector indexes")};
+                        return false;
+                    }
+                    case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+                        // This condition should be removed in the near future
+                        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with fulltext indexes")};
+                        return false;
+                    }
+                    case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                    case NKikimrSchemeOp::EIndexTypeGlobal: {
+                        if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result)) {
+                            return false;
+                        }
+
+                        break;
+                    }
+                    default: {
+                        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with unknown indexes")};
+                        return false;
+                    }
+                }
+
+                break;
+            }
+
+            case NKikimrSchemeOp::EPathType::EPathTypeCdcStream: {
+                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with CDC streams")};
+                return false;
+            }
+
+            case NKikimrSchemeOp::EPathType::EPathTypeSequence: {
+                break;
+            }
+
+            default: {
+                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with unknown children")};
+                return false;
+            }
         }
     }
 
-    if (!isDeleted && (isTable || isIndexParent)) {
-        for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
-            Y_UNUSED(childName);
-            DfsOnTableChildrenTree(opId, tx, context, childPathId, result);
-        }
-    }
+    return true;
 }
 
 } // anonymous namespace
@@ -416,16 +460,16 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
     TPath::TChecker checks = mainTablePath.Check();
     checks
         .IsResolved()
-        .NotEmpty()
-        .NotUnderDomainUpgrade()
-        .NotDeleted()
-        .NotBackupTable()
-        .NotUnderOperation()
         .IsTable();
 
     if (!checks) {
         // We cannot return empty vector of suboperations because of technical features of schemeshard's work
         result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        return result;
+    }
+
+    if (mainTablePath.Parent()->IsTableIndex()) {
+        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate index")};
         return result;
     }
 

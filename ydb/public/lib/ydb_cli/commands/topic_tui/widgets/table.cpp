@@ -26,7 +26,7 @@ void TTable::Clear() {
 void TTable::SetRowCount(size_t count) {
     Rows_.resize(count);
     for (auto& row : Rows_) {
-        row.resize(Columns_.size());
+        row.Cells.resize(Columns_.size());
     }
     // Clamp selection
     if (SelectedRow_ >= static_cast<int>(count)) {
@@ -34,30 +34,104 @@ void TTable::SetRowCount(size_t count) {
     }
 }
 
-void TTable::SetCell(size_t row, size_t col, const TString& text) {
-    if (row < Rows_.size() && col < Columns_.size()) {
-        Rows_[row][col] = TTableCell(text);
+TTableRow& TTable::GetRow(size_t row) {
+    static TTableRow empty;
+    if (row < Rows_.size()) {
+        return Rows_[row];
     }
+    return empty;
 }
 
-void TTable::SetCell(size_t row, size_t col, const TTableCell& cell) {
-    if (row < Rows_.size() && col < Columns_.size()) {
-        Rows_[row][col] = cell;
+const TTableRow& TTable::GetRow(size_t row) const {
+    static TTableRow empty;
+    if (row < Rows_.size()) {
+        return Rows_[row];
+    }
+    return empty;
+}
+
+void TTable::SetRow(size_t row, TTableRow rowData) {
+    if (row < Rows_.size()) {
+        // Ensure cells vector is properly sized
+        rowData.Cells.resize(Columns_.size());
+        Rows_[row] = std::move(rowData);
     }
 }
 
 void TTable::SetRow(size_t row, const TVector<TString>& values) {
     if (row >= Rows_.size()) return;
+    Rows_[row].Cells.resize(Columns_.size());
     for (size_t i = 0; i < values.size() && i < Columns_.size(); ++i) {
-        Rows_[row][i] = TTableCell(values[i]);
+        Rows_[row].Cells[i] = TTableCell(values[i]);
     }
 }
 
 void TTable::SetRow(size_t row, const TVector<TTableCell>& cells) {
     if (row >= Rows_.size()) return;
+    Rows_[row].Cells.resize(Columns_.size());
     for (size_t i = 0; i < cells.size() && i < Columns_.size(); ++i) {
-        Rows_[row][i] = cells[i];
+        Rows_[row].Cells[i] = cells[i];
     }
+}
+
+void TTable::SetCell(size_t row, size_t col, const TString& text) {
+    if (row < Rows_.size() && col < Columns_.size()) {
+        if (Rows_[row].Cells.size() <= col) {
+            Rows_[row].Cells.resize(Columns_.size());
+        }
+        Rows_[row].Cells[col] = TTableCell(text);
+    }
+}
+
+void TTable::SetCell(size_t row, size_t col, const TTableCell& cell) {
+    if (row < Rows_.size() && col < Columns_.size()) {
+        if (Rows_[row].Cells.size() <= col) {
+            Rows_[row].Cells.resize(Columns_.size());
+        }
+        Rows_[row].Cells[col] = cell;
+    }
+}
+
+bool TTable::UpdateCell(size_t row, size_t col, const TString& text) {
+    if (row >= Rows_.size() || col >= Columns_.size()) {
+        return false;
+    }
+    
+    if (Rows_[row].Cells.size() <= col) {
+        Rows_[row].Cells.resize(Columns_.size());
+    }
+    
+    auto& cell = Rows_[row].Cells[col];
+    if (cell.Text != text) {
+        cell.Text = text;
+        cell.ChangedAt = TInstant::Now();
+        return true;
+    }
+    return false;
+}
+
+bool TTable::UpdateCell(size_t row, size_t col, const TTableCell& newCell) {
+    if (row >= Rows_.size() || col >= Columns_.size()) {
+        return false;
+    }
+    
+    if (Rows_[row].Cells.size() <= col) {
+        Rows_[row].Cells.resize(Columns_.size());
+    }
+    
+    auto& cell = Rows_[row].Cells[col];
+    if (cell.Text != newCell.Text) {
+        // Value changed - copy new data and set change timestamp
+        cell = newCell;
+        cell.ChangedAt = TInstant::Now();
+        return true;
+    }
+    // Value same but maybe other properties changed - update without change timestamp
+    cell.TextColor = newCell.TextColor;
+    cell.BgColor = newCell.BgColor;
+    cell.Bold = newCell.Bold;
+    cell.Dim = newCell.Dim;
+    return false;
 }
 
 void TTable::SetSelectedRow(int row) {
@@ -147,16 +221,17 @@ Element TTable::RenderHeader() {
 
 Element TTable::RenderRow(size_t rowIndex) {
     bool selected = IsFocused_ && static_cast<int>(rowIndex) == SelectedRow_;
+    const auto& rowData = Rows_[rowIndex];
     
     Elements cells;
     
     for (size_t i = 0; i < Columns_.size(); ++i) {
         const auto& col = Columns_[i];
-        const auto& cellData = (i < Rows_[rowIndex].size()) 
-            ? Rows_[rowIndex][i] 
+        const auto& cellData = (i < rowData.Cells.size()) 
+            ? rowData.Cells[i] 
             : TTableCell();
         
-        cells.push_back(RenderCell(cellData, col));
+        cells.push_back(RenderCell(cellData, col, rowData, selected));
         
         // Add separator except after last column
         if (i < Columns_.size() - 1) {
@@ -166,6 +241,11 @@ Element TTable::RenderRow(size_t rowIndex) {
     
     Element row = hbox(cells);
     
+    // Apply row-level background color
+    if (rowData.RowBgColor != Color::Default && !selected) {
+        row = row | bgcolor(rowData.RowBgColor);
+    }
+    
     if (selected) {
         row = row | bgcolor(NTheme::HighlightBg) | focus;
     }
@@ -173,19 +253,32 @@ Element TTable::RenderRow(size_t rowIndex) {
     return row;
 }
 
-Element TTable::RenderCell(const TTableCell& cell, const TTableColumn& col) {
+Element TTable::RenderCell(const TTableCell& cell, const TTableColumn& col,
+                           const TTableRow& row, bool isSelected) {
     std::string content = " " + std::string(cell.Text.c_str());
     
     Element elem = text(content);
     
-    // Apply color if specified
+    // Determine text color (cell > row > default)
+    Color textColor = Color::Default;
     if (cell.TextColor != Color::Default) {
-        elem = elem | color(cell.TextColor);
+        textColor = cell.TextColor;
+    } else if (row.RowColor != Color::Default) {
+        textColor = row.RowColor;
     }
     
-    // Apply bold if specified
-    if (cell.Bold) {
+    if (textColor != Color::Default) {
+        elem = elem | color(textColor);
+    }
+    
+    // Apply bold (cell or row level)
+    if (cell.Bold || row.RowBold) {
         elem = elem | bold;
+    }
+    
+    // Apply dim (cell or row level)
+    if (cell.Dim || row.RowDim) {
+        elem = elem | dim;
     }
     
     // Apply width
@@ -195,8 +288,21 @@ Element TTable::RenderCell(const TTableCell& cell, const TTableColumn& col) {
         elem = elem | flex;
     }
     
-    // Apply alignment (for right alignment, we'd need custom logic)
-    // For now, left alignment is default
+    // Check for change highlighting (only if not selected)
+    if (!isSelected && cell.ChangedAt != TInstant()) {
+        TInstant now = TInstant::Now();
+        if (now - cell.ChangedAt < HighlightDuration_) {
+            elem = elem | bgcolor(HighlightColor_);
+        }
+    }
+    
+    // Apply cell-level background (if set and not highlighted)
+    if (!isSelected && cell.BgColor != Color::Default) {
+        if (cell.ChangedAt == TInstant() || 
+            TInstant::Now() - cell.ChangedAt >= HighlightDuration_) {
+            elem = elem | bgcolor(cell.BgColor);
+        }
+    }
     
     return elem;
 }

@@ -151,30 +151,27 @@ void TConsumerView::PopulateTable() {
         const auto& p = PartitionStats_[i];
         
         // Truncate session ID and reader name for display
-        std::string sessionId = p.ReadSessionId.length() > 12 
-            ? std::string(p.ReadSessionId.c_str(), 12) + ".." 
-            : std::string(p.ReadSessionId.c_str());
-        std::string readerName = p.ReaderName.length() > 12 
-            ? std::string(p.ReaderName.c_str(), 12) + ".." 
-            : std::string(p.ReaderName.c_str());
+        TString sessionId = p.ReadSessionId.length() > 12 
+            ? TString(p.ReadSessionId.c_str(), 12) + ".." 
+            : p.ReadSessionId;
+        TString readerName = p.ReaderName.length() > 12 
+            ? TString(p.ReaderName.c_str(), 12) + ".." 
+            : p.ReaderName;
         
-        TVector<TTableCell> cells = {
-            TTableCell(ToString(p.PartitionId)),
-            TTableCell(FormatBytes(p.StoreSizeBytes)),
-            TTableCell(FormatBytes(p.BytesWrittenPerMinute)),
-            TTableCell(FormatDuration(p.WriteTimeLag)),
-            TTableCell(FormatDuration(p.ReadTimeLag)),
-            TTableCell(FormatNumber(p.Lag), NTheme::GetLagColor(p.Lag)),
-            TTableCell(FormatNumber(p.UnreadMessages)),
-            TTableCell(FormatNumber(p.StartOffset)),
-            TTableCell(FormatNumber(p.EndOffset)),
-            TTableCell(FormatNumber(p.CommittedOffset)),
-            TTableCell(sessionId.empty() ? "-" : sessionId),
-            TTableCell(readerName.empty() ? "-" : readerName),
-            TTableCell(p.PartitionNodeId > 0 ? ToString(p.PartitionNodeId) : "-")
-        };
-        
-        Table_.SetRow(i, cells);
+        // Use UpdateCell for each column - this tracks changes automatically
+        Table_.UpdateCell(i, 0, ToString(p.PartitionId));
+        Table_.UpdateCell(i, 1, FormatBytes(p.StoreSizeBytes));
+        Table_.UpdateCell(i, 2, FormatBytes(p.BytesWrittenPerMinute));
+        Table_.UpdateCell(i, 3, FormatDuration(p.WriteTimeLag));
+        Table_.UpdateCell(i, 4, FormatDuration(p.ReadTimeLag));
+        Table_.UpdateCell(i, 5, TTableCell(FormatNumber(p.Lag), NTheme::GetLagColor(p.Lag)));
+        Table_.UpdateCell(i, 6, FormatNumber(p.UnreadMessages));
+        Table_.UpdateCell(i, 7, FormatNumber(p.StartOffset));
+        Table_.UpdateCell(i, 8, FormatNumber(p.EndOffset));
+        Table_.UpdateCell(i, 9, FormatNumber(p.CommittedOffset));
+        Table_.UpdateCell(i, 10, sessionId.empty() ? "-" : sessionId);
+        Table_.UpdateCell(i, 11, readerName.empty() ? "-" : readerName);
+        Table_.UpdateCell(i, 12, p.PartitionNodeId > 0 ? ToString(p.PartitionNodeId) : "-");
     }
 }
 

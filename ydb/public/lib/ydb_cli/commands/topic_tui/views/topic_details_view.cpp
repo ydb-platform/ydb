@@ -254,18 +254,15 @@ void TTopicDetailsView::PopulatePartitionsTable() {
             ? p.LastWriteTime.FormatLocalTime("%H:%M:%S")
             : "-";
         
-        TVector<TTableCell> cells = {
-            TTableCell(ToString(p.PartitionId)),
-            TTableCell(FormatBytes(p.StoreSizeBytes)),
-            TTableCell(FormatBytes(p.BytesWrittenPerMinute)),
-            TTableCell(FormatDuration(p.WriteTimeLag)),
-            TTableCell(FormatNumber(p.StartOffset)),
-            TTableCell(FormatNumber(p.EndOffset)),
-            TTableCell(p.NodeId > 0 ? ToString(p.NodeId) : "-"),
-            TTableCell(lastWriteStr)
-        };
-        
-        PartitionsTable_.SetRow(i, cells);
+        // Use UpdateCell for each column - tracks changes automatically
+        PartitionsTable_.UpdateCell(i, 0, ToString(p.PartitionId));
+        PartitionsTable_.UpdateCell(i, 1, FormatBytes(p.StoreSizeBytes));
+        PartitionsTable_.UpdateCell(i, 2, FormatBytes(p.BytesWrittenPerMinute));
+        PartitionsTable_.UpdateCell(i, 3, FormatDuration(p.WriteTimeLag));
+        PartitionsTable_.UpdateCell(i, 4, FormatNumber(p.StartOffset));
+        PartitionsTable_.UpdateCell(i, 5, FormatNumber(p.EndOffset));
+        PartitionsTable_.UpdateCell(i, 6, p.NodeId > 0 ? ToString(p.NodeId) : "-");
+        PartitionsTable_.UpdateCell(i, 7, lastWriteStr);
     }
 }
 
@@ -275,13 +272,10 @@ void TTopicDetailsView::PopulateConsumersTable() {
     for (size_t i = 0; i < Consumers_.size(); ++i) {
         const auto& c = Consumers_[i];
         
-        TVector<TTableCell> cells = {
-            TTableCell(c.Name),
-            TTableCell(FormatNumber(c.TotalLag), NTheme::GetLagColor(c.TotalLag)),
-            TTableCell(FormatDuration(c.MaxLagTime))
-        };
-        
-        ConsumersTable_.SetRow(i, cells);
+        // Use UpdateCell for each column - tracks changes automatically
+        ConsumersTable_.UpdateCell(i, 0, c.Name);
+        ConsumersTable_.UpdateCell(i, 1, TTableCell(FormatNumber(c.TotalLag), NTheme::GetLagColor(c.TotalLag)));
+        ConsumersTable_.UpdateCell(i, 2, FormatDuration(c.MaxLagTime));
     }
 }
 

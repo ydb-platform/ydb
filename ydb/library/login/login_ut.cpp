@@ -1,8 +1,11 @@
+#include "login.h"
+
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
+
 #include <util/generic/algorithm.h>
 #include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
-#include "login.h"
 
 using namespace NLogin;
 
@@ -30,7 +33,69 @@ Y_UNIT_TEST_SUITE(Login) {
         UNIT_ASSERT(response3.User == request1.User);
     }
 
-    Y_UNIT_TEST(TestNameIsNotAllowed1) {
+    Y_UNIT_TEST(TestSuccessfulLogin2) {
+        TLoginProvider provider;
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+        TString hashes = R"(
+            {
+                "version": 1,
+                "argon2id": "flbr3YnA9kG67qegwDTaYg==$wsTryyX+vdkLiZ4PfYabvgVwHf8tbxBVVtDluhiz3fo=",
+                "scram-sha-256": "4096:s0QSrrFVkMTh3k2TTk860A==$LmCubRpIYV1zHMLucTtu7XjhB+PgWwH8ABCYGyVF1mo=:eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc="
+            }
+        )";
+        TLoginProvider::TCreateUserRequest request1;
+        request1.User = "user1";
+        request1.HashedPassword = Base64Encode(hashes);
+        auto response1 = provider.CreateUser(request1);
+        UNIT_ASSERT(!response1.Error);
+        TLoginProvider::THashToValidate hashToValidate1;
+        hashToValidate1.AuthMech = NLoginProto::ESaslAuthMech::Plain;
+        hashToValidate1.HashType = NLoginProto::EHashType::Argon;
+        hashToValidate1.Hash = "wsTryyX+vdkLiZ4PfYabvgVwHf8tbxBVVtDluhiz3fo=";
+        TLoginProvider::TLoginUserRequest request2;
+        request2.User = request1.User;
+        request2.HashToValidate = hashToValidate1;
+        auto response2 = provider.LoginUser(request2);
+        UNIT_ASSERT_VALUES_EQUAL(response2.Error, "");
+        TLoginProvider::THashToValidate hashToValidate2;
+        hashToValidate2.AuthMech = NLoginProto::ESaslAuthMech::Plain;
+        hashToValidate2.HashType = NLoginProto::EHashType::ScramSha256;
+        hashToValidate2.Hash = "eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc=";
+        TLoginProvider::TLoginUserRequest request3;
+        request3.User = request1.User;
+        request3.HashToValidate = hashToValidate2;
+        auto response3 = provider.LoginUser(request3);
+        UNIT_ASSERT_VALUES_EQUAL(response3.Error, "");
+    }
+
+    Y_UNIT_TEST(TestSuccessfulLogin3) {
+        TLoginProvider provider;
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+        TString hashes = R"(
+            {
+                "version": 1,
+                "argon2id": "flbr3YnA9kG67qegwDTaYg==$wsTryyX+vdkLiZ4PfYabvgVwHf8tbxBVVtDluhiz3fo="
+            }
+        )";
+        TLoginProvider::TCreateUserRequest request1;
+        request1.User = "user1";
+        request1.HashedPassword = Base64Encode(hashes);
+        auto response1 = provider.CreateUser(request1);
+        UNIT_ASSERT(!response1.Error);
+        TLoginProvider::THashToValidate hashToValidate;
+        hashToValidate.AuthMech = NLoginProto::ESaslAuthMech::Plain;
+        hashToValidate.HashType = NLoginProto::EHashType::Argon;
+        hashToValidate.Hash = "wsTryyX+vdkLiZ4PfYabvgVwHf8tbxBVVtDluhiz3fo=";
+        TLoginProvider::TLoginUserRequest request2;
+        request2.User = request1.User;
+        request2.HashToValidate = hashToValidate;
+        auto response2 = provider.LoginUser(request2);
+        UNIT_ASSERT_VALUES_EQUAL(response2.Error, "");
+    }
+
+    Y_UNIT_TEST(TestUsernameIsNotAllowed) {
         TLoginProvider provider;
         TLoginProvider::TCreateUserRequest request;
         request.User = "_USER_";
@@ -56,7 +121,7 @@ Y_UNIT_TEST_SUITE(Login) {
         }
     }
 
-    Y_UNIT_TEST(TestFailedLogin1) {
+    Y_UNIT_TEST(TestWrongPassword1) {
         TLoginProvider provider;
         provider.RotateKeys();
         TLoginProvider::TCreateUserRequest request1;
@@ -71,7 +136,60 @@ Y_UNIT_TEST_SUITE(Login) {
         UNIT_ASSERT(response2.Error == "Invalid password");
     }
 
-    Y_UNIT_TEST(TestFailedLogin2) {
+    Y_UNIT_TEST(TestWrongPassword2) {
+        TLoginProvider provider;
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+        TString hashes1 = R"(
+            {
+                "version": 1,
+                "argon2id": "flbr3YnA9kG67qegwDTaYg==$wsTryyX+vdkLiZ4PfYabvgVwHf8tbxBVVtDluhiz3fo=",
+                "scram-sha-256": "4096:s0QSrrFVkMTh3k2TTk860A==$LmCubRpIYV1zHMLucTtu7XjhB+PgWwH8ABCYGyVF1mo=:eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc="
+            }
+        )";
+        TLoginProvider::TCreateUserRequest request1;
+        request1.User = "user1";
+        request1.HashedPassword = Base64Encode(hashes1);
+        auto response1 = provider.CreateUser(request1);
+        UNIT_ASSERT(!response1.Error);
+        TLoginProvider::THashToValidate hashToValidate;
+        hashToValidate.AuthMech = NLoginProto::ESaslAuthMech::Plain;
+        hashToValidate.HashType = NLoginProto::EHashType::Argon;
+        hashToValidate.Hash = "eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc=";
+        TLoginProvider::TLoginUserRequest request2;
+        request2.User = request1.User;
+        request2.HashToValidate = hashToValidate;
+        auto response2 = provider.LoginUser(request2);
+        UNIT_ASSERT(response2.Error == "Invalid password");
+    }
+
+    Y_UNIT_TEST(TestInvalidHashType) {
+        TLoginProvider provider;
+        provider.Audience = "test_audience1";
+        provider.RotateKeys();
+        TString hashes1 = R"(
+            {
+                "version": 1,
+                "argon2id": "flbr3YnA9kG67qegwDTaYg==$wsTryyX+vdkLiZ4PfYabvgVwHf8tbxBVVtDluhiz3fo="
+            }
+        )";
+        TLoginProvider::TCreateUserRequest request1;
+        request1.User = "user1";
+        request1.HashedPassword = Base64Encode(hashes1);
+        auto response1 = provider.CreateUser(request1);
+        UNIT_ASSERT(!response1.Error);
+        TLoginProvider::THashToValidate hashToValidate;
+        hashToValidate.AuthMech = NLoginProto::ESaslAuthMech::Plain;
+        hashToValidate.HashType = NLoginProto::EHashType::ScramSha256;
+        hashToValidate.Hash = "eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc=";
+        TLoginProvider::TLoginUserRequest request2;
+        request2.User = request1.User;
+        request2.HashToValidate = hashToValidate;
+        auto response2 = provider.LoginUser(request2);
+        UNIT_ASSERT_VALUES_EQUAL(response2.Error, "Invalid hash type");
+    }
+
+    Y_UNIT_TEST(TestUnknownUser) {
         TLoginProvider provider;
         provider.RotateKeys();
         TLoginProvider::TCreateUserRequest request1;
@@ -86,7 +204,28 @@ Y_UNIT_TEST_SUITE(Login) {
         UNIT_ASSERT(response2.Error == "Invalid user");
     }
 
-    Y_UNIT_TEST(TestFailedLogin3) {
+    Y_UNIT_TEST(TestRemovedUser) {
+        TLoginProvider provider;
+        provider.RotateKeys();
+        TLoginProvider::TCreateUserRequest request1;
+        request1.User = "user1";
+        request1.Password = "password1";
+        auto response1 = provider.CreateUser(request1);
+        UNIT_ASSERT(!response1.Error);
+        TLoginProvider::TLoginUserRequest request2;
+        request2.User = request1.User;
+        request2.Password = request1.Password;
+        auto response2 = provider.LoginUser(request2);
+        UNIT_ASSERT_VALUES_EQUAL(response2.Error, "");
+        provider.RemoveUser(request1.User);
+        TLoginProvider::TLoginUserRequest request3;
+        request3.User = request2.User;
+        request3.Password = request2.Password;
+        auto response3 = provider.LoginUser(request2);
+        UNIT_ASSERT(response3.Error == "Invalid user");
+    }
+
+    Y_UNIT_TEST(TestWrongAudience) {
         TLoginProvider provider;
         provider.Audience = "test_audience1";
         provider.RotateKeys();
@@ -437,7 +576,7 @@ Y_UNIT_TEST_SUITE(Login) {
         {
             auto checkLockoutResponse = provider.CheckLockOutUser({.User = "nonExistentUser"});
             UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::INVALID_USER);
-            UNIT_ASSERT_VALUES_EQUAL(checkLockoutResponse.Error, "Cannot find user: nonExistentUser");
+            UNIT_ASSERT_VALUES_EQUAL(checkLockoutResponse.Error, "Cannot find user 'nonExistentUser'");
         }
 
         {
@@ -616,7 +755,7 @@ Y_UNIT_TEST_SUITE(Login) {
         }
     }
 
-    Y_UNIT_TEST(CreateAlterUserWithHash) {
+    Y_UNIT_TEST(CreateAlterUserWithHashOldFormat) {
         TLoginProvider provider;
         provider.RotateKeys();
 

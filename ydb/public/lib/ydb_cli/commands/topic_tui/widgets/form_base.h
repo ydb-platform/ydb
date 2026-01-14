@@ -70,6 +70,9 @@ protected:
     // Optional: form width (default 55)
     virtual int GetFormWidth() const { return 55; }
     
+    // Optional: custom footer (default shows standard submit/cancel)
+    virtual ftxui::Element RenderFooter();
+    
     // Optional: build the internal component container
     // Override to add focusable inputs, checkboxes, etc.
     virtual ftxui::Component BuildContainer() { 

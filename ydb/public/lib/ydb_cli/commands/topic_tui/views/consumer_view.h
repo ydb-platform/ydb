@@ -35,6 +35,7 @@ struct TPartitionConsumerInfo {
     TDuration CommitTimeLag;
     ui64 StoreSizeBytes = 0;
     ui64 BytesWrittenPerMinute = 0;  // Write speed
+    ui64 BytesReadPerMinute = 0;     // Read speed
     TString ReaderName;
     TString ReadSessionId;
     i32 PartitionNodeId = 0;
@@ -56,6 +57,7 @@ public:
     void CheckAsyncCompletion();
     
     std::function<void(ui64 partition, ui64 offset)> OnCommitOffset;
+    std::function<void()> OnDropConsumer;
     std::function<void()> OnBack;
     
 private:
@@ -80,6 +82,7 @@ private:
     std::future<TConsumerData> LoadFuture_;
     TString ErrorMessage_;
     int SpinnerFrame_ = 0;
+    TInstant LastRefreshTime_;  // For auto-refresh
     
     // Per-partition write rate history for sparklines
     std::unordered_map<ui64, TSparklineHistory> PartitionWriteRateHistory_;

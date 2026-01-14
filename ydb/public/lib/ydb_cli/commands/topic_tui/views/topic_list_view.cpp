@@ -131,20 +131,60 @@ Component TTopicListView::Build() {
         
         // Overlay go-to-path popup if active
         if (GoToPathMode_) {
-            // Build completions list
+            // Build completions list - show up to 10 items with scroll
+            const int maxVisible = 10;
             Elements completionElements;
-            for (size_t i = 0; i < PathCompletions_.size() && i < 8; ++i) {
-                auto elem = text(" " + PathCompletions_[i] + " ");
+            
+            // Calculate visible range
+            if (CompletionIndex_ >= 0) {
+                // Adjust scroll to keep selection visible
+                if (CompletionIndex_ < CompletionScrollOffset_) {
+                    CompletionScrollOffset_ = CompletionIndex_;
+                } else if (CompletionIndex_ >= CompletionScrollOffset_ + maxVisible) {
+                    CompletionScrollOffset_ = CompletionIndex_ - maxVisible + 1;
+                }
+            }
+            
+            for (size_t i = CompletionScrollOffset_; 
+                 i < PathCompletions_.size() && i < static_cast<size_t>(CompletionScrollOffset_ + maxVisible); 
+                 ++i) {
+                const auto& path = PathCompletions_[i];
+                
+                // Get type from cache (or show ... if not loaded)
+                TString typeStr;
+                auto it = CompletionTypes_.find(path);
+                if (it != CompletionTypes_.end()) {
+                    typeStr = it->second;
+                } else {
+                    typeStr = "...";
+                }
+                
+                auto elem = hbox({
+                    text(" " + path) | flex,
+                    text(" ") | dim,
+                    text(std::string(typeStr.c_str())) | dim | size(WIDTH, EQUAL, 8)
+                });
+                
                 if (static_cast<int>(i) == CompletionIndex_) {
                     elem = elem | bgcolor(NTheme::HighlightBg) | color(Color::White);
-                } else {
-                    elem = elem | dim;
                 }
                 completionElements.push_back(elem);
             }
             
+            // Show scroll indicator if needed
+            TString scrollInfo;
+            if (PathCompletions_.size() > static_cast<size_t>(maxVisible)) {
+                scrollInfo = Sprintf(" (%d-%d of %d)", 
+                    CompletionScrollOffset_ + 1,
+                    std::min(CompletionScrollOffset_ + maxVisible, static_cast<int>(PathCompletions_.size())),
+                    static_cast<int>(PathCompletions_.size()));
+            }
+            
             Element popup = vbox({
-                text(" Go to path ") | bold | center,
+                hbox({
+                    text(" Go to path ") | bold,
+                    text(std::string(scrollInfo.c_str())) | dim
+                }) | center,
                 separator(),
                 hbox({
                     text(" Path: "),
@@ -153,7 +193,7 @@ Component TTopicListView::Build() {
                 }),
                 completionElements.empty() ? text("") : separator(),
                 completionElements.empty() ? text("") : vbox(std::move(completionElements))
-            }) | border | bgcolor(Color::GrayDark) | size(WIDTH, GREATER_THAN, 50);
+            }) | border | bgcolor(Color::GrayDark) | size(WIDTH, GREATER_THAN, 60);
             
             content = dbox({
                 content,
@@ -182,6 +222,7 @@ Component TTopicListView::Build() {
         if (GoToPathMode_) {
             if (event == Event::Escape) {
                 GoToPathMode_ = false;
+                App_.GetState().InputCaptureActive = false;
                 GoToPathInput_.clear();
                 PathCompletions_.clear();
                 CompletionIndex_ = -1;
@@ -199,12 +240,13 @@ Component TTopicListView::Build() {
                 }
                 
                 GoToPathMode_ = false;
+                App_.GetState().InputCaptureActive = false;
                 GoToPathInput_.clear();
                 PathCompletions_.clear();
                 CompletionIndex_ = -1;
                 
-                if (OnDirectorySelected && !targetPath.empty()) {
-                    OnDirectorySelected(targetPath);
+                if (OnNavigateToPath && !targetPath.empty()) {
+                    OnNavigateToPath(targetPath);
                 }
                 return true;
             }
@@ -249,6 +291,7 @@ Component TTopicListView::Build() {
             if (event == Event::Escape) {
                 // Exit search mode, restore full list
                 SearchMode_ = false;
+                App_.GetState().InputCaptureActive = false;
                 SearchQuery_.clear();
                 ClearSearchFilter();
                 return true;
@@ -262,6 +305,7 @@ Component TTopicListView::Build() {
                     if (realIndex < Entries_.size()) {
                         const auto& entry = Entries_[realIndex];
                         SearchMode_ = false;
+                        App_.GetState().InputCaptureActive = false;
                         SearchQuery_.clear();
                         ClearSearchFilter();
                         
@@ -318,6 +362,7 @@ Component TTopicListView::Build() {
         // Enter search mode with '/'
         if (event == Event::Character('/')) {
             SearchMode_ = true;
+            App_.GetState().InputCaptureActive = true;
             SearchQuery_.clear();
             SearchSelectedIndex_ = 0;
             FilteredIndices_ = GetFilteredIndices();  // Start with all entries
@@ -327,6 +372,7 @@ Component TTopicListView::Build() {
         // Enter go-to-path mode with 'g'
         if (event == Event::Character('g')) {
             GoToPathMode_ = true;
+            App_.GetState().InputCaptureActive = true;
             GoToPathInput_ = std::string(App_.GetState().CurrentPath.c_str());
             PathCompletions_ = GetPathCompletions(GoToPathInput_);
             CompletionIndex_ = -1;
@@ -445,14 +491,8 @@ void TTopicListView::CheckAsyncCompletion() {
             try {
                 Entries_ = LoadFuture_.get();
                 ErrorMessage_.clear();
-                // Apply current sort order
-                SortEntries();
-                // If in search mode, re-apply filter; otherwise populate full table
-                if (SearchMode_) {
-                    ApplySearchFilter();
-                } else {
-                    PopulateTable();
-                }
+                // StartTopicInfoLoads applies cached values AND populates table
+                // (It sorts entries using current sort column before display)
                 StartTopicInfoLoads();
             } catch (const std::exception& e) {
                 ErrorMessage_ = e.what();
@@ -682,7 +722,8 @@ void TTopicListView::StartTopicInfoLoads() {
         }
     }
     
-    // Re-populate table with cached data (respecting search mode)
+    // Sort entries with cached data applied, then populate table
+    SortEntries();
     if (SearchMode_) {
         ApplySearchFilter();
     } else {
@@ -910,6 +951,24 @@ void TTopicListView::CheckTopicInfoCompletion() {
     for (const auto& path : completed) {
         DirInfoFutures_.erase(path);
     }
+    
+    // If we completed any info loads and are sorting by a data-dependent column,
+    // we need to re-sort and repopulate the table
+    bool anyCompleted = !TopicInfoFutures_.empty() || !DirInfoFutures_.empty();  // Still have pending
+    int sortCol = Table_.GetSortColumn();
+    bool needsResort = (sortCol >= 2 && sortCol <= 6);  // Parts, Size, Cons, Ret, WriteSpd
+    
+    // Only re-sort if we just completed some loads AND all loads are now done
+    if (!anyCompleted && needsResort && !Entries_.empty()) {
+        // Check if we actually loaded any info this time (compare before/after)
+        // For simplicity, always re-sort if all futures are done and sorting by data column
+        SortEntries();
+        if (SearchMode_) {
+            ApplySearchFilter();
+        } else {
+            PopulateTable();
+        }
+    }
 }
 
 // === Search mode helpers ===
@@ -1085,6 +1144,10 @@ TVector<std::string> TTopicListView::GetPathCompletions(const std::string& prefi
         return completions;
     }
     
+    // Clear old types for completions
+    CompletionTypes_.clear();
+    CompletionScrollOffset_ = 0;
+    
     for (const auto& child : result.GetChildren()) {
         std::string childName = std::string(child.Name.c_str());
         std::string childNameLower = childName;
@@ -1101,15 +1164,39 @@ TVector<std::string> TTopicListView::GetPathCompletions(const std::string& prefi
             fullPath += childName;
             
             // Add trailing slash for directories
-            if (child.Type == NScheme::ESchemeEntryType::Directory ||
-                child.Type == NScheme::ESchemeEntryType::SubDomain) {
+            bool isDir = child.Type == NScheme::ESchemeEntryType::Directory ||
+                         child.Type == NScheme::ESchemeEntryType::SubDomain;
+            if (isDir) {
                 fullPath += "/";
             }
             
             completions.push_back(fullPath);
             
-            // Limit completions
-            if (completions.size() >= 10) {
+            // Cache type for display
+            TString typeLabel;
+            switch (child.Type) {
+                case NScheme::ESchemeEntryType::Topic:
+                case NScheme::ESchemeEntryType::PqGroup:
+                    typeLabel = "Topic";
+                    break;
+                case NScheme::ESchemeEntryType::Directory:
+                case NScheme::ESchemeEntryType::SubDomain:
+                    typeLabel = "Dir";
+                    break;
+                case NScheme::ESchemeEntryType::Table:
+                    typeLabel = "Table";
+                    break;
+                case NScheme::ESchemeEntryType::ColumnTable:
+                    typeLabel = "ColTable";
+                    break;
+                default:
+                    typeLabel = "";
+                    break;
+            }
+            CompletionTypes_[fullPath] = typeLabel;
+            
+            // Limit completions to prevent UI from being too slow
+            if (completions.size() >= 50) {
                 break;
             }
         }

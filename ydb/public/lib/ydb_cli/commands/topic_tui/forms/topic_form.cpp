@@ -3,6 +3,7 @@
 
 #include <util/string/cast.h>
 #include <util/string/printf.h>
+#include <util/string/split.h>
 
 using namespace ftxui;
 
@@ -29,19 +30,31 @@ EViewType TTopicForm::GetViewType() const {
 }
 
 Component TTopicForm::BuildContainer() {
+    // Create input options with cursor position tracking
+    InputOption pathOpt; pathOpt.content = &PathInput_; pathOpt.cursor_position = &PathCursor_; pathOpt.multiline = false;
+    InputOption minPartOpt; minPartOpt.content = &MinPartitionsInput_; minPartOpt.cursor_position = &MinPartCursor_; minPartOpt.multiline = false;
+    InputOption maxPartOpt; maxPartOpt.content = &MaxPartitionsInput_; maxPartOpt.cursor_position = &MaxPartCursor_; maxPartOpt.multiline = false;
+    InputOption retentionOpt; retentionOpt.content = &RetentionInput_; retentionOpt.cursor_position = &RetentionCursor_; retentionOpt.multiline = false;
+    InputOption storageOpt; storageOpt.content = &StorageInput_; storageOpt.cursor_position = &StorageCursor_; storageOpt.multiline = false;
+    InputOption writeSpeedOpt; writeSpeedOpt.content = &WriteSpeedInput_; writeSpeedOpt.cursor_position = &WriteSpeedCursor_; writeSpeedOpt.multiline = false;
+    InputOption writeBurstOpt; writeBurstOpt.content = &WriteBurstInput_; writeBurstOpt.cursor_position = &WriteBurstCursor_; writeBurstOpt.multiline = false;
+    InputOption stabOpt; stabOpt.content = &StabilizationWindowInput_; stabOpt.cursor_position = &StabilizationCursor_; stabOpt.multiline = false;
+    InputOption upUtilOpt; upUtilOpt.content = &UpUtilizationInput_; upUtilOpt.cursor_position = &UpUtilCursor_; upUtilOpt.multiline = false;
+    InputOption downUtilOpt; downUtilOpt.content = &DownUtilizationInput_; downUtilOpt.cursor_position = &DownUtilCursor_; downUtilOpt.multiline = false;
+    
     // Basic settings inputs
-    PathInputComponent_ = Input(&PathInput_, "topic-name");
-    MinPartInputComponent_ = Input(&MinPartitionsInput_, "1");
-    MaxPartInputComponent_ = Input(&MaxPartitionsInput_, "100");
-    RetentionInputComponent_ = Input(&RetentionInput_, "24h");
-    StorageInputComponent_ = Input(&StorageInput_, "0");
-    WriteSpeedInputComponent_ = Input(&WriteSpeedInput_, "1048576");
-    WriteBurstInputComponent_ = Input(&WriteBurstInput_, "0");
+    PathInputComponent_ = Input(pathOpt);
+    MinPartInputComponent_ = Input(minPartOpt);
+    MaxPartInputComponent_ = Input(maxPartOpt);
+    RetentionInputComponent_ = Input(retentionOpt);
+    StorageInputComponent_ = Input(storageOpt);
+    WriteSpeedInputComponent_ = Input(writeSpeedOpt);
+    WriteBurstInputComponent_ = Input(writeBurstOpt);
     
     // Auto-partitioning inputs
-    StabilizationInputComponent_ = Input(&StabilizationWindowInput_, "300");
-    UpUtilInputComponent_ = Input(&UpUtilizationInput_, "90");
-    DownUtilInputComponent_ = Input(&DownUtilizationInput_, "30");
+    StabilizationInputComponent_ = Input(stabOpt);
+    UpUtilInputComponent_ = Input(upUtilOpt);
+    DownUtilInputComponent_ = Input(downUtilOpt);
     
     // Selectors
     AutoPartSelectorComponent_ = Radiobox(&AutoPartStrategies, &AutoPartitioningStrategyIndex_);
@@ -150,6 +163,30 @@ bool TTopicForm::HandleSubmit() {
         Data_.WriteBurstBytes = FromString<ui64>(TString(WriteBurstInput_.c_str()));
         Data_.RetentionStorageMb = FromString<ui64>(TString(StorageInput_.c_str()));
         
+        // Parse retention period (formats: "24h", "7d", "HH:MM:SS", "HH:MM", or plain hours)
+        TString retentionStr = TString(RetentionInput_.c_str());
+        if (retentionStr.Contains(':')) {
+            // Parse HH:MM:SS or HH:MM format
+            TVector<TString> parts;
+            Split(retentionStr, ":", parts);
+            if (parts.size() >= 2) {
+                ui64 hours = FromString<ui64>(parts[0]);
+                ui64 minutes = FromString<ui64>(parts[1]);
+                ui64 seconds = (parts.size() >= 3) ? FromString<ui64>(parts[2]) : 0;
+                Data_.RetentionPeriod = TDuration::Hours(hours) + TDuration::Minutes(minutes) + TDuration::Seconds(seconds);
+            }
+        } else if (retentionStr.EndsWith("h") || retentionStr.EndsWith("H")) {
+            ui64 hours = FromString<ui64>(retentionStr.substr(0, retentionStr.size() - 1));
+            Data_.RetentionPeriod = TDuration::Hours(hours);
+        } else if (retentionStr.EndsWith("d") || retentionStr.EndsWith("D")) {
+            ui64 days = FromString<ui64>(retentionStr.substr(0, retentionStr.size() - 1));
+            Data_.RetentionPeriod = TDuration::Days(days);
+        } else {
+            // Assume hours if no suffix
+            ui64 hours = FromString<ui64>(retentionStr);
+            Data_.RetentionPeriod = TDuration::Hours(hours);
+        }
+        
         // Auto-partitioning settings
         Data_.StabilizationWindowSeconds = FromString<ui32>(TString(StabilizationWindowInput_.c_str()));
         Data_.UpUtilizationPercent = FromString<ui32>(TString(UpUtilizationInput_.c_str()));
@@ -196,7 +233,12 @@ void TTopicForm::SetEditMode(const TString& topicPath, const NTopic::TTopicDescr
     PathInput_ = std::string(topicPath.c_str());
     MinPartitionsInput_ = std::to_string(partSettings.GetMinActivePartitions());
     MaxPartitionsInput_ = std::to_string(partSettings.GetMaxActivePartitions());
-    RetentionInput_ = std::to_string(desc.GetRetentionPeriod().Hours()) + "h";
+    // Show retention in HH:MM:SS format
+    ui64 totalSeconds = desc.GetRetentionPeriod().Seconds();
+    ui64 hours = totalSeconds / 3600;
+    ui64 minutes = (totalSeconds % 3600) / 60;
+    ui64 seconds = totalSeconds % 60;
+    RetentionInput_ = Sprintf("%02lu:%02lu:%02lu", hours, minutes, seconds);
     StorageInput_ = std::to_string(desc.GetRetentionStorageMb().value_or(0));
     WriteSpeedInput_ = std::to_string(desc.GetPartitionWriteSpeedBytesPerSecond());
     WriteBurstInput_ = std::to_string(desc.GetPartitionWriteBurstBytes());
@@ -239,12 +281,25 @@ void TTopicForm::SetEditMode(const TString& topicPath, const NTopic::TTopicDescr
             default: break;
         }
     }
+    
+    // Set cursor positions at end of values
+    PathCursor_ = PathInput_.size();
+    MinPartCursor_ = MinPartitionsInput_.size();
+    MaxPartCursor_ = MaxPartitionsInput_.size();
+    RetentionCursor_ = RetentionInput_.size();
+    StorageCursor_ = StorageInput_.size();
+    WriteSpeedCursor_ = WriteSpeedInput_.size();
+    WriteBurstCursor_ = WriteBurstInput_.size();
+    StabilizationCursor_ = StabilizationWindowInput_.size();
+    UpUtilCursor_ = UpUtilizationInput_.size();
+    DownUtilCursor_ = DownUtilizationInput_.size();
 }
 
 void TTopicForm::SetCreateMode(const TString& basePath) {
     Reset();
     IsEditMode_ = false;
     PathInput_ = std::string((basePath.EndsWith("/") ? basePath : basePath + "/").c_str());
+    PathCursor_ = PathInput_.size();  // Position cursor at end
 }
 
 void TTopicForm::Reset() {
@@ -266,6 +321,18 @@ void TTopicForm::Reset() {
     DownUtilizationInput_ = "30";
     AutoPartitioningStrategyIndex_ = 0;
     MeteringModeIndex_ = 0;
+    
+    // Set cursor positions at end of default values
+    PathCursor_ = PathInput_.size();
+    MinPartCursor_ = MinPartitionsInput_.size();
+    MaxPartCursor_ = MaxPartitionsInput_.size();
+    RetentionCursor_ = RetentionInput_.size();
+    StorageCursor_ = StorageInput_.size();
+    WriteSpeedCursor_ = WriteSpeedInput_.size();
+    WriteBurstCursor_ = WriteBurstInput_.size();
+    StabilizationCursor_ = StabilizationWindowInput_.size();
+    UpUtilCursor_ = UpUtilizationInput_.size();
+    DownUtilCursor_ = DownUtilizationInput_.size();
 }
 
 TVector<NTopic::ECodec> TTopicForm::GetSelectedCodecs() const {

@@ -13,6 +13,8 @@ SRCS(
     forms/delete_confirm_form.cpp
     forms/consumer_form.cpp
     forms/write_message_form.cpp
+    forms/drop_consumer_form.cpp
+    forms/edit_consumer_form.cpp
     forms/message_form.cpp
     forms/offset_form.cpp
     widgets/sparkline.cpp
@@ -31,3 +33,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

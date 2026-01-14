@@ -46,7 +46,7 @@ Component TFormBase::Build() {
         // Footer (only show if not submitting)
         if (!Submitting_) {
             content.push_back(separator());
-            content.push_back(NTheme::FormFooter(true));
+            content.push_back(RenderFooter());
         }
         
         return vbox(content) | border | size(WIDTH, EQUAL, GetFormWidth()) | center;
@@ -56,6 +56,9 @@ Component TFormBase::Build() {
         if (App_.GetState().CurrentView != GetViewType()) {
             return false;
         }
+        
+        // Mark that a form is capturing input (suppresses global shortcuts)
+        App_.GetState().InputCaptureActive = true;
         
         // Ignore input while submitting
         if (Submitting_) {
@@ -100,6 +103,10 @@ Element TFormBase::LabeledInput(const std::string& label, Component input, int l
 
 Element TFormBase::RenderSpinner(const std::string& message) {
     return NTheme::RenderSpinner(SpinnerFrame_, message) | center;
+}
+
+Element TFormBase::RenderFooter() {
+    return NTheme::FormFooter(true);
 }
 
 } // namespace NYdb::NConsoleClient

@@ -13,6 +13,7 @@ namespace NYdb::NConsoleClient::NTheme {
 
 // Selection and highlighting
 inline const ftxui::Color HighlightBg = ftxui::Color::RGB(40, 60, 100);
+inline const ftxui::Color HoverBg = ftxui::Color::RGB(50, 50, 55);  // Subtle hover
 inline const ftxui::Color HeaderBg = ftxui::Color::GrayDark;
 
 // Text colors

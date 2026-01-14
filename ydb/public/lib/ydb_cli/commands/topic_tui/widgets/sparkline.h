@@ -113,6 +113,15 @@ inline TString FormatDuration(TDuration d) {
     }
 }
 
+// Format retention period in HH:MM:SS format (for long durations, shows total hours)
+inline TString FormatRetention(TDuration d) {
+    ui64 totalSeconds = d.Seconds();
+    ui64 hours = totalSeconds / 3600;
+    ui64 minutes = (totalSeconds % 3600) / 60;
+    ui64 seconds = totalSeconds % 60;
+    return Sprintf("%02lu:%02lu:%02lu", hours, minutes, seconds);
+}
+
 // Format number with thousands separator
 inline TString FormatNumber(ui64 n) {
     TString result = ToString(n);

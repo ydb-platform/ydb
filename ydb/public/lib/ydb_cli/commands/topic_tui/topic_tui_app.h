@@ -27,6 +27,8 @@ class TTopicForm;
 class TDeleteConfirmForm;
 class TConsumerForm;
 class TWriteMessageForm;
+class TDropConsumerForm;
+class TEditConsumerForm;
 
 enum class EViewType {
     TopicList,
@@ -40,7 +42,9 @@ enum class EViewType {
     DeleteConfirm,
     ConsumerForm,
     WriteMessage,
-    OffsetForm
+    OffsetForm,
+    DropConsumerConfirm,
+    EditConsumer
 };
 
 // Shared state between views
@@ -55,8 +59,13 @@ struct TAppState {
     std::atomic<bool> ShouldRefresh{false};
     std::atomic<bool> ShouldExit{false};
     
-    // Current view
+    // Current view and navigation
     EViewType CurrentView = EViewType::TopicList;
+    EViewType PreviousView = EViewType::TopicList;  // For proper back navigation
+    
+    // Input capture mode - when true, global shortcuts are suppressed
+    // Views should set this when entering text-input modes (search, dialogs, etc.)
+    bool InputCaptureActive = false;
     
     // Last error message
     TString LastError;
@@ -124,6 +133,8 @@ private:
     std::shared_ptr<TDeleteConfirmForm> DeleteConfirmForm_;
     std::shared_ptr<TConsumerForm> ConsumerForm_;
     std::shared_ptr<TWriteMessageForm> WriteMessageForm_;
+    std::shared_ptr<TDropConsumerForm> DropConsumerForm_;
+    std::shared_ptr<TEditConsumerForm> EditConsumerForm_;
     
     // Refresh thread
     std::thread RefreshThread_;
@@ -141,6 +152,7 @@ private:
     // Built components (for focus management)
     ftxui::Component TopicListComponent_;
     ftxui::Component TopicDetailsComponent_;
+    ftxui::Component ConsumerComponent_;
     ftxui::Component TopicFormComponent_;
     ftxui::Component DeleteConfirmComponent_;
 };

@@ -152,7 +152,7 @@ public:
     
     // ----- Callbacks -----
     
-    std::function<void(int row)> OnSelect;   // Enter key
+    std::function<void(int row)> OnSelect;   // Enter key or click
     std::function<void(int row)> OnNavigate; // Arrow keys changed selection
     std::function<void(int col, bool ascending)> OnSortChanged;  // Sort changed
     
@@ -174,6 +174,7 @@ private:
     TVector<TTableColumn> Columns_;
     TVector<TTableRow> Rows_;
     int SelectedRow_ = 0;
+    int HoveredRow_ = -1;  // -1 = no hover
     bool IsFocused_ = true;
     
     // Change highlighting config
@@ -182,6 +183,9 @@ private:
     // Sort state
     int SortColumn_ = 0;        // Default: sort by first column
     bool SortAscending_ = true;  // Default: ascending
+    
+    // For mouse coordinate tracking
+    ftxui::Box Box_;
 };
 
 } // namespace NYdb::NConsoleClient

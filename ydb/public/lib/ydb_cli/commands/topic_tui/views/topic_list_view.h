@@ -80,6 +80,7 @@ public:
     // Callbacks
     std::function<void(const TString& topicPath)> OnTopicSelected;
     std::function<void(const TString& dirPath)> OnDirectorySelected;
+    std::function<void(const TString& path)> OnNavigateToPath;  // For 'go to' - checks type
     std::function<void()> OnCreateTopic;
     std::function<void(const TString& topicPath)> OnEditTopic;
     std::function<void(const TString& topicPath)> OnDeleteTopic;
@@ -141,6 +142,8 @@ private:
     std::string GoToPathInput_;
     TVector<std::string> PathCompletions_;  // Autocomplete suggestions
     int CompletionIndex_ = -1;  // Currently selected completion (-1 = none)
+    int CompletionScrollOffset_ = 0;  // For scrolling completions
+    std::unordered_map<std::string, TString> CompletionTypes_;  // Path -> type (Topic, Dir, etc.)
     
     // Note: Sorting state is managed by Table_ (GetSortColumn(), IsSortAscending(), SetSort())
 };

@@ -9,6 +9,8 @@
 #include "forms/delete_confirm_form.h"
 #include "forms/consumer_form.h"
 #include "forms/write_message_form.h"
+#include "forms/drop_consumer_form.h"
+#include "forms/edit_consumer_form.h"
 #include "widgets/sparkline.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
@@ -43,6 +45,8 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     DeleteConfirmForm_ = std::make_shared<TDeleteConfirmForm>(*this);
     ConsumerForm_ = std::make_shared<TConsumerForm>(*this);
     WriteMessageForm_ = std::make_shared<TWriteMessageForm>(*this);
+    DropConsumerForm_ = std::make_shared<TDropConsumerForm>(*this);
+    EditConsumerForm_ = std::make_shared<TEditConsumerForm>(*this);
     
     // Wire up callbacks
     TopicListView_->OnTopicSelected = [this](const TString& path) {
@@ -54,6 +58,29 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     TopicListView_->OnDirectorySelected = [this](const TString& path) {
         State_.CurrentPath = path;
         TopicListView_->Refresh();
+    };
+    
+    TopicListView_->OnNavigateToPath = [this](const TString& path) {
+        // Check path type using DescribePath
+        auto result = SchemeClient_->DescribePath(path).GetValueSync();
+        if (result.IsSuccess()) {
+            auto entry = result.GetEntry();
+            if (entry.Type == NScheme::ESchemeEntryType::Topic || 
+                entry.Type == NScheme::ESchemeEntryType::PqGroup) {
+                // It's a topic - open topic details
+                State_.SelectedTopic = path;
+                TopicDetailsView_->SetTopic(path);
+                NavigateTo(EViewType::TopicDetails);
+            } else {
+                // It's a directory - navigate the explorer
+                State_.CurrentPath = path;
+                TopicListView_->Refresh();
+            }
+        } else {
+            // Path doesn't exist, try as directory
+            State_.CurrentPath = path;
+            TopicListView_->Refresh();
+        }
     };
     
     TopicDetailsView_->OnConsumerSelected = [this](const TString& consumer) {
@@ -77,6 +104,38 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
         NavigateTo(EViewType::ConsumerForm);
     };
     
+    TopicDetailsView_->OnDropConsumer = [this](const TString& consumerName) {
+        DropConsumerForm_->SetConsumer(State_.SelectedTopic, consumerName);
+        NavigateTo(EViewType::DropConsumerConfirm);
+    };
+    
+    TopicDetailsView_->OnEditTopic = [this]() {
+        // Fetch topic description then show form in edit mode
+        auto future = TopicClient_->DescribeTopic(State_.SelectedTopic);
+        auto result = future.GetValueSync();
+        if (result.IsSuccess()) {
+            TopicForm_->SetEditMode(State_.SelectedTopic, result.GetTopicDescription());
+            NavigateTo(EViewType::TopicForm);
+        } else {
+            ShowError(result.GetIssues().ToString());
+        }
+    };
+    
+    TopicDetailsView_->OnEditConsumer = [this](const TString& consumerName) {
+        EditConsumerForm_->SetConsumer(State_.SelectedTopic, consumerName);
+        NavigateTo(EViewType::EditConsumer);
+    };
+    
+    // Edit consumer form callbacks
+    EditConsumerForm_->OnSuccess = [this]() {
+        TopicDetailsView_->Refresh();
+        NavigateBack();
+    };
+    
+    EditConsumerForm_->OnCancel = [this]() {
+        NavigateBack();
+    };
+    
     // Consumer form callbacks
     ConsumerForm_->OnSuccess = [this]() {
         TopicDetailsView_->Refresh();
@@ -92,12 +151,34 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
         NavigateBack();
     };
     
+    // Drop consumer form callbacks
+    DropConsumerForm_->OnConfirm = [this](const TString& topicPath, const TString& consumerName) {
+        NTopic::TAlterTopicSettings settings;
+        settings.AppendDropConsumers(std::string(consumerName.c_str()));
+        auto result = TopicClient_->AlterTopic(topicPath, settings).GetValueSync();
+        NavigateBack();
+        if (result.IsSuccess()) {
+            TopicDetailsView_->Refresh();
+        } else {
+            ShowError(result.GetIssues().ToString());
+        }
+    };
+    
+    DropConsumerForm_->OnCancel = [this]() {
+        NavigateBack();
+    };
+    
     TopicDetailsView_->OnBack = [this]() {
         NavigateBack();
     };
     
     ConsumerView_->OnBack = [this]() {
         NavigateBack();
+    };
+    
+    ConsumerView_->OnDropConsumer = [this]() {
+        DropConsumerForm_->SetConsumer(State_.SelectedTopic, State_.SelectedConsumer);
+        NavigateTo(EViewType::DropConsumerConfirm);
     };
     
     MessagePreviewView_->OnBack = [this]() {
@@ -313,6 +394,13 @@ int TTopicTuiApp::Run() {
 }
 
 void TTopicTuiApp::NavigateTo(EViewType view) {
+    // Track previous view for forms/dialogs so we can return properly
+    if (view == EViewType::TopicForm || view == EViewType::DeleteConfirm ||
+        view == EViewType::ConsumerForm || view == EViewType::WriteMessage ||
+        view == EViewType::DropConsumerConfirm || view == EViewType::EditConsumer) {
+        State_.PreviousView = State_.CurrentView;
+    }
+    
     State_.CurrentView = view;
     
     // Ensure forms have focus when navigating to them
@@ -326,6 +414,9 @@ void TTopicTuiApp::NavigateTo(EViewType view) {
 }
 
 void TTopicTuiApp::NavigateBack() {
+    // Clear input capture state when navigating back from any view
+    State_.InputCaptureActive = false;
+    
     switch (State_.CurrentView) {
         case EViewType::TopicDetails:
             State_.CurrentView = EViewType::TopicList;
@@ -345,23 +436,22 @@ void TTopicTuiApp::NavigateBack() {
         case EViewType::Charts:
             State_.CurrentView = EViewType::TopicDetails;
             break;
+        // Forms and dialogs return to where user came from
         case EViewType::TopicForm:
-            State_.CurrentView = EViewType::TopicList;
-            if (TopicListComponent_) {
-                TopicListComponent_->TakeFocus();
-            }
-            break;
         case EViewType::DeleteConfirm:
-            State_.CurrentView = EViewType::TopicList;
-            if (TopicListComponent_) {
-                TopicListComponent_->TakeFocus();
-            }
-            break;
         case EViewType::ConsumerForm:
-            State_.CurrentView = EViewType::TopicDetails;
-            break;
         case EViewType::WriteMessage:
-            State_.CurrentView = EViewType::TopicDetails;
+        case EViewType::DropConsumerConfirm:
+        case EViewType::EditConsumer:
+            State_.CurrentView = State_.PreviousView;
+            // Restore focus to the appropriate component
+            if (State_.CurrentView == EViewType::TopicList && TopicListComponent_) {
+                TopicListComponent_->TakeFocus();
+            } else if (State_.CurrentView == EViewType::TopicDetails && TopicDetailsComponent_) {
+                TopicDetailsComponent_->TakeFocus();
+            } else if (State_.CurrentView == EViewType::ConsumerDetails && ConsumerComponent_) {
+                ConsumerComponent_->TakeFocus();
+            }
             break;
         default:
             break;
@@ -409,19 +499,21 @@ TString TTopicTuiApp::GetRefreshRateLabel() const {
 Component TTopicTuiApp::BuildMainComponent() {
     TopicListComponent_ = TopicListView_->Build();
     TopicDetailsComponent_ = TopicDetailsView_->Build();
-    auto consumerComponent = ConsumerView_->Build();
+    ConsumerComponent_ = ConsumerView_->Build();
     auto messagePreviewComponent = MessagePreviewView_->Build();
     auto chartsComponent = ChartsView_->Build();
     TopicFormComponent_ = TopicForm_->Build();
     DeleteConfirmComponent_ = DeleteConfirmForm_->Build();
     auto consumerFormComponent = ConsumerForm_->Build();
     auto writeMessageComponent = WriteMessageForm_->Build();
+    auto dropConsumerComponent = DropConsumerForm_->Build();
+    auto editConsumerComponent = EditConsumerForm_->Build();
     
     // Use a simple container - we'll switch rendering manually
     auto container = Container::Stacked({
         TopicListComponent_,
         TopicDetailsComponent_,
-        consumerComponent,
+        ConsumerComponent_,
         messagePreviewComponent,
         chartsComponent,
         TopicFormComponent_,
@@ -453,14 +545,12 @@ Component TTopicTuiApp::BuildMainComponent() {
             return false;  // Let other keys go to form for typing
         }
         
-        // Skip all global shortcuts when in form views - let them type freely
-        if (State_.CurrentView == EViewType::TopicForm || 
-            State_.CurrentView == EViewType::DeleteConfirm ||
-            State_.CurrentView == EViewType::ConsumerForm) {
-            return false;  // Don't handle any keys globally in forms
+        // Global key handling
+        // Skip global shortcuts when a view is capturing text input
+        if (State_.InputCaptureActive) {
+            return false;  // Let views handle all keyboard input
         }
         
-        // Global key handling
         if (event == Event::Character('q') || event == Event::Character('Q')) {
             RequestExit();
             return true;
@@ -520,7 +610,7 @@ Component TTopicTuiApp::BuildMainComponent() {
                 content = TopicDetailsComponent_->Render();
                 break;
             case EViewType::ConsumerDetails:
-                content = consumerComponent->Render();
+                content = ConsumerComponent_->Render();
                 break;
             case EViewType::TopicInfo:
             case EViewType::TopicTablets:
@@ -544,6 +634,12 @@ Component TTopicTuiApp::BuildMainComponent() {
                 break;
             case EViewType::WriteMessage:
                 content = writeMessageComponent->Render();
+                break;
+            case EViewType::DropConsumerConfirm:
+                content = dropConsumerComponent->Render();
+                break;
+            case EViewType::EditConsumer:
+                content = editConsumerComponent->Render();
                 break;
             case EViewType::OffsetForm:
                 // Not rendered as standalone - used as modal
@@ -603,14 +699,13 @@ Component TTopicTuiApp::BuildHelpBar() {
             case EViewType::TopicDetails:
                 parts = {
                     text(" [↑↓] Navigate ") | dim,
-                    text(" [Tab] Switch Panel ") | dim,
+                    text(" [Tab] Switch ") | dim,
                     text(" [Enter] Open ") | color(Color::Cyan),
+                    text(" [e] Edit ") | color(Color::Yellow),
                     text(" [w] Write ") | color(Color::Green),
-                    text(" [a] Add Consumer ") | color(Color::Green),
-                    text(" [i] Info ") | color(Color::Yellow),
-                    text(" [t] Tablets ") | color(Color::Yellow),
-                    text(" [R] Rate: ") | dim,
-                    text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta),
+                    text(" [a] Add ") | color(Color::Green),
+                    text(" [x] Drop ") | color(Color::Red),
+                    text(" [i] Info ") | dim,
                     text(" [Esc] Back ") | dim
                 };
                 break;
@@ -682,6 +777,18 @@ Component TTopicTuiApp::BuildHelpBar() {
             case EViewType::OffsetForm:
                 parts = {
                     text(" [Enter] Commit ") | color(Color::Yellow),
+                    text(" [Esc] Cancel ") | dim
+                };
+                break;
+            case EViewType::DropConsumerConfirm:
+                parts = {
+                    text(" [Enter] Drop (type name first) ") | color(Color::Red),
+                    text(" [Esc] Cancel ") | dim
+                };
+                break;
+            case EViewType::EditConsumer:
+                parts = {
+                    text(" [Enter] Save Changes ") | color(Color::Green),
                     text(" [Esc] Cancel ") | dim
                 };
                 break;

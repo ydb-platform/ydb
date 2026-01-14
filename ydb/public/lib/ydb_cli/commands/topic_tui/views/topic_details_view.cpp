@@ -276,6 +276,23 @@ Component TTopicDetailsView::Build() {
             }
             return true;
         }
+        if (event == Event::Character('e') || event == Event::Character('E')) {
+            if (FocusPanel_ == 1 && !Consumers_.empty()) {
+                // Edit consumer
+                int row = ConsumersTable_.GetSelectedRow();
+                if (row >= 0 && row < static_cast<int>(Consumers_.size())) {
+                    if (OnEditConsumer) {
+                        OnEditConsumer(Consumers_[row].Name);
+                    }
+                }
+            } else {
+                // Edit topic
+                if (OnEditTopic) {
+                    OnEditTopic();
+                }
+            }
+            return true;
+        }
         
         return false;
     }) | Renderer([this, splitContainer](Element) {
@@ -402,7 +419,7 @@ Element TTopicDetailsView::RenderHeader() {
     
     // Always show current values - don't show "..." during loading to prevent flicker
     std::string partitionsText = std::to_string(TotalPartitions_);
-    std::string retentionText = std::string(FormatDuration(RetentionPeriod_).c_str());
+    std::string retentionText = std::string(FormatRetention(RetentionPeriod_).c_str());
     std::string speedText = std::string(FormatBytes(WriteSpeedBytesPerSec_).c_str()) + "/s";
     
     return vbox({

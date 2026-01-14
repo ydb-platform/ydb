@@ -73,18 +73,9 @@ Component TConsumerView::Build() {
             }) | border;
         }
         
-        // Show subtle refresh indicator when loading with existing data
-        auto header = RenderHeader();
-        if (Loading_ && !PartitionStats_.empty()) {
-            auto summaryHeader = RenderHeader();
-            // Add refresh indicator to right side
-        }
-        
         return vbox({
             RenderHeader(),
-            Loading_ && !PartitionStats_.empty() 
-                ? hbox({separator(), text(" ⟳ refreshing...") | dim | color(Color::Yellow)})
-                : separator(),
+            separator(),
             tableComponent->Render() | flex
         }) | border;
     }) | CatchEvent([this](Event event) {
@@ -107,6 +98,14 @@ Component TConsumerView::Build() {
             return true;
         }
         
+        // 'd' key for drop consumer
+        if (event == Event::Character('d') || event == Event::Character('D')) {
+            if (OnDropConsumer) {
+                OnDropConsumer();
+            }
+            return true;
+        }
+        
         // Let table handle navigation
         return Table_.HandleEvent(event);
     });
@@ -123,6 +122,13 @@ void TConsumerView::Refresh() {
 }
 
 void TConsumerView::CheckAsyncCompletion() {
+    // Auto-refresh if enough time has passed and not already loading
+    TDuration refreshRate = App_.GetRefreshRate();
+    if (!Loading_ && LastRefreshTime_ != TInstant::Zero() && 
+        TInstant::Now() - LastRefreshTime_ > refreshRate) {
+        StartAsyncLoad();
+    }
+    
     if (!Loading_ || !LoadFuture_.valid()) {
         return;
     }
@@ -157,7 +163,9 @@ Element TConsumerView::RenderHeader() {
             text(" Consumer: ") | bold,
             text(std::string(ConsumerName_.c_str())) | color(NTheme::AccentText),
             text(" on ") | dim,
-            text(std::string(TopicPath_.c_str())) | color(Color::White)
+            text(std::string(TopicPath_.c_str())) | color(Color::White),
+            filler(),
+            Loading_ ? (text(" ⟳ ") | color(Color::Yellow) | dim) : text("")
         }),
         hbox({
             text(" Total Lag: ") | dim,
@@ -228,6 +236,7 @@ void TConsumerView::StartAsyncLoad() {
     Loading_ = true;
     ErrorMessage_.clear();
     SpinnerFrame_ = 0;
+    LastRefreshTime_ = TInstant::Now();
     
     TString topicPath = TopicPath_;
     TString consumerName = ConsumerName_;

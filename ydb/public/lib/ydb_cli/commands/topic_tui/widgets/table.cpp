@@ -199,7 +199,8 @@ Element TTable::Render() {
         rows.push_back(RenderRow(i));
     }
     
-    return vbox(rows) | yframe | flex;
+    // Use reflect() to track table position for mouse coordinates
+    return vbox(rows) | yframe | flex | reflect(Box_);
 }
 
 bool TTable::HandleEvent(Event event) {
@@ -273,6 +274,49 @@ bool TTable::HandleEvent(Event event) {
         return true;
     }
     
+    // Mouse handling
+    if (event.is_mouse()) {
+        auto& mouse = event.mouse();
+        
+        // Calculate row relative to table's position on screen
+        // Box_.y_min is the top of the table, +1 for header row
+        int relativeY = mouse.y - Box_.y_min;
+        int rowUnderMouse = relativeY - 1;  // -1 for header row
+        
+        if (rowUnderMouse >= 0 && rowUnderMouse < static_cast<int>(Rows_.size())) {
+            // Update hover state
+            HoveredRow_ = rowUnderMouse;
+            
+            // Handle click
+            if (mouse.button == Mouse::Left && mouse.motion == Mouse::Pressed) {
+                SelectedRow_ = rowUnderMouse;
+                if (OnSelect) {
+                    OnSelect(SelectedRow_);
+                }
+                return true;
+            }
+        } else {
+            HoveredRow_ = -1;
+        }
+        
+        // Handle scroll wheel
+        if (mouse.button == Mouse::WheelUp) {
+            if (SelectedRow_ > 0) {
+                SelectedRow_--;
+                if (OnNavigate) OnNavigate(SelectedRow_);
+            }
+            return true;
+        } else if (mouse.button == Mouse::WheelDown) {
+            if (SelectedRow_ < static_cast<int>(Rows_.size()) - 1) {
+                SelectedRow_++;
+                if (OnNavigate) OnNavigate(SelectedRow_);
+            }
+            return true;
+        }
+        
+        return false;  // Don't consume move events to allow hover updates
+    }
+    
     return false;
 }
 
@@ -342,6 +386,12 @@ Element TTable::RenderRow(size_t rowIndex) {
     // Apply row-level background color
     if (rowData.RowBgColor != Color::Default && !selected) {
         row = row | bgcolor(rowData.RowBgColor);
+    }
+    
+    // Apply hover highlight (if not selected)
+    bool hovered = static_cast<int>(rowIndex) == HoveredRow_;
+    if (hovered && !selected) {
+        row = row | bgcolor(NTheme::HoverBg);
     }
     
     if (selected) {

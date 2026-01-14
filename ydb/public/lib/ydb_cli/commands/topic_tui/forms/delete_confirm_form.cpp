@@ -25,8 +25,6 @@ Component TDeleteConfirmForm::BuildContainer() {
 }
 
 Element TDeleteConfirmForm::RenderContent() {
-    bool matches = TString(ConfirmInput_.c_str()) == TopicName_;
-    
     return vbox({
         text(" "),
         text(" Are you sure you want to delete:") | center,
@@ -45,11 +43,13 @@ Element TDeleteConfirmForm::RenderContent() {
             text(" Expected: ") | dim,
             text(std::string(TopicName_.c_str())) | color(NTheme::AccentText),
             filler()
-        }),
-        text(" "),
-        separator(),
-        NTheme::DangerFooter(matches)
+        })
     });
+}
+
+Element TDeleteConfirmForm::RenderFooter() {
+    bool matches = TString(ConfirmInput_.c_str()) == TopicName_;
+    return NTheme::DangerFooter(matches);
 }
 
 bool TDeleteConfirmForm::HandleSubmit() {

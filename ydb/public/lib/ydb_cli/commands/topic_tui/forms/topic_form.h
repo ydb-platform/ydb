@@ -82,6 +82,18 @@ private:
     std::string UpUtilizationInput_;
     std::string DownUtilizationInput_;
     
+    // Cursor positions for inputs (to position cursor at end of prefilled text)
+    int PathCursor_ = 0;
+    int MinPartCursor_ = 0;
+    int MaxPartCursor_ = 0;
+    int RetentionCursor_ = 0;
+    int StorageCursor_ = 0;
+    int WriteSpeedCursor_ = 0;
+    int WriteBurstCursor_ = 0;
+    int StabilizationCursor_ = 0;
+    int UpUtilCursor_ = 0;
+    int DownUtilCursor_ = 0;
+    
     // Auto-partitioning strategy selection
     int AutoPartitioningStrategyIndex_ = 0;  // 0=Disabled, 1=ScaleUp, 2=ScaleUpAndDown, 3=Paused
     

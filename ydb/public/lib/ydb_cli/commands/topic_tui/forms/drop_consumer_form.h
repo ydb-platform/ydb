@@ -10,18 +10,19 @@ namespace NYdb::NConsoleClient {
 
 class TTopicTuiApp;
 
-class TDeleteConfirmForm : public TFormBase {
+class TDropConsumerForm : public TFormBase {
 public:
-    explicit TDeleteConfirmForm(TTopicTuiApp& app);
+    explicit TDropConsumerForm(TTopicTuiApp& app);
     
-    // Set the topic to delete
-    void SetTopic(const TString& topicPath);
+    // Set the consumer to drop
+    void SetConsumer(const TString& topicPath, const TString& consumerName);
     void Reset() override;
     
-    // Callback with the topic path to delete
-    std::function<void(const TString& topicPath)> OnConfirm;
+    // Callback with consumer name to drop
+    std::function<void(const TString& topicPath, const TString& consumerName)> OnConfirm;
     
     const TString& GetTopicPath() const { return TopicPath_; }
+    const TString& GetConsumerName() const { return ConsumerName_; }
     
 protected:
     TString GetTitle() const override;
@@ -34,7 +35,7 @@ protected:
     
 private:
     TString TopicPath_;
-    TString TopicName_;  // Just the name part for display
+    TString ConsumerName_;
     std::string ConfirmInput_;
     ftxui::Component ConfirmInputComponent_;
 };

@@ -324,7 +324,9 @@ void TTopicDetailsView::StartAsyncLoads() {
             TTopicBasicData data;
             
             auto result = topicClient->DescribeTopic(path,
-                NTopic::TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
+                NTopic::TDescribeTopicSettings()
+                    .IncludeStats(true)
+                    .IncludeLocation(true)).GetValueSync();
             
             if (!result.IsSuccess()) {
                 throw std::runtime_error(result.GetIssues().ToString());

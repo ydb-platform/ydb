@@ -125,11 +125,9 @@ private:
     // Resizable split state
     int ConsumersPanelSize_ = 40;
     
-    // Info modal state
-    bool ShowingInfo_ = false;
+    // Info view state
     int InfoScrollY_ = 0;
-    
-    
+        
     // Extended topic description for info modal
     TString Owner_;
     std::vector<NTopic::ECodec> SupportedCodecs_;
@@ -141,15 +139,14 @@ private:
     ui64 MaxActivePartitions_ = 0;
     NTopic::EAutoPartitioningStrategy AutoPartitioningStrategy_ = NTopic::EAutoPartitioningStrategy::Disabled;
     
-    // Tablets modal state
-    bool ShowingTablets_ = false;
+    // Tablets view state
     int TabletsScrollY_ = 0;
     TVector<TTabletInfo> Tablets_;
     std::atomic<bool> LoadingTablets_{false};
     std::future<TVector<TTabletInfo>> TabletsFuture_;
     
-    ftxui::Element RenderInfoModal();
-    ftxui::Element RenderTabletsModal();
+    ftxui::Element RenderInfoView();
+    ftxui::Element RenderTabletsView();
 };
 
 } // namespace NYdb::NConsoleClient

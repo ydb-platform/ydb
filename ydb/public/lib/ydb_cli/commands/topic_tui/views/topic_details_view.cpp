@@ -125,16 +125,10 @@ Component TTopicDetailsView::Build() {
             return false;
         }
         
-        // Info modal handling FIRST - block all other events when modal is open
-        if (ShowingInfo_) {
-            // Toggle off with 'i'
-            if (event == Event::Character('i') || event == Event::Character('I')) {
-                ShowingInfo_ = false;
-                return true;
-            }
-            // Close with Esc
-            if (event == Event::Escape) {
-                ShowingInfo_ = false;
+        // TopicInfo view event handling
+        if (App_.GetState().CurrentView == EViewType::TopicInfo) {
+            if (event == Event::Escape || event == Event::Character('i') || event == Event::Character('I')) {
+                App_.NavigateBack();
                 return true;
             }
             // Scroll
@@ -146,20 +140,13 @@ Component TTopicDetailsView::Build() {
                 InfoScrollY_ = std::max(InfoScrollY_ - 1, 0);
                 return true;
             }
-            // Consume all other events when modal is open
             return true;
         }
         
-        // Tablets modal handling - block all other events when modal is open
-        if (ShowingTablets_) {
-            // Toggle off with 't'
-            if (event == Event::Character('t') || event == Event::Character('T')) {
-                ShowingTablets_ = false;
-                return true;
-            }
-            // Close with Esc
-            if (event == Event::Escape) {
-                ShowingTablets_ = false;
+        // TopicTablets view event handling
+        if (App_.GetState().CurrentView == EViewType::TopicTablets) {
+            if (event == Event::Escape || event == Event::Character('t') || event == Event::Character('T')) {
+                App_.NavigateBack();
                 return true;
             }
             // Scroll
@@ -171,20 +158,33 @@ Component TTopicDetailsView::Build() {
                 TabletsScrollY_ = std::max(TabletsScrollY_ - 1, 0);
                 return true;
             }
-            // Consume all other events when modal is open
+            // Refresh
+            if (event == Event::Character('r') || event == Event::Character('R')) {
+                Tablets_.clear();
+                LoadingTablets_ = true;
+                const TString& endpoint = App_.GetViewerEndpoint();
+                TString topicPath = TopicPath_;
+                TabletsFuture_ = std::async(std::launch::async, [endpoint, topicPath]() -> TVector<TTabletInfo> {
+                    if (endpoint.empty()) {
+                        return {};
+                    }
+                    TViewerHttpClient client(endpoint);
+                    return client.GetTabletInfo(topicPath);
+                });
+                return true;
+            }
             return true;
         }
         
-        // Open info modal
+        // Navigate to info view
         if (event == Event::Character('i') || event == Event::Character('I')) {
-            ShowingInfo_ = true;
             InfoScrollY_ = 0;
+            App_.NavigateTo(EViewType::TopicInfo);
             return true;
         }
         
-        // Open tablets modal
+        // Navigate to tablets view
         if (event == Event::Character('t') || event == Event::Character('T')) {
-            ShowingTablets_ = true;
             TabletsScrollY_ = 0;
             // Start async tablets load if not already loading
             if (!LoadingTablets_ && Tablets_.empty()) {
@@ -199,6 +199,7 @@ Component TTopicDetailsView::Build() {
                     return client.GetTabletInfo(topicPath);
                 });
             }
+            App_.NavigateTo(EViewType::TopicTablets);
             return true;
         }
         
@@ -252,30 +253,22 @@ Component TTopicDetailsView::Build() {
     }) | Renderer([this, splitContainer](Element) {
         CheckAsyncCompletion();
         
-        // Base UI structure
-        auto mainContent = vbox({
+        // Render TopicInfo full screen view
+        if (App_.GetState().CurrentView == EViewType::TopicInfo) {
+            return RenderInfoView();
+        }
+        
+        // Render TopicTablets full screen view
+        if (App_.GetState().CurrentView == EViewType::TopicTablets) {
+            return RenderTabletsView();
+        }
+        
+        // Default: render topic details
+        return vbox({
             RenderHeader(),
             separator(),
             splitContainer->Render() | flex
         });
-        
-        // Show info modal as overlay if active
-        if (ShowingInfo_) {
-            return dbox({
-                mainContent | dim,
-                RenderInfoModal() | clear_under | center
-            });
-        }
-        
-        // Show tablets modal as overlay if active
-        if (ShowingTablets_) {
-            return dbox({
-                mainContent | dim,
-                RenderTabletsModal() | clear_under | center
-            });
-        }
-        
-        return mainContent;
     });
 }
 
@@ -554,7 +547,7 @@ void TTopicDetailsView::StartAsyncLoads() {
     }
 }
 
-Element TTopicDetailsView::RenderInfoModal() {
+Element TTopicDetailsView::RenderInfoView() {
     using namespace ftxui;
     
     // Helper for formatting bytes
@@ -691,15 +684,11 @@ Element TTopicDetailsView::RenderInfoModal() {
         scrollIndicator
     });
     
-    // Use bgcolor to fully cover underlying content (prevents highlight bleed-through)
-    return content 
-        | size(WIDTH, LESS_THAN, 70) 
-        | size(HEIGHT, LESS_THAN, 28) 
-        | border
-        | bgcolor(Color::Black);
+    // Full-screen view with border
+    return content | flex | border;
 }
 
-Element TTopicDetailsView::RenderTabletsModal() {
+Element TTopicDetailsView::RenderTabletsView() {
     Elements lines;
     
     // Title
@@ -781,11 +770,8 @@ Element TTopicDetailsView::RenderTabletsModal() {
     
     auto content = vbox(std::move(visibleLines));
     
-    return content 
-        | size(WIDTH, LESS_THAN, 100) 
-        | size(HEIGHT, LESS_THAN, 22) 
-        | border
-        | bgcolor(Color::Black);
+    // Full-screen view with border
+    return content | flex | border;
 }
 
 } // namespace NYdb::NConsoleClient

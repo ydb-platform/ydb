@@ -31,6 +31,8 @@ class TWriteMessageForm;
 enum class EViewType {
     TopicList,
     TopicDetails,
+    TopicInfo,      // Topic info full screen
+    TopicTablets,   // Tablets list full screen
     ConsumerDetails,
     MessagePreview,
     Charts,

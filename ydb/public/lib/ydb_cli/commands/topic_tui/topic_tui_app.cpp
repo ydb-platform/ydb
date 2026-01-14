@@ -329,6 +329,12 @@ void TTopicTuiApp::NavigateBack() {
         case EViewType::MessagePreview:
             State_.CurrentView = EViewType::TopicDetails;
             break;
+        case EViewType::TopicInfo:
+            State_.CurrentView = EViewType::TopicDetails;
+            break;
+        case EViewType::TopicTablets:
+            State_.CurrentView = EViewType::TopicDetails;
+            break;
         case EViewType::Charts:
             State_.CurrentView = EViewType::TopicDetails;
             break;
@@ -477,6 +483,11 @@ Component TTopicTuiApp::BuildMainComponent() {
             case EViewType::ConsumerDetails:
                 content = consumerComponent->Render();
                 break;
+            case EViewType::TopicInfo:
+            case EViewType::TopicTablets:
+                // These are rendered by TopicDetailsComponent based on CurrentView
+                content = TopicDetailsComponent_->Render();
+                break;
             case EViewType::MessagePreview:
                 content = messagePreviewComponent->Render();
                 break;
@@ -560,6 +571,19 @@ Component TTopicTuiApp::BuildHelpBar() {
                 parts = {
                     text(" [↑↓] Navigate ") | dim,
                     text(" [o] Commit Offset ") | color(Color::Yellow),
+                    text(" [Esc] Back ") | dim
+                };
+                break;
+            case EViewType::TopicInfo:
+                parts = {
+                    text(" [↑↓/jk] Scroll ") | dim,
+                    text(" [Esc] Back ") | dim
+                };
+                break;
+            case EViewType::TopicTablets:
+                parts = {
+                    text(" [↑↓/jk] Scroll ") | dim,
+                    text(" [r] Refresh ") | dim,
                     text(" [Esc] Back ") | dim
                 };
                 break;

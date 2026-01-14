@@ -62,9 +62,8 @@ message Action {
 
     optional uint32 period_us = 3;
     optional uint32 worker_max_in_flight = 4;
-    optional uint32 global_max_in_flight = 5;
 
-    ActionDataMode action_data_mode = 6;
+    optional ActionDataMode action_data_mode = 6;
 
     repeated ActionCommand action_command = 7;
 }

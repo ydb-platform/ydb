@@ -74,7 +74,10 @@ class KeyValueClient(object):
         while True:
             try:
                 callee = self._get_invoke_callee(method, version)
-                return callee(request)
+                print("before callee")
+                result = callee(request)
+                print("after callee")
+                return result
             except (RuntimeError, grpc.RpcError):
                 retry -= 1
 
@@ -110,6 +113,18 @@ class KeyValueClient(object):
         write.value = to_bytes(value)
         if channel is not None:
             write.storage_channel = channel
+        return self.invoke(request, 'ExecuteTransaction', version)
+    
+    def kv_writes(self, path, partition_id, kv_pairs, channel=None, version='v1'):
+        request = keyvalue_api.ExecuteTransactionRequest()
+        request.path = path
+        request.partition_id = partition_id
+        for key, value in kv_pairs:
+            write = request.commands.add().write
+            write.key = key
+            write.value = to_bytes(value)
+            if channel is not None:
+                write.storage_channel = channel
         return self.invoke(request, 'ExecuteTransaction', version)
 
     async def a_kv_write(self, path, partition_id, key, value, channel=None, version='v1'):

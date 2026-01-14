@@ -51,6 +51,9 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
     case NScheme::ESchemeEntryType::StreamingQuery:
         o << colors.LightWhite();
         break;
+    case NScheme::ESchemeEntryType::BackupCollection:
+        o << colors.LightBlueColor();
+        break;
     default:
         o << colors.RedColor();
     }
@@ -117,6 +120,8 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
         return "sys-view";
     case NScheme::ESchemeEntryType::StreamingQuery:
         return "streaming-query";
+    case NScheme::ESchemeEntryType::BackupCollection:
+        return "backup-collection";
     case NScheme::ESchemeEntryType::Unknown:
     case NScheme::ESchemeEntryType::Sequence:
         return "unknown";

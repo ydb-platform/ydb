@@ -153,8 +153,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 }
                 read.PKRangesFilter = std::make_shared<NOlap::TPKRangesFilter>(filterConclusion.DetachResult());
             }
+
+            TInstant buildReadMetadataStart = TAppData::TimeProvider->Now();
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (newRange.IsSuccess()) {
+                Self->Counters.GetScanCounters().OnReadMetadata((TAppData::TimeProvider->Now() - buildReadMetadataStart));
                 if (!request.HasReverse() && deduplicationEnabled) {
                     (*newRange)->SetFakeSort(true);
                 }

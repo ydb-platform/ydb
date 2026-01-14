@@ -224,4 +224,16 @@ bool RewriteCreateAsyncReplicationQuery(
     return RewriteCreateAsyncReplicationQueryNoSecrets(query, dbRestoreRoot, dbPath, issues);
 }
 
+bool RewriteCreateTransferQuery(
+    TString& query,
+    const TString& dbRestoreRoot,
+    const TString& dbPath,
+    NYql::TIssues& issues)
+{
+    if (!RewriteQuerySecretsNoCheck(query, dbRestoreRoot, issues)) {
+        return false;
+    }
+    return RewriteCreateTransferQueryNoSecrets(query, dbRestoreRoot, dbPath, issues);
+}
+
 } // namespace NYdb::NDump

@@ -43,72 +43,35 @@ std::pair<ui64, ui64> GetVolumes(
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapCompression) {
-    Y_UNIT_TEST(DisabledAlterCompression) {
+    Y_UNIT_TEST(CreateWithCompression) {
         auto settings = TKikimrSettings()
-            .SetEnableOlapCompression(false)
-            .SetColumnShardAlterObjectEnabled(true)
+            .SetEnableOlapCompression(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(settings);
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("pk_int").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
+                .SetCompressionSetting("algorithm", "zstd").SetCompressionSetting("level", "3")
         };
-        TTestHelper::TCompression compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
 
         TTestHelper::TColumnTable standaloneTable;
-        standaloneTable.SetName("/Root/StandaloneTable").SetPrimaryKey({ "pk_int" }).SetSharding({ "pk_int" }).SetSchema(schema);
-        testHelper.CreateTable(standaloneTable);
-        testHelper.SetCompression(standaloneTable, "pk_int", compression, NYdb::EStatus::SCHEME_ERROR);
-
-        TTestHelper::TColumnTableStore testTableStore;
-        testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({ "pk_int" }).SetSchema(schema);
-        testHelper.CreateTable(testTableStore);
-        testHelper.SetCompression(testTableStore, "pk_int", compression, NYdb::EStatus::PRECONDITION_FAILED);
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/TableStoreTest/ColumnTableTest").SetPrimaryKey({ "pk_int" }).SetSharding({ "pk_int" }).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-        testHelper.SetCompression(testTable, "pk_int", compression, NYdb::EStatus::SCHEME_ERROR);
+        standaloneTable.SetName("/Root/CompKeyTable").SetPrimaryKey({ "key" }).SetSchema(schema);
+        testHelper.CreateTableQuery(standaloneTable);
     }
 
-    Y_UNIT_TEST(OffCompression) {
+    Y_UNIT_TEST(ChangeCompression) {
         auto settings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
+            .SetEnableOlapCompression(true)
             .SetWithSampleTables(false);
         TTestHelper testHelper(settings);
         TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("pk_int").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
+            TTestHelper::TColumnSchema().SetName("key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Uint64)
         };
-        TTestHelper::TCompression compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
 
         TTestHelper::TColumnTable standaloneTable;
-        standaloneTable.SetName("/Root/StandaloneTable").SetPrimaryKey({ "pk_int" }).SetSharding({ "pk_int" }).SetSchema(schema);
+        standaloneTable.SetName("/Root/CompValueTable").SetPrimaryKey({ "key" }).SetSchema(schema);
         testHelper.CreateTable(standaloneTable);
-        testHelper.SetCompression(standaloneTable, "pk_int", compression);
-
-        TTestHelper::TColumnTableStore testTableStore;
-        testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({ "pk_int" }).SetSchema(schema);
-        testHelper.CreateTable(testTableStore);
-        testHelper.SetCompression(testTableStore, "pk_int", compression);
-    }
-
-    Y_UNIT_TEST(TestAlterCompressionTableInTableStore) {
-        TKikimrSettings settings = TKikimrSettings()
-            .SetColumnShardAlterObjectEnabled(true)
-            .SetWithSampleTables(false);
-        TTestHelper testHelper(settings);
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("pk_int").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)
-        };
-        TTestHelper::TCompression compression = TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
-
-        TTestHelper::TColumnTableStore testTableStore;
-        testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({ "pk_int" }).SetSchema(schema);
-        testHelper.CreateTable(testTableStore);
-
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/TableStoreTest/ColumnTableTest").SetPrimaryKey({ "pk_int" }).SetSharding({ "pk_int" }).SetSchema(schema);
-        testHelper.CreateTable(testTable);
-        testHelper.SetCompression(testTable, "pk_int", compression, NYdb::EStatus::SCHEME_ERROR);
+        testHelper.ExecuteQuery("ALTER TABLE `/Root/CompValueTable` ALTER COLUMN `value` SET COMPRESSION(algorithm=lz4);");
     }
 
     std::pair<ui64, ui64> GetVolumesColumnWithCompression(const std::optional<NKikimrConfig::TColumnShardConfig>& CSConfig = {}) {
@@ -119,8 +82,6 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
         }
         TTestHelper testHelper(settings);
         Tests::NCommon::TLoggerInit(testHelper.GetKikimr()).Initialize();
-        TTestHelper::TCompression plainCompression =
-            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
 
         TVector<TTestHelper::TColumnSchema> schema = {
             TTestHelper::TColumnSchema().SetName("pk_int").SetType(NScheme::NTypeIds::Uint64).SetNullable(false)

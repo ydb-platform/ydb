@@ -115,7 +115,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 } else if (val == "off") {
                     CostBasedOptimizationLevel = 0;
                 } else if (val == "auto") {
-                    CostBasedOptimizationLevel = DefaultCostBasedOptimizationLevel;
+                    CostBasedOptimizationLevel = GetDefaultCostBasedOptimizationLevel();
                 } else {
                     Y_ENSURE(false, "undefined cbo setting, available: [on, off, auto]");
                 }
@@ -252,6 +252,32 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {
     return UseDqHashCombine.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashCombineByDefault());
+}
+
+NSQLTranslation::EBindingsMode TKikimrConfiguration::GetYqlBindingsMode() const {
+    switch (GetBindingsMode()) {
+        case NKikimrConfig::TTableServiceConfig::BM_ENABLED:
+            return NSQLTranslation::EBindingsMode::ENABLED;
+        case NKikimrConfig::TTableServiceConfig::BM_DISABLED:
+            return NSQLTranslation::EBindingsMode::DISABLED;
+        case NKikimrConfig::TTableServiceConfig::BM_DROP_WITH_WARNING:
+            return NSQLTranslation::EBindingsMode::DROP_WITH_WARNING;
+        case NKikimrConfig::TTableServiceConfig::BM_DROP:
+            return NSQLTranslation::EBindingsMode::DROP;
+    }
+
+    return NSQLTranslation::EBindingsMode::ENABLED;
+}
+
+NDq::EHashShuffleFuncType TKikimrConfiguration::GetDqDefaultHashShuffleFuncType() const {
+    switch(GetDefaultHashShuffleFuncType()) {
+        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V1:
+            return NYql::NDq::EHashShuffleFuncType::HashV1;
+        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2:
+            return NYql::NDq::EHashShuffleFuncType::HashV2;
+    }
+
+    return NYql::NDq::EHashShuffleFuncType::HashV1;
 }
 
 NYql::EBackportCompatibleFeaturesMode TKikimrConfiguration::GetYqlBackportMode() const {

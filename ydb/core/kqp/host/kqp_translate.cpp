@@ -173,7 +173,7 @@ NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type) {
 TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(const NYql::TKikimrConfiguration& config) {
     // only options that should be specified for all types of queries
     // including views and etc..
-    SetLangVer(config.LangVer);
+    SetLangVer(config.GetDefaultLangVer());
     SetBackportMode(config.GetYqlBackportMode());
     SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
     return *this;

@@ -189,80 +189,34 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
 
         CopyFrom(serviceConfig);
 
-        AllowOlapDataQuery = serviceConfig.GetAllowOlapDataQuery();
         EnableOlapSink = serviceConfig.GetEnableOlapSink();
         EnableOltpSink = serviceConfig.GetEnableOltpSink();
         EnableStreamWrite = serviceConfig.GetEnableStreamWrite();
-        DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
-        DefaultEnableShuffleElimination = serviceConfig.GetDefaultEnableShuffleElimination();
         SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
         EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
         EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();
-        EnableNewRBO = serviceConfig.GetEnableNewRBO();
         EnableIndexStreamWrite = serviceConfig.GetEnableIndexStreamWrite();
-        LangVer = serviceConfig.GetDefaultLangVer();
 
         if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
             _KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
         }
-
-        switch (serviceConfig.GetBindingsMode()) {
-            case NKikimrConfig::TTableServiceConfig::BM_ENABLED:
-                BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
-                break;
-            case NKikimrConfig::TTableServiceConfig::BM_DISABLED:
-                BindingsMode = NSQLTranslation::EBindingsMode::DISABLED;
-                break;
-            case NKikimrConfig::TTableServiceConfig::BM_DROP_WITH_WARNING:
-                BindingsMode = NSQLTranslation::EBindingsMode::DROP_WITH_WARNING;
-                break;
-            case NKikimrConfig::TTableServiceConfig::BM_DROP:
-                BindingsMode = NSQLTranslation::EBindingsMode::DROP;
-                break;
-        }
-
-        if (GetFilterPushdownOverJoinOptionalSide()) {
-            YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
-            YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
-            YqlCoreOptimizerFlags.insert("sqlinwithnothingornull");
-        }
-
-        switch(serviceConfig.GetDefaultHashShuffleFuncType()) {
-            case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V1:
-                DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV1;
-                break;
-            case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2:
-                DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
-                break;
-        }
-
     }
 
     TKikimrSettings::TConstPtr Snapshot() const;
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
-    NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
-    bool AllowOlapDataQuery = false;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
     bool EnableStreamWrite = false;
     bool EnableSpilling = true;
-    ui32 DefaultCostBasedOptimizationLevel = 4;
     ui64 DefaultEnableSpillingNodes = 0;
     bool EnableSnapshotIsolationRW = false;
-    bool DefaultEnableShuffleElimination = false;
-    bool DefaultEnableShuffleEliminationForAggregation = false;
-    THashSet<TString> YqlCoreOptimizerFlags;
-    bool EnableNewRBO = false;
     bool EnableIndexStreamWrite = false;
 
-    ui32 LangVer = NYql::MinLangVersion;
-
     NYql::EBackportCompatibleFeaturesMode GetYqlBackportMode() const;
-
-    NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
-    NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
+    NSQLTranslation::EBindingsMode GetYqlBindingsMode() const;
+    NDq::EHashShuffleFuncType GetDqDefaultHashShuffleFuncType() const;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

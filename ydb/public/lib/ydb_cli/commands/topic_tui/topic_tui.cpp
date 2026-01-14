@@ -12,10 +12,10 @@ TCommandTopicTui::TCommandTopicTui()
 void TCommandTopicTui::Config(TConfig& config) {
     TYdbCommand::Config(config);
     
-    config.Opts->AddLongOption("refresh", "Auto-refresh interval in seconds")
+    config.Opts->AddLongOption("refresh", "Auto-refresh interval in seconds (0 = off)")
         .Optional()
         .DefaultValue(2)
-        .StoreResult(&RefreshRate_);
+        .StoreResult(&RefreshRateSec_);
     
     config.Opts->AddLongOption("viewer-endpoint", "Viewer HTTP endpoint for message preview (auto-detected if not specified)")
         .Optional()
@@ -157,7 +157,12 @@ int TCommandTopicTui::Run(TConfig& config) {
         startPath = "/";
     }
     
-    TTopicTuiApp app(driver, startPath, RefreshRate_, viewerEndpoint, 
+    // Convert refresh rate: 0 means "off" (no auto-refresh)
+    TDuration refreshRate = (RefreshRateSec_ == 0) 
+        ? TDuration::Max() 
+        : TDuration::Seconds(RefreshRateSec_);
+    
+    TTopicTuiApp app(driver, startPath, refreshRate, viewerEndpoint, 
                      initialTopicPath, initialPartition, initialConsumer);
     return app.Run();
 }

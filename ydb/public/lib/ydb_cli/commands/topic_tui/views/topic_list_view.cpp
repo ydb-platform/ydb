@@ -227,19 +227,24 @@ Component TTopicListView::Build() {
                 hbox({
                     text(" Go to path ") | bold,
                     loadingIndicator,
+                    filler(),
                     text(std::string(scrollInfo.c_str())) | dim
-                }) | center,
+                }),
                 separator(),
                 hbox({
                     text(" Path: "),
                     text(GoToPathInput_) | color(Color::White),
-                    text("█") | blink | color(Color::Cyan)
+                    text("█") | blink | color(Color::Cyan),
+                    filler()
                 }),
-                completionsArea
-            }) | border | bgcolor(Color::GrayDark) | size(WIDTH, GREATER_THAN, 60);
+                completionsArea | xflex
+            }) | border | bgcolor(Color::GrayDark) | size(WIDTH, EQUAL, 70);
             
+            // Clear background by using a solid fill behind the popup
+            auto backdrop = filler() | bgcolor(Color::Black);
             content = dbox({
-                content,
+                content | dim,  // Dim the background
+                backdrop | center | size(WIDTH, EQUAL, 72) | size(HEIGHT, EQUAL, 18),
                 popup | center
             });
         }
@@ -511,8 +516,9 @@ Component TTopicListView::Build() {
 }
 
 void TTopicListView::Refresh() {
-    std::string currentPath(App_.GetState().CurrentPath.c_str());
-    CursorPositionCache_[currentPath] = Table_.GetSelectedRow();
+    // Note: Don't save cursor position here - it's already saved before navigation
+    // in the Enter/Backspace handlers. Saving here would corrupt the NEW directory's
+    // cache with the OLD selection position.
     
     TopicInfoFutures_.clear();
     DirInfoFutures_.clear();
@@ -741,8 +747,8 @@ void TTopicListView::StartAsyncLoad() {
 }
 
 void TTopicListView::StartTopicInfoLoads() {
-    TopicInfoFutures_.clear();
-    DirInfoFutures_.clear();
+    // Don't clear futures - let ongoing loads complete
+    // New loads will only start for topics not already in cache or loading
     
     // First, apply cached data to entries immediately
     for (auto& entry : Entries_) {
@@ -780,14 +786,28 @@ void TTopicListView::StartTopicInfoLoads() {
     auto* topicClient = &App_.GetTopicClient();
     auto* schemeClient = &App_.GetSchemeClient();
     
-    // Start async loads (limit to avoid overwhelming)
-    int loadCount = 0;
-    const int maxConcurrent = 10;
+    // Load stats ONLY for VISIBLE entries (around selected row)
+    // Typical terminal shows ~30-40 rows, load a bit more for scroll buffer
+    int selectedRow = Table_.GetSelectedRow();
+    int visibleBuffer = 25;  // ~50 rows visible window
+    int startIdx = std::max(0, selectedRow - visibleBuffer);
+    int endIdx = std::min(static_cast<int>(Entries_.size()), selectedRow + visibleBuffer);
     
-    for (auto& entry : Entries_) {
-        if (loadCount >= maxConcurrent) break;
+    // Load ALL visible entries at once (no batching limit - they're all visible)
+    for (int idx = startIdx; idx < endIdx; ++idx) {
+        auto& entry = Entries_[idx];
         
         if (entry.IsTopic) {
+            std::string pathKey = std::string(entry.FullPath.c_str());
+            
+            // Skip if already in cache or already loading
+            if (TopicInfoCache_.count(pathKey) > 0) {
+                continue;  // Already have cached data
+            }
+            if (TopicInfoFutures_.count(pathKey) > 0) {
+                continue;  // Already loading
+            }
+            
             entry.InfoLoading = true;
             TString topicPath = entry.FullPath;
             
@@ -825,9 +845,17 @@ void TTopicListView::StartTopicInfoLoads() {
                     
                     return result;
                 });
-            
-            loadCount++;
         } else if (entry.IsDirectory && entry.Name != "..") {
+            std::string pathKey = std::string(entry.FullPath.c_str());
+            
+            // Skip if already in cache or already loading
+            if (DirInfoCache_.count(pathKey) > 0) {
+                continue;  // Already have cached data
+            }
+            if (DirInfoFutures_.count(pathKey) > 0) {
+                continue;  // Already loading
+            }
+            
             entry.InfoLoading = true;
             TString dirPath = entry.FullPath;
             
@@ -850,8 +878,6 @@ void TTopicListView::StartTopicInfoLoads() {
                     
                     return result;
                 });
-            
-            loadCount++;
         }
     }
 }
@@ -1001,12 +1027,12 @@ void TTopicListView::CheckTopicInfoCompletion() {
     
     // If we completed any info loads and are sorting by a data-dependent column,
     // we need to re-sort and repopulate the table
-    bool anyCompleted = !TopicInfoFutures_.empty() || !DirInfoFutures_.empty();  // Still have pending
+    bool anyPending = !TopicInfoFutures_.empty() || !DirInfoFutures_.empty();
     int sortCol = Table_.GetSortColumn();
     bool needsResort = (sortCol >= 2 && sortCol <= 6);  // Parts, Size, Cons, Ret, WriteSpd
     
     // Only re-sort if we just completed some loads AND all loads are now done
-    if (!anyCompleted && needsResort && !Entries_.empty()) {
+    if (!anyPending && needsResort && !Entries_.empty()) {
         // Check if we actually loaded any info this time (compare before/after)
         // For simplicity, always re-sort if all futures are done and sorting by data column
         SortEntries();
@@ -1014,6 +1040,34 @@ void TTopicListView::CheckTopicInfoCompletion() {
             ApplySearchFilter();
         } else {
             PopulateTable();
+        }
+    }
+    
+    // Load stats for newly visible entries when user scrolls
+    // Only trigger if there are unloaded entries in the visible window
+    if (!anyPending && !Entries_.empty()) {
+        int selectedRow = Table_.GetSelectedRow();
+        int visibleBuffer = 25;
+        int startIdx = std::max(0, selectedRow - visibleBuffer);
+        int endIdx = std::min(static_cast<int>(Entries_.size()), selectedRow + visibleBuffer);
+        
+        bool hasUnloadedVisible = false;
+        for (int idx = startIdx; idx < endIdx; ++idx) {
+            const auto& entry = Entries_[idx];
+            std::string pathKey(entry.FullPath.c_str());
+            
+            if (entry.IsTopic && !entry.InfoLoaded && TopicInfoCache_.count(pathKey) == 0) {
+                hasUnloadedVisible = true;
+                break;
+            }
+            if (entry.IsDirectory && entry.Name != ".." && !entry.InfoLoaded && DirInfoCache_.count(pathKey) == 0) {
+                hasUnloadedVisible = true;
+                break;
+            }
+        }
+        
+        if (hasUnloadedVisible) {
+            StartTopicInfoLoads();
         }
     }
 }

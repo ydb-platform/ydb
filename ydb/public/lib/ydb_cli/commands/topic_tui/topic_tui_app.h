@@ -67,6 +67,9 @@ struct TAppState {
     // Views should set this when entering text-input modes (search, dialogs, etc.)
     bool InputCaptureActive = false;
     
+    // Help overlay toggle
+    bool ShowHelpOverlay = false;
+    
     // Last error message
     TString LastError;
 };
@@ -103,6 +106,7 @@ public:
 private:
     ftxui::Component BuildMainComponent();
     ftxui::Component BuildHelpBar();
+    ftxui::Element RenderHelpOverlay();
     void StartRefreshThread();
     void StopRefreshThread();
     

@@ -4,6 +4,7 @@ SRCS(
     format_helpers_ut.cpp
     form_tests_ut.cpp
     http_client_ut.cpp
+    integration_ut.cpp
     sparkline_ut.cpp
     table_ut.cpp
     theme_ut.cpp

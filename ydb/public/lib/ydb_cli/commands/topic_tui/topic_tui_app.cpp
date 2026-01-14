@@ -527,7 +527,7 @@ void TTopicTuiApp::RequestExit() {
     Screen_.Exit();
 }
 
-// Predefined refresh rates: 1s, 2s, 5s, 10s, off (infinite)
+// Predefined refresh rates for cycling with 'R' key
 static const TDuration RefreshRates[] = {
     TDuration::Seconds(1),
     TDuration::Seconds(2),
@@ -535,7 +535,6 @@ static const TDuration RefreshRates[] = {
     TDuration::Seconds(10),
     TDuration::Max()  // "off" - no auto-refresh
 };
-static const char* RefreshRateLabels[] = {"1s", "2s", "5s", "10s", "off"};
 static constexpr int NumRefreshRates = 5;
 
 void TTopicTuiApp::CycleRefreshRate() {
@@ -544,10 +543,15 @@ void TTopicTuiApp::CycleRefreshRate() {
 }
 
 TString TTopicTuiApp::GetRefreshRateLabel() const {
-    if (RefreshRateIndex_ >= 0 && RefreshRateIndex_ < NumRefreshRates) {
-        return TString(RefreshRateLabels[RefreshRateIndex_]);
+    // Show actual refresh rate, not just predefined labels
+    if (RefreshRate_ == TDuration::Max() || RefreshRate_ == TDuration::Zero()) {
+        return "off";
     }
-    return "?";
+    ui64 secs = RefreshRate_.Seconds();
+    if (secs >= 60) {
+        return Sprintf("%dm", static_cast<int>(secs / 60));
+    }
+    return Sprintf("%ds", static_cast<int>(secs));
 }
 
 Component TTopicTuiApp::BuildMainComponent() {
@@ -586,13 +590,11 @@ Component TTopicTuiApp::BuildMainComponent() {
             else if (event.is_character()) eventDesc = "Char: " + event.character();
             else if (event.is_mouse()) eventDesc = "Mouse";
             else eventDesc = "Other";
-            std::cerr << "[DEBUG] WriteMessage event: " << eventDesc << std::endl;
             
             // Handle Escape for WriteMessage at app level FIRST
             bool isEscape = (event == Event::Escape) || 
                            (event.is_character() && event.character() == "\x1b");
             if (isEscape) {
-                std::cerr << "[DEBUG] Escape detected! Navigating back." << std::endl;
                 NavigateBack();
                 return true;
             }
@@ -603,6 +605,22 @@ Component TTopicTuiApp::BuildMainComponent() {
         // Skip global shortcuts when a view is capturing text input
         if (State_.InputCaptureActive) {
             return false;  // Let views handle all keyboard input
+        }
+        
+        // Help overlay takes priority
+        if (State_.ShowHelpOverlay) {
+            if (event == Event::Escape || event == Event::Return || 
+                event == Event::Character('?') || event == Event::Character('q')) {
+                State_.ShowHelpOverlay = false;
+                return true;
+            }
+            return true;  // Consume all events when help is shown
+        }
+        
+        // Toggle help overlay with '?'
+        if (event == Event::Character('?')) {
+            State_.ShowHelpOverlay = true;
+            return true;
         }
         
         if (event == Event::Character('q') || event == Event::Character('Q')) {
@@ -721,11 +739,23 @@ Component TTopicTuiApp::BuildMainComponent() {
             footer = BuildHelpBar()->Render();
         }
         
-        return vbox({
+        // Build main layout
+        auto mainLayout = vbox({
             header,
             content | flex,
             footer
         });
+        
+        // Overlay help if active
+        if (State_.ShowHelpOverlay) {
+            auto helpContent = RenderHelpOverlay();
+            return dbox({
+                mainLayout | dim,  // Dim the background
+                helpContent | center
+            });
+        }
+        
+        return mainLayout;
     });
 }
 
@@ -850,6 +880,79 @@ Component TTopicTuiApp::BuildHelpBar() {
         
         return hbox(parts) | bgcolor(Color::GrayDark);
     });
+}
+
+Element TTopicTuiApp::RenderHelpOverlay() {
+    Elements lines;
+    
+    // Header
+    lines.push_back(text(" Keyboard Shortcuts ") | bold | color(Color::Cyan) | center);
+    lines.push_back(separator());
+    
+    // Global shortcuts
+    lines.push_back(text(" Global ") | bold);
+    lines.push_back(hbox({text("  q") | bold | color(Color::Yellow), text("       Quit application")}));
+    lines.push_back(hbox({text("  ?") | bold | color(Color::Yellow), text("       Show this help")}));
+    lines.push_back(hbox({text("  Esc") | bold | color(Color::Yellow), text("     Go back / Cancel")}));
+    lines.push_back(hbox({text("  r") | bold | color(Color::Yellow), text("       Manual refresh")}));
+    lines.push_back(hbox({text("  R") | bold | color(Color::Yellow), text("       Cycle refresh rate")}));
+    lines.push_back(text(""));
+    
+    // View-specific shortcuts
+    switch (State_.CurrentView) {
+        case EViewType::TopicList:
+            lines.push_back(text(" Explorer ") | bold);
+            lines.push_back(hbox({text("  ↑/↓") | bold, text("     Navigate list")}));
+            lines.push_back(hbox({text("  Enter") | bold, text("   Open item")}));
+            lines.push_back(hbox({text("  g") | bold | color(Color::Cyan), text("       Go to path (with @consumer, :partition)")}));
+            lines.push_back(hbox({text("  /") | bold | color(Color::Cyan), text("       Search/filter")}));
+            lines.push_back(hbox({text("  c") | bold | color(Color::Green), text("       Create topic")}));
+            lines.push_back(hbox({text("  e") | bold | color(Color::Yellow), text("       Edit topic")}));
+            lines.push_back(hbox({text("  d") | bold | color(Color::Red), text("       Delete item")}));
+            lines.push_back(hbox({text("  </>/s") | bold, text("   Sort columns / direction")}));
+            break;
+            
+        case EViewType::TopicDetails:
+            lines.push_back(text(" Topic Details ") | bold);
+            lines.push_back(hbox({text("  ↑/↓") | bold, text("     Navigate tables")}));
+            lines.push_back(hbox({text("  Tab") | bold, text("     Switch panels")}));
+            lines.push_back(hbox({text("  Enter") | bold | color(Color::Cyan), text("   Open consumer / messages")}));
+            lines.push_back(hbox({text("  e") | bold | color(Color::Yellow), text("       Edit topic / consumer")}));
+            lines.push_back(hbox({text("  w") | bold | color(Color::Green), text("       Write message")}));
+            lines.push_back(hbox({text("  a") | bold | color(Color::Green), text("       Add consumer")}));
+            lines.push_back(hbox({text("  d") | bold | color(Color::Red), text("       Drop selected")}));
+            lines.push_back(hbox({text("  m") | bold, text("       Toggle messages")}));
+            lines.push_back(hbox({text("  i") | bold, text("       Topic info")}));
+            lines.push_back(hbox({text("  T") | bold, text("       Tablets view")}));
+            break;
+            
+        case EViewType::ConsumerDetails:
+            lines.push_back(text(" Consumer Details ") | bold);
+            lines.push_back(hbox({text("  ↑/↓") | bold, text("     Navigate partitions")}));
+            lines.push_back(hbox({text("  Enter") | bold | color(Color::Cyan), text("   Commit offset")}));
+            lines.push_back(hbox({text("  d") | bold | color(Color::Red), text("       Drop consumer")}));
+            break;
+            
+        case EViewType::MessagePreview:
+            lines.push_back(text(" Message Preview ") | bold);
+            lines.push_back(hbox({text("  ←/→") | bold, text("     Previous/Next page")}));
+            lines.push_back(hbox({text("  ↑/↓") | bold, text("     Select message")}));
+            lines.push_back(hbox({text("  Enter") | bold, text("   Expand/collapse message")}));
+            lines.push_back(hbox({text("  j/k") | bold, text("     Scroll message content")}));
+            lines.push_back(hbox({text("  t") | bold | color(Color::Green), text("       Toggle tail mode")}));
+            lines.push_back(hbox({text("  o") | bold | color(Color::Cyan), text("       Go to offset")}));
+            break;
+            
+        default:
+            lines.push_back(text(" Context-specific shortcuts available ") | dim);
+            break;
+    }
+    
+    lines.push_back(text(""));
+    lines.push_back(separator());
+    lines.push_back(text(" Press Esc, Enter, or ? to close ") | dim | center);
+    
+    return vbox(lines) | border | bgcolor(Color::GrayDark) | size(WIDTH, GREATER_THAN, 50);
 }
 
 void TTopicTuiApp::StartRefreshThread() {

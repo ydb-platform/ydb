@@ -18,7 +18,7 @@ private:
     TString ResolvePath(const TString& path, const TConfig& config) const;
     
     TString RawPath_;  // Raw path argument, resolved in Run()
-    TDuration RefreshRate_ = TDuration::Seconds(2);
+    int RefreshRateSec_ = 2;  // 0 = off (no auto-refresh)
     TString ViewerEndpoint_;
 };
 

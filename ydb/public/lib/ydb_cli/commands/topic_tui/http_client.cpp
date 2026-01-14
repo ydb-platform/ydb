@@ -418,11 +418,23 @@ NJson::TJsonValue TViewerHttpClient::DoGet(const TString& path) {
             throw std::runtime_error(TStringBuilder() << "Empty response (HTTP " << httpCode << ") from: " << fullUrl);
         }
         
+        // Handle empty JSON object/array or whitespace-only responses
+        TString trimmed = responseStr;
+        while (!trimmed.empty() && (trimmed.front() == ' ' || trimmed.front() == '\n' || trimmed.front() == '\t')) {
+            trimmed = trimmed.substr(1);
+        }
+        if (trimmed.empty() || trimmed == "{}" || trimmed == "[]") {
+            // Return empty JSON object for empty responses
+            return NJson::TJsonValue(NJson::JSON_MAP);
+        }
+        
         NJson::TJsonValue result;
         NJson::TJsonReaderConfig config;
         config.DontValidateUtf8 = true;  // Handle invalid UTF-8 from Viewer API
-        if (!NJson::ReadJsonTree(responseStr, &config, &result, true)) {
-            throw std::runtime_error(TStringBuilder() << "Invalid JSON from: " << fullUrl);
+        if (!NJson::ReadJsonTree(responseStr, &config, &result, false)) {
+            // If parsing fails, return empty object instead of throwing
+            // This handles edge cases like empty partition responses
+            return NJson::TJsonValue(NJson::JSON_MAP);
         }
         return result;
     }

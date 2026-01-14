@@ -156,25 +156,47 @@ bool TSimpleBlockingWriteSession::Close(TDuration closeTimeout) {
 // TSimpleBlockingKeyedWriteSession
 
 TSimpleBlockingKeyedWriteSession::TSimpleBlockingKeyedWriteSession(
-        const TKeyedWriteSessionSettings& settings,
-        std::shared_ptr<TTopicClient::TImpl> client,
-        std::shared_ptr<TGRpcConnectionsImpl> connections,
-        TDbDriverStatePtr dbDriverState
+    const TKeyedWriteSessionSettings& settings,
+    std::shared_ptr<TTopicClient::TImpl> client,
+    std::shared_ptr<TGRpcConnectionsImpl> connections,
+    TDbDriverStatePtr dbDriverState
 ): Connections(connections), Client(client), DbDriverState(dbDriverState), Settings(settings) {
     TDescribeTopicSettings describeTopicSettings;
     auto topicConfig = client->DescribeTopic(settings.Path_, describeTopicSettings).GetValueSync();
     const auto& partitions = topicConfig.GetTopicDescription().GetPartitions();
+    auto partitionChooserStrategy = settings.PartitionChooserStrategy_;
 
-    if (AutoPartitioningEnabled(topicConfig.GetTopicDescription())) {
+    if (partitionChooserStrategy == TKeyedWriteSessionSettings::EPartitionChooserStrategy::Auto) {
+        partitionChooserStrategy = AutoPartitioningEnabled(topicConfig.GetTopicDescription()) ?
+            TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound :
+            TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash;
+    }
+
+    switch (partitionChooserStrategy) {
+    case TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound:
         for (const auto& partition : partitions) {
-            Partitions.emplace_back(partition.GetPartitionId(), partition.GetFromBound(), partition.GetToBound());
+            TPartitionInfo partitionInfo;
+            partitionInfo.PartitionId(partition.GetPartitionId());
+            Partitions.push_back(
+                TPartitionInfo().
+                PartitionId(partition.GetPartitionId()).
+                Bounded(true).
+                FromBound(partition.GetFromBound()).
+                ToBound(partition.GetToBound()));
         }
         PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
-    } else {
+        break;
+    case TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash:
         for (const auto& partition : partitions) {
-            Partitions.emplace_back(partition.GetPartitionId());
+            Partitions.push_back(
+                TPartitionInfo().
+                PartitionId(partition.GetPartitionId()).
+                Bounded(false));
         }
         PartitionChooser = std::make_unique<THashPartitionChooser>(this);
+        break;
+    default:
+        Y_ABORT("Unreachable");
     }
 }
 
@@ -183,7 +205,7 @@ TSimpleBlockingKeyedWriteSession::WrappedWriteSessionPtr TSimpleBlockingKeyedWri
 
     auto alteredSettings = Settings;
     alteredSettings.DirectWriteToPartition(true);
-    alteredSettings.PartitionId(partitionInfo.PartitionId);
+    alteredSettings.PartitionId(partitionInfo.PartitionId_);
 
     auto writeSession = std::make_shared<WriteSessionWrapper>(Client->CreateSimpleWriteSession(alteredSettings), partitionInfo, TInstant::Now() + Settings.SessionTimeout_);
     auto [it, _] = SessionsPool.insert(writeSession);

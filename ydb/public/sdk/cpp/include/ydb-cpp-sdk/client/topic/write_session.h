@@ -147,6 +147,12 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
     using TSelf = TKeyedWriteSessionSettings;
 
+    enum class EPartitionChooserStrategy {
+        Auto,
+        Bound,
+        Hash,
+    };
+
     TKeyedWriteSessionSettings() = default;
     TKeyedWriteSessionSettings(const TKeyedWriteSessionSettings&) = default;
     TKeyedWriteSessionSettings(TKeyedWriteSessionSettings&&) = default;
@@ -161,6 +167,9 @@ struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
 
     //! Session lifetime.
     FLUENT_SETTING(TDuration, SessionTimeout);
+
+    //! Partition chooser strategy.
+    FLUENT_SETTING_DEFAULT(EPartitionChooserStrategy, PartitionChooserStrategy, EPartitionChooserStrategy::Auto);
 };
 
 //! Contains the message to write and all the options.

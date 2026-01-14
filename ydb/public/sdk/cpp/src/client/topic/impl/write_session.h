@@ -100,31 +100,30 @@ private:
     using WriteSessionPtr = std::shared_ptr<ISimpleBlockingWriteSession>;
 
     struct TPartitionInfo {
-        TPartitionInfo(ui64 partitionId) : PartitionId(partitionId), Bounded(false) {}
-        TPartitionInfo(ui64 partitionId, std::optional<std::string> fromBound, std::optional<std::string> toBound) : FromBound(fromBound), ToBound(toBound), PartitionId(partitionId), Bounded(true) {}
+        using TSelf = TPartitionInfo;
 
         struct THash {
             size_t operator()(const TPartitionInfo& v) const noexcept {
-                return std::hash<ui64>{}(v.PartitionId);
+                return std::hash<ui64>{}(v.PartitionId_);
             }
         };
 
         bool InRange(const std::string& key) const {
-            if (FromBound.has_value() && *FromBound > key)
+            if (FromBound_.has_value() && *FromBound_ > key)
                 return false;
-            if (ToBound.has_value() && *ToBound < key)
+            if (ToBound_.has_value() && *ToBound_ < key)
                 return false;
             return true;
         }
 
         bool operator==(const TPartitionInfo& other) const {
-            return PartitionId == other.PartitionId;
+            return PartitionId_ == other.PartitionId_;
         }
 
-        std::optional<std::string> FromBound;
-        std::optional<std::string> ToBound;
-        ui64 PartitionId;
-        bool Bounded;
+        FLUENT_SETTING(std::optional<std::string>, FromBound);
+        FLUENT_SETTING(std::optional<std::string>, ToBound);
+        FLUENT_SETTING(ui64, PartitionId);
+        FLUENT_SETTING(bool, Bounded);
     };
 
 private:

@@ -40,6 +40,7 @@ public:
     }
 };
 
+// WARNING: not thread safe
 class TMemorizableControlWrapper {
     static constexpr i32 RequestCountWithRelevantValue = 1024;
     static constexpr TDuration TimeDurationWithRelevantValue = TDuration::Seconds(15);

@@ -650,6 +650,9 @@ ui32 TInputDescriptor::GetQueueSize() {
 }
 
 TInputBuffer::~TInputBuffer() {
+    if (Descriptor->IsEarlyFinished()) {
+        NodeState->UpdateProgress(Descriptor, Descriptor->PopBytes.load());
+    }
     NodeState->TerminateInputDescriptor(Descriptor);
 }
 

@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     kqp_node_service.cpp
-    kqp_node_state.cpp
 )
 
 PEERDIR(

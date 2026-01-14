@@ -11,7 +11,6 @@
 
 namespace NKikimr::NKqp {
     struct TKqpFederatedQuerySetup;
-    class TNodeState;
 }
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -93,6 +92,13 @@ public:
     }
 };
 
+struct IKqpNodeState {
+    virtual ~IKqpNodeState() = default;
+
+    virtual void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) = 0;
+};
+
+
 struct IKqpNodeComputeActorFactory {
     virtual ~IKqpNodeComputeActorFactory() = default;
 
@@ -121,7 +127,7 @@ public:
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
-        std::shared_ptr<TNodeState> State = nullptr;
+        std::shared_ptr<IKqpNodeState> State = nullptr;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
 

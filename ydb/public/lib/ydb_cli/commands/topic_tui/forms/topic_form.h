@@ -1,7 +1,6 @@
 #pragma once
 
-#include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
-#include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
+#include "../widgets/form_base.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -21,7 +20,8 @@ struct TTopicFormData {
     ui32 MaxPartitions = 100;
     TDuration RetentionPeriod = TDuration::Hours(24);
     ui64 RetentionStorageMb = 0;
-    ui32 WriteSpeedKbps = 1024;
+    ui64 WriteSpeedBytesPerSecond = 1048576;  // 1MB/s default
+    ui64 WriteBurstBytes = 0;  // 0 means use default
     
     // Codecs
     bool CodecRaw = true;
@@ -32,36 +32,43 @@ struct TTopicFormData {
     // Auto-partitioning
     NTopic::EAutoPartitioningStrategy AutoPartitioningStrategy = NTopic::EAutoPartitioningStrategy::Disabled;
     ui32 StabilizationWindowSeconds = 300;
-    ui32 ScaleUpPercent = 90;
-    ui32 ScaleDownPercent = 30;
+    ui32 UpUtilizationPercent = 90;
+    ui32 DownUtilizationPercent = 30;
+    
+    // Metering
+    NTopic::EMeteringMode MeteringMode = NTopic::EMeteringMode::Unspecified;
 };
 
-class TTopicForm {
+class TTopicForm : public TFormBase {
 public:
     explicit TTopicForm(TTopicTuiApp& app);
-    
-    ftxui::Component Build();
     
     // Set existing topic data for editing
     void SetEditMode(const TString& topicPath, const NTopic::TTopicDescription& desc);
     void SetCreateMode(const TString& basePath);
-    void Reset();
+    void Reset() override;
     
-    // Callbacks
+    // Callback with form data
     std::function<void(const TTopicFormData& data)> OnSubmit;
-    std::function<void()> OnCancel;
     
     bool IsEditMode() const { return IsEditMode_; }
     
+protected:
+    TString GetTitle() const override;
+    EViewType GetViewType() const override;
+    ftxui::Element RenderContent() override;
+    bool HandleSubmit() override;
+    int GetFormWidth() const override { return 75; }
+    ftxui::Component BuildContainer() override;
+    
 private:
-    ftxui::Element RenderForm();
     TVector<NTopic::ECodec> GetSelectedCodecs() const;
     
 private:
-    TTopicTuiApp& App_;
     TTopicFormData Data_;
     bool IsEditMode_ = false;
     TString OriginalPath_;
+    ui32 OriginalMinPartitions_ = 0;
     
     // Input field contents (std::string for ftxui compatibility)
     std::string PathInput_;
@@ -70,8 +77,34 @@ private:
     std::string RetentionInput_;
     std::string StorageInput_;
     std::string WriteSpeedInput_;
+    std::string WriteBurstInput_;
+    std::string StabilizationWindowInput_;
+    std::string UpUtilizationInput_;
+    std::string DownUtilizationInput_;
     
-    int FocusedField_ = 0;
+    // Auto-partitioning strategy selection
+    int AutoPartitioningStrategyIndex_ = 0;  // 0=Disabled, 1=ScaleUp, 2=ScaleUpAndDown, 3=Paused
+    
+    // Metering mode selection
+    int MeteringModeIndex_ = 0;  // 0=Unspecified, 1=ReservedCapacity, 2=RequestUnits
+    
+    // Components for rendering
+    ftxui::Component PathInputComponent_;
+    ftxui::Component MinPartInputComponent_;
+    ftxui::Component MaxPartInputComponent_;
+    ftxui::Component RetentionInputComponent_;
+    ftxui::Component StorageInputComponent_;
+    ftxui::Component WriteSpeedInputComponent_;
+    ftxui::Component WriteBurstInputComponent_;
+    ftxui::Component StabilizationInputComponent_;
+    ftxui::Component UpUtilInputComponent_;
+    ftxui::Component DownUtilInputComponent_;
+    ftxui::Component AutoPartSelectorComponent_;
+    ftxui::Component MeteringSelectorComponent_;
+    ftxui::Component CodecRawCheckbox_;
+    ftxui::Component CodecGzipCheckbox_;
+    ftxui::Component CodecZstdCheckbox_;
+    ftxui::Component CodecLzopCheckbox_;
 };
 
 } // namespace NYdb::NConsoleClient

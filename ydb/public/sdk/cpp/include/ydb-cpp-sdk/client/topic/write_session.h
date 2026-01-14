@@ -144,6 +144,25 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING_DEFAULT(bool, ValidateSeqNo, true);
 };
 
+struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
+    using TSelf = TKeyedWriteSessionSettings;
+
+    TKeyedWriteSessionSettings() = default;
+    TKeyedWriteSessionSettings(const TKeyedWriteSessionSettings&) = default;
+    TKeyedWriteSessionSettings(TKeyedWriteSessionSettings&&) = default;
+    TKeyedWriteSessionSettings(const std::string& path, const std::string& producerId, const std::string& messageGroupId) {
+        Path(path);
+        ProducerId(producerId);
+        MessageGroupId(messageGroupId);
+    }
+
+    TKeyedWriteSessionSettings& operator=(const TKeyedWriteSessionSettings&) = default;
+    TKeyedWriteSessionSettings& operator=(TKeyedWriteSessionSettings&&) = default;
+
+    //! Session lifetime.
+    FLUENT_SETTING(TDuration, SessionTimeout);
+};
+
 //! Contains the message to write and all the options.
 struct TWriteMessage {
     using TSelf = TWriteMessage;
@@ -276,4 +295,27 @@ public:
     virtual ~IWriteSession() = default;
 };
 
-} // namespace NYdb::NTopic
+class ISimpleBlockingKeyedWriteSession {
+public:
+    //! Write single message.
+    //! continuationToken - a token earlier provided to client with ReadyToAccept event.
+    virtual bool Write(const std::string& key, TWriteMessage&& message, TTransactionBase* tx = nullptr,
+        const TDuration& blockTimeout = TDuration::Max()) = 0;
+
+    //! Write single message that is already coded by codec.
+    //! continuationToken - a token earlier provided to client with ReadyToAccept event.
+    // virtual bool WriteEncoded(const std::string& key, TWriteMessage&& params, TTransactionBase* tx = nullptr,
+    //     const TDuration& blockTimeout = TDuration::Max()) = 0;
+
+    //! Wait for all writes to complete (no more that closeTimeout()), then close.
+    //! Return true if all writes were completed and acked, false if timeout was reached and some writes were aborted.
+    virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
+
+    //! Writer counters with different stats (see TWriterConuters).
+    virtual TWriterCounters::TPtr GetCounters() = 0;
+
+    //! Close() with timeout = 0 and destroy everything instantly.
+    virtual ~ISimpleBlockingKeyedWriteSession() = default;
+};
+
+}

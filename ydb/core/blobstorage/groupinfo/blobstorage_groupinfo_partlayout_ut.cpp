@@ -98,7 +98,7 @@ public:
 
 void TestErasureSet(ui32 firstIdx, ui32 step) {
     ui32 maxErasureIdx = 0;
-    for (auto erasure : TBlobStorageGroupType::ErasureNames) {
+    for (auto [erasure, _] : TBlobStorageGroupType::ErasureNames) {
         maxErasureIdx = std::max(maxErasureIdx, (ui32)erasure);
     }
     for (ui32 i = firstIdx; i <= maxErasureIdx; i += step) {

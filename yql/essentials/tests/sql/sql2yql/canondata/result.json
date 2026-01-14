@@ -5305,6 +5305,13 @@
             "uri": "https://{canondata_backend}/1597364/0dfdd9be36ea9ae7f51895a91916fc4ec61ed0d8/resource.tar.gz#test_sql2yql.test_linear-mutdict_upsert_/sql.yql"
         }
     ],
+    "test_sql2yql.test[linear-not_consumed_tuple_item]": [
+        {
+            "checksum": "d55cc0811581bdf66466792af217e738",
+            "size": 1106,
+            "uri": "https://{canondata_backend}/1946324/6444bd1a0be749bb94be75f1a8ca64ed8b971099/resource.tar.gz#test_sql2yql.test_linear-not_consumed_tuple_item_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[linear-opt_block1]": [
         {
             "checksum": "295de2b8e5b7ab78ae0c27ab40c3e8e6",
@@ -13552,6 +13559,11 @@
     "test_sql_format.test[linear-mutdict_upsert]": [
         {
             "uri": "file://test_sql_format.test_linear-mutdict_upsert_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-not_consumed_tuple_item]": [
+        {
+            "uri": "file://test_sql_format.test_linear-not_consumed_tuple_item_/formatted.sql"
         }
     ],
     "test_sql_format.test[linear-opt_block1]": [

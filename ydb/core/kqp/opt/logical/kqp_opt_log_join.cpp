@@ -496,7 +496,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     size_t rightPrefixSize;
     TMaybeNode<TExprBase> rightPrefixExpr;
 
-    auto prefixLookup = RewriteReadToPrefixLookup(rightReadMatch->Read, ctx, kqpCtx, kqpCtx.Config->IdxLookupJoinsPrefixPointLimit);
+    auto prefixLookup = RewriteReadToPrefixLookup(rightReadMatch->Read, ctx, kqpCtx, kqpCtx.Config->GetIdxLookupJoinPointsLimit());
     if (prefixLookup) {
         lookupTable = prefixLookup->LookupTableName;
         indexName = prefixLookup->IndexName;

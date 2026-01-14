@@ -183,7 +183,7 @@ public:
     {
     }
 
-    ~TStreamOverPyIter() {
+    ~TStreamOverPyIter() override {
         TPyGilLocker lock;
         PyIter_.Reset();
         PyIterable_.Reset();

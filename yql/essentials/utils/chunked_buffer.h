@@ -55,7 +55,7 @@ public:
     explicit TChunkedBufferOutput(TChunkedBuffer& dst);
 
 private:
-    virtual void DoWrite(const void* buf, size_t len) override;
+    void DoWrite(const void* buf, size_t len) override;
 
     TChunkedBuffer& Dst_;
 };

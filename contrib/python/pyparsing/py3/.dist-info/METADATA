@@ -1,10 +1,11 @@
 Metadata-Version: 2.4
 Name: pyparsing
-Version: 3.3.0
+Version: 3.3.1
 Summary: pyparsing - Classes and methods to define and execute parsing grammars
 Author-email: Paul McGuire <ptmcg.gm+pyparsing@gmail.com>
 Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
+License-Expression: MIT
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: Intended Audience :: Information Technology

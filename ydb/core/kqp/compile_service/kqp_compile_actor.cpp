@@ -85,7 +85,7 @@ public:
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
     {
         Config = BuildConfiguration(tableServiceConfig);
-        PerStatementResult = perStatementResult && Config->EnablePerStatementQueryExecution;
+        PerStatementResult = perStatementResult && Config->GetEnablePerStatementQueryExecution();
     }
 
     TKikimrConfiguration::TPtr BuildConfiguration(const TTableServiceConfig& tableServiceConfig) {
@@ -188,7 +188,7 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), kqpYqlSyntaxVersion, cluster, QueryId.Text, Config->BindingsMode, GUCSettings);
         settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
             .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
-            .SetIsEnablePgConstsToParams(Config->EnablePgConstsToParams)
+            .SetIsEnablePgConstsToParams(Config->GetEnablePgConstsToParams())
             .SetApplicationName(ApplicationName)
             .SetQueryParameters(QueryId.QueryParameterTypes)
             .SetIsEnablePgSyntax(AppData(ctx)->FeatureFlags.GetEnablePgSyntax())

@@ -18,7 +18,7 @@ public:
         ERROR,
     };
 
-    virtual ~IArrowResolver() = default;
+    ~IArrowResolver() override = default;
 
     virtual EStatus LoadFunctionMetadata(const TPosition& pos, TStringBuf name, const TVector<const TTypeAnnotationNode*>& argTypes,
         const TTypeAnnotationNode* returnType, TExprContext& ctx) const = 0;

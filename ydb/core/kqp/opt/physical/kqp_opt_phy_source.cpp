@@ -118,7 +118,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
     };
     TMaybe<TMatchedRead> matched;
 
-    bool stageContainsSimpleProgram = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms;
+    bool stageContainsSimpleProgram = kqpCtx.Config->GetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms();
 
     VisitExpr(stage.Program().Body().Ptr(), [&](const TExprNode::TPtr& node) {
             TExprBase expr(node);
@@ -161,7 +161,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         return node;
     }
 
-    bool stageContainsEmptyProgram = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimization;
+    bool stageContainsEmptyProgram = kqpCtx.Config->GetEnableSimpleProgramsSinglePartitionOptimization();
     if (stage.Program().Body().Raw() != matched->Expr.Raw()) {
         stageContainsEmptyProgram = false;
     }

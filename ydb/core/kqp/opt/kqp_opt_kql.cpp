@@ -1021,7 +1021,7 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
         return nullptr;
     }
 
-    const bool allowBatchUpdates = kqpCtx.Config->EnableBatchUpdates && kqpCtx.Config->EnableOltpSink;
+    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->EnableOltpSink;
     if (!allowBatchUpdates && update.IsBatch() == "true") {
         const TString err = "BATCH operations are not supported at the current time.";
         ctx.AddError(YqlIssue(ctx.GetPosition(update.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
@@ -1043,7 +1043,7 @@ TExprNode::TPtr HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, 
         return nullptr;
     }
 
-    const bool allowBatchUpdates = kqpCtx.Config->EnableBatchUpdates && kqpCtx.Config->EnableOltpSink;
+    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->EnableOltpSink;
     if (!allowBatchUpdates && del.IsBatch() == "true") {
         const TString err = "BATCH operations are not supported at the current time.";
         ctx.AddError(YqlIssue(ctx.GetPosition(del.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
@@ -1231,7 +1231,7 @@ TMaybe<TKqlQueryList> BuildKqlQuery(TKiDataQueryBlocks dataQueryBlocks, const TK
                         YQL_ENSURE(dataSource);
                         if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
                             IDqIntegration::TWrapReadSettings wrSettings;
-                            if (kqpCtx->Config->EnableWatermarks) {
+                            if (kqpCtx->Config->GetEnableWatermarks()) {
                                 wrSettings = {
                                     .WatermarksMode = "default",
                                     .WatermarksGranularityMs = 1000,

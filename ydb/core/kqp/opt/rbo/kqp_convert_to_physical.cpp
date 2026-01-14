@@ -48,6 +48,34 @@ TString GetValidJoinKind(const TString& joinKind) {
     return joinKind;
 }
 
+TExprNode::TPtr BuildMultiConsumerHandler(TExprNode::TPtr input, const ui32 numConsumers, TExprContext& ctx, TPositionHandle pos) {
+    TVector<TExprBase> branches;
+    auto inputIndex = NDq::BuildAtomList("0", pos, ctx);
+    for (ui32 i = 0; i < numConsumers; ++i) {
+        branches.emplace_back(inputIndex);
+        // Just an empty lambda.
+        // clang-format off
+        auto lambda = Build<TCoLambda>(ctx, pos)
+            .Args({"arg"})
+            .Body("arg")
+        .Done();
+        // clang-format on
+        branches.push_back(lambda);
+    }
+
+    // clang-format off
+    return Build<TCoSwitch>(ctx, pos)
+        .Input(input)
+        .BufferBytes()
+            .Value(ToString(128_MB))
+        .Build()
+        .FreeArgs()
+            .Add(branches)
+        .Build()
+     .Done().Ptr();
+     // clang-format on
+}
+
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx, bool removeAliases = false) {
     // FIXME: This is not always correct, for example:
     // lambda($arg) { $val = expr($arg); return member($val `name)}
@@ -184,6 +212,10 @@ TExprNode::TPtr PeepholeStageLambda(TExprNode::TPtr stageLambda, TVector<TExprNo
     return TKqpProgram(newProgram).Lambda().Ptr();
 }
 
+bool IsMultiConsumerHandlerNeeded(const std::shared_ptr<IOperator>& op) {
+    return op->Props.NumOfConsumers.has_value() && op->Props.NumOfConsumers.value() > 1;
+}
+
 TExprNode::TPtr BuildCrossJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TExprContext &ctx,
                                TPositionHandle pos) {
 
@@ -191,7 +223,7 @@ TExprNode::TPtr BuildCrossJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExprNo
     TCoArgument rightArg{ctx.NewArgument(pos, "_kqp_right")};
 
     TVector<TExprNode::TPtr> keys;
-    for (auto iu : join.GetLeftInput()->GetOutputIUs()) {
+    for (const auto& iu : join.GetLeftInput()->GetOutputIUs()) {
         YQL_CLOG(TRACE, CoreDq) << "Converting Cross Join, left key: " << iu.GetFullName();
 
         // clang-format off
@@ -575,12 +607,12 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
 
                     // clang-format off
                     auto olapRead = Build<TKqpBlockReadOlapTableRanges>(ctx, op->Pos)
-                            .Table(opSource->TableCallable)
-                            .Ranges<TCoVoid>().Build()
-                            .Columns().Add(columns).Build()
-                            .Settings<TCoNameValueTupleList>().Build()
-                            .ExplainPrompt<TCoNameValueTupleList>().Build()
-                            .Process(processLambda)
+                        .Table(opSource->TableCallable)
+                        .Ranges<TCoVoid>().Build()
+                        .Columns().Add(columns).Build()
+                        .Settings<TCoNameValueTupleList>().Build()
+                        .ExplainPrompt<TCoNameValueTupleList>().Build()
+                        .Process(processLambda)
                     .Done().Ptr();
 
                     auto flowNonBlockRead = Build<TCoToFlow>(ctx, op->Pos)
@@ -599,6 +631,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                         .Input(narrowMap)
                     .Done().Ptr();
                     // clang-format on
+
+                    if (IsMultiConsumerHandlerNeeded(op)) {
+                        currentStageBody = BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);
+                    }
                     break;
                 }
                 default:
@@ -741,7 +777,11 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                     .Build()
                 .Build()
             .Done().Ptr();
-            // clang-fort on
+            // clang-format on
+
+            if (IsMultiConsumerHandlerNeeded(op)) {
+               currentStageBody = BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);
+            }
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
@@ -884,17 +924,25 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
         YQL_CLOG(TRACE, CoreDq) << "Finalizing stage " << id;
 
         TVector<TExprNode::TPtr> inputs;
+        THashSet<int> processedInputsIds;
         for (const auto inputStageId : stageInputIds.at(id)) {
-            auto inputStage = finalizedStages.at(inputStageId);
-            auto connection = graph.GetConnection(inputStageId, id);
-            YQL_CLOG(TRACE, CoreDq) << "Building connection: " << inputStageId << "->" << id << ", " << connection->Type;
-            TExprNode::TPtr newStage;
-            auto dqConnection = connection->BuildConnection(inputStage, stagePos.at(inputStageId), newStage, ctx);
-            if (newStage) {
-                txStages.push_back(newStage);
+            if (processedInputsIds.contains(inputStageId)) {
+                continue;
             }
-            YQL_CLOG(TRACE, CoreDq) << "Built connection: " << inputStageId << "->" << id << ", " << connection->Type;
-            inputs.push_back(dqConnection);
+            processedInputsIds.insert(inputStageId);
+
+            auto inputStage = finalizedStages.at(inputStageId);
+            const auto connections = graph.GetConnections(inputStageId, id);
+            for (const auto& connection : connections) {
+                YQL_CLOG(TRACE, CoreDq) << "Building connection: " << inputStageId << "->" << id << ", " << connection->Type;
+                TExprNode::TPtr newStage;
+                auto dqConnection = connection->BuildConnection(inputStage, stagePos.at(inputStageId), newStage, ctx);
+                if (newStage) {
+                    txStages.push_back(newStage);
+                }
+                YQL_CLOG(TRACE, CoreDq) << "Built connection: " << inputStageId << "->" << id << ", " << connection->Type;
+                inputs.push_back(dqConnection);
+            }
         }
 
         TExprNode::TPtr stage;

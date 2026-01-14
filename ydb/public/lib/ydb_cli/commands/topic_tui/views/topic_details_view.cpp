@@ -396,9 +396,10 @@ Element TTopicDetailsView::RenderHeader() {
         return text("No topic selected") | dim;
     }
     
-    std::string partitionsText = LoadingTopic_ ? "..." : std::to_string(TotalPartitions_);
-    std::string retentionText = LoadingTopic_ ? "..." : std::string(FormatDuration(RetentionPeriod_).c_str());
-    std::string speedText = LoadingTopic_ ? "..." : std::string(FormatBytes(WriteSpeedBytesPerSec_).c_str()) + "/s";
+    // Always show current values - don't show "..." during loading to prevent flicker
+    std::string partitionsText = std::to_string(TotalPartitions_);
+    std::string retentionText = std::string(FormatDuration(RetentionPeriod_).c_str());
+    std::string speedText = std::string(FormatBytes(WriteSpeedBytesPerSec_).c_str()) + "/s";
     
     return vbox({
         hbox({

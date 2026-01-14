@@ -598,12 +598,20 @@ Element TTopicDetailsView::RenderInfoModal() {
     }
     
     lines.push_back(separator());
-    lines.push_back(text(" [i] Close   [↑↓] Scroll ") | dim | center);
+    lines.push_back(text(" [i/Esc] Close ") | dim | center);
     
-    // Create scrollable content
-    auto content = vbox(std::move(lines)) | yframe | yflex_shrink;
+    // Create vertically scrollable content using focus position
+    auto content = vbox(std::move(lines)) 
+        | vscroll_indicator
+        | yframe
+        | focusPositionRelative(0, static_cast<float>(InfoScrollY_) / 100.0f);
     
-    return content | size(WIDTH, LESS_THAN, 70) | size(HEIGHT, LESS_THAN, 30) | border;
+    // Use bgcolor to fully cover underlying content (prevents highlight bleed-through)
+    return content 
+        | size(WIDTH, LESS_THAN, 70) 
+        | size(HEIGHT, LESS_THAN, 28) 
+        | border
+        | bgcolor(Color::Black);
 }
 
 } // namespace NYdb::NConsoleClient

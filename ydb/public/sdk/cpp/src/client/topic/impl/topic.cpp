@@ -200,7 +200,6 @@ EMeteringMode TTopicDescription::GetMeteringMode() const {
     return MeteringMode_;
 }
 
-
 const std::map<std::string, std::string>& TTopicDescription::GetAttributes() const {
     return Attributes_;
 }

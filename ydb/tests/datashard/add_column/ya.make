@@ -7,6 +7,8 @@ TEST_SRCS(
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
+
 PEERDIR(
     ydb/tests/datashard/lib
     ydb/tests/sql/lib

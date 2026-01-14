@@ -6,6 +6,8 @@ SPLIT_FACTOR(45)
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:32 cpu:4)
+
 TEST_SRCS(
     test_select.py
 

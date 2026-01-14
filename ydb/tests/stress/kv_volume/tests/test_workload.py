@@ -157,7 +157,7 @@ def generate_configs_for_tests():
             .add_write_to_initial_data(size=1024, count=10, channel=0)
             .init_prepared_action(name='delete')
             .add_delete_to_prepared_action(count=2)
-            .set_periodicity_for_prepared_action(period_us=100000)
+            .set_periodicity_for_prepared_action(period_us=1000000)
             .set_data_mode_worker_for_prepared_action()
             .add_prepared_action()
             .return_config()

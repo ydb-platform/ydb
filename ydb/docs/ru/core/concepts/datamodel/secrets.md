@@ -8,7 +8,7 @@
 Создание секрета выполняется с помощью SQL-запроса:
 
 ```yql
-CREATE SECRET `MySecretName` WITH (value = `MySecretData`);
+CREATE SECRET MySecretName WITH (value = "MySecretData");
 ```
 
 Подробнее о синтаксисе команды см. в разделе [CREATE SECRET](../../yql/reference/syntax/create-secret.md).
@@ -19,32 +19,16 @@ CREATE SECRET `MySecretName` WITH (value = `MySecretData`);
 
 ## Устаревший синтаксис
 
-### Создание секретов {#create_secret_deprecated}
-
 {% note warning %}
 
-**Данная команда устарела** и будет удалена в будущих версиях {{ydb-full-name}}. Рекомендуемый синтаксис работы с секретами описан в разделе [Создание секретов](#create_secret).
+**Команды, указанные ниже, устарели** и будут удалены в будущих версиях {{ydb-full-name}}. Рекомендуемый синтаксис работы с секретами описан выше.
 
 {% endnote %}
 
-Создание секрета выполняется с помощью SQL-запроса:
+### Создание секретов {#create_secret_deprecated}
 
-```yql
-CREATE OBJECT `MySecretName` (TYPE SECRET) WITH value=`MySecretData`;
-```
+Устаревший синтаксис создания секретов описан в разделе  [CREATE OBJECT (TYPE SECRET)](../../yql/reference/syntax/create-object-type-secret.md).
 
 ### Управление доступом {#secret_access_deprecated}
 
-{% note warning %}
-
-**Данная команда устарела** и будет удалена в будущих версиях {{ydb-full-name}}. Рекомендуемый синтаксис работы с доступами к секретам описан в разделе [Управление доступом](#secret_access).
-
-{% endnote %}
-
-Все права на использование секрета принадлежат создателю секрета. Создатель секрета может предоставить право чтения секрета другому пользователю с помощью [управления доступом](#secret_access) к секретам.
-
-Для управления доступами к секретам используются специальные объекты `SECRET_ACCESS`. Для выдачи разрешения на использование секрета `MySecretName` пользователю `another_user` необходимо создать объект `SECRET_ACCESS` с именем `MySecretName:another_user`.
-
-```yql
-CREATE OBJECT `MySecretName:another_user` (TYPE SECRET_ACCESS)
-```
+Устаревший синтаксис выдачи разрешения на использование секрета описан в разделе  [CREATE OBJECT (TYPE SECRET_ACCESS)](../../yql/reference/syntax/create-object-type-secret-access.md).

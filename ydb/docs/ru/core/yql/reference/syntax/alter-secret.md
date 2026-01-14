@@ -22,7 +22,7 @@ WITH (option = value[, ...])
 Изменить значение секрета `secret_name` на `secret_value_new`:
 
 ```sql
-ALTER SECRET `secret_name` WITH (value="secret_value_new");
+ALTER SECRET secret_name WITH (value = "secret_value_new");
 ```
 
 ## См. также

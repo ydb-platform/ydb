@@ -19,7 +19,7 @@ DROP SECRET secret_name
 Удалить секрет с именем `secret_name`:
 
 ```sql
-DROP SECRET `secret_name`;
+DROP SECRET secret_name;
 ```
 
 ## См. также

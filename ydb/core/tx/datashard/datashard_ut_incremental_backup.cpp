@@ -394,6 +394,29 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         return latestDir;
     }
 
+    // Добавьте это в начало файла, если нет:
+    // #include <algorithm> 
+
+    TVector<TString> GetSortedBackupItems(TTestActorRuntime& runtime, const TActorId& sender, const TString& collectionPath) {
+        auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+        request->Record.MutableDescribePath()->SetPath(collectionPath);
+        request->Record.MutableDescribePath()->MutableOptions()->SetReturnChildren(true);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+        auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(sender);
+        
+        UNIT_ASSERT_EQUAL(reply->Get()->GetRecord().GetStatus(), NKikimrScheme::EStatus::StatusSuccess);
+        
+        const auto& pathDescription = reply->Get()->GetRecord().GetPathDescription();
+        TVector<TString> children;
+        for (ui32 i = 0; i < pathDescription.ChildrenSize(); ++i) {
+            children.push_back(pathDescription.GetChildren(i).GetName());
+        }
+        
+        std::sort(children.begin(), children.end());
+        
+        return children;
+    }
+
     Y_UNIT_TEST(SimpleBackup) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
@@ -875,12 +898,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection`;)", false);
 
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        auto backups = GetSortedBackupItems(runtime, edgeActor, "/Root/.backups/collections/MyCollection");
+        TString fullBackupPath = "/Root/.backups/collections/MyCollection/" + backups[0] + "/Table";
+
         UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleExec(runtime, R"(
-                -- TODO: fix with navigate after proper scheme cache handling
-                SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000001Z_full/Table`
+            KqpSimpleExec(runtime, Sprintf(R"(
+                SELECT key, value FROM `%s`
                 ORDER BY key
-                )"),
+                )", fullBackupPath.c_str())),
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/Table`
                 ORDER BY key
@@ -899,12 +926,14 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
             SimulateSleep(server, TDuration::Seconds(1));
 
+            backups = GetSortedBackupItems(runtime, edgeActor, "/Root/.backups/collections/MyCollection");
+            TString incrBackupPath = "/Root/.backups/collections/MyCollection/" + backups[1] + "/Table";
+
             UNIT_ASSERT_VALUES_EQUAL(
-                KqpSimpleExec(runtime, R"(
-                    -- TODO: fix with navigate after proper scheme cache handling
-                    SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table`
+                KqpSimpleExec(runtime, Sprintf(R"(
+                    SELECT key, value FROM `%s`
                     ORDER BY key
-                    )"),
+                    )", incrBackupPath.c_str())),
                 "{ items { uint32_value: 1 } items { null_flag_value: NULL_VALUE } }, "
                 "{ items { uint32_value: 2 } items { uint32_value: 200 } }");
         }
@@ -946,13 +975,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             )", false);
 
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        auto backups = GetSortedBackupItems(runtime, edgeActor, "/Root/.backups/collections/MyCollection");
+        TString fullBackupPath = "/Root/.backups/collections/MyCollection/" + backups[0] + "/Table";
 
         UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleExec(runtime, R"(
-                -- TODO: fix with navigate after proper scheme cache handling
-                SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000001Z_full/Table`
+            KqpSimpleExec(runtime, Sprintf(R"(
+                SELECT key, value FROM `%s`
                 ORDER BY key
-                )"),
+                )", fullBackupPath.c_str())),
             KqpSimpleExec(runtime, R"(
                 SELECT key, value FROM `/Root/Table`
                 ORDER BY key
@@ -962,19 +994,19 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (2, 200);
         )");
-
         ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/Table` WHERE key=1;)");
 
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
-
         SimulateSleep(server, TDuration::Seconds(5));
 
+        backups = GetSortedBackupItems(runtime, edgeActor, "/Root/.backups/collections/MyCollection");
+        TString incr1Path = "/Root/.backups/collections/MyCollection/" + backups[1] + "/Table";
+
         UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleExec(runtime, R"(
-                -- TODO: fix with navigate after proper scheme cache handling
-                SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table`
+            KqpSimpleExec(runtime, Sprintf(R"(
+                SELECT key, value FROM `%s`
                 ORDER BY key
-                )"),
+                )", incr1Path.c_str())),
             "{ items { uint32_value: 1 } items { null_flag_value: NULL_VALUE } }, "
             "{ items { uint32_value: 2 } items { uint32_value: 200 } }");
 
@@ -982,19 +1014,20 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (3, 300);
         )");
-
         ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/Table` WHERE key=2;)");
 
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
-
         SimulateSleep(server, TDuration::Seconds(5));
 
+        backups = GetSortedBackupItems(runtime, edgeActor, "/Root/.backups/collections/MyCollection");
+        UNIT_ASSERT_C(backups.size() >= 3, "Expected at least 3 backups");
+        TString incr2Path = "/Root/.backups/collections/MyCollection/" + backups[2] + "/Table";
+
         UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleExec(runtime, R"(
-                -- TODO: fix with navigate after proper scheme cache handling
-                SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000007Z_incremental/Table`
+            KqpSimpleExec(runtime, Sprintf(R"(
+                SELECT key, value FROM `%s`
                 ORDER BY key
-                )"),
+                )", incr2Path.c_str())),
             "{ items { uint32_value: 2 } items { null_flag_value: NULL_VALUE } }, "
             "{ items { uint32_value: 3 } items { uint32_value: 300 } }");
     }
@@ -2153,43 +2186,12 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             DELETE FROM `/Root/Table` WHERE key = 1;
         )");
 
-        // Create incremental backup - this should create the incremental backup implementation tables
         ExecSQL(server, edgeActor, R"(BACKUP `TestCollection` INCREMENTAL;)", false);
-        runtime.SimulateSleep(TDuration::Seconds(10)); // More time for incremental backup to complete
+        runtime.SimulateSleep(TDuration::Seconds(10));
 
-        // Try to find the incremental backup table by iterating through possible timestamps
-        TString foundIncrementalBackupPath;
-        bool foundIncrementalBackupTable = false;
+        auto backups = GetSortedBackupItems(runtime, edgeActor, "/Root/.backups/collections/TestCollection");
 
-        // Common incremental backup paths to try (timestamp-based)
-        TVector<TString> possiblePaths = {
-            "/Root/.backups/collections/TestCollection/19700101000002Z_incremental/Table",
-            "/Root/.backups/collections/TestCollection/19700101000003Z_incremental/Table",
-            "/Root/.backups/collections/TestCollection/19700101000004Z_incremental/Table",
-            "/Root/.backups/collections/TestCollection/19700101000005Z_incremental/Table",
-            "/Root/.backups/collections/TestCollection/19700101000006Z_incremental/Table",
-            "/Root/.backups/collections/TestCollection/19700101000007Z_incremental/Table",
-            "/Root/.backups/collections/TestCollection/19700101000008Z_incremental/Table",
-            "/Root/.backups/collections/TestCollection/19700101000009Z_incremental/Table",
-            "/Root/.backups/collections/TestCollection/19700101000010Z_incremental/Table",
-        };
-
-        for (const auto& path : possiblePaths) {
-            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
-            request->Record.MutableDescribePath()->SetPath(path);
-            request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
-            runtime.Send(new IEventHandle(MakeTxProxyID(), edgeActor, request.Release()));
-            auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(edgeActor);
-
-            if (reply->Get()->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
-                foundIncrementalBackupPath = path;
-                foundIncrementalBackupTable = true;
-                Cerr << "Found incremental backup table at: " << path << Endl;
-                break;
-            }
-        }
-
-        UNIT_ASSERT_C(foundIncrementalBackupTable, TStringBuilder() << "Could not find incremental backup table. Tried paths: " << JoinSeq(", ", possiblePaths));
+        TString foundIncrementalBackupPath = "/Root/.backups/collections/TestCollection/" + backups.back() + "/Table";
 
         // Now check the found incremental backup table attributes
         auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();

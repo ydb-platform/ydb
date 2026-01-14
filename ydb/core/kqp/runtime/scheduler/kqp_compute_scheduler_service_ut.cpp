@@ -27,10 +27,12 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         ydb->CreateResourcePool(poolId, poolSettings);
 
         auto request = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(poolId));
+        const auto& result = request.GetResult();
+        UNIT_ASSERT_EQUAL(result.Response.GetResponse().GetEffectivePoolId(), poolId);
         if (!Enabled) {
-            TSampleQueries::TSelect42::CheckResult(request.GetResult());
+            TSampleQueries::TSelect42::CheckResult(result);
         } else {
-            TSampleQueries::CheckCancelled(request.GetResult());
+            TSampleQueries::CheckCancelled(result);
         }
     }
 

@@ -160,6 +160,7 @@ struct TSampleQueries {
     static void CheckNotFound(const TResult& result, const TString& poolId) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::NOT_FOUND, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), TStringBuilder() << "Resource pool " << poolId << " not found or you don't have access permissions");
+        UNIT_ASSERT_UNEQUAL(result.Response.GetResponse().GetEffectivePoolId(), poolId);
     }
 
     struct TSelect42 {

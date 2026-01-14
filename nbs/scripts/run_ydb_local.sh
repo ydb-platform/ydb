@@ -7,8 +7,9 @@ function parse_args {
     # Default action is 'start' if no argument is provided
     ACTION=${1:-start}
 
-    # Default GRPC_PORT
-    GRPC_PORT=${GRPC_PORT:-9001}
+    # Default ports
+    GRPC_PORT=${GRPC_PORT:-9901}
+    MON_PORT=${MON_PORT:-8765}
 
     # Parse named arguments
     shift  # Remove the first argument (action)
@@ -20,20 +21,36 @@ function parse_args {
                     # Check if the port is an integer
                     if ! [[ "$2" =~ ^[0-9]+$ ]]; then
                         echo "Error: Port must be an integer"
-                        echo "Usage: $0 [start|stop] [--port PORT]"
+                        echo "Usage: $0 [start|stop] [--port PORT] [--mon-port PORT]"
                         exit 1
                     fi
                     GRPC_PORT=$2
                     shift 2
                 else
                     echo "Error: --port requires a value"
-                    echo "Usage: $0 [start|stop] [--port PORT]"
+                    echo "Usage: $0 [start|stop] [--port PORT] [--mon-port PORT]"
+                    exit 1
+                fi
+                ;;
+            --mon-port)
+                if [ -n "$2" ]; then
+                    # Check if the port is an integer
+                    if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+                        echo "Error: Monitor port must be an integer"
+                        echo "Usage: $0 [start|stop] [--port PORT] [--mon-port PORT]"
+                        exit 1
+                    fi
+                    MON_PORT=$2
+                    shift 2
+                else
+                    echo "Error: --mon-port requires a value"
+                    echo "Usage: $0 [start|stop] [--port PORT] [--mon-port PORT]"
                     exit 1
                 fi
                 ;;
             *)
                 echo "Error: Unknown argument $1"
-                echo "Usage: $0 [start|stop] [--port PORT]"
+                echo "Usage: $0 [start|stop] [--port PORT] [--mon-port PORT]"
                 exit 1
                 ;;
         esac
@@ -139,7 +156,7 @@ ConfigsConfig {
     echo "AllowNamedConfigs"
     ydbd -s grpc://localhost:$GRPC_PORT admin console config set --merge "$ALLOW_NAMED_CONFIGS_REQ"
 
-    printf "\n\nYdbd is running at $GRPC_PORT, logs in $PERSISTENT_TMP_DIR/logs/ydbd.log\n"
+    printf "\n\nYdbd monitoring is running at $MON_PORT, logs in $PERSISTENT_TMP_DIR/logs/ydbd.log\n"
 }
 
 
@@ -152,10 +169,11 @@ case "$ACTION" in
         start_ydbd
         ;;
     *)
-        echo "Usage: $0 [start|stop] [--port PORT]"
-        echo "  start [--port PORT] - Stop any existing ydbd process and start a new one (default)"
-        echo "  stop                 - Stop any existing ydbd process and exit"
-        echo "  --port PORT          - Specify GRPC port number (default: 9001)"
+        echo "Usage: $0 [start|stop] [--port PORT] [--mon-port PORT]"
+        echo "  start [--port PORT] [--mon-port PORT] - Stop any existing ydbd process and start a new one (default)"
+        echo "  stop                                    - Stop any existing ydbd process and exit"
+        echo "  --port PORT                             - Specify GRPC port number (default: 9901)"
+        echo "  --mon-port PORT                         - Specify monitoring port number (default: 8765)"
         exit 1
         ;;
 esac

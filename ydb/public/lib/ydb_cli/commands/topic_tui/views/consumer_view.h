@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../widgets/table.h"
+#include "../widgets/theme.h"
+
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
 
@@ -19,12 +22,20 @@ class TTopicTuiApp;
 
 struct TPartitionConsumerInfo {
     ui64 PartitionId = 0;
-    ui64 CommittedOffset = 0;
+    ui64 StartOffset = 0;
     ui64 EndOffset = 0;
-    ui64 Lag = 0;
+    ui64 CommittedOffset = 0;
+    ui64 Lag = 0;  // Uncommitted messages (EndOffset - CommittedOffset)
+    ui64 UnreadMessages = 0;  // EndOffset - LastReadOffset
     TInstant LastReadTime;
     TDuration ReadTimeLag;
+    TDuration WriteTimeLag;
     TDuration CommitTimeLag;
+    ui64 StoreSizeBytes = 0;
+    ui64 BytesWrittenPerMinute = 0;  // Write speed
+    TString ReaderName;
+    TString ReadSessionId;
+    i32 PartitionNodeId = 0;
 };
 
 struct TConsumerData {
@@ -47,9 +58,7 @@ public:
     
 private:
     ftxui::Element RenderHeader();
-    ftxui::Element RenderPartitionStats();
-    ftxui::Element RenderLagGauges();
-    ftxui::Element RenderSpinner();
+    void PopulateTable();
     void StartAsyncLoad();
     
 private:
@@ -61,7 +70,8 @@ private:
     ui64 TotalLag_ = 0;
     TDuration MaxLagTime_;
     
-    int SelectedPartitionIndex_ = 0;
+    // Use TTable instead of manual rendering
+    TTable Table_;
     
     std::atomic<bool> Loading_{false};
     std::future<TConsumerData> LoadFuture_;

@@ -12,7 +12,7 @@ CREATE OBJECT `secret_name:user_name` (TYPE SECRET_ACCESS);
 
 Где:
 
-* `secret_name` - имя [секрета](../../../concepts/datamodel/secrets.md#create_secret_deprecated).
+* `secret_name` - имя [секрета](create-object-type-secret.md).
 * `user_name` - имя пользователя, которому выдается доступ.
 
 ## Пример

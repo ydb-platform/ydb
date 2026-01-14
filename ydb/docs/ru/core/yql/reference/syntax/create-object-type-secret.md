@@ -2,7 +2,7 @@
 
 {% include [deprecated_secrets_warning](./_includes/deprecated_secrets_warning.md) %}
 
-Для создания [секрета](../../../concepts/datamodel/secrets.md#create_secret_deprecated) используется следующий SQL-запрос:
+Для создания [секрета](../../../concepts/datamodel/secrets.md) используется следующий SQL-запрос:
 
 ```yql
 CREATE OBJECT <secret_name> (TYPE SECRET) WITH value = "<secret_value>";

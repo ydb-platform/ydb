@@ -14,6 +14,11 @@ Component TTable::Build() {
     return Renderer([this] {
         return Render();
     }) | CatchEvent([this](Event event) {
+        // Don't handle events when not focused - prevents inactive views
+        // in Container::Stacked from consuming events meant for active view
+        if (!IsFocused_) {
+            return false;
+        }
         return HandleEvent(event);
     });
 }
@@ -170,7 +175,8 @@ Element TTable::Render() {
 }
 
 bool TTable::HandleEvent(Event event) {
-    if (!IsFocused_ || Rows_.empty()) {
+    // Note: Focus management is done at the view level, not here
+    if (Rows_.empty()) {
         return false;
     }
     
@@ -180,32 +186,52 @@ bool TTable::HandleEvent(Event event) {
         if (SelectedRow_ > 0) {
             SelectedRow_--;
         }
+        // Always consume arrow keys even at boundary
+        if (SelectedRow_ != oldSelection && OnNavigate) {
+            OnNavigate(SelectedRow_);
+        }
+        return true;
     } else if (event == Event::ArrowDown) {
         if (SelectedRow_ < static_cast<int>(Rows_.size()) - 1) {
             SelectedRow_++;
         }
+        // Always consume arrow keys even at boundary
+        if (SelectedRow_ != oldSelection && OnNavigate) {
+            OnNavigate(SelectedRow_);
+        }
+        return true;
     } else if (event == Event::PageUp) {
         SelectedRow_ = std::max(0, SelectedRow_ - 10);
+        if (SelectedRow_ != oldSelection && OnNavigate) {
+            OnNavigate(SelectedRow_);
+        }
+        return true;
     } else if (event == Event::PageDown) {
         SelectedRow_ = std::min(static_cast<int>(Rows_.size()) - 1, SelectedRow_ + 10);
+        if (SelectedRow_ != oldSelection && OnNavigate) {
+            OnNavigate(SelectedRow_);
+        }
+        return true;
     } else if (event == Event::Home) {
         SelectedRow_ = 0;
+        if (SelectedRow_ != oldSelection && OnNavigate) {
+            OnNavigate(SelectedRow_);
+        }
+        return true;
     } else if (event == Event::End) {
         SelectedRow_ = static_cast<int>(Rows_.size()) - 1;
+        if (SelectedRow_ != oldSelection && OnNavigate) {
+            OnNavigate(SelectedRow_);
+        }
+        return true;
     } else if (event == Event::Return) {
         if (OnSelect && SelectedRow_ >= 0) {
             OnSelect(SelectedRow_);
         }
         return true;
-    } else {
-        return false;
     }
     
-    if (SelectedRow_ != oldSelection && OnNavigate) {
-        OnNavigate(SelectedRow_);
-    }
-    
-    return true;
+    return false;
 }
 
 Element TTable::RenderHeader() {
@@ -238,6 +264,13 @@ Element TTable::RenderRow(size_t rowIndex) {
     const auto& rowData = Rows_[rowIndex];
     
     Elements cells;
+    
+    // Add selection marker (visible in text-only terminals)
+    if (selected) {
+        cells.push_back(text(">") | bold);
+    } else {
+        cells.push_back(text(" "));
+    }
     
     for (size_t i = 0; i < Columns_.size(); ++i) {
         const auto& col = Columns_[i];

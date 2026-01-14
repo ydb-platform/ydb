@@ -52,9 +52,11 @@ TTopicListView::TTopicListView(TTopicTuiApp& app)
 }
 
 Component TTopicListView::Build() {
-    auto tableComponent = Table_.Build();
+    // Don't use Table_.Build() - it creates a nested CatchEvent that would
+    // consume events even when this view is not active. Instead, just use
+    // the Renderer for display and handle events manually in CatchEvent.
     
-    return Renderer(tableComponent, [this, tableComponent] {
+    return Renderer([this] {
         CheckAsyncCompletion();
         
         // Only show full loading screen if we have no content yet
@@ -90,9 +92,12 @@ Component TTopicListView::Build() {
                 Loading_ ? (text(" ⟳ ") | color(Color::Yellow) | dim) : text("")
             }),
             separator(),
-            tableComponent->Render() | flex
+            Table_.Render() | flex
         }) | border;
     }) | CatchEvent([this](Event event) {
+        // Set focus state FIRST (before any event handling)
+        Table_.SetFocused(App_.GetState().CurrentView == EViewType::TopicList);
+        
         // Only handle events when this view is active
         if (App_.GetState().CurrentView != EViewType::TopicList) {
             return false;

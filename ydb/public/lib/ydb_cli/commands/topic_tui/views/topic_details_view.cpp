@@ -57,8 +57,12 @@ TTopicDetailsView::TTopicDetailsView(TTopicTuiApp& app)
 }
 
 Component TTopicDetailsView::Build() {
+    // Build table components
+    auto partitionsTableComp = PartitionsTable_.Build();
+    auto consumersTableComp = ConsumersTable_.Build();
+    
     // Create partition panel component
-    auto partitionsPanel = Renderer([this] {
+    auto partitionsPanel = Renderer(partitionsTableComp, [this, partitionsTableComp] {
         Element content;
         // Only show spinner if loading AND we have no data yet
         if (LoadingTopic_ && Partitions_.empty()) {
@@ -68,7 +72,7 @@ Component TTopicDetailsView::Build() {
         } else if (Partitions_.empty()) {
             content = text("No partitions") | dim | center;
         } else {
-            content = PartitionsTable_.Render();
+            content = partitionsTableComp->Render();
         }
         
         // Show subtle refresh indicator in header when loading with existing data
@@ -84,7 +88,7 @@ Component TTopicDetailsView::Build() {
     });
     
     // Create consumers panel component
-    auto consumersPanel = Renderer([this] {
+    auto consumersPanel = Renderer(consumersTableComp, [this, consumersTableComp] {
         Element content;
         // Only show spinner if loading AND we have no data yet
         if (LoadingConsumers_ && Consumers_.empty()) {
@@ -94,7 +98,7 @@ Component TTopicDetailsView::Build() {
         } else if (Consumers_.empty()) {
             content = text("No consumers") | dim | center;
         } else {
-            content = ConsumersTable_.Render();
+            content = consumersTableComp->Render();
         }
         
         // Show subtle refresh indicator in header when loading with existing data
@@ -114,16 +118,9 @@ Component TTopicDetailsView::Build() {
     // Create resizable split with consumers on the right
     auto splitContainer = ResizableSplitRight(consumersPanel, partitionsPanel, &ConsumersPanelSize_);
     
-    return Renderer(splitContainer, [this, splitContainer] {
-        CheckAsyncCompletion();
-        
-        // Always render UI structure - each section shows spinner or content
-        return vbox({
-            RenderHeader(),
-            separator(),
-            splitContainer->Render() | flex
-        });
-    }) | CatchEvent([this](Event event) {
+    // CatchEvent comes FIRST (before split can consume events)
+    // Then wrap in Renderer for custom rendering
+    return CatchEvent(splitContainer, [this](Event event) {
         if (App_.GetState().CurrentView != EViewType::TopicDetails) {
             return false;
         }
@@ -174,6 +171,15 @@ Component TTopicDetailsView::Build() {
             return true;
         }
         return false;
+    }) | Renderer([this, splitContainer](Element) {
+        CheckAsyncCompletion();
+        
+        // Always render UI structure - each section shows spinner or content
+        return vbox({
+            RenderHeader(),
+            separator(),
+            splitContainer->Render() | flex
+        });
     });
 }
 

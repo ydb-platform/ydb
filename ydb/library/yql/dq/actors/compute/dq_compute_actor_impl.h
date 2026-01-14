@@ -1599,7 +1599,7 @@ protected:
                 str << Endl;
                 str << "  TaskId: " << Task.GetId() << Endl;
                 str << "  StageId: " << Task.GetStageId() << Endl;
-                str << "  State: " << (unsigned int)State << Endl;
+                str << "  State: " << NDqProto::EComputeState_Name(State) << Endl;
 
                 TaskRunnerMonitoringInfo(str);
 

@@ -104,7 +104,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     auto indexes = BuildAffectedIndexTables(table, insert.Pos(), ctx, nullptr);
     YQL_ENSURE(indexes);
-    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
+    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
 
     const bool needPrecompute = !useStreamIndex
         || !abortOnError

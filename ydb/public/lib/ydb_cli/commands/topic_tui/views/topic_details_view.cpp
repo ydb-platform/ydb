@@ -196,8 +196,7 @@ Component TTopicDetailsView::Build() {
                         return {};
                     }
                     TViewerHttpClient client(endpoint);
-                    auto result = client.GetTopicDescribe(topicPath, true);
-                    return result.Tablets;
+                    return client.GetTabletInfo(topicPath);
                 });
             }
             return true;
@@ -718,6 +717,7 @@ Element TTopicDetailsView::RenderTabletsModal() {
             text(" Type") | bold | size(WIDTH, EQUAL, 22),
             text(" Tablet ID") | bold | size(WIDTH, EQUAL, 20),
             text(" State") | bold | size(WIDTH, EQUAL, 10),
+            text(" Overall") | bold | size(WIDTH, EQUAL, 8),
             text(" Node") | bold | size(WIDTH, EQUAL, 8),
             text(" Gen") | bold | size(WIDTH, EQUAL, 8),
             text(" Uptime") | bold | size(WIDTH, EQUAL, 12)
@@ -741,6 +741,14 @@ Element TTopicDetailsView::RenderTabletsModal() {
             }
         };
         
+        // Helper to get color for overall status
+        auto overallColor = [](const TString& overall) {
+            if (overall == "Green") return Color::Green;
+            if (overall == "Yellow") return Color::Yellow;
+            if (overall == "Red") return Color::Red;
+            return Color::GrayDark;
+        };
+        
         // Tablet rows
         for (const auto& tablet : Tablets_) {
             auto stateColor = tablet.State == "Active" ? Color::Green : Color::Yellow;
@@ -748,6 +756,7 @@ Element TTopicDetailsView::RenderTabletsModal() {
                 text(TString(" ") + tablet.Type) | size(WIDTH, EQUAL, 22),
                 text(TString(" ") + ToString(tablet.TabletId)) | size(WIDTH, EQUAL, 20),
                 text(TString(" ") + tablet.State) | color(stateColor) | size(WIDTH, EQUAL, 10),
+                text(TString(" ") + tablet.Overall) | color(overallColor(tablet.Overall)) | size(WIDTH, EQUAL, 8),
                 text(TString(" ") + ToString(tablet.NodeId)) | size(WIDTH, EQUAL, 8),
                 text(TString(" ") + ToString(tablet.Generation)) | size(WIDTH, EQUAL, 8),
                 text(TString(" ") + formatUptime(tablet.ChangeTime)) | size(WIDTH, EQUAL, 12)
@@ -773,7 +782,7 @@ Element TTopicDetailsView::RenderTabletsModal() {
     auto content = vbox(std::move(visibleLines));
     
     return content 
-        | size(WIDTH, LESS_THAN, 90) 
+        | size(WIDTH, LESS_THAN, 100) 
         | size(HEIGHT, LESS_THAN, 22) 
         | border
         | bgcolor(Color::Black);

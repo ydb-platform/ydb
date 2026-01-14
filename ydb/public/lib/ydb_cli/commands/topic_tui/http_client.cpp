@@ -257,6 +257,89 @@ TTopicDescribeResult TViewerHttpClient::GetTopicDescribe(
     return result;
 }
 
+TVector<TTabletInfo> TViewerHttpClient::GetTabletInfo(
+    const TString& topicPath,
+    TDuration /* timeout */)
+{
+    TVector<TTabletInfo> result;
+    
+    if (!HttpClient_) {
+        return result;
+    }
+    
+    // Extract database from topic path
+    TString database;
+    size_t lastSlash = topicPath.rfind('/');
+    if (lastSlash != TString::npos && lastSlash > 0) {
+        database = topicPath.substr(0, lastSlash);
+    }
+    
+    TStringBuilder path;
+    path << PathPrefix_
+         << "/viewer/json/tabletinfo?"
+         << "database=" << database
+         << "&path=" << topicPath
+         << "&enums=true";
+    
+    auto json = DoGet(path);
+    
+    // Parse TabletStateInfo array
+    if (json.Has("TabletStateInfo") && json["TabletStateInfo"].IsArray()) {
+        for (const auto& tabletJson : json["TabletStateInfo"].GetArray()) {
+            TTabletInfo tablet;
+            
+            if (tabletJson.Has("TabletId")) {
+                // TabletId can be string or number in JSON
+                if (tabletJson["TabletId"].IsString()) {
+                    tablet.TabletId = FromString<ui64>(tabletJson["TabletId"].GetString());
+                } else {
+                    tablet.TabletId = tabletJson["TabletId"].GetUInteger();
+                }
+            }
+            if (tabletJson.Has("Type")) {
+                tablet.Type = tabletJson["Type"].GetString();
+            }
+            if (tabletJson.Has("State")) {
+                tablet.State = tabletJson["State"].GetString();
+            }
+            if (tabletJson.Has("NodeId")) {
+                tablet.NodeId = tabletJson["NodeId"].GetUInteger();
+            }
+            if (tabletJson.Has("Generation")) {
+                tablet.Generation = tabletJson["Generation"].GetUInteger();
+            }
+            if (tabletJson.Has("ChangeTime")) {
+                // ChangeTime can be string or number
+                ui64 changeTimeMs = 0;
+                if (tabletJson["ChangeTime"].IsString()) {
+                    changeTimeMs = FromString<ui64>(tabletJson["ChangeTime"].GetString());
+                } else {
+                    changeTimeMs = tabletJson["ChangeTime"].GetUInteger();
+                }
+                tablet.ChangeTime = TInstant::MilliSeconds(changeTimeMs);
+            }
+            if (tabletJson.Has("Leader")) {
+                tablet.Leader = tabletJson["Leader"].GetBoolean();
+            }
+            if (tabletJson.Has("Overall")) {
+                tablet.Overall = tabletJson["Overall"].GetString();
+            }
+            if (tabletJson.Has("HiveId")) {
+                // HiveId can be string or number
+                if (tabletJson["HiveId"].IsString()) {
+                    tablet.HiveId = FromString<ui64>(tabletJson["HiveId"].GetString());
+                } else {
+                    tablet.HiveId = tabletJson["HiveId"].GetUInteger();
+                }
+            }
+            
+            result.push_back(std::move(tablet));
+        }
+    }
+    
+    return result;
+}
+
 NJson::TJsonValue TViewerHttpClient::DoGet(const TString& path) {
     TString fullUrl = Endpoint_ + path;
     

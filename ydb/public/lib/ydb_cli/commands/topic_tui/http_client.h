@@ -23,15 +23,18 @@ struct TTopicMessage {
     ui32 Codec = 0;          // Compression codec
 };
 
-// Tablet info from Viewer API describe
+// Tablet info from Viewer API /viewer/json/tabletinfo
 struct TTabletInfo {
     ui64 TabletId = 0;
     TString Type;           // "PersQueue", "PersQueueReadBalancer"
     TString State;          // "Active", "Dead", etc.
     ui32 NodeId = 0;
-    TString NodeFQDN;       // Node host name
+    TString NodeFQDN;       // Node host name (if available)
     ui64 Generation = 0;
     TInstant ChangeTime;    // For uptime calculation
+    bool Leader = false;
+    TString Overall;        // "Green", "Yellow", "Red"
+    ui64 HiveId = 0;
 };
 
 // Topic describe result from Viewer API
@@ -73,6 +76,12 @@ public:
     TTopicDescribeResult GetTopicDescribe(
         const TString& topicPath,
         bool includeTablets = true,
+        TDuration timeout = TDuration::Seconds(5));
+    
+    // Get tablet info for a topic
+    // GET /viewer/json/tabletinfo?path=...&enums=true
+    TVector<TTabletInfo> GetTabletInfo(
+        const TString& topicPath,
         TDuration timeout = TDuration::Seconds(5));
     
     // Write message to topic

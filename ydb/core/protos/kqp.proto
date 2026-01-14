@@ -191,8 +191,6 @@ message TIndexDescriptionProto {
     }
 };
 
-
-
 message TKqpTableMetadataProto {
     message TAttributeProto {
         optional string Key = 1;

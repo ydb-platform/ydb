@@ -590,8 +590,10 @@ Component TTopicTuiApp::BuildHelpBar() {
             case EViewType::MessagePreview:
                 parts = {
                     text(" [←→] Navigate Pages ") | dim,
-                    text(" [t] Tail ") | color(Color::Green),
+                    text(" [↑↓] Select ") | dim,
                     text(" [Enter] Expand ") | dim,
+                    text(" [jk] Scroll ") | dim,
+                    text(" [t] Tail ") | color(Color::Green),
                     text(" [Esc] Back ") | dim
                 };
                 break;

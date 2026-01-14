@@ -91,13 +91,24 @@ Component TMessagePreviewView::Build() {
             }
             if (SelectedIndex_ > 0) {
                 SelectedIndex_--;
+                ContentScrollY_ = 0;  // Reset scroll when selecting new message
             }
             return true;
         }
         if (event == Event::ArrowDown) {
             if (SelectedIndex_ < static_cast<int>(Messages_.size()) - 1) {
                 SelectedIndex_++;
+                ContentScrollY_ = 0;  // Reset scroll when selecting new message
             }
+            return true;
+        }
+        // j/k for scrolling message content in expanded view
+        if (ExpandedView_ && (event == Event::Character('j') || event == Event::Character('J'))) {
+            ContentScrollY_++;
+            return true;
+        }
+        if (ExpandedView_ && (event == Event::Character('k') || event == Event::Character('K'))) {
+            ContentScrollY_ = std::max(0, ContentScrollY_ - 1);
             return true;
         }
         if (event == Event::Return) {
@@ -120,6 +131,7 @@ Component TMessagePreviewView::Build() {
                 return true;
             }
             ExpandedView_ = !ExpandedView_;
+            ContentScrollY_ = 0;  // Reset scroll when toggling view
             return true;
         }
         if (event == Event::Escape) {
@@ -483,11 +495,45 @@ Element TMessagePreviewView::RenderMessageContent(const TTopicMessage& msg, bool
         dataElement = text(dataPreview) | color(Color::GrayLight);
     } else {
         // Expanded: wrap text character-by-character into multiple lines
-        Elements lines;
+        Elements allLines;
         for (size_t i = 0; i < dataPreview.size(); i += availableWidth) {
-            lines.push_back(text(dataPreview.substr(i, availableWidth)) | color(Color::GrayLight));
+            allLines.push_back(text(dataPreview.substr(i, availableWidth)) | color(Color::GrayLight));
         }
-        dataElement = vbox(std::move(lines));
+        
+        // Calculate visible area (leave space for metadata + some padding)
+        auto terminalSize = ftxui::Terminal::Size();
+        int maxVisibleLines = std::max(5, terminalSize.dimy - 10);  // Reserve lines for UI chrome
+        
+        // Clamp scroll position
+        int totalLines = static_cast<int>(allLines.size());
+        int maxScroll = std::max(0, totalLines - maxVisibleLines);
+        ContentScrollY_ = std::min(ContentScrollY_, maxScroll);
+        
+        // Slice visible lines
+        Elements visibleLines;
+        int startLine = ContentScrollY_;
+        int endLine = std::min(totalLines, startLine + maxVisibleLines);
+        for (int i = startLine; i < endLine; ++i) {
+            visibleLines.push_back(std::move(allLines[i]));
+        }
+        
+        // Show scroll hint if content overflows
+        if (totalLines > maxVisibleLines) {
+            int remaining = totalLines - endLine;
+            TString scrollHint;
+            if (ContentScrollY_ > 0 && remaining > 0) {
+                scrollHint = Sprintf("↑ [j/k to scroll: %d more below] ↓", remaining);
+            } else if (ContentScrollY_ > 0) {
+                scrollHint = "↑ [k to scroll up]";
+            } else if (remaining > 0) {
+                scrollHint = Sprintf("↓ [j to scroll: %d more lines]", remaining);
+            }
+            if (!scrollHint.empty()) {
+                visibleLines.push_back(text(std::string(scrollHint.c_str())) | dim | center);
+            }
+        }
+        
+        dataElement = vbox(std::move(visibleLines));
     }
     
     Element content = vbox({

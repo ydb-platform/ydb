@@ -83,6 +83,9 @@ private:
     bool GotoOffsetMode_ = false;
     std::string GotoOffsetInput_;
     
+    // Content scroll for expanded message view
+    int ContentScrollY_ = 0;
+    
     // SDK streaming for tail mode
     std::shared_ptr<NTopic::IReadSession> TailSession_;
     std::thread TailReaderThread_;

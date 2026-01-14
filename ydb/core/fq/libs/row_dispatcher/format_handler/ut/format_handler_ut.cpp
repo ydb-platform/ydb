@@ -250,19 +250,14 @@ public:
                 UNIT_ASSERT_LT_C(expectedIndex, expectedMessages.size(), "Expected less messages, clientId: " << clientId << ", got " << data.size() << " batches");
                 auto [expectedOffsets, expectedWatermark, expectedBatch] = expectedMessages[expectedIndex++];
 
-                UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets.size(), actualOffsets.size(), "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
-                size_t i = 0;
-                for (auto actualOffset : actualOffsets) {
-                    UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets[i], actualOffset, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1 << ", i: " << i);
-                    ++i;
-                }
+                UNIT_ASSERT_VALUES_EQUAL_C(expectedOffsets, actualOffsets, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
+
                 UNIT_ASSERT_VALUES_EQUAL_C(expectedWatermark, actualWatermark, "clientId: " << clientId << ", expectedIndex: " << expectedIndex - 1);
 
                 if (!expectedBatch.Rows.empty()) {
                     CheckMessageBatch(actualMessages, expectedBatch);
                 }
             }
-            UNIT_ASSERT_VALUES_EQUAL_C(expectedIndex, expectedMessages.size(), "Expected " << expectedMessages.size() << " messages, but got " << expectedIndex << " (clientId: " << clientId << ")");
         };
     }
 

@@ -551,6 +551,7 @@ Component TTopicTuiApp::BuildHelpBar() {
                     text(" [Enter] Open ") | color(Color::Cyan),
                     text(" [w] Write ") | color(Color::Green),
                     text(" [a] Add Consumer ") | color(Color::Green),
+                    text(" [i] Info ") | color(Color::Yellow),
                     text(" [Esc] Back ") | dim
                 };
                 break;

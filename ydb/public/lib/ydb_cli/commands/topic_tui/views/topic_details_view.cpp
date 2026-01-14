@@ -125,6 +125,38 @@ Component TTopicDetailsView::Build() {
             return false;
         }
         
+        // Info modal handling FIRST - block all other events when modal is open
+        if (ShowingInfo_) {
+            // Toggle off with 'i'
+            if (event == Event::Character('i') || event == Event::Character('I')) {
+                ShowingInfo_ = false;
+                return true;
+            }
+            // Close with Esc
+            if (event == Event::Escape) {
+                ShowingInfo_ = false;
+                return true;
+            }
+            // Scroll
+            if (event == Event::ArrowDown || event == Event::Character('j')) {
+                InfoScrollY_ = std::min(InfoScrollY_ + 1, 100);
+                return true;
+            }
+            if (event == Event::ArrowUp || event == Event::Character('k')) {
+                InfoScrollY_ = std::max(InfoScrollY_ - 1, 0);
+                return true;
+            }
+            // Consume all other events when modal is open
+            return true;
+        }
+        
+        // Open info modal
+        if (event == Event::Character('i') || event == Event::Character('I')) {
+            ShowingInfo_ = true;
+            InfoScrollY_ = 0;
+            return true;
+        }
+        
         // Update focus state for both tables
         PartitionsTable_.SetFocused(FocusPanel_ == 0);
         ConsumersTable_.SetFocused(FocusPanel_ == 1);
@@ -169,31 +201,6 @@ Component TTopicDetailsView::Build() {
                 }
             }
             return true;
-        }
-        
-        // Info modal toggle
-        if (event == Event::Character('i') || event == Event::Character('I')) {
-            ShowingInfo_ = !ShowingInfo_;
-            InfoScrollY_ = 0;  // Reset scroll when opening
-            return true;
-        }
-        
-        // Close info modal with Esc (if open)
-        if (ShowingInfo_ && event == Event::Escape) {
-            ShowingInfo_ = false;
-            return true;
-        }
-        
-        // Scroll info modal
-        if (ShowingInfo_) {
-            if (event == Event::ArrowDown || event == Event::Character('j')) {
-                InfoScrollY_ = std::min(InfoScrollY_ + 1, 100);  // max scroll
-                return true;
-            }
-            if (event == Event::ArrowUp || event == Event::Character('k')) {
-                InfoScrollY_ = std::max(InfoScrollY_ - 1, 0);
-                return true;
-            }
         }
         
         return false;

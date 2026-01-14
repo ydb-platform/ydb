@@ -6795,19 +6795,19 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             {
                 EPathTypeExternalDataSource,
                 R"(
-                -- database: "/MyRoot"
-                CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
-                WITH (
-                    SOURCE_TYPE = 'ClickHouse',
-                    LOCATION = 'https://clickhousedb.net',
-                    PASSWORD_SECRET_NAME = 'password_secret',
-                    AUTH_METHOD = 'BASIC',
-                    DATABASE_NAME = 'clickhouse',
-                    LOGIN = 'my_login',
-                    PROTOCOL = 'NATIVE',
-                    USE_TLS = 'TRUE'
-                );
-            )"
+                    -- database: "/MyRoot"
+                    CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
+                    WITH (
+                        SOURCE_TYPE = 'ClickHouse',
+                        LOCATION = 'https://clickhousedb.net',
+                        PASSWORD_SECRET_NAME = 'password_secret',
+                        AUTH_METHOD = 'BASIC',
+                        DATABASE_NAME = 'clickhouse',
+                        LOGIN = 'my_login',
+                        PROTOCOL = 'NATIVE',
+                        USE_TLS = 'TRUE'
+                    );
+                )"
             }
         ));
 
@@ -6963,6 +6963,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 if (createdByQuery) {
                     runtime.GetAppData().FeatureFlags.SetEnableViews(true);
                     runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
+                    runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
                 }
             }
 
@@ -7670,5 +7671,27 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             },
         }, settings);
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleExternalDataSource) {
+        ShouldSucceed(
+            {
+                EPathTypeExternalDataSource,
+                R"(
+                    -- database: "/MyRoot"
+                    CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
+                    WITH (
+                        SOURCE_TYPE = 'ClickHouse',
+                        LOCATION = 'https://clickhousedb.net',
+                        PASSWORD_SECRET_NAME = 'password_secret',
+                        AUTH_METHOD = 'BASIC',
+                        DATABASE_NAME = 'clickhouse',
+                        LOGIN = 'my_login',
+                        PROTOCOL = 'NATIVE',
+                        USE_TLS = 'TRUE'
+                    );
+                )"
+            }
+        );
     }
 }

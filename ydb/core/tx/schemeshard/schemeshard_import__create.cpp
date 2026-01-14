@@ -281,11 +281,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         importInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistImportState(db, *importInfo);
 
-        Self->Imports[id] = importInfo;
-        if (uid) {
-            Self->ImportsByUid[uid] = importInfo;
-        }
-
+        Self->AddImport(importInfo);
         Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *importInfo);
 
         Progress = true;

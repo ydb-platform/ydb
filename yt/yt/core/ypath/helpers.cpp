@@ -58,7 +58,7 @@ bool IsPathPointingToAttributes(const TYPath& path)
     return false;
 }
 
-TError TryGetShouldNotPointToAttributesError(const TYPath& path)
+TError CheckPathDoesNotPointToAttributes(const TYPath& path)
 {
     if (IsPathPointingToAttributes(path)) {
         return TError("Requested path should not point to attributes (i.e. contain @)");

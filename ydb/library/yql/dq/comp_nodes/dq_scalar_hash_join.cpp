@@ -123,11 +123,11 @@ struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
 
     auto MakeConsumeFn() {
         return [this](TSides<TSingleTuple> tuples) {
-            ForEachSide([&](ESide side) {
+            for(ESide side: EachSide) {
                 Converters_.SelectSide(side)->GetTupleLayout()->TupleDeepCopy(
                     tuples.SelectSide(side).PackedData, tuples.SelectSide(side).OverflowBegin,
                     Output_.Data.SelectSide(side).PackedTuples, Output_.Data.SelectSide(side).Overflow);
-            });
+            }
             Output_.NItems++;
         };
     }
@@ -199,7 +199,7 @@ public:
 private:
     class TStreamState : public TComputationValue<TStreamState> {
         using TBase = TComputationValue<TStreamState>;
-        using JoinType = NJoinPackedTuples::THybridHashJoin<TScalarPackedTupleSource, TestStorageSettings>;
+        using JoinType = NJoinPackedTuples::THybridHashJoin<TScalarPackedTupleSource, TestStorageSettings, EJoinKind::Inner>;
 
     public:
         TStreamState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationWideFlowNode*> flows,
@@ -213,10 +213,9 @@ private:
                                   static_cast<int>(std::ssize(Meta_->InputTypes.Build))},
                         .Probe = {ctx, flows.Probe, Converters_.Probe.get(),
                                   static_cast<int>(std::ssize(Meta_->InputTypes.Probe))}},
-                    ctx.MakeLogger(), "ScalarHashJoinPacked",
+                    ctx, "ScalarHashJoinPacked",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
-                                                              .Probe = Converters_.Probe->GetTupleLayout()},
-                    ctx)
+                                                              .Probe = Converters_.Probe->GetTupleLayout()})
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
         {}
 
@@ -295,7 +294,7 @@ private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         TSides<std::unique_ptr<IScalarLayoutConverter>> converters;
         TTypeInfoHelper helper;
-        ForEachSide([&](ESide side) {
+        for(ESide side: EachSide) {
             TVector<NPackedTuple::EColumnRole> roles(std::ssize(Meta_->InputTypes.SelectSide(side)),
                                                     NPackedTuple::EColumnRole::Payload);
             for (int column : Meta_->KeyColumns.SelectSide(side)) {
@@ -303,7 +302,7 @@ private:
             }
             converters.SelectSide(side) =
                 MakeScalarLayoutConverter(helper, Meta_->InputTypes.SelectSide(side), roles, ctx.HolderFactory);
-        });
+        }
 
         state = ctx.HolderFactory.Create<TStreamState>(ctx, Flows_, std::move(converters), Meta_.get());
     }

@@ -68,7 +68,7 @@ class install(orig.install):
             """,
             see_url="https://blog.ganssle.io/articles/2021/10/setup-py-deprecated.html",
             # TODO: Document how to bootstrap setuptools without install
-            #       (e.g. by unziping the wheel file)
+            #       (e.g. by unzipping the wheel file)
             #       and then add a due_date to this warning.
         )
 

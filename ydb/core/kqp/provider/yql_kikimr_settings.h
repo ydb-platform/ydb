@@ -10,9 +10,6 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <util/generic/size_literals.h>
 
-namespace NKikimrConfig {
-    enum TTableServiceConfig_EBlockChannelsMode : int;
-}
 
 namespace NYql {
 
@@ -192,54 +189,18 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
 
         CopyFrom(serviceConfig);
 
-        EnableKqpScanQuerySourceRead = serviceConfig.GetEnableKqpScanQuerySourceRead();
-        EnableKqpScanQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
-        EnableKqpDataQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
-
-        EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
-        ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
-        EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
-        EnableDiscardSelect = serviceConfig.GetEnableDiscardSelect();
-        EnableCreateTableAs = serviceConfig.GetEnableCreateTableAs();
-        EnableDataShardCreateTableAs = serviceConfig.GetEnableDataShardCreateTableAs();
         AllowOlapDataQuery = serviceConfig.GetAllowOlapDataQuery();
         EnableOlapSink = serviceConfig.GetEnableOlapSink();
         EnableOltpSink = serviceConfig.GetEnableOltpSink();
-        EnableHtapTx = serviceConfig.GetEnableHtapTx();
         EnableStreamWrite = serviceConfig.GetEnableStreamWrite();
-        EnableBatchUpdates = serviceConfig.GetEnableBatchUpdates();
-        BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
-        IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
         DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
         DefaultEnableShuffleElimination = serviceConfig.GetDefaultEnableShuffleElimination();
-        DefaultDqChannelVersion = serviceConfig.GetDqChannelVersion();
-        EnableConstantFolding = serviceConfig.GetEnableConstantFolding();
-        EnableFoldUdfs = serviceConfig.GetEnableFoldUdfs();
         SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
         EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
         EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();
-        AllowMultiBroadcasts = serviceConfig.GetAllowMultiBroadcasts();
         EnableNewRBO = serviceConfig.GetEnableNewRBO();
-        EnableSpillingInHashJoinShuffleConnections = serviceConfig.GetEnableSpillingInHashJoinShuffleConnections();
-        EnableOlapScalarApply = serviceConfig.GetEnableOlapScalarApply();
-        EnableOlapSubstringPushdown = serviceConfig.GetEnableOlapSubstringPushdown();
         EnableIndexStreamWrite = serviceConfig.GetEnableIndexStreamWrite();
-        EnableOlapPushdownProjections = serviceConfig.GetEnableOlapPushdownProjections();
         LangVer = serviceConfig.GetDefaultLangVer();
-        EnableParallelUnionAllConnectionsForExtend = serviceConfig.GetEnableParallelUnionAllConnectionsForExtend();
-        EnableTempTablesForUser = serviceConfig.GetEnableTempTablesForUser();
-        EnableSimpleProgramsSinglePartitionOptimization = serviceConfig.GetEnableSimpleProgramsSinglePartitionOptimization();
-        EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = serviceConfig.GetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms();
-
-        EnableOlapPushdownAggregate = serviceConfig.GetEnableOlapPushdownAggregate();
-        EnableOrderOptimizaionFSM = serviceConfig.GetEnableOrderOptimizaionFSM();
-        EnableTopSortSelectIndex = serviceConfig.GetEnableTopSortSelectIndex();
-        EnablePointPredicateSortAutoSelectIndex = serviceConfig.GetEnablePointPredicateSortAutoSelectIndex();
-        EnableDqHashCombineByDefault = serviceConfig.GetEnableDqHashCombineByDefault();
-        EnableDqHashAggregateByDefault = serviceConfig.GetEnableDqHashAggregateByDefault();
-        EnableWatermarks = serviceConfig.GetEnableWatermarks();
-        EnableBuildAggregationResultStages = serviceConfig.GetEnableBuildAggregationResultStages();
-        EnableFallbackToYqlOptimizer = serviceConfig.GetEnableFallbackToYqlOptimizer();
 
         if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
             _KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
@@ -260,8 +221,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
                 break;
         }
 
-        if (serviceConfig.GetFilterPushdownOverJoinOptionalSide()) {
-            FilterPushdownOverJoinOptionalSide = true;
+        if (GetFilterPushdownOverJoinOptionalSide()) {
             YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
             YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
             YqlCoreOptimizerFlags.insert("sqlinwithnothingornull");
@@ -276,78 +236,30 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
                 break;
         }
 
-        switch(serviceConfig.GetBackportMode()) {
-            case NKikimrConfig::TTableServiceConfig_EBackportMode_Released:
-                BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
-                break;
-            case NKikimrConfig::TTableServiceConfig_EBackportMode_All:
-                BackportMode = NYql::EBackportCompatibleFeaturesMode::All;
-                break;
-        }
     }
 
     TKikimrSettings::TConstPtr Snapshot() const;
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
-    bool EnableKqpScanQuerySourceRead = false;
-    bool EnableKqpScanQueryStreamIdxLookupJoin = false;
-    bool EnableKqpDataQueryStreamIdxLookupJoin = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
-    bool EnableAstCache = false;
-    bool EnablePgConstsToParams = false;
-    ui64 ExtractPredicateRangesLimit = 0;
-    bool EnablePerStatementQueryExecution = false;
-    bool EnableCreateTableAs = false;
-    bool EnableDataShardCreateTableAs = false;
-    ui64 IdxLookupJoinsPrefixPointLimit = 1;
     bool AllowOlapDataQuery = false;
     bool EnableOlapSink = false;
     bool EnableOltpSink = false;
-    bool EnableHtapTx = false;
     bool EnableStreamWrite = false;
-    bool EnableBatchUpdates = false;
-    NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
     bool EnableSpilling = true;
     ui32 DefaultCostBasedOptimizationLevel = 4;
-    bool EnableConstantFolding = true;
-    bool EnableFoldUdfs = true;
     ui64 DefaultEnableSpillingNodes = 0;
-    bool EnableAntlr4Parser = false;
     bool EnableSnapshotIsolationRW = false;
-    bool AllowMultiBroadcasts = false;
     bool DefaultEnableShuffleElimination = false;
     bool DefaultEnableShuffleEliminationForAggregation = false;
-    bool FilterPushdownOverJoinOptionalSide = false;
     THashSet<TString> YqlCoreOptimizerFlags;
     bool EnableNewRBO = false;
-    bool EnableSpillingInHashJoinShuffleConnections = false;
-    bool EnableOlapScalarApply = false;
-    bool EnableOlapSubstringPushdown = false;
     bool EnableIndexStreamWrite = false;
-    bool EnableOlapPushdownProjections = false;
-    bool EnableParallelUnionAllConnectionsForExtend = false;
-    bool EnableTempTablesForUser = false;
-    bool EnableOlapPushdownAggregate = false;
-    bool EnableOrderOptimizaionFSM = false;
-    bool EnableBuildAggregationResultStages = false;
-
-    bool EnableTopSortSelectIndex = true;
-    bool EnablePointPredicateSortAutoSelectIndex = true;
-    bool EnableSimpleProgramsSinglePartitionOptimization = true;
-    bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
-    bool EnableDqHashCombineByDefault = true;
-    bool EnableDqHashAggregateByDefault = false;
-    bool EnableWatermarks = false;
-    ui32 DefaultDqChannelVersion = 1u;
-    bool EnableDiscardSelect = false;
-
-    bool Antlr4ParserIsAmbiguityError = false;
-
-    bool EnableFallbackToYqlOptimizer = false;
 
     ui32 LangVer = NYql::MinLangVersion;
-    NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
+
+    NYql::EBackportCompatibleFeaturesMode GetYqlBackportMode() const;
 
     NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
     NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;

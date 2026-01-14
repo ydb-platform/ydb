@@ -989,7 +989,7 @@ public:
     explicit TImpl(TAddressResolverConfigPtr config)
         : TAsyncExpiringCache(
             config,
-            NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker(),
+            NRpc::TDispatcher::Get()->GetHeavyInvoker(),
             /*logger*/ {},
             DnsProfiler().WithPrefix("/resolve_cache"))
     {

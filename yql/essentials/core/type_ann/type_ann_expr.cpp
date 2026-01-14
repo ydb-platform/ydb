@@ -800,7 +800,7 @@ public:
         }
 
         if (input->IsCallable({"Udf", "ScriptUdf", "EvaluateAtom",
-            "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode"})) {
+            "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode", "Parameter"})) {
             input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
         }

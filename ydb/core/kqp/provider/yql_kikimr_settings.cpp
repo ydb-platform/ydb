@@ -152,8 +152,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
-
-    BlockChannelsMode = NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR;
 }
 
 bool TKikimrSettings::HasAllowKqpUnsafeCommit() const {
@@ -238,24 +236,36 @@ ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
 }
 
 bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
-    return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownProjections);
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) ||
+        TTableServiceConfig::GetEnableOlapPushdownProjections());
 }
 
 bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const {
     return ((GetOptionalFlagValue(OptEnableParallelUnionAllConnectionsForExtend.Get()) == EOptionalFlag::Enabled) ||
-            EnableParallelUnionAllConnectionsForExtend);
+        TTableServiceConfig::GetEnableParallelUnionAllConnectionsForExtend());
 }
 
 bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
-    return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownAggregate);
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) ||
+        TTableServiceConfig::GetEnableOlapPushdownAggregate());
 }
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {
-    return UseDqHashCombine.Get().GetOrElse(EnableDqHashCombineByDefault);
+    return UseDqHashCombine.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashCombineByDefault());
 }
 
+NYql::EBackportCompatibleFeaturesMode TKikimrConfiguration::GetYqlBackportMode() const {
+    switch(GetBackportMode()) {
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_Released:
+            return NYql::EBackportCompatibleFeaturesMode::Released;
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_All:
+            return NYql::EBackportCompatibleFeaturesMode::All;
+    }
+}
+
+
 bool TKikimrConfiguration::GetUseDqHashAggregate() const {
-    return UseDqHashAggregate.Get().GetOrElse(EnableDqHashAggregateByDefault);
+    return UseDqHashAggregate.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashAggregateByDefault());
 }
 
 }

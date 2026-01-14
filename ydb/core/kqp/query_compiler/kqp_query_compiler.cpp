@@ -733,7 +733,7 @@ public:
 
         queryProto.SetEnableOltpSink(Config->EnableOltpSink);
         queryProto.SetEnableOlapSink(Config->EnableOlapSink);
-        queryProto.SetEnableHtapTx(Config->EnableHtapTx);
+        queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->LangVer);
 
         queryProto.SetForceImmediateEffectsExecution(
@@ -743,9 +743,9 @@ public:
             Config->DefaultTxMode.Get().GetOrElse(NKqpProto::ISOLATION_LEVEL_UNDEFINED));
 
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
-        queryProto.SetEnableWatermarks(Config->EnableWatermarks);
+        queryProto.SetEnableWatermarks(Config->GetEnableWatermarks());
 
-        bool enableDiscardSelect = Config->EnableDiscardSelect;
+        bool enableDiscardSelect = Config->GetEnableDiscardSelect();
 
         TDynBitMap resultDiscardFlags;
         ui32 resultCount = 0;
@@ -1156,7 +1156,7 @@ private:
 
         txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination));
         txProto.SetHasEffects(hasEffectStage);
-        txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->DefaultDqChannelVersion));
+        txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->GetDqChannelVersion()));
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());
             const auto& binding = paramBinding.Binding();
@@ -1229,7 +1229,7 @@ private:
                     columnHintsProto.Add(TString(columnHint.Value()));
                 }
             }
-            if (Config->EnableDiscardSelect && hasDiscards) {
+            if (Config->GetEnableDiscardSelect() && hasDiscards) {
                 bool canSkip = (shouldCreateChannel.find(std::make_pair(txIdx, resIdx)) == shouldCreateChannel.end());
                 resultProto.SetCanSkipChannel(canSkip);
             }
@@ -1973,7 +1973,7 @@ private:
                 }
             };
 
-            if (Config->EnableSpillingInHashJoinShuffleConnections && shuffle.UseSpilling()) {
+            if (Config->GetEnableSpillingInHashJoinShuffleConnections() && shuffle.UseSpilling()) {
                 shuffleProto.SetUseSpilling(FromStringWithDefault<bool>(shuffle.UseSpilling().Cast().StringValue(), false));
             }
 

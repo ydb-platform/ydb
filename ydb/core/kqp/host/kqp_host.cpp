@@ -1125,7 +1125,7 @@ public:
         SessionCtx = MakeIntrusive<TKikimrSessionContext>(FuncRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
         TypesCtx->LangVer = config->LangVer;
-        TypesCtx->BackportMode = config->BackportMode;
+        TypesCtx->BackportMode = config->GetYqlBackportMode();
         SessionCtx->SetDatabase(database);
         SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());
         SessionCtx->SetCluster(cluster);
@@ -1302,7 +1302,7 @@ private:
         if (!query.AstResult) {
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
                 .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
-                .SetIsEnablePgConstsToParams(SessionCtx->Config().EnablePgConstsToParams)
+                .SetIsEnablePgConstsToParams(SessionCtx->Config().GetEnablePgConstsToParams())
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
                 .SetIsEnablePgSyntax(SessionCtx->Config().FeatureFlags.GetEnablePgSyntax())
@@ -1337,7 +1337,7 @@ private:
             return result;
         }
 
-        if (SessionCtx->Config().EnableDiscardSelect) {
+        if (SessionCtx->Config().GetEnableDiscardSelect()) {
             bool hasDiscardWarning = false;
             for (const auto& issue : ctx.IssueManager.GetIssues()) {
                 if (issue.GetCode() == TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE) {
@@ -1369,7 +1369,7 @@ private:
 
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
 
-        result.NeedToSplit = Config->EnableCreateTableAs && NeedToSplit(queryExpr, ctx);
+        result.NeedToSplit = Config->GetEnableCreateTableAs() && NeedToSplit(queryExpr, ctx);
         result.QueryExpr = queryExpr;
         return result;
     }
@@ -1613,7 +1613,7 @@ private:
             return nullptr;
         }
 
-        if (!CheckRewrite(compileResult.QueryExpr, Config->EnableDataShardCreateTableAs, ctx)) {
+        if (!CheckRewrite(compileResult.QueryExpr, Config->GetEnableDataShardCreateTableAs(), ctx)) {
             return nullptr;
         }
 
@@ -1969,7 +1969,7 @@ private:
 
         TypesCtx->AddDataSource(providerNames, kikimrDataSource);
         TypesCtx->AddDataSink(providerNames, kikimrDataSink);
-        TypesCtx->FilterPushdownOverJoinOptionalSide = SessionCtx->ConfigPtr()->FilterPushdownOverJoinOptionalSide;
+        TypesCtx->FilterPushdownOverJoinOptionalSide = SessionCtx->ConfigPtr()->GetFilterPushdownOverJoinOptionalSide();
         const auto &yqlCoreOptFlags = SessionCtx->ConfigPtr()->YqlCoreOptimizerFlags;
         TypesCtx->OptimizerFlags.insert(yqlCoreOptFlags.begin(), yqlCoreOptFlags.end());
 

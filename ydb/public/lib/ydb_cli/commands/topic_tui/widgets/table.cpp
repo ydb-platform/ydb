@@ -92,6 +92,11 @@ void TTable::SetCell(size_t row, size_t col, const TTableCell& cell) {
     }
 }
 
+// Check if text is a placeholder (not real data)
+static bool IsPlaceholder(const TString& text) {
+    return text.empty() || text == "-" || text == "..." || text == " -" || text == " ...";
+}
+
 bool TTable::UpdateCell(size_t row, size_t col, const TString& text) {
     if (row >= Rows_.size() || col >= Columns_.size()) {
         return false;
@@ -103,8 +108,13 @@ bool TTable::UpdateCell(size_t row, size_t col, const TString& text) {
     
     auto& cell = Rows_[row].Cells[col];
     if (cell.Text != text) {
+        // Only highlight if cell had real data (not placeholder) that changed
+        bool hadRealData = !IsPlaceholder(cell.Text);
+        bool hasRealData = !IsPlaceholder(text);
         cell.Text = text;
-        cell.ChangedAt = TInstant::Now();
+        if (hadRealData && hasRealData) {
+            cell.ChangedAt = TInstant::Now();
+        }
         return true;
     }
     return false;
@@ -121,9 +131,13 @@ bool TTable::UpdateCell(size_t row, size_t col, const TTableCell& newCell) {
     
     auto& cell = Rows_[row].Cells[col];
     if (cell.Text != newCell.Text) {
-        // Value changed - copy new data and set change timestamp
+        // Only highlight if cell had real data (not placeholder) that changed
+        bool hadRealData = !IsPlaceholder(cell.Text);
+        bool hasRealData = !IsPlaceholder(newCell.Text);
         cell = newCell;
-        cell.ChangedAt = TInstant::Now();
+        if (hadRealData && hasRealData) {
+            cell.ChangedAt = TInstant::Now();
+        }
         return true;
     }
     // Value same but maybe other properties changed - update without change timestamp

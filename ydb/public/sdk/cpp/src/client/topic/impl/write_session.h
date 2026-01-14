@@ -7,6 +7,7 @@
 #include <util/generic/buffer.h>
 
 #include <atomic>
+#include <functional>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -96,11 +97,17 @@ class TSimpleBlockingKeyedWriteSession : public ISimpleBlockingKeyedWriteSession
 private:
     static constexpr auto MAX_CLEANED_SESSIONS_COUNT = 100;
 
-    using WriteSession = std::shared_ptr<ISimpleBlockingWriteSession>;
+    using WriteSessionPtr = std::shared_ptr<ISimpleBlockingWriteSession>;
 
     struct TPartitionInfo {
         TPartitionInfo(ui64 partitionId) : PartitionId(partitionId), Bounded(false) {}
         TPartitionInfo(ui64 partitionId, std::optional<std::string> fromBound, std::optional<std::string> toBound) : FromBound(fromBound), ToBound(toBound), PartitionId(partitionId), Bounded(true) {}
+
+        struct THash {
+            size_t operator()(const TPartitionInfo& v) const noexcept {
+                return std::hash<ui64>{}(v.PartitionId);
+            }
+        };
 
         bool InRange(const std::string& key) const {
             if (FromBound.has_value() && *FromBound > key)
@@ -114,14 +121,15 @@ private:
             return PartitionId == other.PartitionId;
         }
 
-        std::optional<std::string> FromBound = std::nullopt;
-        std::optional<std::string> ToBound = std::nullopt;
+        std::optional<std::string> FromBound;
+        std::optional<std::string> ToBound;
         ui64 PartitionId;
         bool Bounded;
     };
 
+private:
     struct WriteSessionWrapper {
-        WriteSession Session;
+        WriteSessionPtr Session;
         TPartitionInfo PartitionInfo;
         TInstant ExpirationTime;
 
@@ -134,32 +142,23 @@ private:
         }
     };
 
-    using WrappedWriteSession = std::shared_ptr<WriteSessionWrapper>;
+    using WrappedWriteSessionPtr = std::shared_ptr<WriteSessionWrapper>;
 
-    struct PartitionChooser {
+    struct IPartitionChooser {
         virtual const TPartitionInfo& ChoosePartition(const std::string& key) = 0;
-        virtual ~PartitionChooser() = default;
+        virtual ~IPartitionChooser() = default;
     };
 
-    struct TBoundPartitionChooser : public PartitionChooser {
-        TBoundPartitionChooser(TSimpleBlockingKeyedWriteSession* session) : Session(session) {}
-        const TPartitionInfo& ChoosePartition(const std::string& key) override {
-            auto it = std::find_if(Session->Partitions.begin(), Session->Partitions.end(), [key](const auto& partitionInfo) {
-                return partitionInfo.InRange(key);
-            });
-            Y_ABORT_UNLESS(it != Session->Partitions.end());
-            return *it;
-        }
+    struct TBoundPartitionChooser : public IPartitionChooser {
+        TBoundPartitionChooser(TSimpleBlockingKeyedWriteSession* session);
+        const TPartitionInfo& ChoosePartition(const std::string& key) override;
     private:
         TSimpleBlockingKeyedWriteSession* Session;
     };
 
-    struct THashPartitionChooser : public PartitionChooser {
-        THashPartitionChooser(TSimpleBlockingKeyedWriteSession* session) : Session(session) {}
-        const TPartitionInfo& ChoosePartition(const std::string& key) override {
-            auto keyHash = std::hash<std::string>{}(key);
-            return Session->Partitions[keyHash % Session->Partitions.size()];
-        }
+    struct THashPartitionChooser : public IPartitionChooser {
+        THashPartitionChooser(TSimpleBlockingKeyedWriteSession* session);
+        const TPartitionInfo& ChoosePartition(const std::string& key) override;
     private:
         TSimpleBlockingKeyedWriteSession* Session;
     };
@@ -171,9 +170,11 @@ private:
 
     void CleanExpiredSessions();
 
-    WrappedWriteSession GetWriteSession(const TPartitionInfo& partitionInfo);
+    WrappedWriteSessionPtr GetWriteSession(const TPartitionInfo& partitionInfo);
 
-    WrappedWriteSession CreateWriteSession(const TPartitionInfo& partitionInfo);
+    WrappedWriteSessionPtr CreateWriteSession(const TPartitionInfo& partitionInfo);
+
+    void DestroyWriteSession(std::set<WrappedWriteSessionPtr>::iterator& writeSession, const TDuration& closeTimeout);
 
 public:
     TSimpleBlockingKeyedWriteSession(
@@ -186,9 +187,6 @@ public:
     bool Write(const std::string& key, TWriteMessage&& message, TTransactionBase* tx = nullptr,
         const TDuration& blockTimeout = TDuration::Max()) override;
 
-    // bool WriteEncoded(const std::string& key, TWriteMessage&& params, TTransactionBase* tx = nullptr,
-    //     const TDuration& blockTimeout = TDuration::Max()) override;
-
     bool Close(TDuration closeTimeout = TDuration::Max()) override;
 
     TWriterCounters::TPtr GetCounters() override;
@@ -198,8 +196,9 @@ protected:
     std::shared_ptr<TTopicClient::TImpl> Client;
     TDbDriverStatePtr DbDriverState;
     std::vector<TPartitionInfo> Partitions;
-    std::unique_ptr<PartitionChooser> PartitionChooser;
-    std::set<WrappedWriteSession> SessionsPool;
+    std::unique_ptr<IPartitionChooser> PartitionChooser;
+    std::set<WrappedWriteSessionPtr> SessionsPool;
+    std::unordered_map<TPartitionInfo, std::set<WrappedWriteSessionPtr>::iterator, TPartitionInfo::THash> SessionsIndex;
     TKeyedWriteSessionSettings Settings;
 
     std::atomic_bool Closed = false;

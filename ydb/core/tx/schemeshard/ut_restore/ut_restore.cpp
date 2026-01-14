@@ -6803,6 +6803,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         if (createdByQuery) {
             t.GetTestEnvOptions().RunFakeConfigDispatcher(true);
             t.GetTestEnvOptions().SetupKqpProxy(true);
+            t.GetTestEnvOptions().InitYdbDriver(true);
         }
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -7467,24 +7468,59 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleTransfer) {
-        ShouldSucceed(
-            {
-                EPathTypeTransfer,
-                R"(
-                    -- database: "/MyRoot"
-                    -- backup root: "/MyRoot"
-                    $transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
-
-                    CREATE TRANSFER `Transfer`
-                        FROM `/MyRoot/Topic` TO `/MyRoot/Table` USING $transformation_lambda
-                    WITH (
-                        CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
-                        CONSUMER = 'consumerName',
-                        BATCH_SIZE_BYTES = 8388608,
-                        FLUSH_INTERVAL = Interval('PT60S')
-                    );
-                )"
+        const auto settings = R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "Table"
+                    destination_path: "/MyRoot/Table"
+                }
+                items {
+                    source_prefix: "Transfer"
+                    destination_path: "/MyRoot/Transfer"
+                }
             }
-        );
+        )";
+
+        ShouldSucceed({
+            {
+                "/Table",
+                {
+                    EPathTypeTable,
+                    R"(
+                        columns {
+                        name: "key"
+                        type { optional_type { item { type_id: UTF8 } } }
+                        }
+                        columns {
+                        name: "value"
+                        type { optional_type { item { type_id: UTF8 } } }
+                        }
+                        primary_key: "key"
+                    )"
+                }
+            },
+            {
+                "/Transfer",
+                {
+                    EPathTypeTransfer,
+                    R"(
+                        -- database: "/MyRoot"
+                        -- backup root: "/MyRoot"
+                        $transformation_lambda = ($msg) -> { return [ <| partition: $msg._partition, offset: $msg._offset, message: CAST($msg._data AS Utf8) |> ]; };
+
+                        CREATE TRANSFER `Transfer`
+                            FROM `/MyRoot/Topic` TO `/MyRoot/Table` USING $transformation_lambda
+                        WITH (
+                            CONNECTION_STRING = 'grpc://localhost:2135/?database=/MyRoot',
+                            CONSUMER = 'consumerName',
+                            BATCH_SIZE_BYTES = 8388608,
+                            FLUSH_INTERVAL = Interval('PT60S')
+                        );
+                    )"
+                }
+            },
+        }, settings);
     }
 }

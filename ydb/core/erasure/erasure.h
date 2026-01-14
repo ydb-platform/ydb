@@ -252,25 +252,18 @@ struct TErasureType {
         ErasureNone = 0,
         ErasureMirror3 = 1,
         Erasure3Plus1Block = 2,
-        Erasure3Plus1Stripe = 3,
 
         Erasure4Plus2Block = 4,
         Erasure3Plus2Block = 5,
-        Erasure4Plus2Stripe = 6,
-        Erasure3Plus2Stripe = 7,
 
         ErasureMirror3Plus2 = 8,
         ErasureMirror3dc = 9,
 
         Erasure4Plus3Block = 10,
-        Erasure4Plus3Stripe = 11,
         Erasure3Plus3Block = 12,
-        Erasure3Plus3Stripe = 13,
         Erasure2Plus3Block = 14,
-        Erasure2Plus3Stripe = 15,
 
         Erasure2Plus2Block = 16,
-        Erasure2Plus2Stripe = 17,
 
         ErasureMirror3of4 = 18,
 
@@ -281,7 +274,6 @@ struct TErasureType {
 
     enum EErasureFamily {
         ErasureMirror,
-        ErasureParityStripe,
         ErasureParityBlock
     };
 

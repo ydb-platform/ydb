@@ -41,21 +41,14 @@ ui32 GetHandoff(TErasureType::EErasureSpecies species) {
         {TErasureType::EErasureSpecies::ErasureNone,          {0}}
         ,{TErasureType::EErasureSpecies::ErasureMirror3,      {1}}
         ,{TErasureType::EErasureSpecies::Erasure3Plus1Block,  {1}}
-        ,{TErasureType::EErasureSpecies::Erasure3Plus1Stripe, {1}}
         ,{TErasureType::EErasureSpecies::Erasure4Plus2Block,  {2}}
         ,{TErasureType::EErasureSpecies::Erasure3Plus2Block,  {2}}
-        ,{TErasureType::EErasureSpecies::Erasure4Plus2Stripe, {2}}
-        ,{TErasureType::EErasureSpecies::Erasure3Plus2Stripe, {2}}
         ,{TErasureType::EErasureSpecies::ErasureMirror3Plus2, {2}}
         ,{TErasureType::EErasureSpecies::ErasureMirror3dc,    {6}}
         ,{TErasureType::EErasureSpecies::Erasure4Plus3Block,  {3}}
-        ,{TErasureType::EErasureSpecies::Erasure4Plus3Stripe, {3}}
         ,{TErasureType::EErasureSpecies::Erasure3Plus3Block,  {3}}
-        ,{TErasureType::EErasureSpecies::Erasure3Plus3Stripe, {3}}
         ,{TErasureType::EErasureSpecies::Erasure2Plus3Block,  {3}}
-        ,{TErasureType::EErasureSpecies::Erasure2Plus3Stripe, {3}}
         ,{TErasureType::EErasureSpecies::Erasure2Plus2Block,  {2}}
-        ,{TErasureType::EErasureSpecies::Erasure2Plus2Stripe, {2}}
         ,{TErasureType::EErasureSpecies::ErasureMirror3of4,   {5}}
     }};
     return blobStorageGroupErasureSpeciesParameters.at(species).Handoff;

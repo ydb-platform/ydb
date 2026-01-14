@@ -86,6 +86,7 @@
 
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli
+/ydb/public/lib/ydb_cli/dump @ydb-platform/core
 /ydb/public/sdk/cpp @ydb-platform/cpp-sdk
 
 /ydb/core/security @ydb-platform/Security

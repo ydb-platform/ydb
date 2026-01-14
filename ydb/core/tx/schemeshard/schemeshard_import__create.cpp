@@ -87,14 +87,11 @@ bool RewriteCreateQuery(
 {
     if (IsCreateViewQuery(query)) {
         return NYdb::NDump::RewriteCreateViewQuery(query, dbRestoreRoot, true, dbPath, issues);
-    }
-    if (IsCreateReplicationQuery(query)) {
+    } else if (IsCreateReplicationQuery(query)) {
         return NYdb::NDump::RewriteCreateAsyncReplicationQuery(query, dbRestoreRoot, dbPath, issues);
-    }
-    if (IsCreateTransferQuery(query)) {
+    } else if (IsCreateTransferQuery(query)) {
         return NYdb::NDump::RewriteCreateTransferQuery(query, dbRestoreRoot, dbPath, issues);
-    }
-    if (IsCreateExternalDataSourceQuery(query)) {
+    } else if (IsCreateExternalDataSourceQuery(query)) {
         return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
     }
 

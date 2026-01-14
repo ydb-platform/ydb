@@ -793,8 +793,6 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
 
     FLUENT_SETTING_OPTIONAL(EMetricsLevel, MetricsLevel);
 
-    FLUENT_SETTING_OPTIONAL(TString, TimestampType);
-
     TCreateTopicSettings& SetSupportedCodecs(std::vector<ECodec>&& codecs) {
         SupportedCodecs_ = std::move(codecs);
         return *this;

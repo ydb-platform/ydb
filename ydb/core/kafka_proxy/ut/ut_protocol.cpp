@@ -401,7 +401,7 @@ void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 
     }
     if (timestampType) {
         Cerr << "===Create topic with timestampType = " << *timestampType << Endl;
-        topicSettings.TimestampType(*timestampType);
+        topicSettings.AddAttribute("_timestamp_type", *timestampType);
     }
     for (auto& consumer : consumers) {
         topicSettings.BeginAddConsumer(consumer).EndAddConsumer();

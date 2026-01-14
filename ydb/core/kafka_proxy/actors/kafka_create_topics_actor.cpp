@@ -119,7 +119,7 @@ public:
         topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
 
         if (TimestampType.has_value()) {
-            topicRequest.set_timestamp_type(TimestampType.value());
+            topicRequest.mutable_attributes()->insert({"_timestamp_type", TimestampType.value()});
         }
 
         TString error;

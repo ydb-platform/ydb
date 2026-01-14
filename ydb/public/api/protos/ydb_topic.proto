@@ -1082,8 +1082,6 @@ message CreateTopicRequest {
 
     // Metrics level. If the level is unset, use database setting.
     optional uint32 metrics_level = 13;
-
-    optional string timestamp_type = 14;
 }
 
 // Create topic response sent from server to client.

@@ -872,9 +872,6 @@ void TCreateTopicSettings::SerializeTo(Ydb::Topic::CreateTopicRequest& request) 
     *request.mutable_supported_codecs() = SerializeCodecs(SupportedCodecs_);
     request.set_retention_storage_mb(RetentionStorageMb_);
     request.set_metering_mode(TProtoAccessor::GetProto(MeteringMode_));
-    if (TimestampType_) {
-        request.set_timestamp_type(*TimestampType_);
-    }
     request.set_partition_write_speed_bytes_per_second(PartitionWriteSpeedBytesPerSecond_);
     request.set_partition_write_burst_bytes(PartitionWriteBurstBytes_);
     *request.mutable_consumers() = SerializeConsumers(Consumers_);

@@ -695,6 +695,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                 }
             } else if (pair.first == "_cleanup_policy") {
                 config->SetEnableCompactification(pair.second == "compact");
+            } else if (pair.first == "_timestamp_type") {
+                config->SetTimestampType(pair.second);
             } else {
                 error = TStringBuilder() << "Attribute " << pair.first << " is not supported";
                 return Ydb::StatusIds::BAD_REQUEST;
@@ -1163,10 +1165,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         pqTabletConfig->SetRequireAuthWrite(true);
         pqTabletConfig->SetRequireAuthRead(true);
         pqDescr->SetPartitionPerTablet(1);
-
-        if (request.has_timestamp_type()) {
-            pqTabletConfig->SetTimestampType(request.timestamp_type());
-        }
 
         partConfig->SetMaxCountInPartition(Max<i32>());
 

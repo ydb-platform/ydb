@@ -2518,15 +2518,15 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
         UNIT_ASSERT(result1.IsSuccess());
-        UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetTimestampType(), "CreateTime");
+        UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetAttributes().at("_timestamp_type"), "CreateTime");
 
         auto result2 = pqClient.DescribeTopic(topic2Name, describeTopicSettings).GetValueSync();
         UNIT_ASSERT(result2.IsSuccess());
-        UNIT_ASSERT_EQUAL(result2.GetTopicDescription().GetTimestampType(), "CreateTime");
+        UNIT_ASSERT_EQUAL(result2.GetTopicDescription().GetAttributes().at("_timestamp_type"), "CreateTime");
 
         auto result3 = pqClient.DescribeTopic(topic3Name, describeTopicSettings).GetValueSync();
         UNIT_ASSERT(result3.IsSuccess());
-        UNIT_ASSERT_EQUAL(result3.GetTopicDescription().GetTimestampType(), "LogAppendTime");
+        UNIT_ASSERT_EQUAL(result3.GetTopicDescription().GetAttributes().at("_timestamp_type"), "LogAppendTime");
 
         // checking that it is impossible to create a topic with incorrect timestamp type
         auto result4 = pqClient.DescribeTopic(topic4Name, describeTopicSettings).GetValueSync();
@@ -3203,9 +3203,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             auto result0 = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings).GetValueSync();
             UNIT_ASSERT(result0.IsSuccess());
+            auto d = result0.GetTopicDescription();
             UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
             UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionStorageMb().value(), retentionBytes / (1024 * 1024));
-            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetTimestampType().value(), timestampType);
+            UNIT_ASSERT_VALUES_EQUAL(d.GetAttributes().at("_timestamp_type"), timestampType);
         }
 
         {
@@ -3232,7 +3233,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT(result0.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), oldRetentionMs);
             UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionStorageMb().value(), oldRetentionBytes / (1024 * 1024));
-            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetTimestampType().value(), oldTimestampType);
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetAttributes().at("_timestamp_type"), oldTimestampType);
         }
 
         {

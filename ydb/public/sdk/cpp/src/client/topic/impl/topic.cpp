@@ -55,7 +55,6 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
     , TopicStats_(Proto_.topic_stats())
     , MetricsLevel_(Proto_.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(Proto_.metrics_level())) : std::optional<EMetricsLevel>())
-    , TimestampType_(Proto_.has_timestamp_type() ? Proto_.timestamp_type() : std::optional<TString>())
 {
     Owner_ = Proto_.self().owner();
     CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
@@ -201,9 +200,6 @@ EMeteringMode TTopicDescription::GetMeteringMode() const {
     return MeteringMode_;
 }
 
-std::optional<TString> TTopicDescription::GetTimestampType() const {
-    return TimestampType_;
-}
 
 const std::map<std::string, std::string>& TTopicDescription::GetAttributes() const {
     return Attributes_;

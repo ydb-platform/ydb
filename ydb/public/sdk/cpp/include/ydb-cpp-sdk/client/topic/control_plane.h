@@ -362,10 +362,7 @@ public:
 
     std::optional<EMetricsLevel> GetMetricsLevel() const;
 
-    std::optional<TString> GetTimestampType() const;
-
     void SerializeTo(Ydb::Topic::CreateTopicRequest& request) const;
-
 private:
 
     const Ydb::Topic::DescribeTopicResult& GetProto() const;
@@ -389,7 +386,6 @@ private:
     std::vector<NScheme::TPermissions> Permissions_;
     std::vector<NScheme::TPermissions> EffectivePermissions_;
     std::optional<EMetricsLevel> MetricsLevel_;
-    std::optional<TString> TimestampType_;
 };
 
 class TConsumerDescription {

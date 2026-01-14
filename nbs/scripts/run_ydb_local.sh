@@ -8,7 +8,7 @@ function parse_args {
     ACTION=${1:-start}
 
     # Default ports
-    GRPC_PORT=${GRPC_PORT:-9901}
+    GRPC_PORT=${GRPC_PORT:-9001}
     MON_PORT=${MON_PORT:-8765}
 
     # Parse named arguments

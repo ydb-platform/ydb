@@ -241,4 +241,5 @@ message TFeatureFlags {
     optional bool EnableStreamingQueriesCounters = 219 [default = false];
     optional bool UseYdsTopicStorageMetering = 220 [default = false];
     optional bool EnableFsBackups = 222 [default = false];
+    optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
 }

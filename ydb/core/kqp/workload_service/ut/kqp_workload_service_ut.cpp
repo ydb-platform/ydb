@@ -45,7 +45,10 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
             .EnableResourcePools(false)
             .Create();
 
-        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId("another_pool_id")));
+        const auto& result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId("another_pool_id"));
+        const auto& resultPoolId = result.Response.GetResponse().GetEffectivePoolId();
+        UNIT_ASSERT_EQUAL_C(resultPoolId, NResourcePool::DEFAULT_POOL_ID, resultPoolId);
+        TSampleQueries::TSelect42::CheckResult(result);
     }
 
     Y_UNIT_TEST(WorkloadServiceDisabledByFeatureFlagOnServerless) {

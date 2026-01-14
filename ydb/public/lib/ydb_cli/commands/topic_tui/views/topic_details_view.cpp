@@ -599,7 +599,7 @@ void TTopicDetailsView::StartAsyncLoads() {
     if (!LoadingConsumers_) {
         LoadingConsumers_ = true;
         ConsumersError_.clear();
-        Consumers_.clear();
+        // Don't clear Consumers_ - keep showing old data until new data arrives
         
         ConsumersFuture_ = std::async(std::launch::async, [path, topicClient]() -> TConsumersData {
             TConsumersData data;

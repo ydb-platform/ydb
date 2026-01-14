@@ -178,7 +178,7 @@ TSimpleBlockingKeyedWriteSession::TSimpleBlockingKeyedWriteSession(
     }
 }
 
-TSimpleBlockingKeyedWriteSession::WrappedWriteSession TSimpleBlockingKeyedWriteSession::CreateWriteSession(const TPartitionInfo& partitionInfo) {
+TSimpleBlockingKeyedWriteSession::WrappedWriteSessionPtr TSimpleBlockingKeyedWriteSession::CreateWriteSession(const TPartitionInfo& partitionInfo) {
     CleanExpiredSessions();
 
     auto alteredSettings = Settings;
@@ -186,25 +186,23 @@ TSimpleBlockingKeyedWriteSession::WrappedWriteSession TSimpleBlockingKeyedWriteS
     alteredSettings.PartitionId(partitionInfo.PartitionId);
 
     auto writeSession = std::make_shared<WriteSessionWrapper>(Client->CreateSimpleWriteSession(alteredSettings), partitionInfo, TInstant::Now() + Settings.SessionTimeout_);
-    SessionsPool.insert(writeSession);
+    auto [it, _] = SessionsPool.insert(writeSession);
+    SessionsIndex[partitionInfo] = it;
     return writeSession;
 }
 
-TSimpleBlockingKeyedWriteSession::WrappedWriteSession TSimpleBlockingKeyedWriteSession::GetWriteSession(const TPartitionInfo& partitionInfo) {    
-    for (auto it = SessionsPool.begin(); it != SessionsPool.end();) {
-        if ((*it)->PartitionInfo == partitionInfo) {
-            if ((*it)->IsExpired()) {
-                (*it)->Session->Close(TDuration::Zero());
-                SessionsPool.erase(it);
-                return CreateWriteSession(partitionInfo);
-            }
-
-            return *it;
-        }
-        ++it;
+TSimpleBlockingKeyedWriteSession::WrappedWriteSessionPtr TSimpleBlockingKeyedWriteSession::GetWriteSession(const TPartitionInfo& partitionInfo) {    
+    auto it = SessionsIndex.find(partitionInfo);
+    if (it == SessionsIndex.end()) {
+        return CreateWriteSession(partitionInfo);
     }
 
-    return CreateWriteSession(partitionInfo);
+    if ((*it->second)->IsExpired()) {
+        DestroyWriteSession(it->second, TDuration::Zero());
+        return CreateWriteSession(partitionInfo);
+    }
+
+    return *it->second;
 }
 
 bool TSimpleBlockingKeyedWriteSession::Write(const std::string& key, TWriteMessage&& message, TTransactionBase* tx,
@@ -221,8 +219,7 @@ void TSimpleBlockingKeyedWriteSession::CleanExpiredSessions() {
             break;
         }
 
-        (*it)->Session->Close(TDuration::Zero());
-        SessionsPool.erase(it++);
+        DestroyWriteSession(it, TDuration::Zero());
         cleanedSessionsCount++;
     }
 }
@@ -230,14 +227,35 @@ void TSimpleBlockingKeyedWriteSession::CleanExpiredSessions() {
 bool TSimpleBlockingKeyedWriteSession::Close(TDuration closeTimeout) {
     Closed.store(true);
     for (auto it = SessionsPool.begin(); it != SessionsPool.end();) {
-        (*it)->Session->Close(closeTimeout);
-        SessionsPool.erase(it++);
+        DestroyWriteSession(it, closeTimeout);
     }
     return true;
 }
 
+void TSimpleBlockingKeyedWriteSession::DestroyWriteSession(std::set<WrappedWriteSessionPtr>::iterator& writeSession, const TDuration& closeTimeout) {
+    (*writeSession)->Session->Close(closeTimeout);
+    SessionsIndex.erase((*writeSession)->PartitionInfo);
+    SessionsPool.erase(writeSession++);
+}
+
 TWriterCounters::TPtr TSimpleBlockingKeyedWriteSession::GetCounters() {
     return nullptr;
+}
+
+TSimpleBlockingKeyedWriteSession::TBoundPartitionChooser::TBoundPartitionChooser(TSimpleBlockingKeyedWriteSession* session) : Session(session) {}
+
+const TSimpleBlockingKeyedWriteSession::TPartitionInfo& TSimpleBlockingKeyedWriteSession::TBoundPartitionChooser::ChoosePartition(const std::string& key) {
+    auto it = std::find_if(Session->Partitions.begin(), Session->Partitions.end(), [key](const auto& partitionInfo) {
+        return partitionInfo.InRange(key);
+    });
+    Y_ABORT_UNLESS(it != Session->Partitions.end());
+    return *it;
+}
+
+TSimpleBlockingKeyedWriteSession::THashPartitionChooser::THashPartitionChooser(TSimpleBlockingKeyedWriteSession* session) : Session(session) {}
+
+const TSimpleBlockingKeyedWriteSession::TPartitionInfo& TSimpleBlockingKeyedWriteSession::THashPartitionChooser::ChoosePartition(const std::string& key) {
+    return Session->Partitions[std::hash<std::string>{}(key) % Session->Partitions.size()];
 }
 
 } // namespace NYdb::NTopic

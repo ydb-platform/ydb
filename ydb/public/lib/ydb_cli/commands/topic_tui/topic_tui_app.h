@@ -77,6 +77,7 @@ public:
     TAppState& GetState() { return State_; }
     const TString& GetViewerEndpoint() const { return ViewerEndpoint_; }
     const TString& GetDatabaseRoot() const { return DatabaseRoot_; }
+    TDuration GetRefreshRate() const { return RefreshRate_; }
     
     // Navigation
     void NavigateTo(EViewType view);

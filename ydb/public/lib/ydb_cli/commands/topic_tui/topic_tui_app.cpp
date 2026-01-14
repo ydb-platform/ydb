@@ -454,20 +454,23 @@ Component TTopicTuiApp::BuildMainComponent() {
             switch (State_.CurrentView) {
                 case EViewType::TopicList:
                     TopicListView_->Refresh();
-                    break;
+                    return true;
                 case EViewType::TopicDetails:
                     TopicDetailsView_->Refresh();
-                    break;
+                    return true;
                 case EViewType::ConsumerDetails:
                     ConsumerView_->Refresh();
-                    break;
+                    return true;
                 case EViewType::Charts:
                     ChartsView_->Refresh();
-                    break;
+                    return true;
+                case EViewType::TopicInfo:
+                case EViewType::TopicTablets:
+                    // Let the view handle 'r' directly
+                    return false;
                 default:
-                    break;
+                    return false;  // Let view handle if not covered here
             }
-            return true;
         }
         return false;
     });

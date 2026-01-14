@@ -186,10 +186,19 @@ void TTopicListView::Refresh() {
     
     TopicInfoFutures_.clear();
     DirInfoFutures_.clear();
+    LastRefreshTime_ = TInstant::Now();  // Track refresh time
     StartAsyncLoad();
 }
 
 void TTopicListView::CheckAsyncCompletion() {
+    // Auto-refresh if enough time has passed and not already loading
+    TDuration refreshRate = App_.GetRefreshRate();
+    if (!Loading_ && LastRefreshTime_ != TInstant::Zero() && 
+        TInstant::Now() - LastRefreshTime_ > refreshRate) {
+        StartAsyncLoad();
+        LastRefreshTime_ = TInstant::Now();
+    }
+    
     // Check directory listing
     if (Loading_ && LoadFuture_.valid()) {
         if (LoadFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {

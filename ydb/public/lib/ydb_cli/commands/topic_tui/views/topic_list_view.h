@@ -7,6 +7,7 @@
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/datetime/base.h>
 
 #include <memory>
 #include <functional>
@@ -102,6 +103,7 @@ private:
     std::future<TVector<TTopicListEntry>> LoadFuture_;
     TString ErrorMessage_;
     int SpinnerFrame_ = 0;
+    TInstant LastRefreshTime_;  // For auto-refresh
     
     // Async state for topic info
     std::unordered_map<std::string, std::future<TTopicInfoResult>> TopicInfoFutures_;

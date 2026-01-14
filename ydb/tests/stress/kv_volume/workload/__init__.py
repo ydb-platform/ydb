@@ -457,7 +457,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
 
     @property
     def storage_channels(self):
-        return self.config.volume_config.channel_media
+        return list(self.config.volume_config.channel_media)
 
     @property
     def path(self):

@@ -731,8 +731,8 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
-        queryProto.SetEnableOltpSink(Config->EnableOltpSink);
-        queryProto.SetEnableOlapSink(Config->EnableOlapSink);
+        queryProto.SetEnableOltpSink(Config->GetEnableOltpSink());
+        queryProto.SetEnableOlapSink(Config->GetEnableOlapSink());
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());
 
@@ -1128,7 +1128,7 @@ private:
 
         stageProto.SetStageGuid(stageSettings.Id);
         stageProto.SetIsSinglePartition(NDq::TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode);
-        stageProto.SetAllowWithSpilling(Config->EnableSpilling);
+        stageProto.SetAllowWithSpilling(Config->GetEnableQueryServiceSpilling() && (OptimizeCtx.IsGenericQuery() || OptimizeCtx.IsScanQuery()) && Config->SpillingEnabled());
     }
 
     void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx,
@@ -1625,7 +1625,7 @@ private:
                 AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
                 settingsProto.SetInconsistentTx(inconsistentWrite);
 
-                if (Config->EnableIndexStreamWrite) {
+                if (Config->GetEnableIndexStreamWrite()) {
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
 
                     std::vector<size_t> affectedIndexes;

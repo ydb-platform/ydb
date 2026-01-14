@@ -227,12 +227,8 @@ TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
     return std::make_shared<const TKikimrSettings>(*this);
 }
 
-void TKikimrConfiguration::SetDefaultEnabledSpillingNodes(const TString& node) {
-    DefaultEnableSpillingNodes = ParseEnableSpillingNodes(node);
-}
-
 ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
-    return EnableSpillingNodes.Get().GetOrElse(DefaultEnableSpillingNodes);
+    return EnableSpillingNodes.Get().GetOrElse(ParseEnableSpillingNodes(TTableServiceConfig::GetEnableSpillingNodes()));
 }
 
 bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {

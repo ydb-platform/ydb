@@ -302,6 +302,7 @@ Component TTopicDetailsView::Build() {
 
 void TTopicDetailsView::SetTopic(const TString& topicPath) {
     TopicPath_ = topicPath;
+    LastRefreshTime_ = TInstant::Now();  // Enable auto-refresh
     StartAsyncLoads();
 }
 

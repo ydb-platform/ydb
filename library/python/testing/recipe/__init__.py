@@ -79,7 +79,7 @@ def get_options():
 
 def set_env(key, value):
     with open(ya.env_file, "a") as f:
-        json.dump({key: value}, f)
+        json.dump({key: str(value) if value is not None else None}, f)
         f.write("\n")
 
 

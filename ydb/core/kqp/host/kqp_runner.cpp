@@ -229,7 +229,7 @@ public:
         const auto dataQueryBlocks = TKiDataQueryBlocks(query);
 
         if (IsOlapQuery(dataQueryBlocks)) {
-            switch (TransformCtx->Config->BlockChannelsMode) {
+            switch (TransformCtx->Config->GetBlockChannelsMode()) {
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
                     TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;

@@ -307,8 +307,8 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     settings.BuildLiteralRange = true;
     settings.IsValidForRange = IsValidForRange;
 
-    if (kqpCtx.Config->ExtractPredicateRangesLimit != 0) {
-        settings.MaxRanges = kqpCtx.Config->ExtractPredicateRangesLimit;
+    if (kqpCtx.Config->GetExtractPredicateRangesLimit() != 0) {
+        settings.MaxRanges = kqpCtx.Config->GetExtractPredicateRangesLimit();
     } else {
         settings.MaxRanges = Nothing();
     }

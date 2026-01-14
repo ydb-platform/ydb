@@ -84,7 +84,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 
 #include <ydb/core/load_test/service_actor.h>
 

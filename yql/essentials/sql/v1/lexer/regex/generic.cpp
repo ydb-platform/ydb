@@ -28,7 +28,7 @@ public:
     {
     }
 
-    virtual bool Tokenize(
+    bool Tokenize(
         TStringBuf text,
         const TTokenCallback& onNext,
         size_t maxErrors) const override {

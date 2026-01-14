@@ -7,7 +7,7 @@ from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
     index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync, \
-    pk_pg_types, non_pk_pg_types
+    pk_pg_types_mixed, non_pk_pg_types_mixed
 
 
 class TestAsyncReplicationBase(MulticlusterTestBase):
@@ -96,13 +96,13 @@ class TestPgAsyncReplication(TestPgBase, TestAsyncReplicationBase):
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
             # TODO: add UNIQUE_SYNC
-            ("table_index_0__SYNC", pk_pg_types, {}, pk_pg_types, "", "", "SYNC"),
-            ("table_index_0__ASYNC", pk_pg_types, {}, pk_pg_types, "", "", "ASYNC"),
-            ("table_all_types", pk_pg_types, {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_ttl_pgint4", pk_pg_types, {}, {}, "pgint4", "", ""),
-            ("table_ttl_pgint8", pk_pg_types, {}, {}, "pgint8", "", ""),
-            ("table_ttl_pgdate", pk_pg_types, {}, {}, "pgdate", "", ""),
-            ("table_ttl_pgtimestamp", pk_pg_types, {}, {}, "pgtimestamp", "", ""),
+            ("table_index_0__SYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "SYNC"),
+            ("table_index_0__ASYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "ASYNC"),
+            ("table_all_types", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_ttl_pgint4", pk_pg_types_mixed, {}, {}, "pgint4", "", ""),
+            ("table_ttl_pgint8", pk_pg_types_mixed, {}, {}, "pgint8", "", ""),
+            ("table_ttl_pgdate", pk_pg_types_mixed, {}, {}, "pgdate", "", ""),
+            ("table_ttl_pgtimestamp", pk_pg_types_mixed, {}, {}, "pgtimestamp", "", ""),
         ]
     )
     def test_async_replication(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):

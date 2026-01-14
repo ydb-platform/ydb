@@ -26,7 +26,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>

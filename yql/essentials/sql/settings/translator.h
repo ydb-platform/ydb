@@ -10,7 +10,7 @@ namespace NSQLTranslation {
 
 class ITranslator: public TThrRefBase {
 public:
-    virtual ~ITranslator() = default;
+    ~ITranslator() override = default;
 
     virtual ILexer::TPtr MakeLexer(const TTranslationSettings& settings) = 0;
     virtual NYql::TAstParseResult TextToAst(const TString& query, const TTranslationSettings& settings,

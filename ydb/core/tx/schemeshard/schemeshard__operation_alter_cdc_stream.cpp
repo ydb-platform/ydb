@@ -245,7 +245,10 @@ protected:
 
         auto& notice = *tx.MutableAlterCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());
-        notice.SetTableSchemaVersion(table->AlterVersion + 1);
+
+        // Use coordinated version from AlterData
+        table->InitAlterData(OperationId);
+        notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
 
         bool found = false;
         for (const auto& [childName, childPathId] : path->GetChildren()) {
@@ -443,7 +446,6 @@ public:
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
-        Y_ABORT_UNLESS(!table->AlterData);
 
         Y_ABORT_UNLESS(context.SS->CdcStreams.contains(streamPath.Base()->PathId));
         auto stream = context.SS->CdcStreams.at(streamPath.Base()->PathId);

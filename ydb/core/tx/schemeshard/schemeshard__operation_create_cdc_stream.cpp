@@ -367,6 +367,12 @@ protected:
     void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
         auto& notice = *tx.MutableCreateCdcStreamNotice();
         NCdcStreamAtTable::FillNotice(pathId, context, notice);
+
+        // Override table schema version with coordinated version from AlterData
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
+        auto table = context.SS->Tables.at(pathId);
+        table->InitAlterData(OperationId);
+        notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
     }
 
 public:
@@ -579,7 +585,6 @@ public:
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
-        Y_ABORT_UNLESS(!table->AlterData);
 
         const auto txType = InitialScan
             ? TTxState::TxCreateCdcStreamAtTableWithInitialScan

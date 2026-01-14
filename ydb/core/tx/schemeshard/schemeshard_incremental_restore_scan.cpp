@@ -247,10 +247,10 @@ private:
         auto& finalize = *transaction.MutableIncrementalRestoreFinalize();
         finalize.SetOriginalOperationId(OperationId);
         finalize.SetBackupCollectionPathId(state.BackupCollectionPathId.LocalPathId);
-        
+
         CollectTargetTablePaths(state, finalize);
         CollectBackupTablePaths(state, finalize);
-        
+
         LOG_I("Sending finalization operation with txId: " << finalizeTxId);
         Self->Send(Self->SelfId(), request.Release());
     }

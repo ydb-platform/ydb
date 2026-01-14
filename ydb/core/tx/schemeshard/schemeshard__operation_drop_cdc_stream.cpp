@@ -231,7 +231,10 @@ protected:
 
         auto& notice = *tx.MutableDropCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());
-        notice.SetTableSchemaVersion(table->AlterVersion + 1);
+
+        // Use coordinated version from AlterData
+        table->InitAlterData(OperationId);
+        notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
 
         // Collect all streams planned for drop on this table
         TVector<TPathId> streamPathIds;
@@ -339,6 +342,11 @@ public:
         : TSubOperation(id, state)
         , DropSnapshot(dropSnapshot)
     {
+        // Re-extract stream names from transaction when restored from state
+        const auto& op = Transaction.GetDropCdcStream();
+        for (const auto& name : op.GetStreamName()) {
+            StreamNames.push_back(name);
+        }
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
@@ -427,7 +435,6 @@ public:
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
-        Y_ABORT_UNLESS(!table->AlterData);
 
         // Validate and mark all streams for drop in single transaction
         for (const auto& streamPath : streamPaths) {

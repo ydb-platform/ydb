@@ -1,81 +1,150 @@
 #include "consumer_form.h"
 #include "../topic_tui_app.h"
 
-#include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
-
 using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
 TConsumerForm::TConsumerForm(TTopicTuiApp& app)
-    : App_(app)
+    : TFormBase(app)
 {
     Reset();
 }
 
-Component TConsumerForm::Build() {
-    auto nameInput = Input(&NameInput_, "consumer-name");
-    auto readFromInput = Input(&ReadFromInput_, "");
+TString TConsumerForm::GetTitle() const {
+    return "Add Consumer to Topic";
+}
+
+EViewType TConsumerForm::GetViewType() const {
+    return EViewType::ConsumerForm;
+}
+
+Component TConsumerForm::BuildContainer() {
+    NameInputComponent_ = Input(&NameInput_, "consumer-name");
+    ImportantCheckbox_ = Checkbox(" Important", &Important_);
+    RawCheckbox_ = Checkbox(" RAW", &CodecRaw_);
+    GzipCheckbox_ = Checkbox(" GZIP", &CodecGzip_);
+    ZstdCheckbox_ = Checkbox(" ZSTD", &CodecZstd_);
     
-    auto container = Container::Vertical({
-        nameInput,
-        readFromInput
-    });
-    
-    return Renderer(container, [=, this] {
-        return vbox({
-            text(" Add Consumer ") | bold | center,
-            separator(),
-            hbox({text(" Name: ") | size(WIDTH, EQUAL, 15), nameInput->Render() | flex}),
-            hbox({text(" Read From: ") | size(WIDTH, EQUAL, 15), readFromInput->Render() | size(WIDTH, EQUAL, 25)}),
-            text("  (timestamp or empty for beginning)") | dim,
-            separator(),
-            hbox({
-                text(" Codecs: "),
-                text(Data_.CodecRaw ? "[x] Raw " : "[ ] Raw "),
-                text(Data_.CodecGzip ? "[x] GZIP " : "[ ] GZIP "),
-                text(Data_.CodecZstd ? "[x] ZSTD" : "[ ] ZSTD")
-            }),
-            hbox({
-                text(" Important: "),
-                text(Data_.IsImportant ? "[x]" : "[ ]")
-            }),
-            separator(),
-            hbox({
-                filler(),
-                text(" [Enter] Submit ") | color(Color::Green),
-                text(" [Esc] Cancel ") | dim,
-                filler()
-            })
-        }) | border | size(WIDTH, EQUAL, 50) | center;
-    }) | CatchEvent([this](Event event) {
-        if (event == Event::Return) {
-            Data_.Name = TString(NameInput_.c_str());
-            // TODO: Parse ReadFrom timestamp
-            
-            if (OnSubmit) {
-                OnSubmit(Data_);
-            }
-            return true;
-        }
-        if (event == Event::Escape) {
-            if (OnCancel) {
-                OnCancel();
-            }
-            return true;
-        }
-        return false;
+    return Container::Vertical({
+        NameInputComponent_,
+        ImportantCheckbox_,
+        Container::Horizontal({RawCheckbox_, GzipCheckbox_, ZstdCheckbox_})
     });
 }
 
-void TConsumerForm::SetTopicPath(const TString& topicPath) {
+Element TConsumerForm::RenderContent() {
+    // Check async completion each render
+    CheckAsyncCompletion();
+    
+    if (Submitting_) {
+        return RenderSpinner("Adding consumer...");
+    }
+    
+    return vbox({
+        text(" " + std::string(TopicPath_.c_str()) + " ") | dim | center,
+        separator(),
+        hbox({text(" Name: ") | size(WIDTH, EQUAL, 12), NameInputComponent_->Render() | flex}),
+        separator(),
+        NTheme::SectionHeader("Options"),
+        ImportantCheckbox_->Render(),
+        separator(),
+        NTheme::SectionHeader("Supported Codecs"),
+        hbox({
+            RawCheckbox_->Render(),
+            text(" "),
+            GzipCheckbox_->Render(),
+            text(" "),
+            ZstdCheckbox_->Render()
+        })
+    });
+}
+
+bool TConsumerForm::HandleSubmit() {
+    if (NameInput_.empty()) {
+        ErrorMessage_ = "Consumer name is required";
+        return false;
+    }
+    
+    ErrorMessage_.clear();
+    SuccessMessage_.clear();
+    Submitting_ = true;
+    SpinnerFrame_ = 0;
+    
+    DoAsyncSubmit();
+    return false;  // Don't close - wait for async completion
+}
+
+void TConsumerForm::DoAsyncSubmit() {
+    std::string name = NameInput_;
+    bool important = Important_;
+    bool codecRaw = CodecRaw_;
+    bool codecGzip = CodecGzip_;
+    bool codecZstd = CodecZstd_;
+    TString topicPath = TopicPath_;
+    auto* topicClient = &GetApp().GetTopicClient();
+    
+    SubmitFuture_ = std::async(std::launch::async, 
+        [topicPath, topicClient, name, important, codecRaw, codecGzip, codecZstd]() -> TStatus {
+            NTopic::TAlterTopicSettings settings;
+            
+            auto& consumer = settings.BeginAddConsumer(name);
+            consumer.SetImportant(important);
+            
+            std::vector<NTopic::ECodec> codecs;
+            if (codecRaw) codecs.push_back(NTopic::ECodec::RAW);
+            if (codecGzip) codecs.push_back(NTopic::ECodec::GZIP);
+            if (codecZstd) codecs.push_back(NTopic::ECodec::ZSTD);
+            consumer.SetSupportedCodecs(codecs);
+            consumer.EndAddConsumer();
+            
+            return topicClient->AlterTopic(topicPath, settings).GetValueSync();
+        });
+}
+
+void TConsumerForm::CheckAsyncCompletion() {
+    if (!Submitting_ || !SubmitFuture_.valid()) {
+        return;
+    }
+    
+    if (SubmitFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        try {
+            auto result = SubmitFuture_.get();
+            Submitting_ = false;
+            
+            if (result.IsSuccess()) {
+                SuccessMessage_ = "Consumer added successfully!";
+                if (OnSuccess) {
+                    OnSuccess();
+                }
+            } else {
+                ErrorMessage_ = result.GetIssues().ToString();
+            }
+        } catch (const std::exception& e) {
+            Submitting_ = false;
+            ErrorMessage_ = e.what();
+        }
+    } else {
+        SpinnerFrame_++;
+    }
+}
+
+void TConsumerForm::SetTopic(const TString& topicPath) {
     TopicPath_ = topicPath;
+    Reset();
+    // Auto-focus on name input
+    if (NameInputComponent_) {
+        NameInputComponent_->TakeFocus();
+    }
 }
 
 void TConsumerForm::Reset() {
-    Data_ = TConsumerFormData();
+    TFormBase::Reset();
     NameInput_.clear();
-    ReadFromInput_.clear();
+    Important_ = false;
+    CodecRaw_ = true;
+    CodecGzip_ = true;
+    CodecZstd_ = false;
 }
 
 } // namespace NYdb::NConsoleClient

@@ -1,0 +1,41 @@
+#pragma once
+
+#include "../widgets/form_base.h"
+
+#include <util/generic/string.h>
+
+#include <functional>
+
+namespace NYdb::NConsoleClient {
+
+class TTopicTuiApp;
+
+class TDeleteConfirmForm : public TFormBase {
+public:
+    explicit TDeleteConfirmForm(TTopicTuiApp& app);
+    
+    // Set the topic to delete
+    void SetTopic(const TString& topicPath);
+    void Reset() override;
+    
+    // Callback with the topic path to delete
+    std::function<void(const TString& topicPath)> OnConfirm;
+    
+    const TString& GetTopicPath() const { return TopicPath_; }
+    
+protected:
+    TString GetTitle() const override;
+    EViewType GetViewType() const override;
+    ftxui::Element RenderContent() override;
+    bool HandleSubmit() override;
+    int GetFormWidth() const override { return 50; }
+    ftxui::Component BuildContainer() override;
+    
+private:
+    TString TopicPath_;
+    TString TopicName_;  // Just the name part for display
+    std::string ConfirmInput_;
+    ftxui::Component ConfirmInputComponent_;
+};
+
+} // namespace NYdb::NConsoleClient

@@ -1,54 +1,59 @@
 #pragma once
 
-#include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
-#include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
+#include "../widgets/form_base.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/string.h>
 
 #include <functional>
+#include <future>
+#include <atomic>
 
 namespace NYdb::NConsoleClient {
 
 class TTopicTuiApp;
 
-struct TConsumerFormData {
-    TString Name;
-    TMaybe<TInstant> ReadFrom;
-    bool IsImportant = false;
-    
-    // Codecs
-    bool CodecRaw = true;
-    bool CodecGzip = true;
-    bool CodecZstd = true;
-    bool CodecLzop = false;
-};
-
-class TConsumerForm {
+class TConsumerForm : public TFormBase {
 public:
     explicit TConsumerForm(TTopicTuiApp& app);
     
-    ftxui::Component Build();
-    void SetTopicPath(const TString& topicPath);
-    void Reset();
+    void SetTopic(const TString& topicPath);
+    void Reset() override;
     
-    // Callbacks
-    std::function<void(const TConsumerFormData& data)> OnSubmit;
-    std::function<void()> OnCancel;
+protected:
+    TString GetTitle() const override;
+    EViewType GetViewType() const override;
+    ftxui::Element RenderContent() override;
+    bool HandleSubmit() override;
+    int GetFormWidth() const override { return 55; }
+    ftxui::Component BuildContainer() override;
     
 private:
-    ftxui::Element RenderForm();
+    void CheckAsyncCompletion();
+    void DoAsyncSubmit();
     
 private:
-    TTopicTuiApp& App_;
     TString TopicPath_;
-    TConsumerFormData Data_;
     
+    // Form fields
     std::string NameInput_;
-    std::string ReadFromInput_;
+    bool Important_ = false;
     
-    int FocusedField_ = 0;
+    // Codec checkboxes
+    bool CodecRaw_ = true;
+    bool CodecGzip_ = true;
+    bool CodecZstd_ = false;
+    
+    // Async state
+    std::future<TStatus> SubmitFuture_;
+    
+    // Components for rendering
+    ftxui::Component NameInputComponent_;
+    ftxui::Component ImportantCheckbox_;
+    ftxui::Component RawCheckbox_;
+    ftxui::Component GzipCheckbox_;
+    ftxui::Component ZstdCheckbox_;
 };
 
 } // namespace NYdb::NConsoleClient

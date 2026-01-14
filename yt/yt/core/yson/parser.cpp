@@ -11,6 +11,67 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Used as a variant return type for `GetNodeTypeByFirstCharacter` to indicate
+// that further parsing is required to determine exact type.
+struct TNumericNodeTypeTag
+{ };
+
+std::variant<NYTree::ENodeType, TNumericNodeTypeTag> GetNodeTypeByFirstCharacter(char ch)
+{
+    switch (ch) {
+        case BeginMapSymbol:
+            return NYTree::ENodeType::Map;
+        case BeginListSymbol:
+            return NYTree::ENodeType::List;
+        case BeginAttributesSymbol:
+            THROW_ERROR_EXCEPTION("Unexpected attributes while parsing node type");
+        case '"':
+        case StringMarker:
+            return NYTree::ENodeType::String;
+        case Int64Marker:
+            return NYTree::ENodeType::Int64;
+        case Uint64Marker:
+            return NYTree::ENodeType::Uint64;
+        case DoubleMarker:
+            return NYTree::ENodeType::Double;
+        case FalseMarker:
+        case TrueMarker:
+            return NYTree::ENodeType::Boolean;
+        case EntitySymbol:
+            return NYTree::ENodeType::Entity;
+        default: {
+            if (isdigit(ch) || ch == '-' || ch == '+') {
+                return TNumericNodeTypeTag{};
+            } else if (isalpha(ch) || ch == '_') {
+                return NYTree::ENodeType::String;
+            } else if (ch == '%') {
+                return NYTree::ENodeType::Boolean;
+            } else if (ch == EndSymbol) {
+                THROW_ERROR_EXCEPTION("Unexpected end of stream while parsing node type");
+            }
+        }
+    }
+
+    THROW_ERROR_EXCEPTION("Unexpected %Qv while parsing node type", ch);
+}
+
+ENumericResult GetNumericNodeType(TStringBuf buffer)
+{
+    using TLexer = NDetail::TLexerBase<NDetail::TReaderWithContext<NDetail::TZeroCopyInputStreamReader, 64>, false>;
+    TMemoryInput input(buffer);
+    TLexer lexer((NDetail::TZeroCopyInputStreamReader(&input)));
+    TStringBuf valueBuffer;
+    return lexer.ReadNumeric</*AllowFinish*/ true>(&valueBuffer);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
+
 class TYsonParser::TImpl
 {
 private:
@@ -144,6 +205,30 @@ void ParseYsonStringBuffer(TStringBuf buffer, EYsonType type, IYsonConsumer* con
     TParserYsonStreamImpl<IYsonConsumer, TStringReader> parser;
     TStringReader reader(buffer.begin(), buffer.end());
     parser.DoParse(reader, consumer, type, config);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::pair<NYTree::ENodeType, TStringBuf> ParseYsonStringNodeType(TStringBuf buffer)
+{
+    buffer = StripStringLeft(buffer, &IsSpacePtr);
+    THROW_ERROR_EXCEPTION_IF(buffer.empty(),
+        "Error occurred while parsing YSON node type: cannot determine type for empty buffer");
+    auto type = Visit(NDetail::GetNodeTypeByFirstCharacter(buffer[0]),
+        [] (NYTree::ENodeType type) {
+            return type;
+        },
+        [&] (NDetail::TNumericNodeTypeTag) {
+            switch (NDetail::GetNumericNodeType(buffer)) {
+                case NDetail::ENumericResult::Double:
+                    return NYTree::ENodeType::Double;
+                case NDetail::ENumericResult::Int64:
+                    return NYTree::ENodeType::Int64;
+                case NDetail::ENumericResult::Uint64:
+                    return NYTree::ENodeType::Uint64;
+            }
+        });
+    return {type, buffer};
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,7 +1,6 @@
 #pragma once
 
-#include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
-#include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
+#include "../widgets/table.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -13,6 +12,7 @@
 #include <functional>
 #include <future>
 #include <atomic>
+#include <unordered_map>
 
 namespace NYdb::NConsoleClient {
 
@@ -25,10 +25,47 @@ struct TTopicListEntry {
     bool IsDirectory = false;
     bool IsTopic = false;
     
+    // Async loading state (for both topics and directories)
+    bool InfoLoaded = false;
+    bool InfoLoading = false;
+    
     // Topic metadata (if IsTopic)
     ui32 PartitionCount = 0;
+    ui32 ConsumerCount = 0;
+    ui64 TotalSizeBytes = 0;
     TDuration RetentionPeriod;
     ui64 WriteSpeedBytesPerSec = 0;
+    ui64 WriteBurstBytes = 0;
+    ui64 BytesWrittenPerMinute = 0;
+    TDuration MaxWriteTimeLag;
+    TVector<NTopic::ECodec> SupportedCodecs;
+    
+    // Directory metadata (if IsDirectory)
+    ui32 ChildCount = 0;  // Number of items in directory
+    ui32 TopicCount = 0;  // Number of topics in directory
+};
+
+// Result of async topic info load
+struct TTopicInfoResult {
+    TString TopicPath;
+    bool Success = false;
+    ui32 PartitionCount = 0;
+    ui32 ConsumerCount = 0;
+    ui64 TotalSizeBytes = 0;
+    TDuration RetentionPeriod;
+    ui64 WriteSpeedBytesPerSec = 0;
+    ui64 WriteBurstBytes = 0;
+    ui64 BytesWrittenPerMinute = 0;
+    TDuration MaxWriteTimeLag;
+    TVector<NTopic::ECodec> SupportedCodecs;
+};
+
+// Result of async directory info load
+struct TDirInfoResult {
+    TString DirPath;
+    bool Success = false;
+    ui32 ChildCount = 0;
+    ui32 TopicCount = 0;
 };
 
 class TTopicListView {
@@ -47,20 +84,37 @@ public:
     std::function<void(const TString& topicPath)> OnDeleteTopic;
     
 private:
-    ftxui::Element RenderEntry(const TTopicListEntry& entry, bool selected);
-    ftxui::Element RenderSpinner();
+    void PopulateTable();
     void StartAsyncLoad();
+    void StartTopicInfoLoads();  // Start async loads for visible topics
+    void CheckTopicInfoCompletion();  // Check if any topic info loads finished
+    TString FormatCodecs(const TVector<NTopic::ECodec>& codecs);
     
 private:
     TTopicTuiApp& App_;
     TVector<TTopicListEntry> Entries_;
-    int SelectedIndex_ = 0;
     
-    // Async state
+    // Use TTable for the file/topic list
+    TTable Table_;
+    
+    // Async state for directory listing
     std::atomic<bool> Loading_{false};
     std::future<TVector<TTopicListEntry>> LoadFuture_;
     TString ErrorMessage_;
     int SpinnerFrame_ = 0;
+    
+    // Async state for topic info
+    std::unordered_map<std::string, std::future<TTopicInfoResult>> TopicInfoFutures_;
+    
+    // Async state for directory info
+    std::unordered_map<std::string, std::future<TDirInfoResult>> DirInfoFutures_;
+    
+    // Static cache for topic and directory info (persists across navigation)
+    static std::unordered_map<std::string, TTopicInfoResult> TopicInfoCache_;
+    static std::unordered_map<std::string, TDirInfoResult> DirInfoCache_;
+    
+    // Static cache for cursor positions per path (persists across navigation)
+    static std::unordered_map<std::string, int> CursorPositionCache_;
 };
 
 } // namespace NYdb::NConsoleClient

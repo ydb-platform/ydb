@@ -1,5 +1,6 @@
 #include "http_client.h"
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
@@ -418,7 +419,9 @@ NJson::TJsonValue TViewerHttpClient::DoGet(const TString& path) {
         }
         
         NJson::TJsonValue result;
-        if (!NJson::ReadJsonTree(responseStr, &result, true)) {
+        NJson::TJsonReaderConfig config;
+        config.DontValidateUtf8 = true;  // Handle invalid UTF-8 from Viewer API
+        if (!NJson::ReadJsonTree(responseStr, &config, &result, true)) {
             throw std::runtime_error(TStringBuilder() << "Invalid JSON from: " << fullUrl);
         }
         return result;

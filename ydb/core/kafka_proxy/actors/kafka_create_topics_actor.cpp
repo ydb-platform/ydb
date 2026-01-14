@@ -35,7 +35,7 @@ std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPol
 std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertTimestampType(
         const std::optional<TString>& configValue, std::optional<TString>& correctTimestampType
 ) {
-    if (configValue.value_or("") == MESSAGE_TIMESTAMP_CREATE_TIME || configValue.value_or("") == MESSAGE_TIMESTAMP_LOG_APPEND) {
+    if (configValue == MESSAGE_TIMESTAMP_CREATE_TIME || configValue == MESSAGE_TIMESTAMP_LOG_APPEND) {
         correctTimestampType = configValue;
         return std::nullopt;
     }

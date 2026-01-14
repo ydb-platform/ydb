@@ -2081,6 +2081,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH() {str << "QueueSize";}
                         TABLEH() {str << "PopBytes";}
                         TABLEH_ATTRS({{"title", "IsFinished"}}) {str << "F";}
+                        TABLEH_ATTRS({{"title", "Bound"}}) {str << "B";}
                         TABLEH() {str << "OutputActorId";}
                         TABLEH() {str << "InputActorId";}
                     }
@@ -2096,6 +2097,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << descriptor->QueueSize.load();}
                                 TABLED() {str << descriptor->PopBytes.load();}
                                 TABLED() {str << descriptor->Finished.load();}
+                                TABLED() {str << descriptor->IsBinded;}
                                 TABLED() {
                                     HREF(TStringBuilder() << "/node/" << info.OutputActorId.NodeId() << "/actors/kqp_node?ca=" << info.OutputActorId)  {
                                         str << info.OutputActorId;

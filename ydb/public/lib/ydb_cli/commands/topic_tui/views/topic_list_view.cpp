@@ -72,6 +72,13 @@ TTopicListView::TTopicListView(TTopicTuiApp& app)
         SortEntries();
         Table_.SetSelectedRow(0); // Reset selection on sort
     };
+
+    // Fix: Persist cursor position on move (so refresh doesn't jump back)
+    Table_.OnNavigate = [this](int row) {
+        if (!SearchMode_) {
+            CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = row;
+        }
+    };
 }
 
 TTopicListView::~TTopicListView() {
@@ -701,11 +708,21 @@ void TTopicListView::StartAsyncLoad() {
     TString path = App_.GetState().CurrentPath;
     TString dbRoot = App_.GetDatabaseRoot();
     auto* schemeClient = &App_.GetSchemeClient();
+    auto stopFlag = StopFlag_;
     
-    LoadFuture_ = std::async(std::launch::async, [path, dbRoot, schemeClient]() -> TVector<TTopicListEntry> {
+    LoadFuture_ = std::async(std::launch::async, [path, dbRoot, schemeClient, stopFlag]() -> TVector<TTopicListEntry> {
         TVector<TTopicListEntry> entries;
         
-        auto result = schemeClient->ListDirectory(path).GetValueSync();
+        auto listFuture = schemeClient->ListDirectory(path);
+        
+        // Wait with timeout (5 seconds) and stop flag check
+        bool status = WaitFor(listFuture, stopFlag, TDuration::Seconds(5));
+        if (!status) {
+            // Timeout or cancelled - return empty to stop blocking
+            return entries;
+        }
+        
+        auto result = listFuture.GetValueSync();
         
         if (!result.IsSuccess()) {
             throw std::runtime_error(result.GetIssues().ToString());

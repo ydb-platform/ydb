@@ -23,6 +23,17 @@ static TVector<TTableColumn> CreatePartitionsTableColumns() {
     };
 }
 
+// Helper to wait for future with cancellation check
+template<typename T>
+static bool WaitFor(const NThreading::TFuture<T>& future, const std::shared_ptr<std::atomic<bool>>& stopFlag, TDuration timeout) {
+    TInstant deadline = TInstant::Now() + timeout;
+    while (TInstant::Now() < deadline) {
+        if (stopFlag && *stopFlag) return false; // Cancelled
+        if (future.Wait(TDuration::MilliSeconds(100))) return true; // Ready
+    }
+    return false; // Timeout
+}
+
 // Define table columns for consumers  
 static TVector<TTableColumn> CreateConsumersTableColumns() {
     return {
@@ -67,6 +78,14 @@ TTopicDetailsView::TTopicDetailsView(TTopicTuiApp& app)
         SortConsumers(col, asc);
         PopulateConsumersTable();
     };
+    
+    StopFlag_ = std::make_shared<std::atomic<bool>>(false);
+}
+
+TTopicDetailsView::~TTopicDetailsView() {
+    if (StopFlag_) {
+        *StopFlag_ = true;
+    }
 }
 
 Component TTopicDetailsView::Build() {
@@ -564,13 +583,23 @@ void TTopicDetailsView::StartAsyncLoads() {
         LoadingTopic_ = true;
         TopicError_.clear();
         
-        TopicFuture_ = std::async(std::launch::async, [path, topicClient]() -> TTopicBasicData {
+        auto stopFlag = StopFlag_;
+        TopicFuture_ = std::async(std::launch::async, [path, topicClient, stopFlag]() -> TTopicBasicData {
             TTopicBasicData data;
             
-            auto result = topicClient->DescribeTopic(path,
+            auto descFuture = topicClient->DescribeTopic(path,
                 NTopic::TDescribeTopicSettings()
                     .IncludeStats(true)
-                    .IncludeLocation(true)).GetValueSync();
+                    .IncludeLocation(true));
+
+            // Wait with timeout (5 seconds) and stop flag check
+            bool status = WaitFor(descFuture, stopFlag, TDuration::Seconds(5));
+            if (!status) {
+                // Timeout or cancelled - don't block forever
+                return data;
+            }
+
+            auto result = descFuture.GetValueSync();
             
             if (!result.IsSuccess()) {
                 throw std::runtime_error(result.GetIssues().ToString());
@@ -633,11 +662,21 @@ void TTopicDetailsView::StartAsyncLoads() {
         ConsumersError_.clear();
         // Don't clear Consumers_ - keep showing old data until new data arrives
         
-        ConsumersFuture_ = std::async(std::launch::async, [path, topicClient]() -> TConsumersData {
+        auto stopFlag = StopFlag_;
+        ConsumersFuture_ = std::async(std::launch::async, [path, topicClient, stopFlag]() -> TConsumersData {
             TConsumersData data;
             
-            auto result = topicClient->DescribeTopic(path,
-                NTopic::TDescribeTopicSettings()).GetValueSync();
+            auto descFuture = topicClient->DescribeTopic(path,
+                NTopic::TDescribeTopicSettings());
+
+            // Wait with timeout (5 seconds) and stop flag check
+            bool status = WaitFor(descFuture, stopFlag, TDuration::Seconds(5));
+            if (!status) {
+                // Timeout or cancelled - don't block forever
+                return data;
+            }
+
+            auto result = descFuture.GetValueSync();
             
             if (!result.IsSuccess()) {
                 throw std::runtime_error(result.GetIssues().ToString());
@@ -646,26 +685,34 @@ void TTopicDetailsView::StartAsyncLoads() {
             const auto& desc = result.GetTopicDescription();
             
             for (const auto& c : desc.GetConsumers()) {
+                // Check if cancelled
+                if (stopFlag && *stopFlag) return data;
+                
                 TConsumerDisplayInfo info;
                 info.Name = TString(c.GetConsumerName());
                 info.IsImportant = c.GetImportant();
                 
                 // Fetch detailed consumer stats
-                auto consumerResult = topicClient->DescribeConsumer(path, info.Name,
-                    NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+                auto consFuture = topicClient->DescribeConsumer(path, info.Name,
+                    NTopic::TDescribeConsumerSettings().IncludeStats(true));
                 
-                if (consumerResult.IsSuccess()) {
-                    const auto& consumerDesc = consumerResult.GetConsumerDescription();
-                    for (const auto& part : consumerDesc.GetPartitions()) {
-                        if (part.GetPartitionStats() && part.GetPartitionConsumerStats()) {
-                            ui64 endOffset = part.GetPartitionStats()->GetEndOffset();
-                            ui64 committedOffset = part.GetPartitionConsumerStats()->GetCommittedOffset();
-                            if (endOffset > committedOffset) {
-                                info.TotalLag += endOffset - committedOffset;
-                            }
-                            
-                            if (part.GetPartitionConsumerStats()->GetMaxCommittedTimeLag() > info.MaxLagTime) {
-                                info.MaxLagTime = part.GetPartitionConsumerStats()->GetMaxCommittedTimeLag();
+                // Wait with timeout
+                if (WaitFor(consFuture, stopFlag, TDuration::Seconds(5))) {
+                    auto consumerResult = consFuture.GetValueSync(); // Safe now
+                
+                    if (consumerResult.IsSuccess()) {
+                        const auto& consumerDesc = consumerResult.GetConsumerDescription();
+                        for (const auto& part : consumerDesc.GetPartitions()) {
+                            if (part.GetPartitionStats() && part.GetPartitionConsumerStats()) {
+                                ui64 endOffset = part.GetPartitionStats()->GetEndOffset();
+                                ui64 committedOffset = part.GetPartitionConsumerStats()->GetCommittedOffset();
+                                if (endOffset > committedOffset) {
+                                    info.TotalLag += endOffset - committedOffset;
+                                }
+                                
+                                if (part.GetPartitionConsumerStats()->GetMaxCommittedTimeLag() > info.MaxLagTime) {
+                                    info.MaxLagTime = part.GetPartitionConsumerStats()->GetMaxCommittedTimeLag();
+                                }
                             }
                         }
                     }

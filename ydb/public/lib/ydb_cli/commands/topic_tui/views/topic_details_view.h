@@ -75,6 +75,7 @@ struct TConsumersData {
 class TTopicDetailsView {
 public:
     explicit TTopicDetailsView(TTopicTuiApp& app);
+    ~TTopicDetailsView();
     
     ftxui::Component Build();
     void Refresh();
@@ -145,6 +146,9 @@ private:
     TVector<TTabletInfo> Tablets_;
     std::atomic<bool> LoadingTablets_{false};
     std::future<TVector<TTabletInfo>> TabletsFuture_;
+    
+    // Cancellation support for async operations
+    std::shared_ptr<std::atomic<bool>> StopFlag_;
     
     ftxui::Element RenderInfoView();
     ftxui::Element RenderTabletsView();

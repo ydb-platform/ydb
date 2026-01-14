@@ -2,6 +2,7 @@
 
 #include "../widgets/table.h"
 #include "../widgets/theme.h"
+#include "../widgets/sparkline_history.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
@@ -15,6 +16,7 @@
 #include <functional>
 #include <future>
 #include <atomic>
+#include <unordered_map>
 
 namespace NYdb::NConsoleClient {
 
@@ -60,6 +62,7 @@ private:
     ftxui::Element RenderHeader();
     void PopulateTable();
     void StartAsyncLoad();
+    void SortPartitions(int column, bool ascending);
     
 private:
     TTopicTuiApp& App_;
@@ -77,6 +80,9 @@ private:
     std::future<TConsumerData> LoadFuture_;
     TString ErrorMessage_;
     int SpinnerFrame_ = 0;
+    
+    // Per-partition write rate history for sparklines
+    std::unordered_map<ui64, TSparklineHistory> PartitionWriteRateHistory_;
 };
 
 } // namespace NYdb::NConsoleClient

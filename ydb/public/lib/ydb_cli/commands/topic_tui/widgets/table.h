@@ -143,10 +143,18 @@ public:
     bool IsFocused() const { return IsFocused_; }
     void SetFocused(bool focused) { IsFocused_ = focused; }
     
+    // ----- Sorting -----
+    
+    int GetSortColumn() const { return SortColumn_; }
+    bool IsSortAscending() const { return SortAscending_; }
+    void SetSort(int column, bool ascending);
+    void ToggleSort(int column);  // Cycle: none -> asc -> desc -> none
+    
     // ----- Callbacks -----
     
     std::function<void(int row)> OnSelect;   // Enter key
     std::function<void(int row)> OnNavigate; // Arrow keys changed selection
+    std::function<void(int col, bool ascending)> OnSortChanged;  // Sort changed
     
     // ----- Rendering -----
     
@@ -170,6 +178,10 @@ private:
     
     // Change highlighting config
     TDuration HighlightDuration_ = TDuration::Seconds(1);
+    
+    // Sort state
+    int SortColumn_ = 0;        // Default: sort by first column
+    bool SortAscending_ = true;  // Default: ascending
 };
 
 } // namespace NYdb::NConsoleClient

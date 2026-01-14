@@ -159,6 +159,33 @@ void TTable::SetSelectedRow(int row) {
     }
 }
 
+void TTable::SetSort(int column, bool ascending) {
+    if (column >= -1 && column < static_cast<int>(Columns_.size())) {
+        SortColumn_ = column;
+        SortAscending_ = ascending;
+        if (OnSortChanged) {
+            OnSortChanged(SortColumn_, SortAscending_);
+        }
+    }
+}
+
+void TTable::ToggleSort(int column) {
+    if (column < 0 || column >= static_cast<int>(Columns_.size())) {
+        return;
+    }
+    
+    if (SortColumn_ != column) {
+        // New column - start with ascending
+        SetSort(column, true);
+    } else if (SortAscending_) {
+        // Same column, was ascending -> descending
+        SetSort(column, false);
+    } else {
+        // Was descending -> back to ascending (for simplicity)
+        SetSort(column, true);
+    }
+}
+
 Element TTable::Render() {
     if (Rows_.empty()) {
         return text("No data") | dim | center;
@@ -233,6 +260,16 @@ bool TTable::HandleEvent(Event event) {
             OnSelect(SelectedRow_);
         }
         return true;
+    } else if (event == Event::Character('<')) {
+        // Previous column for sorting
+        int newCol = SortColumn_ > 0 ? SortColumn_ - 1 : static_cast<int>(Columns_.size()) - 1;
+        ToggleSort(newCol);
+        return true;
+    } else if (event == Event::Character('>')) {
+        // Next column for sorting
+        int newCol = (SortColumn_ + 1) % static_cast<int>(Columns_.size());
+        ToggleSort(newCol);
+        return true;
     }
     
     return false;
@@ -247,7 +284,13 @@ Element TTable::RenderHeader() {
     for (size_t i = 0; i < Columns_.size(); ++i) {
         const auto& col = Columns_[i];
         
-        Element cell = text(" " + std::string(col.Header.c_str())) | bold;
+        // Add sort indicator if this is the sorted column
+        std::string headerText = " " + std::string(col.Header.c_str());
+        if (static_cast<int>(i) == SortColumn_) {
+            headerText += SortAscending_ ? " ▲" : " ▼";
+        }
+        
+        Element cell = text(headerText) | bold;
         
         if (col.Width > 0) {
             cell = cell | size(WIDTH, EQUAL, col.Width);

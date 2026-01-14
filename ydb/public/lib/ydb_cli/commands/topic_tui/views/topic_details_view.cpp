@@ -14,6 +14,7 @@ static TVector<TTableColumn> CreatePartitionsTableColumns() {
         {"ID", 5},
         {"Size", NTheme::ColBytes},
         {"Write/min", NTheme::ColBytesPerMin},
+        {"WriteRate", NTheme::ColSparkline},  // Sparkline column
         {"WriteLag", NTheme::ColDuration},
         {"Start", NTheme::ColOffset},
         {"End", NTheme::ColOffset},
@@ -46,6 +47,12 @@ TTopicDetailsView::TTopicDetailsView(TTopicTuiApp& app)
         }
     };
     
+    // Sort callback for partitions
+    PartitionsTable_.OnSortChanged = [this](int col, bool asc) {
+        SortPartitions(col, asc);
+        PopulatePartitionsTable();
+    };
+    
     // Set up consumer table selection callback
     ConsumersTable_.OnSelect = [this](int row) {
         if (row >= 0 && row < static_cast<int>(Consumers_.size())) {
@@ -53,6 +60,12 @@ TTopicDetailsView::TTopicDetailsView(TTopicTuiApp& app)
                 OnConsumerSelected(Consumers_[row].Name);
             }
         }
+    };
+    
+    // Sort callback for consumers
+    ConsumersTable_.OnSortChanged = [this](int col, bool asc) {
+        SortConsumers(col, asc);
+        PopulateConsumersTable();
     };
 }
 
@@ -309,12 +322,15 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 RetentionPeriod_ = data.RetentionPeriod;
                 WriteSpeedBytesPerSec_ = data.WriteSpeedBytesPerSec;
                 
-                if (data.WriteRateBytesPerSec > 0) {
-                    WriteRateHistory_.push_back(data.WriteRateBytesPerSec);
-                    while (WriteRateHistory_.size() > 60) {
-                        WriteRateHistory_.erase(WriteRateHistory_.begin());
-                    }
+                // Update topic-level sparkline history
+                TopicWriteRateHistory_.Update(data.WriteRateBytesPerSec);
+                
+                // Update per-partition sparkline histories
+                for (const auto& p : Partitions_) {
+                    PartitionWriteRateHistory_[p.PartitionId].Update(
+                        static_cast<double>(p.BytesWrittenPerMinute) / 60.0);
                 }
+                
                 TopicError_.clear();
                 PopulatePartitionsTable();
             } catch (const std::exception& e) {
@@ -404,11 +420,32 @@ void TTopicDetailsView::PopulatePartitionsTable() {
         PartitionsTable_.UpdateCell(i, 0, ToString(p.PartitionId));
         PartitionsTable_.UpdateCell(i, 1, FormatBytes(p.StoreSizeBytes));
         PartitionsTable_.UpdateCell(i, 2, FormatBytes(p.BytesWrittenPerMinute));
-        PartitionsTable_.UpdateCell(i, 3, FormatDuration(p.WriteTimeLag));
-        PartitionsTable_.UpdateCell(i, 4, FormatNumber(p.StartOffset));
-        PartitionsTable_.UpdateCell(i, 5, FormatNumber(p.EndOffset));
-        PartitionsTable_.UpdateCell(i, 6, p.NodeId > 0 ? ToString(p.NodeId) : "-");
-        PartitionsTable_.UpdateCell(i, 7, lastWriteStr);
+        
+        // Render per-partition sparkline with zero-based scaling
+        auto it = PartitionWriteRateHistory_.find(p.PartitionId);
+        if (it != PartitionWriteRateHistory_.end() && !it->second.Empty()) {
+            const auto& values = it->second.GetValues();
+            TString sparkStr;
+            if (!values.empty()) {
+                double maxVal = it->second.GetMax();
+                size_t start = values.size() > 15 ? values.size() - 15 : 0;
+                for (size_t j = start; j < values.size(); ++j) {
+                    double normalized = values[j] / maxVal;
+                    int level = static_cast<int>(normalized * 8);
+                    level = std::max(0, std::min(8, level));
+                    sparkStr += SparklineChars[level];
+                }
+            }
+            PartitionsTable_.UpdateCell(i, 3, sparkStr.empty() ? "-" : sparkStr);
+        } else {
+            PartitionsTable_.UpdateCell(i, 3, "-");
+        }
+        
+        PartitionsTable_.UpdateCell(i, 4, FormatDuration(p.WriteTimeLag));
+        PartitionsTable_.UpdateCell(i, 5, FormatNumber(p.StartOffset));
+        PartitionsTable_.UpdateCell(i, 6, FormatNumber(p.EndOffset));
+        PartitionsTable_.UpdateCell(i, 7, p.NodeId > 0 ? ToString(p.NodeId) : "-");
+        PartitionsTable_.UpdateCell(i, 8, lastWriteStr);
     }
 }
 
@@ -429,10 +466,46 @@ Element TTopicDetailsView::RenderWriteRateChart() {
     return vbox({
         text(" Write Rate ") | bold,
         hbox({
-            RenderSparkline(WriteRateHistory_, 30),
+            RenderSparkline(TopicWriteRateHistory_.GetValues(), 30),
             text(" ") | flex
         })
     });
+}
+
+void TTopicDetailsView::SortPartitions(int column, bool ascending) {
+    // Columns: ID, Size, Write/min, WriteRate(sparkline), WriteLag, Start, End, Node, LastWrite
+    std::stable_sort(Partitions_.begin(), Partitions_.end(), 
+        [column, ascending](const TPartitionDisplayInfo& a, const TPartitionDisplayInfo& b) {
+            int cmp = 0;
+            switch (column) {
+                case 0: cmp = (a.PartitionId < b.PartitionId) ? -1 : (a.PartitionId > b.PartitionId) ? 1 : 0; break;
+                case 1: cmp = (a.StoreSizeBytes < b.StoreSizeBytes) ? -1 : (a.StoreSizeBytes > b.StoreSizeBytes) ? 1 : 0; break;
+                case 2: cmp = (a.BytesWrittenPerMinute < b.BytesWrittenPerMinute) ? -1 : (a.BytesWrittenPerMinute > b.BytesWrittenPerMinute) ? 1 : 0; break;
+                case 3: cmp = (a.BytesWrittenPerMinute < b.BytesWrittenPerMinute) ? -1 : (a.BytesWrittenPerMinute > b.BytesWrittenPerMinute) ? 1 : 0; break; // sparkline
+                case 4: cmp = (a.WriteTimeLag < b.WriteTimeLag) ? -1 : (a.WriteTimeLag > b.WriteTimeLag) ? 1 : 0; break;
+                case 5: cmp = (a.StartOffset < b.StartOffset) ? -1 : (a.StartOffset > b.StartOffset) ? 1 : 0; break;
+                case 6: cmp = (a.EndOffset < b.EndOffset) ? -1 : (a.EndOffset > b.EndOffset) ? 1 : 0; break;
+                case 7: cmp = (a.NodeId < b.NodeId) ? -1 : (a.NodeId > b.NodeId) ? 1 : 0; break;
+                case 8: cmp = (a.LastWriteTime < b.LastWriteTime) ? -1 : (a.LastWriteTime > b.LastWriteTime) ? 1 : 0; break;
+                default: cmp = 0; break;
+            }
+            return ascending ? (cmp < 0) : (cmp > 0);
+        });
+}
+
+void TTopicDetailsView::SortConsumers(int column, bool ascending) {
+    // Columns: Name, Lag, MaxLag
+    std::stable_sort(Consumers_.begin(), Consumers_.end(),
+        [column, ascending](const TConsumerDisplayInfo& a, const TConsumerDisplayInfo& b) {
+            int cmp = 0;
+            switch (column) {
+                case 0: cmp = a.Name.compare(b.Name); break;
+                case 1: cmp = (a.TotalLag < b.TotalLag) ? -1 : (a.TotalLag > b.TotalLag) ? 1 : 0; break;
+                case 2: cmp = (a.MaxLagTime < b.MaxLagTime) ? -1 : (a.MaxLagTime > b.MaxLagTime) ? 1 : 0; break;
+                default: cmp = 0; break;
+            }
+            return ascending ? (cmp < 0) : (cmp > 0);
+        });
 }
 
 void TTopicDetailsView::StartAsyncLoads() {

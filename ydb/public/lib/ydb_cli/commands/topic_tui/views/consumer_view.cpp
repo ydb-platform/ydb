@@ -14,6 +14,7 @@ static TVector<TTableColumn> CreateConsumerTableColumns() {
         {"Part", NTheme::ColPartitionId},
         {"Size", NTheme::ColBytes},
         {"Write/m", NTheme::ColBytes},
+        {"WriteRate", NTheme::ColSparkline},  // Sparkline column
         {"WriteLag", NTheme::ColDurationShort},
         {"ReadLag", NTheme::ColDurationShort},
         {"Uncommit", NTheme::ColLag},
@@ -39,6 +40,12 @@ TConsumerView::TConsumerView(TTopicTuiApp& app)
                 OnCommitOffset(p.PartitionId, p.CommittedOffset);
             }
         }
+    };
+    
+    // Sort callback
+    Table_.OnSortChanged = [this](int col, bool asc) {
+        SortPartitions(col, asc);
+        PopulateTable();
     };
 }
 
@@ -126,6 +133,13 @@ void TConsumerView::CheckAsyncCompletion() {
             PartitionStats_ = std::move(data.PartitionStats);
             TotalLag_ = data.TotalLag;
             MaxLagTime_ = data.MaxLagTime;
+            
+            // Update per-partition sparkline histories
+            for (const auto& p : PartitionStats_) {
+                PartitionWriteRateHistory_[p.PartitionId].Update(
+                    static_cast<double>(p.BytesWrittenPerMinute) / 60.0);
+            }
+            
             ErrorMessage_.clear();
             PopulateTable();
         } catch (const std::exception& e) {
@@ -172,16 +186,37 @@ void TConsumerView::PopulateTable() {
         Table_.UpdateCell(i, 0, ToString(p.PartitionId));
         Table_.UpdateCell(i, 1, FormatBytes(p.StoreSizeBytes));
         Table_.UpdateCell(i, 2, FormatBytes(p.BytesWrittenPerMinute));
-        Table_.UpdateCell(i, 3, FormatDuration(p.WriteTimeLag));
-        Table_.UpdateCell(i, 4, FormatDuration(p.ReadTimeLag));
-        Table_.UpdateCell(i, 5, TTableCell(FormatNumber(p.Lag), NTheme::GetLagColor(p.Lag)));
-        Table_.UpdateCell(i, 6, FormatNumber(p.UnreadMessages));
-        Table_.UpdateCell(i, 7, FormatNumber(p.StartOffset));
-        Table_.UpdateCell(i, 8, FormatNumber(p.EndOffset));
-        Table_.UpdateCell(i, 9, FormatNumber(p.CommittedOffset));
-        Table_.UpdateCell(i, 10, sessionId.empty() ? "-" : sessionId);
-        Table_.UpdateCell(i, 11, readerName.empty() ? "-" : readerName);
-        Table_.UpdateCell(i, 12, p.PartitionNodeId > 0 ? ToString(p.PartitionNodeId) : "-");
+        
+        // Render per-partition sparkline with zero-based scaling
+        auto it = PartitionWriteRateHistory_.find(p.PartitionId);
+        if (it != PartitionWriteRateHistory_.end() && !it->second.Empty()) {
+            const auto& values = it->second.GetValues();
+            TString sparkStr;
+            if (!values.empty()) {
+                double maxVal = it->second.GetMax();
+                size_t start = values.size() > 15 ? values.size() - 15 : 0;
+                for (size_t j = start; j < values.size(); ++j) {
+                    double normalized = values[j] / maxVal;
+                    int level = static_cast<int>(normalized * 8);
+                    level = std::max(0, std::min(8, level));
+                    sparkStr += SparklineChars[level];
+                }
+            }
+            Table_.UpdateCell(i, 3, sparkStr.empty() ? "-" : sparkStr);
+        } else {
+            Table_.UpdateCell(i, 3, "-");
+        }
+        
+        Table_.UpdateCell(i, 4, FormatDuration(p.WriteTimeLag));
+        Table_.UpdateCell(i, 5, FormatDuration(p.ReadTimeLag));
+        Table_.UpdateCell(i, 6, TTableCell(FormatNumber(p.Lag), NTheme::GetLagColor(p.Lag)));
+        Table_.UpdateCell(i, 7, FormatNumber(p.UnreadMessages));
+        Table_.UpdateCell(i, 8, FormatNumber(p.StartOffset));
+        Table_.UpdateCell(i, 9, FormatNumber(p.EndOffset));
+        Table_.UpdateCell(i, 10, FormatNumber(p.CommittedOffset));
+        Table_.UpdateCell(i, 11, sessionId.empty() ? "-" : sessionId);
+        Table_.UpdateCell(i, 12, readerName.empty() ? "-" : readerName);
+        Table_.UpdateCell(i, 13, p.PartitionNodeId > 0 ? ToString(p.PartitionNodeId) : "-");
     }
 }
 
@@ -202,7 +237,7 @@ void TConsumerView::StartAsyncLoad() {
         TConsumerData data;
         
         auto result = topicClient->DescribeConsumer(topicPath, consumerName,
-            NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+            NTopic::TDescribeConsumerSettings().IncludeStats(true).IncludeLocation(true)).GetValueSync();
         
         if (!result.IsSuccess()) {
             throw std::runtime_error(result.GetIssues().ToString());
@@ -250,6 +285,32 @@ void TConsumerView::StartAsyncLoad() {
         
         return data;
     });
+}
+
+void TConsumerView::SortPartitions(int column, bool ascending) {
+    // Columns: Part, Size, Write/m, WriteRate(sparkline), WriteLag, ReadLag, Uncommit, Unread, Start, End, Commit, SessionID, Reader, Node
+    std::stable_sort(PartitionStats_.begin(), PartitionStats_.end(),
+        [column, ascending](const TPartitionConsumerInfo& a, const TPartitionConsumerInfo& b) {
+            int cmp = 0;
+            switch (column) {
+                case 0: cmp = (a.PartitionId < b.PartitionId) ? -1 : (a.PartitionId > b.PartitionId) ? 1 : 0; break;
+                case 1: cmp = (a.StoreSizeBytes < b.StoreSizeBytes) ? -1 : (a.StoreSizeBytes > b.StoreSizeBytes) ? 1 : 0; break;
+                case 2: cmp = (a.BytesWrittenPerMinute < b.BytesWrittenPerMinute) ? -1 : (a.BytesWrittenPerMinute > b.BytesWrittenPerMinute) ? 1 : 0; break;
+                case 3: cmp = (a.BytesWrittenPerMinute < b.BytesWrittenPerMinute) ? -1 : (a.BytesWrittenPerMinute > b.BytesWrittenPerMinute) ? 1 : 0; break; // sparkline
+                case 4: cmp = (a.WriteTimeLag < b.WriteTimeLag) ? -1 : (a.WriteTimeLag > b.WriteTimeLag) ? 1 : 0; break;
+                case 5: cmp = (a.ReadTimeLag < b.ReadTimeLag) ? -1 : (a.ReadTimeLag > b.ReadTimeLag) ? 1 : 0; break;
+                case 6: cmp = (a.Lag < b.Lag) ? -1 : (a.Lag > b.Lag) ? 1 : 0; break;
+                case 7: cmp = (a.UnreadMessages < b.UnreadMessages) ? -1 : (a.UnreadMessages > b.UnreadMessages) ? 1 : 0; break;
+                case 8: cmp = (a.StartOffset < b.StartOffset) ? -1 : (a.StartOffset > b.StartOffset) ? 1 : 0; break;
+                case 9: cmp = (a.EndOffset < b.EndOffset) ? -1 : (a.EndOffset > b.EndOffset) ? 1 : 0; break;
+                case 10: cmp = (a.CommittedOffset < b.CommittedOffset) ? -1 : (a.CommittedOffset > b.CommittedOffset) ? 1 : 0; break;
+                case 11: cmp = a.ReadSessionId.compare(b.ReadSessionId); break;
+                case 12: cmp = a.ReaderName.compare(b.ReaderName); break;
+                case 13: cmp = (a.PartitionNodeId < b.PartitionNodeId) ? -1 : (a.PartitionNodeId > b.PartitionNodeId) ? 1 : 0; break;
+                default: cmp = 0; break;
+            }
+            return ascending ? (cmp < 0) : (cmp > 0);
+        });
 }
 
 } // namespace NYdb::NConsoleClient

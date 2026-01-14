@@ -2,6 +2,7 @@
 
 #include "../widgets/table.h"
 #include "../widgets/theme.h"
+#include "../widgets/sparkline_history.h"
 #include "../http_client.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
@@ -16,6 +17,7 @@
 #include <functional>
 #include <future>
 #include <atomic>
+#include <unordered_map>
 
 namespace NYdb::NConsoleClient {
 
@@ -93,6 +95,8 @@ private:
     void PopulatePartitionsTable();
     void PopulateConsumersTable();
     void StartAsyncLoads();
+    void SortPartitions(int column, bool ascending);
+    void SortConsumers(int column, bool ascending);
     
 private:
     TTopicTuiApp& App_;
@@ -103,7 +107,8 @@ private:
     size_t TotalPartitions_ = 0;
     TDuration RetentionPeriod_;
     ui64 WriteSpeedBytesPerSec_ = 0;
-    TVector<double> WriteRateHistory_;
+    TSparklineHistory TopicWriteRateHistory_;  // Fixed 5-second interval
+    std::unordered_map<ui64, TSparklineHistory> PartitionWriteRateHistory_;  // Per-partition
     
     // Consumers data (loaded separately)
     TVector<TConsumerDisplayInfo> Consumers_;

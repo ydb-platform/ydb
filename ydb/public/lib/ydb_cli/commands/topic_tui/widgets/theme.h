@@ -52,6 +52,7 @@ constexpr int ColDurationShort = 11;
 constexpr int ColSessionId = 14;
 constexpr int ColReaderName = 14;
 constexpr int ColConsumerName = 25;
+constexpr int ColSparkline = 17;  // For sparkline columns
 
 // Form layout
 constexpr int FormLabelWidth = 22;

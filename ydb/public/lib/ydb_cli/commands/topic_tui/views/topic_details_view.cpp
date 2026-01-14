@@ -60,9 +60,10 @@ Component TTopicDetailsView::Build() {
     // Create partition panel component
     auto partitionsPanel = Renderer([this] {
         Element content;
-        if (LoadingTopic_) {
+        // Only show spinner if loading AND we have no data yet
+        if (LoadingTopic_ && Partitions_.empty()) {
             content = NTheme::RenderSpinner(SpinnerFrame_, "Loading partitions...") | center;
-        } else if (!TopicError_.empty()) {
+        } else if (!TopicError_.empty() && Partitions_.empty()) {
             content = text("Error: " + std::string(TopicError_.c_str())) | color(NTheme::ErrorText) | center;
         } else if (Partitions_.empty()) {
             content = text("No partitions") | dim | center;
@@ -70,8 +71,13 @@ Component TTopicDetailsView::Build() {
             content = PartitionsTable_.Render();
         }
         
+        // Show subtle refresh indicator in header when loading with existing data
+        auto header = LoadingTopic_ && !Partitions_.empty()
+            ? hbox({text(" Partitions ") | bold, text(" ⟳") | dim | color(Color::Yellow)})
+            : text(" Partitions ") | bold;
+        
         return vbox({
-            text(" Partitions ") | bold,
+            header,
             separator(),
             content | flex
         }) | border | flex;
@@ -80,9 +86,10 @@ Component TTopicDetailsView::Build() {
     // Create consumers panel component
     auto consumersPanel = Renderer([this] {
         Element content;
-        if (LoadingConsumers_) {
+        // Only show spinner if loading AND we have no data yet
+        if (LoadingConsumers_ && Consumers_.empty()) {
             content = NTheme::RenderSpinner(SpinnerFrame_, "Loading consumers...") | center;
-        } else if (!ConsumersError_.empty()) {
+        } else if (!ConsumersError_.empty() && Consumers_.empty()) {
             content = text("Error: " + std::string(ConsumersError_.c_str())) | color(NTheme::ErrorText) | center;
         } else if (Consumers_.empty()) {
             content = text("No consumers") | dim | center;
@@ -90,8 +97,13 @@ Component TTopicDetailsView::Build() {
             content = ConsumersTable_.Render();
         }
         
+        // Show subtle refresh indicator in header when loading with existing data
+        auto header = LoadingConsumers_ && !Consumers_.empty()
+            ? hbox({text(" Consumers ") | bold, text(" ⟳") | dim | color(Color::Yellow)})
+            : text(" Consumers ") | bold;
+        
         return vbox({
-            text(" Consumers ") | bold,
+            header,
             separator(),
             content | flex,
             separator(),

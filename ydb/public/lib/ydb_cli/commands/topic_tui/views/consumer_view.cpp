@@ -48,7 +48,8 @@ Component TConsumerView::Build() {
     return Renderer(tableComponent, [this, tableComponent] {
         CheckAsyncCompletion();
         
-        if (Loading_) {
+        // Only show spinner if loading AND we have no data yet
+        if (Loading_ && PartitionStats_.empty()) {
             return vbox({
                 hbox({
                     text(" Consumer: ") | bold,
@@ -59,15 +60,24 @@ Component TConsumerView::Build() {
             }) | border;
         }
         
-        if (!ErrorMessage_.empty()) {
+        if (!ErrorMessage_.empty() && PartitionStats_.empty()) {
             return vbox({
                 text("Error: " + std::string(ErrorMessage_.c_str())) | color(NTheme::ErrorText) | center
             }) | border;
         }
         
+        // Show subtle refresh indicator when loading with existing data
+        auto header = RenderHeader();
+        if (Loading_ && !PartitionStats_.empty()) {
+            auto summaryHeader = RenderHeader();
+            // Add refresh indicator to right side
+        }
+        
         return vbox({
             RenderHeader(),
-            separator(),
+            Loading_ && !PartitionStats_.empty() 
+                ? hbox({separator(), text(" ⟳ refreshing...") | dim | color(Color::Yellow)})
+                : separator(),
             tableComponent->Render() | flex
         }) | border;
     }) | CatchEvent([this](Event event) {

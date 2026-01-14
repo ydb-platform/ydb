@@ -30,8 +30,8 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     }
 
     ITableMetadataAccessor::TSelectMetadataContext context(owner->GetTablesManager(), owner->GetIndexVerified());
-    
     SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, isPlain);
+
     if (!SourcesConstructor) {
         return TConclusionStatus::Fail("cannot build sources constructor for " + readDescription.TableMetadataAccessor->GetTablePath());
     }
@@ -116,7 +116,7 @@ void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) co
     if (!NeedToDetectConflicts()) {
         return;
     }
-    
+
     auto evWriter = std::make_shared<NOlap::NTxInteractions::TEvReadStartWriter>(TableMetadataAccessor->GetPathIdVerified(),
         GetResultSchema()->GetIndexInfo().GetPrimaryKey(), GetPKRangesFilterPtr(), GetMaybeConflictingLockIds());
     owner.GetOperationsManager().AddEventForLock(owner, *LockId, evWriter);

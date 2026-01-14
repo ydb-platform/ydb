@@ -39,7 +39,7 @@ struct TTabletInfo {
 
 // Topic describe result from Viewer API
 struct TTopicDescribeResult {
-    // Basic info
+    // Basic info from PathDescription.Self
     TString Path;
     TString Owner;
     TString PathType;
@@ -47,11 +47,20 @@ struct TTopicDescribeResult {
     ui64 SchemeshardId = 0;
     TInstant CreateTime;
     
-    // Tablets
+    // Tablets from TabletStateInfo
     TVector<TTabletInfo> Tablets;
     
-    // PersQueue-specific
+    // PersQueue-specific from PersQueueGroup.PQTabletConfig
     ui32 PartitionsCount = 0;
+    ui64 RetentionSeconds = 0;
+    ui64 RetentionBytes = 0;
+    ui64 WriteSpeedBytesPerSec = 0;
+    ui64 BurstBytes = 0;
+    TVector<TString> SupportedCodecs;
+    TString MeteringMode;  // "REQUEST_UNITS" or "RESERVED_CAPACITY"
+    
+    // Error if any
+    TString Error;
     
     // Raw JSON for debug
     TString RawJson;

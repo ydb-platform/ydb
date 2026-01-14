@@ -213,11 +213,49 @@ TTopicDescribeResult TViewerHttpClient::GetTopicDescribe(
             }
         }
         
-        // Parse PersQueueGroup for partitions count
+        // Parse PersQueueGroup for config
         if (pathDesc.Has("PersQueueGroup")) {
             const auto& pqGroup = pathDesc["PersQueueGroup"];
             if (pqGroup.Has("Partitions") && pqGroup["Partitions"].IsArray()) {
                 result.PartitionsCount = pqGroup["Partitions"].GetArray().size();
+            }
+            
+            // Parse PQTabletConfig for detailed settings
+            if (pqGroup.Has("PQTabletConfig")) {
+                const auto& config = pqGroup["PQTabletConfig"];
+                
+                if (config.Has("PartitionConfig")) {
+                    const auto& partConfig = config["PartitionConfig"];
+                    if (partConfig.Has("LifetimeSeconds")) {
+                        result.RetentionSeconds = partConfig["LifetimeSeconds"].GetUInteger();
+                    }
+                    if (partConfig.Has("StorageLimitBytes")) {
+                        result.RetentionBytes = partConfig["StorageLimitBytes"].GetUInteger();
+                    }
+                    if (partConfig.Has("WriteSpeedInBytesPerSecond")) {
+                        result.WriteSpeedBytesPerSec = partConfig["WriteSpeedInBytesPerSecond"].GetUInteger();
+                    }
+                    if (partConfig.Has("BurstSize")) {
+                        result.BurstBytes = partConfig["BurstSize"].GetUInteger();
+                    }
+                }
+                
+                if (config.Has("Codecs") && config["Codecs"].Has("Ids") && config["Codecs"]["Ids"].IsArray()) {
+                    for (const auto& codecId : config["Codecs"]["Ids"].GetArray()) {
+                        ui32 id = codecId.GetUInteger();
+                        switch (id) {
+                            case 0: result.SupportedCodecs.push_back("raw"); break;
+                            case 1: result.SupportedCodecs.push_back("gzip"); break;
+                            case 2: result.SupportedCodecs.push_back("lzop"); break;
+                            case 3: result.SupportedCodecs.push_back("zstd"); break;
+                            default: result.SupportedCodecs.push_back(ToString(id)); break;
+                        }
+                    }
+                }
+                
+                if (config.Has("MeteringMode")) {
+                    result.MeteringMode = config["MeteringMode"].GetString();
+                }
             }
         }
         

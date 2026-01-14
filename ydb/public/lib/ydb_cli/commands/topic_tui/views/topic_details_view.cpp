@@ -179,6 +179,21 @@ Component TTopicDetailsView::Build() {
         // Navigate to info view
         if (event == Event::Character('i') || event == Event::Character('I')) {
             InfoScrollY_ = 0;
+            // Start async info load via Viewer API
+            if (!LoadingInfo_) {
+                LoadingInfo_ = true;
+                const TString& endpoint = App_.GetViewerEndpoint();
+                TString topicPath = TopicPath_;
+                InfoFuture_ = std::async(std::launch::async, [endpoint, topicPath]() -> TTopicDescribeResult {
+                    if (endpoint.empty()) {
+                        TTopicDescribeResult result;
+                        result.Error = "Viewer endpoint not configured";
+                        return result;
+                    }
+                    TViewerHttpClient client(endpoint);
+                    return client.GetTopicDescribe(topicPath, false);  // No tablets needed for info view
+                });
+            }
             App_.NavigateTo(EViewType::TopicInfo);
             return true;
         }
@@ -294,17 +309,6 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 RetentionPeriod_ = data.RetentionPeriod;
                 WriteSpeedBytesPerSec_ = data.WriteSpeedBytesPerSec;
                 
-                // Store extended fields for info modal
-                Owner_ = data.Owner;
-                SupportedCodecs_ = std::move(data.SupportedCodecs);
-                Attributes_ = std::move(data.Attributes);
-                MeteringMode_ = data.MeteringMode;
-                PartitionWriteBurstBytes_ = data.PartitionWriteBurstBytes;
-                RetentionStorageMb_ = data.RetentionStorageMb;
-                MinActivePartitions_ = data.MinActivePartitions;
-                MaxActivePartitions_ = data.MaxActivePartitions;
-                AutoPartitioningStrategy_ = data.AutoPartitioningStrategy;
-                
                 if (data.WriteRateBytesPerSec > 0) {
                     WriteRateHistory_.push_back(data.WriteRateBytesPerSec);
                     while (WriteRateHistory_.size() > 60) {
@@ -344,6 +348,18 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 // Ignore errors for tablets
             }
             LoadingTablets_ = false;
+        }
+    }
+    
+    // Check info data future (Viewer API)
+    if (LoadingInfo_ && InfoFuture_.valid()) {
+        if (InfoFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            try {
+                TopicDescribeResult_ = InfoFuture_.get();
+            } catch (const std::exception& e) {
+                TopicDescribeResult_.Error = e.what();
+            }
+            LoadingInfo_ = false;
         }
     }
 }
@@ -552,9 +568,9 @@ Element TTopicDetailsView::RenderInfoView() {
     
     // Helper for formatting bytes
     auto formatBytes = [](ui64 bytes) -> TString {
-        if (bytes >= 1024 * 1024 * 1024) {
+        if (bytes >= 1024ULL * 1024 * 1024) {
             return TStringBuilder() << Sprintf("%.2f", bytes / (1024.0 * 1024.0 * 1024.0)) << " GB";
-        } else if (bytes >= 1024 * 1024) {
+        } else if (bytes >= 1024ULL * 1024) {
             return TStringBuilder() << Sprintf("%.2f", bytes / (1024.0 * 1024.0)) << " MB";
         } else if (bytes >= 1024) {
             return TStringBuilder() << Sprintf("%.2f", bytes / 1024.0) << " KB";
@@ -562,101 +578,94 @@ Element TTopicDetailsView::RenderInfoView() {
         return TStringBuilder() << bytes << " B";
     };
     
-    // Helper for metering mode
-    auto meteringStr = [](NTopic::EMeteringMode mode) -> TString {
-        switch (mode) {
-            case NTopic::EMeteringMode::ReservedCapacity: return "Reserved Capacity";
-            case NTopic::EMeteringMode::RequestUnits: return "Request Units";
-            default: return "Unspecified";
+    // Format duration
+    auto formatDuration = [](ui64 seconds) -> TString {
+        if (seconds >= 86400) {
+            return Sprintf("%lud %luh", seconds / 86400, (seconds % 86400) / 3600);
+        } else if (seconds >= 3600) {
+            return Sprintf("%luh %lum", seconds / 3600, (seconds % 3600) / 60);
+        } else if (seconds >= 60) {
+            return Sprintf("%lum %lus", seconds / 60, seconds % 60);
         }
-    };
-    
-    // Helper for auto partitioning strategy
-    auto strategyStr = [](NTopic::EAutoPartitioningStrategy s) -> TString {
-        switch (s) {
-            case NTopic::EAutoPartitioningStrategy::ScaleUp: return "Scale Up";
-            case NTopic::EAutoPartitioningStrategy::ScaleUpAndDown: return "Scale Up and Down";
-            case NTopic::EAutoPartitioningStrategy::Paused: return "Paused";
-            default: return "Disabled";
-        }
-    };
-    
-    // Helper for codec
-    auto codecStr = [](NTopic::ECodec c) -> TString {
-        switch (c) {
-            case NTopic::ECodec::RAW: return "RAW";
-            case NTopic::ECodec::GZIP: return "GZIP";
-            case NTopic::ECodec::LZOP: return "LZOP";
-            case NTopic::ECodec::ZSTD: return "ZSTD";
-            default: return "Unknown";
-        }
+        return Sprintf("%lus", seconds);
     };
     
     Elements lines;
     
     // Title
-    lines.push_back(text(" Topic Information ") | bold | center);
+    lines.push_back(text(" Topic Information (Viewer API) ") | bold | center);
     lines.push_back(separator());
     
-    // Path and Owner
-    lines.push_back(hbox({text(" Path:   ") | dim, text(TopicPath_.c_str())}));
-    lines.push_back(hbox({text(" Owner:  ") | dim, text(Owner_.c_str())}));
-    lines.push_back(separator());
-    
-    // Partitioning
-    lines.push_back(text(" Partitioning") | bold);
-    lines.push_back(hbox({text("   Partitions:        ") | dim, text(ToString(TotalPartitions_).c_str())}));
-    lines.push_back(hbox({text("   Min Active:        ") | dim, text(ToString(MinActivePartitions_).c_str())}));
-    lines.push_back(hbox({text("   Max Active:        ") | dim, text(ToString(MaxActivePartitions_).c_str())}));
-    lines.push_back(hbox({text("   Auto-Partitioning: ") | dim, text(strategyStr(AutoPartitioningStrategy_).c_str())}));
-    lines.push_back(separator());
-    
-    // Retention
-    lines.push_back(text(" Retention") | bold);
-    lines.push_back(hbox({text("   Period:  ") | dim, text(Sprintf("%.2f hours", RetentionPeriod_.Hours()).c_str())}));
-    lines.push_back(hbox({text("   Storage: ") | dim, text(RetentionStorageMb_ > 0 
-        ? (TStringBuilder() << RetentionStorageMb_ << " MB").c_str() 
-        : "Unlimited")}));
-    lines.push_back(separator());
-    
-    // Write Limits
-    lines.push_back(text(" Write Limits") | bold);
-    lines.push_back(hbox({text("   Speed per partition: ") | dim, text(formatBytes(WriteSpeedBytesPerSec_).c_str()), text("/s")}));
-    lines.push_back(hbox({text("   Burst per partition: ") | dim, text(formatBytes(PartitionWriteBurstBytes_).c_str())}));
-    lines.push_back(separator());
-    
-    // Codecs
-    lines.push_back(text(" Supported Codecs") | bold);
-    TStringBuilder codecsLine;
-    for (size_t i = 0; i < SupportedCodecs_.size(); ++i) {
-        if (i > 0) codecsLine << ", ";
-        codecsLine << codecStr(SupportedCodecs_[i]);
-    }
-    if (SupportedCodecs_.empty()) codecsLine << "(none)";
-    lines.push_back(hbox({text("   ") | dim, text(codecsLine.c_str())}));
-    lines.push_back(separator());
-    
-    // Metering
-    lines.push_back(hbox({text(" Metering: ") | dim, text(meteringStr(MeteringMode_).c_str())}));
-    lines.push_back(separator());
-    
-    // Attributes
-    lines.push_back(text(" Attributes") | bold);
-    if (Attributes_.empty()) {
-        lines.push_back(hbox({text("   ") | dim, text("(none)")}));
+    if (LoadingInfo_) {
+        lines.push_back(text(" Loading topic info... ") | dim | center);
+    } else if (!TopicDescribeResult_.Error.empty()) {
+        lines.push_back(text(" Error: ") | color(Color::Red));
+        lines.push_back(text(std::string("  " + TopicDescribeResult_.Error)) | color(Color::Red));
     } else {
-        for (const auto& [key, value] : Attributes_) {
-            lines.push_back(hbox({
-                text("   ") | dim,
-                text(key) | color(Color::Cyan),
-                text(" = "),
-                text(value)
-            }));
+        const auto& info = TopicDescribeResult_;
+        
+        // Basic Info
+        lines.push_back(text(" Basic Info") | bold);
+        lines.push_back(hbox({text("   Path:       ") | dim, text(info.Path.empty() ? TopicPath_.c_str() : info.Path.c_str())}));
+        lines.push_back(hbox({text("   Owner:      ") | dim, text(info.Owner.c_str())}));
+        lines.push_back(hbox({text("   PathId:     ") | dim, text(ToString(info.PathId).c_str())}));
+        lines.push_back(hbox({text("   Schemeshard:") | dim, text(ToString(info.SchemeshardId).c_str())}));
+        if (info.CreateTime != TInstant::Zero()) {
+            lines.push_back(hbox({text("   Created:    ") | dim, text(info.CreateTime.FormatLocalTime("%Y-%m-%d %H:%M:%S").c_str())}));
+        }
+        lines.push_back(separator());
+        
+        // Partitions
+        lines.push_back(text(" Partitions") | bold);
+        lines.push_back(hbox({text("   Count: ") | dim, text(ToString(info.PartitionsCount).c_str())}));
+        lines.push_back(separator());
+        
+        // Retention
+        lines.push_back(text(" Retention") | bold);
+        if (info.RetentionSeconds > 0) {
+            lines.push_back(hbox({text("   Duration: ") | dim, text(formatDuration(info.RetentionSeconds).c_str())}));
+        }
+        if (info.RetentionBytes > 0) {
+            lines.push_back(hbox({text("   Storage:  ") | dim, text(formatBytes(info.RetentionBytes).c_str())}));
+        }
+        if (info.RetentionSeconds == 0 && info.RetentionBytes == 0) {
+            lines.push_back(hbox({text("   ") | dim, text("Not specified")}));
+        }
+        lines.push_back(separator());
+        
+        // Write Limits
+        lines.push_back(text(" Write Speed") | bold);
+        if (info.WriteSpeedBytesPerSec > 0) {
+            lines.push_back(hbox({text("   Per Partition: ") | dim, text(formatBytes(info.WriteSpeedBytesPerSec).c_str()), text("/s")}));
+        }
+        if (info.BurstBytes > 0) {
+            lines.push_back(hbox({text("   Burst:         ") | dim, text(formatBytes(info.BurstBytes).c_str())}));
+        }
+        if (info.WriteSpeedBytesPerSec == 0 && info.BurstBytes == 0) {
+            lines.push_back(hbox({text("   ") | dim, text("Not specified")}));
+        }
+        lines.push_back(separator());
+        
+        // Codecs
+        lines.push_back(text(" Supported Codecs") | bold);
+        if (info.SupportedCodecs.empty()) {
+            lines.push_back(hbox({text("   ") | dim, text("(default)")}));
+        } else {
+            TStringBuilder codecsLine;
+            for (size_t i = 0; i < info.SupportedCodecs.size(); ++i) {
+                if (i > 0) codecsLine << ", ";
+                codecsLine << info.SupportedCodecs[i];
+            }
+            lines.push_back(hbox({text("   ") | dim, text(codecsLine.c_str())}));
+        }
+        lines.push_back(separator());
+        
+        // Metering
+        if (!info.MeteringMode.empty()) {
+            lines.push_back(hbox({text(" Metering: ") | bold, text(info.MeteringMode.c_str())}));
+            lines.push_back(separator());
         }
     }
-    
-    lines.push_back(separator());
-    lines.push_back(text(" [i/Esc] Close  [↑↓] Scroll ") | dim | center);
     
     // Clamp scroll position to valid range
     int maxScroll = std::max(0, static_cast<int>(lines.size()) - 20);
@@ -722,7 +731,7 @@ Element TTopicDetailsView::RenderTabletsView() {
             if (uptime.Hours() >= 24) {
                 return Sprintf("%lud%luh", uptime.Days(), uptime.Hours() % 24);
             } else if (uptime.Hours() >= 1) {
-                return Sprintf("%luh%lum", uptime.Hours(), uptime.Minutes() % 60);
+                return Sprintf("%luh%lum%lus", uptime.Hours(), uptime.Minutes() % 60, uptime.Seconds() % 60);
             } else if (uptime.Minutes() >= 1) {
                 return Sprintf("%lum%lus", uptime.Minutes(), uptime.Seconds() % 60);
             } else {

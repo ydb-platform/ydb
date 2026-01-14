@@ -125,19 +125,11 @@ private:
     // Resizable split state
     int ConsumersPanelSize_ = 40;
     
-    // Info view state
+    // Info view state (Viewer API based)
     int InfoScrollY_ = 0;
-        
-    // Extended topic description for info modal
-    TString Owner_;
-    std::vector<NTopic::ECodec> SupportedCodecs_;
-    std::map<std::string, std::string> Attributes_;
-    NTopic::EMeteringMode MeteringMode_ = NTopic::EMeteringMode::Unspecified;
-    ui64 PartitionWriteBurstBytes_ = 0;
-    ui64 RetentionStorageMb_ = 0;
-    ui64 MinActivePartitions_ = 0;
-    ui64 MaxActivePartitions_ = 0;
-    NTopic::EAutoPartitioningStrategy AutoPartitioningStrategy_ = NTopic::EAutoPartitioningStrategy::Disabled;
+    std::atomic<bool> LoadingInfo_{false};
+    std::future<TTopicDescribeResult> InfoFuture_;
+    TTopicDescribeResult TopicDescribeResult_;  // From Viewer API
     
     // Tablets view state
     int TabletsScrollY_ = 0;

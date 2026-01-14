@@ -145,6 +145,11 @@ private:
     int CompletionScrollOffset_ = 0;  // For scrolling completions
     std::unordered_map<std::string, TString> CompletionTypes_;  // Path -> type (Topic, Dir, etc.)
     
+    // Async completion loading
+    std::string CachedCompletionDir_;  // Last directory we fetched completions for
+    std::future<TVector<std::pair<std::string, TString>>> CompletionFuture_;  // Async load of completions
+    bool CompletionLoading_ = false;
+    
     // Note: Sorting state is managed by Table_ (GetSortColumn(), IsSortAscending(), SetSort())
 };
 

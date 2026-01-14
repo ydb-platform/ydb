@@ -131,6 +131,28 @@ Component TTopicListView::Build() {
         
         // Overlay go-to-path popup if active
         if (GoToPathMode_) {
+            // Poll for async completion results
+            if (CompletionLoading_ && CompletionFuture_.valid()) {
+                auto status = CompletionFuture_.wait_for(std::chrono::milliseconds(0));
+                if (status == std::future_status::ready) {
+                    try {
+                        auto results = CompletionFuture_.get();
+                        PathCompletions_.clear();
+                        CompletionTypes_.clear();
+                        CompletionScrollOffset_ = 0;
+                        for (const auto& [path, typeLabel] : results) {
+                            PathCompletions_.push_back(path);
+                            CompletionTypes_[path] = typeLabel;
+                        }
+                        // Re-filter with current input
+                        PathCompletions_ = GetPathCompletions(GoToPathInput_);
+                    } catch (...) {
+                        // Ignore errors
+                    }
+                    CompletionLoading_ = false;
+                }
+            }
+            
             // Build completions list - show up to 10 items with scroll
             const int maxVisible = 10;
             Elements completionElements;
@@ -180,9 +202,31 @@ Component TTopicListView::Build() {
                     static_cast<int>(PathCompletions_.size()));
             }
             
+            // Show loading indicator if completing
+            Element loadingIndicator = CompletionLoading_ 
+                ? (text(" ⟳") | color(Color::Yellow))
+                : text("");
+            
+            // Determine what to show in completions area
+            Element completionsArea;
+            if (completionElements.empty() && CompletionLoading_) {
+                completionsArea = vbox({
+                    separator(),
+                    text(" Loading...") | dim | color(Color::Yellow)
+                });
+            } else if (completionElements.empty()) {
+                completionsArea = text("");
+            } else {
+                completionsArea = vbox({
+                    separator(),
+                    vbox(std::move(completionElements))
+                });
+            }
+            
             Element popup = vbox({
                 hbox({
                     text(" Go to path ") | bold,
+                    loadingIndicator,
                     text(std::string(scrollInfo.c_str())) | dim
                 }) | center,
                 separator(),
@@ -191,8 +235,7 @@ Component TTopicListView::Build() {
                     text(GoToPathInput_) | color(Color::White),
                     text("█") | blink | color(Color::Cyan)
                 }),
-                completionElements.empty() ? text("") : separator(),
-                completionElements.empty() ? text("") : vbox(std::move(completionElements))
+                completionsArea
             }) | border | bgcolor(Color::GrayDark) | size(WIDTH, GREATER_THAN, 60);
             
             content = dbox({
@@ -374,6 +417,10 @@ Component TTopicListView::Build() {
             GoToPathMode_ = true;
             App_.GetState().InputCaptureActive = true;
             GoToPathInput_ = std::string(App_.GetState().CurrentPath.c_str());
+            // Add trailing slash to show completions for current directory
+            if (!GoToPathInput_.empty() && GoToPathInput_.back() != '/') {
+                GoToPathInput_ += '/';
+            }
             PathCompletions_ = GetPathCompletions(GoToPathInput_);
             CompletionIndex_ = -1;
             return true;
@@ -1106,10 +1153,31 @@ void TTopicListView::ClearSearchFilter() {
 // === Go-to-path helpers ===
 
 TVector<std::string> TTopicListView::GetPathCompletions(const std::string& prefix) {
-    TVector<std::string> completions;
+    // First, check if we have a pending async result
+    if (CompletionLoading_ && CompletionFuture_.valid()) {
+        auto status = CompletionFuture_.wait_for(std::chrono::milliseconds(0));
+        if (status == std::future_status::ready) {
+            try {
+                auto results = CompletionFuture_.get();
+                PathCompletions_.clear();
+                CompletionTypes_.clear();
+                CompletionScrollOffset_ = 0;
+                for (const auto& [path, typeLabel] : results) {
+                    PathCompletions_.push_back(path);
+                    CompletionTypes_[path] = typeLabel;
+                }
+            } catch (...) {
+                // Ignore errors
+            }
+            CompletionLoading_ = false;
+        }
+    }
     
     if (prefix.empty()) {
-        return completions;
+        PathCompletions_.clear();
+        CompletionTypes_.clear();
+        CachedCompletionDir_.clear();
+        return PathCompletions_;
     }
     
     // Determine parent directory and prefix part
@@ -1130,79 +1198,104 @@ TVector<std::string> TTopicListView::GetPathCompletions(const std::string& prefi
         namePrefix = prefix.substr(lastSlash + 1);
     }
     
-    // Case-insensitive prefix matching
+    // Only fetch if parent directory changed
+    if (parentDir != CachedCompletionDir_ && !CompletionLoading_) {
+        CachedCompletionDir_ = parentDir;
+        CompletionLoading_ = true;
+        // Clear stale completions - they're from a different directory
+        PathCompletions_.clear();
+        CompletionTypes_.clear();
+        
+        // Start async load
+        auto& schemeClient = App_.GetSchemeClient();
+        CompletionFuture_ = std::async(std::launch::async, [&schemeClient, parentDir]() {
+            TVector<std::pair<std::string, TString>> results;
+            
+            auto result = schemeClient.ListDirectory(TString(parentDir.c_str())).GetValueSync();
+            if (!result.IsSuccess()) {
+                return results;
+            }
+            
+            for (const auto& child : result.GetChildren()) {
+                std::string childName = std::string(child.Name.c_str());
+                std::string fullPath = parentDir;
+                if (!fullPath.empty() && fullPath.back() != '/') {
+                    fullPath += "/";
+                }
+                fullPath += childName;
+                
+                // Add trailing slash for directories
+                bool isDir = child.Type == NScheme::ESchemeEntryType::Directory ||
+                             child.Type == NScheme::ESchemeEntryType::SubDomain;
+                if (isDir) {
+                    fullPath += "/";
+                }
+                
+                // Determine type label
+                TString typeLabel;
+                switch (child.Type) {
+                    case NScheme::ESchemeEntryType::Topic:
+                    case NScheme::ESchemeEntryType::PqGroup:
+                        typeLabel = "Topic";
+                        break;
+                    case NScheme::ESchemeEntryType::Directory:
+                    case NScheme::ESchemeEntryType::SubDomain:
+                        typeLabel = "Dir";
+                        break;
+                    case NScheme::ESchemeEntryType::Table:
+                        typeLabel = "Table";
+                        break;
+                    case NScheme::ESchemeEntryType::ColumnTable:
+                        typeLabel = "ColTable";
+                        break;
+                    default:
+                        typeLabel = "";
+                        break;
+                }
+                
+                results.push_back({fullPath, typeLabel});
+                
+                // Limit results
+                if (results.size() >= 100) {
+                    break;
+                }
+            }
+            
+            return results;
+        });
+    }
+    
+    // Filter current completions by name prefix (case-insensitive)
     std::string namePrefixLower = namePrefix;
     for (auto& c : namePrefixLower) {
         c = std::tolower(static_cast<unsigned char>(c));
     }
     
-    // List directory synchronously (blocking, but fast for most cases)
-    auto& schemeClient = App_.GetSchemeClient();
-    auto result = schemeClient.ListDirectory(TString(parentDir.c_str())).GetValueSync();
-    
-    if (!result.IsSuccess()) {
-        return completions;
-    }
-    
-    // Clear old types for completions
-    CompletionTypes_.clear();
-    CompletionScrollOffset_ = 0;
-    
-    for (const auto& child : result.GetChildren()) {
-        std::string childName = std::string(child.Name.c_str());
-        std::string childNameLower = childName;
-        for (auto& c : childNameLower) {
-            c = std::tolower(static_cast<unsigned char>(c));
-        }
-        
-        // Check if child matches the prefix
-        if (namePrefixLower.empty() || childNameLower.find(namePrefixLower) == 0) {
-            std::string fullPath = parentDir;
-            if (!fullPath.empty() && fullPath.back() != '/') {
-                fullPath += "/";
+    TVector<std::string> filtered;
+    for (const auto& path : PathCompletions_) {
+        // Extract name part from path
+        size_t slash = path.rfind('/');
+        if (slash != std::string::npos && slash > 0) {
+            // Check if there's a trailing slash (for directories)
+            size_t nameEnd = path.length();
+            if (path.back() == '/') {
+                nameEnd--;
+                slash = path.rfind('/', nameEnd - 1);
+                if (slash == std::string::npos) slash = 0;
             }
-            fullPath += childName;
-            
-            // Add trailing slash for directories
-            bool isDir = child.Type == NScheme::ESchemeEntryType::Directory ||
-                         child.Type == NScheme::ESchemeEntryType::SubDomain;
-            if (isDir) {
-                fullPath += "/";
+            std::string name = path.substr(slash + 1, nameEnd - slash - 1);
+            std::string nameLower = name;
+            for (auto& c : nameLower) {
+                c = std::tolower(static_cast<unsigned char>(c));
             }
-            
-            completions.push_back(fullPath);
-            
-            // Cache type for display
-            TString typeLabel;
-            switch (child.Type) {
-                case NScheme::ESchemeEntryType::Topic:
-                case NScheme::ESchemeEntryType::PqGroup:
-                    typeLabel = "Topic";
-                    break;
-                case NScheme::ESchemeEntryType::Directory:
-                case NScheme::ESchemeEntryType::SubDomain:
-                    typeLabel = "Dir";
-                    break;
-                case NScheme::ESchemeEntryType::Table:
-                    typeLabel = "Table";
-                    break;
-                case NScheme::ESchemeEntryType::ColumnTable:
-                    typeLabel = "ColTable";
-                    break;
-                default:
-                    typeLabel = "";
-                    break;
-            }
-            CompletionTypes_[fullPath] = typeLabel;
-            
-            // Limit completions to prevent UI from being too slow
-            if (completions.size() >= 50) {
-                break;
+            if (namePrefixLower.empty() || nameLower.find(namePrefixLower) == 0) {
+                filtered.push_back(path);
+                if (filtered.size() >= 50) break;
             }
         }
     }
     
-    return completions;
+    return filtered;
 }
 
 // === Sorting helpers ===

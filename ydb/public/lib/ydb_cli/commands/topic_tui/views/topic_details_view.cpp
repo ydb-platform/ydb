@@ -100,11 +100,10 @@ Component TTopicDetailsView::Build() {
         }) | border | flex;
     });
     
-    // Create consumers panel component
     auto consumersPanel = Renderer(consumersTableComp, [this, consumersTableComp] {
         Element content;
-        // Only show spinner if loading AND we have no data yet
-        if (LoadingConsumers_ && Consumers_.empty()) {
+        // Only show full-screen spinner on FIRST load (never loaded before)
+        if (LoadingConsumers_ && !ConsumersLoadedOnce_) {
             content = NTheme::RenderSpinner(SpinnerFrame_, "Loading consumers...") | center;
         } else if (!ConsumersError_.empty() && Consumers_.empty()) {
             content = text("Error: " + std::string(ConsumersError_.c_str())) | color(NTheme::ErrorText) | center;
@@ -114,8 +113,8 @@ Component TTopicDetailsView::Build() {
             content = consumersTableComp->Render();
         }
         
-        // Show subtle refresh indicator in header when loading with existing data
-        auto header = LoadingConsumers_ && !Consumers_.empty()
+        // Show subtle refresh indicator in header when loading (after first load completed)
+        auto header = LoadingConsumers_ && ConsumersLoadedOnce_
             ? hbox({text(" Consumers ") | bold, text(" ⟳") | dim | color(Color::Yellow)})
             : text(" Consumers ") | bold;
         
@@ -319,6 +318,7 @@ Component TTopicDetailsView::Build() {
 
 void TTopicDetailsView::SetTopic(const TString& topicPath) {
     TopicPath_ = topicPath;
+    ConsumersLoadedOnce_ = false;  // Reset for new topic
     LastRefreshTime_ = TInstant::Now();  // Enable auto-refresh
     StartAsyncLoads();
 }
@@ -377,6 +377,7 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 auto data = ConsumersFuture_.get();
                 Consumers_ = std::move(data.Consumers);
                 ConsumersError_.clear();
+                ConsumersLoadedOnce_ = true;  // Mark that we've completed at least one load
                 // Re-apply current sort order before populating table
                 SortConsumers(ConsumersTable_.GetSortColumn(), ConsumersTable_.IsSortAscending());
                 PopulateConsumersTable();
@@ -417,10 +418,17 @@ Element TTopicDetailsView::RenderHeader() {
         return text("No topic selected") | dim;
     }
     
+    // Calculate totals from partitions
+    ui64 totalWriteRate = 0;
+    for (const auto& p : Partitions_) {
+        totalWriteRate += p.BytesWrittenPerMinute;
+    }
+    
     // Always show current values - don't show "..." during loading to prevent flicker
     std::string partitionsText = std::to_string(TotalPartitions_);
     std::string retentionText = std::string(FormatRetention(RetentionPeriod_).c_str());
     std::string speedText = std::string(FormatBytes(WriteSpeedBytesPerSec_).c_str()) + "/s";
+    std::string writeRateText = std::string(FormatBytes(totalWriteRate).c_str()) + "/m";
     
     return vbox({
         hbox({
@@ -432,8 +440,10 @@ Element TTopicDetailsView::RenderHeader() {
             text(partitionsText) | bold,
             text("   Retention: ") | dim,
             text(retentionText) | bold,
-            text("   Write Speed: ") | dim,
-            text(speedText) | bold
+            text("   Speed Limit: ") | dim,
+            text(speedText) | bold,
+            text("   Write Rate: ") | dim,
+            text(writeRateText) | bold | color(Color::Green)
         })
     });
 }

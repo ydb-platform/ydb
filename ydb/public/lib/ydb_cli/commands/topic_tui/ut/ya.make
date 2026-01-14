@@ -7,6 +7,7 @@ SRCS(
     sparkline_ut.cpp
     table_ut.cpp
     theme_ut.cpp
+    view_logic_ut.cpp
 )
 
 END()

@@ -86,6 +86,8 @@ private:
     
     // Per-partition write rate history for sparklines
     std::unordered_map<ui64, TSparklineHistory> PartitionWriteRateHistory_;
+    // Per-partition read rate history for sparklines
+    std::unordered_map<ui64, TSparklineHistory> PartitionReadRateHistory_;
 };
 
 } // namespace NYdb::NConsoleClient

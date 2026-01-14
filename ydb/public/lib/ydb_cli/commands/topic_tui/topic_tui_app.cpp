@@ -60,25 +60,72 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
         TopicListView_->Refresh();
     };
     
-    TopicListView_->OnNavigateToPath = [this](const TString& path) {
+    TopicListView_->OnNavigateToPath = [this](const TString& inputPath) {
+        TString topicPath;
+        std::optional<ui32> partitionId;
+        TString consumerName;
+        
+        // Parse the input path for @consumer and :partition suffixes
+        TStringBuf pathBuf = inputPath;
+        
+        // First, check for @consumer suffix
+        TStringBuf base, consumerPart;
+        if (pathBuf.TryRSplit('@', base, consumerPart)) {
+            consumerName = TString(consumerPart);
+            topicPath = TString(base);
+        } else {
+            // No @consumer - check for :partition suffix
+            TStringBuf partBase, partitionStr;
+            if (pathBuf.TryRSplit(':', partBase, partitionStr)) {
+                // Verify it looks like a partition number (all digits)
+                bool isPartition = !partitionStr.empty();
+                for (char c : partitionStr) {
+                    if (!std::isdigit(c)) {
+                        isPartition = false;
+                        break;
+                    }
+                }
+                if (isPartition) {
+                    topicPath = TString(partBase);
+                    partitionId = FromString<ui32>(partitionStr);
+                } else {
+                    topicPath = inputPath;
+                }
+            } else {
+                topicPath = inputPath;
+            }
+        }
+        
         // Check path type using DescribePath
-        auto result = SchemeClient_->DescribePath(path).GetValueSync();
+        auto result = SchemeClient_->DescribePath(topicPath).GetValueSync();
         if (result.IsSuccess()) {
             auto entry = result.GetEntry();
             if (entry.Type == NScheme::ESchemeEntryType::Topic || 
                 entry.Type == NScheme::ESchemeEntryType::PqGroup) {
-                // It's a topic - open topic details
-                State_.SelectedTopic = path;
-                TopicDetailsView_->SetTopic(path);
-                NavigateTo(EViewType::TopicDetails);
+                // It's a topic
+                State_.SelectedTopic = topicPath;
+                
+                if (!consumerName.empty()) {
+                    // Navigate to consumer view
+                    State_.SelectedConsumer = consumerName;
+                    ConsumerView_->SetConsumer(topicPath, consumerName);
+                    NavigateTo(EViewType::ConsumerDetails);
+                } else {
+                    // Navigate to topic details, optionally with partition selected
+                    if (partitionId) {
+                        State_.SelectedPartition = *partitionId;
+                    }
+                    TopicDetailsView_->SetTopic(topicPath);
+                    NavigateTo(EViewType::TopicDetails);
+                }
             } else {
                 // It's a directory - navigate the explorer
-                State_.CurrentPath = path;
+                State_.CurrentPath = topicPath;
                 TopicListView_->Refresh();
             }
         } else {
             // Path doesn't exist, try as directory
-            State_.CurrentPath = path;
+            State_.CurrentPath = topicPath;
             TopicListView_->Refresh();
         }
     };
@@ -395,9 +442,12 @@ int TTopicTuiApp::Run() {
 
 void TTopicTuiApp::NavigateTo(EViewType view) {
     // Track previous view for forms/dialogs so we can return properly
+    // Also track for main views when navigating between them
     if (view == EViewType::TopicForm || view == EViewType::DeleteConfirm ||
         view == EViewType::ConsumerForm || view == EViewType::WriteMessage ||
-        view == EViewType::DropConsumerConfirm || view == EViewType::EditConsumer) {
+        view == EViewType::DropConsumerConfirm || view == EViewType::EditConsumer ||
+        view == EViewType::ConsumerDetails || view == EViewType::TopicDetails ||
+        view == EViewType::MessagePreview || view == EViewType::Charts) {
         State_.PreviousView = State_.CurrentView;
     }
     
@@ -422,10 +472,13 @@ void TTopicTuiApp::NavigateBack() {
             State_.CurrentView = EViewType::TopicList;
             break;
         case EViewType::ConsumerDetails:
-            State_.CurrentView = EViewType::TopicDetails;
+            // Go back to where we came from (TopicDetails or TopicList via Go To)
+            State_.CurrentView = (State_.PreviousView == EViewType::TopicList) 
+                ? EViewType::TopicList : EViewType::TopicDetails;
             break;
         case EViewType::MessagePreview:
-            State_.CurrentView = EViewType::TopicDetails;
+            State_.CurrentView = (State_.PreviousView == EViewType::TopicList) 
+                ? EViewType::TopicList : EViewType::TopicDetails;
             break;
         case EViewType::TopicInfo:
             State_.CurrentView = EViewType::TopicDetails;
@@ -434,7 +487,8 @@ void TTopicTuiApp::NavigateBack() {
             State_.CurrentView = EViewType::TopicDetails;
             break;
         case EViewType::Charts:
-            State_.CurrentView = EViewType::TopicDetails;
+            State_.CurrentView = (State_.PreviousView == EViewType::TopicList) 
+                ? EViewType::TopicList : EViewType::TopicDetails;
             break;
         // Forms and dialogs return to where user came from
         case EViewType::TopicForm:
@@ -690,7 +744,7 @@ Component TTopicTuiApp::BuildHelpBar() {
                     text(" [e] Edit ") | color(Color::Yellow),
                     text(" [d] Delete ") | color(Color::Red),
                     text(" [</>] Col ") | dim,
-                    text(" [s] Dir ") | dim,
+                    text(" [s] Sort ↕ ") | dim,
                     text(" [r] Refresh ") | dim,
                     text(" [R] Rate: ") | dim,
                     text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta)

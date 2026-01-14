@@ -114,6 +114,7 @@ private:
     
     // Consumers data (loaded separately)
     TVector<TConsumerDisplayInfo> Consumers_;
+    bool ConsumersLoadedOnce_ = false;  // Track if we've completed first load
     
     // Use TTable for both tables
     TTable PartitionsTable_;

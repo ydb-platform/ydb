@@ -97,13 +97,18 @@ public:
 };
 
 void TestErasureSet(ui32 firstIdx, ui32 step) {
-    std::unordered_set<TBlobStorageGroupType::EErasureSpecies> erasures;
-    for (ui32 i = firstIdx; erasures.size() < TBlobStorageGroupType::ErasureNames.size(); i += step) {
+    ui32 maxErasureIdx = 0;
+    for (ui32 i = 0; i < TBlobStorageGroupType::ErasureNames.size(); i += step) {
         if (!TBlobStorageGroupType::ErasureNames.contains((TBlobStorageGroupType::EErasureSpecies)i)) {
             continue;
         }
+        maxErasureIdx = std::max(maxErasureIdx, i);
+    }
+    for (ui32 i = firstIdx; i <= maxErasureIdx; i += step) {
         auto erasure = (TBlobStorageGroupType::EErasureSpecies)i;
-        erasures.insert(erasure);
+        if (!TBlobStorageGroupType::ErasureNames.contains(erasure)) {
+            continue;
+        }
         if (erasure == TBlobStorageGroupType::ErasureMirror3dc || erasure == TBlobStorageGroupType::ErasureMirror3of4) {
             continue;
         }

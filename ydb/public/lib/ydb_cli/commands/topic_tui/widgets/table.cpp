@@ -182,25 +182,29 @@ bool TTable::HandleEvent(Event event) {
     
     int oldSelection = SelectedRow_;
     
-    if (event == Event::ArrowUp) {
+    // Up navigation (ArrowUp or k)
+    if (event == Event::ArrowUp || event == Event::Character('k')) {
         if (SelectedRow_ > 0) {
             SelectedRow_--;
         }
-        // Always consume arrow keys even at boundary
+        // Always consume these keys even at boundary
         if (SelectedRow_ != oldSelection && OnNavigate) {
             OnNavigate(SelectedRow_);
         }
         return true;
-    } else if (event == Event::ArrowDown) {
+    }
+    // Down navigation (ArrowDown or j)
+    if (event == Event::ArrowDown || event == Event::Character('j')) {
         if (SelectedRow_ < static_cast<int>(Rows_.size()) - 1) {
             SelectedRow_++;
         }
-        // Always consume arrow keys even at boundary
+        // Always consume these keys even at boundary
         if (SelectedRow_ != oldSelection && OnNavigate) {
             OnNavigate(SelectedRow_);
         }
         return true;
-    } else if (event == Event::PageUp) {
+    }
+    if (event == Event::PageUp) {
         SelectedRow_ = std::max(0, SelectedRow_ - 10);
         if (SelectedRow_ != oldSelection && OnNavigate) {
             OnNavigate(SelectedRow_);

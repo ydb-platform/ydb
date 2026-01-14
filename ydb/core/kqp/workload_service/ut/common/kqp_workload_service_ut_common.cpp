@@ -257,6 +257,7 @@ private:
         appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
         appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
         appConfig.MutableFeatureFlags()->SetEnableStreamingQueries(true);
+        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsScheduler(Settings_.EnableResourcePoolsScheduler_);
         appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         *appConfig.MutableWorkloadManagerConfig() = Settings_.WorkloadManagerConfig_;
 
@@ -267,6 +268,7 @@ private:
     void SetLoggerSettings(TServerSettings& serverSettings) const {
         auto loggerInitializer = [](TTestActorRuntime& runtime) {
             runtime.SetLogPriority(NKikimrServices::KQP_WORKLOAD_SERVICE, NLog::EPriority::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE_SCHEDULER, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::EPriority::PRI_TRACE);
         };
 
@@ -422,7 +424,8 @@ public:
 
     void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const override {
         TStatus status = TableClientSession_->ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus,
+            TStringBuilder() << "Query: " << query << Endl << status.GetIssues().ToOneLineString());
         if (expectedStatus != NYdb::EStatus::SUCCESS) {
             UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), expectedMessage);
         }
@@ -495,6 +498,14 @@ public:
     }
 
     // Pools actions
+    void CreateResourcePool(const TString& poolId, const NResourcePool::TPoolSettings& settings) const override {
+        auto edgeActor = GetRuntime()->AllocateEdgeActor();
+
+        GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, poolId, settings, nullptr, {}));
+        auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
+    }
+
     TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const override {
         const auto& edgeActor = GetRuntime()->AllocateEdgeActor();
 

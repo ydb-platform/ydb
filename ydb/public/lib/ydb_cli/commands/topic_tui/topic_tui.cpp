@@ -28,8 +28,59 @@ void TCommandTopicTui::Config(TConfig& config) {
 void TCommandTopicTui::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
     
+    // Helper to resolve relative paths using database path as base
+    auto resolvePath = [&config](const TString& path) -> TString {
+        if (path.empty()) {
+            return config.Database;
+        }
+        if (path.StartsWith("/")) {
+            return path;  // Already absolute
+        }
+        // Relative path - prepend database
+        TString base = config.Database;
+        if (!base.EndsWith("/")) {
+            base += "/";
+        }
+        return base + path;
+    };
+    
     if (config.ParseResult->GetFreeArgCount() > 0) {
-        Path_ = config.ParseResult->GetFreeArgs()[0];
+        TString arg = config.ParseResult->GetFreeArgs()[0];
+        
+        // Check for partition suffix: /path/to/topic:N or topic:N
+        TStringBuf path = arg;
+        TStringBuf base, partitionStr;
+        if (path.TryRSplit(':', base, partitionStr)) {
+            // Verify it looks like a partition number (all digits)
+            bool isPartition = !partitionStr.empty();
+            for (char c : partitionStr) {
+                if (!std::isdigit(c)) {
+                    isPartition = false;
+                    break;
+                }
+            }
+            if (isPartition) {
+                // Resolve the base path (before colon)
+                InitialTopicPath_ = resolvePath(TString(base));
+                InitialPartition_ = FromString<ui32>(partitionStr);
+                // Set Path_ to parent directory for navigation context  
+                TStringBuf parent, discard;
+                if (TStringBuf(InitialTopicPath_).TryRSplit('/', parent, discard)) {
+                    Path_ = parent ? TString(parent) : "/";
+                } else {
+                    Path_ = "/";
+                }
+                return;
+            }
+        }
+        
+        // No partition suffix - resolve path and use for both topic and directory
+        TString resolved = resolvePath(arg);
+        InitialTopicPath_ = resolved;
+        Path_ = resolved;
+    } else {
+        // No argument provided - use database as root path
+        Path_ = config.Database;
     }
 }
 
@@ -64,7 +115,19 @@ int TCommandTopicTui::Run(TConfig& config) {
         viewerEndpoint = InferViewerEndpoint(config.Address);
     }
     
-    TTopicTuiApp app(driver, Path_, RefreshRate_, viewerEndpoint);
+    // Determine start path: use explicit path, or database, or fallback to "/"
+    TString startPath = Path_;
+    if (startPath.empty() || startPath == "/") {
+        // No explicit path - use database if available
+        if (!config.Database.empty()) {
+            startPath = config.Database;
+        } else {
+            startPath = "/";  // Ultimate fallback
+        }
+    }
+    
+    TTopicTuiApp app(driver, startPath, RefreshRate_, viewerEndpoint, 
+                     InitialTopicPath_, InitialPartition_);
     return app.Run();
 }
 

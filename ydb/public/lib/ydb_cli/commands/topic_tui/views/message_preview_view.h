@@ -17,6 +17,7 @@
 #include <thread>
 #include <mutex>
 #include <deque>
+#include <unordered_map>
 
 namespace NYdb::NConsoleClient {
 
@@ -60,10 +61,17 @@ private:
     int SelectedIndex_ = 0;
     bool ExpandedView_ = false;
     
+    // Partition bounds (refreshed in background)
+    ui64 PartitionStartOffset_ = 0;
+    ui64 PartitionEndOffset_ = 0;
+    TInstant LastBoundsRefresh_;
+    
     static constexpr ui32 PageSize = 20;
     
     std::atomic<bool> Loading_{false};
+    ui64 LoadingForOffset_ = 0;  // Track which offset the current load is for
     std::future<std::deque<TTopicMessage>> LoadFuture_;
+    std::vector<std::future<std::deque<TTopicMessage>>> PendingFutures_;  // Old futures (non-blocking cleanup)
     TString ErrorMessage_;
     int SpinnerFrame_ = 0;
     
@@ -71,12 +79,20 @@ private:
     TInstant LastTailRefresh_;
     bool TailPollLoading_ = false;  // True when doing background poll (no spinner)
     
+    // Go to offset input mode
+    bool GotoOffsetMode_ = false;
+    std::string GotoOffsetInput_;
+    
     // SDK streaming for tail mode
     std::shared_ptr<NTopic::IReadSession> TailSession_;
     std::thread TailReaderThread_;
     std::atomic<bool> TailReaderRunning_{false};
     std::mutex TailMessagesMutex_;
     std::deque<TTopicMessage> TailMessagesQueue_;
+    
+    // Static cache of last viewed offset per topic:partition
+    // Key format: "topic_path:partition_id"
+    static std::unordered_map<TString, ui64> PositionCache_;
 };
 
 } // namespace NYdb::NConsoleClient

@@ -9,6 +9,9 @@ using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
+// Static member definition for position cache
+std::unordered_map<TString, ui64> TMessagePreviewView::PositionCache_;
+
 TMessagePreviewView::TMessagePreviewView(TTopicTuiApp& app)
     : App_(app)
 {}
@@ -44,18 +47,48 @@ Component TMessagePreviewView::Build() {
         return vbox({
             RenderHeader(),
             separator(),
-            RenderMessages() | flex
+            GotoOffsetMode_ ? 
+                hbox({
+                    text("Go to offset: ") | bold,
+                    text(GotoOffsetInput_ + "_") | color(Color::Yellow),
+                    text(" (Enter to go, Esc to cancel)") | dim
+                }) | center :
+                RenderMessages() | flex
         }) | border;
     }) | CatchEvent([this](Event event) {
         if (App_.GetState().CurrentView != EViewType::MessagePreview) {
             return false;
         }
+        
+        // Block navigation in goto offset input mode
+        if (GotoOffsetMode_) {
+            // Let the input handling below process this
+        } else {
+            // Allow page navigation even during loading for snappy feel
+            if (event == Event::ArrowLeft) {
+                if (TailMode_) {
+                    TailMode_ = false;
+                    StopTailSession();
+                }
+                NavigateOlder();
+                return true;
+            }
+            if (event == Event::ArrowRight) {
+                NavigateNewer();
+                return true;
+            }
+        }
+        
+        // Block other events during loading
         if (Loading_) {
             return false;
         }
         
         if (event == Event::ArrowUp) {
-            TailMode_ = false;  // Manual nav disables tail mode
+            if (TailMode_) {
+                TailMode_ = false;
+                StopTailSession();
+            }
             if (SelectedIndex_ > 0) {
                 SelectedIndex_--;
             }
@@ -67,18 +100,64 @@ Component TMessagePreviewView::Build() {
             }
             return true;
         }
-        if (event == Event::ArrowLeft) {
-            TailMode_ = false;  // Manual nav disables tail mode
-            NavigateOlder();
-            return true;
-        }
-        if (event == Event::ArrowRight) {
-            NavigateNewer();
-            return true;
-        }
         if (event == Event::Return) {
+            if (GotoOffsetMode_) {
+                // Submit offset
+                try {
+                    ui64 offset = std::stoull(GotoOffsetInput_);
+                    GotoOffsetMode_ = false;
+                    GotoOffsetInput_.clear();
+                    if (TailMode_) {
+                        TailMode_ = false;
+                        StopTailSession();
+                    }
+                    GoToOffset(offset);
+                } catch (...) {
+                    // Invalid input, just close
+                    GotoOffsetMode_ = false;
+                    GotoOffsetInput_.clear();
+                }
+                return true;
+            }
             ExpandedView_ = !ExpandedView_;
             return true;
+        }
+        if (event == Event::Escape) {
+            if (GotoOffsetMode_) {
+                // Cancel goto offset input
+                GotoOffsetMode_ = false;
+                GotoOffsetInput_.clear();
+            } else {
+                // Save current position to cache before leaving
+                TString cacheKey = Sprintf("%s:%u", TopicPath_.c_str(), Partition_);
+                PositionCache_[cacheKey] = CurrentOffset_;
+                
+                // Stop tail mode when leaving the view
+                if (TailMode_) {
+                    TailMode_ = false;
+                    StopTailSession();
+                }
+                // Navigate back to topic details
+                if (OnBack) {
+                    OnBack();
+                }
+            }
+            return true;
+        }
+        if (GotoOffsetMode_) {
+            // Handle digit input
+            if (event.is_character() && event.character().size() == 1) {
+                char c = event.character()[0];
+                if (c >= '0' && c <= '9') {
+                    GotoOffsetInput_ += c;
+                    return true;
+                }
+            }
+            if (event == Event::Backspace && !GotoOffsetInput_.empty()) {
+                GotoOffsetInput_.pop_back();
+                return true;
+            }
+            return true;  // Consume all events in input mode
         }
         if (event == Event::Character('t') || event == Event::Character('T')) {
             TailMode_ = !TailMode_;
@@ -91,23 +170,39 @@ Component TMessagePreviewView::Build() {
             }
             return true;
         }
+        if (event == Event::Character('g') || event == Event::Character('G')) {
+            // Disable tail mode when entering goto offset
+            if (TailMode_) {
+                TailMode_ = false;
+                StopTailSession();
+            }
+            GotoOffsetMode_ = true;
+            GotoOffsetInput_.clear();
+            return true;
+        }
         return false;
     });
 }
 
 void TMessagePreviewView::SetTopic(const TString& topicPath, ui32 partition, ui64 startOffset) {
-    Y_UNUSED(startOffset);  // We always start from the end
+    Y_UNUSED(startOffset);  // We use cached position or start from the end
     TopicPath_ = topicPath;
     Partition_ = partition;
     Messages_.clear();
     SelectedIndex_ = 0;
     ErrorMessage_.clear();
     
-    // Query end offset to start from the last messages
+    // Check if we have a cached position for this topic:partition
+    TString cacheKey = Sprintf("%s:%u", topicPath.c_str(), partition);
+    auto it = PositionCache_.find(cacheKey);
+    bool hasCachedPosition = (it != PositionCache_.end());
+    ui64 cachedOffset = hasCachedPosition ? it->second : 0;
+    
+    // Query partition info and load messages
     Loading_ = true;
-    LoadFuture_ = std::async(std::launch::async, [this, topicPath, partition]() -> std::deque<TTopicMessage> {
+    LoadFuture_ = std::async(std::launch::async, [this, topicPath, partition, hasCachedPosition, cachedOffset]() -> std::deque<TTopicMessage> {
         try {
-            // Get partition info to find end offset
+            // Get partition info to find bounds
             auto describeResult = App_.GetTopicClient().DescribePartition(
                 std::string(topicPath.c_str()), 
                 partition, 
@@ -121,9 +216,16 @@ void TMessagePreviewView::SetTopic(const TString& topicPath, ui32 partition, ui6
             const auto& partInfo = describeResult.GetPartitionDescription().GetPartition();
             const auto& stats = partInfo.GetPartitionStats();
             ui64 endOffset = stats ? stats->GetEndOffset() : 0;
+            ui64 startOff = stats ? stats->GetStartOffset() : 0;
             
-            // Start from PageSize messages before end, or 0 if not enough messages
-            ui64 offset = endOffset > PageSize ? endOffset - PageSize : 0;
+            // Use cached position if valid, otherwise start from end
+            ui64 offset;
+            if (hasCachedPosition && cachedOffset >= startOff && cachedOffset <= endOffset) {
+                offset = cachedOffset;
+            } else {
+                // Start from PageSize messages before end, or 0 if not enough messages
+                offset = endOffset > PageSize ? endOffset - PageSize : 0;
+            }
             CurrentOffset_ = offset;
             
             // Now fetch messages using HTTP API
@@ -171,6 +273,29 @@ void TMessagePreviewView::CheckAsyncCompletion() {
         }
     }
     
+    // Refresh partition bounds every 2 seconds (non-blocking)
+    auto now = TInstant::Now();
+    if (now - LastBoundsRefresh_ > TDuration::Seconds(2)) {
+        LastBoundsRefresh_ = now;
+        try {
+            auto result = App_.GetTopicClient().DescribePartition(
+                std::string(TopicPath_.c_str()), 
+                Partition_, 
+                NTopic::TDescribePartitionSettings().IncludeStats(true)
+            ).GetValueSync();
+            
+            if (result.IsSuccess()) {
+                const auto& stats = result.GetPartitionDescription().GetPartition().GetPartitionStats();
+                if (stats) {
+                    PartitionStartOffset_ = stats->GetStartOffset();
+                    PartitionEndOffset_ = stats->GetEndOffset();
+                }
+            }
+        } catch (...) {
+            // Ignore errors on background refresh
+        }
+    }
+    
     if (!Loading_ && !TailPollLoading_) {
         return;
     }
@@ -182,6 +307,14 @@ void TMessagePreviewView::CheckAsyncCompletion() {
     if (LoadFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
         try {
             auto newMessages = LoadFuture_.get();
+            
+            // Check if the loaded offset is stale (user navigated during load)
+            if (!TailPollLoading_ && LoadingForOffset_ != CurrentOffset_) {
+                // Stale result - discard and load the new offset
+                Loading_ = false;
+                StartAsyncLoad();
+                return;
+            }
             
             if (TailPollLoading_) {
                 // Append new messages to the existing list
@@ -223,31 +356,38 @@ Element TMessagePreviewView::RenderSpinner() {
 }
 
 Element TMessagePreviewView::RenderHeader() {
-    TString offsetRange;
-    if (!Messages_.empty()) {
-        offsetRange = Sprintf("%s - %s",
+    TString offsetInfo;
+    if (Loading_) {
+        // Show target offset during load for immediate feedback
+        offsetInfo = Sprintf("→ %s (loading...)", FormatNumber(CurrentOffset_).c_str());
+    } else if (!Messages_.empty()) {
+        offsetInfo = Sprintf("%s - %s",
             FormatNumber(Messages_.front().Offset).c_str(),
             FormatNumber(Messages_.back().Offset).c_str());
     } else {
-        offsetRange = "No messages";
+        offsetInfo = "No messages";
     }
     
+    // Format topic:partition like CLI argument format (e.g., /Root/db/t10:4)
+    TString topicPartition = Sprintf("%s:%u", TopicPath_.c_str(), Partition_);
+    
+    // Build responsive header using hflow for wrapping
     return vbox({
-        hbox({
-            text(" Message Preview: ") | bold,
-            text(std::string(TopicPath_.c_str())) | color(Color::Cyan),
-            text(" / Partition ") | dim,
-            text(std::to_string(Partition_)) | color(Color::White),
+        // Row 1: Topic:Partition path and tail status
+        hflow({
+            hbox({text(" ") | dim, text(std::string(topicPartition.c_str())) | color(Color::Cyan) | bold}),
             filler(),
             TailMode_ 
                 ? (text(" [Tail: ON] ") | color(Color::Green) | bold)
                 : (text(" [t] Tail ") | dim)
         }),
-        hbox({
-            text(" Offset: ") | dim,
-            text(std::string(offsetRange.c_str())) | bold,
+        // Row 2: Offsets - using smaller tokens for wrapping
+        hflow({
+            hbox({text(" ") | dim, text(std::string(offsetInfo.c_str())) | bold}),
+            hbox({text(" Start:") | dim, text(FormatNumber(PartitionStartOffset_).c_str()) | color(Color::Yellow)}),
+            hbox({text(" End:") | dim, text(FormatNumber(PartitionEndOffset_).c_str()) | color(Color::Yellow)}),
             filler(),
-            text(" [←] Older  [→] Newer  [Enter] Expand ") | dim
+            text(" [←→g↵] ") | dim
         })
     });
 }
@@ -368,8 +508,16 @@ void TMessagePreviewView::StartAsyncLoad() {
         return;
     }
     
-    if (Loading_) {
-        return;
+    // Clean up completed old futures (non-blocking)
+    PendingFutures_.erase(
+        std::remove_if(PendingFutures_.begin(), PendingFutures_.end(),
+            [](auto& f) { return f.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready; }),
+        PendingFutures_.end()
+    );
+    
+    // Move old future to pending vector to prevent destructor blocking
+    if (LoadFuture_.valid()) {
+        PendingFutures_.push_back(std::move(LoadFuture_));
     }
     
     Loading_ = true;
@@ -379,6 +527,7 @@ void TMessagePreviewView::StartAsyncLoad() {
     TString topicPath = TopicPath_;
     ui32 partition = Partition_;
     ui64 offset = CurrentOffset_;
+    LoadingForOffset_ = offset;  // Track which offset this load is for
     
     LoadFuture_ = std::async(std::launch::async, [endpoint, topicPath, partition, offset]() -> std::deque<TTopicMessage> {
         TViewerHttpClient client(endpoint);
@@ -388,23 +537,36 @@ void TMessagePreviewView::StartAsyncLoad() {
 }
 
 void TMessagePreviewView::NavigateOlder() {
-    if (CurrentOffset_ >= 20) {
-        CurrentOffset_ -= 20;
+    if (CurrentOffset_ >= PageSize) {
+        CurrentOffset_ -= PageSize;
     } else {
         CurrentOffset_ = 0;
+    }
+    // Clamp to partition start
+    if (CurrentOffset_ < PartitionStartOffset_) {
+        CurrentOffset_ = PartitionStartOffset_;
     }
     StartAsyncLoad();
 }
 
 void TMessagePreviewView::NavigateNewer() {
-    if (!Messages_.empty()) {
-        CurrentOffset_ = Messages_.back().Offset + 1;
+    CurrentOffset_ += PageSize;
+    // Clamp to partition end
+    if (PartitionEndOffset_ > 0 && CurrentOffset_ > PartitionEndOffset_) {
+        CurrentOffset_ = PartitionEndOffset_ > PageSize ? PartitionEndOffset_ - PageSize : 0;
     }
     StartAsyncLoad();
 }
 
 void TMessagePreviewView::GoToOffset(ui64 offset) {
     CurrentOffset_ = offset;
+    // Clamp to valid range
+    if (CurrentOffset_ < PartitionStartOffset_) {
+        CurrentOffset_ = PartitionStartOffset_;
+    }
+    if (PartitionEndOffset_ > 0 && CurrentOffset_ > PartitionEndOffset_) {
+        CurrentOffset_ = PartitionEndOffset_ > PageSize ? PartitionEndOffset_ - PageSize : 0;
+    }
     StartAsyncLoad();
 }
 
@@ -441,7 +603,18 @@ void TMessagePreviewView::StartTailSession() {
         return;
     }
     
-    // Create read session settings
+    // Jump to the end - clear current messages and set offset to end
+    Messages_.clear();
+    if (PartitionEndOffset_ > PageSize) {
+        CurrentOffset_ = PartitionEndOffset_ - PageSize;
+    } else {
+        CurrentOffset_ = 0;
+    }
+    
+    // Load the latest messages first via HTTP (they'll appear immediately)
+    StartAsyncLoad();
+    
+    // Create read session settings for real-time streaming
     NTopic::TReadSessionSettings settings;
     settings.WithoutConsumer();
     
@@ -468,13 +641,15 @@ void TMessagePreviewView::StartTailSession() {
 void TMessagePreviewView::StopTailSession() {
     TailReaderRunning_ = false;
     
+    // Wait for background thread to exit first (it will detect TailReaderRunning_ = false)
+    if (TailReaderThread_.joinable()) {
+        TailReaderThread_.join();
+    }
+    
+    // Now safe to close and reset the session
     if (TailSession_) {
         TailSession_->Close(TDuration::MilliSeconds(100));
         TailSession_.reset();
-    }
-    
-    if (TailReaderThread_.joinable()) {
-        TailReaderThread_.join();
     }
     
     // Clear the queue

@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 import random
 from collections import defaultdict
 import asyncio
+import threading
+import time
 
 from ydb.public.api.protos import ydb_status_codes_pb2 as ydb_status_codes
 
@@ -58,15 +60,10 @@ class Worker:
             return self.workload.verbose
 
         def _generate_instance_id(self, action_name):
-            if self.worker:
-                return self.worker._generate_instance_id(action_name)
-            instance_id = f'{action_name}_{id(self)}'
-            return instance_id
+            return self.worker._generate_instance_id(action_name)
 
         def _generate_write_key(self):
-            if self.worker:
-                return self.worker._generate_write_key()
-            return f'write_key_{id(self)}'
+            return self.worker._generate_write_key()
 
         async def execute_command(self, cmd, data_context=None):
             cmd_type = cmd.WhichOneof('Command')
@@ -114,6 +111,7 @@ class Worker:
                             print(f"  First 20 bytes of expected: {expected_data[:20]}", file=sys.stderr)
                     elif self.verbose:
                         print(f"READ verification: key={key}, data verified successfully", file=sys.stderr)
+                self.worker._increment_action_stat('read')
             elif cmd_type == 'delete':
                 keys_with_partitions = self._get_keys()
                 if not keys_with_partitions:
@@ -127,7 +125,7 @@ class Worker:
                     partition_id = key_info[0]
                     if self.verbose:
                         print(f"DELETE action: key={key}, partition_id={partition_id}, version={self.workload.version}", file=sys.stderr)
-                    client = self.worker.client if self.worker else self.workload.client
+                    client = self.worker.client
                     response = client.kv_delete_range(
                         self.workload._volume_path(),
                         partition_id,
@@ -141,6 +139,7 @@ class Worker:
                         self._remove_key(key)
                         if self.verbose:
                             print(f"DELETE successful: key={key}", file=sys.stderr)
+                        self.worker._increment_action_stat('delete')
                     else:
                         print(f"Delete failed for key {key} in action {self.config.name}", file=sys.stderr)
             elif cmd_type == 'write':
@@ -164,6 +163,7 @@ class Worker:
                     self._store_key(key, partition_id, cmd.write.size)
                     if self.verbose:
                         print(f"WRITE successful: key={key}", file=sys.stderr)
+                    self.worker._increment_action_stat('write')
 
         def _get_keys(self):
             mode = self.config.action_data_mode.WhichOneof('Mode')
@@ -229,7 +229,7 @@ class Worker:
         async def run_once(self, parent_chain_update=None):
             await self.run_commands(parent_chain_update)
 
-    def __init__(self, worker_id, workload):
+    def __init__(self, worker_id, workload, stats_queue=None):
         self.worker_id = worker_id
         self.workload = workload
         self.database = str(self.workload.database)
@@ -242,6 +242,10 @@ class Worker:
         self.results = defaultdict(lambda: defaultdict(dict))
         self.write_key_counter = 0
         self.instance_counter = 0
+        self.stats_queue = stats_queue
+        self.show_stats = self.workload.show_stats if hasattr(self.workload, 'show_stats') else False
+        self.action_stats = defaultdict(int)
+        self.stats_lock = threading.Lock()
         if self.verbose:
             print(f"Worker {self.worker_id} initialized with {len(self.init_keys)} init keys", file=sys.stderr)
 
@@ -288,6 +292,26 @@ class Worker:
         if self.verbose:
             print(f"Worker {self.worker_id}: generated {len(init_keys)} init keys", file=sys.stderr)
         return init_keys
+
+    def _stats_collector(self):
+        if self.stats_queue:
+            self.stats_queue.put('start')
+
+        while True:
+            time.sleep(0.1)
+            with self.stats_lock:
+                if not self.action_stats:
+                    continue
+                stats_snapshot = dict(self.action_stats)
+                self.action_stats.clear()
+
+            if self.stats_queue:
+                self.stats_queue.put(stats_snapshot)
+
+    def _increment_action_stat(self, action_type):
+        if self.show_stats:
+            with self.stats_lock:
+                self.action_stats[action_type] += 1
 
     async def _fill_init_data(self):
         if not hasattr(self.workload.config, 'initial_data'):
@@ -342,6 +366,11 @@ class Worker:
             print(f"Worker {self.worker_id}: starting arun", file=sys.stderr)
         await self._fill_init_data()
         end_time = datetime.now() + timedelta(seconds=self.workload.duration)
+
+        stats_thread = None
+        if self.show_stats:
+            stats_thread = threading.Thread(target=self._stats_collector, daemon=True)
+            stats_thread.start()
 
         task_map = {}
         parent_chains = {}
@@ -415,15 +444,15 @@ class WorkerBuilder:
     def __init__(self, config, workload):
         self.config = config
         self.workload = workload
-        
+
     @property
     def verbose(self):
         return self.workload.verbose
 
-    def build(self, worker_id):
+    def build(self, worker_id, stats_queue=None):
         if self.verbose:
             print(f"WorkerBuilder: building worker {worker_id} with {len(self.config.actions)} actions", file=sys.stderr)
-        worker = Worker(worker_id, self.workload)
+        worker = Worker(worker_id, self.workload, stats_queue)
 
         parent_names_map = {}
         for action in self.config.actions:
@@ -442,7 +471,7 @@ class WorkerBuilder:
 
 
 class YdbKeyValueVolumeWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, worker_count, version, config, verbose=False):
+    def __init__(self, endpoint, database, duration, worker_count, version, config, verbose=False, show_stats=False):
         super().__init__(None, '', 'kv_volume', None)
         fqdn, port = parse_endpoint(endpoint)
         self.fqdn = fqdn
@@ -456,6 +485,9 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         self.config = config
         self.client = None
         self.verbose = verbose
+        self.show_stats = show_stats
+        self.stats_queue = None
+        self.stats_thread = None
 
     @property
     def partition_count(self):
@@ -478,6 +510,59 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
     def _drop_volume(self, client):
         return client.drop_tablets(self._volume_path())
 
+    def _stats_listener(self):
+        start_messages = 0
+        stats_accumulator = defaultdict(int)
+        last_print_time = time.time()
+        action_types = set()
+        header_printed = False
+        second_counter = 0
+
+        while True:
+            msg = self.stats_queue.get()
+
+            if msg == 'start':
+                start_messages += 1
+                if start_messages >= self.worker_count:
+                    print("Stats: All workers started", file=sys.stderr)
+            elif msg == 'stop':
+                break
+            elif isinstance(msg, dict):
+                for action_type, count in msg.items():
+                    stats_accumulator[action_type] += count
+                    action_types.add(action_type)
+
+            current_time = time.time()
+            if current_time - last_print_time >= 1.0:
+                if action_types and not header_printed:
+                    sorted_actions = sorted(action_types)
+                    col_width = max(8, max(len(a) for a in sorted_actions))
+
+                    print("Time     |", end="", file=sys.stderr)
+                    for action in sorted_actions:
+                        print(f" {action.ljust(col_width)}|", end="", file=sys.stderr)
+                    print("", file=sys.stderr)
+
+                    separator = "-" * 9 + "+"
+                    for action in sorted_actions:
+                        separator += "-" * (col_width + 2) + "+"
+                    print(separator, file=sys.stderr)
+                    header_printed = True
+
+                if header_printed:
+                    sorted_actions = sorted(action_types)
+                    col_width = max(8, max(len(a) for a in sorted_actions))
+
+                    print(f"{second_counter:3d}s      |", end="", file=sys.stderr)
+                    for action in sorted_actions:
+                        count = stats_accumulator.get(action, 0)
+                        print(f" {str(count).ljust(col_width)}|", end="", file=sys.stderr)
+                    print("", file=sys.stderr)
+
+                    stats_accumulator.clear()
+                    second_counter += 1
+                last_print_time = current_time
+
     def _pre_start(self):
         if self.verbose:
             print(f"Initializing KeyValue volume: endpoint={self.fqdn}:{self.port}, database={self.database}, path={self._volume_path()}", file=sys.stderr)
@@ -492,17 +577,30 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         print('Start Load; Begin Time:', self.begin_time, '; End Time:', self.end_time)
         if self.verbose:
             print(f"Start Load: duration={self.duration}s, workers={self.worker_count}, version={self.version}", file=sys.stderr)
+
+        if self.show_stats:
+            from multiprocessing import Queue
+            self.stats_queue = Queue()
+            self.stats_thread = threading.Thread(target=self._stats_listener, daemon=True)
+            self.stats_thread.start()
+
         return True
 
     def _post_stop(self):
         asyncio.run(self._apost_stop())
-    
+
     async def _apost_stop(self):
         if self.verbose:
             print(f"Stop Load: dropping volume {self._volume_path()}", file=sys.stderr)
         if self.client:
             self._drop_volume(self.client)
             self.client.close()
+
+        if self.show_stats and self.stats_queue:
+            self.stats_queue.put('stop')
+            if self.stats_thread:
+                self.stats_thread.join(timeout=2.0)
+
         return True
 
     def get_status(self, response):
@@ -516,6 +614,6 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         workers = []
         for i in range(self.worker_count):
             builder = WorkerBuilder(self.config, self)
-            worker = builder.build(i)
+            worker = builder.build(i, self.stats_queue if self.show_stats else None)
             workers.append(lambda w=worker, worker_id=i: w.run())
         return workers

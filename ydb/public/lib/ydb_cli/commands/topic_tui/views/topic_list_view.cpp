@@ -3,6 +3,7 @@
 #include "../widgets/sparkline.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
+#include <contrib/libs/ftxui/include/ftxui/screen/terminal.hpp>
 
 using namespace ftxui;
 
@@ -793,8 +794,11 @@ void TTopicListView::StartTopicInfoLoads() {
     int startIdx = std::max(0, selectedRow - visibleBuffer);
     int endIdx = std::min(static_cast<int>(Entries_.size()), selectedRow + visibleBuffer);
     
-    // Load ALL visible entries at once (no batching limit - they're all visible)
-    for (int idx = startIdx; idx < endIdx; ++idx) {
+    // Limit concurrent requests to avoid overwhelming the server
+    int loadCount = 0;
+    const int maxConcurrent = 20;  // Reasonable limit for visible entries
+    
+    for (int idx = startIdx; idx < endIdx && loadCount < maxConcurrent; ++idx) {
         auto& entry = Entries_[idx];
         
         if (entry.IsTopic) {
@@ -845,6 +849,8 @@ void TTopicListView::StartTopicInfoLoads() {
                     
                     return result;
                 });
+            
+            loadCount++;
         } else if (entry.IsDirectory && entry.Name != "..") {
             std::string pathKey = std::string(entry.FullPath.c_str());
             
@@ -878,6 +884,8 @@ void TTopicListView::StartTopicInfoLoads() {
                     
                     return result;
                 });
+            
+            loadCount++;
         }
     }
 }

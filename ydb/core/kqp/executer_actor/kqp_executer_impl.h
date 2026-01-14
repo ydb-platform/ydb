@@ -1236,6 +1236,7 @@ protected:
     }
 
     void InternalError(const NYql::TIssues& issues) {
+        AlreadyReplied = false; // temp workaround
         KQP_STLOG_E(KQPEX, issues.ToOneLineString(),
             (trace_id, TraceId()));
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");

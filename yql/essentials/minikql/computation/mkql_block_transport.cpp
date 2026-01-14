@@ -190,7 +190,7 @@ public:
         DoLoadMetadata(metaSource);
     }
 
-    virtual std::shared_ptr<arrow::ArrayData> LoadArray(TChunkedBuffer& src, ui64 blockLen, TMaybe<size_t> offset) final {
+    std::shared_ptr<arrow::ArrayData> LoadArray(TChunkedBuffer& src, ui64 blockLen, TMaybe<size_t> offset) final {
         YQL_ENSURE(blockLen > 0, "Should be handled earlier");
         std::shared_ptr<arrow::Buffer> nulls;
         i64 nullsCount = 0;

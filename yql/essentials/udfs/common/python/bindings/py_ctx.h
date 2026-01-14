@@ -36,7 +36,7 @@ template <typename TValueType>
 class TPyCleanupListItem: public TPyCleanupListItemBase {
 public:
     TPyCleanupListItem() = default;
-    virtual ~TPyCleanupListItem() {
+    ~TPyCleanupListItem() override {
         Unlink();
     }
 

@@ -1,5 +1,5 @@
 diff --git a/include/string_view b/include/string_view
-index 3b32117..69854c1 100644
+index 5beac40..df8b592 100644
 --- a/include/string_view
 +++ b/include/string_view
 @@ -308,6 +308,8 @@ public:

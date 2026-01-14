@@ -14,7 +14,7 @@ struct TCodeLineException: public yexception {
 
     TCodeLineException(const TSourceLocation& sl, const TCodeLineException& t);
 
-    virtual const char* what() const noexcept override;
+    const char* what() const noexcept override;
 
     const char* GetRawMessage() const;
 };

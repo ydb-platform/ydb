@@ -3306,7 +3306,7 @@ public:
     {
     }
 
-    ~TConstraintTransformer() = default;
+    ~TConstraintTransformer() override = default;
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_PROFILE_SCOPE(DEBUG, "ConstraintTransformer::DoTransform");

@@ -12,6 +12,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/common/executor_impl.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/write_session.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
 
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
@@ -27,6 +28,7 @@
 #include <atomic>
 #include <util/stream/zlib.h>
 
+#include <unordered_map>
 
 using namespace std::chrono_literals;
 
@@ -127,6 +129,17 @@ void WriteBinaryProducerIdWithDirectTabletWrite(TTopicSdkTestSetup& setup,
     UNIT_ASSERT_C(result->Record.GetErrorCode() == ::NPersQueue::NErrorCode::OK,
                   "Write failed: " << result->Record.GetErrorReason());
     UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), 1);
+}
+
+static std::string FindKeyForBucket(size_t bucket, size_t bucketsCount) {
+    for (size_t i = 0; i < 1'000'000; ++i) {
+        std::string key = "key-" + ToString(i);
+        if (std::hash<std::string>{}(key) % bucketsCount == bucket) {
+            return key;
+        }
+    }
+    UNIT_FAIL("Failed to find a key for bucket");
+    return {};
 }
 
 void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count, TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor) {
@@ -887,6 +900,76 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(stats.has_value());
         UNIT_ASSERT_VALUES_EQUAL(stats->GetEndOffset(), count);
 
+    }
+
+    Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_NoAutoPartitioning) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
+
+        // Capture partition ids in the same order as DescribeTopic returns them
+        // (the keyed session uses the same DescribeTopic ordering to map hash bucket -> partition id).
+        auto publicClient = setup.MakeClient();
+        auto describeTopicSettings = TDescribeTopicSettings().IncludeStats(true);
+        auto before = publicClient.DescribeTopic(setup.GetTopicPath(TEST_TOPIC), describeTopicSettings).GetValueSync();
+        UNIT_ASSERT_C(before.IsSuccess(), before.GetIssues().ToOneLineString());
+        const auto& beforePartitions = before.GetTopicDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(beforePartitions.size(), 2);
+        const ui64 partitionId0 = beforePartitions[0].GetPartitionId();
+        const ui64 partitionId1 = beforePartitions[1].GetPartitionId();
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.MessageGroupId(TEST_MESSAGE_GROUP_ID);
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.SessionTimeout(TDuration::Seconds(30));
+
+        auto session = publicClient.CreateSimpleBlockingKeyedWriteSession(writeSettings);
+
+        const std::string key0 = FindKeyForBucket(0, 2);
+        const std::string key1 = FindKeyForBucket(1, 2);
+
+        const ui64 count0 = 7;
+        const ui64 count1 = 11;
+
+        for (ui64 i = 0; i < count0; ++i) {
+            UNIT_ASSERT(session->Write(key0, TWriteMessage("msg0")));
+        }
+        for (ui64 i = 0; i < count1; ++i) {
+            UNIT_ASSERT(session->Write(key1, TWriteMessage("msg1")));
+        }
+
+        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+
+        auto after = publicClient.DescribeTopic(setup.GetTopicPath(TEST_TOPIC), describeTopicSettings).GetValueSync();
+        UNIT_ASSERT_C(after.IsSuccess(), after.GetIssues().ToOneLineString());
+        const auto& afterPartitions = after.GetTopicDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(afterPartitions.size(), 2);
+
+        std::unordered_map<ui64, ui64> endOffsets;
+        for (const auto& p : afterPartitions) {
+            auto stats = p.GetPartitionStats();
+            UNIT_ASSERT(stats.has_value());
+            endOffsets[p.GetPartitionId()] = stats->GetEndOffset();
+        }
+
+        auto it0 = endOffsets.find(partitionId0);
+        auto it1 = endOffsets.find(partitionId1);
+        UNIT_ASSERT(it0 != endOffsets.end());
+        UNIT_ASSERT(it1 != endOffsets.end());
+
+        const ui64 endOffset0 = it0->second;
+        const ui64 endOffset1 = it1->second;
+
+        // Partition ordering in DescribeTopic is not a part of public API contract, so allow swapping.
+        UNIT_ASSERT_VALUES_EQUAL(endOffset0 + endOffset1, count0 + count1);
+        UNIT_ASSERT_C(
+            (endOffset0 == count0 && endOffset1 == count1) || (endOffset0 == count1 && endOffset1 == count0),
+            TStringBuilder() << "Unexpected end offsets distribution: "
+                             << "partitionId0=" << partitionId0 << " endOffset0=" << endOffset0 << ", "
+                             << "partitionId1=" << partitionId1 << " endOffset1=" << endOffset1 << ", "
+                             << "expected (" << count0 << "," << count1 << ") in any order"
+        );
+        session->Close(TDuration::Zero());
     }
 
 } // Y_UNIT_TEST_SUITE(BasicUsage)

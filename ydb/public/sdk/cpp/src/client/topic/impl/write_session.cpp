@@ -152,4 +152,92 @@ bool TSimpleBlockingWriteSession::Close(TDuration closeTimeout) {
     return Writer->Close(std::move(closeTimeout));
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TSimpleBlockingKeyedWriteSession
+
+TSimpleBlockingKeyedWriteSession::TSimpleBlockingKeyedWriteSession(
+        const TKeyedWriteSessionSettings& settings,
+        std::shared_ptr<TTopicClient::TImpl> client,
+        std::shared_ptr<TGRpcConnectionsImpl> connections,
+        TDbDriverStatePtr dbDriverState
+): Connections(connections), Client(client), DbDriverState(dbDriverState), Settings(settings) {
+    TDescribeTopicSettings describeTopicSettings;
+    auto topicConfig = client->DescribeTopic(settings.Path_, describeTopicSettings).GetValueSync();
+    const auto& partitions = topicConfig.GetTopicDescription().GetPartitions();
+
+    if (AutoPartitioningEnabled(topicConfig.GetTopicDescription())) {
+        for (const auto& partition : partitions) {
+            Partitions.emplace_back(partition.GetPartitionId(), partition.GetFromBound(), partition.GetToBound());
+        }
+        PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
+    } else {
+        for (const auto& partition : partitions) {
+            Partitions.emplace_back(partition.GetPartitionId());
+        }
+        PartitionChooser = std::make_unique<THashPartitionChooser>(this);
+    }
+}
+
+TSimpleBlockingKeyedWriteSession::WrappedWriteSession TSimpleBlockingKeyedWriteSession::CreateWriteSession(const TPartitionInfo& partitionInfo) {
+    CleanExpiredSessions();
+
+    auto alteredSettings = Settings;
+    alteredSettings.DirectWriteToPartition(true);
+    alteredSettings.PartitionId(partitionInfo.PartitionId);
+
+    auto writeSession = std::make_shared<WriteSessionWrapper>(Client->CreateSimpleWriteSession(alteredSettings), partitionInfo, TInstant::Now() + Settings.SessionTimeout_);
+    SessionsPool.insert(writeSession);
+    return writeSession;
+}
+
+TSimpleBlockingKeyedWriteSession::WrappedWriteSession TSimpleBlockingKeyedWriteSession::GetWriteSession(const TPartitionInfo& partitionInfo) {    
+    for (auto it = SessionsPool.begin(); it != SessionsPool.end();) {
+        if ((*it)->PartitionInfo == partitionInfo) {
+            if ((*it)->IsExpired()) {
+                (*it)->Session->Close(TDuration::Zero());
+                SessionsPool.erase(it);
+                return CreateWriteSession(partitionInfo);
+            }
+
+            return *it;
+        }
+        ++it;
+    }
+
+    return CreateWriteSession(partitionInfo);
+}
+
+bool TSimpleBlockingKeyedWriteSession::Write(const std::string& key, TWriteMessage&& message, TTransactionBase* tx,
+    const TDuration& blockTimeout) {
+    auto partitionInfo = PartitionChooser->ChoosePartition(key);
+    auto writeSession = GetWriteSession(partitionInfo);
+    return writeSession->Session->Write(std::move(message), tx, blockTimeout);
+}
+
+void TSimpleBlockingKeyedWriteSession::CleanExpiredSessions() {
+    ui64 cleanedSessionsCount = 0;
+    for (auto it = SessionsPool.begin(); it != SessionsPool.end();) {
+        if (cleanedSessionsCount >= MAX_CLEANED_SESSIONS_COUNT || !(*it)->IsExpired()) {
+            break;
+        }
+
+        (*it)->Session->Close(TDuration::Zero());
+        SessionsPool.erase(it++);
+        cleanedSessionsCount++;
+    }
+}
+
+bool TSimpleBlockingKeyedWriteSession::Close(TDuration closeTimeout) {
+    Closed.store(true);
+    for (auto it = SessionsPool.begin(); it != SessionsPool.end();) {
+        (*it)->Session->Close(closeTimeout);
+        SessionsPool.erase(it++);
+    }
+    return true;
+}
+
+TWriterCounters::TPtr TSimpleBlockingKeyedWriteSession::GetCounters() {
+    return nullptr;
+}
+
 } // namespace NYdb::NTopic

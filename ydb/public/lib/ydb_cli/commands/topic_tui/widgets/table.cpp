@@ -237,6 +237,9 @@ bool TTable::HandleEvent(Event event) {
 Element TTable::RenderHeader() {
     Elements cells;
     
+    // Add space to align with selection marker column in data rows
+    cells.push_back(text(" "));
+    
     for (size_t i = 0; i < Columns_.size(); ++i) {
         const auto& col = Columns_[i];
         
@@ -339,7 +342,7 @@ Element TTable::RenderCell(const TTableCell& cell, const TTableColumn& col,
     if (!isSelected && cell.ChangedAt != TInstant()) {
         TInstant now = TInstant::Now();
         if (now - cell.ChangedAt < HighlightDuration_) {
-            elem = elem | bgcolor(HighlightColor_);
+            elem = elem | bold;
         }
     }
     

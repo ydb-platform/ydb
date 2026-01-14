@@ -130,13 +130,9 @@ public:
     
     // ----- Change highlighting -----
     
-    // How long to highlight changed cells (default: 3 seconds)
+    // How long to highlight changed cells with bold (default: 1 second)
     void SetHighlightDuration(TDuration duration) { HighlightDuration_ = duration; }
     TDuration GetHighlightDuration() const { return HighlightDuration_; }
-    
-    // Color used to highlight recently changed cells
-    void SetHighlightColor(ftxui::Color color) { HighlightColor_ = color; }
-    ftxui::Color GetHighlightColor() const { return HighlightColor_; }
     
     // ----- Selection -----
     
@@ -173,8 +169,7 @@ private:
     bool IsFocused_ = true;
     
     // Change highlighting config
-    TDuration HighlightDuration_ = TDuration::Seconds(3);
-    ftxui::Color HighlightColor_ = ftxui::Color::Blue;
+    TDuration HighlightDuration_ = TDuration::Seconds(1);
 };
 
 } // namespace NYdb::NConsoleClient

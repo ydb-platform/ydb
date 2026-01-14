@@ -1,4 +1,5 @@
 #include "integration_helpers.h"
+#include "../views/topic_list_view.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -343,5 +344,62 @@ Y_UNIT_TEST_SUITE(StateManagementTests) {
         // Data should be preserved across navigation
         UNIT_ASSERT_EQUAL(nav.GetSelectedTopic(), "/Root/my-topic");
         UNIT_ASSERT_EQUAL(nav.GetSelectedConsumer(), "consumer");
+    }
+}
+
+Y_UNIT_TEST_SUITE(GlobMatchingTests) {
+    
+    // Glob matching is implemented as static helper in TTopicListView
+    // We just test the logic here
+    
+    bool Match(const char* pattern, const char* text) {
+        return TTopicListView::GlobMatch(pattern, text);
+    }
+    
+    Y_UNIT_TEST(Glob_ExactMatch) {
+        UNIT_ASSERT(Match("test", "test"));
+        UNIT_ASSERT(!Match("test", "testing"));
+        UNIT_ASSERT(!Match("testing", "test"));
+    }
+    
+    Y_UNIT_TEST(Glob_WildcardStar) {
+        // Star at end
+        UNIT_ASSERT(Match("test*", "test"));
+        UNIT_ASSERT(Match("test*", "testing"));
+        UNIT_ASSERT(Match("test*", "test-123"));
+        UNIT_ASSERT(!Match("test*", "other"));
+        
+        // Star at beginning
+        UNIT_ASSERT(Match("*test", "test"));
+        UNIT_ASSERT(Match("*test", "my-test"));
+        UNIT_ASSERT(!Match("*test", "test-other"));
+        
+        // Star in middle
+        UNIT_ASSERT(Match("te*st", "test"));
+        UNIT_ASSERT(Match("te*st", "te-abc-st"));
+        UNIT_ASSERT(Match("t*t", "test"));
+        UNIT_ASSERT(Match("t*t", "tt"));
+    }
+    
+    Y_UNIT_TEST(Glob_WildcardQuestion) {
+        UNIT_ASSERT(Match("t?st", "test"));
+        UNIT_ASSERT(Match("t?st", "tast"));
+        UNIT_ASSERT(!Match("t?st", "teest"));
+        UNIT_ASSERT(!Match("t?st", "tst"));
+    }
+    
+    Y_UNIT_TEST(Glob_MultipleWildcards) {
+        UNIT_ASSERT(Match("*t?st*", "my-test-case"));
+        UNIT_ASSERT(Match("a*b*c", "abc"));
+        UNIT_ASSERT(Match("a*b*c", "a--b--c"));
+        UNIT_ASSERT(!Match("a*b*c", "ac"));
+    }
+    
+    Y_UNIT_TEST(Glob_EdgeCases) {
+        UNIT_ASSERT(Match("*", ""));
+        UNIT_ASSERT(Match("*", "anything"));
+        UNIT_ASSERT(Match("", ""));
+        UNIT_ASSERT(!Match("", "anything"));
+        UNIT_ASSERT(!Match("anything", ""));
     }
 }

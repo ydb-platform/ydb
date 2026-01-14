@@ -369,7 +369,7 @@ Component TTopicListView::Build() {
                 }
                 return true;
             }
-            if (event == Event::ArrowDown || event == Event::Character('j')) {
+            if (event == Event::ArrowDown) {
                 int tableRows = static_cast<int>(FilteredIndices_.size());
                 int currentRow = Table_.GetSelectedRow();
                 if (currentRow < tableRows - 1) {
@@ -378,7 +378,7 @@ Component TTopicListView::Build() {
                 }
                 return true;
             }
-            if (event == Event::ArrowUp || event == Event::Character('k')) {
+            if (event == Event::ArrowUp) {
                 int currentRow = Table_.GetSelectedRow();
                 if (currentRow > 0) {
                     Table_.SetSelectedRow(currentRow - 1);
@@ -787,16 +787,28 @@ void TTopicListView::StartTopicInfoLoads() {
     auto* topicClient = &App_.GetTopicClient();
     auto* schemeClient = &App_.GetSchemeClient();
     
-    // Load stats ONLY for VISIBLE entries (around selected row)
-    // Typical terminal shows ~30-40 rows, load a bit more for scroll buffer
-    int selectedRow = Table_.GetSelectedRow();
-    int visibleBuffer = 25;  // ~50 rows visible window
-    int startIdx = std::max(0, selectedRow - visibleBuffer);
-    int endIdx = std::min(static_cast<int>(Entries_.size()), selectedRow + visibleBuffer);
+    // Load stats ONLY for VISIBLE entries
+    // Get actual terminal height and calculate visible rows precisely
+    auto termSize = Terminal::Size();
+    int visibleRows = termSize.dimy - 4;  // Subtract header, footer, border lines
+    if (visibleRows < 10) visibleRows = 20;  // Fallback minimum
     
-    // Limit concurrent requests to avoid overwhelming the server
+    int selectedRow = Table_.GetSelectedRow();
+    
+    // Calculate the visible window around the selected row
+    // For a table, FTXUI centers the selected row when possible
+    int halfVisible = visibleRows / 2;
+    int startIdx = std::max(0, selectedRow - halfVisible);
+    int endIdx = std::min(static_cast<int>(Entries_.size()), startIdx + visibleRows);
+    
+    // Adjust start if we're near the end of the list
+    if (endIdx - startIdx < visibleRows && startIdx > 0) {
+        startIdx = std::max(0, endIdx - visibleRows);
+    }
+    
+    // Load all visible entries at once (they're all on screen)
     int loadCount = 0;
-    const int maxConcurrent = 20;  // Reasonable limit for visible entries
+    const int maxConcurrent = visibleRows + 5;  // A bit more than visible for scrolling
     
     for (int idx = startIdx; idx < endIdx && loadCount < maxConcurrent; ++idx) {
         auto& entry = Entries_[idx];
@@ -820,31 +832,45 @@ void TTopicListView::StartTopicInfoLoads() {
                     TTopicInfoResult result;
                     result.TopicPath = topicPath;
                     
-                    auto descResult = topicClient->DescribeTopic(topicPath, 
-                        NTopic::TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
-                    
-                    if (descResult.IsSuccess()) {
-                        const auto& desc = descResult.GetTopicDescription();
-                        result.Success = true;
-                        result.PartitionCount = desc.GetPartitions().size();
-                        result.ConsumerCount = desc.GetConsumers().size();
-                        result.RetentionPeriod = desc.GetRetentionPeriod();
-                        result.WriteSpeedBytesPerSec = desc.GetPartitionWriteSpeedBytesPerSecond();
-                        result.WriteBurstBytes = desc.GetPartitionWriteBurstBytes();
+                    try {
+                        // Use async version with timeout to prevent blocking
+                        auto descFuture = topicClient->DescribeTopic(topicPath, 
+                            NTopic::TDescribeTopicSettings().IncludeStats(true));
                         
-                        for (const auto& codec : desc.GetSupportedCodecs()) {
-                            result.SupportedCodecs.push_back(codec);
+                        // Wait with timeout (5 seconds)
+                        auto status = descFuture.Wait(TDuration::Seconds(5));
+                        if (!status) {
+                            // Timeout - don't block forever
+                            return result;
                         }
                         
-                        for (const auto& p : desc.GetPartitions()) {
-                            if (p.GetPartitionStats()) {
-                                result.TotalSizeBytes += p.GetPartitionStats()->GetStoreSizeBytes();
-                                result.BytesWrittenPerMinute += p.GetPartitionStats()->GetBytesWrittenPerMinute();
-                                if (p.GetPartitionStats()->GetMaxWriteTimeLag() > result.MaxWriteTimeLag) {
-                                    result.MaxWriteTimeLag = p.GetPartitionStats()->GetMaxWriteTimeLag();
+                        auto descResult = descFuture.GetValueSync();
+                        
+                        if (descResult.IsSuccess()) {
+                            const auto& desc = descResult.GetTopicDescription();
+                            result.Success = true;
+                            result.PartitionCount = desc.GetPartitions().size();
+                            result.ConsumerCount = desc.GetConsumers().size();
+                            result.RetentionPeriod = desc.GetRetentionPeriod();
+                            result.WriteSpeedBytesPerSec = desc.GetPartitionWriteSpeedBytesPerSecond();
+                            result.WriteBurstBytes = desc.GetPartitionWriteBurstBytes();
+                            
+                            for (const auto& codec : desc.GetSupportedCodecs()) {
+                                result.SupportedCodecs.push_back(codec);
+                            }
+                            
+                            for (const auto& p : desc.GetPartitions()) {
+                                if (p.GetPartitionStats()) {
+                                    result.TotalSizeBytes += p.GetPartitionStats()->GetStoreSizeBytes();
+                                    result.BytesWrittenPerMinute += p.GetPartitionStats()->GetBytesWrittenPerMinute();
+                                    if (p.GetPartitionStats()->GetMaxWriteTimeLag() > result.MaxWriteTimeLag) {
+                                        result.MaxWriteTimeLag = p.GetPartitionStats()->GetMaxWriteTimeLag();
+                                    }
                                 }
                             }
                         }
+                    } catch (...) {
+                        // Any exception - just return empty result
                     }
                     
                     return result;
@@ -870,16 +896,29 @@ void TTopicListView::StartTopicInfoLoads() {
                     TDirInfoResult result;
                     result.DirPath = dirPath;
                     
-                    auto listResult = schemeClient->ListDirectory(dirPath).GetValueSync();
-                    
-                    if (listResult.IsSuccess()) {
-                        result.Success = true;
-                        for (const auto& child : listResult.GetChildren()) {
-                            result.ChildCount++;
-                            if (child.Type == NScheme::ESchemeEntryType::Topic) {
-                                result.TopicCount++;
+                    try {
+                        auto listFuture = schemeClient->ListDirectory(dirPath);
+                        
+                        // Wait with timeout (5 seconds)
+                        auto status = listFuture.Wait(TDuration::Seconds(5));
+                        if (!status) {
+                            // Timeout - don't block forever
+                            return result;
+                        }
+                        
+                        auto listResult = listFuture.GetValueSync();
+                        
+                        if (listResult.IsSuccess()) {
+                            result.Success = true;
+                            for (const auto& child : listResult.GetChildren()) {
+                                result.ChildCount++;
+                                if (child.Type == NScheme::ESchemeEntryType::Topic) {
+                                    result.TopicCount++;
+                                }
                             }
                         }
+                    } catch (...) {
+                        // Any exception - just return empty result
                     }
                     
                     return result;
@@ -1054,10 +1093,14 @@ void TTopicListView::CheckTopicInfoCompletion() {
     // Load stats for newly visible entries when user scrolls
     // Only trigger if there are unloaded entries in the visible window
     if (!anyPending && !Entries_.empty()) {
+        auto termSize = Terminal::Size();
+        int visibleRows = termSize.dimy - 4;
+        if (visibleRows < 10) visibleRows = 20;
+        
         int selectedRow = Table_.GetSelectedRow();
-        int visibleBuffer = 25;
-        int startIdx = std::max(0, selectedRow - visibleBuffer);
-        int endIdx = std::min(static_cast<int>(Entries_.size()), selectedRow + visibleBuffer);
+        int halfVisible = visibleRows / 2;
+        int startIdx = std::max(0, selectedRow - halfVisible);
+        int endIdx = std::min(static_cast<int>(Entries_.size()), startIdx + visibleRows);
         
         bool hasUnloadedVisible = false;
         for (int idx = startIdx; idx < endIdx; ++idx) {
@@ -1093,11 +1136,15 @@ TVector<size_t> TTopicListView::GetFilteredIndices() const {
         return result;
     }
     
-    // Case-insensitive substring search
-    std::string queryLower = SearchQuery_;
-    for (auto& c : queryLower) {
+    // Case-insensitive matching
+    std::string patternLower = SearchQuery_;
+    for (auto& c : patternLower) {
         c = std::tolower(static_cast<unsigned char>(c));
     }
+    
+    // Check if pattern contains glob characters
+    bool hasGlob = (patternLower.find('*') != std::string::npos) ||
+                   (patternLower.find('?') != std::string::npos);
     
     for (size_t i = 0; i < Entries_.size(); ++i) {
         std::string nameLower = std::string(Entries_[i].Name.c_str());
@@ -1105,12 +1152,58 @@ TVector<size_t> TTopicListView::GetFilteredIndices() const {
             c = std::tolower(static_cast<unsigned char>(c));
         }
         
-        if (nameLower.find(queryLower) != std::string::npos) {
+        bool matches = false;
+        if (hasGlob) {
+            matches = GlobMatch(patternLower.c_str(), nameLower.c_str());
+        } else {
+            // Simple substring search (original behavior)
+            matches = (nameLower.find(patternLower) != std::string::npos);
+        }
+        
+        if (matches) {
             result.push_back(i);
         }
     }
     
     return result;
+}
+
+bool TTopicListView::GlobMatch(const char* pattern, const char* text) {
+    // Glob pattern matching (* = any chars, ? = single char)
+    // Recursive implementation refactored for testability
+    
+    // We can't use a lambda with recursion easily in a static method without std::function overhead
+    // So we implement the recursion iteratively or using a helper if needed, 
+    // but here direct recursion is clean.
+    
+    const char* p = pattern;
+    const char* t = text;
+    
+    while (*p && *t) {
+        if (*p == '*') {
+            // Skip multiple stars
+            while (*p == '*') p++;
+            if (!*p) return true;  // Trailing * matches everything
+            
+            // Try matching rest of pattern against remaining text
+            // Optimization: if rest of pattern is just literal, scan for it?
+            // For now, standard recursive glob
+            while (*t) {
+                if (GlobMatch(p, t)) return true;
+                t++;
+            }
+            return GlobMatch(p, t);  // Check if pattern also ends at this point
+        } else if (*p == '?' || *p == *t) {
+            p++;
+            t++;
+        } else {
+            return false;
+        }
+    }
+    
+    // Handle trailing stars
+    while (*p == '*') p++;
+    return !*p && !*t;
 }
 
 void TTopicListView::ApplySearchFilter() {

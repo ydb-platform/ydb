@@ -1,6 +1,7 @@
 #include "table.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
+#include <contrib/libs/ftxui/include/ftxui/screen/terminal.hpp>
 
 using namespace ftxui;
 
@@ -234,13 +235,18 @@ bool TTable::HandleEvent(Event event) {
         return true;
     }
     if (event == Event::PageUp) {
-        SelectedRow_ = std::max(0, SelectedRow_ - 10);
+        // Get actual screen height for page scrolling
+        auto termSize = Terminal::Size();
+        int pageSize = std::max(5, termSize.dimy - 4);  // Subtract header/footer lines
+        SelectedRow_ = std::max(0, SelectedRow_ - pageSize);
         if (SelectedRow_ != oldSelection && OnNavigate) {
             OnNavigate(SelectedRow_);
         }
         return true;
     } else if (event == Event::PageDown) {
-        SelectedRow_ = std::min(static_cast<int>(Rows_.size()) - 1, SelectedRow_ + 10);
+        auto termSize = Terminal::Size();
+        int pageSize = std::max(5, termSize.dimy - 4);
+        SelectedRow_ = std::min(static_cast<int>(Rows_.size()) - 1, SelectedRow_ + pageSize);
         if (SelectedRow_ != oldSelection && OnNavigate) {
             OnNavigate(SelectedRow_);
         }

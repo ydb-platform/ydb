@@ -85,6 +85,9 @@ public:
     std::function<void(const TString& topicPath)> OnEditTopic;
     std::function<void(const TString& topicPath)> OnDeleteTopic;
     
+    // Testable helper for glob patching
+    static bool GlobMatch(const char* pattern, const char* text);
+    
 private:
     void PopulateTable();
     void StartAsyncLoad();
@@ -100,6 +103,7 @@ private:
     // Go-to-path helpers
     TVector<std::string> GetPathCompletions(const std::string& prefix);  // Autocomplete suggestions
     
+
     // Sorting helpers
     void SortEntries();  // Sort entries by current sort column (uses Table_'s sort state)
     TString GetSortColumnName() const;  // Get current sort column name for display

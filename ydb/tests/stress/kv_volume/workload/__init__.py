@@ -39,14 +39,14 @@ def generate_pattern_data(size, pattern=DEFAULT_DATA_PATTERN):
 
 class Worker:
     class ActionRunner:
-        def __init__(self, config, workload, worker=None, worker_semaphore=None, global_semaphore=None, init_keys=None, results=None, parent_names=None, parent_chain=None):
+        def __init__(self, config, workload, worker=None, worker_semaphore_limit=None, init_keys=None, results=None, parent_names=None, parent_chain=None):
             self.config = config
             self.workload = workload
             self.worker = worker
             self.task = None
             self.completed_actions = set()
-            self.worker_semaphore = worker_semaphore
-            self.global_semaphore = global_semaphore
+            self.worker_semaphore = None
+            self.worker_semaphore_limit = worker_semaphore_limit
             self.init_keys = init_keys or {}
             self.results = results if results is not None else defaultdict(lambda: defaultdict(dict))
             self.parent_names = parent_names or set()
@@ -85,7 +85,8 @@ class Worker:
                     offset = random.randint(0, max_offset) if max_offset > 1 else 0
                 if self.verbose:
                     print(f"READ action: key={key}, partition_id={partition_id}, offset={offset}, size={cmd.read.size}, version={self.workload.version}", file=sys.stderr)
-                response = await self.workload.client.a_kv_read(
+                client = self.worker.client
+                response = client.kv_read(
                     self.workload._volume_path(),
                     partition_id,
                     key,
@@ -126,7 +127,8 @@ class Worker:
                     partition_id = key_info[0]
                     if self.verbose:
                         print(f"DELETE action: key={key}, partition_id={partition_id}, version={self.workload.version}", file=sys.stderr)
-                    response = await self.workload.client.a_kv_delete_range(
+                    client = self.worker.client if self.worker else self.workload.client
+                    response = client.kv_delete_range(
                         self.workload._volume_path(),
                         partition_id,
                         from_key=key,
@@ -147,7 +149,8 @@ class Worker:
                 data = generate_pattern_data(cmd.write.size)
                 if self.verbose:
                     print(f"WRITE action: key={key}, partition_id={partition_id}, size={cmd.write.size}, channel={cmd.write.channel}, version={self.workload.version}", file=sys.stderr)
-                response = await self.workload.client.a_kv_write(
+                client = self.worker.client
+                response = client.kv_write(
                     self.workload._volume_path(),
                     partition_id,
                     key,
@@ -192,17 +195,10 @@ class Worker:
                 print(f"ActionRunner: running commands for action '{self.config.name}', instance_id={self.instance_id}", file=sys.stderr)
             if parent_chain_update:
                 parent_chain_update(self.config.name, self.instance_id)
+            if self.worker_semaphore is None and self.worker_semaphore_limit is not None:
+                self.worker_semaphore = asyncio.Semaphore(self.worker_semaphore_limit)
             if self.worker_semaphore:
                 async with self.worker_semaphore:
-                    if self.global_semaphore:
-                        async with self.global_semaphore:
-                            for cmd in self.config.action_command:
-                                await self.execute_command(cmd)
-                    else:
-                        for cmd in self.config.action_command:
-                            await self.execute_command(cmd)
-            elif self.global_semaphore:
-                async with self.global_semaphore:
                     for cmd in self.config.action_command:
                         await self.execute_command(cmd)
             else:
@@ -236,9 +232,12 @@ class Worker:
     def __init__(self, worker_id, workload):
         self.worker_id = worker_id
         self.workload = workload
+        self.database = str(self.workload.database)
+        self.path = str(self.workload.path)
         self.actions = {}
         self.runners = {}
-        self.global_semaphores = {}
+        #self._client = None
+        self._client = self.workload.client
         self.init_keys = self._generate_init_keys()
         self.results = defaultdict(lambda: defaultdict(dict))
         self.write_key_counter = 0
@@ -246,9 +245,22 @@ class Worker:
         if self.verbose:
             print(f"Worker {self.worker_id} initialized with {len(self.init_keys)} init keys", file=sys.stderr)
 
+    def volume_path(self):
+        return f'{self.database}/{self.path}'
+
     @property
     def verbose(self):
         return self.workload.verbose
+    
+    @property
+    def client(self):
+        if self._client is None:
+            if self.verbose:
+                print(f"Worker {self.worker_id}: creating client", file=sys.stderr)
+            self._client = KeyValueClient(self.workload.fqdn, self.workload.port)
+            if self.verbose:
+                print(f"Worker {self.worker_id}: created client", file=sys.stderr)
+        return self._client
 
     def _generate_instance_id(self, action_name):
         self.instance_counter += 1
@@ -293,39 +305,32 @@ class Worker:
                     partition_id = key_info[0]
                     if verbose:
                         print(f"Init data WRITE: key={key}, partition_id={partition_id}, size={write_cmd.size}, channel={write_cmd.channel}", file=sys.stderr)
-                    await self.workload.client.a_kv_write(
-                        self.workload._volume_path(),
+                    self.client.kv_write(
+                        self.volume_path(),
                         partition_id,
                         key,
                         data,
                         channel=write_cmd.channel,
                         version=self.workload.version
                     )
+                    if verbose:
+                        print(f"Init data WRITE completed: key={key}, partition_id={partition_id}, size={write_cmd.size}, channel={write_cmd.channel}", file=sys.stderr)
         if verbose:
             print(f"Worker {self.worker_id}: init data filled successfully", file=sys.stderr)
 
     def add_action(self, action_config, parent_names=None):
-        worker_sem = None
+        worker_sem_limit = None
         if action_config.HasField('worker_max_in_flight'):
-            worker_sem = asyncio.Semaphore(action_config.worker_max_in_flight)
-
-        global_sem = None
-        if action_config.HasField('global_max_in_flight'):
-            global_sem = self._get_or_create_global_semaphore(action_config.name, action_config.global_max_in_flight)
+            worker_sem_limit = action_config.worker_max_in_flight
 
         parent_names = parent_names or set()
         parent_chain = {name: None for name in parent_names}
-        runner = self.ActionRunner(action_config, self.workload, self, worker_sem, global_sem, self.init_keys, self.results, parent_names, parent_chain)
+        runner = self.ActionRunner(action_config, self.workload, self, worker_sem_limit, self.init_keys, self.results, parent_names, parent_chain)
         self.actions[action_config.name] = action_config
         self.runners[action_config.name] = runner
         if self.verbose:
             period_str = f", period={action_config.period_us}us" if action_config.HasField('period_us') else ", one-shot"
             print(f"Worker {self.worker_id}: added action '{action_config.name}'{period_str}, commands={len(action_config.action_command)}", file=sys.stderr)
-
-    def _get_or_create_global_semaphore(self, name, limit):
-        if name not in self.global_semaphores:
-            self.global_semaphores[name] = asyncio.Semaphore(limit)
-        return self.global_semaphores[name]
 
     def _update_parent_chains(self, action_name, instance_id, parent_chains):
         for child_name, child_chain in parent_chains.items():
@@ -396,6 +401,7 @@ class Worker:
 
         if task_map:
             await asyncio.gather(*task_map.values())
+        self.client.close()
         if self.verbose:
             print(f"Worker {self.worker_id}: finished arun", file=sys.stderr)
 
@@ -496,7 +502,7 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
             print(f"Stop Load: dropping volume {self._volume_path()}", file=sys.stderr)
         if self.client:
             self._drop_volume(self.client)
-            await self.client.aclose()
+            self.client.close()
         return True
 
     def get_status(self, response):

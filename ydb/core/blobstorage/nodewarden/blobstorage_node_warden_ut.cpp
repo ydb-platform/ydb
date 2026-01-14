@@ -1017,7 +1017,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     void CheckInferredPDiskSettings(TTestBasicRuntime& runtime, TActorId fakeWhiteboard, TActorId fakeNodeWarden,
             ui32 pdiskId, ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits,
             TDuration simTimeout = TDuration::Seconds(10)) {
-        for (int attempt=0; attempt<10; ++attempt) {
+        const int maxAttempts = 10;
+        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
             // Check EvPDiskStateUpdate sent from PDiskActor to Whiteboard
             const auto ev = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>(fakeWhiteboard, simTimeout);
             VERBOSE_COUT(" Got TEvPDiskStateUpdate# " << ev->ToString());
@@ -1025,6 +1026,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             NKikimrWhiteboard::TPDiskStateInfo pdiskInfo = ev->Get()->Record;
             UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskId(), pdiskId);
             if (pdiskInfo.GetState() != NKikimrBlobStorage::TPDiskState::Normal) {
+                UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
                 continue;
             }
             UNIT_ASSERT(pdiskInfo.HasExpectedSlotCount());
@@ -1036,7 +1038,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             break;
         }
 
-        {
+        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
             // Check EvControllerUpdateDiskStatus sent from PDiskActor to NodeWarden
             const auto ev = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerUpdateDiskStatus>(fakeNodeWarden, simTimeout);
             VERBOSE_COUT(" Got TEvControllerUpdateDiskStatus# " << ev->ToString());
@@ -1046,10 +1048,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
             const NKikimrBlobStorage::TPDiskMetrics &metrics = diskStatus.GetPDisksMetrics(0);
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskId(), pdiskId);
+            if (metrics.GetState() != NKikimrBlobStorage::TPDiskState::Normal) {
+                UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
+                continue;
+            }
             UNIT_ASSERT(metrics.HasSlotCount());
             UNIT_ASSERT(metrics.HasSlotSizeInUnits());
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotCount(), expectedSlotCount);
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
+            break;
         }
     }
 

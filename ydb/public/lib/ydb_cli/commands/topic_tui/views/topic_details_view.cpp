@@ -170,16 +170,52 @@ Component TTopicDetailsView::Build() {
             }
             return true;
         }
+        
+        // Info modal toggle
+        if (event == Event::Character('i') || event == Event::Character('I')) {
+            ShowingInfo_ = !ShowingInfo_;
+            InfoScrollY_ = 0;  // Reset scroll when opening
+            return true;
+        }
+        
+        // Close info modal with Esc (if open)
+        if (ShowingInfo_ && event == Event::Escape) {
+            ShowingInfo_ = false;
+            return true;
+        }
+        
+        // Scroll info modal
+        if (ShowingInfo_) {
+            if (event == Event::ArrowDown || event == Event::Character('j')) {
+                InfoScrollY_ = std::min(InfoScrollY_ + 1, 100);  // max scroll
+                return true;
+            }
+            if (event == Event::ArrowUp || event == Event::Character('k')) {
+                InfoScrollY_ = std::max(InfoScrollY_ - 1, 0);
+                return true;
+            }
+        }
+        
         return false;
     }) | Renderer([this, splitContainer](Element) {
         CheckAsyncCompletion();
         
-        // Always render UI structure - each section shows spinner or content
-        return vbox({
+        // Base UI structure
+        auto mainContent = vbox({
             RenderHeader(),
             separator(),
             splitContainer->Render() | flex
         });
+        
+        // Show info modal as overlay if active
+        if (ShowingInfo_) {
+            return dbox({
+                mainContent | dim,
+                RenderInfoModal() | clear_under | center
+            });
+        }
+        
+        return mainContent;
     });
 }
 
@@ -204,6 +240,17 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 TotalPartitions_ = data.TotalPartitions;
                 RetentionPeriod_ = data.RetentionPeriod;
                 WriteSpeedBytesPerSec_ = data.WriteSpeedBytesPerSec;
+                
+                // Store extended fields for info modal
+                Owner_ = data.Owner;
+                SupportedCodecs_ = std::move(data.SupportedCodecs);
+                Attributes_ = std::move(data.Attributes);
+                MeteringMode_ = data.MeteringMode;
+                PartitionWriteBurstBytes_ = data.PartitionWriteBurstBytes;
+                RetentionStorageMb_ = data.RetentionStorageMb;
+                MinActivePartitions_ = data.MinActivePartitions;
+                MaxActivePartitions_ = data.MaxActivePartitions;
+                AutoPartitioningStrategy_ = data.AutoPartitioningStrategy;
                 
                 if (data.WriteRateBytesPerSec > 0) {
                     WriteRateHistory_.push_back(data.WriteRateBytesPerSec);
@@ -362,6 +409,23 @@ void TTopicDetailsView::StartAsyncLoads() {
                 data.Partitions.push_back(info);
             }
             
+            // Extended info for info modal
+            data.Owner = desc.GetOwner();
+            const auto& sdkCodecs = desc.GetSupportedCodecs();
+            data.SupportedCodecs.assign(sdkCodecs.begin(), sdkCodecs.end());
+            data.Attributes = desc.GetAttributes();
+            data.MeteringMode = desc.GetMeteringMode();
+            data.PartitionWriteBurstBytes = desc.GetPartitionWriteBurstBytes();
+            if (desc.GetRetentionStorageMb()) {
+                data.RetentionStorageMb = *desc.GetRetentionStorageMb();
+            }
+            
+            const auto& partSettings = desc.GetPartitioningSettings();
+            data.MinActivePartitions = partSettings.GetMinActivePartitions();
+            data.MaxActivePartitions = partSettings.GetMaxActivePartitions();
+            data.AutoPartitioningStrategy = partSettings.GetAutoPartitioningSettings().GetStrategy();
+            data.ConsumerCount = desc.GetConsumers().size();
+            
             return data;
         });
     }
@@ -418,4 +482,122 @@ void TTopicDetailsView::StartAsyncLoads() {
     }
 }
 
+Element TTopicDetailsView::RenderInfoModal() {
+    using namespace ftxui;
+    
+    // Helper for formatting bytes
+    auto formatBytes = [](ui64 bytes) -> TString {
+        if (bytes >= 1024 * 1024 * 1024) {
+            return TStringBuilder() << Sprintf("%.2f", bytes / (1024.0 * 1024.0 * 1024.0)) << " GB";
+        } else if (bytes >= 1024 * 1024) {
+            return TStringBuilder() << Sprintf("%.2f", bytes / (1024.0 * 1024.0)) << " MB";
+        } else if (bytes >= 1024) {
+            return TStringBuilder() << Sprintf("%.2f", bytes / 1024.0) << " KB";
+        }
+        return TStringBuilder() << bytes << " B";
+    };
+    
+    // Helper for metering mode
+    auto meteringStr = [](NTopic::EMeteringMode mode) -> TString {
+        switch (mode) {
+            case NTopic::EMeteringMode::ReservedCapacity: return "Reserved Capacity";
+            case NTopic::EMeteringMode::RequestUnits: return "Request Units";
+            default: return "Unspecified";
+        }
+    };
+    
+    // Helper for auto partitioning strategy
+    auto strategyStr = [](NTopic::EAutoPartitioningStrategy s) -> TString {
+        switch (s) {
+            case NTopic::EAutoPartitioningStrategy::ScaleUp: return "Scale Up";
+            case NTopic::EAutoPartitioningStrategy::ScaleUpAndDown: return "Scale Up and Down";
+            case NTopic::EAutoPartitioningStrategy::Paused: return "Paused";
+            default: return "Disabled";
+        }
+    };
+    
+    // Helper for codec
+    auto codecStr = [](NTopic::ECodec c) -> TString {
+        switch (c) {
+            case NTopic::ECodec::RAW: return "RAW";
+            case NTopic::ECodec::GZIP: return "GZIP";
+            case NTopic::ECodec::LZOP: return "LZOP";
+            case NTopic::ECodec::ZSTD: return "ZSTD";
+            default: return "Unknown";
+        }
+    };
+    
+    Elements lines;
+    
+    // Title
+    lines.push_back(text(" Topic Information ") | bold | center);
+    lines.push_back(separator());
+    
+    // Path and Owner
+    lines.push_back(hbox({text(" Path:   ") | dim, text(TopicPath_.c_str())}));
+    lines.push_back(hbox({text(" Owner:  ") | dim, text(Owner_.c_str())}));
+    lines.push_back(separator());
+    
+    // Partitioning
+    lines.push_back(text(" Partitioning") | bold);
+    lines.push_back(hbox({text("   Partitions:        ") | dim, text(ToString(TotalPartitions_).c_str())}));
+    lines.push_back(hbox({text("   Min Active:        ") | dim, text(ToString(MinActivePartitions_).c_str())}));
+    lines.push_back(hbox({text("   Max Active:        ") | dim, text(ToString(MaxActivePartitions_).c_str())}));
+    lines.push_back(hbox({text("   Auto-Partitioning: ") | dim, text(strategyStr(AutoPartitioningStrategy_).c_str())}));
+    lines.push_back(separator());
+    
+    // Retention
+    lines.push_back(text(" Retention") | bold);
+    lines.push_back(hbox({text("   Period:  ") | dim, text(Sprintf("%.2f hours", RetentionPeriod_.Hours()).c_str())}));
+    lines.push_back(hbox({text("   Storage: ") | dim, text(RetentionStorageMb_ > 0 
+        ? (TStringBuilder() << RetentionStorageMb_ << " MB").c_str() 
+        : "Unlimited")}));
+    lines.push_back(separator());
+    
+    // Write Limits
+    lines.push_back(text(" Write Limits") | bold);
+    lines.push_back(hbox({text("   Speed per partition: ") | dim, text(formatBytes(WriteSpeedBytesPerSec_).c_str()), text("/s")}));
+    lines.push_back(hbox({text("   Burst per partition: ") | dim, text(formatBytes(PartitionWriteBurstBytes_).c_str())}));
+    lines.push_back(separator());
+    
+    // Codecs
+    lines.push_back(text(" Supported Codecs") | bold);
+    TStringBuilder codecsLine;
+    for (size_t i = 0; i < SupportedCodecs_.size(); ++i) {
+        if (i > 0) codecsLine << ", ";
+        codecsLine << codecStr(SupportedCodecs_[i]);
+    }
+    if (SupportedCodecs_.empty()) codecsLine << "(none)";
+    lines.push_back(hbox({text("   ") | dim, text(codecsLine.c_str())}));
+    lines.push_back(separator());
+    
+    // Metering
+    lines.push_back(hbox({text(" Metering: ") | dim, text(meteringStr(MeteringMode_).c_str())}));
+    lines.push_back(separator());
+    
+    // Attributes
+    lines.push_back(text(" Attributes") | bold);
+    if (Attributes_.empty()) {
+        lines.push_back(hbox({text("   ") | dim, text("(none)")}));
+    } else {
+        for (const auto& [key, value] : Attributes_) {
+            lines.push_back(hbox({
+                text("   ") | dim,
+                text(key) | color(Color::Cyan),
+                text(" = "),
+                text(value)
+            }));
+        }
+    }
+    
+    lines.push_back(separator());
+    lines.push_back(text(" [i] Close   [↑↓] Scroll ") | dim | center);
+    
+    // Create scrollable content
+    auto content = vbox(std::move(lines)) | yframe | yflex_shrink;
+    
+    return content | size(WIDTH, LESS_THAN, 70) | size(HEIGHT, LESS_THAN, 30) | border;
+}
+
 } // namespace NYdb::NConsoleClient
+

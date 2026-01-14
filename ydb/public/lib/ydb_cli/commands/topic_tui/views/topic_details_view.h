@@ -38,6 +38,7 @@ struct TConsumerDisplayInfo {
     bool IsImportant = false;
 };
 
+
 // Separate data structs for independent async loads
 struct TTopicBasicData {
     size_t TotalPartitions = 0;
@@ -52,6 +53,16 @@ struct TTopicBasicData {
     TDuration MaxWriteTimeLag;
     size_t ConsumerCount = 0;
     TVector<NTopic::ECodec> SupportedCodecs;
+    
+    // Extended info for info modal
+    TString Owner;
+    std::map<std::string, std::string> Attributes;
+    NTopic::EMeteringMode MeteringMode = NTopic::EMeteringMode::Unspecified;
+    ui64 PartitionWriteBurstBytes = 0;
+    ui64 RetentionStorageMb = 0;
+    ui64 MinActivePartitions = 0;
+    ui64 MaxActivePartitions = 0;
+    NTopic::EAutoPartitioningStrategy AutoPartitioningStrategy = NTopic::EAutoPartitioningStrategy::Disabled;
 };
 
 struct TConsumersData {
@@ -112,6 +123,23 @@ private:
     
     // Resizable split state
     int ConsumersPanelSize_ = 40;
+    
+    // Info modal state
+    bool ShowingInfo_ = false;
+    int InfoScrollY_ = 0;
+    
+    // Extended topic description for info modal
+    TString Owner_;
+    std::vector<NTopic::ECodec> SupportedCodecs_;
+    std::map<std::string, std::string> Attributes_;
+    NTopic::EMeteringMode MeteringMode_ = NTopic::EMeteringMode::Unspecified;
+    ui64 PartitionWriteBurstBytes_ = 0;
+    ui64 RetentionStorageMb_ = 0;
+    ui64 MinActivePartitions_ = 0;
+    ui64 MaxActivePartitions_ = 0;
+    NTopic::EAutoPartitioningStrategy AutoPartitioningStrategy_ = NTopic::EAutoPartitioningStrategy::Disabled;
+    
+    ftxui::Element RenderInfoModal();
 };
 
 } // namespace NYdb::NConsoleClient

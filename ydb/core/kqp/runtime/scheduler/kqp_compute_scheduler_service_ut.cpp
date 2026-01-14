@@ -55,7 +55,9 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         ydb->CreateResourcePool(poolId, poolSettings);
 
         auto request = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId(poolId));
-        TSampleQueries::TSelect42::CheckResult(request.GetResult());
+        auto result = request.GetResult();
+        UNIT_ASSERT_EQUAL(result.Response.GetResponse().GetEffectivePoolId(), NResourcePool::DEFAULT_POOL_ID);
+        TSampleQueries::TSelect42::CheckResult(result);
     }
 
 }

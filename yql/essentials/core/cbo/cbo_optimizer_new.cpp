@@ -250,7 +250,9 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     }
 
     if (isRightPKJoin) {
-        double rightSelectivity = rightStats.Selectivity;
+        //selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        //selectivity = rightStats.Selectivity;
+        selectivity = std::cbrt(leftStats.Selectivity * rightStats.Selectivity);
 
         switch (joinKind) {
             case EJoinKind::LeftJoin:
@@ -272,14 +274,13 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
                         //YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard;
                         auto selectivityCorrection = ((double)rightHist->GetNumElements() / (double)*overlapCard );
                         //YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
-                        rightSelectivity *= selectivityCorrection;
+                        selectivity *= selectivityCorrection;
                     }
                 }
-                newCard = leftStats.Nrows * rightSelectivity;
+                newCard = leftStats.Nrows * selectivity;
             }
         }
 
-        selectivity = rightSelectivity;
         leftKeyColumns = true;
         if (leftStats.Type == EStatisticsType::BaseTable) {
             outputType = EStatisticsType::FilteredFactTable;
@@ -287,7 +288,9 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
             outputType = leftStats.Type;
         }
     } else if (isLeftPKJoin) {
-        double leftSelectivity = leftStats.Selectivity;
+        //selectivity = leftStats.Selectivity * rightStats.Selectivity;
+        //selectivity = leftStats.Selectivity;
+        selectivity = std::cbrt(leftStats.Selectivity * rightStats.Selectivity);
 
         switch (joinKind) {
             case EJoinKind::RightJoin:
@@ -307,14 +310,13 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
                         //YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard;
                         auto selectivityCorrection = ((double)leftHist->GetNumElements() / (double)*overlapCard );
                         //YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
-                        leftSelectivity *= selectivityCorrection;
+                        selectivity *= selectivityCorrection;
                     }
                 }
-                newCard = rightStats.Nrows * leftSelectivity;
+                newCard = rightStats.Nrows * selectivity;
             }
         }
 
-        selectivity = leftSelectivity;
         rightKeyColumns = true;
         if (rightStats.Type == EStatisticsType::BaseTable) {
             outputType = EStatisticsType::FilteredFactTable;

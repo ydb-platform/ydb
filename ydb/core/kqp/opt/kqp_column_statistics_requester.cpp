@@ -297,41 +297,40 @@ void TKqpColumnStatisticsRequester::GetEquiJoinConditions(const TCoEquiJoinTuple
 
     if (auto left = joinTuple.LeftScope().Maybe<TCoEquiJoinTuple>()) {
         GetEquiJoinConditions(left.Cast(), joinArgMap, result);
-        return;
-    } else if (auto right = joinTuple.RightScope().Maybe<TCoEquiJoinTuple>()) {
-        GetEquiJoinConditions(right.Cast(), joinArgMap, result);
-        return;    
-    } else {
-        size_t joinKeysCount = joinTuple.LeftKeys().Size() / 2;
+    }
+    if (auto right = joinTuple.RightScope().Maybe<TCoEquiJoinTuple>()) {
+        GetEquiJoinConditions(right.Cast(), joinArgMap, result);  
+    }
 
-        for (size_t i = 0; i < joinKeysCount; ++i) {
-            size_t keyIndex = i * 2;
+    size_t joinKeysCount = joinTuple.LeftKeys().Size() / 2;
 
-            auto leftScope = joinTuple.LeftKeys().Item(keyIndex).StringValue();
-            auto leftColumn = joinTuple.LeftKeys().Item(keyIndex + 1).StringValue();
+    for (size_t i = 0; i < joinKeysCount; ++i) {
+        size_t keyIndex = i * 2;
 
-            auto rightScope = joinTuple.RightKeys().Item(keyIndex).StringValue();
-            auto rightColumn = joinTuple.RightKeys().Item(keyIndex + 1).StringValue();
+        auto leftScope = joinTuple.LeftKeys().Item(keyIndex).StringValue();
+        auto leftColumn = joinTuple.LeftKeys().Item(keyIndex + 1).StringValue();
 
-            auto leftArg = joinArgMap.at(leftScope);
-            auto rightArg = joinArgMap.at(rightScope);
+        auto rightScope = joinTuple.RightKeys().Item(keyIndex).StringValue();
+        auto rightColumn = joinTuple.RightKeys().Item(keyIndex + 1).StringValue();
 
-            YQL_CLOG(TRACE, CoreDq) << "Trying to add join stats";
+        auto leftArg = joinArgMap.at(leftScope);
+        auto rightArg = joinArgMap.at(rightScope);
+
+        YQL_CLOG(TRACE, CoreDq) << "Trying to add join stats";
 
 
-            if (!KqpTableByExprNode.contains(leftArg.Get()) || KqpTableByExprNode.at(leftArg.Get()) == nullptr) {
-                continue;
-            }
-            if (!KqpTableByExprNode.contains(rightArg.Get()) || KqpTableByExprNode.at(rightArg.Get()) == nullptr) {
-                continue;
-            }
-
-            auto leftTable = TExprBase(KqpTableByExprNode.at(leftArg.Get())).Cast<TKqpTable>().Path().StringValue();
-            auto rightTable = TExprBase(KqpTableByExprNode.at(rightArg.Get())).Cast<TKqpTable>().Path().StringValue();
-
-            result.push_back(std::make_pair(leftTable, leftColumn));
-            result.push_back(std::make_pair(rightTable, rightColumn));
+        if (!KqpTableByExprNode.contains(leftArg.Get()) || KqpTableByExprNode.at(leftArg.Get()) == nullptr) {
+            continue;
         }
+        if (!KqpTableByExprNode.contains(rightArg.Get()) || KqpTableByExprNode.at(rightArg.Get()) == nullptr) {
+            continue;
+        }
+
+        auto leftTable = TExprBase(KqpTableByExprNode.at(leftArg.Get())).Cast<TKqpTable>().Path().StringValue();
+        auto rightTable = TExprBase(KqpTableByExprNode.at(rightArg.Get())).Cast<TKqpTable>().Path().StringValue();
+
+        result.push_back(std::make_pair(leftTable, leftColumn));
+        result.push_back(std::make_pair(rightTable, rightColumn));
     }
 }
 

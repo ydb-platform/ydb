@@ -85,42 +85,67 @@ int TCommandTopicTui::Run(TConfig& config) {
     TString startPath;
     TString initialTopicPath;
     std::optional<ui32> initialPartition;
+    TString initialConsumer;
     
     if (!RawPath_.empty()) {
-        // Check for partition suffix: /path/to/topic:N or topic:N
         TStringBuf pathBuf = RawPath_;
-        TStringBuf base, partitionStr;
-        if (pathBuf.TryRSplit(':', base, partitionStr)) {
-            // Verify it looks like a partition number (all digits)
-            bool isPartition = !partitionStr.empty();
-            for (char c : partitionStr) {
-                if (!std::isdigit(c)) {
-                    isPartition = false;
-                    break;
-                }
+        
+        // First, check for @consumer suffix
+        TStringBuf base, consumerPart;
+        if (pathBuf.TryRSplit('@', base, consumerPart)) {
+            // Extract consumer name (ignore any :partition after it for now)
+            TStringBuf consumerName, partAfterConsumer;
+            if (consumerPart.TryRSplit(':', consumerName, partAfterConsumer)) {
+                // Format: topic@consumer:partition - not fully supported yet
+                // Just treat the whole consumerPart as consumer name
+                initialConsumer = TString(consumerPart);
+            } else {
+                initialConsumer = TString(consumerPart);
             }
-            if (isPartition) {
-                // Resolve the base path (before colon)
-                initialTopicPath = ResolvePath(TString(base), config);
-                initialPartition = FromString<ui32>(partitionStr);
-                // Set startPath to parent directory for navigation context  
-                TStringBuf parent, discard;
-                if (TStringBuf(initialTopicPath).TryRSplit('/', parent, discard)) {
-                    startPath = parent ? TString(parent) : config.Database;
+            // Resolve base path as topic
+            initialTopicPath = ResolvePath(TString(base), config);
+            // Set startPath to parent directory
+            TStringBuf parent, discard;
+            if (TStringBuf(initialTopicPath).TryRSplit('/', parent, discard)) {
+                startPath = parent ? TString(parent) : config.Database;
+            } else {
+                startPath = config.Database;
+            }
+        } else {
+            // No @consumer - check for :partition suffix
+            TStringBuf partBase, partitionStr;
+            if (pathBuf.TryRSplit(':', partBase, partitionStr)) {
+                // Verify it looks like a partition number (all digits)
+                bool isPartition = !partitionStr.empty();
+                for (char c : partitionStr) {
+                    if (!std::isdigit(c)) {
+                        isPartition = false;
+                        break;
+                    }
+                }
+                if (isPartition) {
+                    // Resolve the base path (before colon)
+                    initialTopicPath = ResolvePath(TString(partBase), config);
+                    initialPartition = FromString<ui32>(partitionStr);
+                    // Set startPath to parent directory for navigation context  
+                    TStringBuf parent, discard;
+                    if (TStringBuf(initialTopicPath).TryRSplit('/', parent, discard)) {
+                        startPath = parent ? TString(parent) : config.Database;
+                    } else {
+                        startPath = config.Database;
+                    }
                 } else {
-                    startPath = config.Database;
+                    // Not a partition suffix - resolve the whole path
+                    TString resolved = ResolvePath(RawPath_, config);
+                    initialTopicPath = resolved;
+                    startPath = resolved;
                 }
             } else {
-                // Not a partition suffix - resolve the whole path
+                // No colon - resolve path and use for both topic and directory
                 TString resolved = ResolvePath(RawPath_, config);
                 initialTopicPath = resolved;
                 startPath = resolved;
             }
-        } else {
-            // No colon - resolve path and use for both topic and directory
-            TString resolved = ResolvePath(RawPath_, config);
-            initialTopicPath = resolved;
-            startPath = resolved;
         }
     } else {
         // No argument provided - use database as root path
@@ -133,7 +158,7 @@ int TCommandTopicTui::Run(TConfig& config) {
     }
     
     TTopicTuiApp app(driver, startPath, RefreshRate_, viewerEndpoint, 
-                     initialTopicPath, initialPartition);
+                     initialTopicPath, initialPartition, initialConsumer);
     return app.Run();
 }
 

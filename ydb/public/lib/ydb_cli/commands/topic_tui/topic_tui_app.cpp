@@ -19,7 +19,8 @@ using namespace ftxui;
 namespace NYdb::NConsoleClient {
 
 TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration refreshRate, const TString& viewerEndpoint,
-                           const TString& initialTopicPath, std::optional<ui32> initialPartition)
+                           const TString& initialTopicPath, std::optional<ui32> initialPartition,
+                           const TString& initialConsumer)
     : SchemeClient_(std::make_unique<NScheme::TSchemeClient>(driver))
     , TopicClient_(std::make_unique<NTopic::TTopicClient>(driver))
     , Screen_(ScreenInteractive::Fullscreen())
@@ -28,6 +29,7 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     , DatabaseRoot_(startPath)
     , InitialTopicPath_(initialTopicPath)
     , InitialPartition_(initialPartition)
+    , InitialConsumer_(initialConsumer)
 {
     State_.CurrentPath = startPath;
     
@@ -286,6 +288,11 @@ int TTopicTuiApp::Run() {
                 State_.SelectedPartition = InitialPartition_.value();
                 MessagePreviewView_->SetTopic(InitialTopicPath_, InitialPartition_.value(), 0);
                 State_.CurrentView = EViewType::MessagePreview;
+            } else if (!InitialConsumer_.empty()) {
+                // Navigate to consumer page
+                State_.SelectedConsumer = InitialConsumer_;
+                ConsumerView_->SetConsumer(InitialTopicPath_, InitialConsumer_);
+                State_.CurrentView = EViewType::ConsumerDetails;
             } else {
                 State_.CurrentView = EViewType::TopicDetails;
             }

@@ -65,7 +65,8 @@ struct TAppState {
 class TTopicTuiApp {
 public:
     TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration refreshRate, const TString& viewerEndpoint,
-                 const TString& initialTopicPath = TString(), std::optional<ui32> initialPartition = std::nullopt);
+                 const TString& initialTopicPath = TString(), std::optional<ui32> initialPartition = std::nullopt,
+                 const TString& initialConsumer = TString());
     ~TTopicTuiApp();
     
     int Run();
@@ -127,6 +128,7 @@ private:
     // Initial navigation (for direct topic/partition opening)
     TString InitialTopicPath_;
     std::optional<ui32> InitialPartition_;
+    TString InitialConsumer_;  // @consumer syntax
     
     // Auto-refresh tracking
     TInstant LastTopicRefreshTime_;

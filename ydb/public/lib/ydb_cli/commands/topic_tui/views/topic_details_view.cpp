@@ -598,13 +598,33 @@ Element TTopicDetailsView::RenderInfoModal() {
     }
     
     lines.push_back(separator());
-    lines.push_back(text(" [i/Esc] Close ") | dim | center);
+    lines.push_back(text(" [i/Esc] Close  [↑↓] Scroll ") | dim | center);
     
-    // Create vertically scrollable content using focus position
-    auto content = vbox(std::move(lines)) 
-        | vscroll_indicator
-        | yframe
-        | focusPositionRelative(0, static_cast<float>(InfoScrollY_) / 100.0f);
+    // Clamp scroll position to valid range
+    int maxScroll = std::max(0, static_cast<int>(lines.size()) - 20);
+    InfoScrollY_ = std::min(InfoScrollY_, maxScroll);
+    
+    // Slice visible lines based on scroll position
+    Elements visibleLines;
+    int startLine = InfoScrollY_;
+    int endLine = std::min(static_cast<int>(lines.size()), startLine + 25);
+    for (int i = startLine; i < endLine; ++i) {
+        visibleLines.push_back(std::move(lines[i]));
+    }
+    
+    // Show scroll indicator if content exceeds visible area
+    Element scrollIndicator = text("");
+    if (lines.size() > 25) {
+        TString indicator = Sprintf(" (%d/%d) ", InfoScrollY_ + 1, static_cast<int>(lines.size()));
+        if (InfoScrollY_ > 0) indicator = "↑" + indicator;
+        if (InfoScrollY_ < maxScroll) indicator = indicator + "↓";
+        scrollIndicator = text(indicator.c_str()) | dim | center;
+    }
+    
+    auto content = vbox({
+        vbox(std::move(visibleLines)),
+        scrollIndicator
+    });
     
     // Use bgcolor to fully cover underlying content (prevents highlight bleed-through)
     return content 

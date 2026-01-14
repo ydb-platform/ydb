@@ -99,6 +99,10 @@ private:
     // Go-to-path helpers
     TVector<std::string> GetPathCompletions(const std::string& prefix);  // Autocomplete suggestions
     
+    // Sorting helpers
+    void SortEntries();  // Sort entries by current sort column (uses Table_'s sort state)
+    TString GetSortColumnName() const;  // Get current sort column name for display
+    
 private:
     TTopicTuiApp& App_;
     TVector<TTopicListEntry> Entries_;
@@ -137,6 +141,8 @@ private:
     std::string GoToPathInput_;
     TVector<std::string> PathCompletions_;  // Autocomplete suggestions
     int CompletionIndex_ = -1;  // Currently selected completion (-1 = none)
+    
+    // Note: Sorting state is managed by Table_ (GetSortColumn(), IsSortAscending(), SetSort())
 };
 
 } // namespace NYdb::NConsoleClient

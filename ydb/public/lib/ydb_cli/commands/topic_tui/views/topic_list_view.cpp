@@ -17,10 +17,10 @@ std::unordered_map<std::string, int> TTopicListView::CursorPositionCache_;
 static TVector<TTableColumn> CreateExplorerTableColumns() {
     return {
         {"Name", -1},  // flex
-        {"Type", 7},
-        {"Parts", 7},
+        {"Type", 9},   // Was 7, need room for " ▲"
+        {"Parts", 9},  // Was 7, need room for " ▲"
         {"Size", NTheme::ColBytes},
-        {"Cons", 6},
+        {"Cons", 8},   // Was 6, need room for " ▲"
         {"Ret", 10},
         {"WriteSpd", NTheme::ColBytesPerMin},
         {"Codecs", 16}
@@ -33,20 +33,36 @@ TTopicListView::TTopicListView(TTopicTuiApp& app)
 {
     // Handle Enter to select item
     Table_.OnSelect = [this](int row) {
-        if (row >= 0 && row < static_cast<int>(Entries_.size())) {
-            const auto& entry = Entries_[row];
+        // In search mode, row is the filtered index
+        size_t entryIndex = row;
+        if (SearchMode_ && row >= 0 && row < static_cast<int>(FilteredIndices_.size())) {
+            entryIndex = FilteredIndices_[row];
+        }
+        
+        if (entryIndex < Entries_.size()) {
+            const auto& entry = Entries_[entryIndex];
             if (entry.IsDirectory && OnDirectorySelected) {
                 TString dbRoot = App_.GetDatabaseRoot();
                 if (entry.Name == ".." && entry.FullPath.size() < dbRoot.size()) {
                     // Would go above database root - ignore
                 } else {
-                    CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = row;
+                    CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = static_cast<int>(entryIndex);
                     OnDirectorySelected(entry.FullPath);
                 }
             } else if (entry.IsTopic && OnTopicSelected) {
-                CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = row;
+                CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = static_cast<int>(entryIndex);
                 OnTopicSelected(entry.FullPath);
             }
+        }
+    };
+    
+    // Sort callback - actually sort the entries when sort column/direction changes
+    Table_.OnSortChanged = [this](int /*col*/, bool /*ascending*/) {
+        SortEntries();
+        if (SearchMode_) {
+            ApplySearchFilter();
+        } else {
+            PopulateTable();
         }
     };
 }
@@ -148,7 +164,9 @@ Component TTopicListView::Build() {
         return content;
     }) | CatchEvent([this](Event event) {
         // Set focus state FIRST (before any event handling)
-        Table_.SetFocused(App_.GetState().CurrentView == EViewType::TopicList && !SearchMode_ && !GoToPathMode_);
+        // Keep focused during search mode so selection highlight remains visible
+        // Only unfocus during go-to-path mode (popup is shown)
+        Table_.SetFocused(App_.GetState().CurrentView == EViewType::TopicList && !GoToPathMode_);
         
         // Only handle events when this view is active
         if (App_.GetState().CurrentView != EViewType::TopicList) {
@@ -237,9 +255,10 @@ Component TTopicListView::Build() {
             }
             if (event == Event::Return) {
                 // Select current item and exit search mode
-                if (!FilteredIndices_.empty() && SearchSelectedIndex_ >= 0 && 
-                    SearchSelectedIndex_ < static_cast<int>(FilteredIndices_.size())) {
-                    size_t realIndex = FilteredIndices_[SearchSelectedIndex_];
+                int tableRow = Table_.GetSelectedRow();
+                if (!FilteredIndices_.empty() && tableRow >= 0 && 
+                    tableRow < static_cast<int>(FilteredIndices_.size())) {
+                    size_t realIndex = FilteredIndices_[tableRow];
                     if (realIndex < Entries_.size()) {
                         const auto& entry = Entries_[realIndex];
                         SearchMode_ = false;
@@ -258,21 +277,19 @@ Component TTopicListView::Build() {
                 return true;
             }
             if (event == Event::ArrowDown || event == Event::Character('j')) {
-                if (SearchSelectedIndex_ < static_cast<int>(FilteredIndices_.size()) - 1) {
-                    SearchSelectedIndex_++;
-                    // Update table selection to show filtered item
-                    if (SearchSelectedIndex_ < static_cast<int>(FilteredIndices_.size())) {
-                        Table_.SetSelectedRow(static_cast<int>(FilteredIndices_[SearchSelectedIndex_]));
-                    }
+                int tableRows = static_cast<int>(FilteredIndices_.size());
+                int currentRow = Table_.GetSelectedRow();
+                if (currentRow < tableRows - 1) {
+                    Table_.SetSelectedRow(currentRow + 1);
+                    SearchSelectedIndex_ = currentRow + 1;
                 }
                 return true;
             }
             if (event == Event::ArrowUp || event == Event::Character('k')) {
-                if (SearchSelectedIndex_ > 0) {
-                    SearchSelectedIndex_--;
-                    if (SearchSelectedIndex_ < static_cast<int>(FilteredIndices_.size())) {
-                        Table_.SetSelectedRow(static_cast<int>(FilteredIndices_[SearchSelectedIndex_]));
-                    }
+                int currentRow = Table_.GetSelectedRow();
+                if (currentRow > 0) {
+                    Table_.SetSelectedRow(currentRow - 1);
+                    SearchSelectedIndex_ = currentRow - 1;
                 }
                 return true;
             }
@@ -313,6 +330,23 @@ Component TTopicListView::Build() {
             GoToPathInput_ = std::string(App_.GetState().CurrentPath.c_str());
             PathCompletions_ = GetPathCompletions(GoToPathInput_);
             CompletionIndex_ = -1;
+            return true;
+        }
+        
+        // Toggle sort direction with 's' (TTable handles </> via OnSortChanged)
+        if (event == Event::Character('s') || event == Event::Character('S')) {
+            Table_.SetSort(Table_.GetSortColumn(), !Table_.IsSortAscending());
+            // OnSortChanged callback will handle the actual sorting
+            return true;
+        }
+        
+        // Alternative keys for sort column navigation (,/. without shift)
+        if (event == Event::Character(',')) {
+            Table_.ToggleSort((Table_.GetSortColumn() + 7) % 8);  // Previous column
+            return true;
+        }
+        if (event == Event::Character('.')) {
+            Table_.ToggleSort((Table_.GetSortColumn() + 1) % 8);  // Next column
             return true;
         }
         
@@ -411,20 +445,29 @@ void TTopicListView::CheckAsyncCompletion() {
             try {
                 Entries_ = LoadFuture_.get();
                 ErrorMessage_.clear();
-                PopulateTable();
+                // Apply current sort order
+                SortEntries();
+                // If in search mode, re-apply filter; otherwise populate full table
+                if (SearchMode_) {
+                    ApplySearchFilter();
+                } else {
+                    PopulateTable();
+                }
                 StartTopicInfoLoads();
             } catch (const std::exception& e) {
                 ErrorMessage_ = e.what();
                 Entries_.clear();
             }
             Loading_ = false;
-            // Restore saved cursor position
-            std::string currentPath(App_.GetState().CurrentPath.c_str());
-            auto cachedPos = CursorPositionCache_.find(currentPath);
-            if (cachedPos != CursorPositionCache_.end()) {
-                Table_.SetSelectedRow(cachedPos->second);
-            } else {
-                Table_.SetSelectedRow(0);
+            // Restore saved cursor position (only if not in search mode)
+            if (!SearchMode_) {
+                std::string currentPath(App_.GetState().CurrentPath.c_str());
+                auto cachedPos = CursorPositionCache_.find(currentPath);
+                if (cachedPos != CursorPositionCache_.end()) {
+                    Table_.SetSelectedRow(cachedPos->second);
+                } else {
+                    Table_.SetSelectedRow(0);
+                }
             }
         } else {
             SpinnerFrame_++;
@@ -639,8 +682,12 @@ void TTopicListView::StartTopicInfoLoads() {
         }
     }
     
-    // Re-populate table with cached data
-    PopulateTable();
+    // Re-populate table with cached data (respecting search mode)
+    if (SearchMode_) {
+        ApplySearchFilter();
+    } else {
+        PopulateTable();
+    }
     
     auto* topicClient = &App_.GetTopicClient();
     auto* schemeClient = &App_.GetSchemeClient();
@@ -747,6 +794,24 @@ void TTopicListView::CheckTopicInfoCompletion() {
                             entry.MaxWriteTimeLag = result.MaxWriteTimeLag;
                             entry.SupportedCodecs = result.SupportedCodecs;
                             
+                            // Find the correct table row to update
+                            size_t tableRow = i;  // Default: entry index == table row
+                            if (SearchMode_) {
+                                // In search mode, find this entry's position in FilteredIndices_
+                                bool found = false;
+                                for (size_t fi = 0; fi < FilteredIndices_.size(); ++fi) {
+                                    if (FilteredIndices_[fi] == i) {
+                                        tableRow = fi;
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if (!found) {
+                                    // Entry not visible in filtered view, skip table update
+                                    break;
+                                }
+                            }
+                            
                             // Update table cells using UpdateCell for change tracking
                             TString retention = entry.RetentionPeriod.Hours() > 24 
                                 ? ToString(entry.RetentionPeriod.Days()) + " days"
@@ -754,15 +819,15 @@ void TTopicListView::CheckTopicInfoCompletion() {
                             TString writeSpd = FormatBytes(entry.WriteSpeedBytesPerSec) + "/s";
                             TString codecs = FormatCodecs(entry.SupportedCodecs);
                             
-                            Table_.UpdateCell(i, 2, ToString(entry.PartitionCount));
-                            Table_.UpdateCell(i, 3, FormatBytes(entry.TotalSizeBytes));
-                            Table_.UpdateCell(i, 4, ToString(entry.ConsumerCount));
-                            Table_.SetCell(i, 5, TTableCell(retention));
-                            Table_.SetCell(i, 6, TTableCell(writeSpd));
-                            Table_.SetCell(i, 7, TTableCell(codecs));
+                            Table_.UpdateCell(tableRow, 2, ToString(entry.PartitionCount));
+                            Table_.UpdateCell(tableRow, 3, FormatBytes(entry.TotalSizeBytes));
+                            Table_.UpdateCell(tableRow, 4, ToString(entry.ConsumerCount));
+                            Table_.SetCell(tableRow, 5, TTableCell(retention));
+                            Table_.SetCell(tableRow, 6, TTableCell(writeSpd));
+                            Table_.SetCell(tableRow, 7, TTableCell(codecs));
                             
                             // Clear dim styling now that data is loaded
-                            Table_.GetRow(i).RowDim = false;
+                            Table_.GetRow(tableRow).RowDim = false;
                         }
                         break;
                     }
@@ -804,8 +869,24 @@ void TTopicListView::CheckTopicInfoCompletion() {
                             entry.ChildCount = result.ChildCount;
                             entry.TopicCount = result.TopicCount;
                             
+                            // Find the correct table row to update
+                            size_t tableRow = i;
+                            if (SearchMode_) {
+                                bool found = false;
+                                for (size_t fi = 0; fi < FilteredIndices_.size(); ++fi) {
+                                    if (FilteredIndices_[fi] == i) {
+                                        tableRow = fi;
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if (!found) {
+                                    break;  // Entry not visible
+                                }
+                            }
+                            
                             // Update child count with change tracking
-                            Table_.UpdateCell(i, 2, ToString(entry.ChildCount));
+                            Table_.UpdateCell(tableRow, 2, ToString(entry.ChildCount));
                         }
                         break;
                     }
@@ -865,18 +946,102 @@ TVector<size_t> TTopicListView::GetFilteredIndices() const {
 }
 
 void TTopicListView::ApplySearchFilter() {
-    FilteredIndices_ = GetFilteredIndices();
-    SearchSelectedIndex_ = 0;
+    // Preserve current selection if valid
+    int previousRow = Table_.GetSelectedRow();
     
-    // Set table selection to first match
-    if (!FilteredIndices_.empty()) {
-        Table_.SetSelectedRow(static_cast<int>(FilteredIndices_[0]));
+    FilteredIndices_ = GetFilteredIndices();
+    
+    // Repopulate table with only filtered entries
+    Table_.SetRowCount(FilteredIndices_.size());
+    
+    for (size_t i = 0; i < FilteredIndices_.size(); ++i) {
+        size_t entryIdx = FilteredIndices_[i];
+        const auto& entry = Entries_[entryIdx];
+        auto& row = Table_.GetRow(i);
+        
+        if (entry.IsDirectory) {
+            row.RowColor = Color::Blue;
+            row.RowType = "directory";
+            row.UserData = const_cast<TTopicListEntry*>(&entry);
+            
+            TString nameDisplay = entry.Name + "/";
+            
+            if (entry.Name == "..") {
+                Table_.SetCell(i, 0, TTableCell(nameDisplay).WithColor(Color::Blue));
+                Table_.SetCell(i, 1, TTableCell("dir").WithDim());
+                for (size_t c = 2; c < 8; ++c) {
+                    Table_.SetCell(i, c, TTableCell(""));
+                }
+            } else if (entry.InfoLoaded) {
+                Table_.SetCell(i, 0, TTableCell(nameDisplay).WithColor(Color::Blue));
+                Table_.SetCell(i, 1, TTableCell("dir").WithDim());
+                Table_.SetCell(i, 2, TTableCell(ToString(entry.ChildCount)));
+                for (size_t c = 3; c < 8; ++c) {
+                    Table_.SetCell(i, c, TTableCell("-").WithDim());
+                }
+            } else {
+                Table_.SetCell(i, 0, TTableCell(nameDisplay).WithColor(Color::Blue));
+                Table_.SetCell(i, 1, TTableCell("dir").WithDim());
+                for (size_t c = 2; c < 8; ++c) {
+                    Table_.SetCell(i, c, TTableCell("-").WithDim());
+                }
+            }
+        } else if (entry.IsTopic) {
+            row.RowColor = Color::Green;
+            row.RowType = "topic";
+            row.UserData = const_cast<TTopicListEntry*>(&entry);
+            
+            Table_.SetCell(i, 0, TTableCell(entry.Name).WithColor(Color::Green));
+            Table_.SetCell(i, 1, TTableCell("topic").WithColor(NTheme::SuccessText));
+            
+            if (entry.InfoLoaded) {
+                TString retention = entry.RetentionPeriod.Hours() > 24 
+                    ? ToString(entry.RetentionPeriod.Days()) + " days"
+                    : ToString(entry.RetentionPeriod.Hours()) + " hours";
+                TString writeSpd = FormatBytes(entry.WriteSpeedBytesPerSec) + "/s";
+                TString codecs = FormatCodecs(entry.SupportedCodecs);
+                
+                Table_.SetCell(i, 2, TTableCell(ToString(entry.PartitionCount)));
+                Table_.SetCell(i, 3, TTableCell(FormatBytes(entry.TotalSizeBytes)));
+                Table_.SetCell(i, 4, TTableCell(ToString(entry.ConsumerCount)));
+                Table_.SetCell(i, 5, TTableCell(retention));
+                Table_.SetCell(i, 6, TTableCell(writeSpd));
+                Table_.SetCell(i, 7, TTableCell(codecs));
+            } else {
+                for (size_t c = 2; c < 8; ++c) {
+                    Table_.SetCell(i, c, TTableCell("-").WithDim());
+                }
+            }
+        } else {
+            row.RowDim = true;
+            row.RowType = "other";
+            Table_.SetCell(i, 0, TTableCell(entry.Name).WithDim());
+            Table_.SetCell(i, 1, TTableCell("other").WithDim());
+            for (size_t c = 2; c < 8; ++c) {
+                Table_.SetCell(i, c, TTableCell(""));
+            }
+        }
+    }
+    
+    // Preserve cursor position if still valid, otherwise reset to 0
+    if (FilteredIndices_.empty()) {
+        SearchSelectedIndex_ = 0;
+    } else if (previousRow >= 0 && previousRow < static_cast<int>(FilteredIndices_.size())) {
+        Table_.SetSelectedRow(previousRow);
+        SearchSelectedIndex_ = previousRow;
+    } else {
+        // Previous row is now out of bounds - go to last valid row
+        int lastRow = static_cast<int>(FilteredIndices_.size()) - 1;
+        Table_.SetSelectedRow(lastRow);
+        SearchSelectedIndex_ = lastRow;
     }
 }
 
 void TTopicListView::ClearSearchFilter() {
     FilteredIndices_.clear();
     SearchSelectedIndex_ = 0;
+    // Restore full table
+    PopulateTable();
 }
 
 // === Go-to-path helpers ===
@@ -953,5 +1118,72 @@ TVector<std::string> TTopicListView::GetPathCompletions(const std::string& prefi
     return completions;
 }
 
+// === Sorting helpers ===
+
+void TTopicListView::SortEntries() {
+    int sortColumn = Table_.GetSortColumn();
+    bool sortAscending = Table_.IsSortAscending();
+    
+    // Always put ".." at the top, then sort directories first, then topics
+    std::stable_sort(Entries_.begin(), Entries_.end(), 
+        [sortColumn, sortAscending](const TTopicListEntry& a, const TTopicListEntry& b) {
+            // ".." always comes first
+            if (a.Name == "..") return true;
+            if (b.Name == "..") return false;
+            
+            // Directories before topics
+            if (a.IsDirectory && !b.IsDirectory) return true;
+            if (!a.IsDirectory && b.IsDirectory) return false;
+            
+            // Same type - sort by selected column
+            int cmp = 0;
+            switch (sortColumn) {
+                case 0: // Name
+                    cmp = a.Name.compare(b.Name);
+                    break;
+                case 1: // Type (dir vs topic)
+                    cmp = (a.IsTopic && !b.IsTopic) ? 1 : (!a.IsTopic && b.IsTopic) ? -1 : 0;
+                    break;
+                case 2: // Parts (partition count or child count)
+                    {
+                        ui32 aVal = a.IsTopic ? a.PartitionCount : a.ChildCount;
+                        ui32 bVal = b.IsTopic ? b.PartitionCount : b.ChildCount;
+                        cmp = (aVal < bVal) ? -1 : (aVal > bVal) ? 1 : 0;
+                    }
+                    break;
+                case 3: // Size
+                    cmp = (a.TotalSizeBytes < b.TotalSizeBytes) ? -1 : (a.TotalSizeBytes > b.TotalSizeBytes) ? 1 : 0;
+                    break;
+                case 4: // Consumers
+                    cmp = (a.ConsumerCount < b.ConsumerCount) ? -1 : (a.ConsumerCount > b.ConsumerCount) ? 1 : 0;
+                    break;
+                case 5: // Retention
+                    cmp = (a.RetentionPeriod < b.RetentionPeriod) ? -1 : (a.RetentionPeriod > b.RetentionPeriod) ? 1 : 0;
+                    break;
+                case 6: // Write speed
+                    cmp = (a.WriteSpeedBytesPerSec < b.WriteSpeedBytesPerSec) ? -1 : (a.WriteSpeedBytesPerSec > b.WriteSpeedBytesPerSec) ? 1 : 0;
+                    break;
+                case 7: // Codecs (just by name for simplicity)
+                    cmp = a.Name.compare(b.Name);
+                    break;
+                default:
+                    cmp = a.Name.compare(b.Name);
+                    break;
+            }
+            return sortAscending ? (cmp < 0) : (cmp > 0);
+        });
+}
+
+TString TTopicListView::GetSortColumnName() const {
+    static const char* names[] = {"Name", "Type", "Parts", "Size", "Cons", "Ret", "WriteSpd", "Codecs"};
+    int col = Table_.GetSortColumn();
+    if (col >= 0 && col < 8) {
+        return TString(names[col]) + (Table_.IsSortAscending() ? " ↑" : " ↓");
+    }
+    return "Name";
+}
+
 } // namespace NYdb::NConsoleClient
+
+
 

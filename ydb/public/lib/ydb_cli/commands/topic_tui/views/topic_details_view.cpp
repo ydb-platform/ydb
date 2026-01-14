@@ -360,6 +360,8 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 auto data = ConsumersFuture_.get();
                 Consumers_ = std::move(data.Consumers);
                 ConsumersError_.clear();
+                // Re-apply current sort order before populating table
+                SortConsumers(ConsumersTable_.GetSortColumn(), ConsumersTable_.IsSortAscending());
                 PopulateConsumersTable();
             } catch (const std::exception& e) {
                 ConsumersError_ = e.what();

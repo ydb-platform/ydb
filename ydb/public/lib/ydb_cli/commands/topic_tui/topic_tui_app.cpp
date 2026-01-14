@@ -593,6 +593,8 @@ Component TTopicTuiApp::BuildHelpBar() {
                     text(" [c] Create ") | color(Color::Green),
                     text(" [e] Edit ") | color(Color::Yellow),
                     text(" [d] Delete ") | color(Color::Red),
+                    text(" [</>] Col ") | dim,
+                    text(" [s] Dir ") | dim,
                     text(" [r] Refresh ") | dim,
                     text(" [R] Rate: ") | dim,
                     text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta)
@@ -607,6 +609,8 @@ Component TTopicTuiApp::BuildHelpBar() {
                     text(" [a] Add Consumer ") | color(Color::Green),
                     text(" [i] Info ") | color(Color::Yellow),
                     text(" [t] Tablets ") | color(Color::Yellow),
+                    text(" [R] Rate: ") | dim,
+                    text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta),
                     text(" [Esc] Back ") | dim
                 };
                 break;
@@ -614,6 +618,8 @@ Component TTopicTuiApp::BuildHelpBar() {
                 parts = {
                     text(" [↑↓] Navigate ") | dim,
                     text(" [o] Commit Offset ") | color(Color::Yellow),
+                    text(" [R] Rate: ") | dim,
+                    text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta),
                     text(" [Esc] Back ") | dim
                 };
                 break;
@@ -637,6 +643,8 @@ Component TTopicTuiApp::BuildHelpBar() {
                     text(" [Enter] Expand ") | dim,
                     text(" [jk] Scroll ") | dim,
                     text(" [t] Tail ") | color(Color::Green),
+                    text(" [R] Rate: ") | dim,
+                    text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta),
                     text(" [Esc] Back ") | dim
                 };
                 break;

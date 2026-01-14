@@ -728,15 +728,15 @@ Element TTopicDetailsView::RenderTabletsView() {
                 return "-";
             }
             TDuration uptime = TInstant::Now() - changeTime;
-            if (uptime.Hours() >= 24) {
-                return Sprintf("%lud%luh", uptime.Days(), uptime.Hours() % 24);
-            } else if (uptime.Hours() >= 1) {
-                return Sprintf("%luh%lum%lus", uptime.Hours(), uptime.Minutes() % 60, uptime.Seconds() % 60);
-            } else if (uptime.Minutes() >= 1) {
-                return Sprintf("%lum%lus", uptime.Minutes(), uptime.Seconds() % 60);
-            } else {
-                return Sprintf("%lus", uptime.Seconds());
+            ui64 totalSecs = uptime.Seconds();
+            ui64 days = totalSecs / 86400;
+            ui64 hours = (totalSecs % 86400) / 3600;
+            ui64 mins = (totalSecs % 3600) / 60;
+            ui64 secs = totalSecs % 60;
+            if (days > 0) {
+                return Sprintf("%lud %02lu:%02lu:%02lu", days, hours, mins, secs);
             }
+            return Sprintf("%02lu:%02lu:%02lu", hours, mins, secs);
         };
         
         // Helper to get color for overall status

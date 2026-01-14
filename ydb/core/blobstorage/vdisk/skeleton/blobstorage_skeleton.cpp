@@ -29,6 +29,7 @@
 #include <ydb/core/blobstorage/vdisk/query/query_public.h>
 #include <ydb/core/blobstorage/vdisk/query/query_statalgo.h>
 #include <ydb/core/blobstorage/vdisk/query/assimilation.h>
+#include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_actor.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
@@ -1990,6 +1991,11 @@ namespace NKikimr {
             MetadataActorId = ctx.Register(metadataActor);
             ActiveActors.Insert(MetadataActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
+            // run chunk keeper actor
+            IActor* chunkKeeperActor = CreateChunkKeeperActor(VCtx, std::move(ev->Get()->ChunkKeeperEntryPoint));
+            ChunkKeeperActorId = ctx.Register(chunkKeeperActor);
+            ActiveActors.Insert(ChunkKeeperActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
+
             LocalRecoveryDoneEvent = std::move(ev);
 
             ctx.Send(MetadataActorId, new TEvCommitVDiskMetadata);
@@ -3149,6 +3155,7 @@ namespace NKikimr {
         std::unique_ptr<TVDiskCompactionState> VDiskCompactionState;
         TMemorizableControlWrapper EnableVPatch;
         THashMap<TLogoBlobID, TActorId> VPatchActors;
+        TActorId ChunkKeeperActorId;
 
         std::unordered_map<TString, TSnapshotInfo> Snapshots;
         TSnapshotExpirationMap SnapshotExpirationMap;

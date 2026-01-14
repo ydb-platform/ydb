@@ -884,6 +884,9 @@ namespace NKikimr {
                 case TLogSignature::SignatureMetadata:
                     LocRecCtx->RecovInfo->DispatchSignatureMetadata(record);
                     return HandleMetadata(ctx, record);
+                case TLogSignature::SignatureChunkKeeper:
+                    LocRecCtx->RecovInfo->DispatchSignatureChunkKeeper(record);
+                    return HandleMetadata(ctx, record);
                 case TLogSignature::Max:
                     break;
             }

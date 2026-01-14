@@ -284,3 +284,16 @@ message TMetadataEntryPoint {
     optional uint32 HullCompSortedPartsNum = 3;
     optional uint32 HugeBlobOverhead = 4;
 }
+
+message TChunkKeeperEntryPoint {
+    enum EChunkOwner {
+        PhantomFlagStorage = 1;
+    }
+
+    message TOwnedChunk {
+        optional uint32 ChunkIdx = 1;
+        optional uint32 ChunkOwner = 2;
+    }
+
+    repeated TOwnedChunk OwnedChunks = 1;
+}

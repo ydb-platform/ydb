@@ -31,42 +31,42 @@ static TString DebugFormatBits(ui64 value) {
 
 namespace NKikimr {
 
-struct TBlobStorageErasureParameters {
-    ui32 Handoff; // number of selected hinted handoff (1 | 2)
-};
+ui32 GetHandoff(TErasureType::EErasureSpecies species) {
+    struct TBlobStorageErasureParameters {
+        ui32 Handoff; // number of selected hinted handoff (1 | 2)
+    };
 
-static const std::unordered_map<TErasureType::EErasureSpecies, TBlobStorageErasureParameters>
-        BlobStorageGroupErasureSpeciesParameters{{
-    {TErasureType::EErasureSpecies::ErasureNone,          {0}}
-    ,{TErasureType::EErasureSpecies::ErasureMirror3,      {1}}
-    ,{TErasureType::EErasureSpecies::Erasure3Plus1Block,  {1}}
-    ,{TErasureType::EErasureSpecies::Erasure3Plus1Stripe, {1}}
-    ,{TErasureType::EErasureSpecies::Erasure4Plus2Block,  {2}}
-    ,{TErasureType::EErasureSpecies::Erasure3Plus2Block,  {2}}
-    ,{TErasureType::EErasureSpecies::Erasure4Plus2Stripe, {2}}
-    ,{TErasureType::EErasureSpecies::Erasure3Plus2Stripe, {2}}
-    ,{TErasureType::EErasureSpecies::ErasureMirror3Plus2, {2}}
-    ,{TErasureType::EErasureSpecies::ErasureMirror3dc,    {6}}
-    ,{TErasureType::EErasureSpecies::Erasure4Plus3Block,  {3}}
-    ,{TErasureType::EErasureSpecies::Erasure4Plus3Stripe, {3}}
-    ,{TErasureType::EErasureSpecies::Erasure3Plus3Block,  {3}}
-    ,{TErasureType::EErasureSpecies::Erasure3Plus3Stripe, {3}}
-    ,{TErasureType::EErasureSpecies::Erasure2Plus3Block,  {3}}
-    ,{TErasureType::EErasureSpecies::Erasure2Plus3Stripe, {3}}
-    ,{TErasureType::EErasureSpecies::Erasure2Plus2Block,  {2}}
-    ,{TErasureType::EErasureSpecies::Erasure2Plus2Stripe, {2}}
-    ,{TErasureType::EErasureSpecies::ErasureMirror3of4,   {5}}
-}};
-
+    static const std::unordered_map<TErasureType::EErasureSpecies, TBlobStorageErasureParameters>
+            blobStorageGroupErasureSpeciesParameters{{
+        {TErasureType::EErasureSpecies::ErasureNone,          {0}}
+        ,{TErasureType::EErasureSpecies::ErasureMirror3,      {1}}
+        ,{TErasureType::EErasureSpecies::Erasure3Plus1Block,  {1}}
+        ,{TErasureType::EErasureSpecies::Erasure3Plus1Stripe, {1}}
+        ,{TErasureType::EErasureSpecies::Erasure4Plus2Block,  {2}}
+        ,{TErasureType::EErasureSpecies::Erasure3Plus2Block,  {2}}
+        ,{TErasureType::EErasureSpecies::Erasure4Plus2Stripe, {2}}
+        ,{TErasureType::EErasureSpecies::Erasure3Plus2Stripe, {2}}
+        ,{TErasureType::EErasureSpecies::ErasureMirror3Plus2, {2}}
+        ,{TErasureType::EErasureSpecies::ErasureMirror3dc,    {6}}
+        ,{TErasureType::EErasureSpecies::Erasure4Plus3Block,  {3}}
+        ,{TErasureType::EErasureSpecies::Erasure4Plus3Stripe, {3}}
+        ,{TErasureType::EErasureSpecies::Erasure3Plus3Block,  {3}}
+        ,{TErasureType::EErasureSpecies::Erasure3Plus3Stripe, {3}}
+        ,{TErasureType::EErasureSpecies::Erasure2Plus3Block,  {3}}
+        ,{TErasureType::EErasureSpecies::Erasure2Plus3Stripe, {3}}
+        ,{TErasureType::EErasureSpecies::Erasure2Plus2Block,  {2}}
+        ,{TErasureType::EErasureSpecies::Erasure2Plus2Stripe, {2}}
+        ,{TErasureType::EErasureSpecies::ErasureMirror3of4,   {5}}
+    }};
+    return blobStorageGroupErasureSpeciesParameters.at(species).Handoff;
+}
 
 ui32 TBlobStorageGroupType::BlobSubgroupSize() const {
-    const TBlobStorageErasureParameters& erasure = BlobStorageGroupErasureSpeciesParameters.at(ErasureSpecies);
-    return DataParts() + ParityParts() + erasure.Handoff;
+    return DataParts() + ParityParts() + GetHandoff(ErasureSpecies);
 }
 
 ui32 TBlobStorageGroupType::Handoff() const {
-    const TBlobStorageErasureParameters& erasure = BlobStorageGroupErasureSpeciesParameters.at(ErasureSpecies);
-    return erasure.Handoff;
+    return GetHandoff(ErasureSpecies);
 }
 
 bool TBlobStorageGroupType::IsHandoffInSubgroup(ui32 idxInSubgroup) const {

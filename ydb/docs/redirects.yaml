@@ -35,8 +35,6 @@ common:
     to: /concepts/glossary.md
   - from: /concepts/vector_index.md
     to: concepts/vector_search.md
-  - from: /postgresql/pg-dump.md
-    to: /postgresql/import.md
   - from: /concepts/column-table.md
     to: /concepts/datamodel/table.md
 
@@ -473,12 +471,8 @@ common:
 
 
 ru:
-  - from: /postgresql/index.md
-    to: /postgresql/intro.md
   - from: /db/terraform.md
     to: /dev/terraform.md
-  - from: /postgresql/docker-connect.md
-    to: /postgresql/connect.md
   - from: /maintenance/manual/replacing_nodes.md
     to: /devops/configuration-management/configuration-v1/replacing-nodes.md
   - from: /maintenance/manual/cluster_expansion.md

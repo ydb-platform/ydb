@@ -1,9 +1,0 @@
-items:
-- name: Connection via PostgreSQL protocol
-  href: docker-connect.md
-- name: PostgreSQL statements
-  include: { mode: link, path: ./statements/toc_m.yaml }
-- name: PostgreSQL functions
-  href: functions.md
-- name: Data dump from PostgreSQL
-  href: import.md

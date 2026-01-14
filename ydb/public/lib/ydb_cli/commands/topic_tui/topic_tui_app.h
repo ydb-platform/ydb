@@ -13,6 +13,7 @@
 #include <memory>
 #include <thread>
 #include <atomic>
+#include <optional>
 
 namespace NYdb::NConsoleClient {
 
@@ -22,13 +23,22 @@ class TTopicDetailsView;
 class TConsumerView;
 class TMessagePreviewView;
 class TChartsView;
+class TTopicForm;
+class TDeleteConfirmForm;
+class TConsumerForm;
+class TWriteMessageForm;
 
 enum class EViewType {
     TopicList,
     TopicDetails,
     ConsumerDetails,
     MessagePreview,
-    Charts
+    Charts,
+    TopicForm,
+    DeleteConfirm,
+    ConsumerForm,
+    WriteMessage,
+    OffsetForm
 };
 
 // Shared state between views
@@ -52,7 +62,8 @@ struct TAppState {
 
 class TTopicTuiApp {
 public:
-    TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration refreshRate, const TString& viewerEndpoint);
+    TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration refreshRate, const TString& viewerEndpoint,
+                 const TString& initialTopicPath = TString(), std::optional<ui32> initialPartition = std::nullopt);
     ~TTopicTuiApp();
     
     int Run();
@@ -62,6 +73,7 @@ public:
     NTopic::TTopicClient& GetTopicClient() { return *TopicClient_; }
     TAppState& GetState() { return State_; }
     const TString& GetViewerEndpoint() const { return ViewerEndpoint_; }
+    const TString& GetDatabaseRoot() const { return DatabaseRoot_; }
     
     // Navigation
     void NavigateTo(EViewType view);
@@ -90,6 +102,7 @@ private:
     // Configuration
     TDuration RefreshRate_;
     TString ViewerEndpoint_;
+    TString DatabaseRoot_;  // Root path for navigation boundary
     
     // State
     TAppState State_;
@@ -100,10 +113,28 @@ private:
     std::shared_ptr<TConsumerView> ConsumerView_;
     std::shared_ptr<TMessagePreviewView> MessagePreviewView_;
     std::shared_ptr<TChartsView> ChartsView_;
+    std::shared_ptr<TTopicForm> TopicForm_;
+    std::shared_ptr<TDeleteConfirmForm> DeleteConfirmForm_;
+    std::shared_ptr<TConsumerForm> ConsumerForm_;
+    std::shared_ptr<TWriteMessageForm> WriteMessageForm_;
     
     // Refresh thread
     std::thread RefreshThread_;
     std::atomic<bool> RefreshThreadRunning_{false};
+    
+    // Initial navigation (for direct topic/partition opening)
+    TString InitialTopicPath_;
+    std::optional<ui32> InitialPartition_;
+    
+    // Auto-refresh tracking
+    TInstant LastTopicRefreshTime_;
+    TInstant LastConsumerRefreshTime_;
+    
+    // Built components (for focus management)
+    ftxui::Component TopicListComponent_;
+    ftxui::Component TopicDetailsComponent_;
+    ftxui::Component TopicFormComponent_;
+    ftxui::Component DeleteConfirmComponent_;
 };
 
 } // namespace NYdb::NConsoleClient

@@ -8,26 +8,92 @@ using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
+// Define table columns for partitions
+static TVector<TTableColumn> CreatePartitionsTableColumns() {
+    return {
+        {"ID", 5},
+        {"Size", NTheme::ColBytes},
+        {"Write/min", NTheme::ColBytesPerMin},
+        {"WriteLag", NTheme::ColDuration},
+        {"Start", NTheme::ColOffset},
+        {"End", NTheme::ColOffset},
+        {"Node", NTheme::ColNodeId},
+        {"LastWrite", NTheme::ColDuration}
+    };
+}
+
+// Define table columns for consumers  
+static TVector<TTableColumn> CreateConsumersTableColumns() {
+    return {
+        {"Consumer Name", -1},  // flex
+        {"Lag", NTheme::ColCount},
+        {"MaxLag", NTheme::ColDuration}
+    };
+}
+
 TTopicDetailsView::TTopicDetailsView(TTopicTuiApp& app)
     : App_(app)
-{}
+    , PartitionsTable_(CreatePartitionsTableColumns())
+    , ConsumersTable_(CreateConsumersTableColumns())
+{
+    // Set up partition table selection callback
+    PartitionsTable_.OnSelect = [this](int row) {
+        if (row >= 0 && row < static_cast<int>(Partitions_.size())) {
+            App_.GetState().SelectedPartition = Partitions_[row].PartitionId;
+            if (OnShowMessages) {
+                OnShowMessages();
+            }
+        }
+    };
+    
+    // Set up consumer table selection callback
+    ConsumersTable_.OnSelect = [this](int row) {
+        if (row >= 0 && row < static_cast<int>(Consumers_.size())) {
+            if (OnConsumerSelected) {
+                OnConsumerSelected(Consumers_[row].Name);
+            }
+        }
+    };
+}
 
 Component TTopicDetailsView::Build() {
     // Create partition panel component
     auto partitionsPanel = Renderer([this] {
+        Element content;
+        if (LoadingTopic_) {
+            content = NTheme::RenderSpinner(SpinnerFrame_, "Loading partitions...") | center;
+        } else if (!TopicError_.empty()) {
+            content = text("Error: " + std::string(TopicError_.c_str())) | color(NTheme::ErrorText) | center;
+        } else if (Partitions_.empty()) {
+            content = text("No partitions") | dim | center;
+        } else {
+            content = PartitionsTable_.Render();
+        }
+        
         return vbox({
             text(" Partitions ") | bold,
             separator(),
-            RenderPartitionsTable() | flex
+            content | flex
         }) | border | flex;
     });
     
     // Create consumers panel component
     auto consumersPanel = Renderer([this] {
+        Element content;
+        if (LoadingConsumers_) {
+            content = NTheme::RenderSpinner(SpinnerFrame_, "Loading consumers...") | center;
+        } else if (!ConsumersError_.empty()) {
+            content = text("Error: " + std::string(ConsumersError_.c_str())) | color(NTheme::ErrorText) | center;
+        } else if (Consumers_.empty()) {
+            content = text("No consumers") | dim | center;
+        } else {
+            content = ConsumersTable_.Render();
+        }
+        
         return vbox({
             text(" Consumers ") | bold,
             separator(),
-            RenderConsumersList() | flex,
+            content | flex,
             separator(),
             RenderWriteRateChart()
         }) | border;
@@ -50,59 +116,28 @@ Component TTopicDetailsView::Build() {
             return false;
         }
         
-        if (event == Event::ArrowUp) {
-            if (FocusPanel_ == 0 && SelectedPartitionIndex_ > 0) {
-                SelectedPartitionIndex_--;
-            } else if (FocusPanel_ == 1 && SelectedConsumerIndex_ > 0) {
-                SelectedConsumerIndex_--;
-            }
-            return true;
-        }
-        if (event == Event::ArrowDown) {
-            if (FocusPanel_ == 0 && SelectedPartitionIndex_ < static_cast<int>(Partitions_.size()) - 1) {
-                SelectedPartitionIndex_++;
-            } else if (FocusPanel_ == 1 && SelectedConsumerIndex_ < static_cast<int>(Consumers_.size()) - 1) {
-                SelectedConsumerIndex_++;
-            }
-            return true;
-        }
-        if (event == Event::PageUp) {
-            if (FocusPanel_ == 0) {
-                SelectedPartitionIndex_ = std::max(0, SelectedPartitionIndex_ - 10);
-            } else if (FocusPanel_ == 1) {
-                SelectedConsumerIndex_ = std::max(0, SelectedConsumerIndex_ - 10);
-            }
-            return true;
-        }
-        if (event == Event::PageDown) {
-            if (FocusPanel_ == 0) {
-                SelectedPartitionIndex_ = std::min(static_cast<int>(Partitions_.size()) - 1, SelectedPartitionIndex_ + 10);
-            } else if (FocusPanel_ == 1) {
-                SelectedConsumerIndex_ = std::min(static_cast<int>(Consumers_.size()) - 1, SelectedConsumerIndex_ + 10);
-            }
-            return true;
-        }
+        // Update focus state for both tables
+        PartitionsTable_.SetFocused(FocusPanel_ == 0);
+        ConsumersTable_.SetFocused(FocusPanel_ == 1);
+        
+        // Tab switches between panels
         if (event == Event::Tab) {
             FocusPanel_ = (FocusPanel_ + 1) % 2;
             return true;
         }
-        if (event == Event::Return) {
-            if (FocusPanel_ == 0 && SelectedPartitionIndex_ >= 0 && 
-                SelectedPartitionIndex_ < static_cast<int>(Partitions_.size())) {
-                // Enter on partition opens messages
-                App_.GetState().SelectedPartition = Partitions_[SelectedPartitionIndex_].PartitionId;
-                if (OnShowMessages) {
-                    OnShowMessages();
-                }
-            } else if (FocusPanel_ == 1 && SelectedConsumerIndex_ >= 0 && 
-                SelectedConsumerIndex_ < static_cast<int>(Consumers_.size())) {
-                // Enter on consumer opens consumer details
-                if (OnConsumerSelected) {
-                    OnConsumerSelected(Consumers_[SelectedConsumerIndex_].Name);
-                }
+        
+        // Delegate navigation to the focused table
+        if (FocusPanel_ == 0 && !Partitions_.empty()) {
+            if (PartitionsTable_.HandleEvent(event)) {
+                return true;
             }
-            return true;
+        } else if (FocusPanel_ == 1 && !Consumers_.empty()) {
+            if (ConsumersTable_.HandleEvent(event)) {
+                return true;
+            }
         }
+        
+        // Custom key handlers
         if (event == Event::Character('w') || event == Event::Character('W')) {
             if (OnWriteMessage) {
                 OnWriteMessage();
@@ -116,10 +151,12 @@ Component TTopicDetailsView::Build() {
             return true;
         }
         if (event == Event::Character('x') || event == Event::Character('X')) {
-            if (FocusPanel_ == 1 && SelectedConsumerIndex_ >= 0 && 
-                SelectedConsumerIndex_ < static_cast<int>(Consumers_.size())) {
-                if (OnDropConsumer) {
-                    OnDropConsumer(Consumers_[SelectedConsumerIndex_].Name);
+            if (FocusPanel_ == 1) {
+                int row = ConsumersTable_.GetSelectedRow();
+                if (row >= 0 && row < static_cast<int>(Consumers_.size())) {
+                    if (OnDropConsumer) {
+                        OnDropConsumer(Consumers_[row].Name);
+                    }
                 }
             }
             return true;
@@ -157,14 +194,11 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                     }
                 }
                 TopicError_.clear();
+                PopulatePartitionsTable();
             } catch (const std::exception& e) {
                 TopicError_ = e.what();
             }
             LoadingTopic_ = false;
-            // Clamp cursor to valid range (preserve position on refresh)
-            if (SelectedPartitionIndex_ >= static_cast<int>(Partitions_.size())) {
-                SelectedPartitionIndex_ = Partitions_.empty() ? 0 : static_cast<int>(Partitions_.size()) - 1;
-            }
         }
     }
     
@@ -175,25 +209,13 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 auto data = ConsumersFuture_.get();
                 Consumers_ = std::move(data.Consumers);
                 ConsumersError_.clear();
+                PopulateConsumersTable();
             } catch (const std::exception& e) {
                 ConsumersError_ = e.what();
             }
             LoadingConsumers_ = false;
-            // Clamp cursor to valid range (preserve position on refresh)
-            if (SelectedConsumerIndex_ >= static_cast<int>(Consumers_.size())) {
-                SelectedConsumerIndex_ = Consumers_.empty() ? 0 : static_cast<int>(Consumers_.size()) - 1;
-            }
         }
     }
-}
-
-Element TTopicDetailsView::RenderSpinner(const std::string& msg) {
-    static const std::vector<std::string> frames = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
-    std::string frame = frames[SpinnerFrame_ % frames.size()];
-    return hbox({
-        text(frame) | color(Color::Cyan),
-        text(" " + msg) | dim
-    }) | center;
 }
 
 Element TTopicDetailsView::RenderHeader() {
@@ -208,7 +230,7 @@ Element TTopicDetailsView::RenderHeader() {
     return vbox({
         hbox({
             text(" Topic: ") | bold,
-            text(std::string(TopicPath_.c_str())) | color(Color::Cyan)
+            text(std::string(TopicPath_.c_str())) | color(NTheme::AccentText)
         }),
         hbox({
             text(" Partitions: ") | dim,
@@ -221,126 +243,46 @@ Element TTopicDetailsView::RenderHeader() {
     });
 }
 
-Element TTopicDetailsView::RenderPartitionsTable() {
-    if (LoadingTopic_) {
-        return RenderSpinner("Loading partitions...");
-    }
-    
-    if (!TopicError_.empty()) {
-        return text("Error: " + std::string(TopicError_.c_str())) | color(Color::Red) | center;
-    }
-    
-    if (Partitions_.empty()) {
-        return text("No partitions") | dim | center;
-    }
-    
-    Elements rows;
-    
-    // Header row with separators like consumer page
-    rows.push_back(hbox({
-        text(" ID") | size(WIDTH, EQUAL, 5) | bold,
-        separator(),
-        text(" Size") | size(WIDTH, EQUAL, 10) | bold,
-        separator(),
-        text(" Write/min") | size(WIDTH, EQUAL, 12) | bold,
-        separator(),
-        text(" WriteLag") | size(WIDTH, EQUAL, 12) | bold,
-        separator(),
-        text(" Start") | size(WIDTH, EQUAL, 14) | bold,
-        separator(),
-        text(" End") | size(WIDTH, EQUAL, 14) | bold,
-        separator(),
-        text(" Node") | size(WIDTH, EQUAL, 6) | bold,
-        separator(),
-        text(" LastWrite") | size(WIDTH, EQUAL, 12) | bold
-    }) | bgcolor(Color::GrayDark));
+void TTopicDetailsView::PopulatePartitionsTable() {
+    PartitionsTable_.SetRowCount(Partitions_.size());
     
     for (size_t i = 0; i < Partitions_.size(); ++i) {
         const auto& p = Partitions_[i];
-        bool selected = FocusPanel_ == 0 && static_cast<int>(i) == SelectedPartitionIndex_;
         
         // Format last write time
-        std::string lastWriteStr = p.LastWriteTime != TInstant() 
-            ? std::string(p.LastWriteTime.FormatLocalTime("%H:%M:%S").c_str())
+        TString lastWriteStr = p.LastWriteTime != TInstant() 
+            ? p.LastWriteTime.FormatLocalTime("%H:%M:%S")
             : "-";
         
-        Element row = hbox({
-            text(" " + std::to_string(p.PartitionId)) | size(WIDTH, EQUAL, 5),
-            separator(),
-            text(" " + std::string(FormatBytes(p.StoreSizeBytes).c_str())) | size(WIDTH, EQUAL, 10),
-            separator(),
-            text(" " + std::string(FormatBytes(p.BytesWrittenPerMinute).c_str())) | size(WIDTH, EQUAL, 12),
-            separator(),
-            text(" " + std::string(FormatDuration(p.WriteTimeLag).c_str())) | size(WIDTH, EQUAL, 12),
-            separator(),
-            text(" " + std::string(FormatNumber(p.StartOffset).c_str())) | size(WIDTH, EQUAL, 14),
-            separator(),
-            text(" " + std::string(FormatNumber(p.EndOffset).c_str())) | size(WIDTH, EQUAL, 14),
-            separator(),
-            text(" " + (p.NodeId > 0 ? std::to_string(p.NodeId) : "-")) | size(WIDTH, EQUAL, 6),
-            separator(),
-            text(" " + lastWriteStr) | size(WIDTH, EQUAL, 12)
-        });
+        TVector<TTableCell> cells = {
+            TTableCell(ToString(p.PartitionId)),
+            TTableCell(FormatBytes(p.StoreSizeBytes)),
+            TTableCell(FormatBytes(p.BytesWrittenPerMinute)),
+            TTableCell(FormatDuration(p.WriteTimeLag)),
+            TTableCell(FormatNumber(p.StartOffset)),
+            TTableCell(FormatNumber(p.EndOffset)),
+            TTableCell(p.NodeId > 0 ? ToString(p.NodeId) : "-"),
+            TTableCell(lastWriteStr)
+        };
         
-        if (selected) {
-            row = row | bgcolor(Color::RGB(40, 60, 100)) | focus;
-        }
-        
-        rows.push_back(row);
+        PartitionsTable_.SetRow(i, cells);
     }
-    
-    return vbox(rows) | yframe | flex;
 }
 
-Element TTopicDetailsView::RenderConsumersList() {
-    if (LoadingConsumers_) {
-        return RenderSpinner("Loading consumers...");
-    }
-    
-    if (!ConsumersError_.empty()) {
-        return text("Error: " + std::string(ConsumersError_.c_str())) | color(Color::Red) | center;
-    }
-    
-    if (Consumers_.empty()) {
-        return text("No consumers") | dim | center;
-    }
-    
-    Elements rows;
-    
-    // Header row with separators
-    rows.push_back(hbox({
-        text(" Consumer Name") | flex | bold,
-        separator(),
-        text(" Lag") | size(WIDTH, EQUAL, 12) | bold,
-        separator(),
-        text(" MaxLag") | size(WIDTH, EQUAL, 14) | bold
-    }) | bgcolor(Color::GrayDark));
+void TTopicDetailsView::PopulateConsumersTable() {
+    ConsumersTable_.SetRowCount(Consumers_.size());
     
     for (size_t i = 0; i < Consumers_.size(); ++i) {
         const auto& c = Consumers_[i];
-        bool selected = FocusPanel_ == 1 && static_cast<int>(i) == SelectedConsumerIndex_;
         
-        std::string prefix = selected ? "> " : "  ";
+        TVector<TTableCell> cells = {
+            TTableCell(c.Name),
+            TTableCell(FormatNumber(c.TotalLag), NTheme::GetLagColor(c.TotalLag)),
+            TTableCell(FormatDuration(c.MaxLagTime))
+        };
         
-        Element row = hbox({
-            text(prefix + std::string(c.Name.c_str())) | flex,
-            separator(),
-            text(" " + std::string(FormatNumber(c.TotalLag).c_str())) | size(WIDTH, EQUAL, 12),
-            separator(),
-            text(" " + std::string(FormatDuration(c.MaxLagTime).c_str())) | size(WIDTH, EQUAL, 14)
-        });
-        
-        if (selected) {
-            row = row | bgcolor(Color::RGB(40, 60, 100)) | focus;  // focus enables auto-scroll
-        }
-        if (c.IsImportant) {
-            row = row | bold;
-        }
-        
-        rows.push_back(row);
+        ConsumersTable_.SetRow(i, cells);
     }
-    
-    return vbox(rows) | yframe | flex;
 }
 
 Element TTopicDetailsView::RenderWriteRateChart() {

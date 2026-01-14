@@ -1,7 +1,6 @@
 #pragma once
 
-#include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
-#include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
+#include "../widgets/form_base.h"
 
 #include <util/generic/string.h>
 
@@ -11,23 +10,26 @@ namespace NYdb::NConsoleClient {
 
 class TTopicTuiApp;
 
-class TOffsetForm {
+class TOffsetForm : public TFormBase {
 public:
     explicit TOffsetForm(TTopicTuiApp& app);
     
-    ftxui::Component Build();
-    void SetContext(const TString& topicPath, const TString& consumerName, ui64 partition, ui64 currentOffset, ui64 endOffset);
-    void Reset();
+    void SetContext(const TString& topicPath, const TString& consumerName, 
+                    ui64 partition, ui64 currentOffset, ui64 endOffset);
+    void Reset() override;
     
-    // Callbacks
-    std::function<void(ui64 offset)> OnSubmit;
-    std::function<void()> OnCancel;
+    // Callback with the new offset value
+    std::function<void(ui64 offset)> OnSubmitOffset;
+    
+protected:
+    TString GetTitle() const override;
+    EViewType GetViewType() const override;
+    ftxui::Element RenderContent() override;
+    bool HandleSubmit() override;
+    int GetFormWidth() const override { return 50; }
+    ftxui::Component BuildContainer() override;
     
 private:
-    ftxui::Element RenderForm();
-    
-private:
-    TTopicTuiApp& App_;
     TString TopicPath_;
     TString ConsumerName_;
     ui64 Partition_ = 0;
@@ -35,7 +37,7 @@ private:
     ui64 EndOffset_ = 0;
     
     std::string OffsetInput_;
-    int FocusedField_ = 0;
+    ftxui::Component OffsetInputComponent_;
 };
 
 } // namespace NYdb::NConsoleClient

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../widgets/table.h"
+#include "../widgets/theme.h"
+
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
 
@@ -74,10 +77,9 @@ public:
     
 private:
     ftxui::Element RenderHeader();
-    ftxui::Element RenderPartitionsTable();
-    ftxui::Element RenderConsumersList();
     ftxui::Element RenderWriteRateChart();
-    ftxui::Element RenderSpinner(const std::string& msg);
+    void PopulatePartitionsTable();
+    void PopulateConsumersTable();
     void StartAsyncLoads();
     
 private:
@@ -94,10 +96,10 @@ private:
     // Consumers data (loaded separately)
     TVector<TConsumerDisplayInfo> Consumers_;
     
-    // Selection
-    int SelectedPartitionIndex_ = 0;
-    int SelectedConsumerIndex_ = 0;
-    int FocusPanel_ = 0;
+    // Use TTable for both tables
+    TTable PartitionsTable_;
+    TTable ConsumersTable_;
+    int FocusPanel_ = 0;  // 0 = partitions, 1 = consumers
     
     // Separate async state for each section
     std::atomic<bool> LoadingTopic_{false};

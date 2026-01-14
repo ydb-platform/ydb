@@ -5,6 +5,10 @@
 #include "views/consumer_view.h"
 #include "views/message_preview_view.h"
 #include "views/charts_view.h"
+#include "forms/topic_form.h"
+#include "forms/delete_confirm_form.h"
+#include "forms/consumer_form.h"
+#include "forms/write_message_form.h"
 #include "widgets/sparkline.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
@@ -14,12 +18,16 @@ using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
-TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration refreshRate, const TString& viewerEndpoint)
+TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration refreshRate, const TString& viewerEndpoint,
+                           const TString& initialTopicPath, std::optional<ui32> initialPartition)
     : SchemeClient_(std::make_unique<NScheme::TSchemeClient>(driver))
     , TopicClient_(std::make_unique<NTopic::TTopicClient>(driver))
     , Screen_(ScreenInteractive::Fullscreen())
     , RefreshRate_(refreshRate)
     , ViewerEndpoint_(viewerEndpoint)
+    , DatabaseRoot_(startPath)
+    , InitialTopicPath_(initialTopicPath)
+    , InitialPartition_(initialPartition)
 {
     State_.CurrentPath = startPath;
     
@@ -29,6 +37,10 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     ConsumerView_ = std::make_shared<TConsumerView>(*this);
     MessagePreviewView_ = std::make_shared<TMessagePreviewView>(*this);
     ChartsView_ = std::make_shared<TChartsView>(*this);
+    TopicForm_ = std::make_shared<TTopicForm>(*this);
+    DeleteConfirmForm_ = std::make_shared<TDeleteConfirmForm>(*this);
+    ConsumerForm_ = std::make_shared<TConsumerForm>(*this);
+    WriteMessageForm_ = std::make_shared<TWriteMessageForm>(*this);
     
     // Wire up callbacks
     TopicListView_->OnTopicSelected = [this](const TString& path) {
@@ -53,6 +65,31 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
         NavigateTo(EViewType::MessagePreview);
     };
     
+    TopicDetailsView_->OnWriteMessage = [this]() {
+        WriteMessageForm_->SetTopic(State_.SelectedTopic, State_.SelectedPartition);
+        NavigateTo(EViewType::WriteMessage);
+    };
+    
+    TopicDetailsView_->OnAddConsumer = [this]() {
+        ConsumerForm_->SetTopic(State_.SelectedTopic);
+        NavigateTo(EViewType::ConsumerForm);
+    };
+    
+    // Consumer form callbacks
+    ConsumerForm_->OnSuccess = [this]() {
+        TopicDetailsView_->Refresh();
+        NavigateBack();
+    };
+    
+    ConsumerForm_->OnCancel = [this]() {
+        NavigateBack();
+    };
+    
+    // Write message form callbacks
+    WriteMessageForm_->OnClose = [this]() {
+        NavigateBack();
+    };
+    
     TopicDetailsView_->OnBack = [this]() {
         NavigateBack();
     };
@@ -68,6 +105,159 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     ChartsView_->OnBack = [this]() {
         NavigateBack();
     };
+    
+    // Wire up topic CRUD callbacks
+    TopicListView_->OnCreateTopic = [this]() {
+        TopicForm_->SetCreateMode(State_.CurrentPath);
+        NavigateTo(EViewType::TopicForm);
+    };
+    
+    TopicListView_->OnEditTopic = [this](const TString& topicPath) {
+        // Fetch topic description then show form in edit mode
+        auto future = TopicClient_->DescribeTopic(topicPath);
+        auto result = future.GetValueSync();
+        if (result.IsSuccess()) {
+            TopicForm_->SetEditMode(topicPath, result.GetTopicDescription());
+            NavigateTo(EViewType::TopicForm);
+        } else {
+            ShowError(result.GetIssues().ToString());
+        }
+    };
+    
+    TopicListView_->OnDeleteTopic = [this](const TString& topicPath) {
+        // Show confirmation dialog instead of deleting directly
+        DeleteConfirmForm_->SetTopic(topicPath);
+        NavigateTo(EViewType::DeleteConfirm);
+    };
+    
+    // Wire up delete confirmation callbacks
+    DeleteConfirmForm_->OnConfirm = [this](const TString& path) {
+        // Try to delete as topic first
+        auto topicResult = TopicClient_->DropTopic(path).GetValueSync();
+        if (topicResult.IsSuccess()) {
+            NavigateBack();
+            TopicListView_->Refresh();
+            return;
+        }
+        
+        // If topic delete failed, try as directory
+        auto dirResult = SchemeClient_->RemoveDirectory(path).GetValueSync();
+        NavigateBack();
+        if (dirResult.IsSuccess()) {
+            TopicListView_->Refresh();
+        } else {
+            // Show original topic error or directory error
+            ShowError(dirResult.GetIssues().ToString());
+        }
+    };
+    
+    DeleteConfirmForm_->OnCancel = [this]() {
+        NavigateBack();
+    };
+    
+    // Wire up form callbacks
+    TopicForm_->OnSubmit = [this](const TTopicFormData& data) {
+        if (TopicForm_->IsEditMode()) {
+            // Alter existing topic
+            NTopic::TAlterTopicSettings settings;
+            
+            // Partitioning settings with auto-partitioning
+            settings.BeginAlterPartitioningSettings()
+                .MinActivePartitions(data.MinPartitions)
+                .MaxActivePartitions(data.MaxPartitions)
+                .BeginAlterAutoPartitioningSettings()
+                    .Strategy(data.AutoPartitioningStrategy)
+                    .StabilizationWindow(TDuration::Seconds(data.StabilizationWindowSeconds))
+                    .UpUtilizationPercent(data.UpUtilizationPercent)
+                    .DownUtilizationPercent(data.DownUtilizationPercent)
+                .EndAlterAutoPartitioningSettings()
+            .EndAlterTopicPartitioningSettings();
+            
+            // Retention
+            settings.SetRetentionPeriod(data.RetentionPeriod);
+            if (data.RetentionStorageMb > 0) {
+                settings.SetRetentionStorageMb(data.RetentionStorageMb);
+            }
+            
+            // Write performance
+            settings.SetPartitionWriteSpeedBytesPerSecond(data.WriteSpeedBytesPerSecond);
+            if (data.WriteBurstBytes > 0) {
+                settings.SetPartitionWriteBurstBytes(data.WriteBurstBytes);
+            }
+            
+            // Metering mode
+            if (data.MeteringMode != NTopic::EMeteringMode::Unspecified) {
+                settings.SetMeteringMode(data.MeteringMode);
+            }
+            
+            // Codecs
+            std::vector<NTopic::ECodec> codecs;
+            if (data.CodecRaw) codecs.push_back(NTopic::ECodec::RAW);
+            if (data.CodecGzip) codecs.push_back(NTopic::ECodec::GZIP);
+            if (data.CodecZstd) codecs.push_back(NTopic::ECodec::ZSTD);
+            if (data.CodecLzop) codecs.push_back(NTopic::ECodec::LZOP);
+            if (!codecs.empty()) {
+                settings.SetSupportedCodecs(codecs);
+            }
+            
+            auto future = TopicClient_->AlterTopic(data.Path, settings);
+            auto result = future.GetValueSync();
+            if (result.IsSuccess()) {
+                NavigateBack();
+                TopicListView_->Refresh();
+            } else {
+                ShowError(result.GetIssues().ToString());
+            }
+        } else {
+            // Create new topic
+            NTopic::TCreateTopicSettings settings;
+            
+            // Partitioning with auto-partitioning
+            NTopic::TAutoPartitioningSettings autoPartSettings(
+                data.AutoPartitioningStrategy,
+                TDuration::Seconds(data.StabilizationWindowSeconds),
+                data.DownUtilizationPercent,
+                data.UpUtilizationPercent
+            );
+            settings.PartitioningSettings(data.MinPartitions, data.MaxPartitions, autoPartSettings);
+            
+            // Retention
+            settings.RetentionPeriod(data.RetentionPeriod);
+            if (data.RetentionStorageMb > 0) {
+                settings.RetentionStorageMb(data.RetentionStorageMb);
+            }
+            
+            // Write performance
+            settings.PartitionWriteSpeedBytesPerSecond(data.WriteSpeedBytesPerSecond);
+            if (data.WriteBurstBytes > 0) {
+                settings.PartitionWriteBurstBytes(data.WriteBurstBytes);
+            }
+            
+            // Metering mode
+            if (data.MeteringMode != NTopic::EMeteringMode::Unspecified) {
+                settings.MeteringMode(data.MeteringMode);
+            }
+            
+            // Codecs
+            if (data.CodecRaw) settings.AppendSupportedCodecs(NTopic::ECodec::RAW);
+            if (data.CodecGzip) settings.AppendSupportedCodecs(NTopic::ECodec::GZIP);
+            if (data.CodecZstd) settings.AppendSupportedCodecs(NTopic::ECodec::ZSTD);
+            if (data.CodecLzop) settings.AppendSupportedCodecs(NTopic::ECodec::LZOP);
+            
+            auto future = TopicClient_->CreateTopic(data.Path, settings);
+            auto result = future.GetValueSync();
+            if (result.IsSuccess()) {
+                NavigateBack();
+                TopicListView_->Refresh();
+            } else {
+                ShowError(result.GetIssues().ToString());
+            }
+        }
+    };
+    
+    TopicForm_->OnCancel = [this]() {
+        NavigateBack();
+    };
 }
 
 TTopicTuiApp::~TTopicTuiApp() {
@@ -75,7 +265,35 @@ TTopicTuiApp::~TTopicTuiApp() {
 }
 
 int TTopicTuiApp::Run() {
-    // Load initial entries
+    // Handle direct navigation to topic or partition
+    if (!InitialTopicPath_.empty()) {
+        // Always verify the topic exists first
+        auto future = TopicClient_->DescribeTopic(InitialTopicPath_);
+        auto result = future.GetValueSync();
+        if (result.IsSuccess()) {
+            // It's a valid topic - navigate to topic details or partition
+            State_.SelectedTopic = InitialTopicPath_;
+            TopicDetailsView_->SetTopic(InitialTopicPath_);
+            
+            // Set parent directory for topic list context
+            TStringBuf parent, discard;
+            if (TStringBuf(InitialTopicPath_).TryRSplit('/', parent, discard)) {
+                State_.CurrentPath = parent ? TString(parent) : "/";
+            }
+            
+            if (InitialPartition_.has_value()) {
+                // Navigate to partition message preview
+                State_.SelectedPartition = InitialPartition_.value();
+                MessagePreviewView_->SetTopic(InitialTopicPath_, InitialPartition_.value(), 0);
+                State_.CurrentView = EViewType::MessagePreview;
+            } else {
+                State_.CurrentView = EViewType::TopicDetails;
+            }
+        }
+        // If DescribeTopic failed, it's a directory or invalid - Path_ is already set
+    }
+    
+    // Load topic list (for the current directory context)
     TopicListView_->Refresh();
     
     StartRefreshThread();
@@ -89,6 +307,14 @@ int TTopicTuiApp::Run() {
 
 void TTopicTuiApp::NavigateTo(EViewType view) {
     State_.CurrentView = view;
+    
+    // Ensure forms have focus when navigating to them
+    if (view == EViewType::TopicForm && TopicFormComponent_) {
+        TopicFormComponent_->TakeFocus();
+    } else if (view == EViewType::DeleteConfirm && DeleteConfirmComponent_) {
+        DeleteConfirmComponent_->TakeFocus();
+    }
+    
     Screen_.PostEvent(Event::Custom);
 }
 
@@ -104,6 +330,24 @@ void TTopicTuiApp::NavigateBack() {
             State_.CurrentView = EViewType::TopicDetails;
             break;
         case EViewType::Charts:
+            State_.CurrentView = EViewType::TopicDetails;
+            break;
+        case EViewType::TopicForm:
+            State_.CurrentView = EViewType::TopicList;
+            if (TopicListComponent_) {
+                TopicListComponent_->TakeFocus();
+            }
+            break;
+        case EViewType::DeleteConfirm:
+            State_.CurrentView = EViewType::TopicList;
+            if (TopicListComponent_) {
+                TopicListComponent_->TakeFocus();
+            }
+            break;
+        case EViewType::ConsumerForm:
+            State_.CurrentView = EViewType::TopicDetails;
+            break;
+        case EViewType::WriteMessage:
             State_.CurrentView = EViewType::TopicDetails;
             break;
         default:
@@ -127,30 +371,68 @@ void TTopicTuiApp::RequestExit() {
 }
 
 Component TTopicTuiApp::BuildMainComponent() {
-    auto topicListComponent = TopicListView_->Build();
-    auto topicDetailsComponent = TopicDetailsView_->Build();
+    TopicListComponent_ = TopicListView_->Build();
+    TopicDetailsComponent_ = TopicDetailsView_->Build();
     auto consumerComponent = ConsumerView_->Build();
     auto messagePreviewComponent = MessagePreviewView_->Build();
     auto chartsComponent = ChartsView_->Build();
+    TopicFormComponent_ = TopicForm_->Build();
+    DeleteConfirmComponent_ = DeleteConfirmForm_->Build();
+    auto consumerFormComponent = ConsumerForm_->Build();
+    auto writeMessageComponent = WriteMessageForm_->Build();
     
     // Use a simple container - we'll switch rendering manually
     auto container = Container::Stacked({
-        topicListComponent,
-        topicDetailsComponent,
+        TopicListComponent_,
+        TopicDetailsComponent_,
         consumerComponent,
         messagePreviewComponent,
-        chartsComponent
+        chartsComponent,
+        TopicFormComponent_,
+        DeleteConfirmComponent_,
+        consumerFormComponent,
+        writeMessageComponent
     });
     
-    // Add global key handling first, then let events flow to children
-    auto withGlobalKeys = CatchEvent(container, [this](Event event) {
-        // Global key handling - only handle if not consumed by children
+    // Use |= to intercept events BEFORE children process them (critical for Escape in WriteMessage)
+    container |= CatchEvent([this](Event event) {
+        // DEBUG: Log all events when in WriteMessage view
+        if (State_.CurrentView == EViewType::WriteMessage) {
+            std::string eventDesc;
+            if (event == Event::Escape) eventDesc = "Escape";
+            else if (event == Event::Return) eventDesc = "Return";
+            else if (event.is_character()) eventDesc = "Char: " + event.character();
+            else if (event.is_mouse()) eventDesc = "Mouse";
+            else eventDesc = "Other";
+            std::cerr << "[DEBUG] WriteMessage event: " << eventDesc << std::endl;
+            
+            // Handle Escape for WriteMessage at app level FIRST
+            bool isEscape = (event == Event::Escape) || 
+                           (event.is_character() && event.character() == "\x1b");
+            if (isEscape) {
+                std::cerr << "[DEBUG] Escape detected! Navigating back." << std::endl;
+                NavigateBack();
+                return true;
+            }
+            return false;  // Let other keys go to form for typing
+        }
+        
+        // Skip all global shortcuts when in form views - let them type freely
+        if (State_.CurrentView == EViewType::TopicForm || 
+            State_.CurrentView == EViewType::DeleteConfirm ||
+            State_.CurrentView == EViewType::ConsumerForm) {
+            return false;  // Don't handle any keys globally in forms
+        }
+        
+        // Global key handling
         if (event == Event::Character('q') || event == Event::Character('Q')) {
             RequestExit();
             return true;
         }
         if (event == Event::Escape) {
-            if (State_.CurrentView != EViewType::TopicList) {
+            // Don't handle Esc globally for views that handle it themselves
+            if (State_.CurrentView != EViewType::TopicList && 
+                State_.CurrentView != EViewType::MessagePreview) {
                 NavigateBack();
                 return true;
             }
@@ -177,15 +459,20 @@ Component TTopicTuiApp::BuildMainComponent() {
         return false;
     });
     
+    auto withGlobalKeys = container;
+    
     return Renderer(withGlobalKeys, [=, this] {
         Element content;
         
+        // Note: Auto-refresh removed - use 'r' key for manual refresh
+        // to avoid disruptive full-page reloads
+        
         switch (State_.CurrentView) {
             case EViewType::TopicList:
-                content = topicListComponent->Render();
+                content = TopicListComponent_->Render();
                 break;
             case EViewType::TopicDetails:
-                content = topicDetailsComponent->Render();
+                content = TopicDetailsComponent_->Render();
                 break;
             case EViewType::ConsumerDetails:
                 content = consumerComponent->Render();
@@ -195,6 +482,21 @@ Component TTopicTuiApp::BuildMainComponent() {
                 break;
             case EViewType::Charts:
                 content = chartsComponent->Render();
+                break;
+            case EViewType::TopicForm:
+                content = TopicFormComponent_->Render();
+                break;
+            case EViewType::DeleteConfirm:
+                content = DeleteConfirmComponent_->Render();
+                break;
+            case EViewType::ConsumerForm:
+                content = consumerFormComponent->Render();
+                break;
+            case EViewType::WriteMessage:
+                content = writeMessageComponent->Render();
+                break;
+            case EViewType::OffsetForm:
+                // Not rendered as standalone - used as modal
                 break;
         }
         
@@ -246,7 +548,7 @@ Component TTopicTuiApp::BuildHelpBar() {
                 parts = {
                     text(" [↑↓] Navigate ") | dim,
                     text(" [Tab] Switch Panel ") | dim,
-                    text(" [m] Messages ") | color(Color::Cyan),
+                    text(" [Enter] Open ") | color(Color::Cyan),
                     text(" [w] Write ") | color(Color::Green),
                     text(" [a] Add Consumer ") | color(Color::Green),
                     text(" [Esc] Back ") | dim
@@ -271,6 +573,37 @@ Component TTopicTuiApp::BuildHelpBar() {
                 parts = {
                     text(" [r] Refresh ") | dim,
                     text(" [Esc] Back ") | dim
+                };
+                break;
+            case EViewType::TopicForm:
+                parts = {
+                    text(" [Enter] Submit ") | color(Color::Green),
+                    text(" [Esc] Cancel ") | dim
+                };
+                break;
+            case EViewType::DeleteConfirm:
+                parts = {
+                    text(" [Enter] Confirm (type name first) ") | color(Color::Red),
+                    text(" [Esc] Cancel ") | dim
+                };
+                break;
+            case EViewType::ConsumerForm:
+                parts = {
+                    text(" [Enter] Add Consumer ") | color(Color::Green),
+                    text(" [Esc] Cancel ") | dim
+                };
+                break;
+            case EViewType::WriteMessage:
+                parts = {
+                    text(" [Enter] Send Message ") | color(Color::Green),
+                    text(" (form stays open for more) ") | dim,
+                    text(" [Esc] Close ") | dim
+                };
+                break;
+            case EViewType::OffsetForm:
+                parts = {
+                    text(" [Enter] Commit ") | color(Color::Yellow),
+                    text(" [Esc] Cancel ") | dim
                 };
                 break;
         }

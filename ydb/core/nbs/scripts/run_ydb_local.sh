@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 NODE=${NODE:-1}
-MON_PORT=${MON_PORT:-8765}
 
 function parse_args {
     # Default action is 'start' if no argument is provided
@@ -60,7 +59,7 @@ function parse_args {
 # Parse command line arguments
 parse_args "$@"
 
-YDBD_BIN="`pwd`/../../ydb/apps/ydbd/ydbd"
+YDBD_BIN="`pwd`/../../../../ydb/apps/ydbd/ydbd"
 
 for bin in $YDBD_BIN
 do

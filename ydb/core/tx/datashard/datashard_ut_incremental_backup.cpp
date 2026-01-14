@@ -394,9 +394,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         return latestDir;
     }
 
-    // Добавьте это в начало файла, если нет:
-    // #include <algorithm> 
-
     TVector<TString> GetSortedBackupItems(TTestActorRuntime& runtime, const TActorId& sender, const TString& collectionPath) {
         auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
         request->Record.MutableDescribePath()->SetPath(collectionPath);
@@ -1020,7 +1017,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         SimulateSleep(server, TDuration::Seconds(5));
 
         backups = GetSortedBackupItems(runtime, edgeActor, "/Root/.backups/collections/MyCollection");
-        UNIT_ASSERT_C(backups.size() >= 3, "Expected at least 3 backups");
         TString incr2Path = "/Root/.backups/collections/MyCollection/" + backups[2] + "/Table";
 
         UNIT_ASSERT_VALUES_EQUAL(

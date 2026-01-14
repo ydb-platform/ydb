@@ -79,6 +79,9 @@ struct TTableRow {
     // Custom data pointer (for callbacks to identify the source data)
     void* UserData = nullptr;
     
+    // For hit detection
+    ftxui::Box Box;
+    
     TTableRow() = default;
     TTableRow(TVector<TTableCell> cells) : Cells(std::move(cells)) {}
     

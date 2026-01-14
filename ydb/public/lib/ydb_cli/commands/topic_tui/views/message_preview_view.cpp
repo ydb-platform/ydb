@@ -84,7 +84,7 @@ Component TMessagePreviewView::Build() {
             return false;
         }
         
-        if (event == Event::ArrowUp) {
+        if (event == Event::ArrowUp || (!ExpandedView_ && (event == Event::Character('k') || event == Event::Character('K')))) {
             if (TailMode_) {
                 TailMode_ = false;
                 StopTailSession();
@@ -95,7 +95,7 @@ Component TMessagePreviewView::Build() {
             }
             return true;
         }
-        if (event == Event::ArrowDown) {
+        if (event == Event::ArrowDown || (!ExpandedView_ && (event == Event::Character('j') || event == Event::Character('J')))) {
             if (SelectedIndex_ < static_cast<int>(Messages_.size()) - 1) {
                 SelectedIndex_++;
                 ContentScrollY_ = 0;  // Reset scroll when selecting new message

@@ -72,6 +72,7 @@ struct TDirInfoResult {
 class TTopicListView {
 public:
     explicit TTopicListView(TTopicTuiApp& app);
+    ~TTopicListView();
     
     ftxui::Component Build();
     void Refresh();
@@ -155,6 +156,9 @@ private:
     bool CompletionLoading_ = false;
     
     // Note: Sorting state is managed by Table_ (GetSortColumn(), IsSortAscending(), SetSort())
+    
+    // Stop flag to cancel async operations on destruction
+    std::shared_ptr<std::atomic<bool>> StopFlag_ = std::make_shared<std::atomic<bool>>(false);
 };
 
 } // namespace NYdb::NConsoleClient

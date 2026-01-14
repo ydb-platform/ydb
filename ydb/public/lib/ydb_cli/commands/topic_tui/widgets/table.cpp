@@ -284,12 +284,16 @@ bool TTable::HandleEvent(Event event) {
     if (event.is_mouse()) {
         auto& mouse = event.mouse();
         
-        // Calculate row relative to table's position on screen
-        // Box_.y_min is the top of the table, +1 for header row
-        int relativeY = mouse.y - Box_.y_min;
-        int rowUnderMouse = relativeY - 1;  // -1 for header row
-        
-        if (rowUnderMouse >= 0 && rowUnderMouse < static_cast<int>(Rows_.size())) {
+        // Hit detection using per-row boxes (handles scrolling correctly)
+        int rowUnderMouse = -1;
+        for (size_t i = 0; i < Rows_.size(); ++i) {
+            if (Rows_[i].Box.Contain(mouse.x, mouse.y)) {
+                rowUnderMouse = static_cast<int>(i);
+                break;
+            }
+        }
+
+        if (rowUnderMouse != -1) {
             // Update hover state
             HoveredRow_ = rowUnderMouse;
             
@@ -362,7 +366,7 @@ Element TTable::RenderHeader() {
 
 Element TTable::RenderRow(size_t rowIndex) {
     bool selected = IsFocused_ && static_cast<int>(rowIndex) == SelectedRow_;
-    const auto& rowData = Rows_[rowIndex];
+    auto& rowData = Rows_[rowIndex];
     
     Elements cells;
     
@@ -404,7 +408,7 @@ Element TTable::RenderRow(size_t rowIndex) {
         row = row | bgcolor(NTheme::HighlightBg) | focus;
     }
     
-    return row;
+    return row | reflect(rowData.Box);
 }
 
 Element TTable::RenderCell(const TTableCell& cell, const TTableColumn& col,

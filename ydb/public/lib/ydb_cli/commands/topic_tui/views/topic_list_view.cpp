@@ -14,6 +14,17 @@ std::unordered_map<std::string, TTopicInfoResult> TTopicListView::TopicInfoCache
 std::unordered_map<std::string, TDirInfoResult> TTopicListView::DirInfoCache_;
 std::unordered_map<std::string, int> TTopicListView::CursorPositionCache_;
 
+// Helper to wait for future with cancellation check
+template<typename T>
+static bool WaitFor(const NThreading::TFuture<T>& future, const std::shared_ptr<std::atomic<bool>>& stopFlag, TDuration timeout) {
+    TInstant deadline = TInstant::Now() + timeout;
+    while (TInstant::Now() < deadline) {
+        if (stopFlag && *stopFlag) return false; // Cancelled
+        if (future.Wait(TDuration::MilliSeconds(100))) return true; // Ready
+    }
+    return false; // Timeout
+}
+
 // Define table columns for the explorer
 static TVector<TTableColumn> CreateExplorerTableColumns() {
     return {
@@ -57,15 +68,16 @@ TTopicListView::TTopicListView(TTopicTuiApp& app)
         }
     };
     
-    // Sort callback - actually sort the entries when sort column/direction changes
     Table_.OnSortChanged = [this](int /*col*/, bool /*ascending*/) {
         SortEntries();
-        if (SearchMode_) {
-            ApplySearchFilter();
-        } else {
-            PopulateTable();
-        }
+        Table_.SetSelectedRow(0); // Reset selection on sort
     };
+}
+
+TTopicListView::~TTopicListView() {
+    if (StopFlag_) {
+        *StopFlag_ = true;
+    }
 }
 
 Component TTopicListView::Build() {
@@ -827,8 +839,9 @@ void TTopicListView::StartTopicInfoLoads() {
             entry.InfoLoading = true;
             TString topicPath = entry.FullPath;
             
+            auto stopFlag = StopFlag_;
             TopicInfoFutures_[std::string(topicPath.c_str())] = std::async(std::launch::async, 
-                [topicPath, topicClient]() -> TTopicInfoResult {
+                [topicPath, topicClient, stopFlag]() -> TTopicInfoResult {
                     TTopicInfoResult result;
                     result.TopicPath = topicPath;
                     
@@ -838,9 +851,10 @@ void TTopicListView::StartTopicInfoLoads() {
                             NTopic::TDescribeTopicSettings().IncludeStats(true));
                         
                         // Wait with timeout (5 seconds)
-                        auto status = descFuture.Wait(TDuration::Seconds(5));
+                        // Wait with timeout (5 seconds) and stop flag check
+                        bool status = WaitFor(descFuture, stopFlag, TDuration::Seconds(5));
                         if (!status) {
-                            // Timeout - don't block forever
+                            // Timeout or cancelled - don't block forever
                             return result;
                         }
                         
@@ -891,8 +905,9 @@ void TTopicListView::StartTopicInfoLoads() {
             entry.InfoLoading = true;
             TString dirPath = entry.FullPath;
             
+            auto stopFlag = StopFlag_;
             DirInfoFutures_[std::string(dirPath.c_str())] = std::async(std::launch::async,
-                [dirPath, schemeClient]() -> TDirInfoResult {
+                [dirPath, schemeClient, stopFlag]() -> TDirInfoResult {
                     TDirInfoResult result;
                     result.DirPath = dirPath;
                     
@@ -900,9 +915,10 @@ void TTopicListView::StartTopicInfoLoads() {
                         auto listFuture = schemeClient->ListDirectory(dirPath);
                         
                         // Wait with timeout (5 seconds)
-                        auto status = listFuture.Wait(TDuration::Seconds(5));
+                        // Wait with timeout (5 seconds) and stop flag check
+                        bool status = WaitFor(listFuture, stopFlag, TDuration::Seconds(5));
                         if (!status) {
-                            // Timeout - don't block forever
+                            // Timeout or cancelled - don't block forever
                             return result;
                         }
                         

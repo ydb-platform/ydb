@@ -409,6 +409,9 @@ TPartitionConsumerStats::TPartitionConsumerStats(const Ydb::Topic::DescribeConsu
     , MaxReadTimeLag_(TDuration::Seconds(partitionStats.max_read_time_lag().seconds()))
     , MaxWriteTimeLag_(TDuration::Seconds(partitionStats.max_write_time_lag().seconds()))
     , MaxCommittedTimeLag_(TDuration::Seconds(partitionStats.max_committed_time_lag().seconds()))
+    , BytesReadPerMinute_(partitionStats.bytes_read().per_minute())
+    , BytesReadPerHour_(partitionStats.bytes_read().per_hour())
+    , BytesReadPerDay_(partitionStats.bytes_read().per_day())
 {}
 
 uint64_t TPartitionConsumerStats::GetCommittedOffset() const {
@@ -441,6 +444,18 @@ const TDuration& TPartitionConsumerStats::GetMaxWriteTimeLag() const {
 
 const TDuration& TPartitionConsumerStats::GetMaxCommittedTimeLag() const {
     return MaxCommittedTimeLag_;
+}
+
+uint64_t TPartitionConsumerStats::GetBytesReadPerMinute() const {
+    return BytesReadPerMinute_;
+}
+
+uint64_t TPartitionConsumerStats::GetBytesReadPerHour() const {
+    return BytesReadPerHour_;
+}
+
+uint64_t TPartitionConsumerStats::GetBytesReadPerDay() const {
+    return BytesReadPerDay_;
 }
 
 TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation)

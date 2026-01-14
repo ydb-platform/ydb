@@ -180,9 +180,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     }
 
     void ApplyServiceConfig(const TTableServiceConfig& serviceConfig) {
-        if (serviceConfig.HasSqlVersion()) {
-            _KqpYqlSyntaxVersion = serviceConfig.GetSqlVersion();
-        }
         if (serviceConfig.GetQueryLimits().HasResultRowsLimit()) {
             _ResultRowsLimit = serviceConfig.GetQueryLimits().GetResultRowsLimit();
         }

@@ -306,11 +306,21 @@ void TTopicDetailsView::SetTopic(const TString& topicPath) {
 }
 
 void TTopicDetailsView::Refresh() {
+    LastRefreshTime_ = TInstant::Now();
     StartAsyncLoads();
 }
 
 void TTopicDetailsView::CheckAsyncCompletion() {
     SpinnerFrame_++;
+    
+    // Auto-refresh if enough time has passed and not already loading
+    TDuration refreshRate = App_.GetRefreshRate();
+    if (!LoadingTopic_ && !LoadingConsumers_ && 
+        LastRefreshTime_ != TInstant::Zero() &&
+        TInstant::Now() - LastRefreshTime_ > refreshRate) {
+        StartAsyncLoads();
+        LastRefreshTime_ = TInstant::Now();
+    }
     
     // Check topic data future
     if (LoadingTopic_ && TopicFuture_.valid()) {

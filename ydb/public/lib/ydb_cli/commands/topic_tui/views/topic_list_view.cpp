@@ -195,6 +195,9 @@ void TTopicListView::CheckAsyncCompletion() {
     TDuration refreshRate = App_.GetRefreshRate();
     if (!Loading_ && LastRefreshTime_ != TInstant::Zero() && 
         TInstant::Now() - LastRefreshTime_ > refreshRate) {
+        // Save cursor position before refresh
+        std::string currentPath(App_.GetState().CurrentPath.c_str());
+        CursorPositionCache_[currentPath] = Table_.GetSelectedRow();
         StartAsyncLoad();
         LastRefreshTime_ = TInstant::Now();
     }

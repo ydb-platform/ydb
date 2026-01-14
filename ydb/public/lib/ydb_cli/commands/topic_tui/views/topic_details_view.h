@@ -126,6 +126,7 @@ private:
     TString TopicError_;
     TString ConsumersError_;
     int SpinnerFrame_ = 0;
+    TInstant LastRefreshTime_;  // For auto-refresh
     
     // Resizable split state
     int ConsumersPanelSize_ = 40;

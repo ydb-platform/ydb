@@ -1,7 +1,10 @@
 #include "kqp_stream_lookup_actor.h"
+#include "kqp_vector_index_cache.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
@@ -25,6 +28,25 @@ namespace {
 static constexpr TDuration SCHEME_CACHE_REQUEST_TIMEOUT = TDuration::Seconds(10);
 NActors::TActorId MainPipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 NActors::TActorId FollowersPipeCacheId = NKikimr::MakePipePerNodeCacheID(true);
+
+// Check if this is a vector index level table
+bool IsVectorIndexLevelTable(const TString& tablePath) {
+    return tablePath.EndsWith(NTableIndex::NKMeans::LevelTable);
+}
+
+// Serialize read request keys for cache key
+// For immutable level tables, we cache results per (table_path, keys/ranges)
+// We don't include target vector because we clear VectorTopK to get all data for the parent
+TString SerializeReadKeys(const TEvDataShard::TEvRead& request) {
+    TStringBuilder sb;
+    for (const auto& key : request.Keys) {
+        sb << key.GetBuffer();
+    }
+    for (const auto& range : request.Ranges) {
+        sb << range.From.GetBuffer() << range.To.GetBuffer();
+    }
+    return sb;
+}
 
 class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLookupActor>, public NYql::NDq::IDqComputeActorAsyncInput {
 public:
@@ -575,6 +597,34 @@ private:
             }
         }
 
+        // Cache level table results for subsequent queries (zero-copy format)
+        const TString& tablePath = StreamLookupWorker->GetTablePath();
+        if (IsVectorIndexLevelTable(tablePath) && record.GetFinished()) {
+            auto cacheKeyIt = CacheKeys.find(record.GetReadId());
+            if (cacheKeyIt != CacheKeys.end()) {
+                size_t rowCount = ev->Get()->GetRowsCount();
+                CA_LOG_D("Caching level table result for: " << tablePath << ", rows: " << rowCount);
+
+                // Create cached data with pre-serialized rows for zero-copy access
+                auto cachedData = MakeIntrusive<TCachedLevelTableData>();
+
+                // Copy metadata (without cell data) - this is small
+                cachedData->RecordMetadata.CopyFrom(record);
+                cachedData->RecordMetadata.ClearCellVec();
+                cachedData->RecordMetadata.ClearArrowBatch();
+
+                // Store rows as serialized cell vectors - ready for direct use
+                cachedData->SerializedRows.reserve(rowCount);
+                for (size_t i = 0; i < rowCount; ++i) {
+                    auto cells = ev->Get()->GetCells(i);
+                    cachedData->SerializedRows.push_back(TSerializedCellVec::Serialize(cells));
+                }
+
+                TVectorIndexLevelCache::Instance().Put(tablePath, cacheKeyIt->second, std::move(cachedData));
+                CacheKeys.erase(cacheKeyIt);
+            }
+        }
+
         auto guard = BindAllocator();
         StreamLookupWorker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
             shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
@@ -667,10 +717,63 @@ private:
     }
 
     void StartTableRead(ui64 shardId, THolder<TEvDataShard::TEvRead> request) {
+        const TString& tablePath = StreamLookupWorker->GetTablePath();
+
+        // Check cache for level table reads
+        if (IsVectorIndexLevelTable(tablePath)) {
+            // Clear VectorTopK first to ensure consistent cache key
+            // (we always get all children for a parent, not top-K for a specific target)
+            if (request->Record.HasVectorTopK()) {
+                request->Record.ClearVectorTopK();
+            }
+
+            TString cacheKey = SerializeReadKeys(*request);
+
+            // Zero-copy cache lookup - returns shared pointer, no data copying
+            if (auto cachedData = TVectorIndexLevelCache::Instance().Get(tablePath, cacheKey)) {
+                CA_LOG_D("Level table cache HIT for: " << tablePath << ", rows: " << cachedData->SerializedRows.size());
+
+                // Build TEvReadResult from cached data
+                // Create a record with CellVec populated, then serialize and Load() to properly set internal state
+                NKikimrTxDataShard::TEvReadResult tempRecord;
+                tempRecord.CopyFrom(cachedData->RecordMetadata);
+                tempRecord.SetReadId(request->Record.GetReadId());
+                tempRecord.SetRowCount(cachedData->SerializedRows.size());
+
+                // Populate CellVec from cached serialized rows
+                auto* cellVec = tempRecord.MutableCellVec();
+                cellVec->MutableRows()->Reserve(cachedData->SerializedRows.size());
+                for (const auto& row : cachedData->SerializedRows) {
+                    cellVec->AddRows(row);
+                }
+
+                // Serialize and Load to properly populate internal RowsSerialized
+                TString serialized;
+                Y_ENSURE(tempRecord.SerializeToString(&serialized));
+                TEventSerializationInfo serInfo;
+                auto eventData = MakeIntrusive<TEventSerializedData>(std::move(serialized), std::move(serInfo));
+                auto* resultEvent = TEvDataShard::TEvReadResult::Load(eventData.Get());
+
+                auto guard = BindAllocator();
+                auto* ieh = new IEventHandle(SelfId(), SelfId(), resultEvent);
+                StreamLookupWorker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
+                    shardId,
+                    THolder<TEventHandle<TEvDataShard::TEvReadResult>>(
+                        static_cast<TEventHandle<TEvDataShard::TEvReadResult>*>(ieh))
+                });
+                Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+                return;
+            }
+
+            // Cache miss - save cache key for later caching
+            CacheKeys[request->Record.GetReadId()] = cacheKey;
+            CA_LOG_D("Level table cache MISS for: " << tablePath);
+        }
+
         Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
-        CA_LOG_D("Start reading of table: " << StreamLookupWorker->GetTablePath() << ", readId: " << record.GetReadId()
+        CA_LOG_D("Start reading of table: " << tablePath << ", readId: " << record.GetReadId()
             << ", shardId: " << shardId);
 
         TReadState read(record.GetReadId(), shardId);
@@ -712,7 +815,7 @@ private:
 
         CA_LOG_D(TStringBuilder() << "Send EvRead (stream lookup) to shardId=" << shardId
             << ", readId = " << record.GetReadId()
-            << ", tablePath: " << StreamLookupWorker->GetTablePath()
+            << ", tablePath: " << tablePath
             << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
             << ", lockTxId=" << record.GetLockTxId()
             << ", lockNodeId=" << record.GetLockNodeId());
@@ -862,6 +965,7 @@ private:
     const TMaybe<ui32> NodeLockId;
     const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     TReads Reads;
+    THashMap<ui64, TString> CacheKeys;  // ReadId -> cache key for level table caching
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
     const TDuration SchemeCacheRequestTimeout;

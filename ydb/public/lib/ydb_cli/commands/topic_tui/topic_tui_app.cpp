@@ -552,6 +552,7 @@ Component TTopicTuiApp::BuildHelpBar() {
                     text(" [w] Write ") | color(Color::Green),
                     text(" [a] Add Consumer ") | color(Color::Green),
                     text(" [i] Info ") | color(Color::Yellow),
+                    text(" [t] Tablets ") | color(Color::Yellow),
                     text(" [Esc] Back ") | dim
                 };
                 break;

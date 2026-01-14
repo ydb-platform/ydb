@@ -150,10 +150,56 @@ Component TTopicDetailsView::Build() {
             return true;
         }
         
+        // Tablets modal handling - block all other events when modal is open
+        if (ShowingTablets_) {
+            // Toggle off with 't'
+            if (event == Event::Character('t') || event == Event::Character('T')) {
+                ShowingTablets_ = false;
+                return true;
+            }
+            // Close with Esc
+            if (event == Event::Escape) {
+                ShowingTablets_ = false;
+                return true;
+            }
+            // Scroll
+            if (event == Event::ArrowDown || event == Event::Character('j')) {
+                TabletsScrollY_ = std::min(TabletsScrollY_ + 1, static_cast<int>(Tablets_.size()));
+                return true;
+            }
+            if (event == Event::ArrowUp || event == Event::Character('k')) {
+                TabletsScrollY_ = std::max(TabletsScrollY_ - 1, 0);
+                return true;
+            }
+            // Consume all other events when modal is open
+            return true;
+        }
+        
         // Open info modal
         if (event == Event::Character('i') || event == Event::Character('I')) {
             ShowingInfo_ = true;
             InfoScrollY_ = 0;
+            return true;
+        }
+        
+        // Open tablets modal
+        if (event == Event::Character('t') || event == Event::Character('T')) {
+            ShowingTablets_ = true;
+            TabletsScrollY_ = 0;
+            // Start async tablets load if not already loading
+            if (!LoadingTablets_ && Tablets_.empty()) {
+                LoadingTablets_ = true;
+                const TString& endpoint = App_.GetViewerEndpoint();
+                TString topicPath = TopicPath_;
+                TabletsFuture_ = std::async(std::launch::async, [endpoint, topicPath]() -> TVector<TTabletInfo> {
+                    if (endpoint.empty()) {
+                        return {};
+                    }
+                    TViewerHttpClient client(endpoint);
+                    auto result = client.GetTopicDescribe(topicPath, true);
+                    return result.Tablets;
+                });
+            }
             return true;
         }
         
@@ -222,6 +268,14 @@ Component TTopicDetailsView::Build() {
             });
         }
         
+        // Show tablets modal as overlay if active
+        if (ShowingTablets_) {
+            return dbox({
+                mainContent | dim,
+                RenderTabletsModal() | clear_under | center
+            });
+        }
+        
         return mainContent;
     });
 }
@@ -286,6 +340,18 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 ConsumersError_ = e.what();
             }
             LoadingConsumers_ = false;
+        }
+    }
+    
+    // Check tablets data future
+    if (LoadingTablets_ && TabletsFuture_.valid()) {
+        if (TabletsFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            try {
+                Tablets_ = TabletsFuture_.get();
+            } catch (const std::exception&) {
+                // Ignore errors for tablets
+            }
+            LoadingTablets_ = false;
         }
     }
 }
@@ -634,5 +700,83 @@ Element TTopicDetailsView::RenderInfoModal() {
         | bgcolor(Color::Black);
 }
 
-} // namespace NYdb::NConsoleClient
+Element TTopicDetailsView::RenderTabletsModal() {
+    Elements lines;
+    
+    // Title
+    lines.push_back(text(" Topic Tablets ") | bold | center);
+    lines.push_back(separator());
+    
+    if (LoadingTablets_) {
+        lines.push_back(text(" Loading tablets... ") | dim | center);
+    } else if (Tablets_.empty()) {
+        lines.push_back(text(" No tablets found ") | dim | center);
+        lines.push_back(text(" (Viewer API may not be available) ") | dim | center);
+    } else {
+        // Header row
+        lines.push_back(hbox({
+            text(" Type") | bold | size(WIDTH, EQUAL, 22),
+            text(" Tablet ID") | bold | size(WIDTH, EQUAL, 20),
+            text(" State") | bold | size(WIDTH, EQUAL, 10),
+            text(" Node") | bold | size(WIDTH, EQUAL, 8),
+            text(" Gen") | bold | size(WIDTH, EQUAL, 8),
+            text(" Uptime") | bold | size(WIDTH, EQUAL, 12)
+        }));
+        lines.push_back(separator());
+        
+        // Helper to format uptime
+        auto formatUptime = [](TInstant changeTime) -> TString {
+            if (changeTime == TInstant::Zero()) {
+                return "-";
+            }
+            TDuration uptime = TInstant::Now() - changeTime;
+            if (uptime.Hours() >= 24) {
+                return Sprintf("%lud%luh", uptime.Days(), uptime.Hours() % 24);
+            } else if (uptime.Hours() >= 1) {
+                return Sprintf("%luh%lum", uptime.Hours(), uptime.Minutes() % 60);
+            } else if (uptime.Minutes() >= 1) {
+                return Sprintf("%lum%lus", uptime.Minutes(), uptime.Seconds() % 60);
+            } else {
+                return Sprintf("%lus", uptime.Seconds());
+            }
+        };
+        
+        // Tablet rows
+        for (const auto& tablet : Tablets_) {
+            auto stateColor = tablet.State == "Active" ? Color::Green : Color::Yellow;
+            lines.push_back(hbox({
+                text(TString(" ") + tablet.Type) | size(WIDTH, EQUAL, 22),
+                text(TString(" ") + ToString(tablet.TabletId)) | size(WIDTH, EQUAL, 20),
+                text(TString(" ") + tablet.State) | color(stateColor) | size(WIDTH, EQUAL, 10),
+                text(TString(" ") + ToString(tablet.NodeId)) | size(WIDTH, EQUAL, 8),
+                text(TString(" ") + ToString(tablet.Generation)) | size(WIDTH, EQUAL, 8),
+                text(TString(" ") + formatUptime(tablet.ChangeTime)) | size(WIDTH, EQUAL, 12)
+            }));
+        }
+    }
+    
+    lines.push_back(separator());
+    lines.push_back(text(" [t/Esc] Close  [↑↓] Scroll ") | dim | center);
+    
+    // Clamp scroll position to valid range
+    int maxScroll = std::max(0, static_cast<int>(lines.size()) - 15);
+    TabletsScrollY_ = std::min(TabletsScrollY_, maxScroll);
+    
+    // Slice visible lines based on scroll position
+    Elements visibleLines;
+    int startLine = TabletsScrollY_;
+    int endLine = std::min(static_cast<int>(lines.size()), startLine + 20);
+    for (int i = startLine; i < endLine; ++i) {
+        visibleLines.push_back(std::move(lines[i]));
+    }
+    
+    auto content = vbox(std::move(visibleLines));
+    
+    return content 
+        | size(WIDTH, LESS_THAN, 90) 
+        | size(HEIGHT, LESS_THAN, 22) 
+        | border
+        | bgcolor(Color::Black);
+}
 
+} // namespace NYdb::NConsoleClient

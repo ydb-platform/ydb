@@ -2,6 +2,7 @@
 
 #include "../widgets/table.h"
 #include "../widgets/theme.h"
+#include "../http_client.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
@@ -128,6 +129,7 @@ private:
     bool ShowingInfo_ = false;
     int InfoScrollY_ = 0;
     
+    
     // Extended topic description for info modal
     TString Owner_;
     std::vector<NTopic::ECodec> SupportedCodecs_;
@@ -139,7 +141,15 @@ private:
     ui64 MaxActivePartitions_ = 0;
     NTopic::EAutoPartitioningStrategy AutoPartitioningStrategy_ = NTopic::EAutoPartitioningStrategy::Disabled;
     
+    // Tablets modal state
+    bool ShowingTablets_ = false;
+    int TabletsScrollY_ = 0;
+    TVector<TTabletInfo> Tablets_;
+    std::atomic<bool> LoadingTablets_{false};
+    std::future<TVector<TTabletInfo>> TabletsFuture_;
+    
     ftxui::Element RenderInfoModal();
+    ftxui::Element RenderTabletsModal();
 };
 
 } // namespace NYdb::NConsoleClient

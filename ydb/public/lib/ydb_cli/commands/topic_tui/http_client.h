@@ -23,18 +23,56 @@ struct TTopicMessage {
     ui32 Codec = 0;          // Compression codec
 };
 
+// Tablet info from Viewer API describe
+struct TTabletInfo {
+    ui64 TabletId = 0;
+    TString Type;           // "PersQueue", "PersQueueReadBalancer"
+    TString State;          // "Active", "Dead", etc.
+    ui32 NodeId = 0;
+    TString NodeFQDN;       // Node host name
+    ui64 Generation = 0;
+    TInstant ChangeTime;    // For uptime calculation
+};
+
+// Topic describe result from Viewer API
+struct TTopicDescribeResult {
+    // Basic info
+    TString Path;
+    TString Owner;
+    TString PathType;
+    ui64 PathId = 0;
+    ui64 SchemeshardId = 0;
+    TInstant CreateTime;
+    
+    // Tablets
+    TVector<TTabletInfo> Tablets;
+    
+    // PersQueue-specific
+    ui32 PartitionsCount = 0;
+    
+    // Raw JSON for debug
+    TString RawJson;
+};
+
 // HTTP client for Viewer API
 class TViewerHttpClient {
 public:
     explicit TViewerHttpClient(const TString& endpoint);
     
     // Read messages from topic partition
-    // GET /viewer/topic_data?path=...&partition=...&offset=...&limit=...
+    // GET /viewer/json/topic_data?path=...&partition=...&offset=...&limit=...
     TVector<TTopicMessage> ReadMessages(
         const TString& topicPath,
         ui32 partition,
         ui64 offset,
         ui32 limit = 10,
+        TDuration timeout = TDuration::Seconds(5));
+    
+    // Get topic description with tablets
+    // GET /viewer/json/describe?path=...&tablets=true
+    TTopicDescribeResult GetTopicDescribe(
+        const TString& topicPath,
+        bool includeTablets = true,
         TDuration timeout = TDuration::Seconds(5));
     
     // Write message to topic

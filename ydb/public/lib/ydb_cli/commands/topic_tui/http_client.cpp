@@ -156,6 +156,107 @@ bool TViewerHttpClient::WriteMessage(
     }
 }
 
+TTopicDescribeResult TViewerHttpClient::GetTopicDescribe(
+    const TString& topicPath,
+    bool includeTablets,
+    TDuration /* timeout */)
+{
+    TTopicDescribeResult result;
+    
+    if (!HttpClient_) {
+        return result;
+    }
+    
+    // Extract database from topic path (format: /Root/db/topicname -> /Root/db)
+    TString database;
+    size_t lastSlash = topicPath.rfind('/');
+    if (lastSlash != TString::npos && lastSlash > 0) {
+        database = topicPath.substr(0, lastSlash);
+    }
+    
+    TStringBuilder path;
+    path << PathPrefix_
+         << "/viewer/json/describe?"
+         << "database=" << database
+         << "&path=" << topicPath;
+    if (includeTablets) {
+        path << "&tablets=true";
+    }
+    
+    auto json = DoGet(path);
+    
+    // Store raw JSON for debug
+    result.RawJson = NJson::WriteJson(json, true);
+    result.Path = topicPath;
+    
+    // Parse PathDescription.Self for basic info
+    if (json.Has("PathDescription")) {
+        const auto& pathDesc = json["PathDescription"];
+        
+        if (pathDesc.Has("Self")) {
+            const auto& self = pathDesc["Self"];
+            if (self.Has("Owner")) {
+                result.Owner = self["Owner"].GetString();
+            }
+            if (self.Has("PathType")) {
+                result.PathType = self["PathType"].GetString();
+            }
+            if (self.Has("PathId")) {
+                result.PathId = self["PathId"].GetUInteger();
+            }
+            if (self.Has("SchemeshardId")) {
+                result.SchemeshardId = self["SchemeshardId"].GetUInteger();
+            }
+            if (self.Has("CreateStep")) {
+                // CreateStep is in microseconds
+                result.CreateTime = TInstant::MicroSeconds(self["CreateStep"].GetUInteger());
+            }
+        }
+        
+        // Parse PersQueueGroup for partitions count
+        if (pathDesc.Has("PersQueueGroup")) {
+            const auto& pqGroup = pathDesc["PersQueueGroup"];
+            if (pqGroup.Has("Partitions") && pqGroup["Partitions"].IsArray()) {
+                result.PartitionsCount = pqGroup["Partitions"].GetArray().size();
+            }
+        }
+        
+        // Parse TabletStateInfo for tablets
+        if (pathDesc.Has("TabletStateInfo") && pathDesc["TabletStateInfo"].IsArray()) {
+            for (const auto& tabletJson : pathDesc["TabletStateInfo"].GetArray()) {
+                TTabletInfo tablet;
+                
+                if (tabletJson.Has("TabletId")) {
+                    tablet.TabletId = tabletJson["TabletId"].GetUInteger();
+                }
+                if (tabletJson.Has("Type")) {
+                    tablet.Type = tabletJson["Type"].GetString();
+                }
+                if (tabletJson.Has("State")) {
+                    tablet.State = tabletJson["State"].GetString();
+                }
+                if (tabletJson.Has("NodeId")) {
+                    tablet.NodeId = tabletJson["NodeId"].GetUInteger();
+                }
+                if (tabletJson.Has("FQDN")) {
+                    tablet.NodeFQDN = tabletJson["FQDN"].GetString();
+                }
+                if (tabletJson.Has("Generation")) {
+                    tablet.Generation = tabletJson["Generation"].GetUInteger();
+                }
+                if (tabletJson.Has("ChangeTime")) {
+                    // ChangeTime is in milliseconds
+                    tablet.ChangeTime = TInstant::MilliSeconds(tabletJson["ChangeTime"].GetUInteger());
+                }
+                
+                result.Tablets.push_back(std::move(tablet));
+            }
+        }
+    }
+    
+    return result;
+}
+
 NJson::TJsonValue TViewerHttpClient::DoGet(const TString& path) {
     TString fullUrl = Endpoint_ + path;
     

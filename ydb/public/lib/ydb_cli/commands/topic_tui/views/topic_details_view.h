@@ -24,6 +24,8 @@ struct TPartitionDisplayInfo {
     ui64 StoreSizeBytes = 0;
     TDuration WriteTimeLag;
     TInstant LastWriteTime;
+    ui64 BytesWrittenPerMinute = 0;
+    i32 NodeId = 0;  // Partition host node
 };
 
 struct TConsumerDisplayInfo {
@@ -40,6 +42,13 @@ struct TTopicBasicData {
     ui64 WriteSpeedBytesPerSec = 0;
     double WriteRateBytesPerSec = 0.0;
     TVector<TPartitionDisplayInfo> Partitions;
+    
+    // Additional stats
+    ui64 TotalSizeBytes = 0;
+    ui64 WriteBurstBytes = 0;
+    TDuration MaxWriteTimeLag;
+    size_t ConsumerCount = 0;
+    TVector<NTopic::ECodec> SupportedCodecs;
 };
 
 struct TConsumersData {
@@ -98,6 +107,9 @@ private:
     TString TopicError_;
     TString ConsumersError_;
     int SpinnerFrame_ = 0;
+    
+    // Resizable split state
+    int ConsumersPanelSize_ = 40;
 };
 
 } // namespace NYdb::NConsoleClient

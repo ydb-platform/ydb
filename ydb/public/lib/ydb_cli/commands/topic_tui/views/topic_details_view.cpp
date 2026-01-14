@@ -13,27 +13,37 @@ TTopicDetailsView::TTopicDetailsView(TTopicTuiApp& app)
 {}
 
 Component TTopicDetailsView::Build() {
-    return Renderer([this] {
+    // Create partition panel component
+    auto partitionsPanel = Renderer([this] {
+        return vbox({
+            text(" Partitions ") | bold,
+            separator(),
+            RenderPartitionsTable() | flex
+        }) | border | flex;
+    });
+    
+    // Create consumers panel component
+    auto consumersPanel = Renderer([this] {
+        return vbox({
+            text(" Consumers ") | bold,
+            separator(),
+            RenderConsumersList() | flex,
+            separator(),
+            RenderWriteRateChart()
+        }) | border;
+    });
+    
+    // Create resizable split with consumers on the right
+    auto splitContainer = ResizableSplitRight(consumersPanel, partitionsPanel, &ConsumersPanelSize_);
+    
+    return Renderer(splitContainer, [this, splitContainer] {
         CheckAsyncCompletion();
         
         // Always render UI structure - each section shows spinner or content
         return vbox({
             RenderHeader(),
             separator(),
-            hbox({
-                vbox({
-                    text(" Partitions ") | bold,
-                    separator(),
-                    RenderPartitionsTable() | flex
-                }) | border | flex,
-                vbox({
-                    text(" Consumers ") | bold,
-                    separator(),
-                    RenderConsumersList() | flex,
-                    separator(),
-                    RenderWriteRateChart()
-                }) | border | size(WIDTH, EQUAL, 40)
-            }) | flex
+            splitContainer->Render() | flex
         });
     }) | CatchEvent([this](Event event) {
         if (App_.GetState().CurrentView != EViewType::TopicDetails) {
@@ -56,25 +66,40 @@ Component TTopicDetailsView::Build() {
             }
             return true;
         }
+        if (event == Event::PageUp) {
+            if (FocusPanel_ == 0) {
+                SelectedPartitionIndex_ = std::max(0, SelectedPartitionIndex_ - 10);
+            } else if (FocusPanel_ == 1) {
+                SelectedConsumerIndex_ = std::max(0, SelectedConsumerIndex_ - 10);
+            }
+            return true;
+        }
+        if (event == Event::PageDown) {
+            if (FocusPanel_ == 0) {
+                SelectedPartitionIndex_ = std::min(static_cast<int>(Partitions_.size()) - 1, SelectedPartitionIndex_ + 10);
+            } else if (FocusPanel_ == 1) {
+                SelectedConsumerIndex_ = std::min(static_cast<int>(Consumers_.size()) - 1, SelectedConsumerIndex_ + 10);
+            }
+            return true;
+        }
         if (event == Event::Tab) {
             FocusPanel_ = (FocusPanel_ + 1) % 2;
             return true;
         }
         if (event == Event::Return) {
-            if (FocusPanel_ == 1 && SelectedConsumerIndex_ >= 0 && 
+            if (FocusPanel_ == 0 && SelectedPartitionIndex_ >= 0 && 
+                SelectedPartitionIndex_ < static_cast<int>(Partitions_.size())) {
+                // Enter on partition opens messages
+                App_.GetState().SelectedPartition = Partitions_[SelectedPartitionIndex_].PartitionId;
+                if (OnShowMessages) {
+                    OnShowMessages();
+                }
+            } else if (FocusPanel_ == 1 && SelectedConsumerIndex_ >= 0 && 
                 SelectedConsumerIndex_ < static_cast<int>(Consumers_.size())) {
+                // Enter on consumer opens consumer details
                 if (OnConsumerSelected) {
                     OnConsumerSelected(Consumers_[SelectedConsumerIndex_].Name);
                 }
-            }
-            return true;
-        }
-        if (event == Event::Character('m') || event == Event::Character('M')) {
-            if (SelectedPartitionIndex_ >= 0 && SelectedPartitionIndex_ < static_cast<int>(Partitions_.size())) {
-                App_.GetState().SelectedPartition = Partitions_[SelectedPartitionIndex_].PartitionId;
-            }
-            if (OnShowMessages) {
-                OnShowMessages();
             }
             return true;
         }
@@ -136,7 +161,10 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 TopicError_ = e.what();
             }
             LoadingTopic_ = false;
-            SelectedPartitionIndex_ = 0;
+            // Clamp cursor to valid range (preserve position on refresh)
+            if (SelectedPartitionIndex_ >= static_cast<int>(Partitions_.size())) {
+                SelectedPartitionIndex_ = Partitions_.empty() ? 0 : static_cast<int>(Partitions_.size()) - 1;
+            }
         }
     }
     
@@ -151,7 +179,10 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 ConsumersError_ = e.what();
             }
             LoadingConsumers_ = false;
-            SelectedConsumerIndex_ = 0;
+            // Clamp cursor to valid range (preserve position on refresh)
+            if (SelectedConsumerIndex_ >= static_cast<int>(Consumers_.size())) {
+                SelectedConsumerIndex_ = Consumers_.empty() ? 0 : static_cast<int>(Consumers_.size()) - 1;
+            }
         }
     }
 }
@@ -205,34 +236,60 @@ Element TTopicDetailsView::RenderPartitionsTable() {
     
     Elements rows;
     
+    // Header row with separators like consumer page
     rows.push_back(hbox({
-        text("ID") | size(WIDTH, EQUAL, 5) | bold,
-        text("Offset Range") | size(WIDTH, EQUAL, 25) | bold,
-        text("Size") | size(WIDTH, EQUAL, 10) | bold | align_right,
-        text("Lag") | size(WIDTH, EQUAL, 8) | bold | align_right
+        text(" ID") | size(WIDTH, EQUAL, 5) | bold,
+        separator(),
+        text(" Size") | size(WIDTH, EQUAL, 10) | bold,
+        separator(),
+        text(" Write/min") | size(WIDTH, EQUAL, 12) | bold,
+        separator(),
+        text(" WriteLag") | size(WIDTH, EQUAL, 12) | bold,
+        separator(),
+        text(" Start") | size(WIDTH, EQUAL, 14) | bold,
+        separator(),
+        text(" End") | size(WIDTH, EQUAL, 14) | bold,
+        separator(),
+        text(" Node") | size(WIDTH, EQUAL, 6) | bold,
+        separator(),
+        text(" LastWrite") | size(WIDTH, EQUAL, 12) | bold
     }) | bgcolor(Color::GrayDark));
     
     for (size_t i = 0; i < Partitions_.size(); ++i) {
         const auto& p = Partitions_[i];
         bool selected = FocusPanel_ == 0 && static_cast<int>(i) == SelectedPartitionIndex_;
         
-        std::string offsetRange = std::string(FormatNumber(p.StartOffset).c_str()) + " - " + std::string(FormatNumber(p.EndOffset).c_str());
+        // Format last write time
+        std::string lastWriteStr = p.LastWriteTime != TInstant() 
+            ? std::string(p.LastWriteTime.FormatLocalTime("%H:%M:%S").c_str())
+            : "-";
         
         Element row = hbox({
-            text(std::to_string(p.PartitionId)) | size(WIDTH, EQUAL, 5),
-            text(offsetRange) | size(WIDTH, EQUAL, 25),
-            text(std::string(FormatBytes(p.StoreSizeBytes).c_str())) | size(WIDTH, EQUAL, 10) | align_right,
-            text(std::string(FormatDuration(p.WriteTimeLag).c_str())) | size(WIDTH, EQUAL, 8) | align_right
+            text(" " + std::to_string(p.PartitionId)) | size(WIDTH, EQUAL, 5),
+            separator(),
+            text(" " + std::string(FormatBytes(p.StoreSizeBytes).c_str())) | size(WIDTH, EQUAL, 10),
+            separator(),
+            text(" " + std::string(FormatBytes(p.BytesWrittenPerMinute).c_str())) | size(WIDTH, EQUAL, 12),
+            separator(),
+            text(" " + std::string(FormatDuration(p.WriteTimeLag).c_str())) | size(WIDTH, EQUAL, 12),
+            separator(),
+            text(" " + std::string(FormatNumber(p.StartOffset).c_str())) | size(WIDTH, EQUAL, 14),
+            separator(),
+            text(" " + std::string(FormatNumber(p.EndOffset).c_str())) | size(WIDTH, EQUAL, 14),
+            separator(),
+            text(" " + (p.NodeId > 0 ? std::to_string(p.NodeId) : "-")) | size(WIDTH, EQUAL, 6),
+            separator(),
+            text(" " + lastWriteStr) | size(WIDTH, EQUAL, 12)
         });
         
         if (selected) {
-            row = row | bgcolor(Color::GrayDark);
+            row = row | bgcolor(Color::RGB(40, 60, 100)) | focus;
         }
         
         rows.push_back(row);
     }
     
-    return vbox(rows) | yframe;
+    return vbox(rows) | yframe | flex;
 }
 
 Element TTopicDetailsView::RenderConsumersList() {
@@ -250,26 +307,31 @@ Element TTopicDetailsView::RenderConsumersList() {
     
     Elements rows;
     
+    // Header row with separators
+    rows.push_back(hbox({
+        text(" Consumer Name") | flex | bold,
+        separator(),
+        text(" Lag") | size(WIDTH, EQUAL, 12) | bold,
+        separator(),
+        text(" MaxLag") | size(WIDTH, EQUAL, 14) | bold
+    }) | bgcolor(Color::GrayDark));
+    
     for (size_t i = 0; i < Consumers_.size(); ++i) {
         const auto& c = Consumers_[i];
         bool selected = FocusPanel_ == 1 && static_cast<int>(i) == SelectedConsumerIndex_;
         
         std::string prefix = selected ? "> " : "  ";
         
-        Elements parts;
-        parts.push_back(text(prefix + std::string(c.Name.c_str())) | flex);
-        
-        double lagRatio = 0.0;
-        if (c.TotalLag > 0) {
-            lagRatio = std::min(1.0, c.TotalLag / 10000.0);
-        }
-        parts.push_back(RenderGaugeBar(lagRatio, 8, false));
-        parts.push_back(text(" " + std::string(FormatNumber(c.TotalLag).c_str())));
-        
-        Element row = hbox(parts);
+        Element row = hbox({
+            text(prefix + std::string(c.Name.c_str())) | flex,
+            separator(),
+            text(" " + std::string(FormatNumber(c.TotalLag).c_str())) | size(WIDTH, EQUAL, 12),
+            separator(),
+            text(" " + std::string(FormatDuration(c.MaxLagTime).c_str())) | size(WIDTH, EQUAL, 14)
+        });
         
         if (selected) {
-            row = row | bgcolor(Color::GrayDark);
+            row = row | bgcolor(Color::RGB(40, 60, 100)) | focus;  // focus enables auto-scroll
         }
         if (c.IsImportant) {
             row = row | bold;
@@ -278,7 +340,7 @@ Element TTopicDetailsView::RenderConsumersList() {
         rows.push_back(row);
     }
     
-    return vbox(rows);
+    return vbox(rows) | yframe | flex;
 }
 
 Element TTopicDetailsView::RenderWriteRateChart() {
@@ -334,6 +396,11 @@ void TTopicDetailsView::StartAsyncLoads() {
                     info.StoreSizeBytes = stats.GetStoreSizeBytes();
                     info.WriteTimeLag = stats.GetMaxWriteTimeLag();
                     info.LastWriteTime = stats.GetLastWriteTime();
+                    info.BytesWrittenPerMinute = stats.GetBytesWrittenPerMinute();
+                }
+                
+                if (p.GetPartitionLocation()) {
+                    info.NodeId = p.GetPartitionLocation()->GetNodeId();
                 }
                 
                 data.Partitions.push_back(info);

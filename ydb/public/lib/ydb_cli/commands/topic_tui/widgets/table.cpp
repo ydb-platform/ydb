@@ -25,7 +25,8 @@ Component TTable::Build() {
 
 void TTable::Clear() {
     Rows_.clear();
-    SelectedRow_ = 0;
+    // Don't reset SelectedRow_ - cursor position should persist across refresh
+    // SetRowCount() will clamp to valid range after repopulation
 }
 
 void TTable::SetRowCount(size_t count) {

@@ -15,14 +15,11 @@ public:
 
 private:
     TString InferViewerEndpoint(const TString& grpcAddress);
+    TString ResolvePath(const TString& path, const TConfig& config) const;
     
-    TString Path_ = "/";
+    TString RawPath_;  // Raw path argument, resolved in Run()
     TDuration RefreshRate_ = TDuration::Seconds(2);
     TString ViewerEndpoint_;
-    
-    // Optional direct navigation to topic/partition
-    TString InitialTopicPath_;     // If set, navigate directly to this topic
-    std::optional<ui32> InitialPartition_;  // If set, open partition view instead of topic details
 };
 
 } // namespace NYdb::NConsoleClient

@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TKqpScheduler) {
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
-        TComputeScheduler scheduler(options.Counters, options.DelayParams);
+        TComputeScheduler scheduler(options.Counters, options.DelayParams, AllowOverlimit);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TKqpScheduler) {
             tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
-        scheduler.UpdateFairShare(AllowOverlimit);
+        scheduler.UpdateFairShare();
 
         for (const auto& query : queries) {
             auto querySnapshot = query->GetSnapshot();

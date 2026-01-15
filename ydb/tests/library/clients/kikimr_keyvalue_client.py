@@ -64,7 +64,7 @@ class KeyValueClient(object):
             return getattr(self._stub_v2, method)
         return getattr(self._stub, method)
 
-    async def _get_async_invoke_callee(self, method, version):
+    def _get_async_invoke_callee(self, method, version):
         if version == 'v2':
             return getattr(self._async_stub_v2, method)
         return getattr(self._async_stub, method)
@@ -92,7 +92,7 @@ class KeyValueClient(object):
         retry = self.__retry_count
         while True:
             try:
-                callee = await self._get_async_invoke_callee(method, version)
+                callee = self._get_async_invoke_callee(method, version)
                 return await callee(request)
             except (RuntimeError, grpc.RpcError):
                 retry -= 1

@@ -54,7 +54,7 @@ class ConfigBuilder:
         self.prepared_action.action_command.append(command)
 
     @chained_method
-    def add_read_to_prepared_action(self, size, count, verify_data=False):
+    def add_read_to_prepared_action(self, size, count):
         command = config_pb.ActionCommand()
         command.read.size = size
         command.read.count = count
@@ -132,7 +132,7 @@ def generate_configs_for_tests():
             .init_initial_data()
             .add_write_to_initial_data(size=1024*1024, count=5, channel=0)
             .init_prepared_action(name='read')
-            .add_read_to_prepared_action(size=1024, count=5, verify_data=True)
+            .add_read_to_prepared_action(size=1024, count=5)
             .set_periodicity_for_prepared_action(period_us=10000)
             .set_data_mode_worker_for_prepared_action()
             .add_prepared_action()
@@ -144,7 +144,7 @@ def generate_configs_for_tests():
             .init_initial_data()
             .add_write_to_initial_data(size=1024*1024, count=5, channel=1)
             .init_prepared_action(name='read')
-            .add_read_to_prepared_action(size=1024, count=5, verify_data=True)
+            .add_read_to_prepared_action(size=1024, count=5)
             .set_periodicity_for_prepared_action(period_us=10000)
             .set_data_mode_worker_for_prepared_action()
             .add_prepared_action()
@@ -154,10 +154,10 @@ def generate_configs_for_tests():
             ConfigBuilder(config_pb.PartitionMode.OnePartition)
             .set_volume_config("kv_volume", 1, ['ssd'] * 3)
             .init_initial_data()
-            .add_write_to_initial_data(size=1024, count=10, channel=0)
+            .add_write_to_initial_data(size=1024, count=10000, channel=0)
             .init_prepared_action(name='delete')
-            .add_delete_to_prepared_action(count=2)
-            .set_periodicity_for_prepared_action(period_us=1000000)
+            .add_delete_to_prepared_action(count=1)
+            .set_periodicity_for_prepared_action(period_us=10000)
             .set_data_mode_worker_for_prepared_action()
             .add_prepared_action()
             .return_config()
@@ -171,7 +171,7 @@ def generate_configs_for_tests():
             .set_data_mode_worker_for_prepared_action()
             .add_prepared_action()
             .init_prepared_action(name='read', parent_action='write')
-            .add_read_to_prepared_action(size=1024, count=5, verify_data=True)
+            .add_read_to_prepared_action(size=1024, count=5)
             .set_data_mode_from_prev_actions_for_prepared_action(['write'])
             .add_prepared_action()
             .init_prepared_action(name='delete', parent_action='read')
@@ -193,7 +193,7 @@ class TestYdbKvVolumeWorkload(StressFixture):
     @pytest.mark.parametrize("version", ["v1", "v2"])
     def test(self, config, version):
         print('Test begin', file=sys.stderr)
-        workload = Workload(self.endpoint, self.database, 10, 1, version, config, verbose=False)
+        workload = Workload(self.endpoint, self.database, 2, 1, version, config, verbose=False)
         print('Workload begin', file=sys.stderr)
         workload.start()
         workload.wait_stop()

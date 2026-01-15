@@ -25,8 +25,8 @@ def parse_int_with_default(s, default=None):
         return default
     except TypeError:
         return default
-    
-    
+
+
 class RWLock:
     def __init__(self):
         self._lock = asyncio.Lock()
@@ -106,10 +106,10 @@ class Worker:
 
         async def release_read(self):
             await self.mutex.release_read()
-            
+
         async def acquire_write(self):
             await self.mutex.acquire_write()
-            
+
         async def release_write(self):
             await self.mutex.release_write()
 
@@ -153,7 +153,7 @@ class Worker:
         async def acquire_read(self):
             await self.mutex.acquire_read()
             await self.previous_data_context.acquire_read()
-            
+
         async def release_read(self):
             await self.previous_data_context.release_read()
             await self.mutex.release_read()
@@ -161,7 +161,7 @@ class Worker:
         async def acquire_write(self):
             await self.mutex.acquire_write()
             await self.previous_data_context.acquire_write()
-        
+
         async def release_write(self):
             await self.previous_data_context.release_write()
             await self.mutex.release_write()
@@ -324,8 +324,8 @@ class Worker:
                     if actual_data != expected_data.encode():
                         msg = (
                             f"Data verification failed for key {key} in action {self.config.name}: "
-                            f"key_size={key_size}, offset={offset}, read_size={read_cmd.size},"
-                            f"actual_len={len(actual_data)}, expected_len={len(expected_data)}"
+                            f"key_size={key_size}, offset={offset}, read_size={read_cmd.size}, "
+                            f"actual_len={len(actual_data)}, expected_len={len(expected_data)} "
                             f"actual_data={actual_data[:min(10, len(actual_data))]}, expected_data={expected_data[:min(10, len(expected_data))]}"
                         )
                         raise ValueError(msg)
@@ -435,10 +435,10 @@ class Worker:
         self.show_stats = self.workload.show_stats
         self.action_stats = defaultdict(int)
         self.stats_lock = None
-        
+
         self._data_lock = None
         self._cached_data = {}
-        
+
     async def generate_pattern_data(self, size, pattern=DEFAULT_DATA_PATTERN):
         async with self._data_lock:
             if size not in self._cached_data:
@@ -546,9 +546,8 @@ class Worker:
 
         end_time = datetime.now() + timedelta(seconds=self.workload.duration + 2)
 
-        stats_task = None
         if self.show_stats:
-            stats_task = asyncio.create_task(self._stats_collector())
+            asyncio.create_task(self._stats_collector())
 
         period_actions = {}
         children_map = defaultdict(set)
@@ -562,7 +561,7 @@ class Worker:
                 await self.event_queue.put(('run', name, Worker.LayeredDataContext(initial_dc)))
                 continue
             children_map[action.parent_action].add(name)
-            
+
         async def scheduler():
             while (now := datetime.now()) < end_time:
                 try:
@@ -578,8 +577,8 @@ class Worker:
                     await asyncio.sleep(max(min(max((time - now).total_seconds(), 0), 0.01) / 10, 0.0005))
                     continue
                 await self.event_queue.put(('run', action_name, dc))
-                
-        scheduler_task = asyncio.create_task(scheduler())
+
+        asyncio.create_task(scheduler())
 
         id_to_action_name = {}
         id_to_tasks = {}
@@ -594,7 +593,6 @@ class Worker:
                 break
             if boxed is None:
                 break
-            empty_queues = False
             command, q, dc = boxed
             if command == 'end':
                 id = q
@@ -604,7 +602,7 @@ class Worker:
                 if name in period_actions:
                     await self.scheduled_queue.put((now + timedelta(microseconds=period_actions[name]), name, dc.clear_clone()))
                 del id_to_action_name[id]
-                #del id_to_tasks[id]
+                del id_to_tasks[id]
             elif command == 'run':
                 name = q
                 instance_id = self.generate_instance_id()
@@ -616,7 +614,7 @@ class Worker:
         await self.client.aclose()
         if self.verbose:
             print(f"Worker {self.worker_id}: finished arun", file=sys.stderr)
-            
+
     def run(self):
         asyncio.run(self.arun())
 

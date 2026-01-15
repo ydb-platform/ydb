@@ -115,7 +115,7 @@ await sql`INSERT INTO series SELECT * FROM AS_TABLE(${data})`
 
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
-The tagged template syntax is used for executing YQL queries. The result is an array of result sets (YDB supports multiple result sets per query).
+The tagged template syntax is used for executing YQL queries. The result is an array of result sets ({{ ydb-short-name }} supports multiple result sets per query).
 
 ```ts
 const resultSets = await sql`
@@ -142,7 +142,7 @@ const [rows, [{ count }]] = await sql<Result>`
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
-The SDK automatically binds parameters through interpolation in template strings. Native JavaScript types, YDB value classes, arrays, and objects are all supported.
+The SDK automatically binds parameters through interpolation in template strings. Native JavaScript types, {{ ydb-short-name }} value classes, arrays, and objects are all supported.
 
 ```ts
 const seriesId = 1n

@@ -115,7 +115,7 @@ await sql`INSERT INTO series SELECT * FROM AS_TABLE(${data})`
 
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
-Для выполнения YQL-запросов используется tagged template синтаксис. Результатом выполнения является массив наборов данных (YDB поддерживает несколько наборов результатов в одном запросе).
+Для выполнения YQL-запросов используется tagged template синтаксис. Результатом выполнения является массив наборов данных ({{ ydb-short-name }} поддерживает несколько наборов результатов в одном запросе).
 
 ```ts
 const resultSets = await sql`
@@ -142,7 +142,7 @@ const [rows, [{ count }]] = await sql<Result>`
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
-SDK автоматически привязывает параметры через интерполяцию в шаблонных строках. Поддерживаются нативные типы JavaScript, классы значений YDB, массивы и объекты.
+SDK автоматически привязывает параметры через интерполяцию в шаблонных строках. Поддерживаются нативные типы JavaScript, классы значений {{ ydb-short-name }}, массивы и объекты.
 
 ```ts
 const seriesId = 1n

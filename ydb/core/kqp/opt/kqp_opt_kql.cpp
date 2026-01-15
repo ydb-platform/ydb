@@ -761,7 +761,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
 
     const bool isSink = NeedSinks(tableData, kqpCtx);
 
-    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
+    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
 
     // For unique or vector index rewrite UPDATE to UPDATE ON
     if (needsKqpEffect || useStreamIndex) {
@@ -1006,7 +1006,7 @@ TExprNode::TPtr HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, 
     }
 
     if (HasIndexesToWrite(tableData)) {
-        const bool isStreamIndexWrite = kqpCtx.Config->EnableIndexStreamWrite;
+        const bool isStreamIndexWrite = kqpCtx.Config->GetEnableIndexStreamWrite();
         return WriteTableWithIndexUpdate(write, inputColumns, defaultConstraintColumns, tableData, ctx, isSink, isStreamIndexWrite).Ptr();
     } else {
         return WriteTableSimple(write, inputColumns, defaultConstraintColumns, tableData, ctx, kqpCtx, isSink).Ptr();
@@ -1021,7 +1021,7 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
         return nullptr;
     }
 
-    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->EnableOltpSink;
+    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->GetEnableOltpSink();
     if (!allowBatchUpdates && update.IsBatch() == "true") {
         const TString err = "BATCH operations are not supported at the current time.";
         ctx.AddError(YqlIssue(ctx.GetPosition(update.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));
@@ -1043,7 +1043,7 @@ TExprNode::TPtr HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, 
         return nullptr;
     }
 
-    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->EnableOltpSink;
+    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->GetEnableOltpSink();
     if (!allowBatchUpdates && del.IsBatch() == "true") {
         const TString err = "BATCH operations are not supported at the current time.";
         ctx.AddError(YqlIssue(ctx.GetPosition(del.Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, err));

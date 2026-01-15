@@ -273,8 +273,6 @@ struct TErasureType {
         Erasure2Plus2Stripe = 17,
 
         ErasureMirror3of4 = 18,
-
-        ErasureSpeciesCount = 19
     };
 
     static const char *ErasureSpeciesToStr(EErasureSpecies es);
@@ -302,26 +300,35 @@ struct TErasureType {
     }
 
     TString ToString() const {
-        Y_ABORT_UNLESS((ui64)ErasureSpecies < ErasureSpeciesCount);
-        return ErasureName[ErasureSpecies];
+        if (auto it = ErasureNames.find(ErasureSpecies); it != ErasureNames.end()) {
+            return it->second;
+        }
+        Y_ABORT("Unknown erasure %d", ErasureSpecies);
     }
 
     static TString ErasureSpeciesName(ui32 erasureSpecies) {
-        if (erasureSpecies < ErasureSpeciesCount) {
-            return ErasureName[erasureSpecies];
+        if (auto it = ErasureNames.find(EErasureSpecies(erasureSpecies)); it != ErasureNames.end()) {
+            return it->second;
         }
         TStringStream str;
         str << "Unknown" << erasureSpecies;
         return str.Str();
     }
 
-    static EErasureSpecies ErasureSpeciesByName(TString name) {
-        for (ui32 species = 0; species < TErasureType::ErasureSpeciesCount; ++species) {
-            if (TErasureType::ErasureName[species] == name) {
-                return TErasureType::EErasureSpecies(species);
+    static bool ParseErasureName(EErasureSpecies& erasure, const TString& name) {
+        for (auto [speciesType, speciesName] : ErasureNames) {
+            if (speciesName == name) {
+                erasure = speciesType;
+                return true;
             }
         }
-        return TErasureType::ErasureSpeciesCount;
+        return false;
+    }
+
+    static EErasureSpecies ErasureSpeciesByName(const TString& name) {
+        EErasureSpecies erasure;
+        Y_ABORT_UNLESS(ParseErasureName(erasure, name));
+        return erasure;
     }
 
     TErasureType::EErasureFamily ErasureFamily() const;
@@ -371,7 +378,7 @@ struct TErasureType {
     ui64 BlockSplitWholeOffset(ui64 dataSize, ui64 partIdx, ui64 offset) const;
     static bool IsCrcModeValid(ui32 crcModeRaw);
 
-    static const std::array<TString, ErasureSpeciesCount> ErasureName;
+    static const std::unordered_map<EErasureSpecies, TString> ErasureNames;
 protected:
     EErasureSpecies ErasureSpecies;
 

@@ -122,6 +122,7 @@ struct TPhysicalOpProps {
     std::optional<int> StageId;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
+    std::optional<ui32> NumOfConsumers;
     bool EnsureAtMostOne = false;
 
     std::optional<TRBOMetadata> Metadata;
@@ -140,13 +141,12 @@ struct TConnection {
         , FromSourceStageStorageType(fromSourceStageStorageType)
         , OutputIndex(outputIndex) {
     }
+    virtual ~TConnection() = default;
 
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) = 0;
-
     template <typename T>
     TExprNode::TPtr BuildConnectionImpl(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx);
-
-    virtual ~TConnection() = default;
+    ui32 GetOutputIndex() const { return OutputIndex; }
 
     TString Type;
     NYql::EStorageType FromSourceStageStorageType;
@@ -229,7 +229,8 @@ struct TStageGraph {
     THashMap<int, TSourceStageTraits> SourceStageRenames;
     THashMap<int, TVector<int>> StageInputs;
     THashMap<int, TVector<int>> StageOutputs;
-    THashMap<std::pair<int, int>, std::shared_ptr<TConnection>> Connections;
+    THashMap<std::pair<int, int>, TVector<std::shared_ptr<TConnection>>> Connections;
+    THashMap<int, int> StageOutputIndices;
 
     int AddStage() {
         int newStageId = StageIds.size();
@@ -273,15 +274,15 @@ struct TStageGraph {
         return NYql::EStorageType::NA;
     }
 
-    void Connect(int from, int to, std::shared_ptr<TConnection> conn) {
+    void Connect(int from, int to, std::shared_ptr<TConnection> connection) {
         auto &outputs = StageOutputs.at(from);
         outputs.push_back(to);
         auto &inputs = StageInputs.at(to);
         inputs.push_back(from);
-        Connections[std::make_pair(from, to)] = conn;
+        Connections[std::make_pair(from, to)].push_back(connection);
     }
 
-    std::shared_ptr<TConnection> GetConnection(int from, int to) { return Connections.at(std::make_pair(from, to)); }
+    TVector<std::shared_ptr<TConnection>> GetConnections(int from, int to) { return Connections.at(std::make_pair(from, to)); }
 
     /**
      * Generate an expression for stage inputs
@@ -289,6 +290,18 @@ struct TStageGraph {
      */
     std::pair<TExprNode::TPtr, TExprNode::TPtr> GenerateStageInput(int &stageInputCounter, TExprNode::TPtr &node, TExprContext &ctx,
                                                                    int fromStage);
+
+    ui32 GetOutputIndex(ui32 stageIndex) {
+        ui32 outputIndex{0};
+        auto it = StageOutputIndices.find(stageIndex);
+        if (it != StageOutputIndices.end()) {
+            it->second++;
+            outputIndex = it->second;
+        } else {
+            StageOutputIndices[stageIndex] = 0;
+        }
+        return outputIndex;
+    }
 
     void TopologicalSort();
 private:

@@ -123,7 +123,7 @@ public:
     {
     }
 
-    ~TMutableFunctionRegistry() {
+    ~TMutableFunctionRegistry() override {
     }
 
     void AllowUdfPatch() override {

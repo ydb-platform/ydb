@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 SRCS(
     kqp_scan_data_ut.cpp
     kqp_scan_fetcher_ut.cpp
+    scheduler/kqp_compute_scheduler_service_ut.cpp
     scheduler/kqp_compute_scheduler_ut.cpp
 )
 
@@ -16,6 +17,7 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/core/kqp/common
     ydb/core/kqp/ut/common
+    ydb/core/kqp/workload_service/ut/common
     ydb/core/testlib/basics/pg
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy

@@ -188,7 +188,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           
           # Узлы
           ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
-          ydb_version: "25.1.4.7"
+          ydb_version: "версия_системы"
 
           # Хранилище
           ydb_cores_static: 8
@@ -251,7 +251,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           
           # Узлы
           ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
-          ydb_version: "25.1.4.7"
+          ydb_version: "версия_системы"
 
           # Хранилище
           ydb_cores_static: 8
@@ -309,7 +309,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           
           # Узлы
           ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
-          ydb_version: "25.1.4.7"
+          ydb_version: "версия_системы"
 
           # Хранилище
           ydb_cores_static: 8

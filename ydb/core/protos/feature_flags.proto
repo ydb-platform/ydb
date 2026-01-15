@@ -247,4 +247,5 @@ message TFeatureFlags {
     optional bool EnableIndexMaterialization = 221 [default = false];
     optional bool EnableFsBackups = 222 [default = false];
     optional bool EnableCmsLocksPriority = 223 [default = false];
+    optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
 }

@@ -731,10 +731,10 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
-        queryProto.SetEnableOltpSink(Config->EnableOltpSink);
-        queryProto.SetEnableOlapSink(Config->EnableOlapSink);
+        queryProto.SetEnableOltpSink(Config->GetEnableOltpSink());
+        queryProto.SetEnableOlapSink(Config->GetEnableOlapSink());
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
-        queryProto.SetLangVer(Config->LangVer);
+        queryProto.SetLangVer(Config->GetDefaultLangVer());
 
         queryProto.SetForceImmediateEffectsExecution(
             Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
@@ -1115,7 +1115,7 @@ private:
         auto& programProto = *stageProto.MutableProgram();
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         programProto.SetRaw(programBytecode);
-        programProto.SetLangVer(Config->LangVer);
+        programProto.SetLangVer(Config->GetDefaultLangVer());
 
         stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
 
@@ -1128,7 +1128,7 @@ private:
 
         stageProto.SetStageGuid(stageSettings.Id);
         stageProto.SetIsSinglePartition(NDq::TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode);
-        stageProto.SetAllowWithSpilling(Config->EnableSpilling);
+        stageProto.SetAllowWithSpilling(Config->GetEnableQueryServiceSpilling() && (OptimizeCtx.IsGenericQuery() || OptimizeCtx.IsScanQuery()) && Config->SpillingEnabled());
     }
 
     void CompileTransaction(const TKqpPhysicalTx& tx, NKqpProto::TKqpPhyTx& txProto, TExprContext& ctx,
@@ -1154,7 +1154,7 @@ private:
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
-        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination));
+        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination()));
         txProto.SetHasEffects(hasEffectStage);
         txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->GetDqChannelVersion()));
         for (const auto& paramBinding : tx.ParamBindings()) {
@@ -1625,7 +1625,7 @@ private:
                 AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
                 settingsProto.SetInconsistentTx(inconsistentWrite);
 
-                if (Config->EnableIndexStreamWrite) {
+                if (Config->GetEnableIndexStreamWrite()) {
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
 
                     std::vector<size_t> affectedIndexes;
@@ -1918,7 +1918,7 @@ private:
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
 
-            NDq::EHashShuffleFuncType hashFuncType = Config->DefaultHashShuffleFuncType;
+            NDq::EHashShuffleFuncType hashFuncType = Config->GetDqDefaultHashShuffleFuncType();
             if (shuffle.HashFunc().IsValid()) {
                 hashFuncType = FromString<NDq::EHashShuffleFuncType>(shuffle.HashFunc().Cast().StringValue());
             }

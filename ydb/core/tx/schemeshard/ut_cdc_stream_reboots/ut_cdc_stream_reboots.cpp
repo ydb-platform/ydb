@@ -893,10 +893,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    void PqTransactions(TTestWithReboots& t, bool enable) {
+    void PqTransactions(TTestWithReboots& t) {
         t.GetTestEnvOptions()
-            .EnableChangefeedInitialScan(true)
-            .EnablePQConfigTransactionsAtSchemeShard(enable);
+            .EnableChangefeedInitialScan(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -933,12 +932,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(WithoutPqTransactions) {
-        PqTransactions(t, false);
-    }
-
     Y_UNIT_TEST_WITH_REBOOTS(WithPqTransactions) {
-        PqTransactions(t, true);
+        PqTransactions(t);
     }
 
 } // TCdcStreamWithRebootsTests

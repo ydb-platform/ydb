@@ -5194,7 +5194,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/TestTable", {
-            .ExpectedReads = UseStreamIndex ? 2 : 1, // TODO: don't use EvWrite UPDATE for conditional statements.
+            .ExpectedReads = 1,
             .ExpectedUpdates = 1
         });
 

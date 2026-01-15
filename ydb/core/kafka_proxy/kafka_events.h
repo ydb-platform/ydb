@@ -43,6 +43,8 @@ struct TEvKafka {
         EvGetCountersRequest,
         EvGetCountersResponse,
         EvFetchRequest,
+        EvFetchActorStateRequest,
+        EvFetchActorStateResponse,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -111,6 +113,19 @@ struct TEvKafka {
 
         ui64 CorrelationId;
         const TMessagePtr<TFetchRequestData> Request;
+    };
+
+    // For tests only
+    struct TEvFetchActorStateRequest : public TEventLocal<TEvFetchActorStateRequest, EvFetchActorStateRequest> {
+    };
+
+    // For tests only
+    struct TEvFetchActorStateResponse : public TEventLocal<TEvFetchActorStateResponse, EvFetchActorStateResponse> {
+        TEvFetchActorStateResponse(std::unordered_map<TActorId, size_t> topicIndexes)
+        : TopicIndexes(std::move(topicIndexes))
+        {}
+
+        std::unordered_map<TActorId, size_t> TopicIndexes;
     };
 
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {

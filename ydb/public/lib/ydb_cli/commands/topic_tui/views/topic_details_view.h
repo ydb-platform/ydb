@@ -103,6 +103,7 @@ private:
     ui64 WriteSpeedBytesPerSec_ = 0;
     TSparklineHistory TopicWriteRateHistory_;  // Fixed 5-second interval
     std::unordered_map<ui64, TSparklineHistory> PartitionWriteRateHistory_;  // Per-partition
+    TVector<NTopic::ECodec> SupportedCodecs_;  // Topic codecs for header
     
     // Consumers data (loaded separately)
     TVector<TConsumerDisplayInfo> Consumers_;

@@ -356,6 +356,7 @@ void TTopicDetailsView::CheckAsyncCompletion() {
                 TotalPartitions_ = data.TotalPartitions;
                 RetentionPeriod_ = data.RetentionPeriod;
                 WriteSpeedBytesPerSec_ = data.WriteSpeedBytesPerSec;
+                SupportedCodecs_ = std::move(data.SupportedCodecs);
                 
                 // Update topic-level sparkline history
                 TopicWriteRateHistory_.Update(data.WriteRateBytesPerSec);
@@ -437,6 +438,20 @@ Element TTopicDetailsView::RenderHeader() {
     std::string speedText = std::string(FormatBytes(WriteSpeedBytesPerSec_).c_str()) + "/s";
     std::string writeRateText = std::string(FormatBytes(totalWriteRate).c_str()) + "/m";
     
+    // Format codecs
+    std::string codecsText;
+    for (size_t i = 0; i < SupportedCodecs_.size(); ++i) {
+        if (i > 0) codecsText += ",";
+        switch (SupportedCodecs_[i]) {
+            case NTopic::ECodec::RAW: codecsText += "RAW"; break;
+            case NTopic::ECodec::GZIP: codecsText += "GZIP"; break;
+            case NTopic::ECodec::LZOP: codecsText += "LZOP"; break;
+            case NTopic::ECodec::ZSTD: codecsText += "ZSTD"; break;
+            default: codecsText += "?"; break;
+        }
+    }
+    if (codecsText.empty()) codecsText = "-";
+    
     return vbox({
         hbox({
             text(" Topic: ") | bold,
@@ -450,7 +465,9 @@ Element TTopicDetailsView::RenderHeader() {
             text("   Speed Limit: ") | dim,
             text(speedText) | bold,
             text("   Write Rate: ") | dim,
-            text(writeRateText) | bold | color(Color::Green)
+            text(writeRateText) | bold | color(Color::Green),
+            text("   Codecs: ") | dim,
+            text(codecsText) | bold | color(Color::Magenta)
         })
     });
 }

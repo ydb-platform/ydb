@@ -1317,7 +1317,6 @@ class TestPqRowDispatcher(TestYdsBase):
 
         sql = Rf'''
             {single_node if single_node else ""}
-            PRAGMA dq.Scheduler=@@{{"type": "single_node"}}@@;
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''

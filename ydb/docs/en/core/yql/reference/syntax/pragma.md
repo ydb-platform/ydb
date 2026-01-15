@@ -435,11 +435,11 @@ SELECT $foo;
 
 ### `ydb.CostBasedOptimization` {#costbasedoptimization}
 
-|  Value | Description |
+| Value | Optimizer behavior |
 | ------- | ---------------------- |
-| on | Cost optimizer is enabled for the current query |
-| off | Cost optimizer is disabled for the current query |
-| auto | The cost optimizer works in accordance with the current [CostBasedOptimizationLevel](#costbasedoptimizationlevel) level |
+| on | Cost-based optimizer is disabled for the current query |
+| off | Cost-based optimizer is disabled for the current query |
+| auto | Cost-based optimizer works in accordance with the current [CostBasedOptimizationLevel](#costbasedoptimizationlevel) level |
 
 ### `ydb.CostBasedOptimizationLevel` {#costbasedoptimizationlevel}
 
@@ -450,6 +450,16 @@ SELECT $foo;
 | 2     | Cost-based optimizer is enabled only for queries that include {% if backend_name == "YDB" and oss == true %}[column-oriented tables](../../../concepts/glossary.md#column-oriented-table-column-oriented-table) {% else %} column-oriented tables.{% endif %} |
 | 3     | Cost-based optimizer is enabled for all queries, but `LookupJoin` is preferred for row-oriented tables. |
 | 4     | Cost-based optimizer is enabled for all queries. |
+
+{% note info %}
+
+The default level is 2
+
+{% endnote %}
+
+### `ydb.OptimizerHints` {#optimizerhints}
+
+The pragma for query hints is desicribed in [a separate section](../../../dev/query-hints.md).
 
 ### `kikimr.IsolationLevel`
 

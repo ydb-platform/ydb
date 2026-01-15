@@ -705,11 +705,11 @@ protected:
             UNIT_ASSERT_C(!choices.empty(), "Choices should not be empty");
         }
 
-        ui64 GetSize() const {
+        ui64 GetSize() const override {
             return Choices_.size();
         }
 
-        void Set(ui64 index) {
+        void Set(ui64 index) override {
             UNIT_ASSERT_LE_C(index + 1, Choices_.size(), "Invalid args dispatcher index");
             Dst_ = Choices_[index];
         }

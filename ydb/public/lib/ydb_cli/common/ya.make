@@ -10,6 +10,7 @@ SRCS(
     common.cpp
     csv_parser.cpp
     describe.cpp
+    duration.cpp
     examples.cpp
     format.cpp
     ftxui.cpp

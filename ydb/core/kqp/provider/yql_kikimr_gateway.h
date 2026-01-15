@@ -264,14 +264,7 @@ struct TIndexDescription {
                 }
                 return true;
             case EType::GlobalFulltext:
-                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&SpecializedIndexDescription);
-                YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
-                const auto& settings = fulltextDesc->GetSettings();
-                if (settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT) {
-                    // Only FLAT fulltext index update is supported at the moment
-                    return true;
-                }
-                return false;
+                return true;
         }
     }
 
@@ -391,6 +384,11 @@ struct TKikimrPathId {
     }
 };
 
+struct TColumnCompression {
+    TMaybe<TString> Algorithm;
+    TMaybe<i64> Level;
+};
+
 struct TKikimrColumnMetadata {
 
     TString Name;
@@ -400,6 +398,7 @@ struct TKikimrColumnMetadata {
     NKikimr::NScheme::TTypeInfo TypeInfo;
     TString TypeMod;
     TVector<TString> Families;
+    TMaybe<TColumnCompression> Compression;
     NKikimrKqp::TKqpColumnMetadataProto::EDefaultKind DefaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_UNSPECIFIED;
     TString DefaultFromSequence;
     TKikimrPathId DefaultFromSequencePathId;
@@ -441,6 +440,16 @@ struct TKikimrColumnMetadata {
             message->HasTypeInfo() ? &message->GetTypeInfo() : nullptr);
         TypeInfo = typeInfoMod.TypeInfo;
         TypeMod = typeInfoMod.TypeMod;
+
+        if (message->HasCompression()) {
+            Compression = TColumnCompression();
+            if (message->GetCompression().HasAlgorithm()) {
+                Compression->Algorithm = message->GetCompression().GetAlgorithm();
+            }
+            if (message->GetCompression().HasLevel()) {
+                Compression->Level = message->GetCompression().GetLevel();
+            }
+        }
     }
 
     void SetDefaultFromSequence() {
@@ -480,6 +489,15 @@ struct TKikimrColumnMetadata {
         }
         for(auto& family: Families) {
             message->AddFamily(family);
+        }
+        if (Compression) {
+            auto compression = message->MutableCompression();
+            if (const auto maybeAlgorithm = Compression->Algorithm) {
+                compression->SetAlgorithm(maybeAlgorithm->c_str());
+            }
+            if (const auto maybeLevel = Compression->Level) {
+                compression->SetLevel(*maybeLevel);
+            }
         }
     }
 

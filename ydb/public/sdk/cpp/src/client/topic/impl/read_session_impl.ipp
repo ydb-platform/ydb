@@ -1700,12 +1700,6 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         return;
     }
 
-    // We should never get an old status:
-    Y_ABORT_UNLESS(
-        partitionStreamIt->second->GetFirstNotReadOffset() <= static_cast<ui64>(msg.read_offset()) &&
-        partitionStreamIt->second->GetFirstNotReadOffset() <= static_cast<ui64>(msg.partition_offsets().end())
-    );
-
     bool pushRes = EventsQueue->PushEvent(partitionStreamIt->second,
                             TReadSessionEvent::TPartitionSessionStatusEvent(
                                 partitionStreamIt->second, msg.committed_offset(),
@@ -2111,8 +2105,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UnregisterPartition(ui
 
 template<bool UseMigrationProtocol>
 std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId) {
-    std::lock_guard guard(HierarchyDataLock);
-
     auto it = HierarchyData.find(partitionId);
     if (it == HierarchyData.end()) {
         return {};
@@ -2139,6 +2131,7 @@ std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParent
 
 template<bool UseMigrationProtocol>
 bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBeenRead(ui32 partitionId, ui64 partitionSessionId) {
+    std::lock_guard guard(HierarchyDataLock);
     for (auto id : GetParentPartitionSessions(partitionId, partitionSessionId)) {
         if (!ReadingFinishedData.contains(id)) {
             return false;
@@ -2150,7 +2143,10 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBe
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds) {
-    ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
+    {
+        std::lock_guard guard(HierarchyDataLock);
+        ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
+    }
     for (auto& [_, s] : PartitionStreams) {
         for (auto partitionId : childIds) {
             if (s->GetPartitionId() == partitionId) {

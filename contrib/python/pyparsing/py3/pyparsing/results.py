@@ -13,7 +13,7 @@ from collections.abc import (
 import pprint
 from typing import Any
 
-from .util import replaced_by_pep8
+from .util import deprecate_argument
 
 
 str_type: tuple[type, ...] = (str, bytes)
@@ -202,8 +202,17 @@ class ParseResults:
     # Performance tuning: we construct a *lot* of these, so keep this
     # constructor as small and fast as possible
     def __init__(
-        self, toklist=None, name=None, asList=True, modal=True, isinstance=isinstance
+        self,
+        toklist=None,
+        name=None,
+        aslist=True,
+        modal=True,
+        isinstance=isinstance,
+        **kwargs,
     ) -> None:
+        asList = deprecate_argument(kwargs, "asList", True, new_name="aslist")
+
+        asList = asList and aslist
         self._tokdict: dict[str, _ParseResultsWithOffset]
         self._modal = modal
 
@@ -597,7 +606,7 @@ class ParseResults:
            <class 'list'>
            >>> print(result_list)
            ['sldkj', 'lsdkj', 'sldkj']
-        
+
         .. versionchanged:: 3.2.0
            New ``flatten`` argument.
         """
@@ -906,7 +915,7 @@ class ParseResults:
             if isinstance(v, Mapping):
                 ret += cls.from_dict(v, name=k)
             else:
-                ret += cls([v], name=k, asList=is_iterable(v))
+                ret += cls([v], name=k, aslist=is_iterable(v))
         if name is not None:
             ret = cls([ret], name=name)
         return ret

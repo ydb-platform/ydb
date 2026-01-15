@@ -12,7 +12,7 @@ public:
     virtual bool UpdateLayerCache(const TKey& key, const TLayerInfo& layer, NYql::TExprContext& ctx) = 0;
     virtual bool UpdateLayerLocations(const TKey& key, TLocations&& locs, NYql::TExprContext& ctx) = 0;
     virtual void RemoveLayerByName(const TString& name) = 0;
-    virtual ~ILayersIntegration() = default;
+    ~ILayersIntegration() override = default;
 };
 
 using ILayersIntegrationPtr = TIntrusivePtr<ILayersIntegration>;

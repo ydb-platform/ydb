@@ -286,6 +286,14 @@
   - sys/stream.h
   # end libpcap files
 
+# These includes are required by sandboxing
+
+- includes:
+  - numpy/__init__.pxd:
+    - contrib/python/numpy/py3/numpy/__init__.pxd
+    - contrib/tools/cython/Cython/Includes/numpy/__init__.pxd
+    - contrib/tools/cython_py2/Cython/Includes/numpy/__init__.pxd
+
 # These includes are not used in autocheck builds, but might be necessary for
 # some external builds with exotic settings
 

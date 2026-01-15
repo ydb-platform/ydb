@@ -358,6 +358,14 @@ class TExecutor
         LowPriority,
     };
 
+    enum class EBrokenReason {
+        Storage,
+        Exception,
+        Transaction,
+    };
+
+    static const TString& BrokenAlertName(EBrokenReason);
+
     const TIntrusivePtr<ITimeProvider> Time = nullptr;
     NFlatExecutorSetup::ITablet * Owner;
     const TActorId OwnerActorId;
@@ -505,7 +513,7 @@ class TExecutor
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
     void PassAway() override;
-    void Broken();
+    void Broken(EBrokenReason reason);
     void Active(const TActorContext &ctx);
     void ActivateFollower(const TActorContext &ctx);
     void RecreatePrivateCache();

@@ -1,5 +1,7 @@
 #include <util/string/join.h>
 
+#include <library/cpp/string_utils/base64/base64.h>
+
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/login/login.h>
 #include <ydb/library/login/password_checker/password_checker.h>
@@ -75,7 +77,7 @@ void CheckToken(const TString& token, const NKikimrScheme::TEvDescribeSchemeResu
 
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
-    Y_UNIT_TEST(UserLogin) {
+    Y_UNIT_TEST(UserLogin1) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -109,6 +111,59 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
     }
 
+    Y_UNIT_TEST(UserLogin2) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            Cerr << describe.DebugString() << Endl;
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 0});
+        }
+
+        {
+            TString hashOldFormat = R"(
+                {
+                    "hash": "ZO37rNB37kP9hzmKRGfwc4aYrboDt4OBDsF1TBn5oLw=",
+                    "salt": "HTkpQjtVJgBoA0CZu+i3zg==",
+                    "type": "argon2id"
+                }
+            )";
+            TString hashes = R"(
+                {
+                    "version": 1,
+                    "argon2id": "HTkpQjtVJgBoA0CZu+i3zg==$ZO37rNB37kP9hzmKRGfwc4aYrboDt4OBDsF1TBn5oLw=",
+                    "scram-sha-256": "4096:s0QSrrFVkMTh3k2TTk860A==$LmCubRpIYV1zHMLucTtu7XjhB+PgWwH8ABCYGyVF1mo=:eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc="
+                }
+            )";
+
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", Base64Encode(hashes), hashOldFormat);
+        }
+
+        {
+            auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            CheckSecurityState(describe, {.PublicKeysSize = 0, .SidsSize = 1});
+        }
+
+        {
+            auto resultLogin = Login(runtime, "user1", "password1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        }
+
+        {
+            auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::Argon,
+                "ZO37rNB37kP9hzmKRGfwc4aYrboDt4OBDsF1TBn5oLw=");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        }
+
+        {
+            auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
+                "eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc=");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        }
+    }
+
     Y_UNIT_TEST_FLAG(RemoveUser, StrictAclCheck) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
@@ -123,7 +178,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // check user has been removed:
         {
             auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user 'user1'");
         }
     }
 
@@ -191,7 +246,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
                 NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1"),
                 NLs::HasNoRight("+U:group"), NLs::HasEffectiveRight("+U:group")});
             auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user 'user1'");
         }
     }
 
@@ -237,7 +292,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
                 {NLs::HasOwner("user2")});
             auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user 'user1'");
         }
     }
 
@@ -301,7 +356,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1/DirSub1"),
                 {NLs::HasNoRight("+U:user1"), NLs::HasNoEffectiveRight("+U:user1")});
             auto resultLogin = Login(runtime, "user1", "password1");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user: user1");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetError(), "Cannot find user 'user1'");
         }
     }
 
@@ -434,7 +489,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         auto resultLogin = Login(runtime, "ldapuser@ldap.domain", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: ldapuser@ldap.domain");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'ldapuser@ldap.domain'");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
         auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
         CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 0});
@@ -551,7 +606,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         }
 
         auto resultLogin = Login(runtime, "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user1'");
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
 
         {
@@ -658,7 +713,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 3});
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASSWORDU3", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 lower case character"}});
             auto resultLogin = Login(runtime, "user3", "PASSWORDU3");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user3");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user3'");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 2});
         }
@@ -691,7 +746,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLowerCaseCount = 0, .MinUpperCaseCount = 3});
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "passwordu5", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 upper case character"}});
             auto resultLogin = Login(runtime, "user5", "passwordu5");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user5");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user5'");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 4});
         }
@@ -726,7 +781,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinLength = 8});
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user7", "passwu7", {{NKikimrScheme::StatusPreconditionFailed, "Password is too short"}});
             auto resultLogin = Login(runtime, "user7", "passwu7");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user7");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user7'");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 6});
         }
@@ -760,7 +815,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinNumbersCount = 3});
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user9", "passwordunine", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 number"}});
             auto resultLogin = Login(runtime, "user9", "passwordunine");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user9");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user9'");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 8});
         }
@@ -794,7 +849,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinSpecialCharsCount = 3});
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user11", "passwordu11", {{NKikimrScheme::StatusPreconditionFailed, "Incorrect password format: should contain at least 3 special character"}});
             auto resultLogin = Login(runtime, "user11", "passwordu11");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user11");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user11'");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 10});
         }
@@ -817,7 +872,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.SpecialChars = "*#"}); // Only 2 special symbols are valid
             CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "passwordu12*&%#", {{NKikimrScheme::StatusPreconditionFailed, "Password contains unacceptable characters"}});
             auto resultLogin = Login(runtime, "user12", "passwordu12*&%#");
-            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user: user12");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Cannot find user 'user12'");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 11});
         }

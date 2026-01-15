@@ -171,7 +171,7 @@ public:
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr(), sessionCtx->GetUserRequestContext()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
-        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel)))
+        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel())))
         , ActorSystem(actorSystem)
     {
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
@@ -229,7 +229,7 @@ public:
         const auto dataQueryBlocks = TKiDataQueryBlocks(query);
 
         if (IsOlapQuery(dataQueryBlocks)) {
-            switch (TransformCtx->Config->BlockChannelsMode) {
+            switch (TransformCtx->Config->GetBlockChannelsMode()) {
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
                     TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
@@ -311,7 +311,7 @@ private:
 
         TransformCtx->DataQueryBlocks = dataQueryBlocks;
 
-        if (Config->EnableNewRBO) {
+        if (Config->GetEnableNewRBO()) {
             YQL_CLOG(INFO, CoreDq) << "Taking the new RBO branch";
             return MakeIntrusive<TPrepareQueryAsyncResult>(query, *NewRBOTransformer, ctx, *TransformCtx);
             //return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);

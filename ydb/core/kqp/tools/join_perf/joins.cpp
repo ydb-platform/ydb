@@ -94,6 +94,7 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
 
                         TBenchmarkCaseResult result;
                         result.CaseName = CaseName(algo, keyType, flavour, params, tableSizes);
+                        descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
                         THolder<NKikimr::NMiniKQL::IComputationGraph> wideStreamGraph =
                             ConstructJoinGraphStream(EJoinKind::Inner, algo, descr);
                         NYql::NUdf::TUnboxedValue wideStream = wideStreamGraph->GetValue();

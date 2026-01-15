@@ -85,7 +85,7 @@ public:
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
     {
         Config = BuildConfiguration(tableServiceConfig);
-        PerStatementResult = perStatementResult && Config->EnablePerStatementQueryExecution;
+        PerStatementResult = perStatementResult && Config->GetEnablePerStatementQueryExecution();
     }
 
     TKikimrConfiguration::TPtr BuildConfiguration(const TTableServiceConfig& tableServiceConfig) {
@@ -99,7 +99,7 @@ public:
 
         config->ApplyServiceConfig(tableServiceConfig);
 
-        if (!tableServiceConfig.HasSqlVersion() || tableServiceConfig.GetSqlVersion() != 0) {
+        if (tableServiceConfig.GetSqlVersion() != 0) {
             EnforcedSqlVersion = false;
         } else if (EnforcedSqlVersion) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR,
@@ -108,13 +108,13 @@ public:
                 << " queryText: " << EscapeC(QueryId.Text)
             );
 
-            config->_KqpYqlSyntaxVersion = 1;
+            config->SetSqlVersion(1);
         } else {
             EnforcedSqlVersion = false;
         }
 
         // This is either the default setting or the explicit exclusion of a new RBO when compilation fails and recompilation is attempted.
-        config->EnableNewRBO = EnableNewRBO;
+        config->SetEnableNewRBO(EnableNewRBO);
 
         if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
             ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
@@ -183,12 +183,10 @@ private:
 private:
     TVector<TQueryAst> GetAstStatements(const TActorContext &ctx) {
         TString cluster = QueryId.Cluster;
-        ui16 kqpYqlSyntaxVersion = Config->_KqpYqlSyntaxVersion.Get().GetRef();
-
-        TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), kqpYqlSyntaxVersion, cluster, QueryId.Text, Config->BindingsMode, GUCSettings);
+        TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), cluster, QueryId.Text, Config->GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
             .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
-            .SetIsEnablePgConstsToParams(Config->EnablePgConstsToParams)
+            .SetIsEnablePgConstsToParams(Config->GetEnablePgConstsToParams())
             .SetApplicationName(ApplicationName)
             .SetQueryParameters(QueryId.QueryParameterTypes)
             .SetIsEnablePgSyntax(AppData(ctx)->FeatureFlags.GetEnablePgSyntax())
@@ -396,7 +394,7 @@ private:
         }
         replayMessage.InsertValue("query_parameter_types", std::move(queryParameterTypes));
         replayMessage.InsertValue("created_at", ToString(TlsActivationContext->ActorSystem()->Timestamp().Seconds()));
-        replayMessage.InsertValue("query_syntax", ToString(Config->_KqpYqlSyntaxVersion.Get().GetRef()));
+        replayMessage.InsertValue("query_syntax", ToString(Config->GetSqlVersion()));
         replayMessage.InsertValue("query_database", QueryId.Database);
         replayMessage.InsertValue("query_cluster", QueryId.Cluster);
         replayMessage.InsertValue("query_type", ToString(QueryId.Settings.QueryType));

@@ -70,6 +70,10 @@ bool IsCreateReplicationQuery(const TString& query) {
     return query.Contains("CREATE ASYNC REPLICATION");
 }
 
+bool IsCreateTransferQuery(const TString& query) {
+    return query.Contains("CREATE TRANSFER");
+}
+
 bool RewriteCreateQuery(
     TString& query,
     const TString& dbRestoreRoot,
@@ -81,6 +85,9 @@ bool RewriteCreateQuery(
     }
     if (IsCreateReplicationQuery(query)) {
         return NYdb::NDump::RewriteCreateAsyncReplicationQuery(query, dbRestoreRoot, dbPath, issues);
+    }
+    if (IsCreateTransferQuery(query)) {
+        return NYdb::NDump::RewriteCreateTransferQuery(query, dbRestoreRoot, dbPath, issues);
     }
 
     issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);
@@ -281,11 +288,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         importInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistImportState(db, *importInfo);
 
-        Self->Imports[id] = importInfo;
-        if (uid) {
-            Self->ImportsByUid[uid] = importInfo;
-        }
-
+        Self->AddImport(importInfo);
         Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *importInfo);
 
         Progress = true;
@@ -610,22 +613,53 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
+    void DelayObjectCreation(
+        TImportInfo::TPtr importInfo,
+        ui32 itemIdx,
+        NIceDb::TNiceDb& db,
+        const TString& error,
+        const TActorContext& ctx)
+    {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+
+        item.State = EState::Waiting;
+        Self->PersistImportItemState(db, *importInfo, itemIdx);
+
+        const auto stateCounts = CountItemsByState(importInfo->Items);
+        if (AllWaiting(stateCounts)) {
+            // Cancel the import, or we will end up waiting indefinitely.
+            return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed");
+        } else if (AllDoneOrWaiting(stateCounts)) {
+            if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjects) {
+                // No progress has been made since the last scheme objec creation retry.
+                return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed");
+            }
+            RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
+        }
+    }
+
     void RetrySchemeObjectsQueryExecution(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const auto database = GetDatabase(*Self);
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo.Items.size())) {
             auto& item = importInfo.Items[itemIdx];
-            if (item.State == EState::Waiting && IsCreatedByQuery(item)) {
+            if (item.State != EState::Waiting || !IsCreatedByQuery(item)) {
+                continue;
+            }
+            if (item.PreparedCreationQuery) {
+                AllocateTxId(importInfo, itemIdx);
+            } else {
                 item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                     Self->SelfId(), importInfo.Id, itemIdx, item.CreationQuery, database
                 ));
                 Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
-
-                item.State = EState::CreateSchemeObject;
-                Self->PersistImportItemState(db, importInfo, itemIdx);
-
-                retriedItems.emplace_back(itemIdx);
             }
+
+            item.State = EState::CreateSchemeObject;
+            Self->PersistImportItemState(db, importInfo, itemIdx);
+
+            retriedItems.emplace_back(itemIdx);
         }
         if (!retriedItems.empty()) {
             importInfo.WaitingSchemeObjects = std::ssize(retriedItems);
@@ -1271,23 +1305,8 @@ private:
         Self->RunningImportSchemeQueryExecutors.erase(std::exchange(item.SchemeQueryExecutor, {}));
 
         if (message.Status == Ydb::StatusIds::SCHEME_ERROR) {
-            // Scheme error happens when the view depends on a table (or a view) that is not yet imported.
-            // Instead of tracking view dependencies, we simply retry the creation of the view later.
-            item.State = EState::Waiting;
-            Self->PersistImportItemState(db, *importInfo, message.ItemIdx);
-
-            const auto stateCounts = CountItemsByState(importInfo->Items);
-            if (AllWaiting(stateCounts)) {
-                // Cancel the import, or we will end up waiting indefinitely.
-                return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
-            } else if (AllDoneOrWaiting(stateCounts)) {
-                if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjects) {
-                    // No progress has been made since the last query execution retry.
-                    return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
-                }
-                RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
-            }
-            return;
+            // Scheme error happens when the creation query depends on other objects that are not yet imported.
+            return DelayObjectCreation(importInfo, message.ItemIdx, db, error, ctx);
         }
 
         if (message.Status != Ydb::StatusIds::SUCCESS || !error.empty()) {
@@ -1399,7 +1418,7 @@ private:
         Self->TxIdToImport[txId] = {importInfo->Id, *itemIdx};
     }
 
-    void OnModifyResult(TTransactionContext& txc, const TActorContext&) {
+    void OnModifyResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(ModifyResult);
         const auto& record = ModifyResult->Get()->Record;
 
@@ -1429,6 +1448,11 @@ private:
 
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
+
+        if (record.GetStatus() == NKikimrScheme::StatusNotAvailable) {
+            // Query compiled, but execution was unsuccessful
+            return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
+        }
 
         if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
             Self->TxIdToImport.erase(txId);

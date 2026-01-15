@@ -39,7 +39,7 @@ TAsyncExpiringCache<TKey, TValue>::TShard::TShard(const TShard& other)
 template <class TKey, class TValue>
 TAsyncExpiringCache<TKey, TValue>::TAsyncExpiringCache(
     TAsyncExpiringCacheConfigPtr config,
-    const IInvokerPtr& invoker,
+    IInvokerPtr invoker,
     NLogging::TLogger logger,
     NProfiling::TProfiler profiler)
     : Logger_(std::move(logger))
@@ -50,7 +50,7 @@ TAsyncExpiringCache<TKey, TValue>::TAsyncExpiringCache(
         invoker,
         BIND(&TAsyncExpiringCache::RefreshAllItems, MakeWeak(this))))
     , ShardCount_(config->ShardCount)
-    , Invoker_(invoker)
+    , Invoker_(std::move(invoker))
     // NB(apachee): +1 to avoid 0. Cf. #TRandomizedHash.
     , ShardKeyHash_(RandomNumber<size_t>(std::numeric_limits<size_t>::max()) + 1)
     , MapShards_(config->ShardCount)

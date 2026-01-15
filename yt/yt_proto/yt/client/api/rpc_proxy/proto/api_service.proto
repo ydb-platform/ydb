@@ -1323,6 +1323,7 @@ message TTransactionalOptions
     reserved 4;
     optional bool suppress_transaction_coordinator_sync = 5;
     optional bool suppress_upstream_sync = 6;
+    optional bool suppress_strongly_ordered_transaction_barrier = 7;
 }
 
 // 101

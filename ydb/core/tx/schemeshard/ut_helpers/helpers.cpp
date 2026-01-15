@@ -2244,6 +2244,22 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hashedPassword, const TString& hashedPasswordOldFormat, const TVector<TExpectedResult>& expectedResults) {
+        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto transaction = modifyTx->Record.AddTransaction();
+        transaction->SetWorkingDir(database);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+
+        auto createUser = transaction->MutableAlterLogin()->MutableCreateUser();
+        createUser->SetUser(user);
+        createUser->SetIsHashedPassword(true);
+        createUser->SetPassword(hashedPasswordOldFormat);
+        createUser->SetHashedPassword(hashedPassword);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
     void CreateAlterLoginRemoveUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TVector<TExpectedResult>& expectedResults) {
         auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = modifyTx->Record.AddTransaction();
@@ -2317,6 +2333,23 @@ namespace NSchemeShardUT_Private {
         if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
             evLogin->Record.SetExternalAuth(ldapDomain);
         }
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech, NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage) {
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto evLogin = new TEvSchemeShard::TEvLogin();
+        evLogin->Record.SetUser(user);
+        auto& hashesToValidate = *evLogin->Record.MutableHashToValidate();
+        hashesToValidate.SetAuthMech(authMech);
+        hashesToValidate.SetHashType(hashType);
+        hashesToValidate.SetHash(hash);
+        hashesToValidate.SetAuthMessage(authMessage);
+
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);

@@ -365,14 +365,13 @@ class ConverterState:
     """
     Stores some state that persists between recursions into the element tree
     """
+    index_generator = itertools.count(start=1)
 
     def __init__(self, diagram_kwargs: typing.Optional[dict] = None) -> None:
         #: A dictionary mapping ParserElements to state relating to them
         self._element_diagram_states: dict[int, ElementState] = {}
         #: A dictionary mapping ParserElement IDs to subdiagrams generated from them
         self.diagrams: dict[int, EditablePartial[NamedDiagram]] = {}
-        #: The index of the next unnamed element
-        self.unnamed_index: int = 1
         #: The index of the next element. This is used for sorting
         self.index: int = 0
         #: Shared kwargs that are used to customize the construction of diagrams
@@ -397,19 +396,11 @@ class ConverterState:
         except KeyError:
             return default
 
-    def generate_unnamed(self) -> int:
-        """
-        Generate a number used in the name of an otherwise unnamed diagram
-        """
-        self.unnamed_index += 1
-        return self.unnamed_index
-
     def generate_index(self) -> int:
         """
         Generate a number used to index a diagram
         """
-        self.index += 1
-        return self.index
+        return next(self.index_generator)
 
     def extract_into_diagram(self, el_id: int):
         """
@@ -557,6 +548,8 @@ def _to_diagram_element(
                 # pyparsing.TokenConverter,
                 pyparsing.Forward,
                 pyparsing.Located,
+                pyparsing.AtStringStart,
+                pyparsing.AtLineStart,
             ),
         ):
             # However, if this element has a useful custom name, and its child does not, we can pass it on to the child

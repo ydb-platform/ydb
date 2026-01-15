@@ -22,7 +22,6 @@
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
 
 struct TPartitionDisplayInfo {
     ui64 PartitionId = 0;

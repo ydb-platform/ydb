@@ -7,7 +7,6 @@
 
 #include <util/generic/string.h>
 
-#include <functional>
 #include <future>
 
 namespace NYdb::NConsoleClient {

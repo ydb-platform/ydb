@@ -12,7 +12,6 @@
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
 
-#include <functional>
 #include <future>
 #include <atomic>
 #include <thread>
@@ -22,7 +21,6 @@
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
 
 class ITuiApp;
 

@@ -9,11 +9,9 @@
 #include <util/generic/hash.h>
 #include <util/datetime/base.h>
 
-#include <functional>
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
 
 // Time-series data point
 struct TMetricPoint {

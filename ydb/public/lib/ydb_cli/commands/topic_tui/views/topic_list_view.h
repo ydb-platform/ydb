@@ -11,14 +11,12 @@
 #include <util/datetime/base.h>
 
 #include <memory>
-#include <functional>
 #include <future>
 #include <atomic>
 #include <unordered_map>
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
 
 // Entry from directory listing
 struct TTopicListEntry {

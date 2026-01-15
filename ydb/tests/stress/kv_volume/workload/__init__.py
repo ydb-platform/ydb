@@ -586,9 +586,9 @@ class Worker:
 
         id_to_action_name = {}
         id_to_tasks = {}
-        
+
         last_ts = {}
-        
+
         while (now := datetime.now()) < end_time:
             try:
                 timeout = (end_time - now).total_seconds()

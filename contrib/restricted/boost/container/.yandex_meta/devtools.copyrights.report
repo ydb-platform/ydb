@@ -150,7 +150,7 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/allocator_t
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2be4c5530322f675f4699b1fecb8bdd0
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp at line 5, include/boost/container/detail/flat_tree.hpp at line 5, include/boost/container/detail/tree.hpp at line 5, include/boost/container/detail/type_traits.hpp at line 4, include/boost/container/list.hpp at line 5, include/boost/container/string.hpp at line 5, include/boost/container/vector.hpp at line 5
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/flat_tree.hpp at line 5, include/boost/container/detail/tree.hpp at line 5, include/boost/container/detail/type_traits.hpp at line 4, include/boost/container/list.hpp at line 5, include/boost/container/string.hpp at line 5, include/boost/container/vector.hpp at line 5
     License text:
         // (C) Copyright Ion Gaztanaga 2005-2015. Distributed under the Boost
         // Software License, Version 1.0. (See accompanying file
@@ -160,7 +160,6 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp a
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/container/deque.hpp [3:5]
         include/boost/container/detail/flat_tree.hpp [3:5]
         include/boost/container/detail/tree.hpp [3:5]
         include/boost/container/detail/type_traits.hpp [2:3]
@@ -567,3 +566,18 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/detail/guar
     Files with this license:
         include/boost/container/detail/guards_dended.hpp [3:6]
         include/boost/container/devector.hpp [3:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fcc5f7aa4665336cceb4d4cf482f2b17
+BELONGS ya.make
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/boost/container/deque.hpp at line 5, include/boost/container/detail/operator_new_helpers.hpp at line 5
+    License text:
+        // (C) Copyright Ion Gaztanaga 2025-2025. Distributed under the Boost
+        // Software License, Version 1.0. (See accompanying file
+        // LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/container/deque.hpp [3:5]
+        include/boost/container/detail/operator_new_helpers.hpp [3:5]

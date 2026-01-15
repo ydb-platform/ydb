@@ -48,12 +48,22 @@ public:
 
         // Tokenize text using NKikimr::NFulltext::Analyze
         TVector<TString> tokens = Analyze(TString(text.AsStringRef()), settings.Analyzers);
+        THashMap<TString, ui32> tokenFreq;
+        for (const auto& token : tokens) {
+            tokenFreq[token]++;
+        }
 
-        // Convert tokens to TUnboxedValue list
-        NUdf::TUnboxedValue* items = nullptr;
-        auto result = ctx.HolderFactory.CreateDirectArrayHolder(tokens.size(), items);
-        for (size_t i = 0; i < tokens.size(); ++i) {
-            items[i] = MakeString(tokens[i]);
+        // Convert tokens to TUnboxedValue struct (frequency, token) list
+        // Frequency comes before token because 'f' < 't'
+        NUdf::TUnboxedValue* rows = nullptr;
+        auto result = ctx.HolderFactory.CreateDirectArrayHolder(tokenFreq.size(), rows);
+        size_t i = 0;
+        for (const auto& [token, freq] : tokenFreq) {
+            NUdf::TUnboxedValue* rowItems = nullptr;
+            auto newValue = ctx.HolderFactory.CreateDirectArrayHolder(2, rowItems);
+            rowItems[0] = NUdf::TUnboxedValuePod(freq);
+            rowItems[1] = MakeString(token);
+            rows[i++] = newValue;
         }
 
         return result;

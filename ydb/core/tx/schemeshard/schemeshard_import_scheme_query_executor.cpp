@@ -102,6 +102,11 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             return Finish(result->Status, createReplication);
         }
 
+        if (transactions[0].GetSchemeOperation().HasCreateTransfer()) {
+            const auto& createTransfer = transactions[0].GetSchemeOperation().GetCreateTransfer();
+            return Finish(result->Status, createTransfer);
+        }
+
         return Finish(Ydb::StatusIds::GENERIC_ERROR, "no supported create operation");
     }
 

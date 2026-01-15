@@ -1810,9 +1810,6 @@ private:
             AFL_ENSURE(keyToReadCellsIndex.emplace(key, readCells.size() - 1).second);
         });
 
-        const auto& mainWriteInfo = PathWriteInfo.at(PathId);
-        THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> keyChanged;
-
         std::vector<bool> existsMask;
         existsMask.reserve(ProcessCells.size());
         for (size_t index = 0; index < ProcessCells.size(); ++index) {
@@ -1823,18 +1820,6 @@ private:
             if (keyIt != keyToReadCellsIndex.end()) {
                 const auto& newCells = TConstArrayRef<TCell>(readCells[keyIt->second]).last(readCells[keyIt->second].size() - KeyColumnTypes.size());
                 AFL_ENSURE(lookupColumnsCount == newCells.size());
-
-                if (mainWriteInfo.SkipEqualRows && !keyChanged.contains(key) && IsEqual(
-                        processCells,
-                        newCells,
-                        mainWriteInfo.NewColumnsIndexes,
-                        mainWriteInfo.OldColumnsIndexes,
-                        mainWriteInfo.ColumnTypes)) {
-                    // skip unchanged rows
-                    Memory -= EstimateSize(processCells);
-                    continue;
-                }
-                keyChanged.insert(key);
 
                 for (const auto& cell : processCells) {
                     rowsBatcher->AddCell(cell);
@@ -4389,6 +4374,10 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+            if (ev->Get()->Record.HasTxStats()) {
+                LocksBrokenAsBreaker += ev->Get()->Record.GetTxStats().GetLocksBrokenAsBreaker();
+                LocksBrokenAsVictim += ev->Get()->Record.GetTxStats().GetLocksBrokenAsVictim();
+            }
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());

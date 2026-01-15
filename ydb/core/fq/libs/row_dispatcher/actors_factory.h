@@ -2,7 +2,7 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/common/row_dispatcher_settings.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <util/generic/ptr.h>

@@ -109,6 +109,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::View;
     case ::Ydb::Scheme::Entry::RESOURCE_POOL:
         return ESchemeEntryType::ResourcePool;
+    case ::Ydb::Scheme::Entry::BACKUP_COLLECTION:
+        return ESchemeEntryType::BackupCollection;
     case ::Ydb::Scheme::Entry::SYS_VIEW:
         return ESchemeEntryType::SysView;
     case ::Ydb::Scheme::Entry::TRANSFER:

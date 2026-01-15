@@ -69,8 +69,6 @@ struct TModuleResolverState : public TThrRefBase {
     THolder<NYql::TExprContext::TFreezeGuard> FreezeGuardHolder;
 };
 
-void ApplyServiceConfig(NYql::TKikimrConfiguration& kqpConfig, const NKikimrConfig::TTableServiceConfig& serviceConfig);
-
 enum class ELocksOp {
     Unspecified = 0,
     Commit,

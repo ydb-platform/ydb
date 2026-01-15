@@ -79,7 +79,7 @@ def get_options():
 
 def set_env(key, value):
     with open(ya.env_file, "a") as f:
-        json.dump({key: value}, f)
+        json.dump({key: str(value) if value is not None else None}, f)
         f.write("\n")
 
 
@@ -91,8 +91,7 @@ def tty():
     if os.isatty(1):
         return
 
-    f = open('/dev/tty', 'w+')
-    fd = f.fileno()
+    fd = os.open('/dev/tty', os.O_RDWR | os.O_NOCTTY)
     os.dup2(fd, 0)
     os.dup2(fd, 1)
     os.dup2(fd, 2)

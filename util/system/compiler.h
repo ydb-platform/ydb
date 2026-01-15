@@ -132,6 +132,19 @@
     #endif
 #endif
 
+/**
+ * @def Y_EMPTY_BASES
+ *
+ * Macro to enable EBO (empty base optimization).
+ */
+#if !defined(Y_EMPTY_BASES)
+    #if defined(_MSC_VER)
+        #define Y_EMPTY_BASES __declspec(empty_bases)
+    #else
+        #define Y_EMPTY_BASES
+    #endif
+#endif
+
 // to cheat compiler about strict aliasing or similar problems
 #if defined(__GNUC__)
     #define Y_FAKE_READ(X)                  \
@@ -795,6 +808,8 @@ Y_FORCE_INLINE void DoNotOptimizeAway(const T&) = delete;
  */
 #if Y_HAS_CPP_ATTRIBUTE(no_unique_address)
     #define Y_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#elif Y_HAS_CPP_ATTRIBUTE(msvc::no_unique_address)
+    #define Y_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
 #else
     #define Y_NO_UNIQUE_ADDRESS
 #endif

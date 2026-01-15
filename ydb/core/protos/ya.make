@@ -21,6 +21,7 @@ SRCS(
     blobstorage_base.proto
     blobstorage_base3.proto
     blobstorage_config.proto
+    blobstorage_ddisk.proto
     blobstorage_disk.proto
     blobstorage_disk_color.proto
     blobstorage_distributed_config.proto
@@ -95,6 +96,7 @@ SRCS(
     kesus.proto
     key.proto
     kqp_compile_settings.proto
+    kqp_tablemetadata.proto
     kqp.proto
     kqp_physical.proto
     kqp_stats.proto

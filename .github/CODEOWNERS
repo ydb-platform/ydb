@@ -1,6 +1,8 @@
 /*.md @ydb-platform/docs
 /CHANGELOG.md @ydb-platform/changelog-reviewers
 
+/.github/docker @ydb-platform/appteam
+
 /build @ydb-platform/ci
 /certs @ydb-platform/ci
 /contrib @ydb-platform/ci
@@ -86,7 +88,9 @@
 
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli
+/ydb/public/lib/ydb_cli/dump @ydb-platform/core
 /ydb/public/sdk/cpp @ydb-platform/cpp-sdk
+/ydb/public/tools/local_ydb/ @ydb-platform/appteam
 
 /ydb/core/security @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security

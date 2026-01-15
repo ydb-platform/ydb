@@ -676,7 +676,7 @@ public:
         std::memset(GetPtr(), 0, Size_ * sizeof(NUdf::TUnboxedValue));
     }
 
-    ~TDirectArrayHolderInplace() {
+    ~TDirectArrayHolderInplace() override {
         for (ui64 i = 0U; i < Size_; ++i) {
             (GetPtr() + i)->~TUnboxedValue();
         }

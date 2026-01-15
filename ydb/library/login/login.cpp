@@ -36,8 +36,10 @@ public:
 
     void GenerateKeyPair(TString& publicKey, TString& privateKey) const ;
     TString GenerateArgonHash(const TString& password) const;
-    static bool VerifyHash(const TString& password, const TString& hash);
-    bool VerifyHashWithCache(const TLruCache::TKey& key);
+    static bool VerifyArgonHash(const TString& password, const TString& hash);
+    static bool SaslPlainVerifyArgonHash(const TString& hashToVerify, const TString& storedHashValue);
+    static bool SaslPlainVerifyScramHash(const TString& serverKeyToVerify, const TString& storedHashValues);
+    bool VerifyHashValues(const TString& password, const TString& hash);
     bool NeedVerifyHash(const TLruCache::TKey& key, TPasswordCheckResult* checkResult);
     void UpdateCache(const TLruCache::TKey& key, const bool isSuccessVerifying);
 
@@ -89,6 +91,20 @@ bool TLoginProvider::CheckGroupNameAllowed(const bool strongCheckName, const TSt
         return StrongCheckAllowedName(groupName);
     }
     return BasicCheckAllowedName(groupName);
+}
+
+void TLoginProvider::TSidRecord::FillHashStorage() {
+    HashStorage.clear();
+    const auto hashesMap = MakePasswordHashesMap(PasswordHashes);
+    HashStorage.reserve(hashesMap.size());
+    for (const auto& [hashType, hashValue] : hashesMap) {
+        THashRecord hashRecord;
+        auto hashSecret = SplitPasswordHash(hashValue);
+        hashRecord.HashInitParams = std::move(hashSecret.HashInitParams);
+        hashRecord.HashValues = std::move(hashSecret.HashValues);
+
+        HashStorage.emplace(hashType, std::move(hashRecord));
+    }
 }
 
 bool TLoginProvider::CheckHashes(const TString& hashedPassword, TString& error) const {
@@ -157,6 +173,7 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
     } else {
         user.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*ArgonHashToNewFormat(user.ArgonHash));
     }
+    user.FillHashStorage();
 
     return response;
 }
@@ -203,8 +220,10 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
 
     if (request.HashedPassword.has_value()) {
         user.PasswordHashes = request.HashedPassword.value();
+        user.FillHashStorage();
     } else if (request.Password.has_value()) {
         user.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*ArgonHashToNewFormat(user.ArgonHash));
+        user.FillHashStorage();
     }
 
     if (request.CanLogin.has_value()) {
@@ -474,7 +493,7 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
     auto itUser = Sids.find(request.User);
     if (itUser == Sids.end()) {
         response.Status = TCheckLockOutResponse::EStatus::INVALID_USER;
-        response.Error = TStringBuilder() << "Cannot find user: " << request.User;
+        response.Error = TStringBuilder() << "Cannot find user '" << request.User << "'";
         return response;
     } else if (itUser->second.Type != ESidType::USER) {
         response.Status = TCheckLockOutResponse::EStatus::INVALID_USER;
@@ -506,33 +525,99 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
     return response;
 }
 
-bool TLoginProvider::NeedVerifyHash(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, TString* passwordHash) {
+bool TLoginProvider::NeedVerifyHash(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, TString* hashValues) {
     Y_ENSURE(checkResult);
-    Y_ENSURE(passwordHash);
+    Y_ENSURE(hashValues);
 
     if (FillUnavailableKey(checkResult)) {
         return false;
     }
 
-    if (!request.ExternalAuth) {
+    if (!request.ExternalAuth.has_value()) {
         const auto* sid = GetUserSid(request.User);
         if (FillInvalidUser(sid, checkResult)) {
             return false;
         }
 
-        *passwordHash = sid->ArgonHash;
-        return Impl->NeedVerifyHash({.User = request.User, .Password = request.Password, .Hash = sid->ArgonHash}, checkResult);
+        if (request.HashToValidate.has_value()) {
+            const auto& hashToValidate = *request.HashToValidate;
+            switch (hashToValidate.AuthMech) {
+            case NLoginProto::ESaslAuthMech::Plain: {
+                auto itHashRecord = sid->HashStorage.find(hashToValidate.HashType);
+                if (itHashRecord == sid->HashStorage.end()) {
+                    checkResult->FillInvalidHashType();
+                    return false;
+                }
+
+                *hashValues = itHashRecord->second.HashValues;
+                return true;
+            };
+            case NLoginProto::ESaslAuthMech::Scram: {
+                // will be implemented in next PR
+                checkResult->FillUnsupportedSaslMech();
+                return false;
+            }
+            default: {
+                checkResult->FillUnsupportedSaslMech();
+                return false;
+            }
+            }
+
+        } else if (request.Password.has_value()) {
+            *hashValues = sid->ArgonHash;
+            return Impl->NeedVerifyHash({.User = request.User, .Password = *request.Password, .Hash = sid->ArgonHash}, checkResult);
+        }
     }
 
     return false;
 }
 
-bool TLoginProvider::VerifyHash(const TLoginUserRequest& request, const TString& passwordHash) {
-    return TImpl::VerifyHash(request.Password, passwordHash);
+void TLoginProvider::VerifyHashValues(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, const TString& hashValues) {
+    Y_ENSURE(checkResult);
+
+    const auto& hashToValidate = *request.HashToValidate;
+    switch (hashToValidate.AuthMech) {
+    case NLoginProto::ESaslAuthMech::Plain: {
+        const auto& hashTypeDescr = HashesRegistry.HashTypesMap.at(hashToValidate.HashType);
+        switch (hashTypeDescr.Class) {
+        case EHashClass::Argon: {
+            if (!TImpl::SaslPlainVerifyArgonHash(hashToValidate.Hash, hashValues)) {
+                checkResult->FillInvalidPassword();
+            }
+
+            return;
+        }
+        case EHashClass::Scram: {
+            if (!TImpl::SaslPlainVerifyScramHash(hashToValidate.Hash, hashValues)) {
+                checkResult->FillInvalidPassword();
+            }
+
+            return;
+        }
+        default: {
+            checkResult->FillInvalidHashType();
+            return;
+        }
+        }
+    };
+    case NLoginProto::ESaslAuthMech::Scram: {
+        // will be implemented in next PR
+        checkResult->FillUnsupportedSaslMech();
+        return;
+    }
+    default: {
+        checkResult->FillUnsupportedSaslMech();
+        return;
+    }
+    }
+}
+
+bool TLoginProvider::VerifyArgonHash(const TLoginUserRequest& request, const TString& passwordHash) {
+    return TImpl::VerifyArgonHash(*request.Password, passwordHash);
 }
 
 void TLoginProvider::UpdateCache(const TLoginUserRequest& request, const TString& passwordHash, const bool isSuccessVerifying) {
-    Impl->UpdateCache({.User = request.User, .Password = request.Password, .Hash = passwordHash}, isSuccessVerifying);
+    Impl->UpdateCache({.User = request.User, .Password = *request.Password, .Hash = passwordHash}, isSuccessVerifying);
 }
 
 bool TLoginProvider::FillUnavailableKey(TPasswordCheckResult* checkResult) const {
@@ -569,13 +654,21 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         response.FillInvalidUser(checkResult.Error);
         return response;
     }
+    if (checkResult.Status == TLoginUserResponse::EStatus::UNSUPPORTED_SASL_MECHANISM) {
+        response.FillUnsupportedSaslMech();
+        return response;
+    }
+    if (checkResult.Status == TLoginUserResponse::EStatus::INVALID_HASH_TYPE) {
+        response.FillInvalidHashType();
+        return response;
+    }
 
     if (FillUnavailableKey(&response)) {
         return response;
     }
 
     TSidRecord* sid = nullptr;
-    if (!request.ExternalAuth) {
+    if (!request.ExternalAuth.has_value()) {
         sid = GetUserSid(request.User);
         if (FillInvalidUser(sid, &response)) {
             return response;
@@ -613,8 +706,8 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         token.set_audience(std::set<std::string>{Audience});
     }
 
-    if (request.ExternalAuth) {
-        token.set_payload_claim(EXTERNAL_AUTH_CLAIM_NAME, jwt::claim(request.ExternalAuth));
+    if (request.ExternalAuth.has_value()) {
+        token.set_payload_claim(EXTERNAL_AUTH_CLAIM_NAME, jwt::claim(*request.ExternalAuth));
     } else {
         if (request.Options.WithUserGroups) {
             auto groups = GetGroupsMembership(request.User);
@@ -637,14 +730,19 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
 
 TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request) {
     TPasswordCheckResult checkResult;
-    TString passwordHash;
-    if (NeedVerifyHash(request, &checkResult, &passwordHash)) {
-        const auto isSuccessVerifying = VerifyHash(request, passwordHash);
-        UpdateCache(request, passwordHash, isSuccessVerifying);
-        if (!isSuccessVerifying) {
-            checkResult.FillInvalidPassword();
+    TString hashValues;
+    if (NeedVerifyHash(request, &checkResult, &hashValues)) {
+        if (request.HashToValidate.has_value()) {
+            VerifyHashValues(request, &checkResult, hashValues);
+        } else if (request.Password.has_value()) { // for backward compatibility
+            const auto isSuccessVerifying = VerifyArgonHash(request, hashValues);
+            UpdateCache(request, hashValues, isSuccessVerifying);
+            if (!isSuccessVerifying) {
+                checkResult.FillInvalidPassword();
+            }
         }
     }
+
     return LoginUser(request, checkResult);
 }
 
@@ -867,7 +965,7 @@ TString TLoginProvider::TImpl::GenerateArgonHash(const TString& password) const 
     return NJson::WriteJson(json, false);
 }
 
-bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& passwordHash) {
+bool TLoginProvider::TImpl::VerifyArgonHash(const TString& password, const TString& passwordHash) {
     NJson::TJsonValue json;
     if (!NJson::ReadJsonTree(passwordHash, &json)) {
         return false;
@@ -886,6 +984,16 @@ bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& p
         reinterpret_cast<const ui8*>(hash.data()),
         hash.size());
 }
+
+bool TLoginProvider::TImpl::SaslPlainVerifyArgonHash(const TString& hashToVerify, const TString& storedHashValue) {
+    return hashToVerify == storedHashValue;
+}
+
+bool TLoginProvider::TImpl::SaslPlainVerifyScramHash(const TString& serverKeyToVerify, const TString& storedHashValues) {
+    const auto hashValues = ParseScramHashValues(storedHashValues);
+    return serverKeyToVerify == hashValues.ServerKey;
+}
+
 
 bool TLoginProvider::TImpl::NeedVerifyHash(const TLruCache::TKey& key, TPasswordCheckResult* checkResult) {
     Y_ENSURE(checkResult);
@@ -915,25 +1023,6 @@ void TLoginProvider::TImpl::UpdateCache(const TLruCache::TKey& key, const bool i
         WrongPasswordsCache.Insert(key, false);
     }
 
-}
-
-bool TLoginProvider::TImpl::VerifyHashWithCache(const TLruCache::TKey& key) {
-    if (!IsCacheUsed()) {
-        ClearCache();
-        return VerifyHash(key.Password, key.Hash);
-    }
-
-    if (SuccessPasswordsCache.Find(key) != SuccessPasswordsCache.End()) {
-        return true;
-    }
-
-    if (WrongPasswordsCache.Find(key) != WrongPasswordsCache.End()) {
-        return false;
-    }
-
-    const bool isSuccessVerifying = VerifyHash(key.Password, key.Hash);
-    UpdateCache(key, isSuccessVerifying);
-    return isSuccessVerifying;
 }
 
 void TLoginProvider::TImpl::UpdateCacheSettings(const TCacheSettings& cacheSettings) {
@@ -1015,6 +1104,7 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             } else if (pbSid.GetArgonHash()) {
                 sid.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*ArgonHashToNewFormat(pbSid.GetArgonHash()));
             }
+            sid.FillHashStorage();
 
             sid.IsEnabled = pbSid.GetIsEnabled();
             for (const auto& pbSubSid : pbSid.GetMembers()) {

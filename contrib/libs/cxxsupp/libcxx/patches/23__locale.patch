@@ -1,5 +1,5 @@
 diff --git a/include/__locale b/include/__locale
-index 4b38276..8784b24 100644
+index 5fb0c19..6c8a8e1 100644
 --- a/include/__locale
 +++ b/include/__locale
 @@ -17,6 +17,7 @@

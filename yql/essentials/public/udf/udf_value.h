@@ -750,7 +750,7 @@ private:
 class TBoxedValue: public TBoxedValueLink, public TWithUdfAllocator {
 public:
     TBoxedValue();
-    ~TBoxedValue();
+    ~TBoxedValue() override;
 };
 
 class TManagedBoxedValue: public TBoxedValueBase, public TWithUdfAllocator {

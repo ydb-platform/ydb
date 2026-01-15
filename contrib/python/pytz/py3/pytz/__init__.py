@@ -101,7 +101,7 @@ def open_resource(name):
             try:
                 import warnings
                 with warnings.catch_warnings():
-                    warnings.filterwarnings(action='ignore', category=DeprecationWarning)
+                    warnings.filterwarnings(action='ignore', category=UserWarning)
                     from pkg_resources import resource_stream
             except ImportError:
                 resource_stream = None

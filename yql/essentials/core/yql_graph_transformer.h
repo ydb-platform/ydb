@@ -174,7 +174,7 @@ public:
         return scope.HandleStatus(DoApplyAsyncChanges(input, output, ctx));
     }
 
-    virtual TStatistics GetStatistics() const override { return Statistics_; }
+    TStatistics GetStatistics() const override { return Statistics_; }
 
 public:
     virtual TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;

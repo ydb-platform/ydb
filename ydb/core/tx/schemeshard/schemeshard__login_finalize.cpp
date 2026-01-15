@@ -39,7 +39,7 @@ public:
         }
         const auto response = Self->LoginProvider.LoginUser(event.Request, event.CheckResult);
 
-        if (!LoginFinalizeEventPtr->Get()->Request.ExternalAuth) {
+        if (!LoginFinalizeEventPtr->Get()->Request.ExternalAuth.has_value()) {
             UpdateLoginSidsStats(response, txc);
         }
         if (!response.Error.empty()) {
@@ -75,6 +75,8 @@ private:
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD:
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_USER:
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNAVAILABLE_KEY:
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_HASH_TYPE:
+        case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNSUPPORTED_SASL_MECHANISM:
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::UNSPECIFIED: {
             result->Record.SetError(response.Error);
             break;
@@ -116,7 +118,7 @@ private:
             db.Table<Schema::LoginSids>()
                 .Key(LoginFinalizeEventPtr->Get()->Request.User)
                 .Update<Schema::LoginSids::LastFailedAttempt, Schema::LoginSids::FailedAttemptCount>(
-                        ToMicroSeconds(sid.LastFailedLogin), sid.FailedLoginAttemptCount
+                    ToMicroSeconds(sid.LastFailedLogin), sid.FailedLoginAttemptCount
                 );
         }
         default:

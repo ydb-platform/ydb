@@ -28,7 +28,7 @@ from distutils.util import rfc822_escape
 def get_metadata_version(self):
     mv = getattr(self, 'metadata_version', None)
     if mv is None:
-        mv = Version('2.2')
+        mv = Version('2.4')
         self.metadata_version = mv
     return mv
 
@@ -88,6 +88,7 @@ def read_pkg_file(self, file):
     self.url = _read_field_from_msg(msg, 'home-page')
     self.download_url = _read_field_from_msg(msg, 'download-url')
     self.license = _read_field_unescaped_from_msg(msg, 'license')
+    self.license_expression = _read_field_unescaped_from_msg(msg, 'license-expression')
 
     self.long_description = _read_field_unescaped_from_msg(msg, 'description')
     if self.long_description is None and self.metadata_version >= Version('2.1'):
@@ -175,8 +176,9 @@ def write_pkg_file(self, file):  # noqa: C901  # is too complex (14)  # FIXME
         if attr_val is not None:
             write_field(field, attr_val)
 
-    license = self.get_license()
-    if license:
+    if license_expression := self.license_expression:
+        write_field('License-Expression', license_expression)
+    elif license := self.get_license():
         write_field('License', rfc822_escape(license))
 
     for label, url in self.project_urls.items():
@@ -205,7 +207,8 @@ def write_pkg_file(self, file):  # noqa: C901  # is too complex (14)  # FIXME
     if self.long_description_content_type:
         write_field('Description-Content-Type', self.long_description_content_type)
 
-    self._write_list(file, 'License-File', self.license_files or [])
+    safe_license_files = map(_safe_license_file, self.license_files or [])
+    self._write_list(file, 'License-File', safe_license_files)
     _write_requirements(self, file)
 
     for field, attr in _POSSIBLE_DYNAMIC_FIELDS.items():
@@ -291,6 +294,14 @@ def _distribution_fullname(name: str, version: str) -> str:
     )
 
 
+def _safe_license_file(file):
+    # XXX: Do we need this after the deprecation discussed in #4892, #4896??
+    normalized = os.path.normpath(file).replace(os.sep, "/")
+    if "../" in normalized:
+        return os.path.basename(normalized)  # Temporarily restore pre PEP639 behaviour
+    return normalized
+
+
 _POSSIBLE_DYNAMIC_FIELDS = {
     # Core Metadata Field x related Distribution attribute
     "author": "author",
@@ -302,7 +313,12 @@ _POSSIBLE_DYNAMIC_FIELDS = {
     "home-page": "url",
     "keywords": "keywords",
     "license": "license",
-    # "license-file": "license_files", # XXX: does PEP 639 exempt Dynamic ??
+    # XXX: License-File is complicated because the user gives globs that are expanded
+    #      during the build. Without special handling it is likely always
+    #      marked as Dynamic, which is an acceptable outcome according to:
+    #      https://github.com/pypa/setuptools/issues/4629#issuecomment-2331233677
+    "license-file": "license_files",
+    "license-expression": "license_expression",  # PEP 639
     "maintainer": "maintainer",
     "maintainer-email": "maintainer_email",
     "obsoletes": "obsoletes",

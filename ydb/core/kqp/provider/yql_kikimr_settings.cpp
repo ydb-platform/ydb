@@ -115,7 +115,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 } else if (val == "off") {
                     CostBasedOptimizationLevel = 0;
                 } else if (val == "auto") {
-                    CostBasedOptimizationLevel = DefaultCostBasedOptimizationLevel;
+                    CostBasedOptimizationLevel = GetDefaultCostBasedOptimizationLevel();
                 } else {
                     Y_ENSURE(false, "undefined cbo setting, available: [on, off, auto]");
                 }
@@ -152,8 +152,6 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
-
-    BlockChannelsMode = NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR;
 }
 
 bool TKikimrSettings::HasAllowKqpUnsafeCommit() const {
@@ -229,33 +227,67 @@ TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
     return std::make_shared<const TKikimrSettings>(*this);
 }
 
-void TKikimrConfiguration::SetDefaultEnabledSpillingNodes(const TString& node) {
-    DefaultEnableSpillingNodes = ParseEnableSpillingNodes(node);
-}
-
 ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
-    return EnableSpillingNodes.Get().GetOrElse(DefaultEnableSpillingNodes);
+    return EnableSpillingNodes.Get().GetOrElse(ParseEnableSpillingNodes(TTableServiceConfig::GetEnableSpillingNodes()));
 }
 
 bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
-    return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownProjections);
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) ||
+        TTableServiceConfig::GetEnableOlapPushdownProjections());
 }
 
 bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const {
     return ((GetOptionalFlagValue(OptEnableParallelUnionAllConnectionsForExtend.Get()) == EOptionalFlag::Enabled) ||
-            EnableParallelUnionAllConnectionsForExtend);
+        TTableServiceConfig::GetEnableParallelUnionAllConnectionsForExtend());
 }
 
 bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
-    return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownAggregate);
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) ||
+        TTableServiceConfig::GetEnableOlapPushdownAggregate());
 }
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {
-    return UseDqHashCombine.Get().GetOrElse(EnableDqHashCombineByDefault);
+    return UseDqHashCombine.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashCombineByDefault());
 }
 
+NSQLTranslation::EBindingsMode TKikimrConfiguration::GetYqlBindingsMode() const {
+    switch (GetBindingsMode()) {
+        case NKikimrConfig::TTableServiceConfig::BM_ENABLED:
+            return NSQLTranslation::EBindingsMode::ENABLED;
+        case NKikimrConfig::TTableServiceConfig::BM_DISABLED:
+            return NSQLTranslation::EBindingsMode::DISABLED;
+        case NKikimrConfig::TTableServiceConfig::BM_DROP_WITH_WARNING:
+            return NSQLTranslation::EBindingsMode::DROP_WITH_WARNING;
+        case NKikimrConfig::TTableServiceConfig::BM_DROP:
+            return NSQLTranslation::EBindingsMode::DROP;
+    }
+
+    return NSQLTranslation::EBindingsMode::ENABLED;
+}
+
+NDq::EHashShuffleFuncType TKikimrConfiguration::GetDqDefaultHashShuffleFuncType() const {
+    switch(GetDefaultHashShuffleFuncType()) {
+        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V1:
+            return NYql::NDq::EHashShuffleFuncType::HashV1;
+        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2:
+            return NYql::NDq::EHashShuffleFuncType::HashV2;
+    }
+
+    return NYql::NDq::EHashShuffleFuncType::HashV1;
+}
+
+NYql::EBackportCompatibleFeaturesMode TKikimrConfiguration::GetYqlBackportMode() const {
+    switch(GetBackportMode()) {
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_Released:
+            return NYql::EBackportCompatibleFeaturesMode::Released;
+        case NKikimrConfig::TTableServiceConfig_EBackportMode_All:
+            return NYql::EBackportCompatibleFeaturesMode::All;
+    }
+}
+
+
 bool TKikimrConfiguration::GetUseDqHashAggregate() const {
-    return UseDqHashAggregate.Get().GetOrElse(EnableDqHashAggregateByDefault);
+    return UseDqHashAggregate.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashAggregateByDefault());
 }
 
 }

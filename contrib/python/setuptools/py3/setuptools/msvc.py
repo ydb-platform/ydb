@@ -1024,6 +1024,16 @@ class EnvironmentInfo:
         ------
         list of str
             paths
+
+        When host CPU is ARM, the tools should be found for ARM.
+
+        >>> getfixture('windows_only')
+        >>> mp = getfixture('monkeypatch')
+        >>> mp.setattr(PlatformInfo, 'current_cpu', 'arm64')
+        >>> ei = EnvironmentInfo(arch='irrelevant')
+        >>> paths = ei.VCTools
+        >>> any('HostARM64' in path for path in paths)
+        True
         """
         si = self.si
         tools = [os.path.join(si.VCInstallDir, 'VCPackages')]
@@ -1038,9 +1048,8 @@ class EnvironmentInfo:
             tools += [os.path.join(si.VCInstallDir, path)]
 
         elif self.vs_ver >= 15.0:
-            host_dir = (
-                r'bin\HostX86%s' if self.pi.current_is_x86() else r'bin\HostX64%s'
-            )
+            host_id = self.pi.current_cpu.replace('amd64', 'x64').upper()
+            host_dir = os.path.join('bin', f'Host{host_id}%s')
             tools += [
                 os.path.join(si.VCInstallDir, host_dir % self.pi.target_dir(x64=True))
             ]

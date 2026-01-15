@@ -16,6 +16,7 @@ SRCS(
     cpuinfo.h
     defs.h
     event_priority_queue.h
+    exceptions.cpp
     failure_injection.cpp
     failure_injection.h
     fast_tls.cpp

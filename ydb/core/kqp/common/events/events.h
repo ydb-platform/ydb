@@ -141,6 +141,7 @@ struct TEvKqp {
         i64 Generation = 1;
         TString CheckpointId;
         TString StreamingQueryPath;
+        TString CustomerSuppliedId;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {

@@ -123,7 +123,7 @@ private:
 
 public:
     using TWorker::TWorker;
-    ~TPullStreamWorker();
+    ~TPullStreamWorker() override;
 
 public:
     void SetInput(NKikimr::NUdf::TUnboxedValue&&, ui32) override;
@@ -145,7 +145,7 @@ private:
 
 public:
     using TWorker::TWorker;
-    ~TPullListWorker();
+    ~TPullListWorker() override;
 
 public:
     void SetInput(NKikimr::NUdf::TUnboxedValue&&, ui32) override;

@@ -52,7 +52,7 @@ public:
         return Inner_->IsActive(component, level);
     }
 
-    void Log(NUdf::TLogComponentId component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+    void Log(NUdf::TLogComponentId component, NUdf::ELogLevel level, const NUdf::TStringRef& message) override {
         Inner_->Log(component, level, message);
     }
 

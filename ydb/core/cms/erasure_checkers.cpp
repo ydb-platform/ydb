@@ -265,8 +265,6 @@ TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpe
         case TErasureType::ErasureMirror3Plus2:
         case TErasureType::Erasure4Plus3Block:
         case TErasureType::Erasure3Plus3Block:
-        case TErasureType::Erasure2Plus3Block:
-        case TErasureType::Erasure2Plus2Block:
         case TErasureType::ErasureMirror3of4:
             return TSimpleSharedPtr<IErasureCounter>(new TDefaultErasureCounter(vdisk, groupId, cmsCounters));
         case TErasureType::ErasureMirror3dc:

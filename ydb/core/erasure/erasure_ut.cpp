@@ -529,22 +529,6 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
     }
 
-    Y_UNIT_TEST(TestBlock23LossOfAllPossible3) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus3Block);
-        constexpr ui32 maxMissingParts = 3;
-        constexpr ui32 maxParts = 2 + 3;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
-    Y_UNIT_TEST(TestBlock22LossOfAllPossible2) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus2Block);
-        constexpr ui32 maxMissingParts = 2;
-        constexpr ui32 maxParts = 2 + 2;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
     void TestErasure(TErasureType::ECrcMode crcMode, TErasureType::EErasureSpecies species) {
         TErasureType groupType(species);
         TString erasureName = TErasureType::ErasureNames.at(species);

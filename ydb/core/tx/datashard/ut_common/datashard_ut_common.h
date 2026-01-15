@@ -1024,4 +1024,5 @@ ui64 AsyncTruncateTable(
     const TActorId& sender,
     const TString& workingDir,
     const TString& tableName);
-}
+
+} // namespace NKikimr

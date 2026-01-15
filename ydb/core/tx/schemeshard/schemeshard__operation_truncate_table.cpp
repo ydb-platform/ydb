@@ -300,12 +300,6 @@ public:
                 shardInfo.CurrentTxId = OperationId.GetTxId();
             }
 
-            {
-                if (tablePath.Parent()->IsTableIndex()) {
-                    IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, tablePath, context.SS, context.OnComplete);
-                }
-            }
-
             for (auto splitTx : table->GetSplitOpsInFlight()) {
                 context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
             }

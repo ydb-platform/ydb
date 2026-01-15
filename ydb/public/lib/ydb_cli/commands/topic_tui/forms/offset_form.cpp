@@ -21,7 +21,12 @@ EViewType TOffsetForm::GetViewType() const {
 }
 
 Component TOffsetForm::BuildContainer() {
-    OffsetInputComponent_ = Input(&OffsetInput_, std::to_string(CurrentOffset_));
+    InputOption opt;
+    opt.content = &OffsetInput_;
+    opt.cursor_position = &OffsetCursor_;
+    opt.multiline = false;
+    
+    OffsetInputComponent_ = Input(opt);
     return Container::Vertical({
         OffsetInputComponent_
     });

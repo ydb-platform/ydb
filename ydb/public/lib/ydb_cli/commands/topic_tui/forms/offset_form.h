@@ -39,6 +39,7 @@ private:
     ui64 EndOffset_ = 0;
     
     std::string OffsetInput_;
+    int OffsetCursor_ = 0;  // Cursor position for Input
     ftxui::Component OffsetInputComponent_;
     
     // Async operation state

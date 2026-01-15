@@ -199,7 +199,7 @@ public:
     TRuntimeNode NewVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType);
     TRuntimeNode NewVariant(TRuntimeNode item, const std::string_view& member, TType* variantType);
 
-    TRuntimeNode ToDynamicLinear(TRuntimeNode item);
+    TRuntimeNode ToDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column);
     TRuntimeNode FromDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column);
 
     TRuntimeNode ToMutDict(TRuntimeNode dict, TType* mdictType, const TArrayRef<const TRuntimeNode>& dependentNodes);

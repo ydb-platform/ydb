@@ -471,8 +471,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"DictPayloads", &TProgramBuilder::DictPayloads},
 
         {"QueuePop", &TProgramBuilder::QueuePop},
-
-        {"ToDynamicLinear", &TProgramBuilder::ToDynamicLinear},
     });
 
     AddSimpleCallables({
@@ -1380,6 +1378,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto message = node.ChildrenSize() > 1 ? MkqlBuildExpr(node.Tail(), ctx) : ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>("");
         const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
         return ctx.ProgramBuilder.Unwrap(opt, message, pos.File, pos.Row, pos.Column);
+    });
+
+    AddCallable("ToDynamicLinear", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto input = MkqlBuildExpr(node.Head(), ctx);
+        const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
+        return ctx.ProgramBuilder.ToDynamicLinear(input, pos.File, pos.Row, pos.Column);
     });
 
     AddCallable("FromDynamicLinear", [](const TExprNode& node, TMkqlBuildContext& ctx) {

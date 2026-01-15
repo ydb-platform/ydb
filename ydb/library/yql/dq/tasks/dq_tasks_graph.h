@@ -387,7 +387,7 @@ public:
         return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
     }
 
-    void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks, TMaybe<ui64> watermarksIdleTimeoutUs = Nothing()) {
+    void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {
         if (!enableCheckpoints && !enableWatermarks) {
             return;
         }
@@ -453,13 +453,9 @@ public:
             if (enableWatermarks) {
                 for (auto& input : task.Inputs) {
                     if (input.SourceType) {
-                        if (IsInfiniteSourceType(input.SourceType)) {
-                            if (input.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
-                                watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
-                                if (watermarksIdleTimeoutUs) {
-                                    input.WatermarksIdleTimeoutUs = watermarksIdleTimeoutUs;
-                                }
-                            }
+                        if (input.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                            Y_DEBUG_ABORT_UNLESS(IsInfiniteSourceType(input.SourceType));
+                            watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
                         }
                     } else {
                         for (ui64 channelId : input.Channels) {

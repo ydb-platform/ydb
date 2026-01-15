@@ -231,7 +231,6 @@ private:
     };
 
     virtual void OnTimeout(TColumnShard& owner) override {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iea", "primary on timeout")("wait_broken_flags", WaitShardsBrokenFlags.size())("wait_result_ack", WaitShardsResultAck.size());
         InitializeRequests(owner);
     }
 

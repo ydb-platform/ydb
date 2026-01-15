@@ -202,7 +202,6 @@ private:
     }
 
     virtual void OnTimeout(TColumnShard& owner) override {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_TX)("iea", "secondary on timeout")("receive_ack", ReceiveAck)("tx_broken_has_value", TxBroken.has_value());
         if (!ReceiveAck) {
             SendResult(owner);
         }

@@ -42,12 +42,9 @@ struct TEvKafka {
         EvTransactionActorDied,
         EvGetCountersRequest,
         EvGetCountersResponse,
-<<<<<<< HEAD
-=======
         EvFetchRequest,
         EvFetchActorStateRequest,
         EvFetchActorStateResponse,
->>>>>>> 6f3f5b4a60e (Fixed sanitizer error in ydb/core/kafka_proxy/ut/FetchActorTests.FetchWithTimeout (#32049))
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -108,8 +105,6 @@ struct TEvKafka {
         const TMessagePtr<THeartbeatRequestData> Request;
     };
 
-<<<<<<< HEAD
-=======
     struct TEvFetchRequest : public TEventLocal<TEvFetchRequest, EvFetchRequest> {
         TEvFetchRequest(const ui64 correlationId, const TMessagePtr<TFetchRequestData>& request)
         : CorrelationId(correlationId)
@@ -133,7 +128,6 @@ struct TEvKafka {
         std::unordered_map<TActorId, size_t> TopicIndexes;
     };
 
->>>>>>> 6f3f5b4a60e (Fixed sanitizer error in ydb/core/kafka_proxy/ut/FetchActorTests.FetchWithTimeout (#32049))
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {
         TEvResponse(const ui64 correlationId, const TApiMessage::TPtr response, EKafkaErrors errorCode)
             : CorrelationId(correlationId)

@@ -1,5 +1,4 @@
 #include "topic_list_view.h"
-#include "topic_list_view.h"
 #include "../app_interface.h"
 #include "../widgets/sparkline.h"
 

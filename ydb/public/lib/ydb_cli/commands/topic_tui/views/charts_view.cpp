@@ -1,5 +1,4 @@
 #include "charts_view.h"
-#include "charts_view.h"
 #include "../app_interface.h"
 #include "../widgets/sparkline.h"
 

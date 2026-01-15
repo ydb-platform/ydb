@@ -1,5 +1,4 @@
 #include "consumer_view.h"
-#include "consumer_view.h"
 #include "../app_interface.h"
 #include "../widgets/sparkline.h"
 

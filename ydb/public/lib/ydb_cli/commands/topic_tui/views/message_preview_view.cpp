@@ -1,5 +1,4 @@
 #include "message_preview_view.h"
-#include "message_preview_view.h"
 #include "../app_interface.h"
 #include "../widgets/sparkline.h"
 #include "../http_client.h"

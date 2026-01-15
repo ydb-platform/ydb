@@ -1,15 +1,11 @@
 #include "topic_details_view.h"
-#include "topic_details_view.h"
 #include "../app_interface.h"
 #include "../widgets/sparkline.h"
+#include "../common/async_utils.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
 
 using namespace ftxui;
-
-using namespace ftxui;
-
-#include "../common/async_utils.h"
 
 namespace NYdb::NConsoleClient {
 

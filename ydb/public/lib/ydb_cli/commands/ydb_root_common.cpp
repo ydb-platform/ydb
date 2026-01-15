@@ -23,6 +23,7 @@
 #include <ydb/core/base/backtrace.h>
 #endif
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
+#include <ydb/public/lib/ydb_cli/common/completion.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
@@ -496,6 +497,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         ydbUserAuth,
         oauth2TokenExchangeAuth
     );
+
+    opts.GetOpts().AddOption(GenerateCompletionOption("ydb", this, config));
 
     const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());
     TStringStream stream;

@@ -1,6 +1,6 @@
 #include "topic_form.h"
-#include "../topic_tui_app.h"
-
+#include "../app_interface.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/string/split.h>
@@ -217,10 +217,105 @@ bool TTopicForm::HandleSubmit() {
         return false;
     }
     
-    if (OnSubmit) {
-        OnSubmit(Data_);
+    // Execute create/alter topic directly using ITuiApp interface
+    if (IsEditMode_) {
+        // Alter existing topic
+        NTopic::TAlterTopicSettings settings;
+        
+        // Partitioning settings with auto-partitioning
+        settings.BeginAlterPartitioningSettings()
+            .MinActivePartitions(Data_.MinPartitions)
+            .MaxActivePartitions(Data_.MaxPartitions)
+            .BeginAlterAutoPartitioningSettings()
+                .Strategy(Data_.AutoPartitioningStrategy)
+                .StabilizationWindow(TDuration::Seconds(Data_.StabilizationWindowSeconds))
+                .UpUtilizationPercent(Data_.UpUtilizationPercent)
+                .DownUtilizationPercent(Data_.DownUtilizationPercent)
+            .EndAlterAutoPartitioningSettings()
+        .EndAlterTopicPartitioningSettings();
+        
+        // Retention
+        settings.SetRetentionPeriod(Data_.RetentionPeriod);
+        if (Data_.RetentionStorageMb > 0) {
+            settings.SetRetentionStorageMb(Data_.RetentionStorageMb);
+        }
+        
+        // Write performance
+        settings.SetPartitionWriteSpeedBytesPerSecond(Data_.WriteSpeedBytesPerSecond);
+        if (Data_.WriteBurstBytes > 0) {
+            settings.SetPartitionWriteBurstBytes(Data_.WriteBurstBytes);
+        }
+        
+        // Metering mode
+        if (Data_.MeteringMode != NTopic::EMeteringMode::Unspecified) {
+            settings.SetMeteringMode(Data_.MeteringMode);
+        }
+        
+        // Codecs
+        std::vector<NTopic::ECodec> codecs;
+        if (Data_.CodecRaw) codecs.push_back(NTopic::ECodec::RAW);
+        if (Data_.CodecGzip) codecs.push_back(NTopic::ECodec::GZIP);
+        if (Data_.CodecZstd) codecs.push_back(NTopic::ECodec::ZSTD);
+        if (Data_.CodecLzop) codecs.push_back(NTopic::ECodec::LZOP);
+        if (!codecs.empty()) {
+            settings.SetSupportedCodecs(codecs);
+        }
+        
+        auto result = GetApp().GetTopicClient().AlterTopic(Data_.Path, settings).GetValueSync();
+        if (result.IsSuccess()) {
+            GetApp().NavigateBack();
+            GetApp().RequestRefresh();
+            return true;
+        } else {
+            GetApp().ShowError(result.GetIssues().ToString());
+            return false;
+        }
+    } else {
+        // Create new topic
+        NTopic::TCreateTopicSettings settings;
+        
+        // Partitioning with auto-partitioning
+        NTopic::TAutoPartitioningSettings autoPartSettings(
+            Data_.AutoPartitioningStrategy,
+            TDuration::Seconds(Data_.StabilizationWindowSeconds),
+            Data_.DownUtilizationPercent,
+            Data_.UpUtilizationPercent
+        );
+        settings.PartitioningSettings(Data_.MinPartitions, Data_.MaxPartitions, autoPartSettings);
+        
+        // Retention
+        settings.RetentionPeriod(Data_.RetentionPeriod);
+        if (Data_.RetentionStorageMb > 0) {
+            settings.RetentionStorageMb(Data_.RetentionStorageMb);
+        }
+        
+        // Write performance
+        settings.PartitionWriteSpeedBytesPerSecond(Data_.WriteSpeedBytesPerSecond);
+        if (Data_.WriteBurstBytes > 0) {
+            settings.PartitionWriteBurstBytes(Data_.WriteBurstBytes);
+        }
+        
+        // Metering mode
+        if (Data_.MeteringMode != NTopic::EMeteringMode::Unspecified) {
+            settings.MeteringMode(Data_.MeteringMode);
+        }
+        
+        // Codecs
+        if (Data_.CodecRaw) settings.AppendSupportedCodecs(NTopic::ECodec::RAW);
+        if (Data_.CodecGzip) settings.AppendSupportedCodecs(NTopic::ECodec::GZIP);
+        if (Data_.CodecZstd) settings.AppendSupportedCodecs(NTopic::ECodec::ZSTD);
+        if (Data_.CodecLzop) settings.AppendSupportedCodecs(NTopic::ECodec::LZOP);
+        
+        auto result = GetApp().GetTopicClient().CreateTopic(Data_.Path, settings).GetValueSync();
+        if (result.IsSuccess()) {
+            GetApp().NavigateBack();
+            GetApp().RequestRefresh();
+            return true;
+        } else {
+            GetApp().ShowError(result.GetIssues().ToString());
+            return false;
+        }
     }
-    return true;  // Close form
 }
 
 void TTopicForm::SetEditMode(const TString& topicPath, const NTopic::TTopicDescription& desc) {

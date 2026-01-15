@@ -56,111 +56,12 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     // Note: All forms now use ITuiApp interface directly:
     // - TFormBase handles Escape key with NavigateBack() automatically
     // - Forms call NavigateBack() and RequestRefresh() in their HandleSubmit/CheckAsyncCompletion
-    // - SDK calls (DropTopic, AlterTopic, RemoveDirectory) moved into form implementations
-    
-    // Wire up form callbacks
-    TopicForm_->OnSubmit = [this](const TTopicFormData& data) {
-        if (TopicForm_->IsEditMode()) {
-            // Alter existing topic
-            NTopic::TAlterTopicSettings settings;
-            
-            // Partitioning settings with auto-partitioning
-            settings.BeginAlterPartitioningSettings()
-                .MinActivePartitions(data.MinPartitions)
-                .MaxActivePartitions(data.MaxPartitions)
-                .BeginAlterAutoPartitioningSettings()
-                    .Strategy(data.AutoPartitioningStrategy)
-                    .StabilizationWindow(TDuration::Seconds(data.StabilizationWindowSeconds))
-                    .UpUtilizationPercent(data.UpUtilizationPercent)
-                    .DownUtilizationPercent(data.DownUtilizationPercent)
-                .EndAlterAutoPartitioningSettings()
-            .EndAlterTopicPartitioningSettings();
-            
-            // Retention
-            settings.SetRetentionPeriod(data.RetentionPeriod);
-            if (data.RetentionStorageMb > 0) {
-                settings.SetRetentionStorageMb(data.RetentionStorageMb);
-            }
-            
-            // Write performance
-            settings.SetPartitionWriteSpeedBytesPerSecond(data.WriteSpeedBytesPerSecond);
-            if (data.WriteBurstBytes > 0) {
-                settings.SetPartitionWriteBurstBytes(data.WriteBurstBytes);
-            }
-            
-            // Metering mode
-            if (data.MeteringMode != NTopic::EMeteringMode::Unspecified) {
-                settings.SetMeteringMode(data.MeteringMode);
-            }
-            
-            // Codecs
-            std::vector<NTopic::ECodec> codecs;
-            if (data.CodecRaw) codecs.push_back(NTopic::ECodec::RAW);
-            if (data.CodecGzip) codecs.push_back(NTopic::ECodec::GZIP);
-            if (data.CodecZstd) codecs.push_back(NTopic::ECodec::ZSTD);
-            if (data.CodecLzop) codecs.push_back(NTopic::ECodec::LZOP);
-            if (!codecs.empty()) {
-                settings.SetSupportedCodecs(codecs);
-            }
-            
-            auto future = TopicClient_->AlterTopic(data.Path, settings);
-            auto result = future.GetValueSync();
-            if (result.IsSuccess()) {
-                NavigateBack();
-                TopicListView_->Refresh();
-            } else {
-                ShowError(result.GetIssues().ToString());
-            }
-        } else {
-            // Create new topic
-            NTopic::TCreateTopicSettings settings;
-            
-            // Partitioning with auto-partitioning
-            NTopic::TAutoPartitioningSettings autoPartSettings(
-                data.AutoPartitioningStrategy,
-                TDuration::Seconds(data.StabilizationWindowSeconds),
-                data.DownUtilizationPercent,
-                data.UpUtilizationPercent
-            );
-            settings.PartitioningSettings(data.MinPartitions, data.MaxPartitions, autoPartSettings);
-            
-            // Retention
-            settings.RetentionPeriod(data.RetentionPeriod);
-            if (data.RetentionStorageMb > 0) {
-                settings.RetentionStorageMb(data.RetentionStorageMb);
-            }
-            
-            // Write performance
-            settings.PartitionWriteSpeedBytesPerSecond(data.WriteSpeedBytesPerSecond);
-            if (data.WriteBurstBytes > 0) {
-                settings.PartitionWriteBurstBytes(data.WriteBurstBytes);
-            }
-            
-            // Metering mode
-            if (data.MeteringMode != NTopic::EMeteringMode::Unspecified) {
-                settings.MeteringMode(data.MeteringMode);
-            }
-            
-            // Codecs
-            if (data.CodecRaw) settings.AppendSupportedCodecs(NTopic::ECodec::RAW);
-            if (data.CodecGzip) settings.AppendSupportedCodecs(NTopic::ECodec::GZIP);
-            if (data.CodecZstd) settings.AppendSupportedCodecs(NTopic::ECodec::ZSTD);
-            if (data.CodecLzop) settings.AppendSupportedCodecs(NTopic::ECodec::LZOP);
-            
-            auto future = TopicClient_->CreateTopic(data.Path, settings);
-            auto result = future.GetValueSync();
-            if (result.IsSuccess()) {
-                NavigateBack();
-                TopicListView_->Refresh();
-            } else {
-                ShowError(result.GetIssues().ToString());
-            }
-        }
-    };
-    
-    TopicForm_->OnCancel = [this]() {
-        NavigateBack();
-    };
+    // - SDK calls (CreateTopic, AlterTopic, DropTopic, RemoveDirectory) moved into form implementations
+    //
+    // TopicForm: create/alter topic SDK calls in HandleSubmit
+    // ConsumerForm/EditConsumerForm: async alter topic for consumers
+    // DropConsumerForm: alter topic to drop consumer
+    // DeleteConfirmForm: drop topic or remove directory
 }
 
 TTopicTuiApp::~TTopicTuiApp() {

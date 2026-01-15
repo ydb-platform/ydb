@@ -319,7 +319,14 @@ bool TSchemeModifier::AddColumnWithTypeInfo(ui32 tid, const TString &name, ui32 
             "Table " << tid << " '" << table->Name << "' column " << id << " '" << name
             << "' expected type " << NScheme::TypeName(typeInfo, pgTypeMod)
             << ", existing type " << NScheme::TypeName(it->second.PType, it->second.PTypeMod));
-        return false;
+
+        bool changes = false;
+        // We check if some properties have changed in the new scheme and update them if needed
+        if (it->second.IsSensitive != isSensitive) {
+            changes |= ChangeTableSetting(tid, it->second.IsSensitive, isSensitive);
+        }
+
+        return changes;
     }
 
     PreserveTable(tid);

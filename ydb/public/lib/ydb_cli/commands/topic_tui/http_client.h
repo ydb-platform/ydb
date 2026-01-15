@@ -43,8 +43,13 @@ struct TTopicDescribeResult {
     TString Path;
     TString Owner;
     TString PathType;
+    TString PathState;
     ui64 PathId = 0;
     ui64 SchemeshardId = 0;
+    ui64 CreateTxId = 0;
+    ui64 ParentPathId = 0;
+    TString Name;
+    bool ChildrenExist = false;
     TInstant CreateTime;
     
     // Tablets from TabletStateInfo
@@ -52,12 +57,43 @@ struct TTopicDescribeResult {
     
     // PersQueue-specific from PersQueueGroup.PQTabletConfig
     ui32 PartitionsCount = 0;
+    ui64 BalancerTabletId = 0;
+    ui64 AlterVersion = 0;
+    ui32 NextPartitionId = 0;
+    ui32 PartitionPerTablet = 0;
+    ui32 TotalGroupCount = 0;
     ui64 RetentionSeconds = 0;
     ui64 RetentionBytes = 0;
     ui64 WriteSpeedBytesPerSec = 0;
     ui64 BurstBytes = 0;
+    ui64 MaxCountInPartition = 0;
+    ui64 SourceIdLifetimeSeconds = 0;
+    ui64 SourceIdMaxCounts = 0;
     TVector<TString> SupportedCodecs;
     TString MeteringMode;  // "REQUEST_UNITS" or "RESERVED_CAPACITY"
+    TString FormatVersion;
+    TString YdbDatabasePath;
+    bool RequireAuthRead = false;
+    bool RequireAuthWrite = false;
+    bool HasRequireAuthRead = false;
+    bool HasRequireAuthWrite = false;
+    
+    struct TPQPartitionInfo {
+        ui32 PartitionId = 0;
+        ui64 TabletId = 0;
+        TString Status;
+    };
+    TVector<TPQPartitionInfo> Partitions;
+    
+    struct TConsumerConfigInfo {
+        TString Name;
+        TString ServiceType;
+        TString Type;
+        ui64 ReadFromTimestampMs = 0;
+        ui32 Version = 0;
+        ui32 FormatVersion = 0;
+    };
+    TVector<TConsumerConfigInfo> Consumers;
     
     // Error if any
     TString Error;
@@ -78,6 +114,7 @@ public:
         ui32 partition,
         ui64 offset,
         ui32 limit = 10,
+        ui64 messageSizeLimit = 4096,
         TDuration timeout = TDuration::Seconds(5));
     
     // Get topic description with tablets
@@ -85,6 +122,9 @@ public:
     TTopicDescribeResult GetTopicDescribe(
         const TString& topicPath,
         bool includeTablets = true,
+        bool includeEnums = false,
+        bool includePartitionStats = false,
+        bool includeSubs = false,
         TDuration timeout = TDuration::Seconds(5));
     
     // Get tablet info for a topic

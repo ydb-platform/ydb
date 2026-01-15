@@ -48,6 +48,7 @@ TVector<TTopicMessage> TViewerHttpClient::ReadMessages(
     ui32 partition,
     ui64 offset,
     ui32 limit,
+    ui64 messageSizeLimit,
     TDuration /* timeout */)
 {
     TVector<TTopicMessage> result;
@@ -72,7 +73,7 @@ TVector<TTopicMessage> TViewerHttpClient::ReadMessages(
          << "&partition=" << partition
          << "&offset=" << offset
          << "&limit=" << limit
-         << "&message_size_limit=1000";
+         << "&message_size_limit=" << messageSizeLimit;
     
     auto json = DoGet(path);
     
@@ -160,6 +161,9 @@ bool TViewerHttpClient::WriteMessage(
 TTopicDescribeResult TViewerHttpClient::GetTopicDescribe(
     const TString& topicPath,
     bool includeTablets,
+    bool includeEnums,
+    bool includePartitionStats,
+    bool includeSubs,
     TDuration /* timeout */)
 {
     TTopicDescribeResult result;
@@ -183,12 +187,62 @@ TTopicDescribeResult TViewerHttpClient::GetTopicDescribe(
     if (includeTablets) {
         path << "&tablets=true";
     }
+    if (includeEnums) {
+        path << "&enums=true";
+    }
+    if (includePartitionStats) {
+        path << "&partition_stats=true";
+    }
+    if (!includeSubs) {
+        path << "&subs=0";
+    }
     
     auto json = DoGet(path);
     
     // Store raw JSON for debug
     result.RawJson = NJson::WriteJson(json, true);
     result.Path = topicPath;
+
+    auto getUint64 = [](const NJson::TJsonValue& value, ui64& out) -> bool {
+        try {
+            if (value.IsUInteger()) {
+                out = value.GetUInteger();
+                return true;
+            }
+            if (value.IsInteger()) {
+                out = static_cast<ui64>(value.GetInteger());
+                return true;
+            }
+            if (value.IsString()) {
+                out = FromString<ui64>(value.GetString());
+                return true;
+            }
+        } catch (const std::exception&) {
+        }
+        return false;
+    };
+    
+    auto getUint32 = [&getUint64](const NJson::TJsonValue& value, ui32& out) -> bool {
+        ui64 tmp = 0;
+        if (!getUint64(value, tmp)) {
+            return false;
+        }
+        out = static_cast<ui32>(tmp);
+        return true;
+    };
+    
+    auto getString = [](const NJson::TJsonValue& value) -> TString {
+        if (value.IsString()) {
+            return value.GetString();
+        }
+        if (value.IsInteger()) {
+            return ToString(value.GetInteger());
+        }
+        if (value.IsUInteger()) {
+            return ToString(value.GetUInteger());
+        }
+        return {};
+    };
     
     // Parse PathDescription.Self for basic info
     if (json.Has("PathDescription")) {
@@ -202,15 +256,33 @@ TTopicDescribeResult TViewerHttpClient::GetTopicDescribe(
             if (self.Has("PathType")) {
                 result.PathType = self["PathType"].GetString();
             }
+            if (self.Has("PathState")) {
+                result.PathState = self["PathState"].GetString();
+            }
             if (self.Has("PathId")) {
-                result.PathId = self["PathId"].GetUInteger();
+                getUint64(self["PathId"], result.PathId);
             }
             if (self.Has("SchemeshardId")) {
-                result.SchemeshardId = self["SchemeshardId"].GetUInteger();
+                getUint64(self["SchemeshardId"], result.SchemeshardId);
+            }
+            if (self.Has("CreateTxId")) {
+                getUint64(self["CreateTxId"], result.CreateTxId);
+            }
+            if (self.Has("ParentPathId")) {
+                getUint64(self["ParentPathId"], result.ParentPathId);
+            }
+            if (self.Has("Name")) {
+                result.Name = self["Name"].GetString();
+            }
+            if (self.Has("ChildrenExist")) {
+                result.ChildrenExist = self["ChildrenExist"].GetBoolean();
             }
             if (self.Has("CreateStep")) {
                 // CreateStep is in microseconds
-                result.CreateTime = TInstant::MicroSeconds(self["CreateStep"].GetUInteger());
+                ui64 createStep = 0;
+                if (getUint64(self["CreateStep"], createStep)) {
+                    result.CreateTime = TInstant::MicroSeconds(createStep);
+                }
             }
         }
         
@@ -219,43 +291,133 @@ TTopicDescribeResult TViewerHttpClient::GetTopicDescribe(
             const auto& pqGroup = pathDesc["PersQueueGroup"];
             if (pqGroup.Has("Partitions") && pqGroup["Partitions"].IsArray()) {
                 result.PartitionsCount = pqGroup["Partitions"].GetArray().size();
+                result.Partitions.clear();
+                for (const auto& partitionJson : pqGroup["Partitions"].GetArray()) {
+                    TTopicDescribeResult::TPQPartitionInfo partition;
+                    if (partitionJson.Has("PartitionId")) {
+                        getUint32(partitionJson["PartitionId"], partition.PartitionId);
+                    }
+                    if (partitionJson.Has("TabletId")) {
+                        getUint64(partitionJson["TabletId"], partition.TabletId);
+                    }
+                    if (partitionJson.Has("Status")) {
+                        partition.Status = partitionJson["Status"].GetString();
+                    }
+                    result.Partitions.push_back(std::move(partition));
+                }
+            }
+            if (pqGroup.Has("BalancerTabletID")) {
+                getUint64(pqGroup["BalancerTabletID"], result.BalancerTabletId);
+            }
+            if (pqGroup.Has("AlterVersion")) {
+                getUint64(pqGroup["AlterVersion"], result.AlterVersion);
+            }
+            if (pqGroup.Has("NextPartitionId")) {
+                getUint32(pqGroup["NextPartitionId"], result.NextPartitionId);
+            }
+            if (pqGroup.Has("PartitionPerTablet")) {
+                getUint32(pqGroup["PartitionPerTablet"], result.PartitionPerTablet);
+            }
+            if (pqGroup.Has("TotalGroupCount")) {
+                getUint32(pqGroup["TotalGroupCount"], result.TotalGroupCount);
             }
             
             // Parse PQTabletConfig for detailed settings
             if (pqGroup.Has("PQTabletConfig")) {
                 const auto& config = pqGroup["PQTabletConfig"];
                 
+                if (config.Has("RequireAuthRead")) {
+                    result.RequireAuthRead = config["RequireAuthRead"].GetBoolean();
+                    result.HasRequireAuthRead = true;
+                }
+                if (config.Has("RequireAuthWrite")) {
+                    result.RequireAuthWrite = config["RequireAuthWrite"].GetBoolean();
+                    result.HasRequireAuthWrite = true;
+                }
+                if (config.Has("FormatVersion")) {
+                    result.FormatVersion = getString(config["FormatVersion"]);
+                }
+                if (config.Has("YdbDatabasePath")) {
+                    result.YdbDatabasePath = config["YdbDatabasePath"].GetString();
+                }
+                
                 if (config.Has("PartitionConfig")) {
                     const auto& partConfig = config["PartitionConfig"];
                     if (partConfig.Has("LifetimeSeconds")) {
-                        result.RetentionSeconds = partConfig["LifetimeSeconds"].GetUInteger();
+                        getUint64(partConfig["LifetimeSeconds"], result.RetentionSeconds);
                     }
                     if (partConfig.Has("StorageLimitBytes")) {
-                        result.RetentionBytes = partConfig["StorageLimitBytes"].GetUInteger();
+                        getUint64(partConfig["StorageLimitBytes"], result.RetentionBytes);
                     }
                     if (partConfig.Has("WriteSpeedInBytesPerSecond")) {
-                        result.WriteSpeedBytesPerSec = partConfig["WriteSpeedInBytesPerSecond"].GetUInteger();
+                        getUint64(partConfig["WriteSpeedInBytesPerSecond"], result.WriteSpeedBytesPerSec);
                     }
                     if (partConfig.Has("BurstSize")) {
-                        result.BurstBytes = partConfig["BurstSize"].GetUInteger();
+                        getUint64(partConfig["BurstSize"], result.BurstBytes);
+                    }
+                    if (partConfig.Has("MaxCountInPartition")) {
+                        getUint64(partConfig["MaxCountInPartition"], result.MaxCountInPartition);
+                    }
+                    if (partConfig.Has("SourceIdLifetimeSeconds")) {
+                        getUint64(partConfig["SourceIdLifetimeSeconds"], result.SourceIdLifetimeSeconds);
+                    }
+                    if (partConfig.Has("SourceIdMaxCounts")) {
+                        getUint64(partConfig["SourceIdMaxCounts"], result.SourceIdMaxCounts);
                     }
                 }
                 
-                if (config.Has("Codecs") && config["Codecs"].Has("Ids") && config["Codecs"]["Ids"].IsArray()) {
-                    for (const auto& codecId : config["Codecs"]["Ids"].GetArray()) {
-                        ui32 id = codecId.GetUInteger();
-                        switch (id) {
-                            case 0: result.SupportedCodecs.push_back("raw"); break;
-                            case 1: result.SupportedCodecs.push_back("gzip"); break;
-                            case 2: result.SupportedCodecs.push_back("lzop"); break;
-                            case 3: result.SupportedCodecs.push_back("zstd"); break;
-                            default: result.SupportedCodecs.push_back(ToString(id)); break;
+                if (config.Has("Codecs")) {
+                    const auto& codecs = config["Codecs"];
+                    if (codecs.Has("Codecs") && codecs["Codecs"].IsArray()) {
+                        for (const auto& codecName : codecs["Codecs"].GetArray()) {
+                            result.SupportedCodecs.push_back(codecName.GetString());
+                        }
+                    } else if (codecs.Has("Ids") && codecs["Ids"].IsArray()) {
+                        for (const auto& codecId : codecs["Ids"].GetArray()) {
+                            ui32 id = 0;
+                            if (!getUint32(codecId, id)) {
+                                result.SupportedCodecs.push_back("unknown");
+                                continue;
+                            }
+                            switch (id) {
+                                case 0: result.SupportedCodecs.push_back("raw"); break;
+                                case 1: result.SupportedCodecs.push_back("gzip"); break;
+                                case 2: result.SupportedCodecs.push_back("lzop"); break;
+                                case 3: result.SupportedCodecs.push_back("zstd"); break;
+                                default: result.SupportedCodecs.push_back(ToString(id)); break;
+                            }
                         }
                     }
                 }
                 
                 if (config.Has("MeteringMode")) {
                     result.MeteringMode = config["MeteringMode"].GetString();
+                }
+                
+                if (config.Has("Consumers") && config["Consumers"].IsArray()) {
+                    result.Consumers.clear();
+                    for (const auto& consumerJson : config["Consumers"].GetArray()) {
+                        TTopicDescribeResult::TConsumerConfigInfo consumer;
+                        if (consumerJson.Has("Name")) {
+                            consumer.Name = consumerJson["Name"].GetString();
+                        }
+                        if (consumerJson.Has("ServiceType")) {
+                            consumer.ServiceType = consumerJson["ServiceType"].GetString();
+                        }
+                        if (consumerJson.Has("Type")) {
+                            consumer.Type = consumerJson["Type"].GetString();
+                        }
+                        if (consumerJson.Has("ReadFromTimestampsMs")) {
+                            getUint64(consumerJson["ReadFromTimestampsMs"], consumer.ReadFromTimestampMs);
+                        }
+                        if (consumerJson.Has("Version")) {
+                            getUint32(consumerJson["Version"], consumer.Version);
+                        }
+                        if (consumerJson.Has("FormatVersion")) {
+                            getUint32(consumerJson["FormatVersion"], consumer.FormatVersion);
+                        }
+                        result.Consumers.push_back(std::move(consumer));
+                    }
                 }
             }
         }
@@ -266,7 +428,7 @@ TTopicDescribeResult TViewerHttpClient::GetTopicDescribe(
                 TTabletInfo tablet;
                 
                 if (tabletJson.Has("TabletId")) {
-                    tablet.TabletId = tabletJson["TabletId"].GetUInteger();
+                    getUint64(tabletJson["TabletId"], tablet.TabletId);
                 }
                 if (tabletJson.Has("Type")) {
                     tablet.Type = tabletJson["Type"].GetString();
@@ -275,17 +437,20 @@ TTopicDescribeResult TViewerHttpClient::GetTopicDescribe(
                     tablet.State = tabletJson["State"].GetString();
                 }
                 if (tabletJson.Has("NodeId")) {
-                    tablet.NodeId = tabletJson["NodeId"].GetUInteger();
+                    getUint32(tabletJson["NodeId"], tablet.NodeId);
                 }
                 if (tabletJson.Has("FQDN")) {
                     tablet.NodeFQDN = tabletJson["FQDN"].GetString();
                 }
                 if (tabletJson.Has("Generation")) {
-                    tablet.Generation = tabletJson["Generation"].GetUInteger();
+                    getUint64(tabletJson["Generation"], tablet.Generation);
                 }
                 if (tabletJson.Has("ChangeTime")) {
                     // ChangeTime is in milliseconds
-                    tablet.ChangeTime = TInstant::MilliSeconds(tabletJson["ChangeTime"].GetUInteger());
+                    ui64 changeTime = 0;
+                    if (getUint64(tabletJson["ChangeTime"], changeTime)) {
+                        tablet.ChangeTime = TInstant::MilliSeconds(changeTime);
+                    }
                 }
                 
                 result.Tablets.push_back(std::move(tablet));

@@ -3900,12 +3900,11 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
 void TPersQueue::AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
                                 ui64 txId)
 {
-    TString key = GetTxKey(txId);
     auto range = request.AddCmdDeleteRange()->MutableRange();
-    range->SetFrom(key);
+    range->SetFrom(GetTxKey(txId));
     range->SetIncludeFrom(true);
-    range->SetTo(key);
-    range->SetIncludeTo(true);
+    range->SetTo(GetTxKey(txId + 1));
+    range->SetIncludeTo(false);
 }
 
 void TPersQueue::ProcessConfigTx(const TActorContext& ctx,
@@ -4159,7 +4158,7 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
 {
     PQ_LOG_T("Commit TxId " << tx.TxId);
 
-    TMaybe<NKikimrPQ::TTransaction> serializedTx = tx.Serialize(NKikimrPQ::TTransaction::EXECUTED);
+    const auto serializedTx = tx.Serialize(NKikimrPQ::TTransaction::EXECUTED);
     TMaybe<NKikimrPQ::TPQTabletConfig> tabletConfig;
 
     if (tx.Kind == NKikimrPQ::TTransaction::KIND_CONFIG) {
@@ -4171,11 +4170,7 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
         auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, graph, partitionId);
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId, explicitMessageGroups);
 
-        if (serializedTx.Defined()) {
-            event->SerializedTx = std::move(*serializedTx);
-
-            serializedTx = Nothing();
-        }
+        event->SerializedTx = serializedTx;
 
         if (tabletConfig.Defined()) {
             event->TabletConfig = std::move(*tabletConfig);

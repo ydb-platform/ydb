@@ -84,7 +84,7 @@ struct TDistributedTransaction {
 
     static void SetDecision(NKikimrTx::TReadSetData::EDecision& var, NKikimrTx::TReadSetData::EDecision value);
 
-    TString GetKey() const;
+    TString GetKey(TMaybe<ui32> partition = Nothing()) const;
 
     void AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx);
     void AddCmdWriteConfigTx(NKikimrPQ::TTransaction& tx);

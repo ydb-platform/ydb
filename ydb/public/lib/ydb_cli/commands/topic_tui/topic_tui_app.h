@@ -1,6 +1,7 @@
 #pragma once
 
 #include "app_interface.h"
+#include "view_registry.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/screen_interactive.hpp>
@@ -102,7 +103,11 @@ private:
     // State
     TAppState State_;
     
-    // Views
+    // View Registry - manages all views and forms
+    TViewRegistry ViewRegistry_;
+    
+    // Typed view accessors (for views that need specific method calls)
+    // These are aliases to views in the registry
     std::shared_ptr<TTopicListView> TopicListView_;
     std::shared_ptr<TTopicDetailsView> TopicDetailsView_;
     std::shared_ptr<TConsumerView> ConsumerView_;

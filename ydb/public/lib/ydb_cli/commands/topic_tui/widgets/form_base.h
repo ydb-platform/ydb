@@ -1,6 +1,7 @@
 #pragma once
 
 #include "theme.h"
+#include "../view_registry.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
@@ -12,7 +13,6 @@
 namespace NYdb::NConsoleClient {
 
 class ITuiApp;
-enum class EViewType;
 
 // =============================================================================
 // TFormBase - Base class for all modal forms
@@ -33,14 +33,14 @@ enum class EViewType;
 // - HandleSubmit() - validation and submission logic
 //
 
-class TFormBase {
+class TFormBase : public IViewComponent {
 public:
     explicit TFormBase(ITuiApp& app);
-    virtual ~TFormBase() = default;
+    ~TFormBase() override = default;
     
     // Build the complete form component
     // This is a template method - subclasses should NOT override
-    ftxui::Component Build();
+    ftxui::Component Build() override;
     
     // Reset form to initial state
     virtual void Reset();

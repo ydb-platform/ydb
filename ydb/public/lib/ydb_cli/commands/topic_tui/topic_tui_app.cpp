@@ -36,7 +36,7 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
 {
     State_.CurrentPath = startPath;
     
-    // Create views
+    // Create views and register in registry
     TopicListView_ = std::make_shared<TTopicListView>(*this);
     TopicDetailsView_ = std::make_shared<TTopicDetailsView>(*this);
     ConsumerView_ = std::make_shared<TConsumerView>(*this);
@@ -50,20 +50,22 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     EditConsumerForm_ = std::make_shared<TEditConsumerForm>(*this);
     OffsetForm_ = std::make_shared<TOffsetForm>(*this);
     
-    // Note: All views now navigate directly via ITuiApp interface:
-    // - TopicListView: topic/directory selection, CRUD operations
-    // - TopicDetailsView: consumer selection, messages, write, add/drop/edit consumer
-    // - ConsumerView: drop consumer
-    //
-    // Note: All forms now use ITuiApp interface directly:
-    // - TFormBase handles Escape key with NavigateBack() automatically
-    // - Forms call NavigateBack() and RequestRefresh() in their HandleSubmit/CheckAsyncCompletion
-    // - SDK calls (CreateTopic, AlterTopic, DropTopic, RemoveDirectory) moved into form implementations
-    //
-    // TopicForm: create/alter topic SDK calls in HandleSubmit
-    // ConsumerForm/EditConsumerForm: async alter topic for consumers
-    // DropConsumerForm: alter topic to drop consumer
-    // DeleteConfirmForm: drop topic or remove directory
+    // Register all views/forms in registry for unified access
+    ViewRegistry_.Register(EViewType::TopicList, TopicListView_);
+    ViewRegistry_.Register(EViewType::TopicDetails, TopicDetailsView_);
+    ViewRegistry_.Register(EViewType::ConsumerDetails, ConsumerView_);
+    ViewRegistry_.Register(EViewType::MessagePreview, MessagePreviewView_);
+    ViewRegistry_.Register(EViewType::Charts, ChartsView_);
+    ViewRegistry_.Register(EViewType::TopicForm, TopicForm_);
+    ViewRegistry_.Register(EViewType::DeleteConfirm, DeleteConfirmForm_);
+    ViewRegistry_.Register(EViewType::ConsumerForm, ConsumerForm_);
+    ViewRegistry_.Register(EViewType::WriteMessage, WriteMessageForm_);
+    ViewRegistry_.Register(EViewType::DropConsumerConfirm, DropConsumerForm_);
+    ViewRegistry_.Register(EViewType::EditConsumer, EditConsumerForm_);
+    ViewRegistry_.Register(EViewType::OffsetForm, OffsetForm_);
+    
+    // Note: All views now navigate directly via ITuiApp interface
+    // Note: All forms now use ITuiApp interface directly
 }
 
 TTopicTuiApp::~TTopicTuiApp() {

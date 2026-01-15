@@ -1,22 +1,17 @@
 #pragma once
 
-#include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
+#include "../view_registry.h"
 
 namespace NYdb::NConsoleClient {
 
-class ITuiView {
+class ITuiView : public IViewComponent {
 public:
-    virtual ~ITuiView() = default;
+    ~ITuiView() override = default;
 
-    // Build the FTXUI component for this view
-    virtual ftxui::Component Build() = 0;
-    
-    // Lifecycle hooks
-    virtual void OnActivate() {}
-    virtual void OnDeactivate() {}
-    
-    // Common actions
-    virtual void Refresh() {}
+    // Build() inherited from IViewComponent
+    // OnActivate() inherited from IViewComponent  
+    // OnDeactivate() inherited from IViewComponent
+    // Refresh() inherited from IViewComponent
 };
 
 } // namespace NYdb::NConsoleClient

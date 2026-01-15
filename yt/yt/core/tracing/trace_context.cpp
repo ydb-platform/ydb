@@ -435,7 +435,6 @@ void TTraceContext::AddTag(const std::string& tagKey, const std::string& tagValu
     }
 
     auto guard = Guard(Lock_);
-    YT_ASSERT(std::ranges::none_of(Tags_, [&] (const auto& tag) { return tag.first == tagKey; }));
     Tags_.emplace_back(tagKey, tagValue);
 }
 

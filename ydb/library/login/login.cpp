@@ -1023,7 +1023,6 @@ bool TLoginProvider::TImpl::SaslScramVerifyHash(const TString& hashName, const T
 
     std::string error;
     bool res = NSasl::VerifyClientProof(hashName, decodedClientProof, storedKey, authMessage, error);
-    Y_ENSURE(error.empty());
     return res;
 }
 
@@ -1034,7 +1033,6 @@ TString TLoginProvider::TImpl::SaslScramComputeServerSignature(const TString& ha
     std::string error;
     std::string serverSignature;
     NSasl::ComputeServerSignature(hashName, serverKey, authMessage, serverSignature, error);
-    Y_ENSURE(error.empty());
     return Base64Encode(serverSignature);
 }
 

@@ -66,8 +66,6 @@ bool ComputeServerKey(const std::string& hashType,
     const std::string& password, const std::string& salt, ui32 iterationsCount,
     std::string& serverKey, std::string& errorText);
 
-std::string PrepareSaslPlainAuthMsg(const std::string& authenticationId, const std::string& password,
-    const std::string& authorizationId = "");
 bool ComputeServerSignature(const std::string& hashType, const std::string& serverKey, const std::string& authMessage,
     std::string& serverSignature, std::string& errorText);
 

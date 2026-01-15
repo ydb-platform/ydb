@@ -6,6 +6,7 @@ PEERDIR(
 )
 
 SRCS(
+    plain.cpp
     saslprep.cpp
     scram.cpp
 )

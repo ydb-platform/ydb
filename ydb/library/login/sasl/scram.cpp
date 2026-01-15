@@ -376,16 +376,6 @@ bool ComputeServerKey(const std::string& hashType,
     return true;
 }
 
-std::string PrepareSaslPlainAuthMsg(const std::string& authenticationId, const std::string& password,
-    const std::string& authorizationId) {
-    std::string res;
-    res.reserve(authenticationId.size() + password.size() + authorizationId.size() + 2);
-    res += authorizationId;
-    res.push_back('\0');
-    res += authenticationId;
-    res.push_back('\0');
-    res += password;
-    return res;
 bool ComputeServerSignature(const std::string& hashType, const std::string& serverKey, const std::string& authMessage,
     std::string& serverSignature, std::string& errorText)
 {

@@ -112,6 +112,7 @@ private:
     }
 
     virtual void SendError(NKikimrIssues::TIssuesIds::EIssueCode issueCode, const std::string& message,
+        [[maybe_unused]] NLogin::NSasl::EScramServerError scramErrorCode = NLogin::NSasl::EScramServerError::OtherError,
         [[maybe_unused]] const std::string& reason = "") const override final
     {
         auto response = std::make_unique<TEvSasl::TEvSaslPlainLoginResponse>();

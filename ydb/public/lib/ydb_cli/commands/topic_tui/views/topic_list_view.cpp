@@ -64,8 +64,48 @@ TTopicListView::TTopicListView(ITuiApp& app)
     };
     
     Table_.OnSortChanged = [this](int /*col*/, bool /*ascending*/) {
+        std::optional<TString> selectedPath;
+        int selectedRow = Table_.GetSelectedRow();
+        if (SearchMode_) {
+            if (selectedRow >= 0 && selectedRow < static_cast<int>(FilteredIndices_.size())) {
+                size_t entryIdx = FilteredIndices_[selectedRow];
+                if (entryIdx < Entries_.size()) {
+                    selectedPath = Entries_[entryIdx].FullPath;
+                }
+            }
+        } else if (selectedRow >= 0 && selectedRow < static_cast<int>(Entries_.size())) {
+            selectedPath = Entries_[selectedRow].FullPath;
+        }
+
         SortEntries();
-        Table_.SetSelectedRow(0); // Reset selection on sort
+        if (SearchMode_) {
+            ApplySearchFilter();
+            if (selectedPath) {
+                int newRow = -1;
+                for (size_t i = 0; i < FilteredIndices_.size(); ++i) {
+                    size_t entryIdx = FilteredIndices_[i];
+                    if (entryIdx < Entries_.size() && Entries_[entryIdx].FullPath == *selectedPath) {
+                        newRow = static_cast<int>(i);
+                        break;
+                    }
+                }
+                if (newRow >= 0) {
+                    Table_.SetSelectedRow(newRow);
+                    SearchSelectedIndex_ = newRow;
+                }
+            }
+        } else {
+            PopulateTable();
+            if (selectedPath) {
+                for (size_t i = 0; i < Entries_.size(); ++i) {
+                    if (Entries_[i].FullPath == *selectedPath) {
+                        Table_.SetSelectedRow(static_cast<int>(i));
+                        CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = static_cast<int>(i);
+                        break;
+                    }
+                }
+            }
+        }
     };
 
     // Fix: Persist cursor position on move (so refresh doesn't jump back)
@@ -266,6 +306,17 @@ Component TTopicListView::Build() {
         
         return content;
     }) | CatchEvent([this](Event event) {
+        auto updateListMode = [this]() {
+            auto& state = App_.GetState();
+            if (GoToPathMode_) {
+                state.TopicListMode = ETopicListMode::GoToPath;
+            } else if (SearchMode_) {
+                state.TopicListMode = ETopicListMode::Search;
+            } else {
+                state.TopicListMode = ETopicListMode::Normal;
+            }
+        };
+
         // Set focus state FIRST (before any event handling)
         // Keep focused during search mode so selection highlight remains visible
         // Only unfocus during go-to-path mode (popup is shown)
@@ -275,6 +326,8 @@ Component TTopicListView::Build() {
         if (App_.GetState().CurrentView != EViewType::TopicList) {
             return false;
         }
+
+        updateListMode();
         
         // Ignore events while loading
         if (Loading_) {
@@ -289,6 +342,7 @@ Component TTopicListView::Build() {
                 GoToPathInput_.clear();
                 PathCompletions_.clear();
                 CompletionIndex_ = -1;
+                updateListMode();
                 return true;
             }
             if (event == Event::Return) {
@@ -307,6 +361,7 @@ Component TTopicListView::Build() {
                 GoToPathInput_.clear();
                 PathCompletions_.clear();
                 CompletionIndex_ = -1;
+                updateListMode();
                 
                 if (!targetPath.empty()) {
                     // Handle go-to-path navigation with deep-link parsing
@@ -421,6 +476,7 @@ Component TTopicListView::Build() {
                 App_.GetState().InputCaptureActive = false;
                 SearchQuery_.clear();
                 ClearSearchFilter();
+                updateListMode();
                 return true;
             }
             if (event == Event::Return) {
@@ -435,6 +491,7 @@ Component TTopicListView::Build() {
                         App_.GetState().InputCaptureActive = false;
                         SearchQuery_.clear();
                         ClearSearchFilter();
+                        updateListMode();
                         
                         if (entry.IsDirectory) {
                             CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = static_cast<int>(realIndex);
@@ -495,6 +552,7 @@ Component TTopicListView::Build() {
             SearchQuery_.clear();
             SearchSelectedIndex_ = 0;
             FilteredIndices_ = GetFilteredIndices();  // Start with all entries
+            updateListMode();
             return true;
         }
         
@@ -509,6 +567,7 @@ Component TTopicListView::Build() {
             }
             PathCompletions_ = GetPathCompletions(GoToPathInput_);
             CompletionIndex_ = -1;
+            updateListMode();
             return true;
         }
         
@@ -1615,7 +1674,8 @@ TString TTopicListView::GetSortColumnName() const {
     return "Name";
 }
 
+TString TTopicListView::GetSortDirectionArrow() const {
+    return Table_.IsSortAscending() ? "↑" : "↓";
+}
+
 } // namespace NYdb::NConsoleClient
-
-
-

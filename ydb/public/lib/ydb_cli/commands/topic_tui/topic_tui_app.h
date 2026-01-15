@@ -148,6 +148,7 @@ private:
     ftxui::Component ConsumerComponent_;
     ftxui::Component TopicFormComponent_;
     ftxui::Component DeleteConfirmComponent_;
+    ftxui::Component OffsetFormComponent_;
     
     // Shutdown tracking
     std::atomic<bool> Exiting_{false};

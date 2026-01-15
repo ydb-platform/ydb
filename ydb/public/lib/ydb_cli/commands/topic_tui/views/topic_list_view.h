@@ -78,6 +78,7 @@ public:
     ftxui::Component Build() override;
     void Refresh() override;
     void CheckAsyncCompletion();  // Called from render to check if async op finished
+    TString GetSortDirectionArrow() const;
     
     // Testable helper for glob patching
     static bool GlobMatch(const char* pattern, const char* text);

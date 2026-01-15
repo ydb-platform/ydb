@@ -38,6 +38,9 @@ TTopicDetailsView::TTopicDetailsView(ITuiApp& app)
     , PartitionsTable_(CreatePartitionsTableColumns())
     , ConsumersTable_(CreateConsumersTableColumns())
 {
+    PartitionsTable_.SetHorizontalScrollEnabled(true);
+    ConsumersTable_.SetHorizontalScrollEnabled(true);
+
     // Set up partition table selection callback
     PartitionsTable_.OnSelect = [this](int row) {
         if (row >= 0 && row < static_cast<int>(Partitions_.size())) {
@@ -51,6 +54,14 @@ TTopicDetailsView::TTopicDetailsView(ITuiApp& app)
     PartitionsTable_.OnSortChanged = [this](int col, bool asc) {
         SortPartitions(col, asc);
         PopulatePartitionsTable();
+        App_.PostRefresh();
+    };
+
+    // Keep selected partition in sync with table navigation
+    PartitionsTable_.OnNavigate = [this](int row) {
+        if (row >= 0 && row < static_cast<int>(Partitions_.size())) {
+            App_.GetState().SelectedPartition = Partitions_[row].PartitionId;
+        }
     };
     
     // Set up consumer table selection callback
@@ -66,9 +77,11 @@ TTopicDetailsView::TTopicDetailsView(ITuiApp& app)
     ConsumersTable_.OnSortChanged = [this](int col, bool asc) {
         SortConsumers(col, asc);
         PopulateConsumersTable();
+        App_.PostRefresh();
     };
     
     StopFlag_ = std::make_shared<std::atomic<bool>>(false);
+    App_.GetState().TopicDetailsFocusPanel = FocusPanel_;
 }
 
 TTopicDetailsView::~TTopicDetailsView() {
@@ -144,6 +157,8 @@ Component TTopicDetailsView::Build() {
         if (App_.GetState().CurrentView != EViewType::TopicDetails) {
             return false;
         }
+        
+        int previousFocus = FocusPanel_;
         
         // TopicInfo view event handling
         if (App_.GetState().CurrentView == EViewType::TopicInfo) {
@@ -246,20 +261,34 @@ Component TTopicDetailsView::Build() {
         // Tab switches between panels
         if (event == Event::Tab) {
             FocusPanel_ = (FocusPanel_ + 1) % 2;
+            App_.GetState().TopicDetailsFocusPanel = FocusPanel_;
             return true;
         }
         
         // Delegate navigation to the focused table
         if (FocusPanel_ == 0 && !Partitions_.empty()) {
             if (PartitionsTable_.HandleEvent(event)) {
+                App_.GetState().TopicDetailsFocusPanel = FocusPanel_;
                 return true;
             }
         } else if (FocusPanel_ == 1 && !Consumers_.empty()) {
             if (ConsumersTable_.HandleEvent(event)) {
+                App_.GetState().TopicDetailsFocusPanel = FocusPanel_;
                 return true;
             }
         }
         
+        if (event == Event::Character('s') || event == Event::Character('S')) {
+            if (FocusPanel_ == 0) {
+                PartitionsTable_.SetSort(PartitionsTable_.GetSortColumn(),
+                                         !PartitionsTable_.IsSortAscending());
+            } else {
+                ConsumersTable_.SetSort(ConsumersTable_.GetSortColumn(),
+                                        !ConsumersTable_.IsSortAscending());
+            }
+            return true;
+        }
+
         // Custom key handlers
         if (event == Event::Character('w') || event == Event::Character('W')) {
             // Write message via ITuiApp interface
@@ -301,6 +330,9 @@ Component TTopicDetailsView::Build() {
             return true;
         }
         
+        if (previousFocus != FocusPanel_) {
+            App_.GetState().TopicDetailsFocusPanel = FocusPanel_;
+        }
         return false;
     }) | Renderer([this, splitContainer](Element) {
         CheckAsyncCompletion();
@@ -932,7 +964,7 @@ Element TTopicDetailsView::RenderTabletsView() {
     }
     
     lines.push_back(separator());
-    lines.push_back(text(" [t/Esc] Close  [↑↓] Scroll ") | dim | center);
+    lines.push_back(text(" [t/Esc] Close  [↑↓] Scroll  [r] Refresh ") | dim | center);
     
     // Clamp scroll position to valid range
     int maxScroll = std::max(0, static_cast<int>(lines.size()) - 15);

@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 #include <future>
 #include <atomic>
@@ -44,6 +45,9 @@ private:
     bool CodecRaw_ = true;
     bool CodecGzip_ = true;
     bool CodecZstd_ = false;
+    bool CodecLzop_ = false;
+
+    TVector<NTopic::ECodec> TopicSupportedCodecs_;
     
     // Async state
     std::future<TStatus> SubmitFuture_;
@@ -54,6 +58,7 @@ private:
     ftxui::Component RawCheckbox_;
     ftxui::Component GzipCheckbox_;
     ftxui::Component ZstdCheckbox_;
+    ftxui::Component LzopCheckbox_;
 };
 
 } // namespace NYdb::NConsoleClient

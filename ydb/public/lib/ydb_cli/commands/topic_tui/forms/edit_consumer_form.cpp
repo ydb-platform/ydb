@@ -23,10 +23,11 @@ Component TEditConsumerForm::BuildContainer() {
     RawCheckbox_ = Checkbox(" RAW", &CodecRaw_);
     GzipCheckbox_ = Checkbox(" GZIP", &CodecGzip_);
     ZstdCheckbox_ = Checkbox(" ZSTD", &CodecZstd_);
+    LzopCheckbox_ = Checkbox(" LZOP", &CodecLzop_);
     
     return Container::Vertical({
         ImportantCheckbox_,
-        Container::Horizontal({RawCheckbox_, GzipCheckbox_, ZstdCheckbox_})
+        Container::Horizontal({RawCheckbox_, GzipCheckbox_, ZstdCheckbox_, LzopCheckbox_})
     });
 }
 
@@ -50,7 +51,9 @@ Element TEditConsumerForm::RenderContent() {
             text(" "),
             GzipCheckbox_->Render(),
             text(" "),
-            ZstdCheckbox_->Render()
+            ZstdCheckbox_->Render(),
+            text(" "),
+            LzopCheckbox_->Render()
         })
     });
 }
@@ -70,12 +73,13 @@ void TEditConsumerForm::DoAsyncSubmit() {
     bool codecRaw = CodecRaw_;
     bool codecGzip = CodecGzip_;
     bool codecZstd = CodecZstd_;
+    bool codecLzop = CodecLzop_;
     TString topicPath = TopicPath_;
     TString consumerName = ConsumerName_;
     auto* topicClient = &GetApp().GetTopicClient();
     
     SubmitFuture_ = std::async(std::launch::async, 
-        [topicPath, topicClient, consumerName, important, codecRaw, codecGzip, codecZstd]() -> TStatus {
+        [topicPath, topicClient, consumerName, important, codecRaw, codecGzip, codecZstd, codecLzop]() -> TStatus {
             NTopic::TAlterTopicSettings settings;
             
             auto& consumer = settings.BeginAlterConsumer(std::string(consumerName.c_str()));
@@ -85,6 +89,7 @@ void TEditConsumerForm::DoAsyncSubmit() {
             if (codecRaw) codecs.push_back(NTopic::ECodec::RAW);
             if (codecGzip) codecs.push_back(NTopic::ECodec::GZIP);
             if (codecZstd) codecs.push_back(NTopic::ECodec::ZSTD);
+            if (codecLzop) codecs.push_back(NTopic::ECodec::LZOP);
             consumer.SetSupportedCodecs(codecs);
             consumer.EndAlterConsumer();
             
@@ -134,11 +139,13 @@ void TEditConsumerForm::SetConsumer(const TString& topicPath, const TString& con
         CodecRaw_ = false;
         CodecGzip_ = false;
         CodecZstd_ = false;
+        CodecLzop_ = false;
         for (auto codec : consumer.GetSupportedCodecs()) {
             switch (codec) {
                 case NTopic::ECodec::RAW: CodecRaw_ = true; break;
                 case NTopic::ECodec::GZIP: CodecGzip_ = true; break;
                 case NTopic::ECodec::ZSTD: CodecZstd_ = true; break;
+                case NTopic::ECodec::LZOP: CodecLzop_ = true; break;
                 default: break;
             }
         }
@@ -151,6 +158,7 @@ void TEditConsumerForm::Reset() {
     CodecRaw_ = true;
     CodecGzip_ = true;
     CodecZstd_ = false;
+    CodecLzop_ = false;
 }
 
 } // namespace NYdb::NConsoleClient

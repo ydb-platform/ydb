@@ -35,6 +35,8 @@ TConsumerView::TConsumerView(ITuiApp& app)
     : App_(app)
     , Table_(CreateConsumerTableColumns())
 {
+    Table_.SetHorizontalScrollEnabled(true);
+
     // Set up table callbacks
     Table_.OnSelect = [](int) {
         // Future: could navigate to message preview for this partition
@@ -44,6 +46,7 @@ TConsumerView::TConsumerView(ITuiApp& app)
     Table_.OnSortChanged = [this](int col, bool asc) {
         SortPartitions(col, asc);
         PopulateTable();
+        App_.PostRefresh();
     };
 }
 
@@ -105,6 +108,11 @@ Component TConsumerView::Build() {
         if (event == Event::Character('d') || event == Event::Character('D')) {
             App_.SetDropConsumerTarget(TopicPath_, ConsumerName_);
             App_.NavigateTo(EViewType::DropConsumerConfirm);
+            return true;
+        }
+
+        if (event == Event::Character('s') || event == Event::Character('S')) {
+            Table_.SetSort(Table_.GetSortColumn(), !Table_.IsSortAscending());
             return true;
         }
         

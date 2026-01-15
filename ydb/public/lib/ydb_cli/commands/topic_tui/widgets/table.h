@@ -153,6 +153,9 @@ public:
     void SetSort(int column, bool ascending);
     void ToggleSort(int column);  // Cycle: none -> asc -> desc -> none
     
+    // ----- Horizontal scrolling -----
+    void SetHorizontalScrollEnabled(bool enabled);
+
     // ----- Callbacks -----
     
     std::function<void(int row)> OnSelect;   // Enter key or click
@@ -189,6 +192,10 @@ private:
     
     // For mouse coordinate tracking
     ftxui::Box Box_;
+
+    // Horizontal scroll state
+    bool HorizontalScrollEnabled_ = false;
+    int HorizontalOffset_ = 0;
 };
 
 } // namespace NYdb::NConsoleClient

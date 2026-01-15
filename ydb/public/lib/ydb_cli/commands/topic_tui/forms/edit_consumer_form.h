@@ -43,12 +43,14 @@ private:
     bool CodecRaw_ = true;
     bool CodecGzip_ = true;
     bool CodecZstd_ = false;
+    bool CodecLzop_ = false;
     
     // Components
     ftxui::Component ImportantCheckbox_;
     ftxui::Component RawCheckbox_;
     ftxui::Component GzipCheckbox_;
     ftxui::Component ZstdCheckbox_;
+    ftxui::Component LzopCheckbox_;
     
     // Async state
     std::future<TStatus> SubmitFuture_;

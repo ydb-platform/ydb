@@ -27,6 +27,12 @@ Component TWriteMessageForm::BuildContainer() {
     messageOpt.cursor_position = &MessageCursor_;
     messageOpt.multiline = true;
     MessageInputComponent_ = Input(messageOpt);
+
+    InputOption partitionOpt;
+    partitionOpt.content = &PartitionInput_;
+    partitionOpt.cursor_position = &PartitionCursor_;
+    partitionOpt.multiline = false;
+    PartitionInputComponent_ = Input(partitionOpt);
     
     InputOption producerOpt;
     producerOpt.content = &ProducerIdInput_;
@@ -42,6 +48,7 @@ Component TWriteMessageForm::BuildContainer() {
     
     return Container::Vertical({
         MessageInputComponent_,
+        PartitionInputComponent_,
         ProducerInputComponent_,
         MessageGroupInputComponent_
     });
@@ -54,9 +61,6 @@ Element TWriteMessageForm::RenderContent() {
     Elements content;
     
     content.push_back(text(" " + std::string(TopicPath_.c_str()) + " ") | dim | center);
-    if (PartitionId_.has_value()) {
-        content.push_back(text(" Partition: " + std::to_string(*PartitionId_) + " ") | dim | center);
-    }
     content.push_back(separator());
     
     if (Submitting_) {
@@ -67,13 +71,10 @@ Element TWriteMessageForm::RenderContent() {
         content.push_back(separator());
         
         content.push_back(text(" Advanced Options (optional):") | dim);
+        content.push_back(hbox({text(" Partition: ") | size(WIDTH, EQUAL, 15), PartitionInputComponent_->Render() | flex}));
         content.push_back(hbox({text(" Producer ID: ") | size(WIDTH, EQUAL, 15), ProducerInputComponent_->Render() | flex}));
         content.push_back(hbox({text(" Message Group: ") | size(WIDTH, EQUAL, 15), MessageGroupInputComponent_->Render() | flex}));
         
-        if (MessagesSent_ > 0) {
-            content.push_back(separator());
-            content.push_back(text(" Messages sent this session: " + std::to_string(MessagesSent_)) | dim);
-        }
     }
     
     return vbox(content);
@@ -83,6 +84,15 @@ bool TWriteMessageForm::HandleSubmit() {
     if (MessageData_.empty()) {
         ErrorMessage_ = "Message data is required";
         return false;
+    }
+
+    if (!PartitionInput_.empty()) {
+        try {
+            FromString<ui32>(TString(PartitionInput_.c_str()));
+        } catch (...) {
+            ErrorMessage_ = "Invalid partition value";
+            return false;
+        }
     }
     
     ErrorMessage_.clear();
@@ -98,6 +108,14 @@ void TWriteMessageForm::SetTopic(const TString& topicPath, std::optional<ui32> p
     TopicPath_ = topicPath;
     PartitionId_ = partitionId;
     Reset();
+    MessageCursor_ = static_cast<int>(MessageData_.size());
+    if (PartitionId_.has_value()) {
+        PartitionInput_ = std::to_string(*PartitionId_);
+        PartitionCursor_ = static_cast<int>(PartitionInput_.size());
+    }
+    if (MessageInputComponent_) {
+        MessageInputComponent_->TakeFocus();
+    }
 }
 
 void TWriteMessageForm::Reset() {
@@ -105,6 +123,11 @@ void TWriteMessageForm::Reset() {
     MessageData_.clear();
     ProducerIdInput_.clear();
     MessageGroupIdInput_.clear();
+    PartitionInput_.clear();
+    MessageCursor_ = 0;
+    ProducerCursor_ = 0;
+    MessageGroupCursor_ = 0;
+    PartitionCursor_ = 0;
     MessagesSent_ = 0;
     
     // Close existing session
@@ -112,14 +135,11 @@ void TWriteMessageForm::Reset() {
         WriteSession_->Close(TDuration::Seconds(1));
         WriteSession_.reset();
     }
+    WriteSessionKey_.reset();
     // Note: TFormBase handles Escape key navigation; session cleanup happens in destructor or Reset
 }
 
 void TWriteMessageForm::CreateWriteSession() {
-    if (WriteSession_ && WriteSession_->IsAlive()) {
-        return;  // Session already exists and is alive
-    }
-    
     NTopic::TWriteSessionSettings settings;
     settings.Path(std::string(TopicPath_.c_str()));
     
@@ -132,13 +152,39 @@ void TWriteMessageForm::CreateWriteSession() {
     settings.ProducerId(producerId);
     settings.MessageGroupId(messageGroupId);
     
-    if (PartitionId_.has_value()) {
-        settings.PartitionId(*PartitionId_);
+    std::optional<ui32> partitionId;
+    if (!PartitionInput_.empty()) {
+        try {
+            partitionId = FromString<ui32>(TString(PartitionInput_.c_str()));
+        } catch (...) {
+            partitionId = std::nullopt;
+        }
+    }
+    
+    if (partitionId.has_value()) {
+        settings.PartitionId(*partitionId);
     }
     
     settings.Codec(NTopic::ECodec::RAW);  // Use raw for simplicity in TUI
     
+    TWriteSessionKey newKey{
+        .TopicPath = std::string(TopicPath_.c_str()),
+        .ProducerId = producerId,
+        .MessageGroupId = messageGroupId,
+        .PartitionId = partitionId,
+        .Codec = NTopic::ECodec::RAW,
+    };
+    
+    if (WriteSession_ && WriteSession_->IsAlive() && WriteSessionKey_.has_value() &&
+        *WriteSessionKey_ == newKey) {
+        return;  // Reuse existing session for same params
+    }
+    if (WriteSession_) {
+        WriteSession_->Close(TDuration::Seconds(1));
+        WriteSession_.reset();
+    }
     WriteSession_ = GetApp().GetTopicClient().CreateSimpleBlockingWriteSession(settings);
+    WriteSessionKey_ = newKey;
 }
 
 void TWriteMessageForm::DoAsyncSend() {

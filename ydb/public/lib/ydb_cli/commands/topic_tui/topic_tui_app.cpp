@@ -141,6 +141,8 @@ void TTopicTuiApp::NavigateTo(EViewType view) {
         TopicFormComponent_->TakeFocus();
     } else if (view == EViewType::DeleteConfirm && DeleteConfirmComponent_) {
         DeleteConfirmComponent_->TakeFocus();
+    } else if (view == EViewType::OffsetForm && OffsetFormComponent_) {
+        OffsetFormComponent_->TakeFocus();
     }
     
     Screen_.PostEvent(Event::Custom);
@@ -169,24 +171,52 @@ void TTopicTuiApp::NavigateBack() {
                 }
             }
             break;
+        case EViewType::TopicDetails:
+            // Return to topic list for the current directory
+            State_.CurrentView = EViewType::TopicList;
+            if (TopicListComponent_) {
+                TopicListComponent_->TakeFocus();
+            }
+            break;
         case EViewType::ConsumerDetails:
             // Go back to where we came from (TopicDetails or TopicList via Go To)
             State_.CurrentView = (State_.PreviousView == EViewType::TopicList) 
                 ? EViewType::TopicList : EViewType::TopicDetails;
+            if (State_.CurrentView == EViewType::TopicList && TopicListComponent_) {
+                TopicListComponent_->TakeFocus();
+            } else if (State_.CurrentView == EViewType::TopicDetails && TopicDetailsComponent_) {
+                TopicDetailsComponent_->TakeFocus();
+            }
             break;
         case EViewType::MessagePreview:
             State_.CurrentView = (State_.PreviousView == EViewType::TopicList) 
                 ? EViewType::TopicList : EViewType::TopicDetails;
+            if (State_.CurrentView == EViewType::TopicList && TopicListComponent_) {
+                TopicListComponent_->TakeFocus();
+            } else if (State_.CurrentView == EViewType::TopicDetails && TopicDetailsComponent_) {
+                TopicDetailsComponent_->TakeFocus();
+            }
             break;
         case EViewType::TopicInfo:
             State_.CurrentView = EViewType::TopicDetails;
+            if (TopicDetailsComponent_) {
+                TopicDetailsComponent_->TakeFocus();
+            }
             break;
         case EViewType::TopicTablets:
             State_.CurrentView = EViewType::TopicDetails;
+            if (TopicDetailsComponent_) {
+                TopicDetailsComponent_->TakeFocus();
+            }
             break;
         case EViewType::Charts:
             State_.CurrentView = (State_.PreviousView == EViewType::TopicList) 
                 ? EViewType::TopicList : EViewType::TopicDetails;
+            if (State_.CurrentView == EViewType::TopicList && TopicListComponent_) {
+                TopicListComponent_->TakeFocus();
+            } else if (State_.CurrentView == EViewType::TopicDetails && TopicDetailsComponent_) {
+                TopicDetailsComponent_->TakeFocus();
+            }
             break;
         // Forms and dialogs return to where user came from
         case EViewType::TopicForm:
@@ -326,6 +356,7 @@ Component TTopicTuiApp::BuildMainComponent() {
     ConsumerComponent_ = ViewRegistry_.GetComponent(EViewType::ConsumerDetails);
     TopicFormComponent_ = ViewRegistry_.GetComponent(EViewType::TopicForm);
     DeleteConfirmComponent_ = ViewRegistry_.GetComponent(EViewType::DeleteConfirm);
+    OffsetFormComponent_ = ViewRegistry_.GetComponent(EViewType::OffsetForm);
     
     // Use a simple container - we'll switch rendering manually
     auto container = Container::Stacked({
@@ -337,7 +368,11 @@ Component TTopicTuiApp::BuildMainComponent() {
         TopicFormComponent_,
         DeleteConfirmComponent_,
         ViewRegistry_.GetComponent(EViewType::ConsumerForm),
-        ViewRegistry_.GetComponent(EViewType::WriteMessage)
+        ViewRegistry_.GetComponent(EViewType::WriteMessage),
+        ViewRegistry_.GetComponent(EViewType::DropConsumerConfirm),
+        ViewRegistry_.GetComponent(EViewType::EditConsumer),
+        ViewRegistry_.GetComponent(EViewType::OffsetForm),
+        ViewRegistry_.GetComponent(EViewType::TopicInfo)
     });
     
     // Use |= to intercept events BEFORE children process them (critical for Escape in WriteMessage)
@@ -401,6 +436,9 @@ Component TTopicTuiApp::BuildMainComponent() {
         }
         if (event == Event::Character('r')) {
             // Manual refresh via registry
+            if (State_.CurrentView == EViewType::TopicTablets) {
+                return false;
+            }
             ViewRegistry_.Refresh(State_.CurrentView);
             return true;
         }
@@ -488,15 +526,72 @@ Component TTopicTuiApp::BuildHelpBar() {
         
         switch (State_.CurrentView) {
             case EViewType::TopicList:
+                if (State_.TopicListMode == ETopicListMode::GoToPath) {
+                    parts = {
+                        text(" [Type] Path ") | dim,
+                        text(" [↑↓] Select ") | dim,
+                        text(" [Tab] Complete ") | dim,
+                        text(" [Backspace] Delete ") | dim,
+                        text(" [Enter] Go ") | color(Color::Cyan),
+                        text(" [Esc] Cancel ") | dim
+                    };
+                } else if (State_.TopicListMode == ETopicListMode::Search) {
+                    parts = {
+                        text(" [Type] Filter ") | dim,
+                        text(" [↑↓] Select ") | dim,
+                        text(" [Backspace] Delete ") | dim,
+                        text(" [Enter] Open ") | color(Color::Cyan),
+                        text(" [Esc] Clear ") | dim
+                    };
+                } else {
+                    TString sortArrow = "↕";
+                    if (TopicListView_) {
+                        sortArrow = TopicListView_->GetSortDirectionArrow();
+                    }
+                    parts = {
+                        text(" [↑↓] Navigate ") | dim,
+                        text(" [Enter] Select ") | dim,
+                        text(" [g] Go ") | color(Color::Cyan),
+                        text(" [/] Search ") | color(Color::Cyan),
+                        text(" [c] Create ") | color(Color::Green),
+                        text(" [e] Edit ") | color(Color::Yellow),
+                        text(" [d] Delete ") | color(Color::Red),
+                        text(" [</>] Col ") | dim,
+                        text(" [s] Sort " + std::string(sortArrow.c_str()) + " ") | dim,
+                        text(" [r] Refresh ") | dim,
+                        text(" [R] Rate: ") | dim,
+                        text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta),
+                        text(" [Esc] Back ") | dim
+                    };
+                }
+                break;
+            case EViewType::TopicDetails:
                 parts = {
                     text(" [↑↓] Navigate ") | dim,
-                    text(" [Enter] Select ") | dim,
-                    text(" [g] Go ") | color(Color::Cyan),
-                    text(" [/] Search ") | color(Color::Cyan),
-                    text(" [c] Create ") | color(Color::Green),
-                    text(" [e] Edit ") | color(Color::Yellow),
-                    text(" [d] Delete ") | color(Color::Red),
-                    text(" [</>] Col ") | dim,
+                    text(" [Tab] Switch ") | dim,
+                    text(" [←→/hl] Scroll ") | dim,
+                    text(" [Enter] Open ") | color(Color::Cyan),
+                    text(State_.TopicDetailsFocusPanel == 1 ? " [e] Edit Consumer " : " [e] Edit Topic ") | color(Color::Yellow),
+                    text(" [w] Write ") | color(Color::Green),
+                    text(" [a] Add ") | color(Color::Green)
+                };
+                if (State_.TopicDetailsFocusPanel == 1) {
+                    parts.push_back(text(" [x] Drop ") | color(Color::Red));
+                }
+                parts.push_back(text(" [s] Sort ↕ ") | dim);
+                parts.push_back(text(" [t] Tablets ") | dim);
+                parts.push_back(text(" [i] Info ") | dim);
+                parts.push_back(text(" [r] Refresh ") | dim);
+                parts.push_back(text(" [R] Rate: ") | dim);
+                parts.push_back(text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta));
+                parts.push_back(text(" [Esc] Back ") | dim);
+                break;
+            case EViewType::ConsumerDetails:
+                parts = {
+                    text(" [↑↓] Navigate ") | dim,
+                    text(" [←→/hl] Scroll ") | dim,
+                    text(" [o] Commit Offset ") | color(Color::Yellow),
+                    text(" [d] Drop ") | color(Color::Red),
                     text(" [s] Sort ↕ ") | dim,
                     text(" [r] Refresh ") | dim,
                     text(" [R] Rate: ") | dim,
@@ -504,31 +599,11 @@ Component TTopicTuiApp::BuildHelpBar() {
                     text(" [Esc] Back ") | dim
                 };
                 break;
-            case EViewType::TopicDetails:
-                parts = {
-                    text(" [↑↓] Navigate ") | dim,
-                    text(" [Tab] Switch ") | dim,
-                    text(" [Enter] Open ") | color(Color::Cyan),
-                    text(" [e] Edit ") | color(Color::Yellow),
-                    text(" [w] Write ") | color(Color::Green),
-                    text(" [a] Add ") | color(Color::Green),
-                    text(" [x] Drop ") | color(Color::Red),
-                    text(" [i] Info ") | dim,
-                    text(" [Esc] Back ") | dim
-                };
-                break;
-            case EViewType::ConsumerDetails:
-                parts = {
-                    text(" [↑↓] Navigate ") | dim,
-                    text(" [o] Commit Offset ") | color(Color::Yellow),
-                    text(" [R] Rate: ") | dim,
-                    text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta),
-                    text(" [Esc] Back ") | dim
-                };
-                break;
             case EViewType::TopicInfo:
                 parts = {
-                    text(" [↑↓/jk] Scroll ") | dim,
+                    text(" [↑↓/jk] Navigate ") | dim,
+                    text(" [←→/hl] Expand/Collapse ") | dim,
+                    text(" [r] Refresh ") | dim,
                     text(" [Esc] Back ") | dim
                 };
                 break;
@@ -536,18 +611,17 @@ Component TTopicTuiApp::BuildHelpBar() {
                 parts = {
                     text(" [↑↓/jk] Scroll ") | dim,
                     text(" [r] Refresh ") | dim,
-                    text(" [Esc] Back ") | dim
+                    text(" [t/Esc] Close ") | dim
                 };
                 break;
             case EViewType::MessagePreview:
                 parts = {
                     text(" [←→] Navigate Pages ") | dim,
-                    text(" [↑↓] Select ") | dim,
+                    text(" [↑↓/jk] Select/Scroll ") | dim,
                     text(" [Enter] Expand ") | dim,
-                    text(" [jk] Scroll ") | dim,
+                    text(" [g] Go to Offset ") | color(Color::Cyan),
                     text(" [t] Tail ") | color(Color::Green),
-                    text(" [R] Rate: ") | dim,
-                    text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta),
+                    text(" [r] Refresh ") | dim,
                     text(" [Esc] Back ") | dim
                 };
                 break;
@@ -640,31 +714,52 @@ Element TTopicTuiApp::RenderHelpOverlay() {
             lines.push_back(text(" Topic Details ") | bold);
             lines.push_back(hbox({text("  ↑/↓") | bold, text("     Navigate tables")}));
             lines.push_back(hbox({text("  Tab") | bold, text("     Switch panels")}));
+            lines.push_back(hbox({text("  ←/→, h/l") | bold, text("  Scroll columns")}));
             lines.push_back(hbox({text("  Enter") | bold | color(Color::Cyan), text("   Open consumer / messages")}));
             lines.push_back(hbox({text("  e") | bold | color(Color::Yellow), text("       Edit topic / consumer")}));
             lines.push_back(hbox({text("  w") | bold | color(Color::Green), text("       Write message")}));
             lines.push_back(hbox({text("  a") | bold | color(Color::Green), text("       Add consumer")}));
-            lines.push_back(hbox({text("  d") | bold | color(Color::Red), text("       Drop selected")}));
-            lines.push_back(hbox({text("  m") | bold, text("       Toggle messages")}));
+            lines.push_back(hbox({text("  x") | bold | color(Color::Red), text("       Drop consumer (Consumers pane)")}));
+            lines.push_back(hbox({text("  s") | bold, text("       Toggle sort direction")}));
             lines.push_back(hbox({text("  i") | bold, text("       Topic info")}));
-            lines.push_back(hbox({text("  T") | bold, text("       Tablets view")}));
+            lines.push_back(hbox({text("  t") | bold, text("       Tablets view")}));
             break;
             
         case EViewType::ConsumerDetails:
             lines.push_back(text(" Consumer Details ") | bold);
             lines.push_back(hbox({text("  ↑/↓") | bold, text("     Navigate partitions")}));
-            lines.push_back(hbox({text("  Enter") | bold | color(Color::Cyan), text("   Commit offset")}));
+            lines.push_back(hbox({text("  ←/→, h/l") | bold, text("  Scroll columns")}));
+            lines.push_back(hbox({text("  o") | bold | color(Color::Yellow), text("       Commit offset")}));
             lines.push_back(hbox({text("  d") | bold | color(Color::Red), text("       Drop consumer")}));
+            lines.push_back(hbox({text("  s") | bold, text("       Toggle sort direction")}));
             break;
             
         case EViewType::MessagePreview:
             lines.push_back(text(" Message Preview ") | bold);
             lines.push_back(hbox({text("  ←/→") | bold, text("     Previous/Next page")}));
-            lines.push_back(hbox({text("  ↑/↓") | bold, text("     Select message")}));
+            lines.push_back(hbox({text("  ↑/↓, j/k") | bold, text("  Select message / scroll (expanded)")}));
             lines.push_back(hbox({text("  Enter") | bold, text("   Expand/collapse message")}));
-            lines.push_back(hbox({text("  j/k") | bold, text("     Scroll message content")}));
             lines.push_back(hbox({text("  t") | bold | color(Color::Green), text("       Toggle tail mode")}));
-            lines.push_back(hbox({text("  o") | bold | color(Color::Cyan), text("       Go to offset")}));
+            lines.push_back(hbox({text("  g") | bold | color(Color::Cyan), text("       Go to offset")}));
+            break;
+            
+        case EViewType::TopicInfo:
+            lines.push_back(text(" Topic Info ") | bold);
+            lines.push_back(hbox({text("  ↑/↓, j/k") | bold, text("  Navigate JSON")}));
+            lines.push_back(hbox({text("  ←/→, h/l") | bold, text("  Collapse/expand")}));
+            lines.push_back(hbox({text("  Esc") | bold, text("     Back")}));
+            break;
+
+        case EViewType::TopicTablets:
+            lines.push_back(text(" Topic Tablets ") | bold);
+            lines.push_back(hbox({text("  ↑/↓") | bold, text("     Scroll list")}));
+            lines.push_back(hbox({text("  r") | bold, text("       Refresh")}));
+            lines.push_back(hbox({text("  t/Esc") | bold, text("   Close")}));
+            break;
+
+        case EViewType::Charts:
+            lines.push_back(text(" Charts ") | bold);
+            lines.push_back(hbox({text("  r") | bold, text("       Refresh")}));
             break;
             
         default:

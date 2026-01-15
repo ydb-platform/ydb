@@ -1,11 +1,59 @@
 #include "table.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
+#include <contrib/libs/ftxui/include/ftxui/dom/node.hpp>
+#include <contrib/libs/ftxui/include/ftxui/dom/requirement.hpp>
 #include <contrib/libs/ftxui/include/ftxui/screen/terminal.hpp>
+#include <contrib/libs/ftxui/include/ftxui/util/autoreset.hpp>
+
+#include <algorithm>
 
 using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
+
+namespace {
+
+class THorizontalScroll : public Node {
+public:
+    THorizontalScroll(Elements children, int* offset)
+        : Node(std::move(children))
+        , Offset_(offset)
+    {}
+
+    void ComputeRequirement() override {
+        Node::ComputeRequirement();
+        requirement_ = children_[0]->requirement();
+    }
+
+    void SetBox(Box box) override {
+        box_ = box;
+        const int external_dimx = box.x_max - box.x_min;
+        const int internal_dimx = std::max(requirement_.min_x, external_dimx);
+        const int max_offset = std::max(0, internal_dimx - external_dimx);
+        int offset = std::clamp(*Offset_, 0, max_offset);
+        *Offset_ = offset;
+
+        Box child_box = box;
+        child_box.x_min = box.x_min - offset;
+        child_box.x_max = box.x_min + internal_dimx - offset;
+        children_[0]->SetBox(child_box);
+    }
+
+    void Render(Screen& screen) override {
+        const AutoReset<Box> stencil(&screen.stencil, Box::Intersection(box_, screen.stencil));
+        children_[0]->Render(screen);
+    }
+
+private:
+    int* Offset_;
+};
+
+Element HorizontalScroll(Element child, int* offset) {
+    return std::make_shared<THorizontalScroll>(Elements{std::move(child)}, offset);
+}
+
+} // namespace
 
 TTable::TTable(TVector<TTableColumn> columns)
     : Columns_(std::move(columns))
@@ -188,6 +236,13 @@ void TTable::ToggleSort(int column) {
     }
 }
 
+void TTable::SetHorizontalScrollEnabled(bool enabled) {
+    HorizontalScrollEnabled_ = enabled;
+    if (!enabled) {
+        HorizontalOffset_ = 0;
+    }
+}
+
 Element TTable::Render() {
     if (Rows_.empty()) {
         return text("No data") | dim | center;
@@ -200,8 +255,14 @@ Element TTable::Render() {
         rows.push_back(RenderRow(i));
     }
     
+    Element table = vbox(rows);
+    table = table | yframe;
+    if (HorizontalScrollEnabled_) {
+        table = HorizontalScroll(table, &HorizontalOffset_);
+    }
+    
     // Use reflect() to track table position for mouse coordinates
-    return vbox(rows) | yframe | flex | reflect(Box_);
+    return table | flex | reflect(Box_);
 }
 
 bool TTable::HandleEvent(Event event) {
@@ -211,6 +272,18 @@ bool TTable::HandleEvent(Event event) {
     }
     
     int oldSelection = SelectedRow_;
+
+    if (HorizontalScrollEnabled_) {
+        constexpr int kScrollStep = 5;
+        if (event == Event::ArrowLeft || event == Event::Character('h')) {
+            HorizontalOffset_ = std::max(0, HorizontalOffset_ - kScrollStep);
+            return true;
+        }
+        if (event == Event::ArrowRight || event == Event::Character('l')) {
+            HorizontalOffset_ += kScrollStep;
+            return true;
+        }
+    }
     
     // Up navigation (ArrowUp or k)
     if (event == Event::ArrowUp || event == Event::Character('k')) {

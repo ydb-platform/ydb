@@ -87,6 +87,11 @@ Component TFormBase::Build() {
             return true;
         }
         
+        // Consume mouse events to prevent clicks from falling through modal forms.
+        if (event.is_mouse()) {
+            return true;
+        }
+        
         return false;
     });
 }

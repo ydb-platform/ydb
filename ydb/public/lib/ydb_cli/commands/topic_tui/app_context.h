@@ -23,6 +23,12 @@ enum class EViewType {
     EditConsumer
 };
 
+enum class ETopicListMode {
+    Normal,
+    Search,
+    GoToPath
+};
+
 // Shared state between views
 struct TAppState {
     // Current navigation
@@ -45,6 +51,12 @@ struct TAppState {
     
     // Help overlay toggle
     bool ShowHelpOverlay = false;
+    
+    // Topic details focus state (0 = partitions, 1 = consumers)
+    int TopicDetailsFocusPanel = 0;
+
+    // Topic list input mode (affects footer shortcuts)
+    ETopicListMode TopicListMode = ETopicListMode::Normal;
     
     // Last error message
     TString LastError;

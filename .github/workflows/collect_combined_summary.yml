@@ -5,7 +5,7 @@ on:
 
 jobs:
   collect_combined_summary:
-    name: Collect Combined Summary
+    name: Collect_Combined_Summary
     runs-on: ubuntu-latest
     if: always()
     steps:

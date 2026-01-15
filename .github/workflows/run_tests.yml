@@ -359,3 +359,20 @@ jobs:
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
 
+      - name: Save step summary to artifact
+        if: always()
+        run: |
+          chmod +x .github/scripts/tests/save_summary_artifact.sh
+          export MATRIX_BRANCH="${{ steps.determine-branch.outputs.branch_name || matrix.branch }}"
+          export INPUTS_BUILD_PRESET="${{ inputs.build_preset }}"
+          .github/scripts/tests/save_summary_artifact.sh
+
+      - name: Upload summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-summary-${{ matrix.branch }}-${{ inputs.build_preset }}
+          path: summary_artifacts/summary-*.md
+          if-no-files-found: warn
+          retention-days: 1
+

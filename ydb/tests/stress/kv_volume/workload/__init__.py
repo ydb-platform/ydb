@@ -2,10 +2,9 @@ import sys
 from datetime import datetime, timedelta
 import random
 from collections import defaultdict
-import threading
 import time
-
-from queue import Queue, PriorityQueue, Empty
+import asyncio
+import threading
 
 from ydb.public.api.protos import ydb_status_codes_pb2 as ydb_status_codes
 from ydb.public.api.protos import ydb_keyvalue_pb2 as keyvalue_pb
@@ -16,7 +15,7 @@ from ydb.tests.stress.common.common import WorkloadBase
 from ydb.tests.library.clients.kikimr_keyvalue_client import KeyValueClient
 
 DEFAULT_YDB_KV_PORT = 2135
-DEFAULT_DATA_PATTERN = '0123456789ABCDEF'
+DEFAULT_DATA_PATTERN = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 
 def parse_int_with_default(s, default=None):
@@ -30,36 +29,41 @@ def parse_int_with_default(s, default=None):
     
 class RWLock:
     def __init__(self):
-        self._cond = threading.Condition(threading.RLock())
+        self._lock = asyncio.Lock()
+        self._cond = asyncio.Condition(self._lock)
+
         self._readers = 0
         self._writer = False
         self._writers_waiting = 0
 
-    def acquire_read(self):
-        with self._cond:
-            # Если есть активный writer или writer(ы) ждут — читаем позже
+    async def acquire_read(self):
+        async with self._cond:
             while self._writer or self._writers_waiting > 0:
-                self._cond.wait()
+                await self._cond.wait()
             self._readers += 1
 
-    def release_read(self):
-        with self._cond:
+    async def release_read(self):
+        async with self._cond:
+            if self._readers <= 0:
+                raise RuntimeError("release_read() called too many times")
             self._readers -= 1
             if self._readers == 0:
                 self._cond.notify_all()
 
-    def acquire_write(self):
-        with self._cond:
+    async def acquire_write(self):
+        async with self._cond:
             self._writers_waiting += 1
             try:
                 while self._writer or self._readers > 0:
-                    self._cond.wait()
+                    await self._cond.wait()
                 self._writer = True
             finally:
                 self._writers_waiting -= 1
 
-    def release_write(self):
-        with self._cond:
+    async def release_write(self):
+        async with self._cond:
+            if not self._writer:
+                raise RuntimeError("release_write() called when no writer holds the lock")
             self._writer = False
             self._cond.notify_all()
 
@@ -92,22 +96,22 @@ class Worker:
             self.keys = {}
             self.mutex = RWLock()
 
-        def add_key(self, action_name, key, partition_id, key_size):
-            self.acquire_write()
+        async def add_key(self, action_name, key, partition_id, key_size):
+            await self.acquire_write()
             self.keys[key] = (partition_id, key_size)
-            self.release_write()
+            await self.release_write()
 
-        def acquire_read(self):
-            self.mutex.acquire_read()
+        async def acquire_read(self):
+            await self.mutex.acquire_read()
 
-        def release_read(self):
-            self.mutex.release_read()
+        async def release_read(self):
+            await self.mutex.release_read()
             
-        def acquire_write(self):
-            self.mutex.acquire_write()
+        async def acquire_write(self):
+            await self.mutex.acquire_write()
             
-        def release_write(self):
-            self.mutex.release_write()
+        async def release_write(self):
+            await self.mutex.release_write()
 
         def _get_keys_by_name(self, name):
             if name == '__initial__':
@@ -118,22 +122,22 @@ class Worker:
             for key in keys:
                 del self.keys[key]
 
-        def get_keys_to_delete(self, count):
-            self.acquire_write()
+        async def get_keys_to_delete(self, count):
+            await self.acquire_write()
             count = min(count, len(self.keys))
             keys = random.sample(list(self.keys.keys()), count)
             result = {key: self.keys[key] for key in keys}
             for key in keys:
                 del self.keys[key]
-            self.release_write()
+            await self.release_write()
             return result
 
-        def get_keys_to_read(self, count):
-            self.acquire_read
+        async def get_keys_to_read(self, count):
+            await self.acquire_read()
             count = min(count, len(self.keys))
             keys = random.sample(list(self.keys.keys()), count)
             result = {key: self.keys[key] for key in keys}
-            self.release_read()
+            await self.release_read()
             return result
 
         def clear_clone(self):
@@ -146,21 +150,21 @@ class Worker:
             self.keys_by_name = defaultdict(dict)
             self.key_to_name = {}
 
-        def acquire_read(self):
-            self.mutex.acquire_read()
-            self.previous_data_context.acquire_read()
+        async def acquire_read(self):
+            await self.mutex.acquire_read()
+            await self.previous_data_context.acquire_read()
             
-        def release_read(self):
-            self.previous_data_context.release_read()
-            self.mutex.release_read()
+        async def release_read(self):
+            await self.previous_data_context.release_read()
+            await self.mutex.release_read()
 
-        def acquire_write(self):
-            self.mutex.acquire_write()
-            self.previous_data_context.acquire_write()
+        async def acquire_write(self):
+            await self.mutex.acquire_write()
+            await self.previous_data_context.acquire_write()
         
-        def release_write(self):
-            self.previous_data_context.release_write()
-            self.mutex.release_write()
+        async def release_write(self):
+            await self.previous_data_context.release_write()
+            await self.mutex.release_write()
 
         def _get_keys_by_name(self, name):
             if name in self.keys_by_name:
@@ -173,12 +177,11 @@ class Worker:
                 del self.keys_by_name[name][key]
                 del self.key_to_name[key]
 
-        def add_key(self, action_name, key, partition_id, key_size):
-            self.mutex.acquire_write()
+        async def add_key(self, action_name, key, partition_id, key_size):
+            await self.mutex.acquire_write()
             self.keys_by_name[action_name][key] = (partition_id, key_size)
-            self.keys[key] = (partition_id, key_size)
             self.key_to_name[key] = action_name
-            self.mutex.release_write()
+            await self.mutex.release_write()
 
         def _get_keys_structs(self, action_names):
             name_to_keys = {}
@@ -192,12 +195,12 @@ class Worker:
                     key_to_name[key] = action_name
             return name_to_keys, name_to_dc, key_to_name
 
-        def get_keys_to_delete(self, action_names, count):
-            self.acquire_write()
+        async def get_keys_to_delete(self, action_names, count):
+            await self.acquire_write()
             name_to_keys, name_to_dc, key_to_name = self._get_keys_structs(action_names)
 
             if not key_to_name:
-                self.release_write
+                await self.release_write()
                 return {}
 
             count = min(count, len(key_to_name))
@@ -214,15 +217,15 @@ class Worker:
                 dc = name_to_dc[name]
                 dc._delete_keys(keys)
 
-            self.release_write()
+            await self.release_write()
             return result
 
-        def get_keys_to_read(self, action_names, count):
-            self.acquire_read()
+        async def get_keys_to_read(self, action_names, count):
+            await self.acquire_read()
             name_to_keys, name_to_dc, key_to_name = self._get_keys_structs(action_names)
 
             if not name_to_keys:
-                self.release_read()
+                await self.release_read()
                 return {}
 
             count = min(count, len(key_to_name))
@@ -233,7 +236,7 @@ class Worker:
                 action_name = key_to_name[key]
                 result[key] = name_to_keys[action_name][key]
 
-            self.release_read()
+            await self.release_read()
             return result
 
         def clear_clone(self):
@@ -284,9 +287,9 @@ class Worker:
                 return ['__initial__']
             return list(action_data_mode.from_prev_actions.action_name)
 
-        def read(self, read_cmd):
+        async def read(self, read_cmd):
             action_names = self.get_action_names()
-            keys_with_partitions = self.data_context.get_keys_to_read(action_names, read_cmd.count)
+            keys_with_partitions = await self.data_context.get_keys_to_read(action_names, read_cmd.count)
 
             for key, key_info in keys_with_partitions.items():
                 partition_id, key_size = key_info
@@ -296,7 +299,7 @@ class Worker:
                 if self.verbose:
                     print(f"READ action: key={key}, partition_id={partition_id}, offset={offset}, size={read_cmd.size}, version={self.version}", file=sys.stderr)
 
-                response = self.worker.client.kv_read(
+                response = await self.worker.client.a_kv_read(
                     self.workload._volume_path(),
                     partition_id,
                     key,
@@ -329,18 +332,18 @@ class Worker:
                     if self.verbose:
                         print(f"READ verification: key={key}, data verified successfully", file=sys.stderr)
 
-        def delete(self, delete_cmd):
+        async def delete(self, delete_cmd):
             action_names = self.get_action_names()
-            keys_to_delete = self.data_context.get_keys_to_delete(action_names, delete_cmd.count)
+            keys_to_delete = await self.data_context.get_keys_to_delete(action_names, delete_cmd.count)
             if len(keys_to_delete) == 0:
                 return
 
             for key, key_info in keys_to_delete:
                 partition_id = key_info[0]
                 if self.verbose:
-                    print(f"DELETE action: key={key}, partition_id={partition_id}, version={self.workload.version}", file=sys.stderr)
+                    print(f"DELETE action: key={key}, partition_id={partition_id}, version={self.version}", file=sys.stderr)
 
-                response = self.worker.client.kv_delete_range(
+                response = await self.worker.client.a_kv_delete_range(
                     self.workload._volume_path(),
                     partition_id,
                     from_key=key,
@@ -359,7 +362,7 @@ class Worker:
             self.write_idx += 1
             return f"{self.config.name}_{self.instance_id}_{self.write_idx}"
 
-        def write(self, write_cmd):
+        async def write(self, write_cmd):
             kv_pairs = []
             for i in range(write_cmd.count):
                 key = self.generate_key()
@@ -367,7 +370,7 @@ class Worker:
                 kv_pairs.append((key, data))
             partition_id = self.worker_partition_id
 
-            response = self.worker.client.kv_writes(
+            response = await self.worker.client.a_kv_writes(
                 self.worker.volume_path,
                 partition_id,
                 kv_pairs,
@@ -376,42 +379,42 @@ class Worker:
             )
 
             if response is None or get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
-                raise ValueError(f"Write failed for key {key} in action {self.config.name}")
+                raise ValueError(f"Write failed in action {self.config.name}")
 
             for key, data in kv_pairs:
-                self.data_context.add_key(self.name, key, partition_id, len(data))
+                await self.data_context.add_key(self.name, key, partition_id, len(data))
             if self.verbose:
                 print("WRITE successful", file=sys.stderr)
 
-        def execute_command(self, cmd):
+        async def execute_command(self, cmd):
             cmd_type = cmd.WhichOneof('Command')
             if cmd_type == 'print':
                 self.print(cmd.print)
             elif cmd_type == 'read':
-                self.read(cmd.read)
+                await self.read(cmd.read)
             elif cmd_type == 'write':
-                self.write(cmd.write)
+                await self.write(cmd.write)
             elif cmd_type == 'delete':
-                self.delete(cmd.delete)
+                await self.delete(cmd.delete)
 
         def notify_about_ending(self):
             self.worker.notify_about_ending(self.instance_id, self.data_context)
 
-        def run(self):
+        async def run(self):
             if self.verbose:
                 print(f"ActionRunner: running commands for action '{self.config.name}', instance_id={self.instance_id}", file=sys.stderr)
 
             if self.worker_semaphore:
-                with self.worker_semaphore:
+                async with self.worker_semaphore:
                     for cmd in self.config.action_command:
-                        self.execute_command(cmd)
+                        await self.execute_command(cmd)
             else:
                 for cmd in self.config.action_command:
-                    self.execute_command(cmd)
+                    await self.execute_command(cmd)
             if self.verbose:
                 print(f"ActionRunner: completed commands for action '{self.config.name}', instance_id={self.instance_id}", file=sys.stderr)
 
-            self.worker._increment_action_stat(self.name)
+            await self.worker._increment_action_stat(self.name)
             self.notify_about_ending()
 
     def __init__(self, worker_id, workload, worker_partition_id, stats_queue=None):
@@ -431,7 +434,7 @@ class Worker:
         self.stats_queue = stats_queue
         self.show_stats = self.workload.show_stats
         self.action_stats = defaultdict(int)
-        self.stats_lock = threading.Lock()
+        self.stats_lock = None
 
     @property
     def volume_path(self):
@@ -456,13 +459,13 @@ class Worker:
         self.write_key_counter += 1
         return f'worker_{self.worker_id}_write_key_{self.write_key_counter}'
 
-    def _stats_collector(self):
+    async def _stats_collector(self):
         if self.stats_queue:
             self.stats_queue.put('start')
 
         while True:
-            time.sleep(0.1)
-            with self.stats_lock:
+            await asyncio.sleep(0.1)
+            async with self.stats_lock:
                 if not self.action_stats:
                     continue
                 stats_snapshot = dict(self.action_stats)
@@ -471,12 +474,12 @@ class Worker:
             if self.stats_queue:
                 self.stats_queue.put(stats_snapshot)
 
-    def _increment_action_stat(self, action_type):
+    async def _increment_action_stat(self, action_type):
         if self.show_stats:
-            with self.stats_lock:
+            async with self.stats_lock:
                 self.action_stats[action_type] += 1
 
-    def write(self, write_cmd, data_context):
+    async def write(self, write_cmd, data_context):
         kv_pairs = []
         for i in range(write_cmd.count):
             key = self._generate_write_key()
@@ -484,7 +487,7 @@ class Worker:
             kv_pairs.append((key, data))
         partition_id = self.worker_partition_id
 
-        response = self.client.kv_writes(
+        response = await self.client.a_kv_writes(
             self.volume_path,
             partition_id,
             kv_pairs,
@@ -497,17 +500,17 @@ class Worker:
             raise ValueError(f"Write failed in init, status: {status}")
 
         for key, data in kv_pairs:
-            data_context.add_key('', key, partition_id, len(data))
+            await data_context.add_key('', key, partition_id, len(data))
         if self.verbose:
             print("WRITE successful", file=sys.stderr)
 
-    def write_initial_data(self, data_context):
+    async def write_initial_data(self, data_context):
         initial_data = self.workload.config.initial_data
         if self.verbose:
             print(f"Worker {self.worker_id}: filling init data", file=sys.stderr)
 
         for write_cmd in initial_data.write_commands:
-            self.write(write_cmd, data_context)
+            await self.write(write_cmd, data_context)
 
     def add_action(self, action_config):
         self.actions[action_config.name] = action_config
@@ -516,85 +519,94 @@ class Worker:
             print(f"Worker {self.worker_id}: added action '{action_config.name}'{period_str}, commands={len(action_config.action_command)}", file=sys.stderr)
 
     def notify_about_ending(self, id, data_context):
-        self.event_queue.put(('end', id, data_context))
+        self.event_queue.put_nowait(('end', id, data_context))
 
-    def run(self):
-        self.event_queue = Queue()
-        self.scheduled_queue = PriorityQueue()
+    async def arun(self):
+        self.event_queue = asyncio.Queue()
+        self.scheduled_queue = asyncio.PriorityQueue()
+        self.stats_lock = asyncio.Lock()
 
         if self.verbose:
             print(f"Worker {self.worker_id}: starting run", file=sys.stderr)
 
         initial_dc = Worker.WorkerDataContext()
-        self.write_initial_data(initial_dc)
+        await self.write_initial_data(initial_dc)
 
         end_time = datetime.now() + timedelta(seconds=self.workload.duration + 2)
 
-        stats_thread = None
+        stats_task = None
         if self.show_stats:
-            stats_thread = threading.Thread(target=self._stats_collector, daemon=True)
-            stats_thread.start()
+            stats_task = asyncio.create_task(self._stats_collector())
 
         period_actions = {}
         children_map = defaultdict(set)
         semaphores = {}
         for name, action in self.actions.items():
             if action.worker_max_in_flight:
-                semaphores[name] = threading.Semaphore(action.worker_max_in_flight)
+                semaphores[name] = asyncio.Semaphore(action.worker_max_in_flight)
             if action.period_us:
                 period_actions[name] = action.period_us
             if not action.parent_action:
-                self.event_queue.put(('run', name, Worker.LayeredDataContext(initial_dc)))
+                await self.event_queue.put(('run', name, Worker.LayeredDataContext(initial_dc)))
                 continue
             children_map[action.parent_action].add(name)
-
-        threads = {}
-        id_to_action_name = {}
-        while datetime.now() < end_time:
-            next_time = None
+            
+        async def scheduler():
             while (now := datetime.now()) < end_time:
                 try:
-                    boxed = self.scheduled_queue.get_nowait()
-                except Empty:
+                    timeout = (end_time - now).total_seconds()
+                    boxed = await asyncio.wait_for(self.scheduled_queue.get(), timeout=timeout)
+                except asyncio.QueueEmpty:
                     break
                 if boxed is None:
                     break
                 time, action_name, dc = boxed
                 if time > now:
-                    self.scheduled_queue.put(boxed)
-                    next_time = time
-                    break
-                self.event_queue.put(('run', action_name, dc))
+                    await self.scheduled_queue.put(boxed)
+                    await asyncio.sleep(max(min(max((time - now).total_seconds(), 0), 0.01) / 10, 0.0005))
+                    continue
+                await self.event_queue.put(('run', action_name, dc))
+                
+        scheduler_task = asyncio.create_task(scheduler())
 
-            while (now := datetime.now()) < end_time:
-                try:
-                    if next_time and now < next_time:
-                        boxed = self.event_queue.get(timeout=(max(next_time - now, 0,1)).total_seconds())
-                    else:
-                        boxed = self.event_queue.get_nowait()
-                except Empty:
-                    break
-                if boxed is None:
-                    break
-                command, q, dc = boxed
-                if command == 'end':
-                    id = q
-                    name = id_to_action_name[id]
-                    for child in children_map[name]:
-                        self.event_queue.put(('run', child, Worker.LayeredDataContext(dc)))
-                    if name in period_actions:
-                        self.scheduled_queue.put((now + timedelta(microseconds=period_actions[name]), name, dc.clear_clone()))
-                    del id_to_action_name[id]
-                elif command == 'run':
-                    name = q
-                    instance_id = self.generate_instance_id()
-                    runner = Worker.ActionRunner(self.actions[name], self.workload, self, semaphores.get(name), instance_id, self.worker_partition_id, data_context=dc)
-                    id_to_action_name[instance_id] = name
-                    runner.run()
+        id_to_action_name = {}
+        id_to_tasks = {}
 
-        self.client.close()
+        while (now := datetime.now()) < end_time:
+            try:
+                timeout = (end_time - now).total_seconds()
+                boxed = await asyncio.wait_for(self.event_queue.get(), timeout=timeout)
+            except asyncio.QueueEmpty:
+                break
+            except asyncio.TimeoutError:
+                break
+            if boxed is None:
+                break
+            empty_queues = False
+            command, q, dc = boxed
+            if command == 'end':
+                id = q
+                name = id_to_action_name[id]
+                for child in children_map[name]:
+                    await self.event_queue.put(('run', child, Worker.LayeredDataContext(dc)))
+                if name in period_actions:
+                    await self.scheduled_queue.put((now + timedelta(microseconds=period_actions[name]), name, dc.clear_clone()))
+                del id_to_action_name[id]
+                #del id_to_tasks[id]
+            elif command == 'run':
+                name = q
+                instance_id = self.generate_instance_id()
+                runner = Worker.ActionRunner(self.actions[name], self.workload, self, semaphores.get(name), instance_id, self.worker_partition_id, data_context=dc)
+                id_to_action_name[instance_id] = name
+                task = asyncio.create_task(runner.run())
+                id_to_tasks[instance_id] = task
+
+        await self.client.aclose()
         if self.verbose:
             print(f"Worker {self.worker_id}: finished arun", file=sys.stderr)
+            
+    def run(self):
+        asyncio.run(self.arun())
 
 
 class WorkerBuilder:
@@ -780,5 +792,5 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
                 worker_partition_id = i % self.config.volume_config.partition_count
             builder = WorkerBuilder(self.config, self, worker_partition_id=worker_partition_id)
             worker = builder.build(i, self.stats_queue if self.show_stats else None)
-            workers.append(lambda w=worker, worker_id=i: w.run())
+            workers.append(worker.run)
         return workers

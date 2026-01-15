@@ -679,6 +679,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         TExprNode::TPtr filterExpr;
         TExprNode::TPtr lastAlias;
 
+        // Extract correlations from outer scopes
+        auto correlatedCols = GetSetting(setItem->Tail(), "final_ext_types");
+
         auto from = GetSetting(setItem->Tail(), "from");
         THashMap<TString, TExprNode::TPtr> aliasToInputMap;
         TVector<TExprNode::TPtr> inputsInOrder;
@@ -742,6 +745,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                 lastAlias = alias;
             }
         }
+
+        // FIXME: Correlated subqueries may contain a correlation column in join conditions
+        // We currently don't handle it
 
         THashSet<TString> processedInputs;
         auto joinOps = GetSetting(setItem->Tail(), "join_ops");
@@ -873,6 +879,33 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         }
 
         filterExpr = joinExpr;
+
+        // Infuse correlation columns into the subplan if any
+        if (correlatedCols) {
+            TVector<TExprNode::TPtr> columns;
+            TVector<TExprNode::TPtr> types;
+
+            auto alias = correlatedCols->Child(1)->Child(0)->Child(0);
+            auto typeExpr = correlatedCols->Child(1)->Child(0)->Child(1);
+            auto structType = typeExpr->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            for (auto item : structType->GetItems()) {
+                TString fullName = TString(alias->Content()) + "." + TString(item->GetName());
+                columns.push_back(ctx.NewAtom(node->Pos(), fullName));
+                types.push_back(ExpandType(node->Pos(), *item->GetItemType(), ctx));
+            }
+
+            // clang-format off
+            filterExpr = Build<TKqpInfuseDependents>(ctx, node->Pos())
+                .Input(filterExpr)
+                .Columns()
+                    .Add(columns)
+                .Build()
+                .Types()
+                    .Add(types)
+                .Build()
+                .Done().Ptr();
+            // clang-format on
+        }
 
         auto where = GetSetting(setItem->Tail(), "where");
 

@@ -1010,6 +1010,16 @@
             "Children" : [
                 {"Index": 2, "Name": "InTuple", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name" : "TKqpInfuseDependents",
+            "Base" : "TCallable",
+            "Match" : {"Type": "Callable", "Name": "KqpInfuseDependents"},
+            "Children" : [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Types", "Type": "TExprList"}
+            ]
         }
     ]
 }

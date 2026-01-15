@@ -15,7 +15,6 @@ SRCS(
     forms/write_message_form.cpp
     forms/drop_consumer_form.cpp
     forms/edit_consumer_form.cpp
-    forms/message_form.cpp
     forms/offset_form.cpp
     widgets/sparkline.cpp
     widgets/table.cpp

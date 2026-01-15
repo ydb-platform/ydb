@@ -26,6 +26,7 @@ struct TNavigationEvent {
         SetEditConsumerTarget,
         SetWriteMessageTarget,
         SetConsumerFormTarget,
+        SetOffsetFormTarget,
         ShowError,
         RequestRefresh,
         RequestExit,
@@ -38,6 +39,8 @@ struct TNavigationEvent {
     TString Path2;  // For consumer name, etc.
     ui32 Partition = 0;
     i64 Offset = 0;
+    ui64 CurrentOffset = 0;
+    ui64 EndOffset = 0;
     std::optional<ui32> OptionalPartition;
 };
 
@@ -217,6 +220,18 @@ public:
         TNavigationEvent event;
         event.Type = TNavigationEvent::EType::SetConsumerFormTarget;
         event.Path = topicPath;
+        RecordEvent(event);
+    }
+    
+    void SetOffsetFormTarget(const TString& topicPath, const TString& consumerName,
+                              ui64 partition, ui64 currentOffset, ui64 endOffset) override {
+        TNavigationEvent event;
+        event.Type = TNavigationEvent::EType::SetOffsetFormTarget;
+        event.Path = topicPath;
+        event.Path2 = consumerName;
+        event.Partition = partition;
+        event.CurrentOffset = currentOffset;
+        event.EndOffset = endOffset;
         RecordEvent(event);
     }
     

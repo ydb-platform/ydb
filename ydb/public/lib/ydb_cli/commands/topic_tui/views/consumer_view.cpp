@@ -84,7 +84,16 @@ Component TConsumerView::Build() {
             return false;
         }
         
-        // Note: 'o' key for commit offset removed - feature not implemented
+        // 'o' key for commit offset
+        if (event == Event::Character('o') || event == Event::Character('O')) {
+            int row = Table_.GetSelectedRow();
+            if (row >= 0 && row < static_cast<int>(PartitionStats_.size())) {
+                const auto& p = PartitionStats_[row];
+                App_.SetOffsetFormTarget(TopicPath_, ConsumerName_, p.PartitionId, p.CommittedOffset, p.EndOffset);
+                App_.NavigateTo(EViewType::OffsetForm);
+            }
+            return true;
+        }
         
         // 'd' key for drop consumer - use ITuiApp interface
         if (event == Event::Character('d') || event == Event::Character('D')) {

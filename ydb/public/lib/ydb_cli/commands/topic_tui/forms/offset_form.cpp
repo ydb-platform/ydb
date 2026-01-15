@@ -1,5 +1,6 @@
 #include "offset_form.h"
-#include "../topic_tui_app.h"
+#include "../app_interface.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/string/cast.h>
 
@@ -27,6 +28,12 @@ Component TOffsetForm::BuildContainer() {
 }
 
 Element TOffsetForm::RenderContent() {
+    CheckAsyncCompletion();
+    
+    if (Submitting_) {
+        return RenderSpinner("Committing offset...");
+    }
+    
     return vbox({
         hbox({text(" Consumer: "), text(std::string(ConsumerName_.c_str())) | color(NTheme::AccentText)}),
         hbox({text(" Topic: "), text(std::string(TopicPath_.c_str())) | color(Color::White)}),
@@ -40,15 +47,80 @@ Element TOffsetForm::RenderContent() {
 }
 
 bool TOffsetForm::HandleSubmit() {
+    // Validate offset
+    ui64 newOffset;
     try {
-        ui64 offset = FromString<ui64>(TString(OffsetInput_.c_str()));
-        if (OnSubmitOffset) {
-            OnSubmitOffset(offset);
-        }
-        return true;  // Close form
+        newOffset = FromString<ui64>(TString(OffsetInput_.c_str()));
     } catch (...) {
         ErrorMessage_ = "Invalid offset value";
-        return false;  // Keep form open
+        return false;
+    }
+    
+    // Validate range
+    if (newOffset > EndOffset_) {
+        ErrorMessage_ = "Offset cannot exceed end offset (" + std::to_string(EndOffset_) + ")";
+        return false;
+    }
+    
+    ErrorMessage_.clear();
+    SuccessMessage_.clear();
+    Submitting_ = true;
+    SpinnerFrame_ = 0;
+    
+    DoAsyncCommit();
+    return false;  // Don't close - wait for async completion
+}
+
+void TOffsetForm::DoAsyncCommit() {
+    TString topicPath = TopicPath_;
+    TString consumerName = ConsumerName_;
+    ui64 partition = Partition_;
+    ui64 offset;
+    try {
+        offset = FromString<ui64>(TString(OffsetInput_.c_str()));
+    } catch (...) {
+        offset = CurrentOffset_;
+    }
+    
+    auto* topicClient = &GetApp().GetTopicClient();
+    
+    CommitFuture_ = std::async(std::launch::async, 
+        [topicPath, topicClient, consumerName, partition, offset]() -> TStatus {
+            NTopic::TCommitOffsetSettings settings;
+            auto result = topicClient->CommitOffset(
+                std::string(topicPath.c_str()),
+                partition,
+                std::string(consumerName.c_str()),
+                offset,
+                settings
+            );
+            return result.GetValueSync();
+        });
+}
+
+void TOffsetForm::CheckAsyncCompletion() {
+    if (!Submitting_) {
+        return;
+    }
+    
+    if (CommitFuture_.valid() && 
+        CommitFuture_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        
+        auto status = CommitFuture_.get();
+        Submitting_ = false;
+        
+        if (status.IsSuccess()) {
+            // Success - close form and refresh
+            GetApp().NavigateBack();
+            GetApp().RequestRefresh();
+        } else {
+            // Show error
+            ErrorMessage_ = status.GetIssues().ToString();
+            if (ErrorMessage_.empty()) {
+                ErrorMessage_ = "Failed to commit offset";
+            }
+        }
+        GetApp().PostRefresh();
     }
 }
 

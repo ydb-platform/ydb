@@ -2,9 +2,11 @@
 
 #include "../widgets/form_base.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+
 #include <util/generic/string.h>
 
-#include <functional>
+#include <future>
 
 namespace NYdb::NConsoleClient {
 
@@ -18,9 +20,6 @@ public:
                     ui64 partition, ui64 currentOffset, ui64 endOffset);
     void Reset() override;
     
-    // Callback with the new offset value
-    std::function<void(ui64 offset)> OnSubmitOffset;
-    
 protected:
     TString GetTitle() const override;
     EViewType GetViewType() const override;
@@ -30,6 +29,9 @@ protected:
     ftxui::Component BuildContainer() override;
     
 private:
+    void DoAsyncCommit();
+    void CheckAsyncCompletion();
+    
     TString TopicPath_;
     TString ConsumerName_;
     ui64 Partition_ = 0;
@@ -38,6 +40,9 @@ private:
     
     std::string OffsetInput_;
     ftxui::Component OffsetInputComponent_;
+    
+    // Async operation state
+    std::future<TStatus> CommitFuture_;
 };
 
 } // namespace NYdb::NConsoleClient

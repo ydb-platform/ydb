@@ -31,6 +31,7 @@ class TConsumerForm;
 class TWriteMessageForm;
 class TDropConsumerForm;
 class TEditConsumerForm;
+class TOffsetForm;
 
 // View types and State are defined in app_context.h via app_interface.h
 
@@ -74,6 +75,8 @@ public:
     void SetEditConsumerTarget(const TString& topicPath, const TString& consumerName) override;
     void SetWriteMessageTarget(const TString& topicPath, std::optional<ui32> partition) override;
     void SetConsumerFormTarget(const TString& topicPath) override;
+    void SetOffsetFormTarget(const TString& topicPath, const TString& consumerName,
+                              ui64 partition, ui64 currentOffset, ui64 endOffset) override;
 
 private:
     ftxui::Component BuildMainComponent();
@@ -111,6 +114,7 @@ private:
     std::shared_ptr<TWriteMessageForm> WriteMessageForm_;
     std::shared_ptr<TDropConsumerForm> DropConsumerForm_;
     std::shared_ptr<TEditConsumerForm> EditConsumerForm_;
+    std::shared_ptr<TOffsetForm> OffsetForm_;
     
     // Refresh thread
     std::thread RefreshThread_;

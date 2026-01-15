@@ -11,6 +11,7 @@
 #include "forms/write_message_form.h"
 #include "forms/drop_consumer_form.h"
 #include "forms/edit_consumer_form.h"
+#include "forms/offset_form.h"
 #include "widgets/sparkline.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
@@ -47,6 +48,7 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     WriteMessageForm_ = std::make_shared<TWriteMessageForm>(*this);
     DropConsumerForm_ = std::make_shared<TDropConsumerForm>(*this);
     EditConsumerForm_ = std::make_shared<TEditConsumerForm>(*this);
+    OffsetForm_ = std::make_shared<TOffsetForm>(*this);
     
     // Note: All views now navigate directly via ITuiApp interface:
     // - TopicListView: topic/directory selection, CRUD operations
@@ -186,6 +188,7 @@ void TTopicTuiApp::NavigateBack() {
         case EViewType::WriteMessage:
         case EViewType::DropConsumerConfirm:
         case EViewType::EditConsumer:
+        case EViewType::OffsetForm:
             State_.CurrentView = State_.PreviousView;
             // Restore focus to the appropriate component
             if (State_.CurrentView == EViewType::TopicList && TopicListComponent_) {
@@ -269,6 +272,11 @@ void TTopicTuiApp::SetConsumerFormTarget(const TString& topicPath) {
     ConsumerForm_->SetTopic(topicPath);
 }
 
+void TTopicTuiApp::SetOffsetFormTarget(const TString& topicPath, const TString& consumerName,
+                                        ui64 partition, ui64 currentOffset, ui64 endOffset) {
+    OffsetForm_->SetContext(topicPath, consumerName, partition, currentOffset, endOffset);
+}
+
 // Predefined refresh rates for cycling with 'R' key
 static const TDuration RefreshRates[] = {
     TDuration::Seconds(1),
@@ -308,6 +316,7 @@ Component TTopicTuiApp::BuildMainComponent() {
     auto writeMessageComponent = WriteMessageForm_->Build();
     auto dropConsumerComponent = DropConsumerForm_->Build();
     auto editConsumerComponent = EditConsumerForm_->Build();
+    auto offsetFormComponent = OffsetForm_->Build();
     
     // Use a simple container - we'll switch rendering manually
     auto container = Container::Stacked({
@@ -455,7 +464,7 @@ Component TTopicTuiApp::BuildMainComponent() {
                 content = editConsumerComponent->Render();
                 break;
             case EViewType::OffsetForm:
-                // Not rendered as standalone - used as modal
+                content = offsetFormComponent->Render();
                 break;
         }
         

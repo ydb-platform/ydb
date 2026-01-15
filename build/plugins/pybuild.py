@@ -473,13 +473,14 @@ def onpy_srcs(unit, *args):
                 pass
 
         obj_suff = unit.get('OBJ_SUF')
+        cython_suff = unit.get('CYTHON_SUFFIX')
         assert obj_suff is not None
         for pyxs, cython, out_suffix, with_ext in [
-            (pyxs_c, unit.on_buildwith_cython_c_dep, ".c", obj_suff),
-            (pyxs_c_h, unit.on_buildwith_cython_c_h, ".c", None),
-            (pyxs_c_api_h, unit.on_buildwith_cython_c_api_h, ".c", None),
-            (pyxs_cpp, unit.on_buildwith_cython_cpp_dep, ".cpp", obj_suff),
-            (pyxs_cpp_h, unit.on_buildwith_cython_cpp_h, ".cpp", None),
+            (pyxs_c, unit.on_buildwith_cython_c_dep, f"{cython_suff}.c", obj_suff),
+            (pyxs_c_h, unit.on_buildwith_cython_c_h, f"{cython_suff}.c", None),
+            (pyxs_c_api_h, unit.on_buildwith_cython_c_api_h, f"{cython_suff}.c", None),
+            (pyxs_cpp, unit.on_buildwith_cython_cpp_dep, f"{cython_suff}.cpp", obj_suff),
+            (pyxs_cpp_h, unit.on_buildwith_cython_cpp_h, f"{cython_suff}.cpp", None),
         ]:
             for path, mod in pyxs:
                 filename = rootrel_arc_src(path, unit)
@@ -525,7 +526,7 @@ def onpy_srcs(unit, *args):
                 unit.onresource_files(['DONT_COMPRESS'] + [x for name, path in files2res for x in ('DEST', name, path)])
 
         if include_map:
-            for cyhon in ['cython', 'cython_py2']:
+            for cython in ['cython' if py3 else 'cython_py2']:
                 data = ['DONT_COMPRESS']
                 prefix = f'resfs/{cython}/include'
                 for line in sorted(

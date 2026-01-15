@@ -7,3 +7,7 @@ items:
   href: jooq.md
 - name: Dapper
   href: dapper.md
+- name: SQLAlchemy
+  href: sqlalchemy.md
+- name: Django
+  href: django.md

@@ -1,5 +1,7 @@
 # Создание и заполнение таблицы на основе результатов запроса
 
+{% include [not_allow_for_oltp](../../../../_includes/not_allow_for_oltp_note.md) %}
+
 Вызов `CREATE TABLE AS` создает новую {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %}, которая заполнена данными из результатов запроса.
 
 ```yql

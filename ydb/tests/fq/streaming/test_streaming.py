@@ -253,7 +253,7 @@ class TestStreamingInYdb(StreamingTestBase):
                 $in = SELECT data FROM {source_name}.`{input_topic}`
                 WITH (
                     FORMAT="json_each_row",
-                    `skip.json.errors` = "true",
+                    SKIP_JSON_ERRORS = "true",
                     SCHEMA=(time UINT32 NOT NULL, data String NOT NULL));
                 INSERT INTO {source_name}.`{output_topic}` SELECT data FROM $in;
             END DO;'''

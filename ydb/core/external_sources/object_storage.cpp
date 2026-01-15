@@ -272,7 +272,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
                 continue;
             }
 
-            if (key == "skip.json.errors"sv) {
+            if (key == "skip.json.errors"sv || key == "skipjsonerrors"sv) {
                 continue;
             }
 

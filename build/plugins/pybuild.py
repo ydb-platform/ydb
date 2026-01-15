@@ -462,7 +462,7 @@ def onpy_srcs(unit, *args):
                 else:
                     cpp_files2res.add((filename + with_ext + out_suffix, path + with_ext + out_suffix))
                 # used includes
-                for entry in parse_pyx_includes(filename, path, unit.resolve('$S'), py3):
+                for entry in parse_pyx_includes(filename, path, unit.resolve('$S'), None, py3):
                     py_files2res.add(entry)
                     include_arc_rel = entry[0]
                     include_map[filename].add(include_arc_rel)

@@ -18,45 +18,19 @@ namespace NKikimr {
 namespace NKqp {
 class TTestHelper {
 public:
-    class TCompression {
-        YDB_ACCESSOR(TString, SerializerClassName, "ARROW_SERIALIZER");
-        YDB_OPT(NKikimrSchemeOp::EColumnCodec, CompressionType);
-        YDB_ACCESSOR_DEF(std::optional<i32>, CompressionLevel);
-
-    public:
-        bool DeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer);
-        TString BuildQuery() const;
-
-        bool IsEqual(const TCompression& rhs, TString& errorMessage) const;
-
-        TString ToString() const;
-    };
-
-    class TColumnFamily {
-        YDB_ACCESSOR(ui32, Id, 0);
-        YDB_ACCESSOR_DEF(TString, FamilyName);
-        YDB_ACCESSOR_DEF(TString, Data);
-        YDB_ACCESSOR_DEF(TCompression, Compression);
-
-    public:
-        bool DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& family);
-        TString BuildQuery() const;
-
-        bool IsEqual(const TColumnFamily& rhs, TString& errorMessage) const;
-
-        TString ToString() const;
-    };
-
-    class TColumnSchema {
+class TColumnSchema {
         YDB_ACCESSOR_DEF(TString, Name);
         YDB_ACCESSOR_DEF(NScheme::TTypeInfo, TypeInfo);
         YDB_FLAG_ACCESSOR(Nullable, true);
-        YDB_ACCESSOR_DEF(TString, ColumnFamilyName);
+
+        std::optional<std::map<TString, TString>> ColumnCompression;
 
     public:
         TString BuildQuery() const;
 
         TColumnSchema& SetType(const NScheme::TTypeInfo& typeInfo);
+        TColumnSchema& SetCompression();
+        TColumnSchema& SetCompressionSetting(const TString& key, const TString& value);
     };
 
     using TUpdatesBuilder = NColumnShard::TTableUpdatesBuilder;
@@ -67,13 +41,11 @@ public:
         YDB_ACCESSOR_DEF(TVector<TString>, PrimaryKey);
         YDB_ACCESSOR_DEF(TVector<TString>, Sharding);
         YDB_ACCESSOR(ui32, MinPartitionsCount, 1);
-        YDB_ACCESSOR_DEF(TVector<TColumnFamily>, ColumnFamilies);
 
         std::optional<std::pair<TString, TString>> TTLConf;
 
     public:
         TString BuildQuery() const;
-        TString BuildAlterCompressionQuery(const TString& columnName, const TCompression& compression) const;
         std::shared_ptr<arrow::Schema> GetArrowSchema(const TVector<TColumnSchema>& columns);
 
         TColumnTableBase& SetTTL(const TString& columnName, const TString& ttlConf) {
@@ -109,6 +81,7 @@ public:
     TTestActorRuntime& GetRuntime();
     NYdb::NTable::TSession& GetSession();
     void CreateTable(const TColumnTableBase& table, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
+    void CreateTableQuery(const TColumnTableBase& table, const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
     void DropTable(const TString& tableName);
     void EnsureSecret(const TString& name, const TString& value);
     void CreateTier(const TString& tierName);
@@ -124,8 +97,6 @@ public:
     void ExecuteQuery(const TString& query) const;
     void RebootTablets(const TString& tableName);
     void WaitTabletDeletionInHive(ui64 tabletId, TDuration duration);
-    void SetCompression(const TColumnTableBase& columnTable, const TString& columnName, const TCompression& compression,
-        const NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS);
 };
 }
 }

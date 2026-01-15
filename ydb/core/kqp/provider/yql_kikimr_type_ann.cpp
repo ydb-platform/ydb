@@ -995,9 +995,32 @@ private:
             }
 
             if (columnTuple.Size() > 3) {
-                auto families = columnTuple.Item(3).Cast<TCoAtomList>();
-                for (auto family : families) {
-                    columnMeta.Families.push_back(TString(family.Value()));
+                auto columnItem = columnTuple.Item(3);
+                if (columnItem.Maybe<TExprList>()) {
+                    const auto exprs = columnItem.Cast<TExprList>();
+                    if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
+                        columnMeta.Compression = TColumnCompression();
+                        const auto settings = exprs.Item(1).Cast<TExprList>();
+                        for (const auto setting : settings) {
+                            const auto sKV = setting.Cast<TExprList>();
+                            const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
+                            const auto& settingVal = sKV.Item(1).Ref();
+                            if (key == "algorithm" && settingVal.IsCallable("String")) {
+                                columnMeta.Compression->Algorithm = settingVal.Child(0)->Content();
+                            } else if (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))) {
+                                columnMeta.Compression->Level = FromString<i64>(settingVal.Child(0)->Content());
+                            } else {
+                                columnTypeError(columnItem.Pos(), columnName, "Only algorithm and level settings supported for column COMPRESSION");
+                                return TStatus::Error;
+                            }
+                        }
+                    } else {
+                        // TODO: fix
+                        const auto families = columnItem.Cast<TCoAtomList>();
+                        for (const auto family : families) {
+                            columnMeta.Families.push_back(TString(family.Value()));
+                        }
+                    }
                 }
             }
 
@@ -1609,9 +1632,25 @@ private:
                                 << "changeColumnConstraints can get exactly one token \\in {\"set_not_null\", \"drop_not_null\"}"));
                             return TStatus::Error;
                         }
+                    } else if (alterColumnAction == "changeCompression") {
+                        const auto settings = alterColumnList.Item(1).Cast<TExprList>();
+                        for (const auto setting : settings) {
+                            const auto sKV = setting.Cast<TExprList>();
+                            const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
+                            const auto& settingVal = sKV.Item(1).Ref();
+                            if (!((key == "algorithm" && settingVal.IsCallable("String")) ||
+                                (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))))) {
+                                ctx.AddError(TIssue(ctx.GetPosition(sKV.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name
+                                    << "\". Setting: \"" << key
+                                    << "\". Only algorithm and level settings supported for column COMPRESSION"));
+                                return TStatus::Error;
+                            }
+                        }
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
-                                TStringBuilder() << "Unsupported action to alter column"));
+                                TStringBuilder() << "Unsupported action to alter column: " << alterColumnAction));
                         return TStatus::Error;
                     }
                 }

@@ -674,7 +674,7 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action, i32 
                     if (!nodeGroup->IsNodeLocked(vdisk->NodeId, priority)) {
                         nodeGroup->LockNode(vdisk->NodeId, priority);
                     }
-                } 
+                }
             }
         }
         break;
@@ -1036,7 +1036,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
         auto &group = entry.second;
         ss << "BSGroup {" << Endl
            << "  Id: " << group.GroupId << Endl;
-        if (group.Erasure.GetErasure() == TErasureType::ErasureSpeciesCount)
+        if (!TBlobStorageGroupType::ErasureNames.contains(group.Erasure.GetErasure()))
             ss << "  Erasure: UNKNOWN" << Endl;
         else
             ss << "  Erasure: " << group.Erasure.ToString() << Endl;
@@ -1060,7 +1060,7 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action, i32 pr
                     if (!nodeGroup->IsNodeLocked(node->NodeId, priority)) {
                         AddNodeLockOperation(node->NodeId, priority, nodeGroup);
                     }
-                }     
+                }
             }
         }
         break;
@@ -1072,14 +1072,14 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action, i32 pr
                     if (!nodeGroup->IsNodeLocked(pdisk->NodeId, priority)) {
                         AddNodeLockOperation(pdisk->NodeId, priority, nodeGroup);
                     }
-                }       
+                }
             } else if (clusterState->HasVDisk(device)) {
                 auto vdisk = &clusterState->VDisk(device);
                 for (auto &nodeGroup: clusterState->NodeRef(vdisk->NodeId).NodeGroups) {
                     if (!nodeGroup->IsNodeLocked(vdisk->NodeId, priority)) {
                         AddNodeLockOperation(vdisk->NodeId, priority, nodeGroup);
                     }
-                }     
+                }
             }
         }
         break;

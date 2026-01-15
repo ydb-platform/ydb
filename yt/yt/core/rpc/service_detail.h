@@ -1117,6 +1117,7 @@ public:
 
     int GetQueueSize() const;
     std::optional<int> GetQueueSizeLimit() const;
+    // TODO(h0pless): support queue byte size limit for symmetry's sake.
     i64 GetQueueByteSize() const;
     int GetConcurrency() const;
     i64 GetConcurrencyByte() const;

@@ -20,7 +20,7 @@ struct TDatabaseState {
     bool& EnabledResourcePoolsOnServerless;
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
 
-    std::vector<TEvPlaceRequestIntoPool::TPtr> PendingRequersts = {};
+    std::vector<TEvPlaceRequestIntoPool::TPtr> PendingRequests = {};
     std::unordered_set<TString> PendingSessionIds = {};
     std::unordered_map<TString, std::vector<TEvCleanupRequest::TPtr>> PendingCancelRequests = {};  // Session ID to requests
     std::unordered_map<TString, std::unordered_set<TActorId>> PendingSubscriptions = {};  // Pool ID to subscribers
@@ -43,7 +43,7 @@ struct TDatabaseState {
     void DoPlaceRequest(TEvPlaceRequestIntoPool::TPtr ev) {
         TString databaseId = ev->Get()->DatabaseId;
         PendingSessionIds.emplace(ev->Get()->SessionId);
-        PendingRequersts.emplace_back(std::move(ev));
+        PendingRequests.emplace_back(std::move(ev));
 
         if (!EnabledResourcePoolsOnServerless && (TInstant::Now() - LastUpdateTime) > IDLE_DURATION) {
             TActivationContext::Register(CreateDatabaseFetcherActor(SelfId, DatabaseIdToDatabase(databaseId)));
@@ -103,20 +103,20 @@ private:
             return;
         }
 
-        for (auto& ev : PendingRequersts) {
+        for (auto& ev : PendingRequests) {
             TActivationContext::Register(CreatePoolResolverActor(std::move(ev), HasDefaultPool, WorkloadManagerConfig));
         }
-        PendingRequersts.clear();
+        PendingRequests.clear();
     }
 
     void ReplyContinueError(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-        for (const auto& ev : PendingRequersts) {
+        for (const auto& ev : PendingRequests) {
             RemovePendingSession(ev->Get()->SessionId, [actorSystem = TActivationContext::ActorSystem()](TEvCleanupRequest::TPtr event) {
                 actorSystem->Send(event->Sender, new TEvCleanupResponse(Ydb::StatusIds::NOT_FOUND, NYql::TIssues{NYql::TIssue(TStringBuilder() << "Pool " << event->Get()->PoolId << " not found")}));
             });
             TActivationContext::Send(ev->Sender, std::make_unique<TEvContinueRequest>(status, TString{}, NResourcePool::TPoolSettings{}, issues));
         }
-        PendingRequersts.clear();
+        PendingRequests.clear();
     }
 };
 

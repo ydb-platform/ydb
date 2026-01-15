@@ -1,8 +1,9 @@
 Metadata-Version: 2.4
 Name: setuptools
-Version: 79.0.1
+Version: 80.9.0
 Summary: Easily download, build, install, upgrade, and uninstall Python packages
 Author-email: Python Packaging Authority <distutils-sig@python.org>
+License-Expression: MIT
 Project-URL: Source, https://github.com/pypa/setuptools
 Project-URL: Documentation, https://setuptools.pypa.io/
 Project-URL: Changelog, https://setuptools.pypa.io/en/stable/history.html

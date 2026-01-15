@@ -27,9 +27,15 @@ Component TOffsetForm::BuildContainer() {
     opt.multiline = false;
     
     OffsetInputComponent_ = Input(opt);
-    return Container::Vertical({
+    
+    auto container = Container::Vertical({
         OffsetInputComponent_
     });
+    
+    // Ensure input has focus when form is shown
+    OffsetInputComponent_->TakeFocus();
+    
+    return container;
 }
 
 Element TOffsetForm::RenderContent() {

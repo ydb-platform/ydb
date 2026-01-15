@@ -1,8 +1,8 @@
-#include "helpers/local.h"
-#include "helpers/writer.h"
-#include "helpers/typed_local.h"
-#include "helpers/query_executor.h"
-#include "helpers/get_value.h"
+#include <ut/olap/helpers/local.h>
+#include <ut/olap/helpers/writer.h>
+#include <ut/olap/helpers/typed_local.h>
+#include <ut/olap/helpers/query_executor.h>
+#include <ut/olap/helpers/get_value.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>

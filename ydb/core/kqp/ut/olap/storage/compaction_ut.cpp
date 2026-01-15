@@ -1,5 +1,5 @@
-#include "helpers/local.h"
-#include "helpers/writer.h"
+#include <ut/olap/helpers/local.h>
+#include <ut/olap/helpers/writer.h>
 
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>

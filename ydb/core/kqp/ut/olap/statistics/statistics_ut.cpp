@@ -1,4 +1,4 @@
-#include "helpers/typed_local.h"
+#include <ut/olap/helpers/typed_local.h>
 
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 

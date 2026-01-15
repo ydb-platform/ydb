@@ -333,7 +333,13 @@ public:
     }
 };
 
-bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, const TPathId& currentPathId, TVector<ISubOperation::TPtr>& result) {
+enum ESchemeObjectType {
+    ETypeMainTable,
+    ETypeIndex,
+    ETypeIndexImplTable
+};
+
+bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, const TPathId& currentPathId, TVector<ISubOperation::TPtr>& result, ESchemeObjectType objectType) {
     TPath currentPath = TPath::Init(currentPathId, context.SS);
 
     if (currentPath->IsTable()) {
@@ -361,71 +367,110 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
         result.push_back(CreateTruncateTable(NextPartId(opId, result), modifycheme));
     }
 
-    for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
-        Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
-        TPath srcChildPath = currentPath.Child(childName);
+    // The code below checks that the table matches a very strictly defined structure.
+    // We must not allow this structure to be accidentally broken by future changes,
+    // because in that case TRUNCATE could bring the database into an inconsistent state.
+    // It is better to return an error to the user than to allow that to happen.
+    switch (objectType) {
+        case ESchemeObjectType::ETypeMainTable: {
+            for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
+                Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
+                TPath srcChildPath = currentPath.Child(childName);
 
-        if (srcChildPath.IsDeleted()) {
-            continue;
-        }
-
-        switch (srcChildPath.Base()->PathType) {
-            case NKikimrSchemeOp::EPathType::EPathTypeTable: { // indexImplTables
-                if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result)) {
-                    return false;
+                if (srcChildPath.IsDeleted()) {
+                    continue;
                 }
 
-                break;
+                switch (srcChildPath.Base()->PathType) {
+                    case NKikimrSchemeOp::EPathType::EPathTypeTableIndex: {
+                        auto indexType = context.SS->Indexes.at(srcChildPath.Base()->PathId)->Type;
+
+                        switch (indexType) {
+                            case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
+                                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with async indexes")};
+                                return false;
+                            }
+                            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+                                // This condition should be removed in the near future
+                                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with vector indexes")};
+                                return false;
+                            }
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+                                // This condition should be removed in the near future
+                                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with fulltext indexes")};
+                                return false;
+                            }
+                            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                            case NKikimrSchemeOp::EIndexTypeGlobal: {
+                                if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::ETypeIndex)) {
+                                    return false;
+                                }
+
+                                break;
+                            }
+                            default: {
+                                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with unknown indexes")};
+                                return false;
+                            }
+                        }
+
+                        break;
+                    }
+
+                    case NKikimrSchemeOp::EPathType::EPathTypeCdcStream: {
+                        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with CDC streams")};
+                        return false;
+                    }
+
+                    case NKikimrSchemeOp::EPathType::EPathTypeSequence: {
+                        break;
+                    }
+
+                    default: {
+                        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with unknown children")};
+                        return false;
+                    }
+                }
             }
 
-            case NKikimrSchemeOp::EPathType::EPathTypeTableIndex: {
-                auto indexType = context.SS->Indexes.at(srcChildPath.Base()->PathId)->Type;
+            break;
+        }
 
-                switch (indexType) {
-                    case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
-                        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with async indexes")};
-                        return false;
-                    }
-                    case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
-                        // This condition should be removed in the near future
-                        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with vector indexes")};
-                        return false;
-                    }
-                    case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-                        // This condition should be removed in the near future
-                        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with fulltext indexes")};
-                        return false;
-                    }
-                    case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-                    case NKikimrSchemeOp::EIndexTypeGlobal: {
-                        if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result)) {
+        case ESchemeObjectType::ETypeIndex: {
+            for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
+                Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
+                TPath srcChildPath = currentPath.Child(childName);
+
+                if (srcChildPath.IsDeleted()) {
+                    continue;
+                }
+
+                switch (srcChildPath.Base()->PathType) {
+                    case NKikimrSchemeOp::EPathType::EPathTypeTable: { // indexImplTables
+                        if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::ETypeIndexImplTable)) {
                             return false;
                         }
 
                         break;
                     }
+
                     default: {
-                        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with unknown indexes")};
+                        result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with unknown children")};
                         return false;
                     }
                 }
-
-                break;
             }
 
-            case NKikimrSchemeOp::EPathType::EPathTypeCdcStream: {
-                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with CDC streams")};
+            break;
+        }
+
+        case ESchemeObjectType::ETypeIndexImplTable: {
+            if (!currentPath.Base()->GetChildren().empty()) {
+                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Index impl tables cannot contain children")};
                 return false;
             }
 
-            case NKikimrSchemeOp::EPathType::EPathTypeSequence: {
-                break;
-            }
-
-            default: {
-                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with unknown children")};
-                return false;
-            }
+            break;
         }
     }
 
@@ -473,7 +518,7 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
         return result;
     }
 
-    DfsOnTableChildrenTree(opId, tx, context, mainTablePath.Base()->PathId, result);
+    DfsOnTableChildrenTree(opId, tx, context, mainTablePath.Base()->PathId, result, ESchemeObjectType::ETypeMainTable);
 
     return result;
 }

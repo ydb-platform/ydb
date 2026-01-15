@@ -9,7 +9,7 @@ using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
-TMessageForm::TMessageForm(TTopicTuiApp& app)
+TMessageForm::TMessageForm(ITuiApp& app)
     : App_(app)
 {
     Reset();

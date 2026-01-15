@@ -12,7 +12,7 @@
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
+class ITuiApp;
 enum class EViewType;
 
 // =============================================================================
@@ -36,7 +36,7 @@ enum class EViewType;
 
 class TFormBase {
 public:
-    explicit TFormBase(TTopicTuiApp& app);
+    explicit TFormBase(ITuiApp& app);
     virtual ~TFormBase() = default;
     
     // Build the complete form component
@@ -89,7 +89,7 @@ protected:
     ftxui::Element RenderSpinner(const std::string& message);
     
     // Access to app
-    TTopicTuiApp& GetApp() { return App_; }
+    ITuiApp& GetApp() { return App_; }
     
     // === State ===
     TString ErrorMessage_;
@@ -98,7 +98,7 @@ protected:
     int SpinnerFrame_ = 0;
     
 private:
-    TTopicTuiApp& App_;
+    ITuiApp& App_;
 };
 
 } // namespace NYdb::NConsoleClient

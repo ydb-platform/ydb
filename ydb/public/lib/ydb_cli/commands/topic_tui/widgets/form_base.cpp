@@ -1,5 +1,5 @@
 #include "form_base.h"
-#include "../topic_tui_app.h"
+#include "../app_interface.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
 
@@ -7,7 +7,7 @@ using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
-TFormBase::TFormBase(TTopicTuiApp& app)
+TFormBase::TFormBase(ITuiApp& app)
     : App_(app)
 {}
 
@@ -65,20 +65,17 @@ Component TFormBase::Build() {
             return true;
         }
         
-        // Handle Escape - cancel form
+        // Handle Escape - cancel form and navigate back
         if (event == Event::Escape) {
-            if (OnCancel) {
-                OnCancel();
-            }
+            App_.NavigateBack();
             return true;
         }
         
         // Handle Enter - submit form
         if (event == Event::Return) {
             if (HandleSubmit()) {
-                if (OnSuccess) {
-                    OnSuccess();
-                }
+                // HandleSubmit should call NavigateBack() and RequestRefresh() as needed
+                // Forms handle their own navigation now
             }
             return true;
         }

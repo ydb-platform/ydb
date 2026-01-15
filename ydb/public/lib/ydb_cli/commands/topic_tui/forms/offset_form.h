@@ -8,11 +8,11 @@
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
+class ITuiApp;
 
 class TOffsetForm : public TFormBase {
 public:
-    explicit TOffsetForm(TTopicTuiApp& app);
+    explicit TOffsetForm(ITuiApp& app);
     
     void SetContext(const TString& topicPath, const TString& consumerName, 
                     ui64 partition, ui64 currentOffset, ui64 endOffset);

@@ -1,11 +1,12 @@
 #include "drop_consumer_form.h"
-#include "../topic_tui_app.h"
+#include "../app_interface.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
-TDropConsumerForm::TDropConsumerForm(TTopicTuiApp& app)
+TDropConsumerForm::TDropConsumerForm(ITuiApp& app)
     : TFormBase(app)
 {}
 
@@ -56,9 +57,17 @@ Element TDropConsumerForm::RenderFooter() {
 
 bool TDropConsumerForm::HandleSubmit() {
     if (TString(ConfirmInput_.c_str()) == ConsumerName_) {
-        if (OnConfirm) {
-            OnConfirm(TopicPath_, ConsumerName_);
+        // Execute the drop consumer operation directly using ITuiApp interface
+        NTopic::TAlterTopicSettings settings;
+        settings.AppendDropConsumers(std::string(ConsumerName_.c_str()));
+        auto result = GetApp().GetTopicClient().AlterTopic(TopicPath_, settings).GetValueSync();
+        
+        GetApp().NavigateBack();
+        if (!result.IsSuccess()) {
+            GetApp().ShowError(result.GetIssues().ToString());
         }
+        // Request refresh for the topic details view
+        GetApp().RequestRefresh();
         return true;  // Close form
     }
     // Name doesn't match - don't close, don't show error

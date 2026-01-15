@@ -13,7 +13,7 @@ namespace NYdb::NConsoleClient {
 static std::vector<std::string> AutoPartStrategies = {"Disabled", "ScaleUp", "ScaleUpAndDown", "Paused"};
 static std::vector<std::string> MeteringModes = {"Unspecified", "ReservedCapacity", "RequestUnits"};
 
-TTopicForm::TTopicForm(TTopicTuiApp& app)
+TTopicForm::TTopicForm(ITuiApp& app)
     : TFormBase(app)
 {
     Reset();

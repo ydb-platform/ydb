@@ -13,11 +13,11 @@
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
+class ITuiApp;
 
 class TWriteMessageForm : public TFormBase {
 public:
-    explicit TWriteMessageForm(TTopicTuiApp& app);
+    explicit TWriteMessageForm(ITuiApp& app);
     
     void SetTopic(const TString& topicPath, std::optional<ui32> partitionId);
     void Reset() override;

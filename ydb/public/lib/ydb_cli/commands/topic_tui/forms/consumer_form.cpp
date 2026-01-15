@@ -1,11 +1,12 @@
 #include "consumer_form.h"
-#include "../topic_tui_app.h"
+#include "../app_interface.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
-TConsumerForm::TConsumerForm(TTopicTuiApp& app)
+TConsumerForm::TConsumerForm(ITuiApp& app)
     : TFormBase(app)
 {
     Reset();
@@ -114,9 +115,9 @@ void TConsumerForm::CheckAsyncCompletion() {
             
             if (result.IsSuccess()) {
                 SuccessMessage_ = "Consumer added successfully!";
-                if (OnSuccess) {
-                    OnSuccess();
-                }
+                // Navigate back and refresh using ITuiApp interface
+                GetApp().NavigateBack();
+                GetApp().RequestRefresh();
             } else {
                 ErrorMessage_ = result.GetIssues().ToString();
             }

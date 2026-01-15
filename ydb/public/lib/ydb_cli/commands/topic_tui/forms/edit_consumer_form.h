@@ -11,11 +11,11 @@
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
+class ITuiApp;
 
 class TEditConsumerForm : public TFormBase {
 public:
-    explicit TEditConsumerForm(TTopicTuiApp& app);
+    explicit TEditConsumerForm(ITuiApp& app);
     
     // Set the consumer to edit
     void SetConsumer(const TString& topicPath, const TString& consumerName);

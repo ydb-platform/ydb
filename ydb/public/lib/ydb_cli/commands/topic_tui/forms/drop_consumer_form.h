@@ -8,11 +8,11 @@
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
+class ITuiApp;
 
 class TDropConsumerForm : public TFormBase {
 public:
-    explicit TDropConsumerForm(TTopicTuiApp& app);
+    explicit TDropConsumerForm(ITuiApp& app);
     
     // Set the consumer to drop
     void SetConsumer(const TString& topicPath, const TString& consumerName);

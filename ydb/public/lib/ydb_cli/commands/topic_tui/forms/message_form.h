@@ -10,7 +10,7 @@
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
+class ITuiApp;
 
 struct TMessageFormData {
     TString Data;
@@ -20,7 +20,7 @@ struct TMessageFormData {
 
 class TMessageForm {
 public:
-    explicit TMessageForm(TTopicTuiApp& app);
+    explicit TMessageForm(ITuiApp& app);
     
     ftxui::Component Build();
     void SetTopicPath(const TString& topicPath);
@@ -34,7 +34,7 @@ private:
     ftxui::Element RenderForm();
     
 private:
-    TTopicTuiApp& App_;
+    ITuiApp& App_;
     TString TopicPath_;
     TMessageFormData Data_;
     

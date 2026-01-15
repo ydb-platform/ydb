@@ -1,11 +1,12 @@
 #include "delete_confirm_form.h"
-#include "../topic_tui_app.h"
-
+#include "../app_interface.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
-TDeleteConfirmForm::TDeleteConfirmForm(TTopicTuiApp& app)
+TDeleteConfirmForm::TDeleteConfirmForm(ITuiApp& app)
     : TFormBase(app)
 {}
 
@@ -54,8 +55,23 @@ Element TDeleteConfirmForm::RenderFooter() {
 
 bool TDeleteConfirmForm::HandleSubmit() {
     if (TString(ConfirmInput_.c_str()) == TopicName_) {
-        if (OnConfirm) {
-            OnConfirm(TopicPath_);
+        // Execute the delete operation directly using ITuiApp interface
+        // Try to delete as topic first
+        auto topicResult = GetApp().GetTopicClient().DropTopic(TopicPath_).GetValueSync();
+        if (topicResult.IsSuccess()) {
+            GetApp().NavigateBack();
+            GetApp().RequestRefresh();
+            return true;  // Close form
+        }
+        
+        // If topic delete failed, try as directory
+        auto dirResult = GetApp().GetSchemeClient().RemoveDirectory(TopicPath_).GetValueSync();
+        GetApp().NavigateBack();
+        if (dirResult.IsSuccess()) {
+            GetApp().RequestRefresh();
+        } else {
+            // Show directory error
+            GetApp().ShowError(dirResult.GetIssues().ToString());
         }
         return true;  // Close form
     }

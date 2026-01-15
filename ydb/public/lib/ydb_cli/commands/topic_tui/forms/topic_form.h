@@ -11,7 +11,7 @@
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
+class ITuiApp;
 
 // Form data for creating/editing a topic
 struct TTopicFormData {
@@ -41,7 +41,7 @@ struct TTopicFormData {
 
 class TTopicForm : public TFormBase {
 public:
-    explicit TTopicForm(TTopicTuiApp& app);
+    explicit TTopicForm(ITuiApp& app);
     
     // Set existing topic data for editing
     void SetEditMode(const TString& topicPath, const NTopic::TTopicDescription& desc);

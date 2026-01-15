@@ -7,7 +7,7 @@ using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
-TOffsetForm::TOffsetForm(TTopicTuiApp& app)
+TOffsetForm::TOffsetForm(ITuiApp& app)
     : TFormBase(app)
 {}
 

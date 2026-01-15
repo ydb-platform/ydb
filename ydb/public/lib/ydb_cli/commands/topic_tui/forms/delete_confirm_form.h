@@ -8,11 +8,11 @@
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
+class ITuiApp;
 
 class TDeleteConfirmForm : public TFormBase {
 public:
-    explicit TDeleteConfirmForm(TTopicTuiApp& app);
+    explicit TDeleteConfirmForm(ITuiApp& app);
     
     // Set the topic to delete
     void SetTopic(const TString& topicPath);

@@ -48,80 +48,15 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     DropConsumerForm_ = std::make_shared<TDropConsumerForm>(*this);
     EditConsumerForm_ = std::make_shared<TEditConsumerForm>(*this);
     
-    // Note: TopicListView no longer uses callbacks - it navigates directly via ITuiApp interface
-    // Note: TopicDetailsView no longer uses callbacks - it navigates directly via ITuiApp interface
-    
-    // Wire up form callbacks (forms still use callbacks since they represent one-shot actions)
-    // Edit consumer form callbacks
-    EditConsumerForm_->OnSuccess = [this]() {
-        TopicDetailsView_->Refresh();
-        NavigateBack();
-    };
-    
-    EditConsumerForm_->OnCancel = [this]() {
-        NavigateBack();
-    };
-    
-    // Consumer form callbacks
-    ConsumerForm_->OnSuccess = [this]() {
-        TopicDetailsView_->Refresh();
-        NavigateBack();
-    };
-    
-    ConsumerForm_->OnCancel = [this]() {
-        NavigateBack();
-    };
-    
-    // Write message form callbacks
-    WriteMessageForm_->OnClose = [this]() {
-        NavigateBack();
-    };
-    
-    // Drop consumer form callbacks
-    DropConsumerForm_->OnConfirm = [this](const TString& topicPath, const TString& consumerName) {
-        NTopic::TAlterTopicSettings settings;
-        settings.AppendDropConsumers(std::string(consumerName.c_str()));
-        auto result = TopicClient_->AlterTopic(topicPath, settings).GetValueSync();
-        NavigateBack();
-        if (result.IsSuccess()) {
-            TopicDetailsView_->Refresh();
-        } else {
-            ShowError(result.GetIssues().ToString());
-        }
-    };
-    
-    DropConsumerForm_->OnCancel = [this]() {
-        NavigateBack();
-    };
-    
-    // Note: ConsumerView no longer uses OnDropConsumer callback - it navigates directly via ITuiApp interface
-    // Note: OnBack callbacks are removed - views should call App_.NavigateBack() directly if needed
-    // (The global Escape handling in BuildMainComponent covers most navigation back scenarios)
-    
-    // Wire up delete confirmation callbacks
-    DeleteConfirmForm_->OnConfirm = [this](const TString& path) {
-        // Try to delete as topic first
-        auto topicResult = TopicClient_->DropTopic(path).GetValueSync();
-        if (topicResult.IsSuccess()) {
-            NavigateBack();
-            TopicListView_->Refresh();
-            return;
-        }
-        
-        // If topic delete failed, try as directory
-        auto dirResult = SchemeClient_->RemoveDirectory(path).GetValueSync();
-        NavigateBack();
-        if (dirResult.IsSuccess()) {
-            TopicListView_->Refresh();
-        } else {
-            // Show original topic error or directory error
-            ShowError(dirResult.GetIssues().ToString());
-        }
-    };
-    
-    DeleteConfirmForm_->OnCancel = [this]() {
-        NavigateBack();
-    };
+    // Note: All views now navigate directly via ITuiApp interface:
+    // - TopicListView: topic/directory selection, CRUD operations
+    // - TopicDetailsView: consumer selection, messages, write, add/drop/edit consumer
+    // - ConsumerView: drop consumer
+    //
+    // Note: All forms now use ITuiApp interface directly:
+    // - TFormBase handles Escape key with NavigateBack() automatically
+    // - Forms call NavigateBack() and RequestRefresh() in their HandleSubmit/CheckAsyncCompletion
+    // - SDK calls (DropTopic, AlterTopic, RemoveDirectory) moved into form implementations
     
     // Wire up form callbacks
     TopicForm_->OnSubmit = [this](const TTopicFormData& data) {

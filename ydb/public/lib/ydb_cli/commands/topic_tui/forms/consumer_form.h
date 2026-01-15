@@ -12,11 +12,11 @@
 
 namespace NYdb::NConsoleClient {
 
-class TTopicTuiApp;
+class ITuiApp;
 
 class TConsumerForm : public TFormBase {
 public:
-    explicit TConsumerForm(TTopicTuiApp& app);
+    explicit TConsumerForm(ITuiApp& app);
     
     void SetTopic(const TString& topicPath);
     void Reset() override;

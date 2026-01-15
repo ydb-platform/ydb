@@ -1,13 +1,13 @@
 #include "write_message_form.h"
-#include "../topic_tui_app.h"
+#include "../app_interface.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/string/printf.h>
-
 using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
-TWriteMessageForm::TWriteMessageForm(TTopicTuiApp& app)
+TWriteMessageForm::TWriteMessageForm(ITuiApp& app)
     : TFormBase(app)
 {
     Reset();
@@ -98,17 +98,7 @@ void TWriteMessageForm::Reset() {
         WriteSession_->Close(TDuration::Seconds(1));
         WriteSession_.reset();
     }
-    
-    // Wire up OnCancel to close the write session
-    OnCancel = [this]() {
-        if (WriteSession_) {
-            WriteSession_->Close(TDuration::Seconds(5));
-            WriteSession_.reset();
-        }
-        if (OnClose) {
-            OnClose();
-        }
-    };
+    // Note: TFormBase handles Escape key navigation; session cleanup happens in destructor or Reset
 }
 
 void TWriteMessageForm::CreateWriteSession() {

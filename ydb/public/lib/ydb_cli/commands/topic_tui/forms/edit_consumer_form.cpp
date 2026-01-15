@@ -1,11 +1,12 @@
 #include "edit_consumer_form.h"
-#include "../topic_tui_app.h"
+#include "../app_interface.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
-TEditConsumerForm::TEditConsumerForm(TTopicTuiApp& app)
+TEditConsumerForm::TEditConsumerForm(ITuiApp& app)
     : TFormBase(app)
 {}
 
@@ -103,9 +104,9 @@ void TEditConsumerForm::CheckAsyncCompletion() {
             
             if (result.IsSuccess()) {
                 SuccessMessage_ = "Consumer updated successfully!";
-                if (OnSuccess) {
-                    OnSuccess();
-                }
+                // Navigate back and refresh using ITuiApp interface
+                GetApp().NavigateBack();
+                GetApp().RequestRefresh();
             } else {
                 ErrorMessage_ = result.GetIssues().ToString();
             }

@@ -96,6 +96,9 @@ private:
     // Static cache of last viewed offset per topic:partition
     // Key format: "topic_path:partition_id"
     static std::unordered_map<TString, ui64> PositionCache_;
+    
+    // Stop flag for async cancellation
+    std::shared_ptr<std::atomic<bool>> StopFlag_ = std::make_shared<std::atomic<bool>>(false);
 };
 
 } // namespace NYdb::NConsoleClient

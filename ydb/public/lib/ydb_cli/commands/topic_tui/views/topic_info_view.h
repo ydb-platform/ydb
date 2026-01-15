@@ -44,6 +44,7 @@ struct TTopicInfoData {
 class TTopicInfoView : public ITuiView {
 public:
     explicit TTopicInfoView(ITuiApp& app);
+    ~TTopicInfoView();
     
     ftxui::Component Build() override;
     void Refresh() override;
@@ -71,6 +72,9 @@ private:
     
     // Partition table
     TTable Table_;
+    
+    // Stop flag for async cancellation
+    std::shared_ptr<std::atomic<bool>> StopFlag_ = std::make_shared<std::atomic<bool>>(false);
 };
 
 } // namespace NYdb::NConsoleClient

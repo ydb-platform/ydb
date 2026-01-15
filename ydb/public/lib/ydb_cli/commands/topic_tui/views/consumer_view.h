@@ -51,6 +51,7 @@ class ITuiApp;
 class TConsumerView : public ITuiView {
 public:
     explicit TConsumerView(ITuiApp& app);
+    ~TConsumerView();
     
     ftxui::Component Build() override;
     void Refresh() override;
@@ -85,6 +86,9 @@ private:
     std::unordered_map<ui64, TSparklineHistory> PartitionWriteRateHistory_;
     // Per-partition read rate history for sparklines
     std::unordered_map<ui64, TSparklineHistory> PartitionReadRateHistory_;
+    
+    // Stop flag for async cancellation
+    std::shared_ptr<std::atomic<bool>> StopFlag_ = std::make_shared<std::atomic<bool>>(false);
 };
 
 } // namespace NYdb::NConsoleClient

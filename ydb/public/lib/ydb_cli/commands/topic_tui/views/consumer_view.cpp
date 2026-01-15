@@ -1,6 +1,7 @@
 #include "consumer_view.h"
 #include "../app_interface.h"
 #include "../widgets/sparkline.h"
+#include "../common/async_utils.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
 
@@ -44,6 +45,12 @@ TConsumerView::TConsumerView(ITuiApp& app)
         SortPartitions(col, asc);
         PopulateTable();
     };
+}
+
+TConsumerView::~TConsumerView() {
+    if (StopFlag_) {
+        *StopFlag_ = true;
+    }
 }
 
 Component TConsumerView::Build() {
@@ -269,12 +276,20 @@ void TConsumerView::StartAsyncLoad() {
     TString topicPath = TopicPath_;
     TString consumerName = ConsumerName_;
     auto* topicClient = &App_.GetTopicClient();
+    auto stopFlag = StopFlag_;
     
-    LoadFuture_ = std::async(std::launch::async, [topicPath, consumerName, topicClient]() -> TConsumerData {
+    LoadFuture_ = std::async(std::launch::async, [topicPath, consumerName, topicClient, stopFlag]() -> TConsumerData {
         TConsumerData data;
         
-        auto result = topicClient->DescribeConsumer(topicPath, consumerName,
-            NTopic::TDescribeConsumerSettings().IncludeStats(true).IncludeLocation(true)).GetValueSync();
+        auto future = topicClient->DescribeConsumer(topicPath, consumerName,
+            NTopic::TDescribeConsumerSettings().IncludeStats(true).IncludeLocation(true));
+        
+        // Wait with timeout and cancellation check
+        if (!WaitFor(future, stopFlag, TDuration::Seconds(5))) {
+            throw std::runtime_error("Request timed out or cancelled");
+        }
+        
+        auto result = future.GetValueSync();
         
         if (!result.IsSuccess()) {
             throw std::runtime_error(result.GetIssues().ToString());

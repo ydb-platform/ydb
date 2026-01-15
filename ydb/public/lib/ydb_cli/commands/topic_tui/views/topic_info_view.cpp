@@ -1,6 +1,7 @@
 #include "topic_info_view.h"
 #include "../app_interface.h"
 #include "../widgets/sparkline.h"
+#include "../common/async_utils.h"
 
 #include <util/string/printf.h>
 #include <functional>
@@ -39,6 +40,12 @@ TTopicInfoView::TTopicInfoView(ITuiApp& app)
 {
 }
 
+TTopicInfoView::~TTopicInfoView() {
+    if (StopFlag_) {
+        *StopFlag_ = true;
+    }
+}
+
 Component TTopicInfoView::Build() {
     return Renderer([this] {
         CheckAsyncCompletion();
@@ -65,11 +72,20 @@ void TTopicInfoView::StartAsyncLoad() {
     Loading_ = true;
     auto* topicClient = &App_.GetTopicClient();
     TString topicPath = TopicPath_;
+    auto stopFlag = StopFlag_;
     
-    DescribeFuture_ = std::async(std::launch::async, [topicClient, topicPath]() {
+    DescribeFuture_ = std::async(std::launch::async, [topicClient, topicPath, stopFlag]() {
         NTopic::TDescribeTopicSettings settings;
         settings.IncludeStats(true);
-        return topicClient->DescribeTopic(std::string(topicPath.c_str()), settings).GetValueSync();
+        
+        auto future = topicClient->DescribeTopic(std::string(topicPath.c_str()), settings);
+        
+        // Wait with timeout and cancellation check
+        if (!WaitFor(future, stopFlag, TDuration::Seconds(5))) {
+            throw std::runtime_error("Request timed out or cancelled");
+        }
+        
+        return future.GetValueSync();
     });
 }
 

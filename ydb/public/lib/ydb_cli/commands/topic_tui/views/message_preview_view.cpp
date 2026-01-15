@@ -2,6 +2,7 @@
 #include "../app_interface.h"
 #include "../widgets/sparkline.h"
 #include "../http_client.h"
+#include "../common/async_utils.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
 
@@ -646,6 +647,10 @@ void TMessagePreviewView::StartTailPoll() {
 }
 
 TMessagePreviewView::~TMessagePreviewView() {
+    // Signal stop to any async operations
+    if (StopFlag_) {
+        *StopFlag_ = true;
+    }
     StopTailSession();
 }
 

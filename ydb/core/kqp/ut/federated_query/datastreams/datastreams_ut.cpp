@@ -3650,6 +3650,46 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         CheckScriptExecutionsCount(0, 0);
     }
+
+    Y_UNIT_TEST_F(CreateStreamingQueryUnderTimeout, TStreamingWithSchemaSecretsTestFixture) {
+        auto& config = *SetupAppConfig().MutableQueryServiceConfig();
+        config.SetQueryTimeoutDefaultSeconds(3);
+        config.SetScriptOperationTimeoutDefaultSeconds(3);
+
+        constexpr char inputTopicName[] = "createStreamingQueryUnderTimeoutInputTopic";
+        constexpr char outputTopicName[] = "createStreamingQueryUnderTimeoutOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(5));
+
+        WriteTopicMessage(inputTopicName, "data1");
+        ReadTopicMessage(outputTopicName, "data1");
+        Sleep(TDuration::Seconds(5));
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        const auto& result = ExecQuery("SELECT RetryCount FROM `.sys/streaming_queries`");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), 0);
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {

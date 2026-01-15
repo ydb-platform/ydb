@@ -38,21 +38,24 @@
 Тело запроса:
 
 ```sql
-SELECT
-    AGGREGATE_LIST(ts) AS result,
-    HOP_END() AS ts
-FROM
-    input_topic
-WITH (
-    FORMAT = json_each_row,
-    SCHEMA = (
-        ts String
-    ),
-    -- WATERMARK_ADJUST_LATE_EVENTS,
-)
-WHERE pass > 0
-GROUP BY
-    HoppingWindow(DateTime::FromSeconds, "PT5S", "PT10S");
+CREATE STREAMING QUERY example AS
+DO BEGIN
+    SELECT
+        AGGREGATE_LIST(ts) AS result,
+        HOP_END() AS ts
+    FROM
+        input_topic
+    WITH (
+        FORMAT = json_each_row,
+        SCHEMA = (
+            ts String
+        ),
+        -- WATERMARK_ADJUST_LATE_EVENTS,
+    )
+    WHERE pass > 0
+    GROUP BY
+        HoppingWindow(DateTime::FromSeconds(ts), "PT5S", "PT10S");
+END DO;
 ```
 
 Результат:

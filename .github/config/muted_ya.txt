@@ -33,6 +33,7 @@ ydb/core/kqp/ut/join KqpBlockHashJoin.BlockHashJoinLeftJoinNullCount
 ydb/core/kqp/ut/olap KqpOlapJson.BloomCategoryIndexesVariants[false,false,1,10,0,0,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/olap KqpOlapTiering.DeletedTier
 ydb/core/kqp/ut/olap KqpOlapTiering.EvictionIncreaseDuration
+ydb/core/kqp/ut/olap KqpOlapTiering.EvictionResetTiering
 ydb/core/kqp/ut/olap KqpOlapTiering.EvictionWithStrippedEdsPath
 ydb/core/kqp/ut/olap KqpOlapTiering.LoadTtlSettings
 ydb/core/kqp/ut/olap unittest.[*/*] chunk
@@ -54,11 +55,13 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.MultipleTablesWithIndexesIncrementalRestore
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.CreateStreamOnIndexTable[TabletReboots]
+ydb/core/tx/schemeshard/ut_cdc_stream_reboots TCdcStreamWithRebootsTests.SplitTableSimple[TabletReboots]
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCase
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCaseUniq
+ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCaseWithDataColumnsUniq
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.AlterAfter
@@ -289,6 +292,7 @@ ydb/tests/functional/serverless test_serverless.py.test_turn_on_serverless_stora
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v1-std]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor[tables_format_v0]
 ydb/tests/functional/tenants py3test.[*/*] chunk
+ydb/tests/functional/tenants test_db_counters.py.TestStorageCounters.test_storage_counters[enable_separate_quotas]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--false-enable_pool_encryption--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
@@ -302,6 +306,8 @@ ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLe
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap test_create.py.TestCreate.test_create_all_opt_ints
 ydb/tests/olap test_create.py.TestCreate.test_create_real_opt
+ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_bulk_upsert[1-10000-2]
+ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_bulk_upsert[1000-1-2]
 ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_workload[2-2]
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap/large test_log_scenario.py.TestLogScenario.test_log_uniform
@@ -318,5 +324,7 @@ ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bu
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/oltp_workload/tests py3test.sole chunk
+ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

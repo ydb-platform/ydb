@@ -3,8 +3,8 @@
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
-#include <ut/olap/helpers/get_value.h>
-#include <ut/olap/helpers/query_executor.h>
+#include <ydb/core/kqp/ut/olap/helpers/get_value.h>
+#include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
 
 namespace NKikimr {
 namespace NKqp {

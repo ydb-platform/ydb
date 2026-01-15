@@ -283,6 +283,12 @@ def extract_job_info_from_name(job_name: str) -> Tuple[Optional[str], Optional[s
         if len(parts) >= 2:
             branch = parts[0].strip()
             build_preset = parts[1].strip()
+    elif '__' in job_name:
+        # Format: "branch__build_preset" (colon-safe)
+        parts = job_name.split('__')
+        if len(parts) >= 2:
+            branch = parts[0].strip()
+            build_preset = parts[1].strip()
     elif ' / ' in job_name:
         # Format: "Regression-run_... (build_preset) / branch:build_preset"
         parts = job_name.split(' / ')
@@ -290,6 +296,10 @@ def extract_job_info_from_name(job_name: str) -> Tuple[Optional[str], Optional[s
             branch_preset = parts[-1].strip()
             if ':' in branch_preset:
                 branch, build_preset = branch_preset.split(':', 1)
+                branch = branch.strip()
+                build_preset = build_preset.strip()
+            elif '__' in branch_preset:
+                branch, build_preset = branch_preset.split('__', 1)
                 branch = branch.strip()
                 build_preset = build_preset.strip()
     
@@ -342,6 +352,10 @@ def collect_summaries_from_artifacts(artifacts_dir: str) -> Dict[str, Dict]:
                 # Try to extract from filename directly
                 if ':' in job_name:
                     parts = job_name.split(':', 1)
+                    branch = parts[0].strip()
+                    build_preset = parts[1].strip()
+                elif '__' in job_name:
+                    parts = job_name.split('__', 1)
                     branch = parts[0].strip()
                     build_preset = parts[1].strip()
             

@@ -11,6 +11,7 @@ SRCS(
     table_ut.cpp
     theme_ut.cpp
     view_logic_ut.cpp
+    view_scenarios_ut.cpp
 )
 
 END()

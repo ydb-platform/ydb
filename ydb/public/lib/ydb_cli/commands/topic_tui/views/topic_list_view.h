@@ -1,5 +1,6 @@
 #pragma once
 
+#include "view_interface.h"
 #include "../widgets/table.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
@@ -69,13 +70,13 @@ struct TDirInfoResult {
     ui32 TopicCount = 0;
 };
 
-class TTopicListView {
+class TTopicListView : public ITuiView {
 public:
     explicit TTopicListView(TTopicTuiApp& app);
-    ~TTopicListView();
+    ~TTopicListView() override;
     
-    ftxui::Component Build();
-    void Refresh();
+    ftxui::Component Build() override;
+    void Refresh() override;
     void CheckAsyncCompletion();  // Called from render to check if async op finished
     
     // Callbacks

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "view_interface.h"
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
 
@@ -28,12 +29,12 @@ struct TTopicMetrics {
     THashMap<TString, ui64> ConsumerLags;  // consumer -> total lag
 };
 
-class TChartsView {
+class TChartsView : public ITuiView {
 public:
     explicit TChartsView(TTopicTuiApp& app);
     
-    ftxui::Component Build();
-    void Refresh();
+    ftxui::Component Build() override;
+    void Refresh() override;
     void SetTopic(const TString& topicPath);
     
     // Callbacks

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "view_interface.h"
 #include "../widgets/table.h"
 #include "../widgets/theme.h"
 #include "../widgets/sparkline_history.h"
@@ -47,12 +48,12 @@ struct TConsumerData {
     TDuration MaxLagTime;
 };
 
-class TConsumerView {
+class TConsumerView : public ITuiView {
 public:
     explicit TConsumerView(TTopicTuiApp& app);
     
-    ftxui::Component Build();
-    void Refresh();
+    ftxui::Component Build() override;
+    void Refresh() override;
     void SetConsumer(const TString& topicPath, const TString& consumerName);
     void CheckAsyncCompletion();
     

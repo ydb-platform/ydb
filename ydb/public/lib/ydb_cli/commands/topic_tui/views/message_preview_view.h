@@ -1,5 +1,6 @@
 #pragma once
 
+#include "view_interface.h"
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
 
@@ -23,13 +24,13 @@ namespace NYdb::NConsoleClient {
 
 class TTopicTuiApp;
 
-class TMessagePreviewView {
+class TMessagePreviewView : public ITuiView {
 public:
     explicit TMessagePreviewView(TTopicTuiApp& app);
-    ~TMessagePreviewView();
+    ~TMessagePreviewView() override;
     
-    ftxui::Component Build();
-    void Refresh();
+    ftxui::Component Build() override;
+    void Refresh() override;
     void SetTopic(const TString& topicPath, ui32 partition, ui64 startOffset);
     void CheckAsyncCompletion();
     

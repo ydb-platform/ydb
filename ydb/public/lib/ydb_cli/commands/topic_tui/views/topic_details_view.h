@@ -1,5 +1,6 @@
 #pragma once
 
+#include "view_interface.h"
 #include "../widgets/table.h"
 #include "../widgets/theme.h"
 #include "../widgets/sparkline_history.h"
@@ -72,13 +73,13 @@ struct TConsumersData {
     TVector<TConsumerDisplayInfo> Consumers;
 };
 
-class TTopicDetailsView {
+class TTopicDetailsView : public ITuiView {
 public:
     explicit TTopicDetailsView(TTopicTuiApp& app);
-    ~TTopicDetailsView();
+    ~TTopicDetailsView() override;
     
-    ftxui::Component Build();
-    void Refresh();
+    ftxui::Component Build() override;
+    void Refresh() override;
     void SetTopic(const TString& topicPath);
     void CheckAsyncCompletion();
     

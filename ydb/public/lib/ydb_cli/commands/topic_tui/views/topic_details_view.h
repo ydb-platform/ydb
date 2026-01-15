@@ -15,7 +15,6 @@
 #include <util/generic/vector.h>
 
 #include <memory>
-#include <functional>
 #include <future>
 #include <atomic>
 #include <unordered_map>
@@ -83,8 +82,6 @@ public:
     void Refresh() override;
     void SetTopic(const TString& topicPath);
     void CheckAsyncCompletion();
-    
-    std::function<void(ui32 partition)> OnPartitionSelected;
     
 private:
     ftxui::Element RenderHeader();

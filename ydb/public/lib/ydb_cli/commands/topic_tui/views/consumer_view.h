@@ -14,7 +14,6 @@
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>
 
-#include <functional>
 #include <future>
 #include <atomic>
 #include <unordered_map>
@@ -57,8 +56,6 @@ public:
     void Refresh() override;
     void SetConsumer(const TString& topicPath, const TString& consumerName);
     void CheckAsyncCompletion();
-    
-    std::function<void(ui64 partition, ui64 offset)> OnCommitOffset;
     
 private:
     ftxui::Element RenderHeader();

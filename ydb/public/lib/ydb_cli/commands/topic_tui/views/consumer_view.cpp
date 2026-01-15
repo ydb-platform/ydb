@@ -36,13 +36,8 @@ TConsumerView::TConsumerView(ITuiApp& app)
     , Table_(CreateConsumerTableColumns())
 {
     // Set up table callbacks
-    Table_.OnSelect = [this](int row) {
-        if (row >= 0 && row < static_cast<int>(PartitionStats_.size())) {
-            const auto& p = PartitionStats_[row];
-            if (OnCommitOffset) {
-                OnCommitOffset(p.PartitionId, p.CommittedOffset);
-            }
-        }
+    Table_.OnSelect = [](int) {
+        // Future: could navigate to message preview for this partition
     };
     
     // Sort callback
@@ -89,17 +84,7 @@ Component TConsumerView::Build() {
             return false;
         }
         
-        // 'o' key for commit offset
-        if (event == Event::Character('o') || event == Event::Character('O')) {
-            int row = Table_.GetSelectedRow();
-            if (row >= 0 && row < static_cast<int>(PartitionStats_.size())) {
-                const auto& p = PartitionStats_[row];
-                if (OnCommitOffset) {
-                    OnCommitOffset(p.PartitionId, p.CommittedOffset);
-                }
-            }
-            return true;
-        }
+        // Note: 'o' key for commit offset removed - feature not implemented
         
         // 'd' key for drop consumer - use ITuiApp interface
         if (event == Event::Character('d') || event == Event::Character('D')) {

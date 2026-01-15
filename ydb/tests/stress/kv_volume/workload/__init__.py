@@ -458,7 +458,7 @@ class Worker:
     @property
     def client(self):
         if self._client is None:
-            self._client = KeyValueClient(str(self.workload.fqdn), int(self.workload.port))
+            self._client = KeyValueClient(str(self.workload.fqdn), int(self.workload.port), retry_count=10, sleep_retry_seconds=0.1)
         return self._client
 
     def generate_instance_id(self):
@@ -552,11 +552,14 @@ class Worker:
         period_actions = {}
         children_map = defaultdict(set)
         semaphores = {}
+        now = datetime.now()
+        scheduled_count = defaultdict(int)
         for name, action in self.actions.items():
             if action.worker_max_in_flight:
                 semaphores[name] = asyncio.Semaphore(action.worker_max_in_flight)
             if action.period_us:
                 period_actions[name] = action.period_us
+                scheduled_count[name] = 1
             if not action.parent_action:
                 await self.event_queue.put(('run', name, Worker.LayeredDataContext(initial_dc)))
                 continue
@@ -569,6 +572,7 @@ class Worker:
                     boxed = await asyncio.wait_for(self.scheduled_queue.get(), timeout=timeout)
                 except asyncio.QueueEmpty:
                     break
+                now = datetime.now()
                 if boxed is None:
                     break
                 time, action_name, dc = boxed
@@ -582,7 +586,9 @@ class Worker:
 
         id_to_action_name = {}
         id_to_tasks = {}
-
+        
+        last_ts = {}
+        
         while (now := datetime.now()) < end_time:
             try:
                 timeout = (end_time - now).total_seconds()
@@ -599,8 +605,6 @@ class Worker:
                 name = id_to_action_name[id]
                 for child in children_map[name]:
                     await self.event_queue.put(('run', child, Worker.LayeredDataContext(dc)))
-                if name in period_actions:
-                    await self.scheduled_queue.put((now + timedelta(microseconds=period_actions[name]), name, dc.clear_clone()))
                 del id_to_action_name[id]
                 del id_to_tasks[id]
             elif command == 'run':
@@ -610,6 +614,14 @@ class Worker:
                 id_to_action_name[instance_id] = name
                 task = asyncio.create_task(runner.run())
                 id_to_tasks[instance_id] = task
+                if name in period_actions:
+                    ts = last_ts.get(name, now)
+                    scheduled_count[name] -= 1
+                    while (ts <= now or not scheduled_count[name]) and scheduled_count[name] < 5:
+                        ts += timedelta(microseconds=max(1, period_actions[name]))
+                        await self.scheduled_queue.put((ts, name, dc.clear_clone()))
+                        scheduled_count[name] += 1
+                    last_ts[name] = ts
 
         await self.client.aclose()
         if self.verbose:

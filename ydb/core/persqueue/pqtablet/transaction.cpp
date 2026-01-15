@@ -500,9 +500,9 @@ void TDistributedTransaction::SetDecision(NKikimrTx::TReadSetData::EDecision& va
     }
 }
 
-TString TDistributedTransaction::GetKey(TMaybe<ui32> partition) const
+TString TDistributedTransaction::GetKey() const
 {
-    return GetTxKey(TxId, partition);
+    return GetTxKey(TxId);
 }
 
 void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const TEvTxProcessing::TEvReadSet& event)

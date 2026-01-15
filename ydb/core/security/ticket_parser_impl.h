@@ -328,7 +328,6 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsAS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheMiss;
-    ::NMonitoring::THistogramPtr CounterTicketsBuildTime;
     ::NMonitoring::THistogramPtr CounterTicketsHighPriorityBuildTime;
     ::NMonitoring::THistogramPtr CounterTicketsLowPriorityBuildTime;
 
@@ -1873,7 +1872,6 @@ protected:
         record.RefreshRetryableErrorImmediately = true;
         CounterTicketsSuccess->Inc();
         TDuration::TValue ticketBuildTime = (now - record.InitTime).MilliSeconds();
-        CounterTicketsBuildTime->Collect(ticketBuildTime);
         if (record.IsLowRequestPriority) {
             CounterTicketsLowPriorityBuildTime->Collect(ticketBuildTime);
         } else {
@@ -2147,11 +2145,9 @@ protected:
         CounterTicketsAS = counters->GetCounter("TicketsAS", true);
         CounterTicketsCacheHit = counters->GetCounter("TicketsCacheHit", true);
         CounterTicketsCacheMiss = counters->GetCounter("TicketsCacheMiss", true);
-        CounterTicketsBuildTime = counters->GetHistogram("TicketsBuildTimeMs",
+        CounterTicketsHighPriorityBuildTime = counters->GetSubgroup("TicketsBuildTimeMs", "HighPriority")->GetHistogram("TicketsBuildTimeMs",
             NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
-        CounterTicketsHighPriorityBuildTime = counters->GetHistogram("TicketsHighPriorityBuildTimeMs",
-            NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
-        CounterTicketsLowPriorityBuildTime = counters->GetHistogram("TicketsLowPriorityBuildTimeMs",
+        CounterTicketsLowPriorityBuildTime = counters->GetSubgroup("TicketsBuildTimeMs", "LowPriority")->GetHistogram("TicketsBuildTimeMs",
             NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
     }
 

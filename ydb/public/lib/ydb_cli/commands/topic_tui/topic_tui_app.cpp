@@ -468,8 +468,23 @@ void TTopicTuiApp::NavigateBack() {
     State_.InputCaptureActive = false;
     
     switch (State_.CurrentView) {
-        case EViewType::TopicDetails:
-            State_.CurrentView = EViewType::TopicList;
+        case EViewType::TopicList:
+            // Go to parent directory if possible
+            if (TopicListView_) {
+                TString current = State_.CurrentPath;
+                TString dbRoot = DatabaseRoot_;
+                // Only go up if we are deeper than root
+                if (current.size() > dbRoot.size() && current.StartsWith(dbRoot)) {
+                     TStringBuf parent, discard;
+                     if (TStringBuf(current).TryRSplit('/', parent, discard)) {
+                         // Ensure we don't go above db root
+                         if (parent.size() >= dbRoot.size()) {
+                             State_.CurrentPath = TString(parent);
+                             TopicListView_->Refresh();
+                         }
+                     }
+                }
+            }
             break;
         case EViewType::ConsumerDetails:
             // Go back to where we came from (TopicDetails or TopicList via Go To)
@@ -629,8 +644,7 @@ Component TTopicTuiApp::BuildMainComponent() {
         }
         if (event == Event::Escape) {
             // Don't handle Esc globally for views that handle it themselves
-            if (State_.CurrentView != EViewType::TopicList && 
-                State_.CurrentView != EViewType::MessagePreview) {
+            if (State_.CurrentView != EViewType::MessagePreview) {
                 NavigateBack();
                 return true;
             }
@@ -777,7 +791,8 @@ Component TTopicTuiApp::BuildHelpBar() {
                     text(" [s] Sort ↕ ") | dim,
                     text(" [r] Refresh ") | dim,
                     text(" [R] Rate: ") | dim,
-                    text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta)
+                    text(std::string(GetRefreshRateLabel().c_str())) | color(Color::Magenta),
+                    text(" [Esc] Back ") | dim
                 };
                 break;
             case EViewType::TopicDetails:

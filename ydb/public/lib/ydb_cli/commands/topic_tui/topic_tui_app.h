@@ -1,5 +1,7 @@
 #pragma once
 
+#include "app_interface.h"
+
 #include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
 #include <contrib/libs/ftxui/include/ftxui/component/screen_interactive.hpp>
 
@@ -30,51 +32,9 @@ class TWriteMessageForm;
 class TDropConsumerForm;
 class TEditConsumerForm;
 
-enum class EViewType {
-    TopicList,
-    TopicDetails,
-    TopicInfo,      // Topic info full screen
-    TopicTablets,   // Tablets list full screen
-    ConsumerDetails,
-    MessagePreview,
-    Charts,
-    TopicForm,
-    DeleteConfirm,
-    ConsumerForm,
-    WriteMessage,
-    OffsetForm,
-    DropConsumerConfirm,
-    EditConsumer
-};
+// View types and State are defined in app_context.h via app_interface.h
 
-// Shared state between views
-struct TAppState {
-    // Current navigation
-    TString CurrentPath;
-    TString SelectedTopic;
-    TString SelectedConsumer;
-    ui32 SelectedPartition = 0;
-    
-    // Refresh control
-    std::atomic<bool> ShouldRefresh{false};
-    std::atomic<bool> ShouldExit{false};
-    
-    // Current view and navigation
-    EViewType CurrentView = EViewType::TopicList;
-    EViewType PreviousView = EViewType::TopicList;  // For proper back navigation
-    
-    // Input capture mode - when true, global shortcuts are suppressed
-    // Views should set this when entering text-input modes (search, dialogs, etc.)
-    bool InputCaptureActive = false;
-    
-    // Help overlay toggle
-    bool ShowHelpOverlay = false;
-    
-    // Last error message
-    TString LastError;
-};
-
-class TTopicTuiApp {
+class TTopicTuiApp : public ITuiApp {
 public:
     TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration refreshRate, const TString& viewerEndpoint,
                  const TString& initialTopicPath = TString(), std::optional<ui32> initialPartition = std::nullopt,
@@ -84,24 +44,24 @@ public:
     int Run();
     
     // Getters for clients (used by views)
-    NScheme::TSchemeClient& GetSchemeClient() { return *SchemeClient_; }
-    NTopic::TTopicClient& GetTopicClient() { return *TopicClient_; }
-    TAppState& GetState() { return State_; }
-    const TString& GetViewerEndpoint() const { return ViewerEndpoint_; }
-    const TString& GetDatabaseRoot() const { return DatabaseRoot_; }
-    TDuration GetRefreshRate() const { return RefreshRate_; }
-    TString GetRefreshRateLabel() const;  // Returns human readable rate
-    void CycleRefreshRate();  // Cycle through predefined rates
+    NScheme::TSchemeClient& GetSchemeClient() override { return *SchemeClient_; }
+    NTopic::TTopicClient& GetTopicClient() override { return *TopicClient_; }
+    TAppState& GetState() override { return State_; }
+    const TString& GetViewerEndpoint() const override { return ViewerEndpoint_; }
+    const TString& GetDatabaseRoot() const override { return DatabaseRoot_; }
+    TDuration GetRefreshRate() const override { return RefreshRate_; }
+    TString GetRefreshRateLabel() const override;  // Returns human readable rate
+    void CycleRefreshRate() override;  // Cycle through predefined rates
     
     // Navigation
-    void NavigateTo(EViewType view);
-    void NavigateBack();
-    void ShowError(const TString& message);
-    void RequestRefresh();
-    void RequestExit();
+    void NavigateTo(EViewType view) override;
+    void NavigateBack() override;
+    void ShowError(const TString& message) override;
+    void RequestRefresh() override;
+    void RequestExit() override;
     
     // Thread-safe UI refresh trigger
-    void PostRefresh() { Screen_.PostEvent(ftxui::Event::Custom); }
+    void PostRefresh() override { Screen_.PostEvent(ftxui::Event::Custom); }
 
 private:
     ftxui::Component BuildMainComponent();

@@ -73,9 +73,11 @@ struct TConsumersData {
     TVector<TConsumerDisplayInfo> Consumers;
 };
 
+class ITuiApp;
+
 class TTopicDetailsView : public ITuiView {
 public:
-    explicit TTopicDetailsView(TTopicTuiApp& app);
+    explicit TTopicDetailsView(ITuiApp& app);
     ~TTopicDetailsView() override;
     
     ftxui::Component Build() override;
@@ -103,7 +105,7 @@ private:
     void SortConsumers(int column, bool ascending);
     
 private:
-    TTopicTuiApp& App_;
+    ITuiApp& App_;
     TString TopicPath_;
     
     // Topic basic data (partitions, header info)

@@ -1,5 +1,6 @@
 #include "message_preview_view.h"
-#include "../topic_tui_app.h"
+#include "message_preview_view.h"
+#include "../app_interface.h"
 #include "../widgets/sparkline.h"
 #include "../http_client.h"
 
@@ -16,7 +17,7 @@ std::unordered_map<TString, ui64> TMessagePreviewView::PositionCache_;
 static std::vector<std::future<std::deque<TTopicMessage>>> S_PendingFutures;
 static std::mutex S_PendingFuturesMutex;
 
-TMessagePreviewView::TMessagePreviewView(TTopicTuiApp& app)
+TMessagePreviewView::TMessagePreviewView(ITuiApp& app)
     : App_(app)
 {}
 

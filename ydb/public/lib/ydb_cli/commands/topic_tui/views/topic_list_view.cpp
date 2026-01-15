@@ -1,5 +1,6 @@
 #include "topic_list_view.h"
-#include "../topic_tui_app.h"
+#include "topic_list_view.h"
+#include "../app_interface.h"
 #include "../widgets/sparkline.h"
 
 #include "../common/async_utils.h"
@@ -30,7 +31,7 @@ static TVector<TTableColumn> CreateExplorerTableColumns() {
     };
 }
 
-TTopicListView::TTopicListView(TTopicTuiApp& app)
+TTopicListView::TTopicListView(ITuiApp& app)
     : App_(app)
     , Table_(CreateExplorerTableColumns())
 {

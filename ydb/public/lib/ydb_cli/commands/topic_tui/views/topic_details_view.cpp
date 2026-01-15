@@ -1,5 +1,6 @@
 #include "topic_details_view.h"
-#include "../topic_tui_app.h"
+#include "topic_details_view.h"
+#include "../app_interface.h"
 #include "../widgets/sparkline.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
@@ -36,7 +37,7 @@ static TVector<TTableColumn> CreateConsumersTableColumns() {
     };
 }
 
-TTopicDetailsView::TTopicDetailsView(TTopicTuiApp& app)
+TTopicDetailsView::TTopicDetailsView(ITuiApp& app)
     : App_(app)
     , PartitionsTable_(CreatePartitionsTableColumns())
     , ConsumersTable_(CreateConsumersTableColumns())

@@ -48,9 +48,11 @@ struct TConsumerData {
     TDuration MaxLagTime;
 };
 
+class ITuiApp;
+
 class TConsumerView : public ITuiView {
 public:
-    explicit TConsumerView(TTopicTuiApp& app);
+    explicit TConsumerView(ITuiApp& app);
     
     ftxui::Component Build() override;
     void Refresh() override;
@@ -68,7 +70,7 @@ private:
     void SortPartitions(int column, bool ascending);
     
 private:
-    TTopicTuiApp& App_;
+    ITuiApp& App_;
     TString TopicPath_;
     TString ConsumerName_;
     

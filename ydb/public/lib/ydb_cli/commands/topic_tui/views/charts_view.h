@@ -29,9 +29,11 @@ struct TTopicMetrics {
     THashMap<TString, ui64> ConsumerLags;  // consumer -> total lag
 };
 
+class ITuiApp;
+
 class TChartsView : public ITuiView {
 public:
-    explicit TChartsView(TTopicTuiApp& app);
+    explicit TChartsView(ITuiApp& app);
     
     ftxui::Component Build() override;
     void Refresh() override;
@@ -47,7 +49,7 @@ private:
     void UpdateMetrics();
     
 private:
-    TTopicTuiApp& App_;
+    ITuiApp& App_;
     TString TopicPath_;
     
     TTopicMetrics Metrics_;

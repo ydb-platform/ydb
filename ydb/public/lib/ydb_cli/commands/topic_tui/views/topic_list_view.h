@@ -70,9 +70,11 @@ struct TDirInfoResult {
     ui32 TopicCount = 0;
 };
 
+class ITuiApp;
+
 class TTopicListView : public ITuiView {
 public:
-    explicit TTopicListView(TTopicTuiApp& app);
+    explicit TTopicListView(ITuiApp& app);
     ~TTopicListView() override;
     
     ftxui::Component Build() override;
@@ -111,7 +113,7 @@ private:
     TString GetSortColumnName() const;  // Get current sort column name for display
     
 private:
-    TTopicTuiApp& App_;
+    ITuiApp& App_;
     TVector<TTopicListEntry> Entries_;
     
     // Use TTable for the file/topic list

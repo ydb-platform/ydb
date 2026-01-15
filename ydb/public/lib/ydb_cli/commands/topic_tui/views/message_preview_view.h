@@ -24,9 +24,11 @@ namespace NYdb::NConsoleClient {
 
 class TTopicTuiApp;
 
+class ITuiApp;
+
 class TMessagePreviewView : public ITuiView {
 public:
-    explicit TMessagePreviewView(TTopicTuiApp& app);
+    explicit TMessagePreviewView(ITuiApp& app);
     ~TMessagePreviewView() override;
     
     ftxui::Component Build() override;
@@ -53,7 +55,7 @@ private:
     void TailReaderLoop();
     
 private:
-    TTopicTuiApp& App_;
+    ITuiApp& App_;
     TString TopicPath_;
     ui32 Partition_ = 0;
     ui64 CurrentOffset_ = 0;

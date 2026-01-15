@@ -1,5 +1,6 @@
 #include "consumer_view.h"
-#include "../topic_tui_app.h"
+#include "consumer_view.h"
+#include "../app_interface.h"
 #include "../widgets/sparkline.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
@@ -30,7 +31,7 @@ static TVector<TTableColumn> CreateConsumerTableColumns() {
     };
 }
 
-TConsumerView::TConsumerView(TTopicTuiApp& app)
+TConsumerView::TConsumerView(ITuiApp& app)
     : App_(app)
     , Table_(CreateConsumerTableColumns())
 {

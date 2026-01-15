@@ -1,5 +1,6 @@
 #include "charts_view.h"
-#include "../topic_tui_app.h"
+#include "charts_view.h"
+#include "../app_interface.h"
 #include "../widgets/sparkline.h"
 
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
@@ -8,7 +9,7 @@ using namespace ftxui;
 
 namespace NYdb::NConsoleClient {
 
-TChartsView::TChartsView(TTopicTuiApp& app)
+TChartsView::TChartsView(ITuiApp& app)
     : App_(app)
 {}
 

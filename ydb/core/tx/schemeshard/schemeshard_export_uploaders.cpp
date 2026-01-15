@@ -364,8 +364,8 @@ private:
 
     TString DatabaseRoot;
     TString Scheme;
-    bool EnablePermissions = false;
-    bool EnableChecksums = true;
+    const bool EnablePermissions;
+    const bool EnableChecksums;
     TString Permissions;
     TString Metadata;
 }; // TSchemeUploader

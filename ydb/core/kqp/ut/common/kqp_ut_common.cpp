@@ -125,13 +125,6 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     return funcRegistry.Release();
 }
 
-TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
-    auto setting = NKikimrKqp::TKqpSetting();
-    setting.SetName("_KqpYqlSyntaxVersion");
-    setting.SetValue("1");
-    return {setting};
-}
-
 TTestLogSettings& TTestLogSettings::AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority) {
     if (!Freeze) {
         LogPriorities.emplace(service, priority);

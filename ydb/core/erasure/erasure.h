@@ -263,8 +263,6 @@ struct TErasureType {
         Erasure3Plus3Block = 12,
 
         ErasureMirror3of4 = 18,
-
-        ErasureSpeciesCount = 19
     };
 
     static const char *ErasureSpeciesToStr(EErasureSpecies es);

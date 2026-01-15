@@ -701,7 +701,7 @@ void TErrorCodicils::Initialize()
 
     ErrorCodicilsSlot(); // Warm up the slot.
     TError::RegisterEnricher([] (TError* error) {
-        if (auto* codicils = TErrorCodicils::MaybeGet()) {
+        if (auto* codicils = TErrorCodicils::TryGet()) {
             codicils->Apply(*error);
         }
     });
@@ -712,14 +712,14 @@ TErrorCodicils& TErrorCodicils::GetOrCreate()
     return *ErrorCodicilsSlot().GetOrCreate();
 }
 
-TErrorCodicils* TErrorCodicils::MaybeGet()
+TErrorCodicils* TErrorCodicils::TryGet()
 {
-    return ErrorCodicilsSlot().MaybeGet();
+    return ErrorCodicilsSlot().TryGet();
 }
 
 std::optional<std::string> TErrorCodicils::MaybeEvaluate(const std::string& key)
 {
-    auto* instance = MaybeGet();
+    auto* instance = TryGet();
     if (!instance) {
         return {};
     }
@@ -732,7 +732,7 @@ std::optional<std::string> TErrorCodicils::MaybeEvaluate(const std::string& key)
     return getter();
 }
 
-auto TErrorCodicils::Guard(std::string key, TGetter getter) -> TGuard
+auto TErrorCodicils::MakeGuard(std::string key, TGetter getter) -> TGuard
 {
     auto& instance = GetOrCreate();
     auto [it, added] = instance.Getters_.try_emplace(key, getter);

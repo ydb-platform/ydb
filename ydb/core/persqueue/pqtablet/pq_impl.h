@@ -315,6 +315,7 @@ private:
     TDeque<std::unique_ptr<TEvPersQueue::TEvProposeTransaction>> EvProposeTransactionQueue;
     THashMap<ui64, NKikimrPQ::TTransaction::EState> WriteTxs;
     THashSet<ui64> DeleteTxs;
+    bool DeleteTxsContainsKafkaTxs = false;
     TSet<std::pair<ui64, ui64>> ChangedTxs;
     TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfigTx;
     TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfigTx;
@@ -354,7 +355,8 @@ private:
                      const TActorContext& ctx);
     void TryWriteTxs(const TActorContext& ctx);
 
-    void ProcessProposeTransactionQueue(const TActorContext& ctx);
+    void ProcessProposeTransactionQueue(const TActorContext& ctx,
+                                        NKikimrClient::TKeyValueRequest& request);
     void ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& ev,
                          const TActorContext& ctx);
     void ProcessWriteTxs(const TActorContext& ctx,
@@ -394,7 +396,7 @@ private:
     void SendReplies(const TActorContext& ctx);
     void CheckChangedTxStates(const TActorContext& ctx);
 
-    bool AllTransactionsHaveBeenProcessed() const;
+    bool ReadyForDroppedReply() const;
 
     void BeginWriteTabletState(const TActorContext& ctx, NKikimrPQ::ETabletState state);
     void EndWriteTabletState(const NKikimrClient::TResponse& resp,
@@ -503,7 +505,6 @@ private:
 
     bool CanProcessProposeTransactionQueue() const;
     bool CanProcessWriteTxs() const;
-    bool CanProcessDeleteTxs() const;
     bool CanProcessTxWrites() const;
 
     ui64 GetGeneration();

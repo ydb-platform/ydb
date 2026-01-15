@@ -394,7 +394,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto connection = stage.Inputs().Item(i).Maybe<TDqCnHashShuffle>();
                 if (connection) {
-                    auto hashFuncType = config->DefaultHashShuffleFuncType;
+                    auto hashFuncType = config->GetDqDefaultHashShuffleFuncType();
                     if (connection.Cast().HashFunc().IsValid()) {
                         hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
                     }

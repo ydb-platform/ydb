@@ -74,9 +74,7 @@ class KeyValueClient(object):
         while True:
             try:
                 callee = self._get_invoke_callee(method, version)
-                print("before callee")
                 result = callee(request)
-                print("after callee")
                 return result
             except (RuntimeError, grpc.RpcError):
                 retry -= 1
@@ -104,18 +102,7 @@ class KeyValueClient(object):
 
                 await asyncio.sleep(self.__retry_sleep_seconds)
 
-    def kv_write(self, path, partition_id, key, value, channel=None, version='v1'):
-        request = keyvalue_api.ExecuteTransactionRequest()
-        request.path = path
-        request.partition_id = partition_id
-        write = request.commands.add().write
-        write.key = key
-        write.value = to_bytes(value)
-        if channel is not None:
-            write.storage_channel = channel
-        return self.invoke(request, 'ExecuteTransaction', version)
-    
-    def kv_writes(self, path, partition_id, kv_pairs, channel=None, version='v1'):
+    def make_write_request(self, path, partition_id, kv_pairs, channel=None):
         request = keyvalue_api.ExecuteTransactionRequest()
         request.path = path
         request.partition_id = partition_id
@@ -125,21 +112,26 @@ class KeyValueClient(object):
             write.value = to_bytes(value)
             if channel is not None:
                 write.storage_channel = channel
+        return request
+
+    def kv_write(self, path, partition_id, key, value, channel=None, version='v1'):
+        request = self.make_write_request(path, partition_id, [(key, value)], channel)
+        return self.invoke(request, 'ExecuteTransaction', version)
+
+    def kv_writes(self, path, partition_id, kv_pairs, channel=None, version='v1'):
+        request = self.make_write_request(path, partition_id, kv_pairs, channel)
         return self.invoke(request, 'ExecuteTransaction', version)
 
     async def a_kv_write(self, path, partition_id, key, value, channel=None, version='v1'):
-        request = keyvalue_api.ExecuteTransactionRequest()
-        request.path = path
-        request.partition_id = partition_id
-        write = request.commands.add().write
-        write.key = key
-        write.value = to_bytes(value)
-        if channel is not None:
-            write.storage_channel = channel
+        request = self.make_write_request(path, partition_id, [(key, value)], channel)
         return await self.ainvoke(request, 'ExecuteTransaction', version)
 
-    def kv_delete_range(self, path, partition_id, from_key=None, to_key=None,
-                        from_inclusive=True, to_inclusive=False, version='v1'):
+    async def a_kv_writes(self, path, partition_id, kv_pairs, channel=None, version='v1'):
+        request = self.make_write_request(path, partition_id, kv_pairs, channel)
+        return await self.ainvoke(request, 'ExecuteTransaction', version)
+
+    def make_delete_range_request(self, path, partition_id, from_key=None, to_key=None,
+                                  from_inclusive=True, to_inclusive=False):
         request = keyvalue_api.ExecuteTransactionRequest()
         request.path = path
         request.partition_id = partition_id
@@ -154,27 +146,21 @@ class KeyValueClient(object):
                 delete_range.range.to_key_inclusive = to_key
             else:
                 delete_range.range.to_key_exclusive = to_key
+        return request
+
+    def kv_delete_range(self, path, partition_id, from_key=None, to_key=None,
+                        from_inclusive=True, to_inclusive=False, version='v1'):
+        request = self.make_delete_range_request(path, partition_id, from_key, to_key,
+                                                 from_inclusive, to_inclusive)
         return self.invoke(request, 'ExecuteTransaction', version)
 
     async def a_kv_delete_range(self, path, partition_id, from_key=None, to_key=None,
                                 from_inclusive=True, to_inclusive=False, version='v1'):
-        request = keyvalue_api.ExecuteTransactionRequest()
-        request.path = path
-        request.partition_id = partition_id
-        delete_range = request.commands.add().delete_range
-        if from_key is not None:
-            if from_inclusive:
-                delete_range.range.from_key_inclusive = from_key
-            else:
-                delete_range.range.from_key_exclusive = from_key
-        if to_key is not None:
-            if to_inclusive:
-                delete_range.range.to_key_inclusive = to_key
-            else:
-                delete_range.range.to_key_exclusive = to_key
+        request = self.make_delete_range_request(path, partition_id, from_key, to_key,
+                                                 from_inclusive, to_inclusive)
         return await self.ainvoke(request, 'ExecuteTransaction', version)
 
-    def kv_read(self, path, partition_id, key, offset=None, size=None, version='v1'):
+    def make_read_request(self, path, partition_id, key, offset=None, size=None):
         request = keyvalue_api.ReadRequest()
         request.path = path
         request.partition_id = partition_id
@@ -183,17 +169,14 @@ class KeyValueClient(object):
             request.offset = offset
         if size is not None:
             request.size = size
+        return request
+
+    def kv_read(self, path, partition_id, key, offset=None, size=None, version='v1'):
+        request = self.make_read_request(path, partition_id, key, offset, size)
         return self.invoke(request, 'Read', version)
 
     async def a_kv_read(self, path, partition_id, key, offset=None, size=None, version='v1'):
-        request = keyvalue_api.ReadRequest()
-        request.path = path
-        request.partition_id = partition_id
-        request.key = key
-        if offset is not None:
-            request.offset = offset
-        if size is not None:
-            request.size = size
+        request = self.make_read_request(path, partition_id, key, offset, size)
         return await self.ainvoke(request, 'Read', version)
 
     def kv_get_tablets_read_state(self, path, partition_ids):

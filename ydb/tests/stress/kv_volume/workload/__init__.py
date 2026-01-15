@@ -5,7 +5,7 @@ from collections import defaultdict
 import threading
 import time
 
-from queue import Queue, PriorityQueue
+from queue import Queue, PriorityQueue, Empty
 
 from ydb.public.api.protos import ydb_status_codes_pb2 as ydb_status_codes
 from ydb.public.api.protos import ydb_keyvalue_pb2 as keyvalue_pb
@@ -26,6 +26,42 @@ def parse_int_with_default(s, default=None):
         return default
     except TypeError:
         return default
+    
+    
+class RWLock:
+    def __init__(self):
+        self._cond = threading.Condition(threading.RLock())
+        self._readers = 0
+        self._writer = False
+        self._writers_waiting = 0
+
+    def acquire_read(self):
+        with self._cond:
+            # Если есть активный writer или writer(ы) ждут — читаем позже
+            while self._writer or self._writers_waiting > 0:
+                self._cond.wait()
+            self._readers += 1
+
+    def release_read(self):
+        with self._cond:
+            self._readers -= 1
+            if self._readers == 0:
+                self._cond.notify_all()
+
+    def acquire_write(self):
+        with self._cond:
+            self._writers_waiting += 1
+            try:
+                while self._writer or self._readers > 0:
+                    self._cond.wait()
+                self._writer = True
+            finally:
+                self._writers_waiting -= 1
+
+    def release_write(self):
+        with self._cond:
+            self._writer = False
+            self._cond.notify_all()
 
 
 def parse_endpoint(endpoint):
@@ -42,28 +78,36 @@ def generate_pattern_data(size, pattern=DEFAULT_DATA_PATTERN):
     return (pattern * repeats)[:size]
 
 
+def get_status(response):
+    if response is None:
+        return None
+    if hasattr(response, 'operation'):
+        return response.operation.status
+    return response.status
+
+
 class Worker:
     class WorkerDataContext:
         def __init__(self):
             self.keys = {}
-            self.mutex = threading.Lock()
+            self.mutex = RWLock()
 
         def add_key(self, action_name, key, partition_id, key_size):
-            with self.mutex:
-                self.keys[key] = (partition_id, key_size)
+            self.acquire_write()
+            self.keys[key] = (partition_id, key_size)
+            self.release_write()
 
-        def __enter__(self):
-            self.mutex.acquire()
-            return self
+        def acquire_read(self):
+            self.mutex.acquire_read()
 
-        def __exit__(self, exc_type, exc_value, traceback):
-            self.mutex.release()
-
-        def acquire_all(self):
-            self.mutex.acquire()
-
-        def release_all(self):
-            self.mutex.release()
+        def release_read(self):
+            self.mutex.release_read()
+            
+        def acquire_write(self):
+            self.mutex.acquire_write()
+            
+        def release_write(self):
+            self.mutex.release_write()
 
         def _get_keys_by_name(self, name):
             if name == '__initial__':
@@ -75,45 +119,48 @@ class Worker:
                 del self.keys[key]
 
         def get_keys_to_delete(self, count):
-            with self:
-                count = min(count, len(self.keys))
-                keys = random.sample(list(self.keys.keys()), count)
-                result = {key: self.keys[key] for key in keys}
-                for key in keys:
-                    del self.keys[key]
-                return result
+            self.acquire_write()
+            count = min(count, len(self.keys))
+            keys = random.sample(list(self.keys.keys()), count)
+            result = {key: self.keys[key] for key in keys}
+            for key in keys:
+                del self.keys[key]
+            self.release_write()
+            return result
 
         def get_keys_to_read(self, count):
-            with self:
-                count = min(count, len(self.keys))
-                keys = random.sample(list(self.keys.keys()), count)
-                result = {key: self.keys[key] for key in keys}
-                return result
+            self.acquire_read
+            count = min(count, len(self.keys))
+            keys = random.sample(list(self.keys.keys()), count)
+            result = {key: self.keys[key] for key in keys}
+            self.release_read()
+            return result
 
         def clear_clone(self):
             return self
 
     class LayeredDataContext:
         def __init__(self, previous_data_context):
-            self.mutex = threading.Lock()
+            self.mutex = RWLock()
             self.previous_data_context = previous_data_context
             self.keys_by_name = defaultdict(dict)
             self.key_to_name = {}
 
-        def __enter__(self):
-            self.acquire_all()
-            return self
+        def acquire_read(self):
+            self.mutex.acquire_read()
+            self.previous_data_context.acquire_read()
+            
+        def release_read(self):
+            self.previous_data_context.release_read()
+            self.mutex.release_read()
 
-        def __exit__(self, exc_type, exc_value, traceback):
-            self.release_all()
-
-        def acquire_all(self):
-            self.mutex.acquire()
-            self.previous_data_context.acquire_all()
-
-        def release_all(self):
-            self.previous_data_context.release_all()
-            self.mutex.release()
+        def acquire_write(self):
+            self.mutex.acquire_write()
+            self.previous_data_context.acquire_write()
+        
+        def release_write(self):
+            self.previous_data_context.release_write()
+            self.mutex.release_write()
 
         def _get_keys_by_name(self, name):
             if name in self.keys_by_name:
@@ -127,10 +174,11 @@ class Worker:
                 del self.key_to_name[key]
 
         def add_key(self, action_name, key, partition_id, key_size):
-            with self.mutex:
-                self.keys_by_name[action_name][key] = (partition_id, key_size)
-                self.keys[key] = (partition_id, key_size)
-                self.key_to_name[key] = action_name
+            self.mutex.acquire_write()
+            self.keys_by_name[action_name][key] = (partition_id, key_size)
+            self.keys[key] = (partition_id, key_size)
+            self.key_to_name[key] = action_name
+            self.mutex.release_write()
 
         def _get_keys_structs(self, action_names):
             name_to_keys = {}
@@ -145,44 +193,48 @@ class Worker:
             return name_to_keys, name_to_dc, key_to_name
 
         def get_keys_to_delete(self, action_names, count):
-            with self:
-                name_to_keys, name_to_dc, key_to_name = self._get_keys_structs(action_names)
+            self.acquire_write()
+            name_to_keys, name_to_dc, key_to_name = self._get_keys_structs(action_names)
 
-                if not key_to_name:
-                    return {}
+            if not key_to_name:
+                self.release_write
+                return {}
 
-                count = min(count, len(key_to_name))
-                keys = random.sample(sorted(key_to_name), count)
+            count = min(count, len(key_to_name))
+            keys = random.sample(sorted(key_to_name), count)
 
-                to_delete = defaultdict(list)
-                result = {}
-                for key in keys:
-                    action_name = key_to_name[key]
-                    to_delete[action_name].append(key)
-                    result[key] = name_to_keys[action_name][key]
+            to_delete = defaultdict(list)
+            result = {}
+            for key in keys:
+                action_name = key_to_name[key]
+                to_delete[action_name].append(key)
+                result[key] = name_to_keys[action_name][key]
 
-                for name, keys in to_delete.items():
-                    dc = name_to_dc[name]
-                    dc._delete_keys(keys)
+            for name, keys in to_delete.items():
+                dc = name_to_dc[name]
+                dc._delete_keys(keys)
 
-                return result
+            self.release_write()
+            return result
 
         def get_keys_to_read(self, action_names, count):
-            with self:
-                name_to_keys, name_to_dc, key_to_name = self._get_keys_structs(action_names)
+            self.acquire_read()
+            name_to_keys, name_to_dc, key_to_name = self._get_keys_structs(action_names)
 
-                if not name_to_keys:
-                    return {}
+            if not name_to_keys:
+                self.release_read()
+                return {}
 
-                count = min(count, len(key_to_name))
-                keys = random.sample(sorted(key_to_name), count)
+            count = min(count, len(key_to_name))
+            keys = random.sample(sorted(key_to_name), count)
 
-                result = {}
-                for key in keys:
-                    action_name = key_to_name[key]
-                    result[key] = name_to_keys[action_name][key]
+            result = {}
+            for key in keys:
+                action_name = key_to_name[key]
+                result[key] = name_to_keys[action_name][key]
 
-                return result
+            self.release_read()
+            return result
 
         def clear_clone(self):
             return Worker.LayeredDataContext(self.previous_data_context)
@@ -253,7 +305,7 @@ class Worker:
                     version=self.workload.version
                 )
 
-                if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
+                if response is None or get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
                     raise ValueError(f"Read failed for key {key} in action {self.config.name}")
 
                 if read_cmd.verify_data:
@@ -297,7 +349,7 @@ class Worker:
                     to_inclusive=True,
                     version=self.workload.version
                 )
-                if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
+                if response is None or get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
                     raise ValueError(f"Delete failed for key {key} in action {self.config.name}")
 
                 if self.verbose:
@@ -323,7 +375,7 @@ class Worker:
                 version=self.workload.version
             )
 
-            if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
+            if response is None or get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
                 raise ValueError(f"Write failed for key {key} in action {self.config.name}")
 
             for key, data in kv_pairs:
@@ -368,8 +420,7 @@ class Worker:
         self.workload = workload
         self.database = str(self.workload.database)
         self.path = str(self.workload.path)
-        #self._client = self.workload.client
-        self._client = KeyValueClient(str(self.workload.fqdn), str(self.workload.port))
+        self._client = None
         self.worker_partition_id = worker_partition_id
 
         self.event_queue = None
@@ -377,9 +428,8 @@ class Worker:
         self.actions = {}
 
         self.write_key_counter = 0
-        self.instance_counter = 0
         self.stats_queue = stats_queue
-        self.show_stats = self.workload.show_stats if hasattr(self.workload, 'show_stats') else False
+        self.show_stats = self.workload.show_stats
         self.action_stats = defaultdict(int)
         self.stats_lock = threading.Lock()
 
@@ -394,7 +444,7 @@ class Worker:
     @property
     def client(self):
         if self._client is None:
-            self._client = KeyValueClient(self.workload.fqdn, self.workload.port)
+            self._client = KeyValueClient(str(self.workload.fqdn), int(self.workload.port))
         return self._client
 
     def generate_instance_id(self):
@@ -442,8 +492,9 @@ class Worker:
             version=self.workload.version
         )
 
-        if response is None or self.workload.get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
-            raise ValueError(f"Write failed in action {self.config.name}")
+        status = None
+        if response is None or (status := get_status(response)) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
+            raise ValueError(f"Write failed in init, status: {status}")
 
         for key, data in kv_pairs:
             data_context.add_key('', key, partition_id, len(data))
@@ -458,13 +509,7 @@ class Worker:
         for write_cmd in initial_data.write_commands:
             self.write(write_cmd, data_context)
 
-    def add_action(self, action_config, parent_names=None):
-        worker_sem_limit = None
-        if action_config.HasField('worker_max_in_flight'):
-            worker_sem_limit = action_config.worker_max_in_flight
-
-        parent_names = parent_names or set()
-        parent_chain = {name: None for name in parent_names}
+    def add_action(self, action_config):
         self.actions[action_config.name] = action_config
         if self.verbose:
             period_str = f", period={action_config.period_us}us" if action_config.HasField('period_us') else ", one-shot"
@@ -483,7 +528,7 @@ class Worker:
         initial_dc = Worker.WorkerDataContext()
         self.write_initial_data(initial_dc)
 
-        end_time = datetime.now() + timedelta(seconds=self.workload.duration)
+        end_time = datetime.now() + timedelta(seconds=self.workload.duration + 2)
 
         stats_thread = None
         if self.show_stats:
@@ -503,45 +548,42 @@ class Worker:
                 continue
             children_map[action.parent_action].add(name)
 
-        print("Worker cycle start")
-
         threads = {}
         id_to_action_name = {}
-        while datetime.now() < end_time:            
+        while datetime.now() < end_time:
             next_time = None
-            while datetime.now() < end_time:
+            while (now := datetime.now()) < end_time:
                 try:
                     boxed = self.scheduled_queue.get_nowait()
-                except:
+                except Empty:
                     break
                 if boxed is None:
                     break
                 time, action_name, dc = boxed
-                if time > datetime.now():
+                if time > now:
                     self.scheduled_queue.put(boxed)
                     next_time = time
                     break
                 self.event_queue.put(('run', action_name, dc))
 
-            while datetime.now() < end_time:
+            while (now := datetime.now()) < end_time:
                 try:
-                    if next_time:
-                        boxed = self.event_queue.get(timeout=next_time - datetime.now())
+                    if next_time and now < next_time:
+                        boxed = self.event_queue.get(timeout=(next_time - now).total_seconds())
                     else:
                         boxed = self.event_queue.get_nowait()
-                except:
+                except Empty:
                     break
                 if boxed is None:
                     break
                 command, q, dc = boxed
-                print('Run command', command, 'with', q)
                 if command == 'end':
                     id = q
                     name = id_to_action_name[id]
                     for child in children_map[name]:
                         self.event_queue.put(('run', child, Worker.LayeredDataContext(dc)))
                     if name in period_actions:
-                        self.scheduled_queue.put((datetime.now() + timedelta(microseconds=period_actions[name]), name, dc.clear_clone()))
+                        self.scheduled_queue.put((now + timedelta(microseconds=period_actions[name]), name, dc.clear_clone()))
                     del id_to_action_name[id]
                     del threads[id]
                 elif command == 'run':
@@ -575,17 +617,8 @@ class WorkerBuilder:
             print(f"WorkerBuilder: building worker {worker_id} with {len(self.config.actions)} actions", file=sys.stderr)
         worker = Worker(worker_id, self.workload, stats_queue=stats_queue, worker_partition_id=self.worker_partition_id)
 
-        parent_names_map = {}
         for action in self.config.actions:
-            parent_names_map[action.name] = set()
-            current = action.parent_action if action.HasField('parent_action') else None
-            while current:
-                parent_names_map[action.name].add(current)
-                current = next((a.parent_action for a in self.config.actions if a.name == current and a.HasField('parent_action')), None)
-
-        for action in self.config.actions:
-            parent_names = parent_names_map[action.name].copy()
-            worker.add_action(action, parent_names)
+            worker.add_action(action)
         if self.verbose:
             print(f"WorkerBuilder: worker {worker_id} built successfully", file=sys.stderr)
         return worker
@@ -596,15 +629,12 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         super().__init__(None, '', 'kv_volume', None)
         fqdn, port = parse_endpoint(endpoint)
         self.fqdn = fqdn
-        self.port = port
+        self.port = int(port)
         self.database = database
         self.duration = duration
         self.worker_count = worker_count
-        self.begin_time = None
-        self.end_time = None
         self.version = version
         self.config = config
-        self.client = None
         self.verbose = verbose
         self.show_stats = show_stats
         self.stats_queue = None
@@ -634,10 +664,14 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
     def _stats_listener(self):
         start_messages = 0
         stats_accumulator = defaultdict(int)
+        sum_stats_accumulator = defaultdict(int)
         last_print_time = time.time()
-        action_types = set()
-        header_printed = False
         second_counter = 0
+
+        action_names = []
+        for action in self.config.actions:
+            if action.name:
+                action_names.append(action.name)
 
         while True:
             msg = self.stats_queue.get()
@@ -645,57 +679,78 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
             if msg == 'start':
                 start_messages += 1
                 if start_messages >= self.worker_count:
-                    print("Stats: All workers started", file=sys.stderr)
-            elif msg == 'stop':
+                    break
+
+        begin_time = datetime.now()
+        end_time = begin_time + timedelta(seconds=self.duration)
+        print('Start Load; Begin Time:', begin_time, '; End Time:', end_time)
+
+        sorted_actions = sorted(action_names)
+        col_width = max(8, max(len(a) for a in sorted_actions))
+
+        separator = "+" + "-" * 10 + "+"
+        for action in sorted_actions:
+            separator += "-" * (col_width + 1) + "+"
+        print(separator)
+
+        print("| Time     |", end="")
+        for action in sorted_actions:
+            print(f" {action.ljust(col_width)}|", end="")
+        print("")
+        print(separator)
+
+        while second_counter <= self.duration:
+            msg = self.stats_queue.get()
+
+            if msg == 'stop':
                 break
             elif isinstance(msg, dict):
                 for action_type, count in msg.items():
                     stats_accumulator[action_type] += count
-                    action_types.add(action_type)
+                    sum_stats_accumulator[action_type] += count
 
             current_time = time.time()
+
             if current_time - last_print_time >= 1.0:
-                if action_types and not header_printed:
-                    sorted_actions = sorted(action_types)
-                    col_width = max(8, max(len(a) for a in sorted_actions))
-
-                    print("Time     |", end="", file=sys.stderr)
-                    for action in sorted_actions:
-                        print(f" {action.ljust(col_width)}|", end="", file=sys.stderr)
-                    print("", file=sys.stderr)
-
-                    separator = "-" * 9 + "+"
-                    for action in sorted_actions:
-                        separator += "-" * (col_width + 2) + "+"
-                    print(separator, file=sys.stderr)
-                    header_printed = True
-
-                if header_printed:
-                    sorted_actions = sorted(action_types)
-                    col_width = max(8, max(len(a) for a in sorted_actions))
-
-                    print(f"{second_counter:3d}s      |", end="", file=sys.stderr)
+                if second_counter != 0:
+                    print(f"| {second_counter:7d}s |", end="")
                     for action in sorted_actions:
                         count = stats_accumulator.get(action, 0)
-                        print(f" {str(count).ljust(col_width)}|", end="", file=sys.stderr)
-                    print("", file=sys.stderr)
+                        print(f"{str(count).rjust(col_width)} |", end="")
+                    print("")
+                else:
+                    sum_stats_accumulator.clear()
 
-                    stats_accumulator.clear()
-                    second_counter += 1
+                stats_accumulator.clear()
+                second_counter += 1
                 last_print_time = current_time
+
+        print(separator)
+
+        print("|      avg |", end="")
+        for action in sorted_actions:
+            count = sum_stats_accumulator.get(action, 0)
+            print(f"{str(count // self.duration).rjust(col_width)} |", end="")
+        print("")
+
+        print("|      sum |", end="")
+        for action in sorted_actions:
+            count = sum_stats_accumulator.get(action, 0)
+            print(f"{str(count).rjust(col_width)} |", end="")
+        print("")
+
+        print(separator)
 
     def _pre_start(self):
         if self.verbose:
             print(f"Initializing KeyValue volume: endpoint={self.fqdn}:{self.port}, database={self.database}, path={self._volume_path()}", file=sys.stderr)
-        self.client = KeyValueClient(self.fqdn, self.port)
-        create_reponse = self._create_volume(self.client)
+        client = KeyValueClient(self.fqdn, self.port)
+        create_reponse = self._create_volume(client)
+        client.close()
         if create_reponse is None or create_reponse.operation.status != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
             print('Create volume failed')
             print('response:', create_reponse)
             return False
-        self.begin_time = datetime.now()
-        self.end_time = self.begin_time + timedelta(seconds=self.duration)
-        print('Start Load; Begin Time:', self.begin_time, '; End Time:', self.end_time)
         if self.verbose:
             print(f"Start Load: duration={self.duration}s, workers={self.worker_count}, version={self.version}", file=sys.stderr)
 
@@ -708,14 +763,12 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
         return True
 
     def _post_stop(self):
-        self._apost_stop()
-
-    def _apost_stop(self):
         if self.verbose:
             print(f"Stop Load: dropping volume {self._volume_path()}", file=sys.stderr)
-        if self.client:
-            self._drop_volume(self.client)
-            self.client.close()
+
+        client = KeyValueClient(self.fqdn, self.port)
+        self._drop_volume(client)
+        client.close()
 
         if self.show_stats and self.stats_queue:
             self.stats_queue.put('stop')
@@ -723,13 +776,6 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
                 self.stats_thread.join(timeout=2.0)
 
         return True
-
-    def get_status(self, response):
-        if response is None:
-            return None
-        if hasattr(response, 'operation'):
-            return response.operation.status
-        return response.status
 
     def get_workload_thread_funcs(self):
         workers = []

@@ -2813,11 +2813,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     void CheckUpsertNonEquatableType(bool notNull) {
-        auto kqpSetting = NKikimrKqp::TKqpSetting();
-        kqpSetting.SetName("_KqpYqlSyntaxVersion");
-        kqpSetting.SetValue("1");
-
-        auto settings = TKikimrSettings().SetKqpSettings({kqpSetting});
+        auto settings = TKikimrSettings();
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4336,11 +4332,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     void CreateTableWithIndexSQL(EIndexTypeSql type) {
-        auto kqpSetting = NKikimrKqp::TKqpSetting();
-        kqpSetting.SetName("_KqpYqlSyntaxVersion");
-        kqpSetting.SetValue("1");
-
-        auto settings = TKikimrSettings().SetKqpSettings({kqpSetting});
+        auto settings = TKikimrSettings();
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4417,11 +4409,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     void SelectFromAsyncIndexedTable() {
-        auto kqpSetting = NKikimrKqp::TKqpSetting();
-        kqpSetting.SetName("_KqpYqlSyntaxVersion");
-        kqpSetting.SetValue("1");
-
-        auto settings = TKikimrSettings().SetKqpSettings({kqpSetting});
+        auto settings = TKikimrSettings();
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4473,10 +4461,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST(SelectFromIndexesAndFreeSpaceLogicDoesntTimeout) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings();
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
         // setting channel buffer size so small to make sure that we will be able to transfer at least
         // one row in stream lookup.
@@ -4557,10 +4542,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST(InnerJoinWithNonIndexWherePredicate) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings();
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -4635,10 +4617,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     //KIKIMR-8144
     Y_UNIT_TEST(InnerJoinSecondaryIndexLookupAndRightTablePredicateNonIndexColumn) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings();
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);

@@ -351,4 +351,115 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT_VALUES_EQUAL(indexRows, 1);
         }
     }
+
+    void TruncateTableWithIndex(NKikimrSchemeOp::EIndexType indexType) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableTruncateTable(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/TestTable",
+            TBuildIndexConfig{"TextIndex", indexType, {"text"}, {}, {}});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
+            {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex"),
+            {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex/indexImplTable"),
+            {NLs::PathExist});
+
+        TVector<TCell> mainTableCells = {
+            TCell::Make((ui64)1), TCell(TStringBuf("hello")), TCell(TStringBuf("data one")),
+            TCell::Make((ui64)2), TCell(TStringBuf("world")), TCell(TStringBuf("data two")),
+            TCell::Make((ui64)3), TCell(TStringBuf("test")), TCell(TStringBuf("data three")),
+            TCell::Make((ui64)4), TCell(TStringBuf("index")), TCell(TStringBuf("data four")),
+        };
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2, 3}, TSerializedCellMatrix(mainTableCells, 4, 3), true);
+
+        TVector<TCell> indexTableCells = {
+            TCell(TStringBuf("hello")), TCell::Make((ui64)1),
+            TCell(TStringBuf("world")), TCell::Make((ui64)2),
+            TCell(TStringBuf("test")), TCell::Make((ui64)3),
+            TCell(TStringBuf("index")), TCell::Make((ui64)4),
+        };
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable/TextIndex/indexImplTable",
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2}, TSerializedCellMatrix(indexTableCells, 4, 2), true);
+
+        {
+            auto mainRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(mainRows, 4);
+            auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TextIndex/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(indexRows, 4);
+        }
+
+        TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto mainRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(mainRows, 0);
+            auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TextIndex/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(indexRows, 0);
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
+            {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex"),
+            {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex/indexImplTable"),
+            {NLs::PathExist});
+
+        TVector<TCell> newMainTableCells = {
+            TCell::Make((ui64)10), TCell(TStringBuf("new")), TCell(TStringBuf("new data one")),
+            TCell::Make((ui64)20), TCell(TStringBuf("fresh")), TCell(TStringBuf("new data two")),
+        };
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable",
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2, 3}, TSerializedCellMatrix(newMainTableCells, 2, 3), true);
+
+        TVector<TCell> newIndexTableCells = {
+            TCell(TStringBuf("new")), TCell::Make((ui64)10),
+            TCell(TStringBuf("fresh")), TCell::Make((ui64)20),
+        };
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/TestTable/TextIndex/indexImplTable",
+            0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            {1, 2}, TSerializedCellMatrix(newIndexTableCells, 2, 2), true);
+
+        {
+            auto mainRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(mainRows, 2);
+            auto indexRows = CountRows(runtime, TTestTxConfig::SchemeShard, "/MyRoot/TestTable/TextIndex/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(indexRows, 2);
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
+            {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex"),
+            {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable/TextIndex/indexImplTable"),
+            {NLs::PathExist});
+    }
+
+    Y_UNIT_TEST(TruncateTableWithSecondaryIndex) {
+        TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobal);   
+    }
+
+    Y_UNIT_TEST(TruncateTableWithUniqueIndex) {
+        TruncateTableWithIndex(NKikimrSchemeOp::EIndexTypeGlobalUnique);   
+    }
 }
+

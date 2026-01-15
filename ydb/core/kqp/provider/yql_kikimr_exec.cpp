@@ -1648,6 +1648,11 @@ bool ParseCompressionSettings(
             }
         } else if (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))) {
             compression->set_compression_level(FromString<i64>(settingVal.Child(0)->Content()));
+            if (!compression->has_algorithm()) {
+                ctx.AddError(TIssue(ctx.GetPosition(settingVal.Pos()), TStringBuilder()
+                    << "compression level specified without an algorithm"));
+                return false;
+            }
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(sKV.Pos()), TStringBuilder()
                 << " Column: \"" << alter_columns->name()

@@ -3,6 +3,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     test_disabled.py
+    test_incorrect.py
     test_obsolete.py
 )
 

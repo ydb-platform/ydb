@@ -33,6 +33,7 @@ class TWriteMessageForm;
 class TDropConsumerForm;
 class TEditConsumerForm;
 class TOffsetForm;
+class TTopicInfoView;
 
 // View types and State are defined in app_context.h via app_interface.h
 
@@ -120,6 +121,7 @@ private:
     std::shared_ptr<TDropConsumerForm> DropConsumerForm_;
     std::shared_ptr<TEditConsumerForm> EditConsumerForm_;
     std::shared_ptr<TOffsetForm> OffsetForm_;
+    std::shared_ptr<TTopicInfoView> TopicInfoView_;
     
     // Refresh thread
     std::thread RefreshThread_;

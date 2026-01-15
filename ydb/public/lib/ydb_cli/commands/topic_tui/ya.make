@@ -9,6 +9,7 @@ SRCS(
     views/consumer_view.cpp
     views/message_preview_view.cpp
     views/charts_view.cpp
+    views/topic_info_view.cpp
     forms/topic_form.cpp
     forms/delete_confirm_form.cpp
     forms/consumer_form.cpp

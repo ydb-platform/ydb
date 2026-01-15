@@ -5,6 +5,7 @@
 #include "views/consumer_view.h"
 #include "views/message_preview_view.h"
 #include "views/charts_view.h"
+#include "views/topic_info_view.h"
 #include "forms/topic_form.h"
 #include "forms/delete_confirm_form.h"
 #include "forms/consumer_form.h"
@@ -49,6 +50,7 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     DropConsumerForm_ = std::make_shared<TDropConsumerForm>(*this);
     EditConsumerForm_ = std::make_shared<TEditConsumerForm>(*this);
     OffsetForm_ = std::make_shared<TOffsetForm>(*this);
+    TopicInfoView_ = std::make_shared<TTopicInfoView>(*this);
     
     // Register all views/forms in registry for unified access
     ViewRegistry_.Register(EViewType::TopicList, TopicListView_);
@@ -63,6 +65,7 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     ViewRegistry_.Register(EViewType::DropConsumerConfirm, DropConsumerForm_);
     ViewRegistry_.Register(EViewType::EditConsumer, EditConsumerForm_);
     ViewRegistry_.Register(EViewType::OffsetForm, OffsetForm_);
+    ViewRegistry_.Register(EViewType::TopicInfo, TopicInfoView_);
     
     // Note: All views now navigate directly via ITuiApp interface
     // Note: All forms now use ITuiApp interface directly
@@ -417,16 +420,16 @@ Component TTopicTuiApp::BuildMainComponent() {
             case EViewType::WriteMessage:
             case EViewType::DropConsumerConfirm:
             case EViewType::EditConsumer:
-            case EViewType::OffsetForm: {
+            case EViewType::OffsetForm:
+            case EViewType::TopicInfo: {
                 auto component = ViewRegistry_.GetComponent(State_.CurrentView);
                 if (component) {
                     content = component->Render();
                 }
                 break;
             }
-            case EViewType::TopicInfo:
             case EViewType::TopicTablets:
-                // These are rendered by TopicDetailsComponent based on CurrentView
+                // TopicTablets not yet implemented, fall back to TopicDetailsComponent
                 content = TopicDetailsComponent_->Render();
                 break;
         }

@@ -1,0 +1,151 @@
+#include <library/cpp/json/json_writer.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include "hive_impl.h"
+
+namespace NKikimr::NHive {
+
+class TTxUpdateLastReassign : public TTransactionBase<THive> {
+public:
+    TTxUpdateLastReassign(TSelf* hive) : TTransactionBase(hive) {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext&) override {
+        NIceDb::TNiceDb db(txc.DB);
+        db.Table<Schema::State>().Key(TSchemeIds::LastReassign).Update<Schema::State::StringValue>(Self->LastReassign);
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+    }
+};
+
+class TReassignTabletsActor : public TActorBootstrapped<TReassignTabletsActor>, public ISubActor {
+public:
+    TActorId Source;
+    std::vector<TReassignOperation> Operations;
+    std::vector<TReassignOperation>::iterator NextReassign;
+    ui32 ReassignInFlight = 0;
+    ui32 MaxInFlight = 1;
+    NJson::TJsonValue Response;
+    TString Description;
+    ui64 TabletsDone = 0;
+    THive* Hive;
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::HIVE_MON_REQUEST;
+    }
+
+    TReassignTabletsActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, THive* hive)
+        : Source(source)
+        , Operations(std::move(operations))
+        , NextReassign(Operations.begin())
+        , MaxInFlight(maxInFlight)
+        , Description(std::move(description))
+        , Hive(hive)
+    {}
+
+    TReassignTabletsActor(std::vector<TReassignOperation> operations, THive* hive)
+        : Operations(std::move(operations))
+        , NextReassign(Operations.begin())
+        , Hive(hive)
+    {}
+
+    void PassAway() override {
+        --Hive->ReassignsRunning;
+        Hive->RemoveSubActor(this);
+        return IActor::PassAway();
+    }
+
+    void Cleanup() override {
+        PassAway();
+    }
+
+    TString GetDescription() const override {
+        auto progress = 100 * (NextReassign - Operations.begin()) / Operations.size();
+        return TStringBuilder() << "Reassign(" << Description << "): " << progress << "%";
+    }
+
+    TSubActorId GetId() const override {
+        return SelfId().LocalId();
+    }
+
+    void CheckCompletion() {
+        if (ReassignInFlight == 0 && NextReassign == Operations.end()) {
+            if (Source) {
+                Response["total"] = TabletsDone;
+                Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Response, false)));
+            }
+            Hive->LastReassign = TStringBuilder() << "Last actor reassign: " << Description << " at " << TActivationContext::Now();
+            Hive->Execute(new TTxUpdateLastReassign(Hive));
+            return PassAway();
+        }
+    }
+
+    bool CanReassignNextTablet() const {
+        return ReassignInFlight < MaxInFlight && NextReassign != Operations.end();
+    }
+
+    void ReassignNextTablet() {
+        while (CanReassignNextTablet()) {
+            const auto& operation = *(NextReassign++);
+            TTabletId tabletId = operation.TabletId;
+            TLeaderTabletInfo* tablet = Hive->FindTablet(tabletId);
+            if (tablet == nullptr) {
+                continue;
+            }
+            tablet->ActorsToNotifyOnRestart.push_back(SelfId());
+            ++ReassignInFlight;
+            switch (tablet->State) {
+                default: {
+                    Send(Hive->SelfId(), operation.ToEvent());
+                    break;
+                }
+                case ETabletState::BlockStorage: {
+                    TSideEffects sideEffects;
+                    sideEffects.Reset(SelfId());
+                    tablet->InitiateBlockStorage(sideEffects);
+                    sideEffects.Complete(TActivationContext::AsActorContext());
+                    break;
+                }
+                case ETabletState::GroupAssignment: {
+                    tablet->InitiateAssignTabletGroups();
+                    break;
+                }
+            }
+        }
+    }
+
+    void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
+        --ReassignInFlight;
+        ++TabletsDone;
+        ReassignNextTablet();
+        return CheckCompletion();
+    }
+
+    void Bootstrap() {
+        ++Hive->ReassignsRunning;
+        Become(&TThis::StateWork);
+        ReassignNextTablet();
+        return CheckCompletion();
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            cFunc(TEvents::TSystem::PoisonPill, PassAway);
+            hFunc(TEvPrivate::TEvRestartComplete, Handle);
+        }
+    }
+};
+
+void THive::StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description) {
+    auto* actor = new TReassignTabletsActor(std::move(operations), source, maxInFlight, std::move(description), this);
+    SubActors.emplace_back(actor);
+    RegisterWithSameMailbox(actor);
+}
+
+void THive::StartReassignActor(std::vector<TReassignOperation> operations) {
+    auto* actor = new TReassignTabletsActor(std::move(operations), this);
+    SubActors.emplace_back(actor);
+    RegisterWithSameMailbox(actor);
+}
+
+} // NKikimr::NHive

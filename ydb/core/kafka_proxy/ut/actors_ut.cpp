@@ -521,10 +521,6 @@ namespace NKafka::NTests {
             auto [actorId, actor] = CreateFetchActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime, config);
             Sleep(TDuration::MilliSeconds(500)); // wait actor will be created
 
-<<<<<<< HEAD
-            // emulate pipe error
-            auto topicIndexes = TestAccessor::GetTopicIndexes(actor);
-=======
             // emulate timeout
             runtime->Send(actorId, edge, new TEvKafka::TEvFetchActorStateRequest());
 
@@ -532,7 +528,6 @@ namespace NKafka::NTests {
             TAutoPtr<IEventHandle> handle;
             auto* evS = runtime->GrabEdgeEvent<TEvKafka::TEvFetchActorStateResponse>(handle);
             auto topicIndexes = evS->TopicIndexes;
->>>>>>> 6f3f5b4a60e (Fixed sanitizer error in ydb/core/kafka_proxy/ut/FetchActorTests.FetchWithTimeout (#32049))
             UNIT_ASSERT(topicIndexes.size() == 1);
             auto fetchActorId = topicIndexes.begin()->first;
             runtime->Send(fetchActorId, fetchActorId, new TEvents::TEvWakeup(1000));

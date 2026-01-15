@@ -103,6 +103,7 @@ ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[180]
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap zip_bomb.py.TestZipBomb.test
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
+ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/olap_workload/tests py3test.sole chunk
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test

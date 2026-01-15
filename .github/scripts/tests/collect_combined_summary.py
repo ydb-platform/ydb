@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Tuple
 
 TABLE_HEADER_PATTERN = r'\|\s*TESTS\s*\|\s*PASSED\s*\|\s*ERRORS\s*\|\s*FAILED\s*\|\s*SKIPPED\s*\|\s*MUTED'
 URL_PATTERN = r'https://storage\.yandexcloud\.net/[^\s\)]+ya-test\.html[^\s\)]*'
+DEFAULT_SUMMARY_DIR = "summary_artifacts"
 
 
 def _extract_number(value: str) -> int:
@@ -63,6 +64,36 @@ def _parse_tables(summary_text: str) -> List[Dict]:
                 break
             i += 1
     return tables
+
+
+def _safe_summary_name(raw_name: str) -> str:
+    # Replace colon for artifact filesystem compatibility
+    return raw_name.replace(":", "__")
+
+
+def _build_summary_filename(job_name: str, branch: str, build_preset: str) -> str:
+    if ":" in job_name:
+        return f"summary-{_safe_summary_name(job_name)}.md"
+    return f"summary-{_safe_summary_name(branch)}__{_safe_summary_name(build_preset)}.md"
+
+
+def save_step_summary(
+    summary_path: str,
+    output_dir: str,
+    job_name: str,
+    branch: str,
+    build_preset: str,
+) -> Path:
+    summary_dir = Path(output_dir)
+    summary_dir.mkdir(parents=True, exist_ok=True)
+    filename = _build_summary_filename(job_name, branch, build_preset)
+    summary_file = summary_dir / filename
+
+    if Path(summary_path).is_file():
+        summary_file.write_text(Path(summary_path).read_text(encoding="utf-8"), encoding="utf-8")
+    else:
+        summary_file.touch()
+    return summary_file
 
 
 def parse_all_attempts(summary_text: str) -> List[Dict]:
@@ -383,38 +414,77 @@ def generate_combined_markdown_table(summaries: Dict[str, Dict]) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Collect step summaries from matrix jobs and generate combined markdown table'
+        description='Collect step summaries from matrix jobs or save current step summary'
     )
     parser.add_argument(
         '--artifacts-dir',
-        required=True,
         help='Directory containing summary artifacts from matrix jobs'
     )
     parser.add_argument(
         '--output',
         help='Output file for combined summary (default: GITHUB_STEP_SUMMARY)'
     )
-    
+    parser.add_argument(
+        '--save-summary',
+        action='store_true',
+        help='Save current GITHUB_STEP_SUMMARY to artifact directory'
+    )
+    parser.add_argument(
+        '--summary-dir',
+        default=DEFAULT_SUMMARY_DIR,
+        help='Directory to write summary artifacts (default: summary_artifacts)'
+    )
+    parser.add_argument(
+        '--summary-path',
+        default=os.environ.get('GITHUB_STEP_SUMMARY', ''),
+        help='Path to GITHUB_STEP_SUMMARY file (default: env GITHUB_STEP_SUMMARY)'
+    )
+    parser.add_argument(
+        '--job-name',
+        default=os.environ.get('GITHUB_JOB', 'unknown'),
+        help='Job name used to derive summary filename'
+    )
+    parser.add_argument(
+        '--branch',
+        default=os.environ.get('MATRIX_BRANCH') or os.environ.get('GITHUB_REF_NAME', 'unknown'),
+        help='Branch name for summary filename'
+    )
+    parser.add_argument(
+        '--build-preset',
+        default=os.environ.get('INPUTS_BUILD_PRESET') or os.environ.get('MATRIX_BUILD_PRESET', 'unknown'),
+        help='Build preset for summary filename'
+    )
+
     args = parser.parse_args()
-    
-    # Collect summaries
+
+    if args.save_summary:
+        saved = save_step_summary(
+            summary_path=args.summary_path,
+            output_dir=args.summary_dir,
+            job_name=args.job_name,
+            branch=args.branch,
+            build_preset=args.build_preset,
+        )
+        print(f"Saved summary to {saved}", file=sys.stderr)
+        return 0
+
+    if not args.artifacts_dir:
+        parser.error('--artifacts-dir is required unless --save-summary is used')
+
     print("Collecting summaries from artifacts...", file=sys.stderr)
     summaries = collect_summaries_from_artifacts(args.artifacts_dir)
     print(f"Found {len(summaries)} job summaries", file=sys.stderr)
-    
-    # Generate combined markdown table
+
     combined_markdown = generate_combined_markdown_table(summaries)
-    
-    # Write output
+
     output_file = args.output or os.environ.get('GITHUB_STEP_SUMMARY')
     if output_file:
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(combined_markdown)
         print(f"Combined summary written to {output_file}", file=sys.stderr)
     else:
-        # Write to stdout if no output file specified
         print(combined_markdown)
-    
+
     return 0
 
 

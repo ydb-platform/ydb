@@ -68,8 +68,41 @@ public:
         return Views_.count(type) > 0;
     }
     
+    // Build all registered views and cache their components
+    void BuildAll() {
+        for (const auto& [type, view] : Views_) {
+            if (view) {
+                Components_[type] = view->Build();
+            }
+        }
+    }
+    
+    // Get built component for a view type
+    ftxui::Component GetComponent(EViewType type) const {
+        auto it = Components_.find(type);
+        return (it != Components_.end()) ? it->second : nullptr;
+    }
+    
+    // Refresh a specific view
+    void Refresh(EViewType type) {
+        auto view = Get(type);
+        if (view) {
+            view->Refresh();
+        }
+    }
+    
+    // Refresh all views that support it
+    void RefreshAll() {
+        for (const auto& [type, view] : Views_) {
+            if (view) {
+                view->Refresh();
+            }
+        }
+    }
+    
 private:
     std::unordered_map<EViewType, ViewPtr> Views_;
+    std::unordered_map<EViewType, ftxui::Component> Components_;
 };
 
 } // namespace NYdb::NConsoleClient

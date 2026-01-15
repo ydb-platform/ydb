@@ -107,7 +107,7 @@ int TTopicTuiApp::Run() {
     }
     
     // Load topic list (for the current directory context)
-    TopicListView_->Refresh();
+    ViewRegistry_.Refresh(EViewType::TopicList);
     
     StartRefreshThread();
     
@@ -158,7 +158,7 @@ void TTopicTuiApp::NavigateBack() {
                          // Ensure we don't go above db root
                          if (parent.size() >= dbRoot.size()) {
                              State_.CurrentPath = TString(parent);
-                             TopicListView_->Refresh();
+                             ViewRegistry_.Refresh(EViewType::TopicList);
                          }
                      }
                 }
@@ -307,30 +307,27 @@ TString TTopicTuiApp::GetRefreshRateLabel() const {
 }
 
 Component TTopicTuiApp::BuildMainComponent() {
-    TopicListComponent_ = TopicListView_->Build();
-    TopicDetailsComponent_ = TopicDetailsView_->Build();
-    ConsumerComponent_ = ConsumerView_->Build();
-    auto messagePreviewComponent = MessagePreviewView_->Build();
-    auto chartsComponent = ChartsView_->Build();
-    TopicFormComponent_ = TopicForm_->Build();
-    DeleteConfirmComponent_ = DeleteConfirmForm_->Build();
-    auto consumerFormComponent = ConsumerForm_->Build();
-    auto writeMessageComponent = WriteMessageForm_->Build();
-    auto dropConsumerComponent = DropConsumerForm_->Build();
-    auto editConsumerComponent = EditConsumerForm_->Build();
-    auto offsetFormComponent = OffsetForm_->Build();
+    // Build all views via registry and cache their components
+    ViewRegistry_.BuildAll();
+    
+    // Keep references to components that need focus management
+    TopicListComponent_ = ViewRegistry_.GetComponent(EViewType::TopicList);
+    TopicDetailsComponent_ = ViewRegistry_.GetComponent(EViewType::TopicDetails);
+    ConsumerComponent_ = ViewRegistry_.GetComponent(EViewType::ConsumerDetails);
+    TopicFormComponent_ = ViewRegistry_.GetComponent(EViewType::TopicForm);
+    DeleteConfirmComponent_ = ViewRegistry_.GetComponent(EViewType::DeleteConfirm);
     
     // Use a simple container - we'll switch rendering manually
     auto container = Container::Stacked({
         TopicListComponent_,
         TopicDetailsComponent_,
         ConsumerComponent_,
-        messagePreviewComponent,
-        chartsComponent,
+        ViewRegistry_.GetComponent(EViewType::MessagePreview),
+        ViewRegistry_.GetComponent(EViewType::Charts),
         TopicFormComponent_,
         DeleteConfirmComponent_,
-        consumerFormComponent,
-        writeMessageComponent
+        ViewRegistry_.GetComponent(EViewType::ConsumerForm),
+        ViewRegistry_.GetComponent(EViewType::WriteMessage)
     });
     
     // Use |= to intercept events BEFORE children process them (critical for Escape in WriteMessage)
@@ -393,27 +390,9 @@ Component TTopicTuiApp::BuildMainComponent() {
             return true;
         }
         if (event == Event::Character('r')) {
-            // Manual refresh
-            switch (State_.CurrentView) {
-                case EViewType::TopicList:
-                    TopicListView_->Refresh();
-                    return true;
-                case EViewType::TopicDetails:
-                    TopicDetailsView_->Refresh();
-                    return true;
-                case EViewType::ConsumerDetails:
-                    ConsumerView_->Refresh();
-                    return true;
-                case EViewType::Charts:
-                    ChartsView_->Refresh();
-                    return true;
-                case EViewType::TopicInfo:
-                case EViewType::TopicTablets:
-                    // Let the view handle 'r' directly
-                    return false;
-                default:
-                    return false;
-            }
+            // Manual refresh via registry
+            ViewRegistry_.Refresh(State_.CurrentView);
+            return true;
         }
         return false;
     });
@@ -428,45 +407,27 @@ Component TTopicTuiApp::BuildMainComponent() {
         
         switch (State_.CurrentView) {
             case EViewType::TopicList:
-                content = TopicListComponent_->Render();
-                break;
             case EViewType::TopicDetails:
-                content = TopicDetailsComponent_->Render();
-                break;
             case EViewType::ConsumerDetails:
-                content = ConsumerComponent_->Render();
+            case EViewType::MessagePreview:
+            case EViewType::Charts:
+            case EViewType::TopicForm:
+            case EViewType::DeleteConfirm:
+            case EViewType::ConsumerForm:
+            case EViewType::WriteMessage:
+            case EViewType::DropConsumerConfirm:
+            case EViewType::EditConsumer:
+            case EViewType::OffsetForm: {
+                auto component = ViewRegistry_.GetComponent(State_.CurrentView);
+                if (component) {
+                    content = component->Render();
+                }
                 break;
+            }
             case EViewType::TopicInfo:
             case EViewType::TopicTablets:
                 // These are rendered by TopicDetailsComponent based on CurrentView
                 content = TopicDetailsComponent_->Render();
-                break;
-            case EViewType::MessagePreview:
-                content = messagePreviewComponent->Render();
-                break;
-            case EViewType::Charts:
-                content = chartsComponent->Render();
-                break;
-            case EViewType::TopicForm:
-                content = TopicFormComponent_->Render();
-                break;
-            case EViewType::DeleteConfirm:
-                content = DeleteConfirmComponent_->Render();
-                break;
-            case EViewType::ConsumerForm:
-                content = consumerFormComponent->Render();
-                break;
-            case EViewType::WriteMessage:
-                content = writeMessageComponent->Render();
-                break;
-            case EViewType::DropConsumerConfirm:
-                content = dropConsumerComponent->Render();
-                break;
-            case EViewType::EditConsumer:
-                content = editConsumerComponent->Render();
-                break;
-            case EViewType::OffsetForm:
-                content = offsetFormComponent->Render();
                 break;
         }
         

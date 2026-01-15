@@ -57,9 +57,6 @@ Component TFormBase::Build() {
             return false;
         }
         
-        // Mark that a form is capturing input (suppresses global shortcuts)
-        App_.GetState().InputCaptureActive = true;
-        
         // Ignore input while submitting
         if (Submitting_) {
             return true;
@@ -67,6 +64,7 @@ Component TFormBase::Build() {
         
         // Handle Escape - cancel form and navigate back
         if (event == Event::Escape) {
+            App_.GetState().InputCaptureActive = false;
             App_.NavigateBack();
             return true;
         }
@@ -75,11 +73,15 @@ Component TFormBase::Build() {
         if (event == Event::Return) {
             if (HandleSubmit()) {
                 // HandleSubmit should call NavigateBack() and RequestRefresh() as needed
-                // Forms handle their own navigation now
             }
             return true;
         }
         
+        // Mark that a form is capturing input (suppresses global shortcuts)
+        // Do this AFTER handling Escape/Enter so those work correctly
+        App_.GetState().InputCaptureActive = true;
+        
+        // Let the container (Input components, etc.) handle the event
         return false;
     });
 }

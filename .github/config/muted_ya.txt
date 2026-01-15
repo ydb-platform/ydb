@@ -30,7 +30,6 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysVi
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
 ydb/core/kqp/ut/join KqpBlockHashJoin.BlockHashJoinLeftJoinNullCount
-ydb/core/kqp/ut/olap KqpOlapJson.BloomCategoryIndexesVariants[false,false,1,10,0,0,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/olap KqpOlapTiering.DeletedTier
 ydb/core/kqp/ut/olap KqpOlapTiering.EvictionIncreaseDuration
 ydb/core/kqp/ut/olap KqpOlapTiering.EvictionWithStrippedEdsPath

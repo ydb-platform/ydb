@@ -624,9 +624,8 @@ private:
         auto& item = importInfo->Items.at(itemIdx);
 
         LOG_D("TImport::TTxProgress: delay scheme object query execution"
-                << ": id# " << importInfo->Id
-                << ", delayed item# " << itemIdx
-            );
+            << ": id# " << importInfo->Id
+            << ", delayed item# " << itemIdx);
 
         item.State = EState::Waiting;
         Self->PersistImportItemState(db, *importInfo, itemIdx);

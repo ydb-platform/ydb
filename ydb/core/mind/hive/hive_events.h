@@ -38,6 +38,7 @@ struct TEvPrivate {
         EvGenerateTestData,
         EvRefreshScaleRecommendation,
         EvUpdateFollowers,
+        EvProcessTabletMetrics,
         EvEnd
     };
 
@@ -142,6 +143,8 @@ struct TEvPrivate {
 
     struct TEvUpdateFollowers : TEventLocal<TEvUpdateFollowers, EvUpdateFollowers> {
     };
+
+    struct TEvProcessTabletMetrics : TEventLocal<TEvProcessTabletMetrics, EvProcessTabletMetrics> {};
 };
 
 } // NHive

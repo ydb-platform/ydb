@@ -1,4 +1,4 @@
-name: Run and debug tests
+name: Run_and_debug_tests
 
 on:
   workflow_dispatch:

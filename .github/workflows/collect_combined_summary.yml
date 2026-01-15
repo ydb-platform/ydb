@@ -1,4 +1,4 @@
-name: Collect Combined Summary
+name: Collect_Combined_Summary
 
 on:
   workflow_call:

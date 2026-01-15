@@ -62,6 +62,18 @@ public:
     
     // Thread-safe UI refresh trigger
     void PostRefresh() override { Screen_.PostEvent(ftxui::Event::Custom); }
+    
+    // View Target Configuration (ITuiApp interface)
+    void SetTopicDetailsTarget(const TString& topicPath) override;
+    void SetConsumerViewTarget(const TString& topicPath, const TString& consumerName) override;
+    void SetMessagePreviewTarget(const TString& topicPath, ui32 partition, i64 offset) override;
+    void SetTopicFormCreateMode(const TString& parentPath) override;
+    void SetTopicFormEditMode(const TString& topicPath) override;
+    void SetDeleteConfirmTarget(const TString& path) override;
+    void SetDropConsumerTarget(const TString& topicPath, const TString& consumerName) override;
+    void SetEditConsumerTarget(const TString& topicPath, const TString& consumerName) override;
+    void SetWriteMessageTarget(const TString& topicPath, std::optional<ui32> partition) override;
+    void SetConsumerFormTarget(const TString& topicPath) override;
 
 private:
     ftxui::Component BuildMainComponent();

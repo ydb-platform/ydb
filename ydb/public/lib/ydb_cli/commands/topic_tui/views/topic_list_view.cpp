@@ -45,17 +45,21 @@ TTopicListView::TTopicListView(ITuiApp& app)
         
         if (entryIndex < Entries_.size()) {
             const auto& entry = Entries_[entryIndex];
-            if (entry.IsDirectory && OnDirectorySelected) {
+            if (entry.IsDirectory) {
                 TString dbRoot = App_.GetDatabaseRoot();
                 if (entry.Name == ".." && entry.FullPath.size() < dbRoot.size()) {
                     // Would go above database root - ignore
                 } else {
                     CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = static_cast<int>(entryIndex);
-                    OnDirectorySelected(entry.FullPath);
+                    // Navigate to directory: update path and refresh
+                    App_.GetState().CurrentPath = entry.FullPath;
+                    Refresh();
                 }
-            } else if (entry.IsTopic && OnTopicSelected) {
+            } else if (entry.IsTopic) {
                 CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = static_cast<int>(entryIndex);
-                OnTopicSelected(entry.FullPath);
+                // Navigate to topic details via ITuiApp interface
+                App_.SetTopicDetailsTarget(entry.FullPath);
+                App_.NavigateTo(EViewType::TopicDetails);
             }
         }
     };
@@ -305,8 +309,72 @@ Component TTopicListView::Build() {
                 PathCompletions_.clear();
                 CompletionIndex_ = -1;
                 
-                if (OnNavigateToPath && !targetPath.empty()) {
-                    OnNavigateToPath(targetPath);
+                if (!targetPath.empty()) {
+                    // Handle go-to-path navigation with deep-link parsing
+                    TString topicPath;
+                    std::optional<ui32> partitionId;
+                    TString consumerName;
+                    
+                    // Parse the input path for @consumer and :partition suffixes
+                    TStringBuf pathBuf = targetPath;
+                    
+                    // First, check for @consumer suffix
+                    TStringBuf base, consumerPart;
+                    if (pathBuf.TryRSplit('@', base, consumerPart)) {
+                        consumerName = TString(consumerPart);
+                        topicPath = TString(base);
+                    } else {
+                        // No @consumer - check for :partition suffix
+                        TStringBuf partBase, partitionStr;
+                        if (pathBuf.TryRSplit(':', partBase, partitionStr)) {
+                            // Verify it looks like a partition number (all digits)
+                            bool isPartition = !partitionStr.empty();
+                            for (char c : partitionStr) {
+                                if (!std::isdigit(c)) {
+                                    isPartition = false;
+                                    break;
+                                }
+                            }
+                            if (isPartition) {
+                                topicPath = TString(partBase);
+                                partitionId = FromString<ui32>(partitionStr);
+                            } else {
+                                topicPath = targetPath;
+                            }
+                        } else {
+                            topicPath = targetPath;
+                        }
+                    }
+                    
+                    // Check path type using DescribePath
+                    auto result = App_.GetSchemeClient().DescribePath(topicPath).GetValueSync();
+                    if (result.IsSuccess()) {
+                        auto entry = result.GetEntry();
+                        if (entry.Type == NScheme::ESchemeEntryType::Topic || 
+                            entry.Type == NScheme::ESchemeEntryType::PqGroup) {
+                            // It's a topic
+                            if (!consumerName.empty()) {
+                                // Navigate to consumer view via ITuiApp interface
+                                App_.SetConsumerViewTarget(topicPath, consumerName);
+                                App_.NavigateTo(EViewType::ConsumerDetails);
+                            } else {
+                                // Navigate to topic details, optionally with partition selected
+                                if (partitionId) {
+                                    App_.GetState().SelectedPartition = *partitionId;
+                                }
+                                App_.SetTopicDetailsTarget(topicPath);
+                                App_.NavigateTo(EViewType::TopicDetails);
+                            }
+                        } else {
+                            // It's a directory - navigate the explorer
+                            App_.GetState().CurrentPath = topicPath;
+                            Refresh();
+                        }
+                    } else {
+                        // Path doesn't exist, try as directory
+                        App_.GetState().CurrentPath = topicPath;
+                        Refresh();
+                    }
                 }
                 return true;
             }
@@ -369,12 +437,14 @@ Component TTopicListView::Build() {
                         SearchQuery_.clear();
                         ClearSearchFilter();
                         
-                        if (entry.IsDirectory && OnDirectorySelected) {
+                        if (entry.IsDirectory) {
                             CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = static_cast<int>(realIndex);
-                            OnDirectorySelected(entry.FullPath);
-                        } else if (entry.IsTopic && OnTopicSelected) {
+                            App_.GetState().CurrentPath = entry.FullPath;
+                            Refresh();
+                        } else if (entry.IsTopic) {
                             CursorPositionCache_[std::string(App_.GetState().CurrentPath.c_str())] = static_cast<int>(realIndex);
-                            OnTopicSelected(entry.FullPath);
+                            App_.SetTopicDetailsTarget(entry.FullPath);
+                            App_.NavigateTo(EViewType::TopicDetails);
                         }
                     }
                 }
@@ -485,30 +555,31 @@ Component TTopicListView::Build() {
                 return true;  // Already at root, ignore
             }
             
-            if (OnDirectorySelected) {
-                size_t pos = path.rfind('/');
-                if (pos != TString::npos && pos > 0) {
-                    TString parent = path.substr(0, pos);
-                    if (parent.size() >= dbRoot.size() || dbRoot.StartsWith(parent)) {
-                        CursorPositionCache_[std::string(path.c_str())] = Table_.GetSelectedRow();
-                        OnDirectorySelected(parent);
-                    }
+            size_t pos = path.rfind('/');
+            if (pos != TString::npos && pos > 0) {
+                TString parent = path.substr(0, pos);
+                if (parent.size() >= dbRoot.size() || dbRoot.StartsWith(parent)) {
+                    CursorPositionCache_[std::string(path.c_str())] = Table_.GetSelectedRow();
+                    App_.GetState().CurrentPath = parent;
+                    Refresh();
                 }
             }
             return true;
         }
         if (event == Event::Character('c') || event == Event::Character('C')) {
-            if (OnCreateTopic) {
-                OnCreateTopic();
-            }
+            // Create topic - use ITuiApp interface
+            App_.SetTopicFormCreateMode(App_.GetState().CurrentPath);
+            App_.NavigateTo(EViewType::TopicForm);
             return true;
         }
         if (event == Event::Character('e') || event == Event::Character('E')) {
             int row = Table_.GetSelectedRow();
             if (row >= 0 && row < static_cast<int>(Entries_.size())) {
                 const auto& entry = Entries_[row];
-                if (entry.IsTopic && OnEditTopic) {
-                    OnEditTopic(entry.FullPath);
+                if (entry.IsTopic) {
+                    // Edit topic - use ITuiApp interface
+                    App_.SetTopicFormEditMode(entry.FullPath);
+                    App_.NavigateTo(EViewType::TopicForm);
                 }
             }
             return true;
@@ -517,8 +588,10 @@ Component TTopicListView::Build() {
             int row = Table_.GetSelectedRow();
             if (row >= 0 && row < static_cast<int>(Entries_.size())) {
                 const auto& entry = Entries_[row];
-                if ((entry.IsTopic || entry.IsDirectory) && entry.Name != ".." && OnDeleteTopic) {
-                    OnDeleteTopic(entry.FullPath);
+                if ((entry.IsTopic || entry.IsDirectory) && entry.Name != "..") {
+                    // Delete topic/directory - use ITuiApp interface
+                    App_.SetDeleteConfirmTarget(entry.FullPath);
+                    App_.NavigateTo(EViewType::DeleteConfirm);
                 }
             }
             return true;

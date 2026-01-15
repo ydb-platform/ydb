@@ -48,88 +48,9 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     DropConsumerForm_ = std::make_shared<TDropConsumerForm>(*this);
     EditConsumerForm_ = std::make_shared<TEditConsumerForm>(*this);
     
-    // Wire up callbacks
-    TopicListView_->OnTopicSelected = [this](const TString& path) {
-        State_.SelectedTopic = path;
-        TopicDetailsView_->SetTopic(path);
-        NavigateTo(EViewType::TopicDetails);
-    };
+    // Note: TopicListView no longer uses callbacks - it navigates directly via ITuiApp interface
     
-    TopicListView_->OnDirectorySelected = [this](const TString& path) {
-        State_.CurrentPath = path;
-        TopicListView_->Refresh();
-    };
-    
-    TopicListView_->OnNavigateToPath = [this](const TString& inputPath) {
-        TString topicPath;
-        std::optional<ui32> partitionId;
-        TString consumerName;
-        
-        // Parse the input path for @consumer and :partition suffixes
-        TStringBuf pathBuf = inputPath;
-        
-        // First, check for @consumer suffix
-        TStringBuf base, consumerPart;
-        if (pathBuf.TryRSplit('@', base, consumerPart)) {
-            consumerName = TString(consumerPart);
-            topicPath = TString(base);
-        } else {
-            // No @consumer - check for :partition suffix
-            TStringBuf partBase, partitionStr;
-            if (pathBuf.TryRSplit(':', partBase, partitionStr)) {
-                // Verify it looks like a partition number (all digits)
-                bool isPartition = !partitionStr.empty();
-                for (char c : partitionStr) {
-                    if (!std::isdigit(c)) {
-                        isPartition = false;
-                        break;
-                    }
-                }
-                if (isPartition) {
-                    topicPath = TString(partBase);
-                    partitionId = FromString<ui32>(partitionStr);
-                } else {
-                    topicPath = inputPath;
-                }
-            } else {
-                topicPath = inputPath;
-            }
-        }
-        
-        // Check path type using DescribePath
-        auto result = SchemeClient_->DescribePath(topicPath).GetValueSync();
-        if (result.IsSuccess()) {
-            auto entry = result.GetEntry();
-            if (entry.Type == NScheme::ESchemeEntryType::Topic || 
-                entry.Type == NScheme::ESchemeEntryType::PqGroup) {
-                // It's a topic
-                State_.SelectedTopic = topicPath;
-                
-                if (!consumerName.empty()) {
-                    // Navigate to consumer view
-                    State_.SelectedConsumer = consumerName;
-                    ConsumerView_->SetConsumer(topicPath, consumerName);
-                    NavigateTo(EViewType::ConsumerDetails);
-                } else {
-                    // Navigate to topic details, optionally with partition selected
-                    if (partitionId) {
-                        State_.SelectedPartition = *partitionId;
-                    }
-                    TopicDetailsView_->SetTopic(topicPath);
-                    NavigateTo(EViewType::TopicDetails);
-                }
-            } else {
-                // It's a directory - navigate the explorer
-                State_.CurrentPath = topicPath;
-                TopicListView_->Refresh();
-            }
-        } else {
-            // Path doesn't exist, try as directory
-            State_.CurrentPath = topicPath;
-            TopicListView_->Refresh();
-        }
-    };
-    
+    // Wire up remaining view callbacks
     TopicDetailsView_->OnConsumerSelected = [this](const TString& consumer) {
         State_.SelectedConsumer = consumer;
         ConsumerView_->SetConsumer(State_.SelectedTopic, consumer);
@@ -236,29 +157,8 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
         NavigateBack();
     };
     
-    // Wire up topic CRUD callbacks
-    TopicListView_->OnCreateTopic = [this]() {
-        TopicForm_->SetCreateMode(State_.CurrentPath);
-        NavigateTo(EViewType::TopicForm);
-    };
-    
-    TopicListView_->OnEditTopic = [this](const TString& topicPath) {
-        // Fetch topic description then show form in edit mode
-        auto future = TopicClient_->DescribeTopic(topicPath);
-        auto result = future.GetValueSync();
-        if (result.IsSuccess()) {
-            TopicForm_->SetEditMode(topicPath, result.GetTopicDescription());
-            NavigateTo(EViewType::TopicForm);
-        } else {
-            ShowError(result.GetIssues().ToString());
-        }
-    };
-    
-    TopicListView_->OnDeleteTopic = [this](const TString& topicPath) {
-        // Show confirmation dialog instead of deleting directly
-        DeleteConfirmForm_->SetTopic(topicPath);
-        NavigateTo(EViewType::DeleteConfirm);
-    };
+    // Note: TopicListView CRUD callbacks (OnCreateTopic, OnEditTopic, OnDeleteTopic) 
+    // are now handled directly in the view via ITuiApp interface methods
     
     // Wire up delete confirmation callbacks
     DeleteConfirmForm_->OnConfirm = [this](const TString& path) {
@@ -540,6 +440,59 @@ void TTopicTuiApp::RequestRefresh() {
 void TTopicTuiApp::RequestExit() {
     State_.ShouldExit = true;
     Screen_.Exit();
+}
+
+// View Target Configuration - These configure the destination view before NavigateTo()
+void TTopicTuiApp::SetTopicDetailsTarget(const TString& topicPath) {
+    State_.SelectedTopic = topicPath;
+    TopicDetailsView_->SetTopic(topicPath);
+}
+
+void TTopicTuiApp::SetConsumerViewTarget(const TString& topicPath, const TString& consumerName) {
+    State_.SelectedTopic = topicPath;
+    State_.SelectedConsumer = consumerName;
+    ConsumerView_->SetConsumer(topicPath, consumerName);
+}
+
+void TTopicTuiApp::SetMessagePreviewTarget(const TString& topicPath, ui32 partition, i64 offset) {
+    State_.SelectedTopic = topicPath;
+    State_.SelectedPartition = partition;
+    MessagePreviewView_->SetTopic(topicPath, partition, offset);
+}
+
+void TTopicTuiApp::SetTopicFormCreateMode(const TString& parentPath) {
+    TopicForm_->SetCreateMode(parentPath);
+}
+
+void TTopicTuiApp::SetTopicFormEditMode(const TString& topicPath) {
+    // Fetch topic description then configure form
+    auto future = TopicClient_->DescribeTopic(topicPath);
+    auto result = future.GetValueSync();
+    if (result.IsSuccess()) {
+        TopicForm_->SetEditMode(topicPath, result.GetTopicDescription());
+    } else {
+        ShowError(result.GetIssues().ToString());
+    }
+}
+
+void TTopicTuiApp::SetDeleteConfirmTarget(const TString& path) {
+    DeleteConfirmForm_->SetTopic(path);
+}
+
+void TTopicTuiApp::SetDropConsumerTarget(const TString& topicPath, const TString& consumerName) {
+    DropConsumerForm_->SetConsumer(topicPath, consumerName);
+}
+
+void TTopicTuiApp::SetEditConsumerTarget(const TString& topicPath, const TString& consumerName) {
+    EditConsumerForm_->SetConsumer(topicPath, consumerName);
+}
+
+void TTopicTuiApp::SetWriteMessageTarget(const TString& topicPath, std::optional<ui32> partition) {
+    WriteMessageForm_->SetTopic(topicPath, partition);
+}
+
+void TTopicTuiApp::SetConsumerFormTarget(const TString& topicPath) {
+    ConsumerForm_->SetTopic(topicPath);
 }
 
 // Predefined refresh rates for cycling with 'R' key

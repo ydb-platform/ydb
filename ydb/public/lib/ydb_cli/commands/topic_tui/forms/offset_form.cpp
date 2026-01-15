@@ -53,7 +53,7 @@ Element TOffsetForm::RenderContent() {
         hbox({text(" Current Offset: "), text(std::to_string(CurrentOffset_)) | dim}),
         hbox({text(" End Offset: "), text(std::to_string(EndOffset_)) | dim}),
         separator(),
-        hbox({text(" New Offset: ") | size(WIDTH, EQUAL, 15), OffsetInputComponent_->Render() | size(WIDTH, EQUAL, 20)})
+        hbox({text(" New Offset: ") | size(WIDTH, EQUAL, 15), OffsetInputComponent_->Render() | size(WIDTH, EQUAL, 20) | focus})
     });
 }
 

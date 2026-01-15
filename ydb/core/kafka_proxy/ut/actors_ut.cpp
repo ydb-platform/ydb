@@ -529,7 +529,7 @@ namespace NKafka::NTests {
             auto edge = runtime->AllocateEdgeActor();
 
             auto [actorId, actor] = CreateFetchActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime, config);
-            Sleep(TDuration::MilliSeconds(100)); // wait actor willbe created
+            Sleep(TDuration::MilliSeconds(500)); // wait actor will be created
 
             // emulate timeout
             auto topicIndexes = TestAccessor::GetTopicIndexes(actor);

@@ -60,7 +60,6 @@ Y_UNIT_TEST_SUITE(TBsProxyFaultToleranceTest) {
     //ERASURE_TEST(Erasure3Plus1Block)
     ERASURE_TEST(Erasure4Plus2Block)
     //ERASURE_TEST(Erasure3Plus2Block)
-    //ERASURE_TEST(ErasureMirror3Plus2)
     ERASURE_TEST(ErasureMirror3dc)
     ERASURE_TEST(ErasureMirror3of4)
 

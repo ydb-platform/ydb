@@ -208,11 +208,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         exportInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistExportState(db, *exportInfo);
 
-        Self->Exports[id] = exportInfo;
-        if (uid) {
-            Self->ExportsByUid[uid] = exportInfo;
-        }
-
+        Self->AddExport(exportInfo);
         Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *exportInfo);
 
         Progress = true;
@@ -1496,11 +1492,6 @@ private:
                     return EndExport(exportInfo, EState::Done, db);
                 }
 
-                if (exportInfo->Uid) {
-                    Self->ExportsByUid.erase(exportInfo->Uid);
-                }
-
-                Self->Exports.erase(exportInfo->Id);
                 Self->PersistRemoveExport(db, *exportInfo);
             }
             return;

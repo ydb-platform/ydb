@@ -9,6 +9,7 @@ SRCS(
     cluster_balancing.cpp
     cmds_box.cpp
     cmds_bridge.cpp
+    cmds_ddisk.cpp
     cmds_drive_status.cpp
     cmds_host_config.cpp
     cmds_storage_pool.cpp

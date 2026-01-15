@@ -32,10 +32,8 @@ jobs:
             echo "Directory does not exist"
           fi
 
-      - name: Clear old summary and add combined
+      - name: Add combined summary
         run: |
-          # Clear existing summary
-          > $GITHUB_STEP_SUMMARY
           # Add combined summary
           python3 .github/scripts/tests/collect_combined_summary.py \
             --artifacts-dir summary_artifacts \

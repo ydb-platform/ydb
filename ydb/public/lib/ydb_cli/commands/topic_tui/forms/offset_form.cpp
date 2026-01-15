@@ -28,14 +28,9 @@ Component TOffsetForm::BuildContainer() {
     
     OffsetInputComponent_ = Input(opt);
     
-    auto container = Container::Vertical({
-        OffsetInputComponent_
-    });
-    
-    // Ensure input has focus when form is shown
-    OffsetInputComponent_->TakeFocus();
-    
-    return container;
+    // Return input directly - no need for Container wrapper for single input
+    // This ensures proper event forwarding from Renderer to Input
+    return OffsetInputComponent_;
 }
 
 Element TOffsetForm::RenderContent() {

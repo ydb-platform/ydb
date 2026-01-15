@@ -18,6 +18,19 @@ jobs:
           pattern: job-summary-*
           merge-multiple: true
           path: summary_artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Debug - List downloaded artifacts
+        if: always()
+        run: |
+          echo "Checking summary_artifacts directory..."
+          if [ -d "summary_artifacts" ]; then
+            echo "Directory exists"
+            find summary_artifacts -type f -name "*.md" | head -20
+            echo "Total files: $(find summary_artifacts -type f -name "*.md" | wc -l)"
+          else
+            echo "Directory does not exist"
+          fi
 
       - name: Clear old summary and add combined
         run: |

@@ -21,11 +21,20 @@ mkdir -p "$SUMMARY_DIR"
 
 SUMMARY_FILE="${SUMMARY_DIR}/${SUMMARY_NAME}"
 
+echo "DEBUG: GITHUB_STEP_SUMMARY=${GITHUB_STEP_SUMMARY}"
+echo "DEBUG: SUMMARY_FILE=${SUMMARY_FILE}"
+echo "DEBUG: SUMMARY_DIR=${SUMMARY_DIR}"
+
 if [ -f "$GITHUB_STEP_SUMMARY" ]; then
+    echo "DEBUG: GITHUB_STEP_SUMMARY exists, size: $(wc -c < "$GITHUB_STEP_SUMMARY") bytes"
     cp "$GITHUB_STEP_SUMMARY" "$SUMMARY_FILE"
-    echo "Saved summary to $SUMMARY_FILE"
+    echo "Saved summary to $SUMMARY_FILE (size: $(wc -c < "$SUMMARY_FILE") bytes)"
+    echo "DEBUG: First 200 chars of summary:"
+    head -c 200 "$SUMMARY_FILE" || true
+    echo ""
 else
-    echo "Warning: GITHUB_STEP_SUMMARY not found"
+    echo "Warning: GITHUB_STEP_SUMMARY not found at $GITHUB_STEP_SUMMARY"
     # Create empty file so artifact upload doesn't fail
     touch "$SUMMARY_FILE"
+    echo "Created empty summary file: $SUMMARY_FILE"
 fi

@@ -230,7 +230,9 @@ void TKafkaDescribeConfigsActor::AddDescribeResponse(
     } else {
         AddConfigEntry(singleConfig, "cleanup.policy", "delete", EKafkaConfigType::LIST);
     }
-    AddConfigEntry(singleConfig, "message.timestamp.type", ev->Response.timestamp_type(), EKafkaConfigType::STRING);
+    AddConfigEntry(singleConfig, "message.timestamp.type",
+                ev->PQGroupInfo->Description.GetPQTabletConfig().HasTimestampType() ?  ev->PQGroupInfo->Description.GetPQTabletConfig().GetTimestampType(): MESSAGE_TIMESTAMP_CREATE_TIME,
+                EKafkaConfigType::STRING);
 
     response->Results.emplace_back(std::move(singleConfig));
 }

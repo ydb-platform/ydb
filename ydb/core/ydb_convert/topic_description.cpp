@@ -166,7 +166,7 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     out.set_retention_storage_mb(partConfig.GetStorageLimitBytes() / 1024 / 1024);
     (*out.mutable_attributes())["_message_group_seqno_retention_period_ms"] = TStringBuilder() << (partConfig.GetSourceIdLifetimeSeconds() * 1000);
     (*out.mutable_attributes())["__max_partition_message_groups_seqno_stored"] = TStringBuilder() << partConfig.GetSourceIdMaxCounts();
-    if (config.GetTimestampType()) {
+    if (config.HasTimestampType()) {
         (*out.mutable_attributes())["_timestamp_type"] = TStringBuilder() << config.GetTimestampType();
     } else {
         (*out.mutable_attributes())["_timestamp_type"] = TStringBuilder() << NKafka::MESSAGE_TIMESTAMP_CREATE_TIME;
@@ -204,11 +204,6 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
         out.set_metrics_level(config.GetMetricsLevel());
     }
 
-    if (config.HasTimestampType()) {
-        out.set_timestamp_type(config.GetTimestampType());
-    } else {
-        out.set_timestamp_type(NKafka::MESSAGE_TIMESTAMP_CREATE_TIME);
-    }
     for (const auto& consumer : config.GetConsumers()) {
         if (!FillConsumer(*out.add_consumers(), consumer, status, error)) {
             return false;

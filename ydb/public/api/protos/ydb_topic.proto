@@ -1218,8 +1218,6 @@ message DescribeTopicResult {
 
     // Metrics level.
     optional uint32 metrics_level = 16;
-
-    optional string timestamp_type = 17;
 }
 
 // Describe partition request sent from client to server.

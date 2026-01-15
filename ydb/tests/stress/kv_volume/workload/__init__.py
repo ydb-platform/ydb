@@ -319,7 +319,7 @@ class Worker:
                         if not response.operation.result.Unpack(read_result):
                             raise ValueError(f"Failed to unpack read result for key {key} in action {self.config.name}")
 
-                    expected_data = generate_pattern_data(key_size)[offset:offset + read_cmd.size]
+                    expected_data = (await self.worker.generate_pattern_data(key_size))[offset:offset + read_cmd.size]
                     actual_data = read_result.value
                     if actual_data != expected_data.encode():
                         msg = (
@@ -338,7 +338,7 @@ class Worker:
             if len(keys_to_delete) == 0:
                 return
 
-            for key, key_info in keys_to_delete:
+            for key, key_info in keys_to_delete.items():
                 partition_id = key_info[0]
                 if self.verbose:
                     print(f"DELETE action: key={key}, partition_id={partition_id}, version={self.version}", file=sys.stderr)
@@ -366,7 +366,7 @@ class Worker:
             kv_pairs = []
             for i in range(write_cmd.count):
                 key = self.generate_key()
-                data = generate_pattern_data(write_cmd.size)
+                data = await self.worker.generate_pattern_data(write_cmd.size)
                 kv_pairs.append((key, data))
             partition_id = self.worker_partition_id
 
@@ -435,6 +435,17 @@ class Worker:
         self.show_stats = self.workload.show_stats
         self.action_stats = defaultdict(int)
         self.stats_lock = None
+        
+        self._data_lock = None
+        self._cached_data = {}
+        
+    async def generate_pattern_data(self, size, pattern=DEFAULT_DATA_PATTERN):
+        async with self._data_lock:
+            if size not in self._cached_data:
+                data = generate_pattern_data(size, pattern)
+                self._cached_data[size] = data
+                return data
+            return self._cached_data[size]
 
     @property
     def volume_path(self):
@@ -483,7 +494,7 @@ class Worker:
         kv_pairs = []
         for i in range(write_cmd.count):
             key = self._generate_write_key()
-            data = generate_pattern_data(write_cmd.size)
+            data = await self.generate_pattern_data(write_cmd.size)
             kv_pairs.append((key, data))
         partition_id = self.worker_partition_id
 
@@ -525,6 +536,7 @@ class Worker:
         self.event_queue = asyncio.Queue()
         self.scheduled_queue = asyncio.PriorityQueue()
         self.stats_lock = asyncio.Lock()
+        self._data_lock = asyncio.Lock()
 
         if self.verbose:
             print(f"Worker {self.worker_id}: starting run", file=sys.stderr)

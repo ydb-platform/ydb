@@ -330,6 +330,8 @@ namespace NActors {
 
         TEvHandshakeDone *msg = ev->Get();
 
+        bool runPendingRdmaHandshakeTimer = false;
+
         // Terminate handshake actor working in opposite direction, if set up.
         if (ev->Sender == IncomingHandshakeActor) {
             LOG_INFO_IC("ICP19", "incoming handshake succeeded");
@@ -337,6 +339,9 @@ namespace NActors {
             DropOutgoingHandshake();
         } else if (ev->Sender == OutgoingHandshakeActor) {
             LOG_INFO_IC("ICP20", "outgoing handshake succeeded");
+            if (auto rdmaDisabled = ev->Get()->RdmaHanshakeResult.GetDisabled()) {
+                runPendingRdmaHandshakeTimer = rdmaDisabled->PendingHandshake;
+            }
             DropIncomingHandshake();
             DropOutgoingHandshake(false);
         } else {
@@ -389,6 +394,13 @@ namespace NActors {
 
         /* Forward all held events */
         ProcessPendingSessionEvents();
+
+        if (runPendingRdmaHandshakeTimer && !PendingRdmaHandshakeTimeout) {
+            LOG_INFO_IC("ICP29", "run pending rdma handshake for session: %s", SessionID.ToString().data());
+            PendingRdmaHandshakeTimeout = TDuration::Seconds(5);
+            TActivationContext::Schedule(PendingRdmaHandshakeTimeout, new IEventHandle(EvRdmaPendingHandshake, 0, SelfId(),
+                        {}, nullptr, 0));
+        }
     }
 
     void TInterconnectProxyTCP::HandleHandshakeStatus(TEvHandshakeFail::TPtr& ev) {
@@ -618,6 +630,15 @@ namespace NActors {
         Y_ABORT_UNLESS(Session && SessionID);
         ValidateEvent(ev, "ForwardSessionEventToSession");
         InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev);
+    }
+
+    void TInterconnectProxyTCP::HandleRdmaPendingHandshake() {
+        if (CurrentStateFunc() == &TThis::StateWork) {
+            // There is a chance that session was promouted to use RDMA without us.
+            if (!InvokeOtherActor(*Session, &TInterconnectSessionTCP::IsRdmaInUse)) {
+                HandleClosePeerSocket("closed connection by rdma pending handshake");
+            }
+        }
     }
 
     void TInterconnectProxyTCP::GenerateHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
@@ -859,10 +880,14 @@ namespace NActors {
     }
 
     void TInterconnectProxyTCP::HandleClosePeerSocket() {
+        HandleClosePeerSocket("closed connection by debug command");
+    }
+
+    void TInterconnectProxyTCP::HandleClosePeerSocket(std::span<const char> logEntry) {
         ICPROXY_PROFILED;
 
         if (Session && Session->Socket) {
-            LOG_INFO_IC("ICP34", "closed connection by debug command");
+            LOG_INFO_IC("ICP34", logEntry.data());
             Session->Socket->Shutdown(SHUT_RDWR);
         }
     }

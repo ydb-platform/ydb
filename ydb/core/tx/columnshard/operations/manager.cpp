@@ -60,12 +60,16 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             const ui64 txId = rowset.GetValue<Schema::OperationTxIds::TxId>();
             const bool broken = rowset.GetValueOrDefault<Schema::OperationTxIds::Broken>(true);
 
-            auto lock = TLockFeatures(lockId, 0);
+            auto it = LockFeatures.find(lockId);
+            if (it == LockFeatures.end()) {
+                it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0)).first;
+            }
+            auto& lock = it->second;
+
             lock.SetTxId(txId);
             if (broken) {
                 lock.SetBroken();
             }
-            AFL_VERIFY(LockFeatures.emplace(lockId, std::move(lock)).second);
             AFL_VERIFY(Tx2Lock.emplace(txId, lockId).second);
             if (!rowset.Next()) {
                 return false;

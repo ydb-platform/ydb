@@ -14,7 +14,42 @@ TFormBase::TFormBase(ITuiApp& app)
 Component TFormBase::Build() {
     auto container = BuildContainer();
     
-    return Renderer(container, [this, container] {
+    // Wrap container with CatchEvent FIRST so events go to container if not handled
+    auto withEvents = container | CatchEvent([this](Event event) {
+        // Only handle events when this form is active
+        if (App_.GetState().CurrentView != GetViewType()) {
+            return false;
+        }
+        
+        // Ignore all input while submitting
+        if (Submitting_) {
+            return true;
+        }
+        
+        // Handle Escape - cancel form and navigate back
+        if (event == Event::Escape) {
+            App_.GetState().InputCaptureActive = false;
+            App_.NavigateBack();
+            return true;
+        }
+        
+        // Handle Enter - submit form
+        if (event == Event::Return) {
+            if (HandleSubmit()) {
+                // Form handled its own navigation
+            }
+            return true;
+        }
+        
+        // Mark that a form is capturing input (suppresses global shortcuts)
+        App_.GetState().InputCaptureActive = true;
+        
+        // Let the container (Input components) handle the event
+        return false;
+    });
+    
+    // Then wrap with Renderer for display
+    return Renderer(withEvents, [this] {
         // Increment spinner frame each render
         if (Submitting_) {
             SpinnerFrame_++;
@@ -50,39 +85,6 @@ Component TFormBase::Build() {
         }
         
         return vbox(content) | border | size(WIDTH, EQUAL, GetFormWidth()) | center;
-        
-    }) | CatchEvent([this](Event event) {
-        // Only handle events when this form is active
-        if (App_.GetState().CurrentView != GetViewType()) {
-            return false;
-        }
-        
-        // Ignore input while submitting
-        if (Submitting_) {
-            return true;
-        }
-        
-        // Handle Escape - cancel form and navigate back
-        if (event == Event::Escape) {
-            App_.GetState().InputCaptureActive = false;
-            App_.NavigateBack();
-            return true;
-        }
-        
-        // Handle Enter - submit form
-        if (event == Event::Return) {
-            if (HandleSubmit()) {
-                // HandleSubmit should call NavigateBack() and RequestRefresh() as needed
-            }
-            return true;
-        }
-        
-        // Mark that a form is capturing input (suppresses global shortcuts)
-        // Do this AFTER handling Escape/Enter so those work correctly
-        App_.GetState().InputCaptureActive = true;
-        
-        // Let the container (Input components, etc.) handle the event
-        return false;
     });
 }
 

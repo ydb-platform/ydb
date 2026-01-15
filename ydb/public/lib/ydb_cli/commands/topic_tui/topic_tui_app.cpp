@@ -127,6 +127,7 @@ void TTopicTuiApp::NavigateTo(EViewType view) {
     if (view == EViewType::TopicForm || view == EViewType::DeleteConfirm ||
         view == EViewType::ConsumerForm || view == EViewType::WriteMessage ||
         view == EViewType::DropConsumerConfirm || view == EViewType::EditConsumer ||
+        view == EViewType::OffsetForm ||  // Added!
         view == EViewType::ConsumerDetails || view == EViewType::TopicDetails ||
         view == EViewType::MessagePreview || view == EViewType::Charts) {
         State_.PreviousView = State_.CurrentView;

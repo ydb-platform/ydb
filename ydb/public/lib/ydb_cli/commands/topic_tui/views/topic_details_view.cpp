@@ -6,6 +6,10 @@
 
 using namespace ftxui;
 
+using namespace ftxui;
+
+#include "../common/async_utils.h"
+
 namespace NYdb::NConsoleClient {
 
 // Define table columns for partitions
@@ -21,17 +25,6 @@ static TVector<TTableColumn> CreatePartitionsTableColumns() {
         {"Node", NTheme::ColNodeId},
         {"LastWrite", NTheme::ColDuration}
     };
-}
-
-// Helper to wait for future with cancellation check
-template<typename T>
-static bool WaitFor(const NThreading::TFuture<T>& future, const std::shared_ptr<std::atomic<bool>>& stopFlag, TDuration timeout) {
-    TInstant deadline = TInstant::Now() + timeout;
-    while (TInstant::Now() < deadline) {
-        if (stopFlag && *stopFlag) return false; // Cancelled
-        if (future.Wait(TDuration::MilliSeconds(100))) return true; // Ready
-    }
-    return false; // Timeout
 }
 
 // Define table columns for consumers  

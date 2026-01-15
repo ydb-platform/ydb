@@ -12,6 +12,10 @@ namespace NYdb::NConsoleClient {
 // Static member definition for position cache
 std::unordered_map<TString, ui64> TMessagePreviewView::PositionCache_;
 
+// Global wastebin for detached futures to prevent destructor hangs on View destruction
+static std::vector<std::future<std::deque<TTopicMessage>>> S_PendingFutures;
+static std::mutex S_PendingFuturesMutex;
+
 TMessagePreviewView::TMessagePreviewView(TTopicTuiApp& app)
     : App_(app)
 {}
@@ -79,8 +83,8 @@ Component TMessagePreviewView::Build() {
             }
         }
         
-        // Block other events during loading
-        if (Loading_) {
+        // Block other events during loading, BUT allow Escape
+        if (Loading_ && event != Event::Escape) {
             return false;
         }
         
@@ -555,15 +559,18 @@ void TMessagePreviewView::StartAsyncLoad() {
     }
     
     // Clean up completed old futures (non-blocking)
-    PendingFutures_.erase(
-        std::remove_if(PendingFutures_.begin(), PendingFutures_.end(),
-            [](auto& f) { return f.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready; }),
-        PendingFutures_.end()
-    );
-    
-    // Move old future to pending vector to prevent destructor blocking
-    if (LoadFuture_.valid()) {
-        PendingFutures_.push_back(std::move(LoadFuture_));
+    {
+        std::lock_guard lock(S_PendingFuturesMutex);
+        S_PendingFutures.erase(
+            std::remove_if(S_PendingFutures.begin(), S_PendingFutures.end(),
+                [](auto& f) { return f.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready; }),
+            S_PendingFutures.end()
+        );
+        
+        // Move old future to pending vector to prevent destructor blocking
+        if (LoadFuture_.valid()) {
+            S_PendingFutures.push_back(std::move(LoadFuture_));
+        }
     }
     
     Loading_ = true;

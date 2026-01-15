@@ -71,7 +71,8 @@ private:
     std::atomic<bool> Loading_{false};
     ui64 LoadingForOffset_ = 0;  // Track which offset the current load is for
     std::future<std::deque<TTopicMessage>> LoadFuture_;
-    std::vector<std::future<std::deque<TTopicMessage>>> PendingFutures_;  // Old futures (non-blocking cleanup)
+    // PendingFutures was moved to static storage in cpp
+    // PendingFutures moved to static storage in cpp to prevent destructor hang
     TString ErrorMessage_;
     int SpinnerFrame_ = 0;
     

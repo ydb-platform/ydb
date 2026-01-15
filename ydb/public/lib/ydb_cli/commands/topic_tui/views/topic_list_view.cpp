@@ -2,6 +2,8 @@
 #include "../topic_tui_app.h"
 #include "../widgets/sparkline.h"
 
+#include "../common/async_utils.h"
+
 #include <contrib/libs/ftxui/include/ftxui/component/event.hpp>
 #include <contrib/libs/ftxui/include/ftxui/screen/terminal.hpp>
 
@@ -13,17 +15,6 @@ namespace NYdb::NConsoleClient {
 std::unordered_map<std::string, TTopicInfoResult> TTopicListView::TopicInfoCache_;
 std::unordered_map<std::string, TDirInfoResult> TTopicListView::DirInfoCache_;
 std::unordered_map<std::string, int> TTopicListView::CursorPositionCache_;
-
-// Helper to wait for future with cancellation check
-template<typename T>
-static bool WaitFor(const NThreading::TFuture<T>& future, const std::shared_ptr<std::atomic<bool>>& stopFlag, TDuration timeout) {
-    TInstant deadline = TInstant::Now() + timeout;
-    while (TInstant::Now() < deadline) {
-        if (stopFlag && *stopFlag) return false; // Cancelled
-        if (future.Wait(TDuration::MilliSeconds(100))) return true; // Ready
-    }
-    return false; // Timeout
-}
 
 // Define table columns for the explorer
 static TVector<TTableColumn> CreateExplorerTableColumns() {

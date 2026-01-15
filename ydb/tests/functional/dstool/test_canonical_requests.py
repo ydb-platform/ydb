@@ -50,7 +50,7 @@ def ydb_cluster(ydb_configurator, request):
         configurator=ydb_configurator,
     )
     cluster.is_local_test = True
-    cluster.start(timeout_seconds=20)
+    cluster.start()
 
     yield cluster
 

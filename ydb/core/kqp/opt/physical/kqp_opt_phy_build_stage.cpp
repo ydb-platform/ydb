@@ -100,6 +100,10 @@ bool IsLiteralNothing(TExprBase node) {
                 auto slot = type->Cast<TDataExprType>()->GetSlot();
                 auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
+                if (NKikimr::NScheme::NTypeIds::IsParametrizedType(typeId)) {
+                    return false;
+                }
+
                 return (
                     NKikimr::NScheme::NTypeIds::IsYqlType(typeId)
                     && NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId))

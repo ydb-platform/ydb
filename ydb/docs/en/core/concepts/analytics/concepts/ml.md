@@ -13,8 +13,8 @@ Use {{ydb-short-name}} as an engine for feature engineering:
 
 {{ydb-short-name}} can serve as a fast and scalable data source for model training:
 
--   Jupyter Integration: connect to {{ydb-short-name}} from [Jupyter Notebook](../../../integrations/gui/jupyter.md) for ad-hoc analysis and model prototyping;
--   distributed training: the Apache Spark connector enables parallel reading of data from all cluster nodes directly into a Spark DataFrame. This allows you to load training sets for models in PySpark MLlib, CatBoost, Scikit-learn, and other libraries.
+* Jupyter Integration: connect to {{ydb-short-name}} from [Jupyter Notebook](../../../integrations/gui/jupyter.md) for ad-hoc analysis and model prototyping;
+* distributed training: the Apache Spark connector enables parallel reading of data from all cluster nodes directly into a Spark DataFrame. This allows you to load training sets for models in PySpark MLlib, CatBoost, Scikit-learn, and other libraries.
 
 ## Online Feature Store
 

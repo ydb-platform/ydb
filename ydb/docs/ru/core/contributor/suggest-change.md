@@ -399,3 +399,5 @@ git push fork
 ```bash
 gh pr create --title "Title" -B stable-24-1
 ```
+
+{% include [career](./_includes/career.md) %}

@@ -893,14 +893,14 @@ namespace {
                 TStringBuilder() << "\nExpected query to start with:\n\n"
                     << expectedStartsWith << "\n\nActual query:\n\n" << content);
 
-			// Check if all expected properties are presented
+            // Check if all expected properties are presented
             for (const auto& property : expectedProperties) {
                 UNIT_ASSERT_C(content.find(property) != TString::npos,
                     TStringBuilder() << "Property not found:\n"
                     << "\nExpected property:\n\n" << property << "\n\nActual query:\n\n" << content);
             }
 
-			// Check if no other properties are presented
+            // Check if no other properties are presented
             UNIT_ASSERT_EQUAL_C(
                 std::ranges::count(content, '='),
                 static_cast<long>(expectedProperties.size()),

@@ -166,7 +166,7 @@ bool BuildExternalTableScheme(
 {
     const auto& pathDesc = describeResult.GetPathDescription();
     if (!pathDesc.HasExternalTableDescription()) {
-        error = "Path description does not contain a description of external data source";
+        error = "Path description does not contain a description of external table";
         return false;
     }
 

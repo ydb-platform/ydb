@@ -545,7 +545,31 @@ private:
 
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         std::shared_ptr<TSchemeCacheNavigate> result(ev->Get()->Request.Release());
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Handle SchemeCache response" << ": result# " << result->ToString(*AppData()->TypeRegistry));
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE,
+            "Handle SchemeCache response: result# " << result->ToString(*AppData()->TypeRegistry));
+
+        bool needLogError = AnyOf(result->ResultSet, [](const auto& entry) {
+            switch (entry.Status) {
+                case TSchemeCacheNavigate::EStatus::LookupError:
+                case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+                case TSchemeCacheNavigate::EStatus::RedirectLookupError:
+                case TSchemeCacheNavigate::EStatus::RootUnknown:
+                case TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
+                case TSchemeCacheNavigate::EStatus::Unknown:
+                    return true;
+                case TSchemeCacheNavigate::EStatus::PathNotTable:
+                case TSchemeCacheNavigate::EStatus::PathNotPath:
+                case TSchemeCacheNavigate::EStatus::AccessDenied:
+                case TSchemeCacheNavigate::EStatus::Ok:
+                    return false;
+            }
+        });
+        if (needLogError) {
+            LOG_ERROR_S(ctx, NKikimrServices::PQ_METACACHE,
+                "Handle SchemeCache response: result# " << result->ToString(*AppData()->TypeRegistry));
+        }
+
         auto waiterIter = DescribeTopicsWaiters.find(result->Instant);
         Y_ABORT_UNLESS(!waiterIter.IsEnd());
         auto waiter = waiterIter->second; //copy shared ptr

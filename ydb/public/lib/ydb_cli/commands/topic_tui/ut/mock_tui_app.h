@@ -27,6 +27,7 @@ struct TNavigationEvent {
         SetWriteMessageTarget,
         SetConsumerFormTarget,
         SetOffsetFormTarget,
+        SetTopicInfoTarget,
         ShowError,
         RequestRefresh,
         RequestExit,
@@ -236,6 +237,13 @@ public:
         event.Partition = partition;
         event.CurrentOffset = currentOffset;
         event.EndOffset = endOffset;
+        RecordEvent(event);
+    }
+    
+    void SetTopicInfoTarget(const TString& topicPath) override {
+        TNavigationEvent event;
+        event.Type = TNavigationEvent::EType::SetTopicInfoTarget;
+        event.Path = topicPath;
         RecordEvent(event);
     }
     

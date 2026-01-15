@@ -46,6 +46,7 @@ public:
     virtual void SetConsumerFormTarget(const TString& topicPath) = 0;
     virtual void SetOffsetFormTarget(const TString& topicPath, const TString& consumerName,
                                       ui64 partition, ui64 currentOffset, ui64 endOffset) = 0;
+    virtual void SetTopicInfoTarget(const TString& topicPath) = 0;
     
     // Formatting
     virtual TString GetRefreshRateLabel() const = 0;

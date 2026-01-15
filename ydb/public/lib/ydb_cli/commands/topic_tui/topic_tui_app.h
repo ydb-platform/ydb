@@ -80,6 +80,7 @@ public:
     void SetConsumerFormTarget(const TString& topicPath) override;
     void SetOffsetFormTarget(const TString& topicPath, const TString& consumerName,
                               ui64 partition, ui64 currentOffset, ui64 endOffset) override;
+    void SetTopicInfoTarget(const TString& topicPath) override;
 
 private:
     ftxui::Component BuildMainComponent();

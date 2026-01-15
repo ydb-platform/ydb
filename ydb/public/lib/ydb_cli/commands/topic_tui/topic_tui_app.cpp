@@ -284,6 +284,10 @@ void TTopicTuiApp::SetOffsetFormTarget(const TString& topicPath, const TString& 
     OffsetForm_->SetContext(topicPath, consumerName, partition, currentOffset, endOffset);
 }
 
+void TTopicTuiApp::SetTopicInfoTarget(const TString& topicPath) {
+    TopicInfoView_->SetTopic(topicPath);
+}
+
 // Predefined refresh rates for cycling with 'R' key
 static const TDuration RefreshRates[] = {
     TDuration::Seconds(1),

@@ -214,6 +214,7 @@ Component TTopicDetailsView::Build() {
                     return client.GetTopicDescribe(topicPath, false);  // No tablets needed for info view
                 });
             }
+            App_.SetTopicInfoTarget(TopicPath_);
             App_.NavigateTo(EViewType::TopicInfo);
             return true;
         }

@@ -6862,11 +6862,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                     key: "database_name",
                     value: "clickhouse"
                 }
-				Properties {
+                Properties {
                     key: "protocol",
                     value: "NATIVE"
                 }
-				Properties {
+                Properties {
                     key: "use_tls",
                     value: "TRUE"
                 }

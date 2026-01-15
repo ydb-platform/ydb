@@ -629,11 +629,6 @@ public:
             Add(props, WatermarksLateArrivalDelayUsSetting,
                 ToString(watermarksLateArrivalDelayUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksLateArrivalDelayMs.GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs)).MicroSeconds())), pos, ctx);
 
-            const auto lateArrivalDelay = TDuration::MilliSeconds(wrSettings
-                .WatermarksLateArrivalDelayMs
-                .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
-            Add(props, WatermarksLateArrivalDelayUsSetting, ToString(lateArrivalDelay.MicroSeconds()), pos, ctx);
-
             const auto lateEventsPolicy = watermarksLateEventsPolicy
                 .GetOrElse("adjust");
             Add(props, WatermarksLateEventsPolicySetting, lateEventsPolicy, pos, ctx);

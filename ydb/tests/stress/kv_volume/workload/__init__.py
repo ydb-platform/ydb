@@ -569,7 +569,7 @@ class Worker:
             while (now := datetime.now()) < end_time:
                 try:
                     if next_time and now < next_time:
-                        boxed = self.event_queue.get(timeout=(next_time - now).total_seconds())
+                        boxed = self.event_queue.get(timeout=(max(next_time - now, 0,1)).total_seconds())
                     else:
                         boxed = self.event_queue.get_nowait()
                 except Empty:
@@ -585,18 +585,13 @@ class Worker:
                     if name in period_actions:
                         self.scheduled_queue.put((now + timedelta(microseconds=period_actions[name]), name, dc.clear_clone()))
                     del id_to_action_name[id]
-                    del threads[id]
                 elif command == 'run':
                     name = q
                     instance_id = self.generate_instance_id()
                     runner = Worker.ActionRunner(self.actions[name], self.workload, self, semaphores.get(name), instance_id, self.worker_partition_id, data_context=dc)
-                    thread = threading.Thread(target=runner.run)
-                    thread.start()
-                    threads[instance_id] = thread
                     id_to_action_name[instance_id] = name
+                    runner.run()
 
-        for t in threads.values():
-            t.join()
         self.client.close()
         if self.verbose:
             print(f"Worker {self.worker_id}: finished arun", file=sys.stderr)

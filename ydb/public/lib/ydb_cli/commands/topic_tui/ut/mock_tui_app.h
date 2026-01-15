@@ -134,6 +134,10 @@ public:
         ExitRequested_ = true;
     }
     
+    bool IsExiting() const override {
+        return ExitRequested_;
+    }
+    
     void PostRefresh() override {
         TNavigationEvent event;
         event.Type = TNavigationEvent::EType::PostRefresh;

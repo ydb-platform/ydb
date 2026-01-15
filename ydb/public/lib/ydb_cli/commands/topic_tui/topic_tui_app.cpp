@@ -221,6 +221,7 @@ void TTopicTuiApp::RequestRefresh() {
 }
 
 void TTopicTuiApp::RequestExit() {
+    Exiting_ = true;  // Signal all async operations to abort
     State_.ShouldExit = true;
     Screen_.Exit();
 }

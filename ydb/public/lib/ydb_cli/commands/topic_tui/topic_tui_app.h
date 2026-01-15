@@ -62,6 +62,7 @@ public:
     void ShowError(const TString& message) override;
     void RequestRefresh() override;
     void RequestExit() override;
+    bool IsExiting() const override { return Exiting_.load(); }
     
     // Thread-safe UI refresh trigger
     void PostRefresh() override { Screen_.PostEvent(ftxui::Event::Custom); }
@@ -142,6 +143,9 @@ private:
     ftxui::Component ConsumerComponent_;
     ftxui::Component TopicFormComponent_;
     ftxui::Component DeleteConfirmComponent_;
+    
+    // Shutdown tracking
+    std::atomic<bool> Exiting_{false};
 };
 
 } // namespace NYdb::NConsoleClient

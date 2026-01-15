@@ -29,6 +29,7 @@ public:
     virtual void ShowError(const TString& message) = 0;
     virtual void RequestRefresh() = 0;
     virtual void RequestExit() = 0;
+    virtual bool IsExiting() const = 0;  // Check if app is shutting down
     virtual void PostRefresh() = 0; // Trigger UI redraw
     
     // View Target Configuration (for navigation between views)

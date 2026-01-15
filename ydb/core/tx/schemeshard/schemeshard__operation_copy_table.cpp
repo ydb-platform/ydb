@@ -307,9 +307,14 @@ public:
                 Y_ABORT_UNLESS(srcTable->AlterData && srcTable->AlterData->CoordinatedSchemaVersion,
                     "AlterData with CoordinatedSchemaVersion must be set in ConfigureParts before Done phase");
                 srcTable->AlterVersion = Max(srcTable->AlterVersion, *srcTable->AlterData->CoordinatedSchemaVersion);
-                srcTable->ReleaseAlterData(OperationId); // Release our reference, cleanup when all subops done
 
+                // Persist updated AlterVersion so it survives restart
                 context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
+
+                // After successful completion, clear AlterTableFull if this was the last user
+                if (srcTable->ReleaseAlterData(OperationId)) {
+                    context.SS->PersistClearAlterTableFull(db, srcPathId);
+                }
 
                 TPathId parentPathId = srcPath->ParentPathId;
                 if (parentPathId && context.SS->PathsById.contains(parentPathId)) {

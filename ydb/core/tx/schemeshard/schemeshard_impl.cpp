@@ -2931,6 +2931,16 @@ void TSchemeShard::PersistTableAlterVersion(NIceDb::TNiceDb& db, const TPathId p
     }
 }
 
+void TSchemeShard::PersistClearAlterTableFull(NIceDb::TNiceDb& db, const TPathId& pathId) {
+    if (pathId.OwnerId == TabletID()) {
+        db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::Tables::AlterTableFull>(TString()));
+    } else {
+        db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::MigratedTables::AlterTableFull>(TString()));
+    }
+}
+
 void TSchemeShard::PersistTableFinishColumnBuilding(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 colId) {
     const auto& cinfo = tableInfo->Columns.at(colId);
     if (pathId.OwnerId == TabletID()) {

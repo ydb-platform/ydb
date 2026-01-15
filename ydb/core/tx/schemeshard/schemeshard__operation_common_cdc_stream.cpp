@@ -164,7 +164,14 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
     Y_ABORT_UNLESS(table->AlterData && table->AlterData->CoordinatedSchemaVersion,
         "AlterData with CoordinatedSchemaVersion must be set in ConfigureParts before Done phase");
     table->AlterVersion = Max(table->AlterVersion, *table->AlterData->CoordinatedSchemaVersion);
-    table->ReleaseAlterData(OperationId); // Release our reference, cleanup when all subops done
+
+    // Persist updated AlterVersion so it survives restart
+    context.SS->PersistTableAlterVersion(db, pathId, table);
+
+    // After successful completion, clear AlterTableFull if this was the last user
+    if (table->ReleaseAlterData(OperationId)) {
+        context.SS->PersistClearAlterTableFull(db, pathId);
+    }
 
     // Sync index versions before publishing (indexes must be published before parent table)
     auto versionCtx = BuildTableVersionContext(*txState, path, context);

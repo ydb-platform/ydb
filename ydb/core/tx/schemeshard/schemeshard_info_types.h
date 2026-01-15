@@ -795,6 +795,10 @@ public:
     // Tracks which operations are using this AlterData. When all release, it's cleaned up.
     // Also ensures CoordinatedSchemaVersion is set in TableDescriptionFull for persistence.
     void InitAlterData(const TOperationId& opId) {
+        // If AlterData exists but has no users, it's stale from restart - reset it
+        if (AlterData && AlterData->CoordinatedVersionUsers.empty()) {
+            AlterData.Reset();
+        }
         if (!AlterData) {
             AlterData = new TTableInfo::TAlterTableInfo;
             AlterData->AlterVersion = AlterVersion + 1;
@@ -811,14 +815,17 @@ public:
 
     // Release AlterData after coordinated versioning operation completes.
     // When all users release, AlterData is cleaned up.
-    void ReleaseAlterData(const TOperationId& opId) {
+    // Returns true if AlterData was fully released (all users done).
+    bool ReleaseAlterData(const TOperationId& opId) {
         if (!AlterData) {
-            return;
+            return false;
         }
         AlterData->CoordinatedVersionUsers.erase(opId);
         if (AlterData->CoordinatedVersionUsers.empty()) {
             AlterData.Reset();
+            return true;  // Caller should clear AlterTableFull from DB
         }
+        return false;
     }
 
     void PrepareAlter(TAlterDataPtr alterData) {

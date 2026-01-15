@@ -60,8 +60,6 @@ public:
     void CheckAsyncCompletion();
     
     std::function<void(ui64 partition, ui64 offset)> OnCommitOffset;
-    std::function<void()> OnDropConsumer;
-    std::function<void()> OnBack;
     
 private:
     ftxui::Element RenderHeader();

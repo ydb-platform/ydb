@@ -48,9 +48,6 @@ public:
     void SetCreateMode(const TString& basePath);
     void Reset() override;
     
-    // Callback with form data
-    std::function<void(const TTopicFormData& data)> OnSubmit;
-    
     bool IsEditMode() const { return IsEditMode_; }
     
 protected:

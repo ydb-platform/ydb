@@ -155,9 +155,7 @@ Component TMessagePreviewView::Build() {
                     StopTailSession();
                 }
                 // Navigate back to topic details
-                if (OnBack) {
-                    OnBack();
-                }
+                App_.NavigateBack();
             }
             return true;
         }

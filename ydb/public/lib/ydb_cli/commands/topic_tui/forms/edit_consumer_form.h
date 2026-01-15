@@ -21,9 +21,6 @@ public:
     void SetConsumer(const TString& topicPath, const TString& consumerName);
     void Reset() override;
     
-    // Callback on successful edit
-    std::function<void()> OnSuccess;
-    
     const TString& GetTopicPath() const { return TopicPath_; }
     const TString& GetConsumerName() const { return ConsumerName_; }
     

@@ -39,9 +39,6 @@ public:
     void Refresh() override;
     void SetTopic(const TString& topicPath);
     
-    // Callbacks
-    std::function<void()> OnBack;
-    
 private:
     ftxui::Element RenderWriteRateChart();
     ftxui::Element RenderConsumerLagGauges();

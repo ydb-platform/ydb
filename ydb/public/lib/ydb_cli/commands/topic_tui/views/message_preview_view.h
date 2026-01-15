@@ -36,8 +36,6 @@ public:
     void SetTopic(const TString& topicPath, ui32 partition, ui64 startOffset);
     void CheckAsyncCompletion();
     
-    std::function<void()> OnBack;
-    
 private:
     ftxui::Element RenderHeader();
     ftxui::Element RenderMessages();

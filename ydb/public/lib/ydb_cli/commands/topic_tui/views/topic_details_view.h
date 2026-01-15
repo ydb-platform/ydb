@@ -85,15 +85,7 @@ public:
     void SetTopic(const TString& topicPath);
     void CheckAsyncCompletion();
     
-    std::function<void(const TString& consumerName)> OnConsumerSelected;
-    std::function<void()> OnAddConsumer;
-    std::function<void(const TString& consumerName)> OnDropConsumer;
-    std::function<void(const TString& consumerName)> OnEditConsumer;
-    std::function<void()> OnEditTopic;
     std::function<void(ui32 partition)> OnPartitionSelected;
-    std::function<void()> OnShowMessages;
-    std::function<void()> OnWriteMessage;
-    std::function<void()> OnBack;
     
 private:
     ftxui::Element RenderHeader();

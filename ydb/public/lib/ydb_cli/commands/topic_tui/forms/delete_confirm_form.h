@@ -18,9 +18,6 @@ public:
     void SetTopic(const TString& topicPath);
     void Reset() override;
     
-    // Callback with the topic path to delete
-    std::function<void(const TString& topicPath)> OnConfirm;
-    
     const TString& GetTopicPath() const { return TopicPath_; }
     
 protected:

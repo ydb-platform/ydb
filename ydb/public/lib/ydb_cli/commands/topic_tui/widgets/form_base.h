@@ -46,10 +46,6 @@ public:
     // Reset form to initial state
     virtual void Reset();
     
-    // Callbacks
-    std::function<void()> OnSuccess;
-    std::function<void()> OnCancel;
-    
 protected:
     // === Subclass Interface ===
     

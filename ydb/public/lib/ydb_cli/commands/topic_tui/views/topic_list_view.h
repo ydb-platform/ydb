@@ -81,14 +81,6 @@ public:
     void Refresh() override;
     void CheckAsyncCompletion();  // Called from render to check if async op finished
     
-    // Callbacks
-    std::function<void(const TString& topicPath)> OnTopicSelected;
-    std::function<void(const TString& dirPath)> OnDirectorySelected;
-    std::function<void(const TString& path)> OnNavigateToPath;  // For 'go to' - checks type
-    std::function<void()> OnCreateTopic;
-    std::function<void(const TString& topicPath)> OnEditTopic;
-    std::function<void(const TString& topicPath)> OnDeleteTopic;
-    
     // Testable helper for glob patching
     static bool GlobMatch(const char* pattern, const char* text);
     

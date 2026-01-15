@@ -22,9 +22,6 @@ public:
     void SetTopic(const TString& topicPath, std::optional<ui32> partitionId);
     void Reset() override;
     
-    // Custom close callback (instead of OnSuccess, since form stays open for multiple messages)
-    std::function<void()> OnClose;
-    
 protected:
     TString GetTitle() const override;
     EViewType GetViewType() const override;

@@ -22,9 +22,23 @@ EViewType TWriteMessageForm::GetViewType() const {
 }
 
 Component TWriteMessageForm::BuildContainer() {
-    MessageInputComponent_ = Input(&MessageData_, "Enter message data...");
-    ProducerInputComponent_ = Input(&ProducerIdInput_, "auto-generated");
-    MessageGroupInputComponent_ = Input(&MessageGroupIdInput_, "auto-generated");
+    InputOption messageOpt;
+    messageOpt.content = &MessageData_;
+    messageOpt.cursor_position = &MessageCursor_;
+    messageOpt.multiline = true;
+    MessageInputComponent_ = Input(messageOpt);
+    
+    InputOption producerOpt;
+    producerOpt.content = &ProducerIdInput_;
+    producerOpt.cursor_position = &ProducerCursor_;
+    producerOpt.multiline = false;
+    ProducerInputComponent_ = Input(producerOpt);
+    
+    InputOption messageGroupOpt;
+    messageGroupOpt.content = &MessageGroupIdInput_;
+    messageGroupOpt.cursor_position = &MessageGroupCursor_;
+    messageGroupOpt.multiline = false;
+    MessageGroupInputComponent_ = Input(messageGroupOpt);
     
     return Container::Vertical({
         MessageInputComponent_,

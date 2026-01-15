@@ -43,6 +43,11 @@ private:
     std::string ProducerIdInput_;
     std::string MessageGroupIdInput_;
     
+    // Cursor positions for InputOption
+    int MessageCursor_ = 0;
+    int ProducerCursor_ = 0;
+    int MessageGroupCursor_ = 0;
+    
     // Async state
     std::future<bool> SendFuture_;
     int MessagesSent_ = 0;

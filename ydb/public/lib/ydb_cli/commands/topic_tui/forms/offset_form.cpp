@@ -137,6 +137,12 @@ void TOffsetForm::SetContext(const TString& topicPath, const TString& consumerNa
     CurrentOffset_ = currentOffset;
     EndOffset_ = endOffset;
     OffsetInput_ = std::to_string(currentOffset);
+    OffsetCursor_ = static_cast<int>(OffsetInput_.size());  // Cursor at end
+    
+    // Request focus on the input component when form is shown
+    if (OffsetInputComponent_) {
+        OffsetInputComponent_->TakeFocus();
+    }
 }
 
 void TOffsetForm::Reset() {
@@ -147,6 +153,7 @@ void TOffsetForm::Reset() {
     CurrentOffset_ = 0;
     EndOffset_ = 0;
     OffsetInput_.clear();
+    OffsetCursor_ = 0;
 }
 
 } // namespace NYdb::NConsoleClient

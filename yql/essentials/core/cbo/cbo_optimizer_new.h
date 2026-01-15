@@ -337,8 +337,8 @@ struct TRelOptimizerNode: public IBaseOptimizerNode {
     virtual ~TRelOptimizerNode() {
     }
 
-    virtual TVector<TString> Labels();
-    virtual void Print(std::stringstream& stream, int ntabs = 0);
+    TVector<TString> Labels() override;
+    void Print(std::stringstream& stream, int ntabs = 0) override;
 };
 
 /**
@@ -371,8 +371,8 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
                        bool nonReorderable = false);
     virtual ~TJoinOptimizerNode() {
     }
-    virtual TVector<TString> Labels();
-    virtual void Print(std::stringstream& stream, int ntabs = 0);
+    TVector<TString> Labels() override;
+    void Print(std::stringstream& stream, int ntabs = 0) override;
 };
 
 class IOptimizerNew {

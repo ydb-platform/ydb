@@ -305,6 +305,17 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
                             indexUpdated = true;
                         }
                     }
+                    if (TMaybeNode<TKqpTableSinkSettings>(exprNode)) {
+                        if (TKqpTableSinkSettings(exprNode).Table().Path().Value().Contains(indexName)) {
+                            if (TKqpTableSinkSettings(exprNode).Mode().Value() == "upsert") {
+                                indexUpdated = true;
+                            } else if (TKqpTableSinkSettings(exprNode).Mode().Value() == "delete") {
+                                indexCleaned = true;
+                            } else if (TKqpTableSinkSettings(exprNode).Mode().Value().empty()) {
+                                indexUpdated = true;
+                            }
+                        }
+                    }
                     if (TMaybeNode<TKqpDeleteRows>(exprNode)) {
                         if (TKqpDeleteRows(exprNode).Table().Path().Value().Contains(indexName)) {
                             indexCleaned = true;

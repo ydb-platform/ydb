@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
 
         auto factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Cannot find user: user");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Cannot find user 'user'");
 
         loginConnection.CreateUser(User, Password);
 
@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
 
         factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
         loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Cannot find user: user");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Cannot find user 'user'");
 
         loginConnection.Stop();
     }

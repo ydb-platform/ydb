@@ -85,7 +85,7 @@ public:
         {
         }
 
-        void Pg(const TString& name) {
+        void Pg(const TString& name) override {
             Owner.State[Owner.CurrentParam].first.push_back(name);
         }
 

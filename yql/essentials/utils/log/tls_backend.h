@@ -54,7 +54,7 @@ public:
     {
     }
 
-    ~TScopedBackend() {
+    ~TScopedBackend() override {
         SetLogBackendForCurrentThread(PrevBacked_);
     }
 

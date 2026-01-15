@@ -42,7 +42,7 @@ TTopFreqResource* GetTopFreqResource(const TUnboxedValuePod& arg) {
 template <EDataSlot Slot>
 class TTopFreqCreateData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         ui32 minSize = args[1].Get<ui32>();
         return TUnboxedValuePod(new TTopFreqResourceData<Slot>(args[0], minSize, minSize * 2));
     }
@@ -50,7 +50,7 @@ private:
 
 class TTopFreqCreate: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         ui32 minSize = args[1].Get<ui32>();
         return TUnboxedValuePod(new TTopFreqResource(args[0], minSize, minSize * 2, Hash_, Equate_));
     }
@@ -70,7 +70,7 @@ private:
 template <EDataSlot Slot>
 class TTopFreqAddValueData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         const auto topFreq = GetTopFreqResourceData<Slot>(args[0]);
         topFreq->Get()->AddValue(args[1]);
         return TUnboxedValuePod(topFreq);
@@ -79,7 +79,7 @@ private:
 
 class TTopFreqAddValue: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         const auto topFreq = GetTopFreqResource(args[0]);
         topFreq->Get()->AddValue(args[1]);
         return TUnboxedValuePod(topFreq);
@@ -89,14 +89,14 @@ private:
 template <EDataSlot Slot>
 class TTopFreqSerializeData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         return GetTopFreqResourceData<Slot>(args[0])->Get()->Serialize(valueBuilder);
     }
 };
 
 class TTopFreqSerialize: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         return GetTopFreqResource(args[0])->Get()->Serialize(valueBuilder);
     }
 };
@@ -104,14 +104,14 @@ private:
 template <EDataSlot Slot>
 class TTopFreqDeserializeData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TTopFreqResourceData<Slot>(args[0]));
     }
 };
 
 class TTopFreqDeserialize: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TTopFreqResource(args[0], Hash_, Equate_));
     }
 
@@ -130,7 +130,7 @@ private:
 template <EDataSlot Slot>
 class TTopFreqMergeData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         const auto topFreq0 = GetTopFreqResourceData<Slot>(args[0]);
         const auto topFreq1 = GetTopFreqResourceData<Slot>(args[1]);
         return TUnboxedValuePod(new TTopFreqResourceData<Slot>(*topFreq0->Get(), *topFreq1->Get()));
@@ -139,7 +139,7 @@ private:
 
 class TTopFreqMerge: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         const auto topFreq0 = GetTopFreqResource(args[0]);
         const auto topFreq1 = GetTopFreqResource(args[1]);
         return TUnboxedValuePod(new TTopFreqResource(*topFreq0->Get(), *topFreq1->Get(), Hash_, Equate_));
@@ -160,14 +160,14 @@ private:
 template <EDataSlot Slot>
 class TTopFreqGetData: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         return GetTopFreqResourceData<Slot>(args[0])->Get()->Get(valueBuilder, args[1].Get<ui32>());
     }
 };
 
 class TTopFreqGet: public TBoxedValue {
 private:
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         return GetTopFreqResource(args[0])->Get()->Get(valueBuilder, args[1].Get<ui32>());
     }
 };

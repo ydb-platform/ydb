@@ -141,7 +141,7 @@ class KikimrConfigGenerator(object):
             use_log_files=True,
             grpc_ssl_enable=False,
             use_in_memory_pdisks=True,
-            enable_pqcd=True,
+            enable_pqcd=False,
             enable_metering=False,
             enable_audit_log=False,
             audit_log_config=None,

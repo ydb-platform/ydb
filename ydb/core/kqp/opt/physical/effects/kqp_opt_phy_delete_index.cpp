@@ -58,7 +58,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
     effects.emplace_back(tableDelete);
 
     const bool isSink = NeedSinks(table, kqpCtx);
-    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
+    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
 
     for (const auto& [tableNode, indexDesc] : indexes) {
         if (useStreamIndex

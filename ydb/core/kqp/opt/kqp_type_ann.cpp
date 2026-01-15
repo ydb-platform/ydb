@@ -2893,7 +2893,7 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
             }
 
             if (TKqpPhysicalQuery::Match(input.Get())) {
-                return AnnotateKqpPhysicalQuery(input, ctx, config->EnableNewRBO);
+                return AnnotateKqpPhysicalQuery(input, ctx, config->GetEnableNewRBO());
             }
 
             if (TKqpEffects::Match(input.Get())) {

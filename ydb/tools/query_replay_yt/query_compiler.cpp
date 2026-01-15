@@ -207,9 +207,8 @@ public:
         , FunctionRegistry(functionRegistry)
         , HttpGateway(std::move(httpGateway))
     {
-        Config->DefaultCostBasedOptimizationLevel = 2;
-        Config->EnableOltpSink = enableOltpSink;
-        Config->Antlr4ParserIsAmbiguityError = antlr4ParserIsAmbiguityError;
+        Config->SetEnableOltpSink(enableOltpSink);
+        Config->SetAntlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError);
     }
 
     void Bootstrap() {

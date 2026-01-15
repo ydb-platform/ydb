@@ -110,7 +110,7 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
     }
 }
 
-THashSet<TString> CmpOperators{"=", "<", ">", "<=", ">="};
+const THashSet<TString> CmpOperators{"=", "<", ">", "<=", ">="};
 
 TExprNode::TPtr PruneCast(TExprNode::TPtr node) {
     if (node->IsCallable("ToPg") || node->IsCallable("PgCast")) {
@@ -135,6 +135,15 @@ TVector<TInfoUnit> GetHashableKeys(const std::shared_ptr<IOperator> &input) {
     }
 
     return hashableKeys;
+}
+
+void UpdateNumOfConsumers(std::shared_ptr<IOperator> &input) {
+    auto &props = input->Props;
+    if (props.NumOfConsumers.has_value()) {
+        props.NumOfConsumers.value() += 1;
+    } else {
+        props.NumOfConsumers = 1;
+    }
 }
 
 bool IsNullRejectingPredicate(const TFilterInfo &filter, TExprContext &ctx) {
@@ -168,7 +177,7 @@ std::shared_ptr<TOpCBOTree> AddJoinToCBOTree(std::shared_ptr<TOpCBOTree> & cboTr
         join->SetLeftInput(cboTree->TreeRoot);
         treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
         treeNodes.push_back(join);
-    } 
+    }
     else {
         join->SetRightInput(cboTree->TreeRoot);
         treeNodes.insert(treeNodes.end(), cboTree->TreeNodes.begin(), cboTree->TreeNodes.end());
@@ -223,7 +232,7 @@ namespace NKqp {
 std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
-    
+
     if (input->Kind != EOperator::Map) {
         return input;
     }
@@ -537,7 +546,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
             .Name().Value(countResult.GetFullName()).Build()
         .Done().Ptr();
         // clang-format on
-        
+
         auto body = ctx.ExprCtx.NewCallable(filter->Pos, compareCallable, {member, zero});
 
         // clang-format off
@@ -901,7 +910,7 @@ std::shared_ptr<IOperator> TPushOlapFilterRule::SimpleMatchAndApply(const std::s
         return input;
     }
 
-    const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->EnableOlapScalarApply, ctx.KqpCtx.Config->EnableOlapSubstringPushdown,
+    const TPushdownOptions pushdownOptions(ctx.KqpCtx.Config->GetEnableOlapScalarApply(), ctx.KqpCtx.Config->GetEnableOlapSubstringPushdown(),
                                            /*StripAliasPrefixForColumnName=*/true);
     if (!IsSuitableToPushPredicateToColumnTables(input)) {
         return input;
@@ -1023,15 +1032,15 @@ std::shared_ptr<IOperator> TExpandCBOTreeRule::SimpleMatchAndApply(const std::sh
 
         bool leftSideCBOTree = true;
 
-        auto findCBOTree = [&join](const std::shared_ptr<IOperator>& op, 
-                std::shared_ptr<TOpCBOTree>& cboTree, 
+        auto findCBOTree = [&join](const std::shared_ptr<IOperator>& op,
+                std::shared_ptr<TOpCBOTree>& cboTree,
                 std::shared_ptr<TOpFilter>& maybeFilter) {
 
             if (op->Kind == EOperator::CBOTree) {
                 cboTree = CastOperator<TOpCBOTree>(op);
                 return true;
             }
-            if (op->Kind == EOperator::Filter && 
+            if (op->Kind == EOperator::Filter &&
                     CastOperator<TOpFilter>(op)->GetInput()->Kind == EOperator::CBOTree &&
                     join->JoinKind == "Inner") {
 
@@ -1173,6 +1182,7 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
     } else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
         auto childOp = CastOperator<IUnaryOperator>(input)->GetInput();
         auto prevStageId = *(childOp->Props.StageId);
+        UpdateNumOfConsumers(childOp);
 
         // If the child operator is a source, it requires its own stage
         // So we have build a new stage for current operator
@@ -1188,7 +1198,7 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
                     break;
                 }
                 case NYql::EStorageType::ColumnStorage: {
-                    connection.reset(new TUnionAllConnection(NYql::EStorageType::ColumnStorage));
+                    connection.reset(new TUnionAllConnection(NYql::EStorageType::ColumnStorage, props.StageGraph.GetOutputIndex(prevStageId)));
                     break;
                 }
                 default: {
@@ -1225,6 +1235,8 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
         props.StageGraph.Connect(prevStageId, newStageId,conn);
     } else if (input->Kind == EOperator::UnionAll) {
         auto unionAll = CastOperator<TOpUnionAll>(input);
+        UpdateNumOfConsumers(unionAll->GetLeftInput());
+        UpdateNumOfConsumers(unionAll->GetRightInput());
 
         auto leftStage = unionAll->GetLeftInput()->Props.StageId;
         auto rightStage = unionAll->GetRightInput()->Props.StageId;
@@ -1232,10 +1244,12 @@ bool TAssignStagesRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOCon
         auto newStageId = props.StageGraph.AddStage();
         unionAll->Props.StageId = newStageId;
 
-        props.StageGraph.Connect(*leftStage, newStageId,
-                                 std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(*leftStage)));
-        props.StageGraph.Connect(*rightStage, newStageId,
-                                 std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(*rightStage)));
+        props.StageGraph.Connect(
+            *leftStage, newStageId,
+            std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(*leftStage), props.StageGraph.GetOutputIndex(*leftStage)));
+        props.StageGraph.Connect(
+            *rightStage, newStageId,
+            std::make_shared<TUnionAllConnection>(props.StageGraph.GetStorageType(*rightStage), props.StageGraph.GetOutputIndex(*rightStage)));
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stages union_all";
     } else if (input->Kind == EOperator::Aggregate) {

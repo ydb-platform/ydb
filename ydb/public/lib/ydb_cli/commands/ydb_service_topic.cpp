@@ -167,20 +167,6 @@ namespace NYdb::NConsoleClient {
 
             return exists->second;
         }
-
-        TDuration ParseDurationHours(const TStringBuf str) {
-            double hours = 0;
-            if (!TryFromString(str, hours)) {
-                throw TMisuseException() << "Invalid hours duration '" << str << "'";
-            }
-            if (hours < 0) {
-                throw TMisuseException() << "Duration must be non-negative";
-            }
-            if (!std::isfinite(hours)) {
-                throw TMisuseException() << "Duration must be finite";
-            }
-            return TDuration::Seconds(hours * 3600); // using floating-point ctor with saturation
-        }
     }
 
     void TCommandWithSupportedCodecs::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NYdb::NTopic::ECodec>& supportedCodecs) {
@@ -363,7 +349,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&MinActivePartitions_)
             .DefaultValue(1);
         config.Opts->AddLongOption("retention-period-hours", TStringBuilder()
-                << "Duration in hours for which data in topic is stored "
+                << "Duration in hours for which data in topic is stored. Supports time units (e.g., '72h', '1440m'). Plain number interpreted as hours "
                 << "(default: " << NColorizer::StdOut().CyanColor() << RetentionPeriod_.Hours() << NColorizer::StdOut().OldColor() << ")")
             .Hidden()
             .Optional()
@@ -463,7 +449,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partitions-count", "Initial and minimum number of partitions for topic")
             .Optional()
             .StoreResult(&MinActivePartitions_);
-        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
+        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored. Supports time units (e.g., '72h', '1440m'). Plain number interpreted as hours.")
             .Hidden()
             .Optional()
             .RequiredArgument("HOURS")
@@ -948,7 +934,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
             .StoreResult(&File_);
-        config.Opts->AddLongOption("idle-timeout", "Max wait duration for the first message. Topic is considered empty if no new messages arrive within this period.")
+        config.Opts->AddLongOption("idle-timeout", "Max wait duration for the first message. Topic is considered empty if no new messages arrive within this period. Value must include a time unit suffix (e.g., '5s', '1m').")
             .Optional()
             .DefaultValue(DefaultIdleTimeout)
             .StoreResult(&IdleTimeout_);
@@ -1176,10 +1162,10 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .RequiredArgument("INDEX")
             .StoreResult(&PartitionId_);
-        config.Opts->AddLongOption("init-seqno-timeout", "Max wait duration for initial seqno")
+        config.Opts->AddLongOption("init-seqno-timeout", "Max wait duration for initial seqno. Supports time units (e.g., '5s', '1m'). Plain number interpreted as seconds.")
             .Optional()
             .Hidden()
-            .Handler([this](const TString& arg) { MessagesWaitTimeout_ = TDuration::Seconds(FromString<ui8>(arg)); });
+            .StoreMappedResult(&MessagesWaitTimeout_, &ParseDurationSeconds);
 
         AddTransform(config);
     }

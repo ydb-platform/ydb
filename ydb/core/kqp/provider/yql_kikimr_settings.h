@@ -10,9 +10,6 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <util/generic/size_literals.h>
 
-namespace NKikimrConfig {
-    enum TTableServiceConfig_EBlockChannelsMode : int;
-}
 
 namespace NYql {
 
@@ -192,75 +189,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
 
         CopyFrom(serviceConfig);
 
-        EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
-        EnableCreateTableAs = serviceConfig.GetEnableCreateTableAs();
-        EnableDataShardCreateTableAs = serviceConfig.GetEnableDataShardCreateTableAs();
-        AllowOlapDataQuery = serviceConfig.GetAllowOlapDataQuery();
-        EnableOlapSink = serviceConfig.GetEnableOlapSink();
-        EnableOltpSink = serviceConfig.GetEnableOltpSink();
-        EnableHtapTx = serviceConfig.GetEnableHtapTx();
-        EnableStreamWrite = serviceConfig.GetEnableStreamWrite();
-        EnableBatchUpdates = serviceConfig.GetEnableBatchUpdates();
-        BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
-        IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
-        DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
-        DefaultEnableShuffleElimination = serviceConfig.GetDefaultEnableShuffleElimination();
-        DefaultDqChannelVersion = serviceConfig.GetDqChannelVersion();
-        SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
-        EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
-        EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();
-        EnableNewRBO = serviceConfig.GetEnableNewRBO();
-        EnableSpillingInHashJoinShuffleConnections = serviceConfig.GetEnableSpillingInHashJoinShuffleConnections();
-        EnableOlapScalarApply = serviceConfig.GetEnableOlapScalarApply();
-        EnableOlapSubstringPushdown = serviceConfig.GetEnableOlapSubstringPushdown();
-        EnableIndexStreamWrite = serviceConfig.GetEnableIndexStreamWrite();
-        LangVer = serviceConfig.GetDefaultLangVer();
-
-        EnableDqHashCombineByDefault = serviceConfig.GetEnableDqHashCombineByDefault();
-        EnableDqHashAggregateByDefault = serviceConfig.GetEnableDqHashAggregateByDefault();
-        EnableFallbackToYqlOptimizer = serviceConfig.GetEnableFallbackToYqlOptimizer();
-
         if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
             _KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
-        }
-
-        switch (serviceConfig.GetBindingsMode()) {
-            case NKikimrConfig::TTableServiceConfig::BM_ENABLED:
-                BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
-                break;
-            case NKikimrConfig::TTableServiceConfig::BM_DISABLED:
-                BindingsMode = NSQLTranslation::EBindingsMode::DISABLED;
-                break;
-            case NKikimrConfig::TTableServiceConfig::BM_DROP_WITH_WARNING:
-                BindingsMode = NSQLTranslation::EBindingsMode::DROP_WITH_WARNING;
-                break;
-            case NKikimrConfig::TTableServiceConfig::BM_DROP:
-                BindingsMode = NSQLTranslation::EBindingsMode::DROP;
-                break;
-        }
-
-        if (GetFilterPushdownOverJoinOptionalSide()) {
-            YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
-            YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
-            YqlCoreOptimizerFlags.insert("sqlinwithnothingornull");
-        }
-
-        switch(serviceConfig.GetDefaultHashShuffleFuncType()) {
-            case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V1:
-                DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV1;
-                break;
-            case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2:
-                DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
-                break;
-        }
-
-        switch(serviceConfig.GetBackportMode()) {
-            case NKikimrConfig::TTableServiceConfig_EBackportMode_Released:
-                BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
-                break;
-            case NKikimrConfig::TTableServiceConfig_EBackportMode_All:
-                BackportMode = NYql::EBackportCompatibleFeaturesMode::All;
-                break;
         }
     }
 
@@ -268,47 +198,10 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
-    NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
-    bool EnableAstCache = false;
-    bool EnablePerStatementQueryExecution = false;
-    bool EnableCreateTableAs = false;
-    bool EnableDataShardCreateTableAs = false;
-    ui64 IdxLookupJoinsPrefixPointLimit = 1;
-    bool AllowOlapDataQuery = false;
-    bool EnableOlapSink = false;
-    bool EnableOltpSink = false;
-    bool EnableHtapTx = false;
-    bool EnableStreamWrite = false;
-    bool EnableBatchUpdates = false;
-    NKikimrConfig::TTableServiceConfig_EBlockChannelsMode BlockChannelsMode;
-    bool EnableSpilling = true;
-    ui32 DefaultCostBasedOptimizationLevel = 4;
-    ui64 DefaultEnableSpillingNodes = 0;
-    bool EnableSnapshotIsolationRW = false;
-    bool DefaultEnableShuffleElimination = false;
-    bool DefaultEnableShuffleEliminationForAggregation = false;
-    THashSet<TString> YqlCoreOptimizerFlags;
-    bool EnableNewRBO = false;
-    bool EnableSpillingInHashJoinShuffleConnections = false;
-    bool EnableOlapScalarApply = false;
-    bool EnableOlapSubstringPushdown = false;
-    bool EnableIndexStreamWrite = false;
+    NYql::EBackportCompatibleFeaturesMode GetYqlBackportMode() const;
+    NSQLTranslation::EBindingsMode GetYqlBindingsMode() const;
+    NDq::EHashShuffleFuncType GetDqDefaultHashShuffleFuncType() const;
 
-    bool EnableDqHashCombineByDefault = true;
-    bool EnableDqHashAggregateByDefault = false;
-    ui32 DefaultDqChannelVersion = 1u;
-
-    bool Antlr4ParserIsAmbiguityError = false;
-
-    bool EnableFallbackToYqlOptimizer = false;
-
-    ui32 LangVer = NYql::MinLangVersion;
-    NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
-
-    NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
-    NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
-
-    void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;
     bool GetEnableOlapPushdownProjections() const;
     bool GetEnableParallelUnionAllConnectionsForExtend() const;

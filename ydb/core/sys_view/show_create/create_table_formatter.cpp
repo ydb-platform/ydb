@@ -1327,12 +1327,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     try {
         for (const auto& column: columns) {
-            const TFamilyDescription* family = nullptr;
-            if (column.second->HasColumnFamilyId()) {
-                family = families.at(column.second->GetColumnFamilyId());
-            }
-
-            FormatAlterColumn(fullPath, *column.second, family);
+            FormatAlterColumn(fullPath, *column.second);
         }
     } catch (const TFormatFail& ex) {
         return TFormatResult(ex.Status, ex.Error);
@@ -1379,16 +1374,37 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
     EscapeName(olapColumnDesc.GetName(), Stream);
     Stream << " " << olapColumnDesc.GetType();
 
-    if (olapColumnDesc.HasColumnFamilyName()) {
-        Stream << " FAMILY ";
-        EscapeName(olapColumnDesc.GetColumnFamilyName(), Stream);
-    }
     if (olapColumnDesc.GetNotNull()) {
         Stream << " NOT NULL";
     }
 
     if (olapColumnDesc.HasStorageId() && !olapColumnDesc.GetStorageId().empty()) {
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
+    }
+
+    if (olapColumnDesc.HasSerializer()) {
+        Stream << " COMPRESSION (";
+        auto compression = olapColumnDesc.GetSerializer();
+        if (compression.HasArrowCompression()) {
+            if (compression.GetArrowCompression().HasCodec()) {
+                Stream << "algorithm=";
+                switch (compression.GetArrowCompression().GetCodec()) {
+                    case NKikimrSchemeOp::ColumnCodecPlain:
+                        Stream << "off";
+                        break;
+                    case NKikimrSchemeOp::ColumnCodecLZ4:
+                        Stream << "lz4";
+                        break;
+                    case NKikimrSchemeOp::ColumnCodecZSTD:
+                        Stream << "zstd";
+                        break;            
+                }
+            }
+            if (compression.GetArrowCompression().HasLevel()) {
+                Stream << ", level=" << compression.GetArrowCompression().GetLevel();
+            }
+        }
+        Stream << ')';
     }
 }
 
@@ -1555,7 +1571,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
     }
 }
 
-void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc, const TFamilyDescription* family) {
+void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc) {
     TStringStream paramsStr;
     TString del = "";
 
@@ -1660,46 +1676,6 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
         paramsStr << "=";
         EscapeValue(columnDesc.GetDictionaryEncoding().GetEnabled(), paramsStr);
         del = ", ";
-    }
-
-    if (columnDesc.HasSerializer()) {
-        const auto& serializer = columnDesc.GetSerializer();
-        if (serializer.HasClassName() && !serializer.GetClassName().empty()) {
-            bool hasDiff = false;
-            if (family && serializer.HasArrowCompression()) {
-                const auto& arrowCompression = serializer.GetArrowCompression();
-                if (arrowCompression.HasCodec() && (!family->HasColumnCodec() || arrowCompression.GetCodec() != family->GetColumnCodec())) {
-                    hasDiff = true;
-                }
-                if (arrowCompression.HasLevel() && (!family->HasColumnCodecLevel() || arrowCompression.GetLevel() != family->GetColumnCodecLevel())) {
-                    hasDiff = true;
-                }
-            }
-            if (hasDiff) {
-                paramsStr << del;
-                EscapeName("SERIALIZER.CLASS_NAME", paramsStr);
-                paramsStr << "=";
-                EscapeValue(serializer.GetClassName(), paramsStr);
-                del = ", ";
-                if (serializer.HasArrowCompression()) {
-                    const auto& arrowCompression = serializer.GetArrowCompression();
-                    if (arrowCompression.HasCodec()) {
-                        paramsStr << del;
-                        EscapeName("COMPRESSION.TYPE", paramsStr);
-                        paramsStr << "=";
-                        EscapeValue(NArrow::CompressionToString(arrowCompression.GetCodec()), paramsStr);
-                        del = ", ";
-                    }
-                    if (arrowCompression.HasLevel()) {
-                        paramsStr << del;
-                        EscapeName("COMPRESSION.LEVEL", paramsStr);
-                        paramsStr << "=";
-                        EscapeValue(arrowCompression.GetLevel(), paramsStr);
-                        del = ", ";
-                    }
-                }
-            }
-        }
     }
 
     TString params = paramsStr.Str();

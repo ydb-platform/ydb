@@ -786,7 +786,7 @@ public:
         return {};
     }
 
-    virtual ~TChain1MapTraits() = default;
+    ~TChain1MapTraits() override = default;
 private:
     const TStringBuf Name_;
     const TPositionHandle Pos_;
@@ -1240,7 +1240,7 @@ public:
     {
     }
 
-  virtual TExprNode::TPtr BuildCalculateLambda(TExprContext& ctx) const {
+  TExprNode::TPtr BuildCalculateLambda(TExprContext& ctx) const override {
         return ctx.Builder(GetPos())
             .Lambda()
                 .Param("state")

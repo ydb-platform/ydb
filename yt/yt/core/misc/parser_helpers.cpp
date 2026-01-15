@@ -32,6 +32,13 @@ bool IsSpace(char ch)
     return lookupTable[static_cast<ui8>(ch)];
 }
 
+// For compatibility with "criterions" from `util/string/strip.h` functions.
+bool IsSpacePtr(const char* ch)
+{
+    YT_VERIFY(ch);
+    return IsSpace(*ch);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

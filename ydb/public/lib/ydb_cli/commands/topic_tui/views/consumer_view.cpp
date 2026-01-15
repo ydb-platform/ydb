@@ -101,11 +101,10 @@ Component TConsumerView::Build() {
             return true;
         }
         
-        // 'd' key for drop consumer
+        // 'd' key for drop consumer - use ITuiApp interface
         if (event == Event::Character('d') || event == Event::Character('D')) {
-            if (OnDropConsumer) {
-                OnDropConsumer();
-            }
+            App_.SetDropConsumerTarget(TopicPath_, ConsumerName_);
+            App_.NavigateTo(EViewType::DropConsumerConfirm);
             return true;
         }
         

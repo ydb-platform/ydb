@@ -49,51 +49,9 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
     EditConsumerForm_ = std::make_shared<TEditConsumerForm>(*this);
     
     // Note: TopicListView no longer uses callbacks - it navigates directly via ITuiApp interface
+    // Note: TopicDetailsView no longer uses callbacks - it navigates directly via ITuiApp interface
     
-    // Wire up remaining view callbacks
-    TopicDetailsView_->OnConsumerSelected = [this](const TString& consumer) {
-        State_.SelectedConsumer = consumer;
-        ConsumerView_->SetConsumer(State_.SelectedTopic, consumer);
-        NavigateTo(EViewType::ConsumerDetails);
-    };
-    
-    TopicDetailsView_->OnShowMessages = [this]() {
-        MessagePreviewView_->SetTopic(State_.SelectedTopic, State_.SelectedPartition, 0);
-        NavigateTo(EViewType::MessagePreview);
-    };
-    
-    TopicDetailsView_->OnWriteMessage = [this]() {
-        WriteMessageForm_->SetTopic(State_.SelectedTopic, State_.SelectedPartition);
-        NavigateTo(EViewType::WriteMessage);
-    };
-    
-    TopicDetailsView_->OnAddConsumer = [this]() {
-        ConsumerForm_->SetTopic(State_.SelectedTopic);
-        NavigateTo(EViewType::ConsumerForm);
-    };
-    
-    TopicDetailsView_->OnDropConsumer = [this](const TString& consumerName) {
-        DropConsumerForm_->SetConsumer(State_.SelectedTopic, consumerName);
-        NavigateTo(EViewType::DropConsumerConfirm);
-    };
-    
-    TopicDetailsView_->OnEditTopic = [this]() {
-        // Fetch topic description then show form in edit mode
-        auto future = TopicClient_->DescribeTopic(State_.SelectedTopic);
-        auto result = future.GetValueSync();
-        if (result.IsSuccess()) {
-            TopicForm_->SetEditMode(State_.SelectedTopic, result.GetTopicDescription());
-            NavigateTo(EViewType::TopicForm);
-        } else {
-            ShowError(result.GetIssues().ToString());
-        }
-    };
-    
-    TopicDetailsView_->OnEditConsumer = [this](const TString& consumerName) {
-        EditConsumerForm_->SetConsumer(State_.SelectedTopic, consumerName);
-        NavigateTo(EViewType::EditConsumer);
-    };
-    
+    // Wire up form callbacks (forms still use callbacks since they represent one-shot actions)
     // Edit consumer form callbacks
     EditConsumerForm_->OnSuccess = [this]() {
         TopicDetailsView_->Refresh();
@@ -136,29 +94,9 @@ TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration 
         NavigateBack();
     };
     
-    TopicDetailsView_->OnBack = [this]() {
-        NavigateBack();
-    };
-    
-    ConsumerView_->OnBack = [this]() {
-        NavigateBack();
-    };
-    
-    ConsumerView_->OnDropConsumer = [this]() {
-        DropConsumerForm_->SetConsumer(State_.SelectedTopic, State_.SelectedConsumer);
-        NavigateTo(EViewType::DropConsumerConfirm);
-    };
-    
-    MessagePreviewView_->OnBack = [this]() {
-        NavigateBack();
-    };
-    
-    ChartsView_->OnBack = [this]() {
-        NavigateBack();
-    };
-    
-    // Note: TopicListView CRUD callbacks (OnCreateTopic, OnEditTopic, OnDeleteTopic) 
-    // are now handled directly in the view via ITuiApp interface methods
+    // Note: ConsumerView no longer uses OnDropConsumer callback - it navigates directly via ITuiApp interface
+    // Note: OnBack callbacks are removed - views should call App_.NavigateBack() directly if needed
+    // (The global Escape handling in BuildMainComponent covers most navigation back scenarios)
     
     // Wire up delete confirmation callbacks
     DeleteConfirmForm_->OnConfirm = [this](const TString& path) {

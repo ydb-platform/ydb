@@ -46,9 +46,8 @@ TTopicDetailsView::TTopicDetailsView(ITuiApp& app)
     PartitionsTable_.OnSelect = [this](int row) {
         if (row >= 0 && row < static_cast<int>(Partitions_.size())) {
             App_.GetState().SelectedPartition = Partitions_[row].PartitionId;
-            if (OnShowMessages) {
-                OnShowMessages();
-            }
+            App_.SetMessagePreviewTarget(TopicPath_, static_cast<ui32>(Partitions_[row].PartitionId), 0);
+            App_.NavigateTo(EViewType::MessagePreview);
         }
     };
     
@@ -61,9 +60,9 @@ TTopicDetailsView::TTopicDetailsView(ITuiApp& app)
     // Set up consumer table selection callback
     ConsumersTable_.OnSelect = [this](int row) {
         if (row >= 0 && row < static_cast<int>(Consumers_.size())) {
-            if (OnConsumerSelected) {
-                OnConsumerSelected(Consumers_[row].Name);
-            }
+            // Navigate to consumer details via ITuiApp interface
+            App_.SetConsumerViewTarget(TopicPath_, Consumers_[row].Name);
+            App_.NavigateTo(EViewType::ConsumerDetails);
         }
     };
     
@@ -266,24 +265,24 @@ Component TTopicDetailsView::Build() {
         
         // Custom key handlers
         if (event == Event::Character('w') || event == Event::Character('W')) {
-            if (OnWriteMessage) {
-                OnWriteMessage();
-            }
+            // Write message via ITuiApp interface
+            App_.SetWriteMessageTarget(TopicPath_, App_.GetState().SelectedPartition);
+            App_.NavigateTo(EViewType::WriteMessage);
             return true;
         }
         if (event == Event::Character('a') || event == Event::Character('A')) {
-            if (OnAddConsumer) {
-                OnAddConsumer();
-            }
+            // Add consumer via ITuiApp interface
+            App_.SetConsumerFormTarget(TopicPath_);
+            App_.NavigateTo(EViewType::ConsumerForm);
             return true;
         }
         if (event == Event::Character('x') || event == Event::Character('X')) {
             if (FocusPanel_ == 1) {
                 int row = ConsumersTable_.GetSelectedRow();
                 if (row >= 0 && row < static_cast<int>(Consumers_.size())) {
-                    if (OnDropConsumer) {
-                        OnDropConsumer(Consumers_[row].Name);
-                    }
+                    // Drop consumer via ITuiApp interface
+                    App_.SetDropConsumerTarget(TopicPath_, Consumers_[row].Name);
+                    App_.NavigateTo(EViewType::DropConsumerConfirm);
                 }
             }
             return true;
@@ -293,15 +292,14 @@ Component TTopicDetailsView::Build() {
                 // Edit consumer
                 int row = ConsumersTable_.GetSelectedRow();
                 if (row >= 0 && row < static_cast<int>(Consumers_.size())) {
-                    if (OnEditConsumer) {
-                        OnEditConsumer(Consumers_[row].Name);
-                    }
+                    // Edit consumer via ITuiApp interface
+                    App_.SetEditConsumerTarget(TopicPath_, Consumers_[row].Name);
+                    App_.NavigateTo(EViewType::EditConsumer);
                 }
             } else {
-                // Edit topic
-                if (OnEditTopic) {
-                    OnEditTopic();
-                }
+                // Edit topic via ITuiApp interface
+                App_.SetTopicFormEditMode(TopicPath_);
+                App_.NavigateTo(EViewType::TopicForm);
             }
             return true;
         }

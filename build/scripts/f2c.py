@@ -45,6 +45,7 @@ if __name__ == '__main__':
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         stdin=subprocess.PIPE,
+        text=True,
     )
     stdout, stderr = p.communicate(input=open(args.input).read())
     ret = p.wait()

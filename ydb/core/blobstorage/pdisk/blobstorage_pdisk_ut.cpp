@@ -3,6 +3,7 @@
 #include "blobstorage_pdisk_abstract.h"
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_params.h"
+#include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_ut_env.h"
 
 #include <type_traits>
@@ -87,7 +88,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(TestPDiskActorErrorState) {
-        TActorTestContext testCtx({ true });
+        TActorTestContext::TSettings settings{};
+        settings.IsBad = true;
+        TActorTestContext testCtx(settings);
 
         const TVDiskID vDiskID(0, 1, 0, 0, 0);
         testCtx.TestResponse<NPDisk::TEvYardInitResult>(
@@ -624,7 +627,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         vdisk.SendEvLogSync();
     }
 
-    Y_UNIT_TEST(TestStartWithAllEncryptionDisabled) {
+    Y_UNIT_TEST(StartWithAllEncryptionDisabled) {
         TActorTestContext::TSettings settings{};
         settings.UseSectorMap = false;
 
@@ -660,6 +663,83 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     chunk, 0, writeData.size(), 0, nullptr),
                 NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
+    }
+
+    Y_UNIT_TEST(AfterObliterateDontReuseOldChunkDataWithoutEncryption) {
+        TActorTestContext::TSettings settings{};
+        settings.UseSectorMap = true;
+        settings.ChunkSize = NPDisk::SmallDiskMaximumChunkSize;
+        settings.DiskSize = (ui64)settings.ChunkSize * 50;
+        settings.SmallDisk = true;
+
+        TActorTestContext testCtx(settings);
+
+        // disable encryption
+
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->SectorMap = testCtx.TestCtx.SectorMap;
+        cfg->EnableSectorEncryption = false;
+        cfg->EnableMetadataEncryption = false;
+        cfg->ReadOnly = false;
+        testCtx.UpdateConfigRecreatePDisk(cfg, true);
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        // write unencrypted data
+
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.Chunks[EChunkState::COMMITTED].size(), 1);
+        const ui32 firstChunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+        vdisk.SendEvLogSync();
+
+        const TString writeData = PrepareData(4096);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+                new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    firstChunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
+                NKikimrProto::OK);
+
+        {
+            const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    firstChunk, 0, writeData.size(), 0, nullptr),
+                std::nullopt);
+
+            if (readRes->Status == NKikimrProto::OK) {
+                UNIT_ASSERT(readRes->Data.IsReadable(0, writeData.size()));
+                UNIT_ASSERT_VALUES_EQUAL(writeData, readRes->Data.ToString());
+            }
+        }
+
+        // now, we format PDisk via obliterate
+
+        cfg = testCtx.GetPDiskConfig();
+        const ui64 formatBytes = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
+        const ui64 obliterateSectors = formatBytes /  NPDisk::NSectorMap::SECTOR_SIZE;
+        testCtx.TestCtx.SectorMap->ZeroInit(obliterateSectors);
+        cfg->SectorMap = testCtx.TestCtx.SectorMap;
+        cfg->EnableSectorEncryption = false;
+        cfg->EnableMetadataEncryption = false;
+        cfg->ReadOnly = false;
+        testCtx.UpdateConfigRecreatePDisk(cfg, false);
+
+        TVDiskMock vdiskAfter(&testCtx);
+        vdiskAfter.InitFull();
+        vdiskAfter.ReserveChunk();
+        vdiskAfter.CommitReservedChunks();
+        UNIT_ASSERT_VALUES_EQUAL(vdiskAfter.Chunks[EChunkState::COMMITTED].size(), 1);
+        const ui32 newChunk = *vdiskAfter.Chunks[EChunkState::COMMITTED].begin();
+        UNIT_ASSERT_VALUES_EQUAL(newChunk, firstChunk);
+
+        const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                new NPDisk::TEvChunkRead(vdiskAfter.PDiskParams->Owner, vdiskAfter.PDiskParams->OwnerRound,
+                    firstChunk, 0, writeData.size(), 0, nullptr),
+                std::nullopt);
+
+        if (readRes->Status == NKikimrProto::OK) {
+            UNIT_ASSERT(!readRes->Data.IsReadable(0, writeData.size()));
+        }
     }
 
     Y_UNIT_TEST(PDiskOwnerSlayRace) {
@@ -1580,7 +1660,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(AllRequestsAreAnsweredOnPDiskRestart) {
-        TActorTestContext testCtx({ false });
+        TActorTestContext::TSettings settings{};
+        settings.IsBad = false;
+        TActorTestContext testCtx(settings);
         TVDiskMock vdisk(&testCtx);
 
         vdisk.InitFull();

@@ -5,6 +5,7 @@
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_state.h"
 
+#include <ydb/core/util/random.h>
 #include <ydb/core/util/text.h>
 
 namespace NKikimr {
@@ -800,10 +801,15 @@ struct TDiskFormat {
         cypher.InplaceEncrypt(&magic, sizeof(magic));
     }
 
-    void InitMagic() {
+    void InitMagic(bool randomizeMagic = false) {
         MagicFormatChunk = MagicFormatChunkId;
         NPDisk::TPDiskHashCalculator hash;
         hash.Hash(&Guid, sizeof(Guid));
+        if (randomizeMagic) {
+            ui64 formatMagicSalt = 0;
+            SafeEntropyPoolRead(&formatMagicSalt, sizeof(formatMagicSalt));
+            hash.Hash(&formatMagicSalt, sizeof(formatMagicSalt));
+        }
         hash.Hash(&MagicNextLogChunkReferenceId, sizeof(MagicNextLogChunkReferenceId));
         MagicNextLogChunkReference = hash.GetHashResult();
         hash.Hash(&MagicLogChunkId, sizeof(MagicLogChunkId));

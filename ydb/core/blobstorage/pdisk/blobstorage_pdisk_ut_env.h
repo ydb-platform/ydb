@@ -35,6 +35,7 @@ public:
         bool ReadOnly = false;
         bool InitiallyZeroed = false; // Only for sector map. Zero first 1MiB on start.
         bool PlainDataChunks = false;
+        std::optional<bool> RandomizeMagic = std::nullopt;
         bool UseRdmaAllocator = false;
     };
 
@@ -55,7 +56,7 @@ public:
     void DoFormatPDisk(ui64 guid, bool enableMetadataEncryption = true, std::optional<bool> enableSectorEncryption = std::nullopt) {
         FormatPDiskForTest(TestCtx.Path, guid, Settings.ChunkSize, Settings.DiskSize,
             false, TestCtx.SectorMap, Settings.SmallDisk, Settings.PlainDataChunks, enableMetadataEncryption,
-            enableSectorEncryption);
+            enableSectorEncryption, Settings.RandomizeMagic);
     }
 
     TIntrusivePtr<TPDiskConfig> DefaultPDiskConfig(bool isBad) {

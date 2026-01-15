@@ -47,7 +47,8 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
     TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr, bool enableSmallDiskOptimization = true,
     std::optional<TRcBuf> metadata = std::nullopt, bool plainDataChunks = false,
     bool enableMetadataEncryption = true,
-    std::optional<bool> enableSectorEncryption = std::nullopt);
+    std::optional<bool> enableSectorEncryption = std::nullopt,
+    std::optional<bool> forceRandomizeMagic = std::nullopt);
 
 bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, TPDiskInfo &outInfo,
     const bool doLock = false, TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr);

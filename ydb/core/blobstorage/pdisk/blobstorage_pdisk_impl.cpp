@@ -1769,7 +1769,7 @@ void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
 void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
         const ui64 &diskGuid, const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
         TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice,
-        std::optional<TRcBuf> metadata, bool plainDataChunks) {
+        std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic) {
     TGuard<TMutex> guard(StateMutex);
     // Prepare format record
     alignas(16) TDiskFormat format;
@@ -1785,7 +1785,14 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     format.ChunkKey = chunkKey;
     format.LogKey = logKey;
     format.SysLogKey = sysLogKey;
-    format.InitMagic();
+    bool randomizeMagic = !Cfg->EnableMetadataEncryption || !Cfg->EnableSectorEncryption || plainDataChunks;
+#ifdef DISABLE_PDISK_ENCRYPTION
+    randomizeMagic = true;
+#endif
+    if (forceRandomizeMagic) {
+        randomizeMagic = *forceRandomizeMagic;
+    }
+    format.InitMagic(randomizeMagic);
     memcpy(format.FormatText, textMessage.data(), Min(sizeof(format.FormatText) - 1, textMessage.size()));
     format.SysLogSectorCount = RecordsInSysLog * format.SysLogSectorsPerRecord();
     ui64 firstSectorIdx = format.FirstSysLogSectorIdx();

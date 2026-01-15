@@ -2,6 +2,8 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk_ut_context.h"
+
+#include <optional>
 #include <ydb/library/pdisk_io/buffers.h>
 
 #include <ydb/core/protos/base.pb.h>
@@ -17,7 +19,8 @@ TString CreateFile(const char *baseDir, ui32 dataSize);
 void FormatPDiskForTest(TString path, ui64 guid, ui32& chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization = false,
         bool plainDataChunks = false, bool enableMetadataEncryption = true,
-        std::optional<bool> enableSectorEncryption = std::nullopt);
+        std::optional<bool> enableSectorEncryption = std::nullopt,
+        std::optional<bool> forceRandomizeMagic = std::nullopt);
 
 void ReadPdiskFile(TTestContext *tc, ui32 dataSize, NPDisk::TAlignedData &outData);
 i64 FindLastDifferingBytes(NPDisk::TAlignedData &dataBefore, NPDisk::TAlignedData &dataAfter, ui32 dataSize);

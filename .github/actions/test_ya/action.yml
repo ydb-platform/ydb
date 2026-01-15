@@ -729,11 +729,3 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black
 
-    - name: Save step summary to artifact
-      if: always()
-      shell: bash
-      run: |
-        chmod +x .github/scripts/tests/save_summary_artifact.sh
-        export MATRIX_BRANCH="${{ inputs.custom_branch_name || github.ref_name }}"
-        export INPUTS_BUILD_PRESET="${{ inputs.build_preset }}"
-        .github/scripts/tests/save_summary_artifact.sh

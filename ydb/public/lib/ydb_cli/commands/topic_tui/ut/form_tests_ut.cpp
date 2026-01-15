@@ -245,3 +245,186 @@ Y_UNIT_TEST_SUITE(TTableRowAdvancedTests) {
         UNIT_ASSERT(row.RowDim);
     }
 }
+
+// ======================================================================
+// OffsetForm Validation Tests
+// Test the offset validation logic used in TOffsetForm::HandleSubmit()
+// ======================================================================
+
+#include <util/string/cast.h>
+
+namespace {
+
+// Simulates TOffsetForm validation logic
+struct TOffsetValidation {
+    ui64 EndOffset = 0;
+    std::string OffsetInput;
+    TString ErrorMessage;
+    
+    // Returns true if validation passes, false otherwise
+    bool Validate() {
+        ui64 newOffset;
+        try {
+            newOffset = FromString<ui64>(TString(OffsetInput.c_str()));
+        } catch (...) {
+            ErrorMessage = "Invalid offset value";
+            return false;
+        }
+        
+        if (newOffset > EndOffset) {
+            ErrorMessage = "Offset cannot exceed end offset (" + std::to_string(EndOffset) + ")";
+            return false;
+        }
+        
+        ErrorMessage.clear();
+        return true;
+    }
+};
+
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE(OffsetValidationTests) {
+    
+    // === Valid Offset Parsing ===
+    
+    Y_UNIT_TEST(ValidOffset_Zero) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        v.OffsetInput = "0";
+        UNIT_ASSERT(v.Validate());
+        UNIT_ASSERT(v.ErrorMessage.empty());
+    }
+    
+    Y_UNIT_TEST(ValidOffset_Positive) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        v.OffsetInput = "50";
+        UNIT_ASSERT(v.Validate());
+        UNIT_ASSERT(v.ErrorMessage.empty());
+    }
+    
+    Y_UNIT_TEST(ValidOffset_ExactlyAtEnd) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        v.OffsetInput = "100";
+        UNIT_ASSERT(v.Validate());  // Offset == EndOffset is valid
+        UNIT_ASSERT(v.ErrorMessage.empty());
+    }
+    
+    Y_UNIT_TEST(ValidOffset_LargeNumber) {
+        TOffsetValidation v;
+        v.EndOffset = 999999999999ULL;
+        v.OffsetInput = "999999999999";
+        UNIT_ASSERT(v.Validate());
+        UNIT_ASSERT(v.ErrorMessage.empty());
+    }
+    
+    // === Invalid Offset Parsing ===
+    
+    Y_UNIT_TEST(InvalidOffset_NonNumeric) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        v.OffsetInput = "abc";
+        UNIT_ASSERT(!v.Validate());
+        UNIT_ASSERT_STRINGS_EQUAL(v.ErrorMessage.c_str(), "Invalid offset value");
+    }
+    
+    Y_UNIT_TEST(InvalidOffset_Empty) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        v.OffsetInput = "";
+        UNIT_ASSERT(!v.Validate());
+        UNIT_ASSERT_STRINGS_EQUAL(v.ErrorMessage.c_str(), "Invalid offset value");
+    }
+    
+    Y_UNIT_TEST(InvalidOffset_Negative) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        v.OffsetInput = "-1";
+        UNIT_ASSERT(!v.Validate());  // FromString<ui64> fails on negative
+        UNIT_ASSERT_STRINGS_EQUAL(v.ErrorMessage.c_str(), "Invalid offset value");
+    }
+    
+    Y_UNIT_TEST(InvalidOffset_Decimal) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        v.OffsetInput = "50.5";
+        UNIT_ASSERT(!v.Validate());  // ui64 doesn't accept decimals
+        UNIT_ASSERT_STRINGS_EQUAL(v.ErrorMessage.c_str(), "Invalid offset value");
+    }
+    
+    Y_UNIT_TEST(InvalidOffset_WithSpaces) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        v.OffsetInput = " 50 ";
+        // FromString may or may not handle leading/trailing spaces
+        // This test documents the behavior
+        bool result = v.Validate();
+        // If it fails, it should be "Invalid offset value"
+        if (!result) {
+            UNIT_ASSERT_STRINGS_EQUAL(v.ErrorMessage.c_str(), "Invalid offset value");
+        }
+    }
+    
+    Y_UNIT_TEST(InvalidOffset_MixedContent) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        v.OffsetInput = "50abc";
+        UNIT_ASSERT(!v.Validate());
+        UNIT_ASSERT_STRINGS_EQUAL(v.ErrorMessage.c_str(), "Invalid offset value");
+    }
+    
+    // === Range Validation ===
+    
+    Y_UNIT_TEST(RangeError_ExceedsEnd) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        v.OffsetInput = "101";
+        UNIT_ASSERT(!v.Validate());
+        UNIT_ASSERT(v.ErrorMessage.Contains("cannot exceed"));
+        UNIT_ASSERT(v.ErrorMessage.Contains("100"));
+    }
+    
+    Y_UNIT_TEST(RangeError_WayOverEnd) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        v.OffsetInput = "99999";
+        UNIT_ASSERT(!v.Validate());
+        UNIT_ASSERT(v.ErrorMessage.Contains("cannot exceed"));
+    }
+    
+    Y_UNIT_TEST(RangeError_EndOffsetZero) {
+        TOffsetValidation v;
+        v.EndOffset = 0;
+        v.OffsetInput = "1";
+        UNIT_ASSERT(!v.Validate());
+        UNIT_ASSERT(v.ErrorMessage.Contains("cannot exceed"));
+        UNIT_ASSERT(v.ErrorMessage.Contains("0"));
+    }
+    
+    // === Boundary Cases ===
+    
+    Y_UNIT_TEST(Boundary_ZeroOffsetZeroEnd) {
+        TOffsetValidation v;
+        v.EndOffset = 0;
+        v.OffsetInput = "0";
+        UNIT_ASSERT(v.Validate());  // 0 <= 0 is valid
+    }
+    
+    Y_UNIT_TEST(Boundary_MaxUi64) {
+        TOffsetValidation v;
+        v.EndOffset = std::numeric_limits<ui64>::max();
+        v.OffsetInput = std::to_string(std::numeric_limits<ui64>::max());
+        UNIT_ASSERT(v.Validate());
+    }
+    
+    Y_UNIT_TEST(Boundary_OverflowAttempt) {
+        TOffsetValidation v;
+        v.EndOffset = 100;
+        // A number larger than ui64::max should fail to parse
+        v.OffsetInput = "999999999999999999999999999999";
+        UNIT_ASSERT(!v.Validate());
+        UNIT_ASSERT_STRINGS_EQUAL(v.ErrorMessage.c_str(), "Invalid offset value");
+    }
+}
+

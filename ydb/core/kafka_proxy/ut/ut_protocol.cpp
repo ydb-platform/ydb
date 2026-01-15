@@ -2516,6 +2516,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
 
+        // check that timestamp_type has "CreateTime" value by default
         auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
         UNIT_ASSERT(result1.IsSuccess());
         UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetAttributes().at("_timestamp_type"), "CreateTime");
@@ -2551,7 +2552,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         CreateTopic(pqClient, topic1Name, 10, {});
         CreateTopic(pqClient, topic2Name, 20, {});
-
 
         TKafkaTestClient client(testServer.Port);
 

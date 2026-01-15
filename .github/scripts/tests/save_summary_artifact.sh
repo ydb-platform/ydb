@@ -8,12 +8,12 @@ JOB_NAME="${GITHUB_JOB:-unknown}"
 # If job name contains branch:build_preset format, use it
 # Otherwise try to construct from matrix variables
 if [[ "$JOB_NAME" == *":"* ]]; then
-    SUMMARY_NAME="summary-${JOB_NAME}.md"
+    SUMMARY_NAME="summary-${JOB_NAME//:/__}.md"
 else
     # Try to get from matrix context
     BRANCH="${MATRIX_BRANCH:-${GITHUB_REF_NAME:-unknown}}"
     BUILD_PRESET="${MATRIX_BUILD_PRESET:-${INPUTS_BUILD_PRESET:-unknown}}"
-    SUMMARY_NAME="summary-${BRANCH}:${BUILD_PRESET}.md"
+    SUMMARY_NAME="summary-${BRANCH}__${BUILD_PRESET}.md"
 fi
 
 SUMMARY_DIR="${GITHUB_WORKSPACE}/summary_artifacts"

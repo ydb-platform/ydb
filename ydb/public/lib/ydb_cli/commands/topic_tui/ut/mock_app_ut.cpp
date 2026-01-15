@@ -176,6 +176,20 @@ Y_UNIT_TEST_SUITE(MockTuiAppTests) {
         UNIT_ASSERT(!event->OptionalPartition.has_value());
     }
     
+    Y_UNIT_TEST(SetOffsetFormTarget_RecordsAllFields) {
+        TMockTuiApp app;
+        
+        app.SetOffsetFormTarget("/Root/topic", "my-consumer", 7, 1000, 5000);
+        
+        auto* event = app.GetLastEvent();
+        UNIT_ASSERT_EQUAL(event->Type, TNavigationEvent::EType::SetOffsetFormTarget);
+        UNIT_ASSERT_EQUAL(event->Path, "/Root/topic");
+        UNIT_ASSERT_EQUAL(event->Path2, "my-consumer");
+        UNIT_ASSERT_EQUAL(event->Partition, 7);
+        UNIT_ASSERT_EQUAL(event->CurrentOffset, 1000);
+        UNIT_ASSERT_EQUAL(event->EndOffset, 5000);
+    }
+    
     // === UI Action Tests ===
     
     Y_UNIT_TEST(ShowError_RecordsMessage) {

@@ -9,7 +9,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 ///////////////////////////////////////////////////////////////////////////////
 
 TPool* TTreeElement::GetParent() const {
-    return dynamic_cast<TPool*>(Parent);
+    return dynamic_cast<TPool*>(Parent.load());
 }
 
 void TTreeElement::AccountSnapshotDuration(const TDuration& period) {

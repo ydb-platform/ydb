@@ -130,7 +130,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
     protected:
         const TId Id;
-        TTreeElementBase* Parent = nullptr; // TODO: init parent in ctor and make it const.
+        std::atomic<TTreeElementBase*> Parent = nullptr; // TODO: init parent in ctor and make it const.
 
     private:
         struct TCompareChildren {

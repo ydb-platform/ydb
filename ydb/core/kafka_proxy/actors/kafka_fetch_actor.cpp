@@ -164,22 +164,21 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
     for (i32 recordIndex = 0; recordIndex < partPQResponse.GetReadResult().GetResult().size(); recordIndex++) {
         auto& result = partPQResponse.GetReadResult().GetResult()[recordIndex];
-        auto fillTimestamp = [&timestampType, &result](ui64& timestampToFill) {
-            if (timestampType.value_or(MESSAGE_TIMESTAMP_CREATE_TIME) == MESSAGE_TIMESTAMP_CREATE_TIME) {
-                timestampToFill = result.GetCreateTimestampMS();
-            } else if (timestampType == MESSAGE_TIMESTAMP_LOG_APPEND) {
-                timestampToFill = result.GetWriteTimestampMS();
+        auto fillTimestamp = [&timestampType, &result]() {
+            if (timestampType == MESSAGE_TIMESTAMP_LOG_APPEND) {
+                return result.GetWriteTimestampMS();
             }
+            return result.GetCreateTimestampMS();
         };
         if (first) {
             baseOffset = result.GetOffset();
-            fillTimestamp(baseTimestamp);
+            baseTimestamp = fillTimestamp();
             baseSequense = result.GetSeqNo();
             first = false;
         }
 
         lastOffset = result.GetOffset();
-        fillTimestamp(lastTimestamp);
+        lastTimestamp = fillTimestamp();
 
         auto& record = recordsBatch.Records[recordIndex];
 

@@ -1,5 +1,33 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.27.0 {#2-27-0}
+
+Дата выхода 30 октября 2025. Для обновления до версии **2.27.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлена опция `--exclude` в [команду](./reference/ydb-cli/export-import/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая исключать схемные объекты из импорта по шаблону имени.
+* Добавлена команда `{{ ydb-cli }} admin cluster state fetch` для сбора информации о состоянии узлов кластера и метриках.
+* Добавлена поддержка объектов типа [трансфер](./concepts/transfer.md) при выполнении [команды](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и [команды](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`.
+* Добавлена новая опция `--retention-period` в подкоманды `{{ ydb-cli }} topic`. Использование устаревшей опции `--retention-period-hours` не рекомендуется.
+* В [команде](./reference/ydb-cli/topic-consumer-add.md) `{{ ydb-cli }} topic consumer add` появилась новая опция `--availability-period`, которая переопределяет гарантию удержания для читателя.
+* В [командах](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload vector` добавлены подкоманды `build-index` и `drop-index`.
+
+### Исправления ошибок
+
+* Исправлена ошибка, из-за которой команда `{{ ydb-cli }} debug ping` аварийно завершалась.
+
+## Версия 2.26.0 {#2-26-0}
+
+Дата выхода 25 сентября 2025. Для обновления до версии **2.26.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлены опции `--no-merge` и `--no-cache` в [команду](./reference/ydb-cli/commands/monitoring-healthcheck.md) `{{ ydb-cli }} monitoring healthcheck`.
+* Добавлена статистика времени компиляции запроса в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`.
+* Добавлена опция `--retries` в [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`, позваляющая задать количество повторных попыток для каждого запроса загрузки данных.
+* **_(Требуется сервер v25.4+)_** Добавлена опция `--replace-sys-acl` в [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`, которая задаёт, нужно ли заменять ACL для системных объектов.
+
 ## Версия 2.25.0 {#2-25-0}
 
 Дата выхода 1 сентября 2025. Для обновления до версии **2.25.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
@@ -93,7 +121,7 @@
 ### Функциональность
 
 * Добавлено автодополнение имён схемных объектов в интерактивном режиме.
-* Расширены возможности команды `{{ ydb-cli }} workload query`: добавлены команды `{{ ydb-cli }} workload query init`, `{{ ydb-cli }} workload query import` и `{{ ydb-cli }} workload query clean` и изменена команда `{{ ydb-cli }} workload query run`. Пользуясь ими можно инициализировать таблицы, заполнить их данными, провести нагрузочное тестирование и очистить данные за собой.
+* Расширены возможности [команды](./reference/ydb-cli/workload-query.md) `{{ ydb-cli }} workload query`: добавлены команды `{{ ydb-cli }} workload query init`, `{{ ydb-cli }} workload query import` и `{{ ydb-cli }} workload query clean` и изменена команда `{{ ydb-cli }} workload query run`. Пользуясь ими можно инициализировать таблицы, заполнить их данными, провести нагрузочное тестирование и очистить данные за собой.
 * В [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload clickbench run`, `{{ ydb-cli }} workload tpch run`, `{{ ydb-cli }} workload tpcds run` добавлена опция `--threads`, позволяющая указывать количество потоков для отправки запросов.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена [команда](./reference/ydb-cli/commands/configuration/cluster/index.md#list) `{{ ydb-cli }} admin cluster config version` для отображения версии конфигурации (V1/V2) на узлах.
 

@@ -1,0 +1,10 @@
+dstool -e <endpoint> --mon-port <mon_port> cluster set --pdisk-space-color-border UNKNOWN
+Exit Status: 1
+===== stdout =====
+To see more info run 'dstool cluster set --help'
+
+===== stderr =====
+dstool [global options ...] cluster set [set options ...]
+Unexpected value UNKNOWN for pdisk_space_color_border, it should be one of the 
+next values: GREEN, CYAN, LIGHT_YELLOW, YELLOW, LIGHT_ORANGE, PRE_ORANGE, 
+ORANGE, RED, BLACK

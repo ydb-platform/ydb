@@ -14,8 +14,9 @@
 
 - [директория](../../../../concepts/datamodel/dir.md);
 - [строковая таблица](../../../../concepts/datamodel/table.md#row-oriented-tables);
-- [вторичный индекс](../../../../concepts/glossary.md#secondary-index).
-- [векторный индекс](../../../../concepts/glossary.md#vector-index).
+- [вторичный индекс](../../../../concepts/glossary.md#secondary-index);
+- [векторный индекс](../../../../concepts/glossary.md#vector-index);
+- [топик](../../../../concepts/datamodel/topic.md) (только схема).
 
 Для более простого экспорта одиночных строковых и колоночных таблиц в S3-совместимое хранилище данных можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/federated_query/s3/write_data.md#export-to-s3).
 

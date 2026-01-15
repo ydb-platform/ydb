@@ -29,6 +29,52 @@ Yandex Enterprise Database distributions are available for download via the link
 
 #|
 || **Version** | **Release date** | **Download** | **Checksums** | **Changelog** ||
+|| **v25.1** |  |  |  |  ||
+|| v.25.1.4.ent.3 | 25.11.2025 |
+
+- [Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/ydbd-enterpise-25.1.4.ent.3-stable-linux-amd64.tar.xz)
+- [Debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/ydbd-enterpise-25.1.4.ent.3-stable-linux-amd64-debug.tar.xz)
+
+|
+
+- [For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/checksums.txt)
+- [For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/checksums.debug.txt)
+
+| [See list](../changelog-enterprise.md#25-1-4-ent-3) ||
+|| **v24.4** |  |  |  |  ||
+|| v.24.4.4.20 | 01.11.2025 |
+
+- [Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/ydbd-enterpise-24.4.4.ent.20-stable-linux-amd64.tar.xz)
+- [Debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/ydbd-enterpise-24.4.4.ent.20-stable-linux-amd64-debug.tar.xz)
+
+|
+
+- [For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/checksums.txt)
+- [For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/checksums.debug.txt)
+
+| [See list](../changelog-enterprise.md#24-4-4-20) ||
+|| v.24.4.4.15 | 19.09.2025 |
+
+- [Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64.tar.xz)
+- [Debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64-debug.tar.xz)
+
+|
+
+- [For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/checksums.txt)
+- [For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/checksums.debug.txt)
+
+| [See list](../changelog-enterprise.md#24-4-4-15) ||
+|| v.24.4.4.13 | 29.07.2025 |
+
+- [Distribution](https://binaries.ясубд.рф/release/24.4.4.13/yasubd-24.4.4.13-linux-amd64.tar.xz)
+- [Debug symbols](https://binaries.ясубд.рф/release/24.4.4.13/yasubd-24.4.4.13-linux-amd64-debug.tar.xz)
+
+|
+
+- [For distribution](https://binaries.ясубд.рф/release/24.4.4.13/checksums.txt)
+- [For debug symbols](https://binaries.ясубд.рф/release/24.4.4.13/checksums.debug.txt)
+
+| [See list](../changelog-enterprise.md#24-4-4-13) ||
 || **v24.3** |  |  |  |  ||
 || v.24.3.13.11 | 06.03.2024 |
 
@@ -86,6 +132,12 @@ Yandex Enterprise Database distributions are available for download via the link
 
 #|
 || **Version** | **Release date** | **Download** | **Changelog** ||
+|| **v25.1** |  |  |  |  ||
+|| v.25.1.4.ent.3 | 25.11.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.1.4.ent.3` | [See list](../changelog-enterprise.md#25-1-4-ent-3) ||
+|| **v24.4** |  |  |  |  ||
+|| v.24.4.4.20 | 01.11.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:24.4.4.ent.20` | [See list](../changelog-enterprise.md#24-4-4-20) ||
+|| v.24.4.4.15 | 19.09.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:24.4.4.ent.15` | [See list](../changelog-enterprise.md#24-4-4-15) ||
+|| v.24.4.4.13 | 29.07.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:2025-08-08-73940688fea2aeb2e109f01a7827f2d7` | [See list](../changelog-enterprise.md#24-4-4-13) ||
 || **v24.3** |  |  |  |  ||
 || v.24.3.13 | 05.12.2024 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.3.11.13` | [See list](../changelog-server.md#24-3) ||
 || **v24.2** |  |  |  |  ||

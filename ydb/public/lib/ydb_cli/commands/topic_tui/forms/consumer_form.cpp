@@ -21,7 +21,12 @@ EViewType TConsumerForm::GetViewType() const {
 }
 
 Component TConsumerForm::BuildContainer() {
-    NameInputComponent_ = Input(&NameInput_, "consumer-name");
+    InputOption nameOpt;
+    nameOpt.content = &NameInput_;
+    nameOpt.cursor_position = &NameCursor_;
+    nameOpt.multiline = false;
+    
+    NameInputComponent_ = Input(nameOpt);
     ImportantCheckbox_ = Checkbox(" Important", &Important_);
     RawCheckbox_ = Checkbox(" RAW", &CodecRaw_);
     GzipCheckbox_ = Checkbox(" GZIP", &CodecGzip_);

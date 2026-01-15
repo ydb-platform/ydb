@@ -37,6 +37,7 @@ private:
     
     // Form fields
     std::string NameInput_;
+    int NameCursor_ = 0;  // Cursor position for Input
     bool Important_ = false;
     
     // Codec checkboxes

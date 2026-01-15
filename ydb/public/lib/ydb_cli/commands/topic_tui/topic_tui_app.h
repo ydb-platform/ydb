@@ -12,6 +12,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
+#include <util/system/types.h>
 
 #include <memory>
 #include <thread>
@@ -40,6 +41,7 @@ class TTopicInfoView;
 class TTopicTuiApp : public ITuiApp {
 public:
     TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration refreshRate, const TString& viewerEndpoint,
+                 ui64 messageSizeLimit,
                  const TString& initialTopicPath = TString(), std::optional<ui32> initialPartition = std::nullopt,
                  const TString& initialConsumer = TString());
     ~TTopicTuiApp();
@@ -53,6 +55,7 @@ public:
     const TString& GetViewerEndpoint() const override { return ViewerEndpoint_; }
     const TString& GetDatabaseRoot() const override { return DatabaseRoot_; }
     TDuration GetRefreshRate() const override { return RefreshRate_; }
+    ui64 GetMessageSizeLimit() const override { return MessageSizeLimit_; }
     TString GetRefreshRateLabel() const override;  // Returns human readable rate
     void CycleRefreshRate() override;  // Cycle through predefined rates
     
@@ -101,6 +104,7 @@ private:
     TDuration RefreshRate_;
     int RefreshRateIndex_ = 1;  // Index into predefined rates (0=1s, 1=2s, 2=5s, 3=10s, 4=off)
     TString ViewerEndpoint_;
+    ui64 MessageSizeLimit_ = 4096;
     TString DatabaseRoot_;  // Root path for navigation boundary
     
     // State

@@ -20,6 +20,11 @@ void TCommandTopicTui::Config(TConfig& config) {
     config.Opts->AddLongOption("viewer-endpoint", "Viewer HTTP endpoint for message preview (auto-detected if not specified)")
         .Optional()
         .StoreResult(&ViewerEndpoint_);
+
+    config.Opts->AddLongOption("message-size-limit", "Max single message size to fetch from Viewer API (bytes)")
+        .Optional()
+        .DefaultValue(4096)
+        .StoreResult(&MessageSizeLimit_);
     
     config.Opts->SetFreeArgsNum(0, 1);
     SetFreeArgTitle(0, "<path>", "Starting directory path (default: database root)");
@@ -162,7 +167,7 @@ int TCommandTopicTui::Run(TConfig& config) {
         ? TDuration::Max() 
         : TDuration::Seconds(RefreshRateSec_);
     
-    TTopicTuiApp app(driver, startPath, refreshRate, viewerEndpoint, 
+    TTopicTuiApp app(driver, startPath, refreshRate, viewerEndpoint, MessageSizeLimit_,
                      initialTopicPath, initialPartition, initialConsumer);
     return app.Run();
 }

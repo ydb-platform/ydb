@@ -71,6 +71,7 @@ public:
     const TString& GetViewerEndpoint() const override { return ViewerEndpoint_; }
     const TString& GetDatabaseRoot() const override { return DatabaseRoot_; }
     TDuration GetRefreshRate() const override { return RefreshRate_; }
+    ui64 GetMessageSizeLimit() const override { return MessageSizeLimit_; }
     
     // Navigation & UI
     void NavigateTo(EViewType view) override {
@@ -320,6 +321,7 @@ public:
     void SetViewerEndpoint(const TString& endpoint) { ViewerEndpoint_ = endpoint; }
     void SetDatabaseRoot(const TString& root) { DatabaseRoot_ = root; }
     void SetRefreshRate(TDuration rate) { RefreshRate_ = rate; }
+    void SetMessageSizeLimit(ui64 limit) { MessageSizeLimit_ = limit; }
     
 private:
     void RecordEvent(TNavigationEvent event) {
@@ -330,6 +332,7 @@ private:
     TString ViewerEndpoint_;
     TString DatabaseRoot_ = "/Root";
     TDuration RefreshRate_ = TDuration::Seconds(2);
+    ui64 MessageSizeLimit_ = 4096;
     
     std::vector<TNavigationEvent> Events_;
     bool RefreshRequested_ = false;

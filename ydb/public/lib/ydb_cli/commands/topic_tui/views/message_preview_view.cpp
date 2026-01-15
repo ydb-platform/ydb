@@ -249,7 +249,7 @@ void TMessagePreviewView::SetTopic(const TString& topicPath, ui32 partition, ui6
                 return {};
             }
             TViewerHttpClient client(endpoint);
-            auto vec = client.ReadMessages(topicPath, partition, offset, PageSize);
+            auto vec = client.ReadMessages(topicPath, partition, offset, PageSize, App_.GetMessageSizeLimit());
             return std::deque<TTopicMessage>(std::make_move_iterator(vec.begin()), std::make_move_iterator(vec.end()));
         } catch (const std::exception& e) {
             throw;
@@ -579,11 +579,12 @@ void TMessagePreviewView::StartAsyncLoad() {
     TString topicPath = TopicPath_;
     ui32 partition = Partition_;
     ui64 offset = CurrentOffset_;
+    ui64 messageSizeLimit = App_.GetMessageSizeLimit();
     LoadingForOffset_ = offset;  // Track which offset this load is for
     
-    LoadFuture_ = std::async(std::launch::async, [endpoint, topicPath, partition, offset]() -> std::deque<TTopicMessage> {
+    LoadFuture_ = std::async(std::launch::async, [endpoint, topicPath, partition, offset, messageSizeLimit]() -> std::deque<TTopicMessage> {
         TViewerHttpClient client(endpoint);
-        auto vec = client.ReadMessages(topicPath, partition, offset, 20);
+        auto vec = client.ReadMessages(topicPath, partition, offset, 20, messageSizeLimit);
         return std::deque<TTopicMessage>(std::make_move_iterator(vec.begin()), std::make_move_iterator(vec.end()));
     });
 }
@@ -638,10 +639,11 @@ void TMessagePreviewView::StartTailPoll() {
     ui32 partition = Partition_;
     // Query from the offset after our last known message
     ui64 offset = Messages_.empty() ? CurrentOffset_ : Messages_.back().Offset + 1;
+    ui64 messageSizeLimit = App_.GetMessageSizeLimit();
     
-    LoadFuture_ = std::async(std::launch::async, [endpoint, topicPath, partition, offset]() -> std::deque<TTopicMessage> {
+    LoadFuture_ = std::async(std::launch::async, [endpoint, topicPath, partition, offset, messageSizeLimit]() -> std::deque<TTopicMessage> {
         TViewerHttpClient client(endpoint);
-        auto vec = client.ReadMessages(topicPath, partition, offset, 20);
+        auto vec = client.ReadMessages(topicPath, partition, offset, 20, messageSizeLimit);
         return std::deque<TTopicMessage>(std::make_move_iterator(vec.begin()), std::make_move_iterator(vec.end()));
     });
 }

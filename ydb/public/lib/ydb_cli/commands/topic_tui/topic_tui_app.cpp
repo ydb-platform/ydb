@@ -23,13 +23,14 @@ using namespace ftxui;
 namespace NYdb::NConsoleClient {
 
 TTopicTuiApp::TTopicTuiApp(TDriver& driver, const TString& startPath, TDuration refreshRate, const TString& viewerEndpoint,
-                           const TString& initialTopicPath, std::optional<ui32> initialPartition,
-                           const TString& initialConsumer)
+                           ui64 messageSizeLimit, const TString& initialTopicPath,
+                           std::optional<ui32> initialPartition, const TString& initialConsumer)
     : SchemeClient_(std::make_unique<NScheme::TSchemeClient>(driver))
     , TopicClient_(std::make_unique<NTopic::TTopicClient>(driver))
     , Screen_(ScreenInteractive::Fullscreen())
     , RefreshRate_(refreshRate)
     , ViewerEndpoint_(viewerEndpoint)
+    , MessageSizeLimit_(messageSizeLimit)
     , DatabaseRoot_(startPath)
     , InitialTopicPath_(initialTopicPath)
     , InitialPartition_(initialPartition)

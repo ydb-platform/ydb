@@ -6,6 +6,7 @@
 
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
+#include <util/system/types.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -22,6 +23,7 @@ public:
     virtual const TString& GetViewerEndpoint() const = 0;
     virtual const TString& GetDatabaseRoot() const = 0;
     virtual TDuration GetRefreshRate() const = 0;
+    virtual ui64 GetMessageSizeLimit() const = 0;
     
     // Navigation & UI
     virtual void NavigateTo(EViewType view) = 0;

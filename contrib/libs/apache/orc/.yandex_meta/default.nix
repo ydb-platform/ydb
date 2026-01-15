@@ -1,13 +1,13 @@
 self: super: with self; {
   apache-orc = stdenv.mkDerivation rec {
     name = "orc";
-    version = "2.2.1";
+    version = "2.2.2";
 
     src = fetchFromGitHub {
       owner = "apache";
       repo = "orc";
       rev = "rel/release-${version}";
-      sha256 = "sha256-H7nowl2pq31RIAmTUz15x48Wc99MljFJboc4F7Ln/zk=";
+      sha256 = "sha256-gmoVCH6Df1CareX+ak45d6SWdxkdeHPzfeglWmB14hA=";
     };
 
     patches = [];

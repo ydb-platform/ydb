@@ -93,6 +93,11 @@ enum EMvccState {
     MvccDisabled = 2;
 }
 
+message TColumnCompression {
+    optional string Algorithm = 1;
+    optional int64 Level = 2;
+}
+
 message TColumnDescription {
     optional string Name = 1;
     optional string Type = 2;
@@ -110,6 +115,7 @@ message TColumnDescription {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
+    optional TColumnCompression Compression = 13;
 }
 
 message TStorageSettings {
@@ -393,14 +399,14 @@ message TOlapColumnDescription {
     optional NKikimrProto.TTypeInfo TypeInfo = 6;
     optional bool NotNull = 7;
 
-    optional TCompressionOptions Compression = 8[deprecated = true];
+    optional TCompressionOptions Compression = 8 [deprecated = true];
     optional TDictionaryEncodingSettings DictionaryEncoding = 9;
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
     optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
-    optional uint32 ColumnFamilyId = 14;
-    optional string ColumnFamilyName = 15;
+    optional uint32 ColumnFamilyId = 14 [deprecated = true];
+    optional string ColumnFamilyName = 15 [deprecated = true];
 }
 
 message TIndexDataExtractor {

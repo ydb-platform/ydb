@@ -125,8 +125,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
     }
 
     Y_UNIT_TEST(OutputInfoAboutErasureSpecies) {
-        for (int i = TErasureType::ErasureNone; i < TErasureType::ErasureSpeciesCount; i++) {
-            auto es = (TErasureType::EErasureSpecies)i;
+
+        for (auto [es, _] : TErasureType::ErasureNames) {
             TBlobStorageGroupType groupType(es);
             STR << groupType.ToString() << ":\n";
             STR << "  ParityParts:                " << groupType.ParityParts() << "\n";

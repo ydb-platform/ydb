@@ -1904,7 +1904,13 @@ Y_UNIT_TEST_F(Cancel_Tx, TPQTabletFixture)
 
     StartPQWriteTxsObserver();
 
+    // запись о транзакции не удаляется сразу
     SendCancelTransactionProposal({.TxId=txId});
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
 
     WaitForPQWriteTxs();
 }
@@ -2337,6 +2343,13 @@ Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)
 
     WaitProposeTransactionResponse({.TxId=txId, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
 
+    // We will send a TEvProposeTransaction to delete the previous transaction
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
     // Instead of TEvReadSetAck, the PQ tablet will receive TEvClientConnected with the Dead flag. The transaction
     // will switch from the WAIT_RS_AKS state to the DELETING state.
     WaitForTheTransactionToBeDeleted(txId);
@@ -2552,6 +2565,14 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
                              Ctx->Edge,
                              deleteDoneEvent.Release(),
                              0, 0);
+
+    // We will send a TEvProposeTransaction to delete the previous transaction
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
     WaitForTheTransactionToBeDeleted(txId);
 
     // check that information about a transaction with this WriteId has been renewed on disk
@@ -2609,6 +2630,13 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Deleting_State, TP
                              deleteDoneEvents[i].Release(),
                              0, i);
     }
+
+    // We will send a TEvProposeTransaction to delete the previous transaction
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
 
     WaitForTheTransactionToBeDeleted(txId);
 

@@ -244,7 +244,16 @@ class Worker:
             return Worker.LayeredDataContext(self.previous_data_context)
 
     class ActionRunner:
-        def __init__(self, config, workload, worker=None, worker_semaphore=None, instance_id=None, worker_partition_id=None, data_context=None):
+        def __init__(
+            self,
+            config,
+            workload,
+            worker=None,
+            worker_semaphore=None,
+            instance_id=None,
+            worker_partition_id=None,
+            data_context=None,
+        ):
             self.config = config
             self.workload = workload
             self.worker = worker
@@ -298,7 +307,10 @@ class Worker:
                 offset = random.randint(0, max_offset) if max_offset > 1 else 0
 
                 if self.verbose:
-                    print(f"READ action: key={key}, partition_id={partition_id}, offset={offset}, size={read_cmd.size}, version={self.version}", file=sys.stderr)
+                    print(
+                        f"READ action: key={key}, partition_id={partition_id}, offset={offset}, size={read_cmd.size}, version={self.version}",
+                        file=sys.stderr,
+                    )
 
                 response = await self.worker.client.a_kv_read(
                     self.workload._volume_path(),
@@ -306,7 +318,7 @@ class Worker:
                     key,
                     offset=offset,
                     size=read_cmd.size,
-                    version=self.workload.version
+                    version=self.workload.version,
                 )
 
                 if response is None or get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
@@ -320,7 +332,7 @@ class Worker:
                         if not response.operation.result.Unpack(read_result):
                             raise ValueError(f"Failed to unpack read result for key {key} in action {self.config.name}")
 
-                    expected_data = (await self.worker.generate_pattern_data(key_size))[offset:offset + read_cmd.size]
+                    expected_data = (await self.worker.generate_pattern_data(key_size))[offset : offset + read_cmd.size]
                     actual_data = read_result.value
                     if actual_data != expected_data.encode():
                         msg = (
@@ -342,7 +354,10 @@ class Worker:
             for key, key_info in keys_to_delete.items():
                 partition_id = key_info[0]
                 if self.verbose:
-                    print(f"DELETE action: key={key}, partition_id={partition_id}, version={self.version}", file=sys.stderr)
+                    print(
+                        f"DELETE action: key={key}, partition_id={partition_id}, version={self.version}",
+                        file=sys.stderr,
+                    )
 
                 response = await self.worker.client.a_kv_delete_range(
                     self.workload._volume_path(),
@@ -351,7 +366,7 @@ class Worker:
                     to_key=key,
                     from_inclusive=True,
                     to_inclusive=True,
-                    version=self.workload.version
+                    version=self.workload.version,
                 )
                 if response is None or get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
                     raise ValueError(f"Delete failed for key {key} in action {self.config.name}")
@@ -376,7 +391,7 @@ class Worker:
                 partition_id,
                 kv_pairs,
                 channel=write_cmd.channel,
-                version=self.workload.version
+                version=self.workload.version,
             )
 
             if response is None or get_status(response) != ydb_status_codes.StatusIds.StatusCode.SUCCESS:
@@ -403,7 +418,10 @@ class Worker:
 
         async def run(self):
             if self.verbose:
-                print(f"ActionRunner: running commands for action '{self.config.name}', instance_id={self.instance_id}", file=sys.stderr)
+                print(
+                    f"ActionRunner: running commands for action '{self.config.name}', instance_id={self.instance_id}",
+                    file=sys.stderr,
+                )
 
             if self.worker_semaphore:
                 async with self.worker_semaphore:
@@ -413,7 +431,10 @@ class Worker:
                 for cmd in self.config.action_command:
                     await self.execute_command(cmd)
             if self.verbose:
-                print(f"ActionRunner: completed commands for action '{self.config.name}', instance_id={self.instance_id}", file=sys.stderr)
+                print(
+                    f"ActionRunner: completed commands for action '{self.config.name}', instance_id={self.instance_id}",
+                    file=sys.stderr,
+                )
 
             await self.worker._increment_action_stat(self.name)
             self.notify_about_ending()
@@ -459,7 +480,9 @@ class Worker:
     @property
     def client(self):
         if self._client is None:
-            self._client = KeyValueClient(str(self.workload.fqdn), int(self.workload.port), retry_count=10, sleep_retry_seconds=0.1)
+            self._client = KeyValueClient(
+                str(self.workload.fqdn), int(self.workload.port), retry_count=10, sleep_retry_seconds=0.1
+            )
         return self._client
 
     def generate_instance_id(self):
@@ -500,11 +523,7 @@ class Worker:
         partition_id = self.worker_partition_id
 
         response = await self.client.a_kv_writes(
-            self.volume_path,
-            partition_id,
-            kv_pairs,
-            channel=write_cmd.channel,
-            version=self.workload.version
+            self.volume_path, partition_id, kv_pairs, channel=write_cmd.channel, version=self.workload.version
         )
 
         status = None
@@ -527,8 +546,13 @@ class Worker:
     def add_action(self, action_config):
         self.actions[action_config.name] = action_config
         if self.verbose:
-            period_str = f", period={action_config.period_us}us" if action_config.HasField('period_us') else ", one-shot"
-            print(f"Worker {self.worker_id}: added action '{action_config.name}'{period_str}, commands={len(action_config.action_command)}", file=sys.stderr)
+            period_str = (
+                f", period={action_config.period_us}us" if action_config.HasField('period_us') else ", one-shot"
+            )
+            print(
+                f"Worker {self.worker_id}: added action '{action_config.name}'{period_str}, commands={len(action_config.action_command)}",
+                file=sys.stderr,
+            )
 
     def notify_about_ending(self, id, data_context):
         self.event_queue.put_nowait(('end', id, data_context))
@@ -611,7 +635,15 @@ class Worker:
             elif command == 'run':
                 name = q
                 instance_id = self.generate_instance_id()
-                runner = Worker.ActionRunner(self.actions[name], self.workload, self, semaphores.get(name), instance_id, self.worker_partition_id, data_context=dc)
+                runner = Worker.ActionRunner(
+                    self.actions[name],
+                    self.workload,
+                    self,
+                    semaphores.get(name),
+                    instance_id,
+                    self.worker_partition_id,
+                    data_context=dc,
+                )
                 id_to_action_name[instance_id] = name
                 task = asyncio.create_task(runner.run())
                 id_to_tasks[instance_id] = task
@@ -644,7 +676,9 @@ class WorkerBuilder:
 
     def build(self, worker_id, stats_queue=None):
         if self.verbose:
-            print(f"WorkerBuilder: building worker {worker_id} with {len(self.config.actions)} actions", file=sys.stderr)
+            print(
+                f"WorkerBuilder: building worker {worker_id} with {len(self.config.actions)} actions", file=sys.stderr
+            )
         worker = Worker(worker_id, self.workload, stats_queue=stats_queue, worker_partition_id=self.worker_partition_id)
 
         for action in self.config.actions:
@@ -773,7 +807,10 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
 
     def _pre_start(self):
         if self.verbose:
-            print(f"Initializing KeyValue volume: endpoint={self.fqdn}:{self.port}, database={self.database}, path={self._volume_path()}", file=sys.stderr)
+            print(
+                f"Initializing KeyValue volume: endpoint={self.fqdn}:{self.port}, database={self.database}, path={self._volume_path()}",
+                file=sys.stderr,
+            )
         client = KeyValueClient(self.fqdn, self.port)
         create_reponse = self._create_volume(client)
         client.close()
@@ -782,10 +819,14 @@ class YdbKeyValueVolumeWorkload(WorkloadBase):
             print('response:', create_reponse)
             return False
         if self.verbose:
-            print(f"Start Load: duration={self.duration}s, workers={self.worker_count}, version={self.version}", file=sys.stderr)
+            print(
+                f"Start Load: duration={self.duration}s, workers={self.worker_count}, version={self.version}",
+                file=sys.stderr,
+            )
 
         if self.show_stats:
             from multiprocessing import Queue
+
             self.stats_queue = Queue()
             self.stats_thread = threading.Thread(target=self._stats_listener, daemon=True)
             self.stats_thread.start()
@@ -824,6 +865,7 @@ def chained_method(method):
     def _wrapped(self, *args, **kwargs):
         method(self, *args, **kwargs)
         return self
+
     return _wrapped
 
 
@@ -926,39 +968,39 @@ class ConfigBuilder:
 def generate_preset_configs():
     return {
         'common_channel_read': ConfigBuilder(config_pb.PartitionMode.OnePartition)
-            .set_volume_config("kv_volume", 16, ['ssd'] * 3)
-            .init_initial_data()
-            .add_write_to_initial_data(size=1024*1024, count=5, channel=0)
-            .init_prepared_action(name='read')
-            .add_read_to_prepared_action(size=1024, count=5)
-            .set_periodicity_for_prepared_action(period_us=10000)
-            .set_data_mode_worker_for_prepared_action()
-            .add_prepared_action()
-            .return_config(),
+        .set_volume_config("kv_volume", 16, ['ssd'] * 3)
+        .init_initial_data()
+        .add_write_to_initial_data(size=1024 * 1024, count=5, channel=0)
+        .init_prepared_action(name='read')
+        .add_read_to_prepared_action(size=1024, count=5)
+        .set_periodicity_for_prepared_action(period_us=10000)
+        .set_data_mode_worker_for_prepared_action()
+        .add_prepared_action()
+        .return_config(),
         'inline_channel_read': ConfigBuilder(config_pb.PartitionMode.OnePartition)
-            .set_volume_config("kv_volume", 16, ['ssd'] * 3)
-            .init_initial_data()
-            .add_write_to_initial_data(size=1024*1024, count=5, channel=1)
-            .init_prepared_action(name='read')
-            .add_read_to_prepared_action(size=1024, count=5)
-            .set_periodicity_for_prepared_action(period_us=10000)
-            .set_data_mode_worker_for_prepared_action()
-            .add_prepared_action()
-            .return_config(),
+        .set_volume_config("kv_volume", 16, ['ssd'] * 3)
+        .init_initial_data()
+        .add_write_to_initial_data(size=1024 * 1024, count=5, channel=1)
+        .init_prepared_action(name='read')
+        .add_read_to_prepared_action(size=1024, count=5)
+        .set_periodicity_for_prepared_action(period_us=10000)
+        .set_data_mode_worker_for_prepared_action()
+        .add_prepared_action()
+        .return_config(),
         'write_read_delete': ConfigBuilder(config_pb.PartitionMode.OnePartition)
-            .set_volume_config("kv_volume", 16, ['ssd'] * 3)
-            .init_prepared_action(name='write')
-            .add_write_to_prepared_action(size=4096, count=5, channel=0)
-            .set_periodicity_for_prepared_action(period_us=50000)
-            .set_data_mode_worker_for_prepared_action()
-            .add_prepared_action()
-            .init_prepared_action(name='read', parent_action='write')
-            .add_read_to_prepared_action(size=1024, count=5)
-            .set_data_mode_from_prev_actions_for_prepared_action(['write'])
-            .add_prepared_action()
-            .init_prepared_action(name='delete', parent_action='read')
-            .add_delete_to_prepared_action(count=5)
-            .set_data_mode_from_prev_actions_for_prepared_action(['write'])
-            .add_prepared_action()
-            .return_config(),
+        .set_volume_config("kv_volume", 16, ['ssd'] * 3)
+        .init_prepared_action(name='write')
+        .add_write_to_prepared_action(size=4096, count=5, channel=0)
+        .set_periodicity_for_prepared_action(period_us=50000)
+        .set_data_mode_worker_for_prepared_action()
+        .add_prepared_action()
+        .init_prepared_action(name='read', parent_action='write')
+        .add_read_to_prepared_action(size=1024, count=5)
+        .set_data_mode_from_prev_actions_for_prepared_action(['write'])
+        .add_prepared_action()
+        .init_prepared_action(name='delete', parent_action='read')
+        .add_delete_to_prepared_action(count=5)
+        .set_data_mode_from_prev_actions_for_prepared_action(['write'])
+        .add_prepared_action()
+        .return_config(),
     }

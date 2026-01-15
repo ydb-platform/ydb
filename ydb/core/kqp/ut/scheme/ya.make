@@ -14,6 +14,11 @@ SRCS(
     kqp_acl_ut.cpp
     kqp_constraints_ut.cpp
     kqp_scheme_ut.cpp
+<<<<<<< HEAD
+=======
+    kqp_scheme_fulltext_ut.cpp
+    kqp_scheme_type_info_ut.cpp
+>>>>>>> b9eb476fbc5 (fix the issue (#32072))
     kqp_secrets_ut.cpp
 )
 

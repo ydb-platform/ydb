@@ -391,7 +391,8 @@ void AssertMessageAvaialbleThroughLogbrokerApiAndCommit(std::shared_ptr<NTopic::
 void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 minActivePartitions,
                 std::vector<TString> consumers,
                 std::optional<ui64> retentionSeconds = std::nullopt,
-                std::optional<TString> timestampType = std::nullopt) {
+                std::optional<TString> timestampType = std::nullopt,
+                EStatus expectedStatus = EStatus::SUCCESS) {
     auto topicSettings = NYdb::NTopic::TCreateTopicSettings()
                             .PartitioningSettings(minActivePartitions, 100);
 
@@ -412,7 +413,7 @@ void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 
                                 .ExtractValueSync();
 
     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
 }
 
 void AlterTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, std::vector<TString> consumers) {
@@ -2509,7 +2510,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         CreateTopic(pqClient, topic1Name, 10, {});
         CreateTopic(pqClient, topic2Name, 10, {}, std::nullopt, "CreateTime");
         CreateTopic(pqClient, topic3Name, 10, {}, std::nullopt, "LogAppendTime");
-        CreateTopic(pqClient, topic3Name, 10, {}, std::nullopt, "Incorrect");
+        CreateTopic(pqClient, topic3Name, 10, {}, std::nullopt, "Incorrect", EStatus::BAD_REQUEST);
 
         TKafkaTestClient client(testServer.Port);
         client.AuthenticateToKafka();

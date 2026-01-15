@@ -1592,7 +1592,7 @@ private:
             } else if (settings.Mode().Cast().StringValue() == "update") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
             } else if (settings.Mode().Cast().StringValue() == "update_conditional") {
-                AFL_ENSURE(Config->EnableIndexStreamWrite);
+                AFL_ENSURE(Config->EnableIndexStreamWrite); // Don't allow this mode for old versions.
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL);
             } else if (settings.Mode().Cast().StringValue() == "fill_table") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
@@ -1672,7 +1672,8 @@ private:
                                 || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
                                 const auto& implTable = tableMeta->ImplTables[index];
 
-                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
+                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
+                                        || settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL) {
                                     if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
                                             return columnsSet.contains(column.first) && !mainKeyColumnsSet.contains(column.first);
                                         })) {

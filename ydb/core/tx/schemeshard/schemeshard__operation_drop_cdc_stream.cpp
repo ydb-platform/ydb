@@ -236,6 +236,10 @@ protected:
         table->InitAlterData(OperationId);
         notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
 
+        // Persist AlterData with CoordinatedSchemaVersion for crash recovery
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
+
         // Collect all streams planned for drop on this table
         TVector<TPathId> streamPathIds;
         for (const auto& [_, childPathId] : path->GetChildren()) {

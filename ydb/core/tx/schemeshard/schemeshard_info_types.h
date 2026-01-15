@@ -793,6 +793,7 @@ public:
 
     // InitAlterData with tracking - for coordinated versioning operations.
     // Tracks which operations are using this AlterData. When all release, it's cleaned up.
+    // Also ensures CoordinatedSchemaVersion is set in TableDescriptionFull for persistence.
     void InitAlterData(const TOperationId& opId) {
         if (!AlterData) {
             AlterData = new TTableInfo::TAlterTableInfo;
@@ -800,6 +801,11 @@ public:
             AlterData->CoordinatedSchemaVersion = AlterVersion + 1;
             AlterData->NextColumnId = NextColumnId;
         }
+        // Ensure TableDescriptionFull exists and has CoordinatedSchemaVersion set for persistence
+        if (!AlterData->TableDescriptionFull) {
+            AlterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
+        }
+        AlterData->TableDescriptionFull->SetCoordinatedSchemaVersion(*AlterData->CoordinatedSchemaVersion);
         AlterData->CoordinatedVersionUsers.insert(opId);
     }
 

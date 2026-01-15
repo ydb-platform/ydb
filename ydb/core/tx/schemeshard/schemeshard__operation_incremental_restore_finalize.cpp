@@ -104,6 +104,9 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 // InitAlterData() sets AlterVersion = CurrentVersion + 1 and also sets CoordinatedSchemaVersion
                 table->InitAlterData(OperationId);
 
+                // Persist AlterData with CoordinatedSchemaVersion for crash recovery
+                context.SS->PersistAddAlterTable(db, tablePathId, table->AlterData);
+
                 LOG_I(DebugHint() << " Preparing ALTER for table " << tablePathId
                       << " version: " << table->AlterVersion << " -> " << table->AlterData->AlterVersion);
 

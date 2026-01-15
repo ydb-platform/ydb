@@ -250,6 +250,10 @@ protected:
         table->InitAlterData(OperationId);
         notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
 
+        // Persist AlterData with CoordinatedSchemaVersion for crash recovery
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
+
         bool found = false;
         for (const auto& [childName, childPathId] : path->GetChildren()) {
             Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));

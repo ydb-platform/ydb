@@ -140,13 +140,18 @@ public:
                 auto& combined = *oldShardTx.MutableCreateIncrementalBackupSrc();
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
 
+                // Get coordinated version from source table's AlterData (shared across both drop and create)
+                auto srcTable = context.SS->Tables.at(txState->SourcePathId);
+                srcTable->InitAlterData(OperationId);
+                ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
+
+                // Persist AlterData with CoordinatedSchemaVersion for crash recovery
+                NIceDb::TNiceDb db(context.GetDB());
+                context.SS->PersistAddAlterTable(db, txState->SourcePathId, srcTable->AlterData);
+
                 if (hasDrop) {
                     auto& dropNotice = *combined.MutableDropCdcStreamNotice();
                     txState->SourcePathId.ToProto(dropNotice.MutablePathId());
-                    // Get coordinated version from source table's AlterData
-                    auto srcTable = context.SS->Tables.at(txState->SourcePathId);
-                    srcTable->InitAlterData(OperationId);
-                    ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
                     dropNotice.SetTableSchemaVersion(coordVersion);
 
                     for (const auto& id : streamsToDrop) {
@@ -156,10 +161,6 @@ public:
 
                 if (hasCreate) {
                     NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
-                    // Get coordinated version from source table's AlterData
-                    auto srcTable = context.SS->Tables.at(txState->SourcePathId);
-                    srcTable->InitAlterData(OperationId);
-                    ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
                     combined.MutableCreateCdcStreamNotice()->SetTableSchemaVersion(coordVersion);
                 }
 

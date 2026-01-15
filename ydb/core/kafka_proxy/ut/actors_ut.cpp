@@ -96,16 +96,6 @@ TMetarequestTestParams SetupServer(const TString shortTopicName, bool serverless
     return {std::move(server), kafkaPort, serverSettings.AppConfig->GetKafkaProxyConfig(), fullTopicName};
 }
 
-namespace NKafka {
-
-struct TestAccessor {
-    static std::unordered_map<TActorId, size_t> GetTopicIndexes(TKafkaFetchActor* actor) {
-        return actor->TopicIndexes;
-    }
-};
-
-}
-
 namespace NKafka::NTests {
     Y_UNIT_TEST_SUITE(DiscoveryIsNotBroken) {
         void CheckEndpointsInDiscovery(bool withSsl, bool expectKafkaEndpoints) {
@@ -529,15 +519,24 @@ namespace NKafka::NTests {
             auto edge = runtime->AllocateEdgeActor();
 
             auto [actorId, actor] = CreateFetchActor(edge, {NKikimr::JoinPath({"/Root/PQ/", topicName})}, runtime, config);
-            Sleep(TDuration::MilliSeconds(100)); // wait actor willbe created
+            Sleep(TDuration::MilliSeconds(500)); // wait actor will be created
 
+<<<<<<< HEAD
             // emulate pipe error
             auto topicIndexes = TestAccessor::GetTopicIndexes(actor);
+=======
+            // emulate timeout
+            runtime->Send(actorId, edge, new TEvKafka::TEvFetchActorStateRequest());
+
+
+            TAutoPtr<IEventHandle> handle;
+            auto* evS = runtime->GrabEdgeEvent<TEvKafka::TEvFetchActorStateResponse>(handle);
+            auto topicIndexes = evS->TopicIndexes;
+>>>>>>> 6f3f5b4a60e (Fixed sanitizer error in ydb/core/kafka_proxy/ut/FetchActorTests.FetchWithTimeout (#32049))
             UNIT_ASSERT(topicIndexes.size() == 1);
             auto fetchActorId = topicIndexes.begin()->first;
             runtime->Send(fetchActorId, fetchActorId, new TEvents::TEvWakeup(1000));
 
-            TAutoPtr<IEventHandle> handle;
             auto* ev = runtime->GrabEdgeEvent<TEvKafka::TEvResponse>(handle);
             UNIT_ASSERT(ev);
             auto response = dynamic_cast<TFetchResponseData*>(ev->Response.get());

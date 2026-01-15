@@ -237,5 +237,8 @@ void TKafkaFetchActor::RespondIfRequired(const TActorContext& ctx) {
     }
 }
 
+void TKafkaFetchActor::Handle(TEvKafka::TEvFetchActorStateRequest::TPtr& ev) {
+    Send(ev->Sender, new TEvKafka::TEvFetchActorStateResponse(TopicIndexes));
+}
 
 } // namespace NKafka

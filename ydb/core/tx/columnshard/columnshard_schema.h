@@ -373,9 +373,10 @@ struct Schema : NIceDb::Schema {
     struct OperationTxIds : NIceDb::Schema::Table<OperationTxIdsId> {
         struct TxId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct LockId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Broken: Column<3, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TxId, LockId>;
-        using TColumns = TableColumns<TxId, LockId>;
+        using TColumns = TableColumns<TxId, LockId, Broken>;
     };
 
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {

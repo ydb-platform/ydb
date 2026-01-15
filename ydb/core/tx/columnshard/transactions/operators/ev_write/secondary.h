@@ -175,6 +175,9 @@ private:
             op->SelfBroken = lock.IsBroken();
             Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
             if (!op->ReceiveAck) {
+                // We send the result here before SelfBroken is truly persisted, yes.
+                // But we persist lock.IsBroken(), so if the secondary crushes and restarts,
+                // the secondary will send the same result again, and the primary will ignore it (if already processed)
                 op->SendResult(*Self);
             }
             return true;

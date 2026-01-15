@@ -3399,6 +3399,49 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             CompareYson(output, R"([[1u;1u]])");
         }
     }
+
+    Y_UNIT_TEST(AsListTakesOptional) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            const TString query = R"(
+                CREATE TABLE table
+                (
+                    id  Uint32 NOT NULL,
+                    id2 Int64,
+                    PRIMARY KEY (id)
+                );
+            )";
+            auto result = queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                $missing_row = AsStruct(
+                    NULL AS id,
+                    false AS flag
+                );
+
+                $row = SELECT (
+                    id AS id,
+                    (id2 = 42) AS flag
+                ) FROM table;
+
+                $result = SELECT count(*) AS result FROM AS_TABLE(AsList(
+                Coalesce($row, $missing_row),
+                $row
+                ));
+                SELECT $result AS result;
+            )";
+            auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+        }
+    }
 }
 Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
     TKikimrRunner CreateKikimrWithDiscardSelect(bool useRealThreads = true) {

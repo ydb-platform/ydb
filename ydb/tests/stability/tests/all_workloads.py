@@ -157,6 +157,12 @@ def _init_stress_utils():
                 'local_path': 'ydb/tests/stress/transfer/transfer'
             }
 
+        for config_preset in ['common_channel_read', 'inline_channel_read', 'write_read_delete']:
+            _all_stress_utils[f'KVVolume_{config_preset}'] = {
+                'args': ["--endpoint", "grpc://{node_host}:2135", '--in-flight', '3', '--config-name', config_preset],
+                'local_path': 'ydb/tests/stress/kv_volume/workload_keyvalue_volume'
+            }
+
     filtered_stress_utils_arg: str = yatest.common.get_param('stress-utils-to-run', None)
 
     if filtered_stress_utils_arg:

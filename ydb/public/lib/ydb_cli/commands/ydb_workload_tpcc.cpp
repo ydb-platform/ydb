@@ -243,15 +243,15 @@ void TCommandTPCCRun::Config(TConfig& config) {
             .Optional().StoreTrue(&RunConfig->NoDelays);
 
     auto txModeOpt = config.Opts->AddLongOption(
-        "tx-mode", TStringBuilder() << "Transaction mode: serializable or snapshot")
+        "tx-mode", TStringBuilder() << "Transaction mode: serializable-rw or snapshot-rw")
             .OptionalArgument("STRING").StoreMappedResult(&RunConfig->TxMode, [](const TString& value) {
-                if (value == "serializable") {
+                if (value == "serializable-rw") {
                     return NQuery::TTxSettings::SerializableRW();
-                } else if (value == "snapshot") {
+                } else if (value == "snapshot-rw") {
                     return NQuery::TTxSettings::SnapshotRW();
                 }
-                throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable, snapshot";
-            }).DefaultValue("serializable");
+                throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable-rw, snapshot-rw";
+            }).DefaultValue("serializable-rw");
 
     auto simulateOpt = config.Opts->AddLongOption(
         "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")

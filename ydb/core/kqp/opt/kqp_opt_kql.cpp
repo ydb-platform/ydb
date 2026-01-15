@@ -222,7 +222,7 @@ TExprNode::TPtr IsConditionalUpdateSetting(const bool isStreamIndexWrite, TExprC
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add()
             .Name().Build("Mode")
-            .Value<TCoAtom>().Build(isStreamIndexWrite ? "update" : "upsert") // Rows were read from table, so we are sure that they exist.
+            .Value<TCoAtom>().Build(isStreamIndexWrite ? "update_conditional" : "upsert") // Rows were read from table, so we are sure that they exist.
         .Build()
         .Add()
             .Name().Build("IsUpdate")

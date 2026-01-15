@@ -166,7 +166,11 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     out.set_retention_storage_mb(partConfig.GetStorageLimitBytes() / 1024 / 1024);
     (*out.mutable_attributes())["_message_group_seqno_retention_period_ms"] = TStringBuilder() << (partConfig.GetSourceIdLifetimeSeconds() * 1000);
     (*out.mutable_attributes())["__max_partition_message_groups_seqno_stored"] = TStringBuilder() << partConfig.GetSourceIdMaxCounts();
-    (*out.mutable_attributes())["_timestamp_type"] = TStringBuilder() << config.GetTimestampType();
+    if (config.GetTimestampType()) {
+        (*out.mutable_attributes())["_timestamp_type"] = TStringBuilder() << config.GetTimestampType();
+    } else {
+        (*out.mutable_attributes())["_timestamp_type"] = TStringBuilder() << NKafka::MESSAGE_TIMESTAMP_CREATE_TIME;
+    }
 
     if (local || pqConfig.GetTopicsAreFirstClassCitizen()) {
         out.set_partition_write_speed_bytes_per_second(partConfig.GetWriteSpeedInBytesPerSecond());

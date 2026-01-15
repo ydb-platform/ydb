@@ -16,7 +16,7 @@
 (let $15 '('"Endpoint" '"<pq_pq_endpoint>"))
 (let $16 '('"SharedReading" '1))
 (let $17 '('"UseSsl" '1))
-(let $18 '('('"Consumer" '"test_client") $15 $16 '('"ReconnectPeriod" '"") '('"Format" '"json_each_row") '('"ReadGroup" '"fqrun") $17 '('"WatermarksEnable" '1) '('"WatermarksGranularityUs" '"1000000") '('"WatermarksLateArrivalDelayUs" '"5000000") '('"WatermarksLateEventsPolicy" '"adjust")))
+(let $18 '('('"Consumer" '"test_client") $15 $16 '('"ReconnectPeriod" '"") '('"Format" '"json_each_row") '('"ReadGroup" '"fqrun") $17))
 (let $19 (SecureParam '"cluster:default_pq"))
 (let $20 (DqPqTopicSource $6 $13 $14 $18 $19 '"" $12 '""))
 (let $21 (DqStage '((DqSource $7 $20)) (lambda '($25) (block '(

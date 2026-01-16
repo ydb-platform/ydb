@@ -60,6 +60,7 @@ enum EServiceKikimr {
     BS_CLUSTER_BALANCING = 2605;
     BS_BRIDGE_SYNC = 2606;
     BS_PHANTOM_FLAG_STORAGE = 2607;
+    BS_COMP_BROKER = 2608;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -1140,5 +1141,6 @@ message TActivity {
         FILTER_KMEANS_SCAN_ACTOR = 675;
         BS_SYNC_SST_WRITER = 676;
         BS_ASYNC_SYNC_SST_COMMITTER = 677;
+        BS_COMP_BROKER_ACTOR = 678;
     };
 };

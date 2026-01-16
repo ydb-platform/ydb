@@ -47,6 +47,7 @@ namespace NKikimr {
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         // Self VDisk related info
         const TGroupId GroupId;
+        const TVDiskID SelfVDisk;
         const TVDiskIdShort ShortSelfVDisk;
         const TString VDiskLogPrefix;
         const ui32 NodeId;

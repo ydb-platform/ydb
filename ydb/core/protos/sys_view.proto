@@ -43,7 +43,7 @@ message TPartitionStats {
     optional uint64 TxRejectedByOverload = 18;
     optional uint64 TxRejectedBySpace = 19;
     optional uint64 TxCompleteLagMsec = 26;
-    
+
     optional TTtlStats TtlStats = 20;
 
     optional uint64 ByKeyFilterSize = 21;
@@ -190,7 +190,7 @@ message TPDiskInfo {
     optional string DecommitStatus = 18;
     optional string State = 19;
     optional uint32 SlotSizeInUnits = 20; // either inferred or user-defined
-    optional uint64 InferPDiskSlotCountFromUnitSize = 21;
+    reserved 21;
     // metrics ?
     // physical location ?
     // config ?

@@ -16,6 +16,11 @@ struct TLocksInfo {
     TVector<NKikimrDataEvents::TLock> BrokenLocks;
 };
 
+struct TPerStepScanTimings {
+    TDuration ExecutionDuration;
+    TDuration WaitDuration;
+};
+
 namespace NInternalImplementation {
 struct TEvRemoteScanData: public TEventPB<TEvRemoteScanData, NKikimrKqp::TEvRemoteScanData,
     TKqpComputeEvents::EvRemoteScanData> {
@@ -54,7 +59,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
 
     TOwnedCellVec LastKey;
     NKikimrKqp::TEvKqpScanCursor LastCursorProto;
-    THashMap<TString, TDuration> CpuTimePerStep;
+    THashMap<TString, TPerStepScanTimings> PerStepTimings;
     TDuration CpuTime;
     TDuration WaitTime;
     ui64 RawBytes = 0;

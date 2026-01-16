@@ -358,6 +358,11 @@ public:
 };
 
 class TConcreteScanCounters: public TScanCounters {
+public:
+    struct TPerStepCounters{
+        std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds;
+        std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds;
+    };
 private:
     using TBase = TScanCounters;
     std::shared_ptr<TAtomicCounter> FetchAccessorsCount = std::make_shared<TAtomicCounter>();
@@ -373,13 +378,13 @@ private:
     std::shared_ptr<TAtomicCounter> TotalExecutionDurationUs = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> TotalRawBytes = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> AccessorsForConstructionGuard = std::make_shared<TAtomicCounter>();
-    using TStepName = TString;
-    NColumnShard::TThreadSafeValue<THashMap<TStepName, std::shared_ptr<TAtomicCounter>>> StepExecutionDurations;
 
 public:
+    using TStepName = TString;
+    NColumnShard::TThreadSafeValue<THashMap<TStepName, TPerStepCounters>> StepExecutionDurations;
     TScanAggregations Aggregations;
 
-    const std::shared_ptr<TAtomicCounter>& ExecutionTimeCounterForStep(const TString& stepName) const {
+    const TPerStepCounters& CountersForStep(const TString& stepName) const {
         auto* counterIfExists = [&]{
             auto lock = StepExecutionDurations.ReadGuard();
             return lock.Value.FindPtr(stepName);
@@ -390,9 +395,6 @@ public:
         auto lock = StepExecutionDurations.WriteGuard();
         auto [it, ok] = lock.Value.emplace(stepName, std::make_shared<TAtomicCounter>());
         return it->second;
-    }
-    auto GetExecutionTimePerSteps() const {
-        return StepExecutionDurations.ReadGuard();
     }
 
     void AddExecutionDuration(const TDuration d) const {

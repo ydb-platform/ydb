@@ -26,10 +26,9 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             break;
         }
         const NColumnShard::TConcreteScanCounters& counters = source->GetContext()->GetCommonContext()->GetCounters();
-        if (PreviousOperationStartIfAsync.has_value()) {
+        if (StepEndIfStepIsAsync.has_value()) {
             // previous operation was async 
-            auto waitDuration = TMonotonic::Now() - *PreviousOperationStartIfAsync;
-            PreviousOperationStartIfAsync = std::nullopt;
+            auto waitDuration = TMonotonic::Now() - *StepEndIfStepIsAsync;
             AFL_VERIFY(CurrentStepIdx >= 1);
             counters.CountersForStep(Script->GetStep(CurrentStepIdx - 1)->GetName()).WaitDurationMicroSeconds->Add(waitDuration.MicroSeconds());
         }
@@ -56,9 +55,11 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             return resultStep;
         }
         if (!*resultStep) {
-            PreviousOperationStartIfAsync.emplace(TMonotonic::Now());
+            StepEndIfStepIsAsync.emplace(TMonotonic::Now());
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
             return false;
+        }else{
+            StepEndIfStepIsAsync = std::nullopt;
         }
         StepStartInstant = TMonotonic::Now();
         ++CurrentStepIdx;

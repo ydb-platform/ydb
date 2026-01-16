@@ -127,8 +127,7 @@ void TScanCounters::FillStats(::NKikimrTableStats::TTableStats& output) const {
     output.SetRangeReads(ScansFinishedByStatus[(ui32)EStatusFinish::Success]->Val());
 }
 
-TConcreteScanCounters::TConcreteScanCounters(
-    const TScanCounters& counters, [[maybe_unused]] const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>&  program)
+TConcreteScanCounters::TConcreteScanCounters(const TScanCounters& counters)
     : TBase(counters)
     , Aggregations(TBase::BuildAggregations()) 
     {}

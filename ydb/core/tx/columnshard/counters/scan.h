@@ -485,7 +485,7 @@ public:
         Aggregations.OnBlobWaitingDuration(d, fullScanDuration);
     }
 
-    TConcreteScanCounters(const TScanCounters& counters, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program);
+    TConcreteScanCounters(const TScanCounters& counters);
 };
 
 }   // namespace NKikimr::NColumnShard

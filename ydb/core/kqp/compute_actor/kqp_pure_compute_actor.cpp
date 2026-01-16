@@ -295,9 +295,6 @@ void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
         ScanData->ProfileStats->Messages++;
         ScanData->ProfileStats->ScanCpuTime += msg.CpuTime; // TODO: not implemented yet
         ScanData->ProfileStats->ScanWaitTime += msg.WaitTime;
-        for(const auto& kv: msg.CpuTimePerStep) {
-            ScanData->ProfileStats->ScanCpuTimeByStep[kv.first] += kv.second;
-        }
         if (msg.PageFault) {
             ScanData->ProfileStats->PageFaults += msg.PageFaults;
             ScanData->ProfileStats->MessagesByPageFault++;

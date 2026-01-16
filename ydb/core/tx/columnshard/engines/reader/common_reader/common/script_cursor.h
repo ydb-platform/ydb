@@ -8,7 +8,7 @@ private:
     ui32 CurrentStepIdx = 0;
     YDB_READONLY(TMonotonic, StepStartInstant, TMonotonic::Zero());
     std::shared_ptr<TFetchingScript> Script;
-    std::optional<TMonotonic> PreviousOperationStartIfAsync = std::nullopt;
+    std::optional<TMonotonic> StepEndIfStepIsAsync = std::nullopt;
 
 public:
     TFetchingScriptCursor(const std::shared_ptr<TFetchingScript>& script, const ui32 index)

@@ -10,6 +10,7 @@ PY_SRCS(
 
 PEERDIR(
     ydb/tests/stress/common
+    ydb/tests/library/fixtures
     ydb/public/sdk/python
     ydb/tests/datashard/lib
 )

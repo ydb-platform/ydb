@@ -82,6 +82,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters& cacheCounters);
 
     //client requests
+    // remove TEvPersQueue::TEvUpdateConfig at 26-3 release
     void Handle(TEvPersQueue::TEvUpdateConfig::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionConfigChanged::TPtr& ev, const TActorContext& ctx);
     void ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx);

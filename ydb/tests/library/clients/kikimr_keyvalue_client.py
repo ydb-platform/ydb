@@ -41,13 +41,13 @@ def to_bytes(v):
 
 
 class KeyValueClient(object):
-    def __init__(self, server, port, cluster=None, retry_count=1):
+    def __init__(self, server, port, cluster=None, retry_count=1, sleep_retry_seconds=10):
         self.server = server
         self.port = port
         self._cluster = cluster
         self.__domain_id = 1
         self.__retry_count = retry_count
-        self.__retry_sleep_seconds = 10
+        self.__retry_sleep_seconds = sleep_retry_seconds
         self._options = [
             ('grpc.max_receive_message_length', 64 * 10 ** 6),
             ('grpc.max_send_message_length', 64 * 10 ** 6)

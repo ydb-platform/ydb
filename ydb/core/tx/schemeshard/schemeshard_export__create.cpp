@@ -43,6 +43,7 @@ bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& ite
     case NKikimrSchemeOp::EPathTypeReplication:
     case NKikimrSchemeOp::EPathTypeTransfer:
     case NKikimrSchemeOp::EPathTypeExternalDataSource:
+    case NKikimrSchemeOp::EPathTypeExternalTable:
         return true;
     default:
         return false;

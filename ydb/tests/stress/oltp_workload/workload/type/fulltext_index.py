@@ -265,7 +265,7 @@ class WorkloadFulltextIndex(WorkloadBase):
         self._upsert_values(
             table_path=table_path,
             use_upsert=False,
-            min_key=self.row_count,
+            min_key=self.row_count+1,
             max_key=self.row_count+3,
         )
         # update the index using upsert

@@ -50,6 +50,7 @@ class AttachmentType(Enum):
     JSON = ("application/json", "json")
     YAML = ("application/yaml", "yaml")
     PCAP = ("application/vnd.tcpdump.pcap", "pcap")
+    ZIP = ("application/zip", "zip")
 
     PNG = ("image/png", "png")
     JPG = ("image/jpg", "jpg")

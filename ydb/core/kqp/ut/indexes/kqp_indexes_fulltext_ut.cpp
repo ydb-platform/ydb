@@ -61,6 +61,45 @@ void AddIndex(NQuery::TQueryClient& db, const char* layout = "flat") {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
+void DoValidateRelevanceQuery(NQuery::TQueryClient& db, const TString& relevanceQuery, std::vector<std::pair<std::string, std::vector<std::pair<ui64, double>>>> cases, NYdb::TParamsBuilder params = {}) {
+    for (const auto& [query, expectedResults] : cases) {
+        // Get the actual relevance score
+        auto result = db.ExecuteQuery(
+            Sprintf(relevanceQuery.c_str(), query.c_str()), NYdb::NQuery::TTxControl::NoTx(), params.Build()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 1, "Expected 1 result set");
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_C(resultSet.RowsCount() == expectedResults.size(),
+            "Expected " + std::to_string(expectedResults.size()) + " results for query: " + query);
+
+        NYdb::TResultSetParser parser(resultSet);
+        size_t idx = 0;
+        while (parser.TryNextRow()) {
+            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+            double relevance = parser.ColumnParser("Relevance").GetDouble();
+
+            UNIT_ASSERT_C(idx < expectedResults.size(),
+                "More results than expected for query: " + query);
+
+            auto expectedKey = expectedResults[idx].first;
+            auto expectedRelevance = expectedResults[idx].second;
+
+            UNIT_ASSERT_VALUES_EQUAL_C(key, expectedKey,
+                "Key mismatch for query '" + query + "' at position " + std::to_string(idx) +
+                ": expected " + std::to_string(expectedKey) + ", got " + std::to_string(key));
+
+            // Allow small floating-point differences (similar to Lucene's 0.0001f tolerance)
+            UNIT_ASSERT_C(std::abs(relevance - expectedRelevance) < 1e-4,
+                "Relevance score mismatch for query '" + query + "' key " + std::to_string(key) +
+                ": expected " + std::to_string(expectedRelevance) + ", got " + std::to_string(relevance));
+
+            ++idx;
+        }
+    }
+};
+
+
 void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, const size_t nGramMaxLength = 3, const bool edgeNGram = false, const bool covered = false) {
     const TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
@@ -2845,127 +2884,58 @@ Y_UNIT_TEST(SelectWithFulltextRelevanceB1FactorAndK1Factor) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    std::vector<std::tuple<std::string, double, ui64, double>> searchingTerms = {
-        {"собаки любят ", 1.2, 12, 2.464092448},
-        {"собаки любят ", 1.0, 12, 2.301624815},
-        {"собаки любят ", 0.8, 12, 2.159256269},
-    };
-
-    for(const auto& [term, bfactor, expecteddoc, expectedRelevance] : searchingTerms) {
-        // Query with WHERE clause using FulltextContains UDF
-        TString query = Sprintf(R"sql(
-            SELECT Key, Text, FullText::Relevance(Text, "%s", "and", "2", %f) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, Text, FullText::Relevance(Text, "%s", 1.2 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
             LIMIT 10
-        )sql", term.c_str(), bfactor);
+        )sql", { {"собаки любят ", { {12, 2.464092448}, } } });
 
-        Cerr << "Query: " << query << Endl;
-
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto resultSet = result.GetResultSet(0);
-        UNIT_ASSERT_C(resultSet.RowsCount() == 1, "Expected 1 row with " + term + " content");
-
-        // Verify that all returned rows actually contain the search term
-        NYdb::TResultSetParser parser(resultSet);
-        while (parser.TryNextRow()) {
-            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
-            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
-            double relevance = parser.ColumnParser("Relevance").GetDouble();
-            UNIT_ASSERT_C(bodyValue, "Body should not be null");
-            Cerr << "Key: " << key << ", Relevance: " << relevance << Endl;
-            UNIT_ASSERT_C(
-                expecteddoc == key,
-                "All returned rows should contain search term related text"
-            );
-            UNIT_ASSERT_C(abs(relevance - expectedRelevance) < 1e-4,
-                "Relevance should be close to " + std::to_string(expectedRelevance));
-        }
-    }
-
-    std::vector<std::tuple<std::string, double, double, ui64, double>> searchingTermsK1Factor = {
-        {"собаки любят ", 0.75, 1.2, 12, 2.839970958},
-        {"собаки любят ", 0.8, 1.0, 12, 2.65123871},
-        {"собаки любят ", 0.9, 0.8, 12, 2.421362522},
-    };
-
-    for(const auto& [term, bfactor, k1factor, expecteddoc, expectedRelevance] : searchingTermsK1Factor) {
-        // Query with WHERE clause using FulltextContains UDF
-        TString query = Sprintf(R"sql(
-            SELECT Key, Text, FullText::Relevance(Text, "%s", %f as K1, %f as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, Text, FullText::Relevance(Text, "%s", 1.0 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
             LIMIT 10
-        )sql", term.c_str(), bfactor, k1factor);
+        )sql", { {"собаки любят ", { {12, 2.301624815}, } } });
 
-        Cerr << "Query: " << query << Endl;
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, Text, FullText::Relevance(Text, "%s", 0.8 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql", { {"собаки любят ", { {12, 2.159256269}, } } });
 
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, Text, FullText::Relevance(Text, "%s", 0.75 as K1, 1.2 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql", { {"собаки любят ", { {12, 2.839970958}, } } });
 
-        auto resultSet = result.GetResultSet(0);
-        UNIT_ASSERT_C(resultSet.RowsCount() == 1, "Expected 1 row with " + term + " content");
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, Text, FullText::Relevance(Text, "%s", 0.8 as K1, 1.0 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql", { {"собаки любят ", { {12, 2.65123871}, } } });
 
-        // Verify that all returned rows actually contain the search term
-        NYdb::TResultSetParser parser(resultSet);
-        while (parser.TryNextRow()) {
-            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
-            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
-            double relevance = parser.ColumnParser("Relevance").GetDouble();
-            UNIT_ASSERT_C(bodyValue, "Body should not be null");
-            Cerr << "Key: " << key << ", Relevance: " << relevance << Endl;
-            UNIT_ASSERT_C(
-                expecteddoc == key,
-                "All returned rows should contain search term related text"
-            );
-            UNIT_ASSERT_C(abs(relevance - expectedRelevance) < 1e-4,
-                "Relevance should be close to " + std::to_string(expectedRelevance));
-        }
-    }
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, Text, FullText::Relevance(Text, "%s", 0.9 as K1, 0.8 as B) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+            LIMIT 10
+        )sql", { {"собаки любят ", { {12, 2.421362522}, } } });
 
-    {
-        // Query with WHERE clause using FulltextContains UDF
-        TString query = Sprintf(R"sql(
+    DoValidateRelevanceQuery(db,
+        R"sql(
             DECLARE $bfactor as Double;
             DECLARE $k1factor as Double;
             SELECT Key, Text, FullText::Relevance(Text, "собаки любят", $bfactor as B, $k1factor as K1) as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
             LIMIT 10
-        )sql");
+        )sql", { {"собаки любят ", { {12, 2.839970958}, } } },
+        std::move(NYdb::TParamsBuilder().AddParam("$bfactor").Double(1.2).Build().AddParam("$k1factor").Double(0.75).Build()));
 
-        auto params = NYdb::TParamsBuilder();
-        params
-            .AddParam("$bfactor")
-                .Double(1.2)
-                .Build()
-            .AddParam("$k1factor")
-                .Double(0.75)
-                .Build();
-
-        Cerr << "Query: " << query << Endl;
-
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params.Build()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        auto resultSet = result.GetResultSet(0);
-        UNIT_ASSERT_C(resultSet.RowsCount() == 1, "Expected 1 row with content");
-
-        // Verify that all returned rows actually contain the search term
-        NYdb::TResultSetParser parser(resultSet);
-        while (parser.TryNextRow()) {
-            auto bodyValue = parser.ColumnParser("Text").GetOptionalString();
-            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
-            double relevance = parser.ColumnParser("Relevance").GetDouble();
-            UNIT_ASSERT_C(bodyValue, "Body should not be null");
-            Cerr << "Key: " << key << ", Relevance: " << relevance << Endl;
-            UNIT_ASSERT_C(
-                12 == key,
-                "All returned rows should contain search term related text"
-            );
-            UNIT_ASSERT_C(abs(relevance - 2.839970958) < 1e-4,
-                "Relevance should be close to 2.839970958");
-        }
-    }
 }
 
 Y_UNIT_TEST_TWIN(SelectWithFulltextRelevance, UTF8) {
@@ -3161,9 +3131,9 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
             {0, 0.5720391}   // doc0: "the quick brown fox jumps over the lazy dog"
         }},
         {"brown fox", {
-            {0, 0.5720391}  // doc0: "the quick brown fox jumps over the lazy dog"
-        //    {1, 0.46395808}, // doc1: "quick quick fox"
-        //    {3, 0.42037117}  // doc3: "brown bear eats honey" (skip it, because we support only AND terms in the query)
+            {0, 0.5720391}, // doc0: "the quick brown fox jumps over the lazy dog"
+            {1, 0.46395808}, // doc1: "quick quick fox"
+            {3, 0.42037117}  // doc3: "brown bear eats honey"
         }},
         {"honey", {
             {3, 0.66565275}  // doc3: "brown bear eats honey"
@@ -3173,43 +3143,163 @@ Y_UNIT_TEST(LuceneRelevanceComparison) {
         }}
     };
 
-    for (const auto& [query, expectedResults] : testCases) {
-        // Get the actual relevance scores
-        TString relevanceQuery = Sprintf(R"sql(
-            SELECT Key, FullText::Relevance(Text, "%s") as Relevance
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, FullText::Relevance(Text, "%s", "or" as Mode, "1" as MinimumShouldMatch) as Relevance
             FROM `/Root/Texts` VIEW `fulltext_idx`
             ORDER BY Relevance DESC
-        )sql", query.c_str(), query.c_str());
+        )sql",
+        testCases);
 
-        auto result = db.ExecuteQuery(relevanceQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, FullText::Relevance(Text, "%s", "or" as Mode, "50%" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql",
+        testCases);
 
-        auto resultSet = result.GetResultSet(0);
-        UNIT_ASSERT_C(resultSet.RowsCount() == expectedResults.size(),
-            "Expected " + std::to_string(expectedResults.size()) + " results for query: " + query);
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, FullText::Relevance(Text, "%s", "or" as Mode, "-1" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql",
+        testCases);
 
-        NYdb::TResultSetParser parser(resultSet);
-        size_t idx = 0;
-        while (parser.TryNextRow()) {
-            ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
-            double relevance = parser.ColumnParser("Relevance").GetDouble();
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, FullText::Relevance(Text, "%s", "or" as Mode, "-100" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql",
+        testCases);
 
-            UNIT_ASSERT_C(idx < expectedResults.size(),
-                "More results than expected for query: " + query);
+    std::vector<std::pair<std::string, std::vector<std::pair<ui64, double>>>> andTestCases = {
+        {"quick fox", {
+            {1, 1.0704575},  // doc1: "quick quick fox"
+            {0, 0.5720391}   // doc0: "the quick brown fox jumps over the lazy dog"
+        }},
+        {"lazy dog", {
+            {2, 0.92791617}, // doc2: "lazy dog sleeps"
+            {0, 0.5720391}   // doc0: "the quick brown fox jumps over the lazy dog"
+        }},
+        {"brown fox", {
+            {0, 0.5720391}  // doc3: "brown bear eats honey"
+        }},
+        {"honey", {
+            {3, 0.66565275}  // doc3: "brown bear eats honey"
+        }},
+        {"xylophone rare", {
+            {4, 1.3313055}   // doc4: "xylophone music is rare"
+        }}
+    };
 
-            auto expectedKey = expectedResults[idx].first;
-            auto expectedRelevance = expectedResults[idx].second;
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, FullText::Relevance(Text, "%s", "and" as Mode) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql",
+        andTestCases);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(key, expectedKey,
-                "Key mismatch for query '" + query + "' at position " + std::to_string(idx) +
-                ": expected " + std::to_string(expectedKey) + ", got " + std::to_string(key));
+    DoValidateRelevanceQuery(db,
+        R"sql(
+            SELECT Key, FullText::Relevance(Text, "%s", "or" as Mode, "100" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql",
+        andTestCases);
 
-            // Allow small floating-point differences (similar to Lucene's 0.0001f tolerance)
-            UNIT_ASSERT_C(std::abs(relevance - expectedRelevance) < 1e-4,
-                "Relevance score mismatch for query '" + query + "' key " + std::to_string(key) +
-                ": expected " + std::to_string(expectedRelevance) + ", got " + std::to_string(relevance));
+    {
+        TString query = Sprintf(R"sql(
+            SELECT Key, FullText::Relevance(Text, "quick fox", "and" as Mode, "1" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql");
 
-            ++idx;
-        }
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "MinimumShouldMatch is not supported for AND query mode");
+    }
+
+    {
+        TString query = Sprintf(R"sql(
+            SELECT Key, FullText::Relevance(Text, "quick fox", "some" as Mode, "1" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql");
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported query mode: `some`. Should be `and` or `or`");
+    }
+
+    {
+        TString query = Sprintf(R"sql(
+            SELECT Key, FullText::Relevance(Text, "quick fox", "or" as Mode, "101%" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql");
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "MinimumShouldMatch is incorrect. Invalid percentage: `101%`. Should be less than or equal to 100");
+    }
+
+    {
+        TString query = Sprintf(R"sql(
+            SELECT Key, FullText::Relevance(Text, "quick fox", "or" as Mode, "-1%" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql");
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "MinimumShouldMatch is incorrect. Invalid percentage: `-1%`. Should be positive");
+    }
+
+    {
+        TString query = Sprintf(R"sql(
+            SELECT Key, FullText::Relevance(Text, "quick fox", "or" as Mode, "0%" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql");
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "MinimumShouldMatch is incorrect. Invalid percentage: `0%`. Should be positive");
+    }
+
+    {
+        TString query = Sprintf(R"sql(
+            SELECT Key, FullText::Relevance(Text, "quick fox", "or" as Mode, "non_numeric%" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql");
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "MinimumShouldMatch is incorrect. Invalid percentage: `non_numeric%`. Should be a number");
+    }
+
+    {
+        TString query = Sprintf(R"sql(
+            SELECT Key, FullText::Relevance(Text, "quick fox", "or" as Mode, "non_numeric" as MinimumShouldMatch) as Relevance
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            ORDER BY Relevance DESC
+        )sql");
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        Cerr << "Result: " << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "MinimumShouldMatch is incorrect. Invalid value: `non_numeric`. Should be a number");
     }
 }
 

@@ -43,14 +43,14 @@ void TTableWriteDistributedSession::PingThreadFunc() {
 }
 
 TString TTableWriteDistributedSession::GetId() const {
-    return NYT::NodeToYsonString(static_cast<const NYT::TNode&>(Session_), NYson::EYsonFormat::Binary);
+    return NYT::NodeToYsonString(static_cast<const NYT::TNode&>(Session_), NYson::EYsonFormat::Text);
 }
 
 std::vector<TString> TTableWriteDistributedSession::GetCookies() const {
     std::vector<TString> result;
     result.reserve(Cookies_.size());
     for (const auto& cookie : Cookies_) {
-        result.push_back(NYT::NodeToYsonString(static_cast<const NYT::TNode&>(cookie), NYson::EYsonFormat::Binary));
+        result.push_back(NYT::NodeToYsonString(static_cast<const NYT::TNode&>(cookie), NYson::EYsonFormat::Text));
     }
     return result;
 }

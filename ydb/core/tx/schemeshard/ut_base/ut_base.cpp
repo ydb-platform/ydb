@@ -11501,7 +11501,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(TopicWithAutopartitioningReserveSize) {
         TTestEnvOptions opts;
         opts.EnableTopicSplitMerge(true);
-        opts.EnablePQConfigTransactionsAtSchemeShard(true);
 
         TTestBasicRuntime runtime;
 

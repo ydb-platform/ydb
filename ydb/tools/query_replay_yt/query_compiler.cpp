@@ -561,7 +561,7 @@ private:
         if (queryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
             syntax = 1;
         }
-	    Config->_KqpYqlSyntaxVersion = syntax;
+	    Config->SetSqlVersion(syntax);
         Config->FreezeDefaults();
 
         MetadataLoader = make_shared<TStaticTableMetadataLoader>(TlsActivationContext->ActorSystem(), TableMetadata);

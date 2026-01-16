@@ -1,9 +1,9 @@
-#include "combinatory/variator.h"
-#include "helpers/get_value.h"
-#include "helpers/local.h"
-#include "helpers/query_executor.h"
-#include "helpers/typed_local.h"
-#include "helpers/writer.h"
+#include <ydb/core/kqp/ut/olap/combinatory/variator.h>
+#include <ydb/core/kqp/ut/olap/helpers/get_value.h>
+#include <ydb/core/kqp/ut/olap/helpers/local.h>
+#include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
+#include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
+#include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/formats/arrow/serializer/native.h>

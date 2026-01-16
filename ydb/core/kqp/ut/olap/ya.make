@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(50)
+SPLIT_FACTOR(150)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
@@ -14,24 +14,12 @@ SRCS(
     GLOBAL blobs_sharing_ut.cpp
     GLOBAL kqp_olap_ut.cpp
     aggregations_ut.cpp
-    bool_ut.cpp
     clickbench_ut.cpp
-    compaction_ut.cpp
-    compression_ut.cpp
-    datatime64_ut.cpp
-    decimal_ut.cpp
-    delete_ut.cpp
     dictionary_ut.cpp
-    json_ut.cpp
-    kqp_olap_stats_ut.cpp
     locks_ut.cpp
     optimizer_ut.cpp
-    simple_reader_ut.cpp
-    sparsed_ut.cpp
-    statistics_ut.cpp
     sys_view_ut.cpp
     tiering_ut.cpp
-    write_ut.cpp
 )
 
 PEERDIR(
@@ -49,10 +37,13 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-GENERATE_ENUM_SERIALIZATION(bool_test_enums.h)
-
 END()
 
 RECURSE_FOR_TESTS(
     indexes
+    types
+    operations
+    statistics
+    storage
+    reading
 )

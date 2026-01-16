@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(75.8.2)
+VERSION(80.9.0)
 
 LICENSE(MIT)
 
@@ -35,6 +35,7 @@ PY_SRCS(
     pkg_resources/__init__.py
     setuptools/__init__.py
     setuptools/_core_metadata.py
+    setuptools/_discovery.py
     setuptools/_distutils/__init__.py
     setuptools/_distutils/_log.py
     setuptools/_distutils/_macos_compat.py
@@ -64,7 +65,16 @@ PY_SRCS(
     setuptools/_distutils/command/install_scripts.py
     setuptools/_distutils/command/sdist.py
     setuptools/_distutils/compat/__init__.py
+    setuptools/_distutils/compat/numpy.py
     setuptools/_distutils/compat/py39.py
+    setuptools/_distutils/compilers/C/__init__.py
+    setuptools/_distutils/compilers/C/base.py
+    setuptools/_distutils/compilers/C/cygwin.py
+    setuptools/_distutils/compilers/C/errors.py
+    setuptools/_distutils/compilers/C/msvc.py
+    setuptools/_distutils/compilers/C/unix.py
+    setuptools/_distutils/compilers/C/zos.py
+    setuptools/_distutils/compilers/__init__.py
     setuptools/_distutils/core.py
     setuptools/_distutils/cygwinccompiler.py
     setuptools/_distutils/debug.py
@@ -92,6 +102,7 @@ PY_SRCS(
     setuptools/_normalization.py
     setuptools/_path.py
     setuptools/_reqs.py
+    setuptools/_scripts.py
     setuptools/_shutil.py
     setuptools/_static.py
     setuptools/archive_util.py
@@ -149,8 +160,6 @@ PY_SRCS(
     setuptools/monkey.py
     setuptools/msvc.py
     setuptools/namespaces.py
-    setuptools/package_index.py
-    setuptools/sandbox.py
     setuptools/unicode_utils.py
     setuptools/version.py
     setuptools/warnings.py

@@ -13,11 +13,7 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpWrite) {
     Y_UNIT_TEST(UpsertNullKey) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-
-        auto kikimr = DefaultKikimrRunner({setting});
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -454,7 +450,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
-        
+
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         Y_UNUSED(runtime);
 

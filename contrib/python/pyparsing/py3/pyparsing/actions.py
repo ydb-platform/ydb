@@ -193,6 +193,7 @@ def with_attribute(*args: tuple[str, str], **attr_dict) -> ParseAction:
 
 
 with_attribute.ANY_VALUE = object()  # type: ignore [attr-defined]
+"Value to use with :class:`with_attribute` parse action, to match any value, as long as the attribute is present"
 
 
 def with_class(classname: str, namespace: str = "") -> ParseAction:

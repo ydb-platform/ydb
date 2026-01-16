@@ -512,9 +512,10 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(IndexUpsert, QueryService, UseSink) {
+    Y_UNIT_TEST_QUAD(IndexUpsert, QueryService, UseStreamIndex) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -530,12 +531,13 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         )"), params);
 
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 1 : 4);
     }
 
-    Y_UNIT_TEST_QUAD(IndexReplace, QueryService, UseSink) {
+    Y_UNIT_TEST_QUAD(IndexReplace, QueryService, UseStreamIndex) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -550,12 +552,13 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             SELECT * FROM AS_TABLE($items);
         )"), params);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 1 : 4);
     }
 
-    Y_UNIT_TEST_QUAD(IndexUpdateOn, QueryService, UseSink) {
+    Y_UNIT_TEST_QUAD(IndexUpdateOn, QueryService, UseStreamIndex) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -570,12 +573,13 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             SELECT * FROM AS_TABLE($items);
         )"), params);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 1 : 4);
     }
 
-    Y_UNIT_TEST_QUAD(IndexDeleteOn, QueryService, UseSink) {
+    Y_UNIT_TEST_QUAD(IndexDeleteOn, QueryService, UseStreamIndex) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -590,12 +594,13 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             SELECT * FROM AS_TABLE($items);
         )"), params);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 3 : 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 2 : 3);
     }
 
-    Y_UNIT_TEST_QUAD(IndexInsert, QueryService, UseSink) {
+    Y_UNIT_TEST_QUAD(IndexInsert, QueryService, UseStreamIndex) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -610,7 +615,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             SELECT * FROM AS_TABLE($items);
         )"), params);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 1 : 4);
     }
 
     Y_UNIT_TEST_TWIN(IdxLookupJoin, QueryService) {

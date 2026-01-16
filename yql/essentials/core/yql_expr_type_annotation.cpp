@@ -1739,11 +1739,15 @@ NUdf::TCastResultOptions CastResult(const TTypeAnnotationNode* source, const TTy
         return NUdf::ECastOptions::Complete;
     }
 
-    if (sKind == ETypeAnnotationKind::Universal) {
+    if (sKind == ETypeAnnotationKind::Universal || tKind == ETypeAnnotationKind::Universal) {
         return NUdf::ECastOptions::Complete;
     }
 
     if (sKind == ETypeAnnotationKind::UniversalStruct && tKind == ETypeAnnotationKind::Struct) {
+        return NUdf::ECastOptions::Complete;
+    }
+
+    if (tKind == ETypeAnnotationKind::UniversalStruct && sKind == ETypeAnnotationKind::Struct) {
         return NUdf::ECastOptions::Complete;
     }
 
@@ -2111,6 +2115,11 @@ bool IsDataOrOptionalOfData(TPosition pos, const TTypeAnnotationNode* typeAnnota
 
     if (typeAnnotation->GetKind() != ETypeAnnotationKind::Optional) {
         if (!HasError(typeAnnotation, err)) {
+            if (isUniversal && typeAnnotation->GetKind() == ETypeAnnotationKind::Universal) {
+                *isUniversal = true;
+                return true;
+            }
+
             err = TIssue(pos, TStringBuilder() << "Expected data or optional of data, but got: " << *typeAnnotation);
         } else {
             hasErrorType = true;

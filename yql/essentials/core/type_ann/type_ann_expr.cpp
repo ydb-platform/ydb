@@ -28,7 +28,7 @@ public:
     {
     }
 
-    ~TTypeAnnotationTransformer() {
+    ~TTypeAnnotationTransformer() override {
         if (PrintCallableTimes) {
             std::vector<std::pair<TStringBuf, std::pair<ui64, ui64>>> pairs;
             pairs.reserve(CallableTimes_.size());
@@ -124,7 +124,7 @@ public:
         return combinedStatus;
     }
 
-    void Rewind() {
+    void Rewind() override {
         CallableTransformer_->Rewind();
         CallableInputs_.clear();
         Processed_.clear();
@@ -800,7 +800,7 @@ public:
         }
 
         if (input->IsCallable({"Udf", "ScriptUdf", "EvaluateAtom",
-            "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode"})) {
+            "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode", "Parameter"})) {
             input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
@@ -834,7 +834,7 @@ namespace {
 class TFakeArrowResolver : public IArrowResolver {
 public:
     EStatus LoadFunctionMetadata(const TPosition& pos, TStringBuf name, const TVector<const TTypeAnnotationNode*>& argTypes,
-        const TTypeAnnotationNode* returnType, TExprContext& ctx) const {
+        const TTypeAnnotationNode* returnType, TExprContext& ctx) const override {
         Y_UNUSED(pos);
         Y_UNUSED(name);
         Y_UNUSED(argTypes);
@@ -843,7 +843,7 @@ public:
         return EStatus::OK;
     }
 
-    EStatus HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, TExprContext& ctx) const {
+    EStatus HasCast(const TPosition& pos, const TTypeAnnotationNode* from, const TTypeAnnotationNode* to, TExprContext& ctx) const override {
         Y_UNUSED(pos);
         Y_UNUSED(from);
         Y_UNUSED(to);
@@ -851,7 +851,7 @@ public:
         return EStatus::OK;
     }
 
-    virtual EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx,
+    EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx,
         const TUnsupportedTypeCallback& onUnsupported = {}) const final {
         Y_UNUSED(pos);
         Y_UNUSED(types);
@@ -877,12 +877,12 @@ public:
         return Nothing();
     }
 
-    bool HasLayer(const NLayers::TKey& key) const {
+    bool HasLayer(const NLayers::TKey& key) const override {
         Y_UNUSED(key);
         return false;
     }
 
-    bool AddLayer(const TString& name, const TMaybe<TString>& parent, const TMaybe<TString>& url, TExprContext& ctx) {
+    bool AddLayer(const TString& name, const TMaybe<TString>& parent, const TMaybe<TString>& url, TExprContext& ctx) override {
         Y_UNUSED(name);
         Y_UNUSED(parent);
         Y_UNUSED(url);

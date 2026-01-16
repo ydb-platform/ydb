@@ -993,7 +993,7 @@ WITH (
     }
 
     Y_UNIT_TEST(ShowCreateTableColumn) {
-        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableOlapCompression = true});
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -1005,21 +1005,12 @@ WITH (
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
                 Key1 Uint64 NOT NULL,
-                Key2 Utf8 NOT NULL,
-                Key3 Int32 NOT NULL,
-                Value1 Utf8 FAMILY Family1,
-                Value2 Int16 FAMILY Family2,
-                Value3 String FAMILY Family2,
+                Key2 Utf8 NOT NULL COMPRESSION (),
+                Key3 Int32 NOT NULL COMPRESSION (algorithm = off),
+                Value1 Utf8 COMPRESSION (algorithm = lz4),
+                Value2 Int16 COMPRESSION (algorithm = zstd),
+                Value3 String COMPRESSION (algorithm = zstd, level = 10),
                 PRIMARY KEY (Key1, Key2, Key3),
-                FAMILY default (
-                    COMPRESSION = "zstd"
-                ),
-                FAMILY Family1 (
-                    COMPRESSION = "off"
-                ),
-                FAMILY Family2 (
-                    COMPRESSION = "lz4"
-                )
             )
             PARTITION BY HASH(`Key1`, `Key2`)
             WITH (
@@ -1034,13 +1025,10 @@ WITH (
 R"(CREATE TABLE `test_show_create` (
     `Key1` Uint64 NOT NULL,
     `Key2` Utf8 NOT NULL,
-    `Key3` Int32 NOT NULL,
-    `Value1` Utf8,
-    `Value2` Int16,
-    `Value3` String,
-    FAMILY `default` (COMPRESSION = 'zstd'),
-    FAMILY `Family1` (COMPRESSION = 'off'),
-    FAMILY `Family2` (COMPRESSION = 'lz4'),
+    `Key3` Int32 NOT NULL COMPRESSION (algorithm = off),
+    `Value1` Utf8 COMPRESSION (algorithm = lz4),
+    `Value2` Int16 COMPRESSION (algorithm = zstd, level = 1),
+    `Value3` String COMPRESSION (algorithm = zstd, level = 10),
     PRIMARY KEY (`Key1`, `Key2`, `Key3`)
 )
 PARTITION BY HASH (`Key1`, `Key2`)
@@ -1998,11 +1986,11 @@ ALTER TABLE `test_show_create`
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `ENCODING.DICTIONARY.ENABLED`=`true`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`);
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
     `Col1` Uint64 NOT NULL,
-    `Col2` JsonDocument,
+    `Col2` JsonDocument COMPRESSION (algorithm = zstd, level = 4),
     `Col3` Uint32,
     PRIMARY KEY (`Col1`)
 )
@@ -2012,7 +2000,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
 );
 
-ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`, `SERIALIZER.CLASS_NAME` = `ARROW_SERIALIZER`, `COMPRESSION.TYPE` = `zstd`, `COMPRESSION.LEVEL` = `4`);
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`);
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
 )"
@@ -2147,7 +2135,6 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, N
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `ENCODING.DICTIONARY.ENABLED`=`true`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DEFAULT_VALUE`=`100`);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`lz4`);
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
     `Col1` Uint64 NOT NULL,
@@ -2163,7 +2150,7 @@ WITH (
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DEFAULT_VALUE` = `100`);
 
-ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`, `SERIALIZER.CLASS_NAME` = `ARROW_SERIALIZER`, `COMPRESSION.TYPE` = `lz4`);
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`);
 
 ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = max_index, TYPE = MAX, FEATURES = `{"column_name":"Col2"}`);
 
@@ -4343,134 +4330,6 @@ R"(CREATE TABLE `test_show_create` (
         NKqp::CompareYson(R"([
             [[0u]];
         ])", ysonString);
-    }
-
-    Y_UNIT_TEST_TWIN(QueryMetricsLocksBroken, UseSink) {
-        TTestEnvSettings settings;
-        settings.EnableSVP = true;
-        settings.TableServiceConfig.SetEnableOltpSink(UseSink);
-        TTestEnv env(1, 2, settings);
-        CreateTenant(env, "Tenant1", true);
-
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(env.GetEndpoint())
-            .SetDiscoveryMode(EDiscoveryMode::Off)
-            .SetDatabase("/Root/Tenant1");
-        auto driver = TDriver(driverConfig);
-
-        TTableClient client(driver);
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        auto victimSession = client.CreateSession().GetValueSync().GetSession();
-
-        // Create table and insert initial data
-        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/Tenant1/TableLocks` (
-                Key Uint64,
-                Value String,
-                PRIMARY KEY (Key)
-            );
-        )").GetValueSync());
-
-        NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-            "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"Initial\")",
-            TTxControl::BeginTx().CommitTx()
-        ).GetValueSync());
-
-        // Establish locks by reading in a transaction (victim)
-        std::optional<TTransaction> victimTx;
-        while (!victimTx) {
-            auto result = victimSession.ExecuteDataQuery(
-                "SELECT * FROM `/Root/Tenant1/TableLocks` WHERE Key = 1u /* victim-query */",
-                TTxControl::BeginTx()
-            ).ExtractValueSync();
-            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
-
-            TString yson = FormatResultSetYson(result.GetResultSet(0));
-            if (yson == "[]") {
-                continue;  // Data not visible yet, retry
-            }
-
-            victimTx = result.GetTransaction();
-            UNIT_ASSERT(victimTx);
-        }
-
-        // Breaker transaction: writes to key 1, breaking victim's read lock
-        NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-            "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"BreakerValue\") /* lock-breaker */",
-            TTxControl::BeginTx().CommitTx()
-        ).GetValueSync());
-
-        // Victim tries to commit with write to the same key
-        // This triggers lock validation, which fails because the lock on key 1 was broken
-        auto commitResult = victimSession.ExecuteDataQuery(
-            "UPSERT INTO `/Root/Tenant1/TableLocks` (Key, Value) VALUES (1u, \"VictimValue\") /* victim-commit */",
-            TTxControl::Tx(*victimTx).CommitTx()
-        ).ExtractValueSync();
-
-        // Victim should be ABORTED because its locks were broken
-        UNIT_ASSERT_VALUES_EQUAL(commitResult.GetStatus(), EStatus::ABORTED);
-
-        // Wait for stats to be collected and check both LocksBrokenAsBreaker and LocksBrokenAsVictim
-        ui64 locksBrokenAsBreaker = 0;
-        ui64 locksBrokenAsVictim = 0;
-        bool foundBreaker = false;
-        bool foundVictim = false;
-
-        for (size_t iter = 0; iter < 30 && (!foundBreaker || !foundVictim); ++iter) {
-            // Query both breaker and victim metrics in one pass
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT QueryText, LocksBrokenAsBreaker, LocksBrokenAsVictim
-                FROM `/Root/Tenant1/.sys/query_metrics_one_minute`
-                WHERE QueryText LIKE '%lock-breaker%' OR QueryText LIKE '%victim-commit%';
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString ysonString = NKqp::StreamResultToYson(it);
-            Cerr << "Query metrics result: " << ysonString << Endl;
-
-            auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
-            UNIT_ASSERT(node.IsList());
-
-            for (const auto& row : node.AsList()) {
-                if (!row.IsList() || row.AsList().size() < 3) continue;
-
-                auto getStringValue = [](const NYT::TNode& n) -> TString {
-                    if (n.IsList() && !n.AsList().empty()) {
-                        return n.AsList()[0].AsString();
-                    }
-                    return n.AsString();
-                };
-                auto getUint64Value = [](const NYT::TNode& n) -> ui64 {
-                    if (n.IsList() && !n.AsList().empty()) {
-                        return n.AsList()[0].AsUint64();
-                    }
-                    return n.AsUint64();
-                };
-
-                TString queryText = getStringValue(row.AsList()[0]);
-                ui64 breaker = getUint64Value(row.AsList()[1]);
-                ui64 victim = getUint64Value(row.AsList()[2]);
-
-                if (queryText.Contains("lock-breaker") && !queryText.Contains("query_metrics")) {
-                    locksBrokenAsBreaker = breaker;
-                    foundBreaker = true;
-                }
-                if (queryText.Contains("victim-commit") && !queryText.Contains("query_metrics")) {
-                    locksBrokenAsVictim = victim;
-                    foundVictim = true;
-                }
-            }
-
-            if (!foundBreaker || !foundVictim) {
-                Sleep(TDuration::Seconds(5));
-            }
-        }
-
-        UNIT_ASSERT_C(foundBreaker, "Breaker not found in metrics");
-        UNIT_ASSERT_C(foundVictim, "Victim not found in metrics");
-
-        UNIT_ASSERT_VALUES_EQUAL(locksBrokenAsBreaker, 1u);
-        UNIT_ASSERT_VALUES_EQUAL(locksBrokenAsVictim, 1u);
     }
 }
 

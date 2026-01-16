@@ -266,6 +266,89 @@ public:
     }
 };
 
+enum class EQueryMode {
+    And,
+    Or
+};
+
+
+class TValidationException : public yexception {
+};
+
+static EQueryMode QueryModeFromString(const TString& mode) {
+    if (mode.empty()) {
+        return EQueryMode::And;
+    } else if (to_lower(mode) == "and") {
+        return EQueryMode::And;
+    } else if (to_lower(mode) == "or") {
+        return EQueryMode::Or;
+    } else {
+        throw TValidationException() << "Unsupported query mode: `" << EscapeC(mode) << "`. Should be `and` or `or`";
+    }
+}
+
+
+ui32 NormalizeMinimumShouldMatch(i32 wordsCount, i32 minimumShouldMatch) {
+    // NOTE
+    // as per lucene documentation, minimum should match should be at least 1
+    // and at most the number of words in the query
+    if (minimumShouldMatch <= 0) {
+        return 1;
+    }
+    if (minimumShouldMatch > wordsCount) {
+        return wordsCount;
+    }
+
+    return minimumShouldMatch;
+}
+
+ui32 MinimumShouldMatchFromString(i32 wordsCount, EQueryMode queryMode, const TString& minimumShouldMatch) {
+    if (minimumShouldMatch.empty()) {
+        if (queryMode == EQueryMode::And) {
+            return wordsCount;
+        } else {
+            // at least one word should be matched
+            return 1;
+        }
+    } else {
+        if (queryMode != EQueryMode::Or) {
+            throw TValidationException() << "MinimumShouldMatch is not supported for AND query mode";
+        }
+
+        if (minimumShouldMatch.EndsWith("%")) {
+            i32 intValue;
+            if (!TryFromString<i32>(minimumShouldMatch.substr(0, minimumShouldMatch.size() - 1), intValue)) {
+                throw TValidationException() << "MinimumShouldMatch is incorrect. Invalid percentage: `" << EscapeC(minimumShouldMatch) << "`. Should be a number";
+            }
+            if (intValue <= 0) {
+                throw TValidationException() << "MinimumShouldMatch is incorrect. Invalid percentage: `" << EscapeC(minimumShouldMatch) << "`. Should be positive";
+            }
+            if (intValue > 100) {
+                throw TValidationException() << "MinimumShouldMatch is incorrect. Invalid percentage: `" << EscapeC(minimumShouldMatch) << "`. Should be less than or equal to 100";
+            }
+
+            return NormalizeMinimumShouldMatch(wordsCount, (i32)(std::floor(static_cast<double>(wordsCount) * intValue / 100.0 + EPSILON) + EPSILON));
+        }
+
+        i32 intValue;
+        if (!TryFromString<i32>(minimumShouldMatch, intValue)) {
+            throw TValidationException() << "MinimumShouldMatch is incorrect. Invalid value: `" << EscapeC(minimumShouldMatch) << "`. Should be a number";
+        }
+
+        if (intValue <= -wordsCount) {
+            return 1;
+        } if (intValue > wordsCount) {
+            return wordsCount;
+        }
+
+        if (intValue < 0) {
+            return NormalizeMinimumShouldMatch(wordsCount, wordsCount + intValue);
+        }
+
+        return NormalizeMinimumShouldMatch(wordsCount, intValue);
+    }
+}
+
 class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
     const ui64 DocCount = 0;
     const double AvgDL = 1.0;
@@ -274,9 +357,13 @@ class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
     double BFactor = B_FACTOR_DEFAULT;
     const TVector<std::pair<i32, NScheme::TTypeInfo>> ResultCellIndices;
     const TConstArrayRef<NScheme::TTypeInfo> DocumentKeyColumnTypes;
+    const EQueryMode QueryMode;
+    const ui32 MinimumShouldMatch;
 
 public:
     TQueryCtx(size_t wordCount, ui64 totalDocLength, ui64 docCount,
+        const TString& queryMode,
+        const TString& minimumShouldMatch,
         const TVector<std::pair<i32, NScheme::TTypeInfo>> resultCellIndices,
         const TConstArrayRef<NScheme::TTypeInfo> documentKeyColumnTypes)
         : DocCount(docCount)
@@ -284,6 +371,8 @@ public:
         , IDFValues(wordCount, 0.0)
         , ResultCellIndices(resultCellIndices)
         , DocumentKeyColumnTypes(documentKeyColumnTypes)
+        , QueryMode(QueryModeFromString(queryMode))
+        , MinimumShouldMatch(MinimumShouldMatchFromString(wordCount, QueryMode, minimumShouldMatch))
     {
     }
 
@@ -325,6 +414,14 @@ public:
         return BFactor;
     }
 
+    EQueryMode GetQueryMode() const {
+        return QueryMode;
+    }
+
+    ui32 GetMinimumShouldMatch() const {
+        return MinimumShouldMatch;
+    }
+
     double GetAvgDL() const {
         return AvgDL;
     }
@@ -362,7 +459,7 @@ public:
     {}
 
     bool AllWordsContained() const {
-        return NumContainingWords == ContainingWords.size();
+        return NumContainingWords >= QueryCtx->GetMinimumShouldMatch();
     }
 
     void AddContainingWord(size_t wordIndex, ui64 docFreq) {
@@ -880,7 +977,7 @@ struct TReadInfo {
     ui64 ShardId;
 };
 
-class TFullTextContainsSource : public TActorBootstrapped<TFullTextContainsSource>, public NYql::NDq::IDqComputeActorAsyncInput {
+class TFullTextContainsSource : public TActorBootstrapped<TFullTextContainsSource>, public NYql::NDq::IDqComputeActorAsyncInput, public NActors::IActorExceptionHandler {
 private:
 
     struct TEvPrivate {
@@ -962,6 +1059,7 @@ private:
     std::priority_queue<TDocumentIdPointer, TVector<TDocumentIdPointer>> MergeQueue;
     std::deque<TIntrusivePtr<TDocumentInfo>> ResultQueue;
     TActorId PipeCacheId;
+    size_t FinishedWords = 0;
 
     ui64 DocCount = 0;
     ui64 SumDocLength = 0;
@@ -1068,7 +1166,7 @@ private:
 
     void StartWordReads() {
         QueryCtx = MakeIntrusive<TQueryCtx>(
-            Words.size(), SumDocLength, DocCount, ResultCellIndices, MainTableReader->GetKeyColumnTypes());
+            Words.size(), SumDocLength, DocCount, Settings->GetQueryMode(), Settings->GetMinimumShouldMatch(), ResultCellIndices, MainTableReader->GetKeyColumnTypes());
 
         if (Settings->HasBFactor() && Settings->GetBFactor() > EPSILON) {
             QueryCtx->SetBFactor(Settings->GetBFactor());
@@ -1339,6 +1437,29 @@ public:
         }
     }
 
+    bool OnUnhandledException(const std::exception_ptr& exception) override {
+        try {
+            if (exception) {
+                std::rethrow_exception(exception);
+            }
+        } catch (const TValidationException& ex) {
+            RuntimeError(ex.what(), NYql::NDqProto::StatusIds::BAD_REQUEST);
+            return true;
+        } catch (const std::exception& ex) {
+            RuntimeError(ex.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+            return true;
+        } catch (const TMemoryLimitExceededException& ex) {
+            RuntimeError("Memory limit exceeded at full text source", NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
+            return true;
+        }
+
+        return false;
+    }
+
+    bool OnUnhandledException(const std::exception&) override {
+        return false;
+    }
+
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
         // implement retry logic a bit later
         CA_LOG_D("TEvDeliveryProblem was received");
@@ -1411,13 +1532,10 @@ public:
     void DocumentDetailsResult(NKikimr::TEvDataShard::TEvReadResult &msg, ui64) {
         for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
-            auto it = DocumentInfos.find(GetDocumentId(row));
-            YQL_ENSURE(it != DocumentInfos.end());
-
-            const TIntrusivePtr<NKikimr::NKqp::TDocumentInfo> documentInfoPtr = it->second;
-            documentInfoPtr->AddRow(row);
-            if (PostfilterMatchers.empty() || Postfilter(*documentInfoPtr)) {
-                ResultQueue.push_back(documentInfoPtr);
+            const auto& doc = DocumentInfos.at(GetDocumentId(row));
+            doc->AddRow(row);
+            if (PostfilterMatchers.empty() || Postfilter(*doc)) {
+                ResultQueue.push_back(doc);
             }
         }
 
@@ -1439,9 +1557,7 @@ public:
     void DocumentStatsResult(NKikimr::TEvDataShard::TEvReadResult &msg) {
         for(size_t i = 0; i < msg.GetRowsCount(); ++i) {
             const auto& row = msg.GetCells(i);
-            auto it = DocumentInfos.find(GetDocumentId(row));
-            YQL_ENSURE(it != DocumentInfos.end());
-            auto& doc = it->second;
+            auto& doc = DocumentInfos.at(GetDocumentId(row));
             doc->SetDocumentLength(DocsTableReader->GetDocumentLength(row));
 
             if (Limit > 0) {
@@ -1503,9 +1619,19 @@ public:
             }
         }
 
-        while (MergeQueue.size() == Words.size()) {
+        if (finished) {
+            ContinueWordRead(wordInfo);
+        }
+
+        while (MergeQueue.size() == Words.size() - FinishedWords && !MergeQueue.empty()) {
             const auto& documentIdPointer = MergeQueue.top();
             if (documentIdPointer.Finished) {
+                if (QueryCtx->GetQueryMode() == EQueryMode::Or) {
+                    FinishedWords++;
+                    MergeQueue.pop();
+                    continue;
+                }
+
                 break;
             }
 
@@ -1540,9 +1666,6 @@ public:
 
         NotifyCA();
 
-        if (finished) {
-            ContinueWordRead(wordInfo);
-        }
     }
 
     void HandleReadResult(TEvDataShard::TEvReadResult::TPtr& ev) {

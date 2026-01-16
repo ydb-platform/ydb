@@ -26,19 +26,32 @@ bool IsBase64(const std::string& value) {
 
 namespace NLogin {
 
-TArgonSecret ParseArgonHash(const TStringBuf argonHash) {
-    size_t pos = argonHash.find('$');
+using namespace NLoginProto;
+
+THashSecret SplitPasswordHash(const TStringBuf hash) {
+    size_t pos = hash.find('$');
     if (pos == NPOS) {
         return {};
     }
 
-    const TStringBuf salt = argonHash.substr(0, pos);
-    const TStringBuf hash = argonHash.substr(pos + 1);
-    if (salt.empty() || hash.empty()) {
+    const TStringBuf initParams = hash.substr(0, pos);
+    const TStringBuf hashValues = hash.substr(pos + 1);
+    if (initParams.empty() || hashValues.empty()) {
         return {};
     }
 
-    return { TString(salt), TString(hash) };
+    return { TString(initParams), TString(hashValues) };
+}
+
+TArgonSecret ParseArgonHash(const TStringBuf argonHash) {
+    auto hashSecret = SplitPasswordHash(argonHash);
+    if (hashSecret.HashInitParams.empty() || hashSecret.HashValues.empty()) {
+        return {};
+    }
+
+    TString salt = std::move(hashSecret.HashInitParams);
+    TString hash = std::move(hashSecret.HashValues);
+    return { std::move(salt), std::move(hash) };
 }
 
 TMaybe<TString> ArgonHashToNewFormat(const TStringBuf oldArgonHash) {
@@ -99,41 +112,73 @@ TMaybe<THashes> ConvertHashes(const TString& hash) {
     }
 }
 
-NLogin::TScramSecret ParseScramHash(const TStringBuf hash) {
-    size_t pos = hash.find('$');
+TScramInitHashParams ParseScramHashInitParams(const TStringBuf hashInitParams) {
+    size_t pos = hashInitParams.find(':');
     if (pos == NPOS) {
         return {};
     }
 
-    const TStringBuf iterSalt = hash.substr(0, pos);
-    const TStringBuf storedKeyServerKey = hash.substr(pos + 1);
-    if (iterSalt.empty() || storedKeyServerKey.empty()) {
-        return {};
-    }
-
-    pos = iterSalt.find(':');
-    if (pos == NPOS) {
-        return {};
-    }
-
-    const TStringBuf iterationsCount = iterSalt.substr(0, pos);
-    const TStringBuf salt = iterSalt.substr(pos + 1);
+    const TStringBuf iterationsCount = hashInitParams.substr(0, pos);
+    const TStringBuf salt = hashInitParams.substr(pos + 1);
     if (iterationsCount.empty() || salt.empty()) {
         return {};
     }
 
-    pos = storedKeyServerKey.find(':');
+    return { TString(iterationsCount), TString(salt) };
+}
+
+TScramHashValues ParseScramHashValues(const TStringBuf hashValues) {
+    size_t pos = hashValues.find(':');
     if (pos == NPOS) {
         return {};
     }
 
-    const TStringBuf storedKey = storedKeyServerKey.substr(0, pos);
-    const TStringBuf serverKey = storedKeyServerKey.substr(pos + 1);
+    const TStringBuf storedKey = hashValues.substr(0, pos);
+    const TStringBuf serverKey = hashValues.substr(pos + 1);
     if (storedKey.empty() || serverKey.empty()) {
         return {};
     }
 
-    return { TString(iterationsCount), TString(salt), TString(storedKey), TString(serverKey) };
+    return { TString(storedKey), TString(serverKey) };
+}
+
+TScramSecret ParseScramHash(const TStringBuf scramHash) {
+    auto hashSecret = SplitPasswordHash(scramHash);
+    if (hashSecret.HashInitParams.empty() || hashSecret.HashValues.empty()) {
+        return {};
+    }
+
+    auto initParams = ParseScramHashInitParams(hashSecret.HashInitParams);
+    if (initParams.IterationsCount.empty() || initParams.Salt.empty()) {
+        return {};
+    }
+
+    auto hashValues = ParseScramHashValues(hashSecret.HashValues);
+    if (hashValues.StoredKey.empty() || hashValues.ServerKey.empty()) {
+        return {};
+    }
+
+    return { std::move(initParams.IterationsCount), std::move(initParams.Salt),
+        std::move(hashValues.StoredKey), std::move(hashValues.ServerKey)
+    };
+}
+
+THashMap<EHashType::HashType, TString> MakePasswordHashesMap(const TString& hashes) {
+    THashMap<EHashType::HashType, TString> result;
+
+    NJson::TJsonValue json;
+    NJson::ReadJsonTree(Base64StrictDecode(hashes), &json);
+
+    for (const auto& [fieldName, value] : json.GetMap()) {
+        if (fieldName == "version") {
+            continue;
+        }
+
+        const auto& hashTypeDescription = HashesRegistry.HashNamesMap.at(fieldName);
+        result[hashTypeDescription.Type] = value.GetString();
+    }
+
+    return result;
 }
 
 THashesChecker::TResult THashesChecker::OldFormatCheck(const TString& hash) {

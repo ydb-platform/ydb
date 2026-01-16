@@ -5305,6 +5305,13 @@
             "uri": "https://{canondata_backend}/1597364/0dfdd9be36ea9ae7f51895a91916fc4ec61ed0d8/resource.tar.gz#test_sql2yql.test_linear-mutdict_upsert_/sql.yql"
         }
     ],
+    "test_sql2yql.test[linear-not_consumed_tuple_item]": [
+        {
+            "checksum": "d55cc0811581bdf66466792af217e738",
+            "size": 1106,
+            "uri": "https://{canondata_backend}/1946324/6444bd1a0be749bb94be75f1a8ca64ed8b971099/resource.tar.gz#test_sql2yql.test_linear-not_consumed_tuple_item_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[linear-opt_block1]": [
         {
             "checksum": "295de2b8e5b7ab78ae0c27ab40c3e8e6",
@@ -5331,6 +5338,13 @@
             "checksum": "9eb82256a4af3df5fe811fc856bf4021",
             "size": 1551,
             "uri": "https://{canondata_backend}/1600758/347bcbaaa0880e8fce734e45f36d8bcfa59ac5d5/resource.tar.gz#test_sql2yql.test_linear-opt_block_multi_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[linear-runtime_not_consumed]": [
+        {
+            "checksum": "c0fa1c707f27fd63e9460938a61b8e70",
+            "size": 1365,
+            "uri": "https://{canondata_backend}/1942278/582c05770fda935327af6b1752dcf81964a7e2dd/resource.tar.gz#test_sql2yql.test_linear-runtime_not_consumed_/sql.yql"
         }
     ],
     "test_sql2yql.test[linear-types]": [
@@ -13554,6 +13568,11 @@
             "uri": "file://test_sql_format.test_linear-mutdict_upsert_/formatted.sql"
         }
     ],
+    "test_sql_format.test[linear-not_consumed_tuple_item]": [
+        {
+            "uri": "file://test_sql_format.test_linear-not_consumed_tuple_item_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[linear-opt_block1]": [
         {
             "uri": "file://test_sql_format.test_linear-opt_block1_/formatted.sql"
@@ -13572,6 +13591,11 @@
     "test_sql_format.test[linear-opt_block_multi]": [
         {
             "uri": "file://test_sql_format.test_linear-opt_block_multi_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[linear-runtime_not_consumed]": [
+        {
+            "uri": "file://test_sql_format.test_linear-runtime_not_consumed_/formatted.sql"
         }
     ],
     "test_sql_format.test[linear-types]": [

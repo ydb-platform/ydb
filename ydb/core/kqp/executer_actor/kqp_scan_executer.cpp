@@ -181,6 +181,10 @@ private:
             return;
         }
 
+        if (Stats) {
+            Stats->Prepare();
+        }
+
         ui32 nShardScans = 0;
         TVector<ui64> computeTasks;
 

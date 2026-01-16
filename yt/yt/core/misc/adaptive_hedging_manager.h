@@ -13,13 +13,13 @@ namespace NYT {
 struct TAdaptiveHedgingManagerStatistics
 {
     //! Number of primary requests registered for hedging.
-    int PrimaryRequestCount;
+    int PrimaryRequestCount = 0;
     //! Number of requests that were actually hedged.
-    int SecondaryRequestCount;
+    int SecondaryRequestCount = 0;
     //! Number of secondary requests put into the queue waiting for the hedging quota.
-    int QueuedRequestCount;
+    int QueuedRequestCount = 0;
     //! Maximum number of requests simultaneously present in the waiting queue.
-    int MaxQueueSize;
+    int MaxQueueSize = 0;
     //! Current hedging delay before invocation of secondary request.
     TDuration HedgingDelay;
 
@@ -31,14 +31,14 @@ struct TAdaptiveHedgingManagerStatistics
 struct IAdaptiveHedgingManager
     : public TRefCounted
 {
-    //! Will register request and schedule invocation of its corresponding secondary request.
+    //! Registers request and schedule invocation of its corresponding secondary request.
     //! #startSecondaryRequest will be called when the conditions are met, i.e.
     //! (adaptive) deadline is reached, quota is not exhausted and primary request has not finished yet.
     virtual void RegisterRequest(
         TFuture<void> requestFuture,
         TClosure startSecondaryRequest) = 0;
 
-    //! Will return a set of statistics accumulated since last call to this method.
+    //! Returns a set of statistics accumulated since last call to this method.
     virtual TAdaptiveHedgingManagerStatistics CollectStatistics() = 0;
 };
 

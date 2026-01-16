@@ -34,7 +34,7 @@ public:
         bool IsExpired = true;
     };
 
-    virtual ~ICache() = default;
+    ~ICache() override = default;
     virtual NThreading::TFuture<TEntry> Get(const TKey& key) const = 0;
     virtual NThreading::TFuture<void> Update(const TKey& key, TValue value) const = 0;
 };

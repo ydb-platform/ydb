@@ -22,7 +22,7 @@ public:
         , TypeAnnTransformer(std::move(typeAnnTransformer))
         , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
         , FuncRegistry(funcRegistry)
-        , CBOCtx(TKqpProviderContext(kqpCtx, kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->DefaultCostBasedOptimizationLevel))) {
+        , CBOCtx(TKqpProviderContext(kqpCtx, kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->GetDefaultCostBasedOptimizationLevel()))) {
     }
 
    TKqpOptimizeContext& KqpCtx;

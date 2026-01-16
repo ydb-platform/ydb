@@ -30,7 +30,7 @@ typedef TVector<TTableRef> TTableList;
 class IJoin;
 class ISource: public INode {
 public:
-    virtual ~ISource();
+    ~ISource() override;
 
     virtual bool IsFake() const;
     virtual void AllColumns();
@@ -92,14 +92,14 @@ public:
     virtual bool SetSamplingRate(TContext& ctx, ESampleClause clause, TNodePtr samplingRate);
     virtual IJoin* GetJoin();
     virtual ISource* GetCompositeSource();
-    virtual bool IsSelect() const;
+    bool IsSelect() const override;
     virtual bool IsTableSource() const;
     virtual bool ShouldUseSourceAsColumn(const TString& source) const;
     virtual bool IsJoinKeysInitializing() const;
     virtual const TString* GetWindowName() const;
     virtual bool HasMatchRecognize() const;
     virtual TNodePtr BuildMatchRecognize(TContext& ctx, TString&& inputTable);
-    virtual bool DoInit(TContext& ctx, ISource* src);
+    bool DoInit(TContext& ctx, ISource* src) override;
     virtual TNodePtr Build(TContext& ctx) = 0;
 
     virtual TMaybe<TString> FindColumnMistype(const TString& name) const;
@@ -119,7 +119,7 @@ public:
 
 protected:
     ISource(TPosition pos);
-    virtual TAstNode* Translate(TContext& ctx) const;
+    TAstNode* Translate(TContext& ctx) const override;
 
     void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortKeySelector, TNodePtr& sortDirection);
 
@@ -180,9 +180,9 @@ struct TJoinLinkSettings {
 
 class IJoin: public ISource {
 public:
-    virtual ~IJoin();
+    ~IJoin() override;
 
-    virtual IJoin* GetJoin();
+    IJoin* GetJoin() override;
     virtual TNodePtr BuildJoinKeys(TContext& ctx, const TVector<TDeferredAtom>& names) = 0;
     virtual void SetupJoin(const TString& joinOp, TNodePtr joinExpr, const TJoinLinkSettings& linkSettings) = 0;
     virtual const THashMap<TString, THashSet<TString>>& GetSameKeysMap() const = 0;

@@ -718,6 +718,11 @@ public:
      * Release all input data from worker state
      */
     virtual void Invalidate() = 0;
+
+    /**
+     * Check worker state. Should be called after finish of processing. Preliminary calls are allowed too to detect early errors.
+     */
+    virtual void CheckState(bool isFinished) = 0;
 };
 
 /**

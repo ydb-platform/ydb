@@ -72,6 +72,7 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(TString, DomainName, "Root");
     FLUENT_SETTING_DEFAULT(bool, CreateSampleTenants, false);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePools, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableResourcePoolsScheduler, true);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePoolsOnServerless, false);
     FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
     FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
@@ -116,6 +117,7 @@ public:
     virtual NActors::TActorId CreateInFlightCoordinator(ui32 numberRequests, ui32 expectedInFlight) const = 0;
 
     // Pools actions
+    virtual void CreateResourcePool(const TString& poolId, const NResourcePool::TPoolSettings& settings) const = 0;
     virtual void CreateSamplePoolOn(const TString& databaseId) const = 0;
     virtual TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const = 0;
     virtual void WaitPoolState(const TPoolStateDescription& state, const TString& poolId = "") const = 0;

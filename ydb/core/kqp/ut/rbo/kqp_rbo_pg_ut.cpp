@@ -576,6 +576,23 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
     }
 
+    void InsertIntoSchema1(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < numRows; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i + 2)
+                .AddMember("c").Int64(i + 1)
+                .EndStruct();
+        }
+        rows.EndList();
+        auto resultUpsert = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+    }
+
+ 
     void CreateSimpleTable(TKikimrRunner &kikimr) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -742,14 +759,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             R"(
                 --!syntax_pg
                 SET TablePathPrefix = "/Root/";
-                select sum(t1.c) as sum from t1 group by t1.b
-                union all
-                select sum(t1.b) as sum from t1
-                order by sum;
-            )",
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
                 select t1.b, min(t1.a) from t1 group by t1.b order by t1.b;
             )",
             R"(
@@ -900,7 +909,6 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         std::vector<std::string> results = {
             R"([["1";"4"];["2";"6"]])",
             R"([["1";"4"];["2";"6"]])",
-            R"([["4"];["6"];["8"]])",
             R"([["1";"1"];["2";"0"]])",
             R"([["1";"3"];["2";"4"]])",
             R"([["1";"2"];["2";"3"]])",
@@ -941,6 +949,70 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
 
     Y_UNIT_TEST_TWIN(Aggregation, ColumnStore) {
         TestAggregation(ColumnStore);
+    }
+
+    Y_UNIT_TEST(MultiConsumer) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+	            b Int64,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+	            b Int64,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+        const std::vector<std::pair<std::string, int>> tables{{"/Root/t1", 4}, {"/Root/t2", 3}};
+        for (const auto &[table, rowsNum] : tables) {
+            InsertIntoSchema1(db, table, rowsNum);
+        }
+
+        std::vector<std::string> queries = {
+            R"(
+                --!syntax_pg
+                set TablePathPrefix = "/Root/";
+                select t1.a as a from t1
+                union all
+                select t1.a as a from t1 order by a;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select sum(t1.c) as sum from t1 group by t1.b
+                union all
+                select sum(t1.c) as sum from t1
+                order by sum;
+            )"
+        };
+
+        std::vector<std::string> results = {
+            R"([["0"];["0"];["1"];["1"];["2"];["2"];["3"];["3"]])",
+            R"([["1"];["2"];["3"];["4"];["10"]])"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        }
     }
 
     Y_UNIT_TEST(UnionAll) {

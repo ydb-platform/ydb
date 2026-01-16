@@ -98,6 +98,9 @@ void AddExecutorPool(NActors::TCpuManagerConfig& cpuManager, const NKikimrConfig
             if (poolConfig.HasForcedForeignSlots()) {
                 basic.ForcedForeignSlotCount = poolConfig.GetForcedForeignSlots();
             }
+            if (poolConfig.HasAllThreadsAreShared()) {
+                basic.AllThreadsAreShared = poolConfig.GetAllThreadsAreShared();
+            }
             cpuManager.Basic.emplace_back(std::move(basic));
 
             break;

@@ -182,7 +182,7 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_43_Query, TFixtureQuery)
 Y_UNIT_TEST_F(ReadRuleGeneration, TFixtureNoClient)
 {
     // There was a server
-    NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = false});
+    NotifySchemeShard({});
 
     // Users have created their own topic on it
     CreateTopic(TEST_TOPIC);
@@ -200,7 +200,7 @@ Y_UNIT_TEST_F(ReadRuleGeneration, TFixtureNoClient)
     CloseTopicReadSession(TEST_TOPIC, "consumer-1");
 
     // And then the Logbroker team turned on the feature flag
-    NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = true});
+    NotifySchemeShard({});
 
     // Users continued to write to the topic
     WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-4");

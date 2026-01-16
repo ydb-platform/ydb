@@ -27,6 +27,12 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
             << NUri::ParsedStateToString(parseStatus));
     }
 
+    // Extract host and port
+    TStringBuf host = uri.GetHost();
+    if (host.empty()) {
+        ythrow TContractViolation("Connection string must contain a host");
+    }
+
     // Validate and extract scheme
     TStringBuf scheme = uri.GetField(NUri::TUri::FieldScheme);
     if (!scheme.empty()) {
@@ -36,14 +42,7 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
         connectionInfo.EnableSsl = (scheme == "grpcs");
     } else {
         // No scheme provided - enable SSL if host is not localhost
-        TStringBuf host = uri.GetHost();
         connectionInfo.EnableSsl = (host != "localhost");
-    }
-
-    // Extract host and port
-    TStringBuf host = uri.GetHost();
-    if (host.empty()) {
-        ythrow TContractViolation("Connection string must contain a host");
     }
     
     ui16 port = uri.GetPort();

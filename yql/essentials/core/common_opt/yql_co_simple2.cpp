@@ -671,7 +671,7 @@ TExprNode::TPtr ApplyAndAbsorption(const TExprNode::TPtr& node, TExprContext& ct
 bool IsOptimizeXNotXEnabled(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
     static const char Flag[] = "OptimizeXNotX";
-    return IsOptimizerEnabled<Flag>(*optCtx.Types) && !IsOptimizerDisabled<Flag>(*optCtx.Types);
+    return !IsOptimizerDisabled<Flag>(*optCtx.Types);
 }
 
 const TExprNode* UnwrapUnessential(const TExprNode* node) {

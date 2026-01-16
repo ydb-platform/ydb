@@ -64,6 +64,7 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
     }
 
     // If database not found in query and path exists, use path as database
+    // Note: NUri already includes the leading '/' in the path
     if (connectionInfo.Database.empty() && !path.empty()) {
         connectionInfo.Database = std::string(path);
     }

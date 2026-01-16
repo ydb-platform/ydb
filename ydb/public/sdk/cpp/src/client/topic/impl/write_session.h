@@ -241,11 +241,8 @@ private:
     std::list<TMessageInfo> InFlightMessages;
 
     NThreading::TPromise<void> MessagesNotEmptyPromise;
-    // NThreading::TFuture<void> MessagesNotEmptyFuture;
     NThreading::TPromise<void> ClosePromise;
-    // NThreading::TFuture<void> CloseFuture;
     NThreading::TPromise<void> EventsProcessedPromise;
-    // NThreading::TFuture<void> EventsProcessedFuture;
 
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;

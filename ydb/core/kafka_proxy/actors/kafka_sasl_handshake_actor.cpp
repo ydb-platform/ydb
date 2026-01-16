@@ -28,7 +28,7 @@ void TKafkaSaslHandshakeActor::Handshake() {
         return;
     }
 
-    if (HandshakeRequestData->Mechanism->StartsWith("SCRAM") && NKikimr::IsLdapAuthenticationEnable(NKikimr::AppData()->AuthConfig)) {
+    if (HandshakeRequestData->Mechanism->StartsWith("SCRAM") && NKikimr::IsLdapAuthenticationEnabled(NKikimr::AppData()->AuthConfig)) {
         SendResponse("Does not support Scram mechanisms with LDAP authentication.", EKafkaErrors::UNSUPPORTED_SASL_MECHANISM, EAuthSteps::FAILED);
     }
 

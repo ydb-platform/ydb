@@ -233,7 +233,22 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext& ctx) {
+TStatus ComputeTypes(std::shared_ptr<TOpAddDependencies> addDeps, TRBOContext& ctx) {
+    const TTypeAnnotationNode* inputType = addDeps->GetInput()->Type;
+    auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto resStructItemTypes = structType->GetItems();
+
+    for (size_t i=0; i<addDeps->Dependencies.size(); i++) {
+        resStructItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(addDeps->Dependencies[i].GetFullName(), addDeps->Types[i]));
+    }
+
+    auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resStructItemTypes);
+    const TTypeAnnotationNode* resultAnn = ctx.ExprCtx.MakeType<TListExprType>(resultItemType);
+    addDeps->Type = resultAnn;
+    return TStatus::Ok;
+}
+
+TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
     Y_UNUSED(ctx);
     auto leftInputType = unionAll->GetLeftInput()->Type;
     // TODO: Add sanity checks.
@@ -345,6 +360,9 @@ TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProp
     }
     else if(MatchOperator<TOpMap>(op)) {
         return ComputeTypes(CastOperator<TOpMap>(op), ctx);
+    }
+    else if(MatchOperator<TOpAddDependencies>(op)) {
+        return ComputeTypes(CastOperator<TOpAddDependencies>(op), ctx);
     }
     else if(MatchOperator<TOpJoin>(op)) {
         return ComputeTypes(CastOperator<TOpJoin>(op), ctx);

@@ -15,7 +15,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Project, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
 
 /* Represents aggregation phases. */
 enum EAggregationPhase : ui32 {Intermediate, Final};
@@ -318,12 +318,20 @@ struct TSubplanEntry {
     std::shared_ptr<IOperator> Plan;
     TVector<TInfoUnit> Tuple;
     ESubplanType Type;
+    TInfoUnit IU;
 };
 
 struct TSubplans {
 
     void Add(TInfoUnit iu, TSubplanEntry entry) {
         OrderedList.push_back(iu);
+        PlanMap.insert({iu, entry});
+    }
+
+    void Replace(TInfoUnit iu, std::shared_ptr<IOperator> op) {
+        auto entry = PlanMap.at(iu);
+        entry.Plan = op;
+        PlanMap.erase(iu);
         PlanMap.insert({iu, entry});
     }
 
@@ -529,6 +537,20 @@ class TOpMap : public IUnaryOperator {
     bool Ordered = false;
 };
 
+/**
+ * OpAddDependencies is a temporary operator to infuse dependencies into a correlated subplan
+ * This operator needs to be removed during query decorrelation
+ */
+class TOpAddDependencies : public IUnaryOperator {
+  public:
+    TOpAddDependencies(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& columns, const TVector<const TTypeAnnotationNode*>& types);
+    virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TString ToString(TExprContext& ctx) override;
+
+    TVector<TInfoUnit> Dependencies;
+    TVector<const TTypeAnnotationNode*> Types;
+};
+
 class TOpProject : public IUnaryOperator {
   public:
     TOpProject(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& projectList);
@@ -685,12 +707,13 @@ class TOpRoot : public IUnaryOperator {
 
     struct Iterator {
         struct IteratorItem {
-            IteratorItem(std::shared_ptr<IOperator> curr, std::shared_ptr<IOperator> parent, size_t idx)
-                : Current(curr), Parent(parent), ChildIndex(idx) {}
+            IteratorItem(std::shared_ptr<IOperator> curr, std::shared_ptr<IOperator> parent, size_t idx, std::shared_ptr<TInfoUnit> subplanIU)
+                : Current(curr), Parent(parent), ChildIndex(idx), SubplanIU(subplanIU) {}
 
             std::shared_ptr<IOperator> Current;
             std::shared_ptr<IOperator> Parent;
             size_t ChildIndex;
+            std::shared_ptr<TInfoUnit> SubplanIU;
         };
 
         using iterator_category = std::input_iterator_tag;
@@ -705,10 +728,10 @@ class TOpRoot : public IUnaryOperator {
 
             std::unordered_set<std::shared_ptr<IOperator>> visited;
             for (auto subplan : Root->PlanProps.Subplans.Get()) {
-                BuildDfsList(subplan.Plan, {}, size_t(0), visited);
+                BuildDfsList(subplan.Plan, {}, size_t(0), visited, std::make_shared<TInfoUnit>(subplan.IU));
             }
             auto child = ptr->GetInput();
-            BuildDfsList(child, {}, size_t(0), visited);
+            BuildDfsList(child, {}, size_t(0), visited, nullptr);
             CurrElement = 0;
         }
 
@@ -737,12 +760,12 @@ class TOpRoot : public IUnaryOperator {
 
       private:
         void BuildDfsList(std::shared_ptr<IOperator> current, std::shared_ptr<IOperator> parent, size_t childIdx,
-                          std::unordered_set<std::shared_ptr<IOperator>> &visited) {
+                          std::unordered_set<std::shared_ptr<IOperator>> &visited, std::shared_ptr<TInfoUnit> subplanIU) {
             for (size_t idx = 0; idx < current->Children.size(); idx++) {
-                BuildDfsList(current->Children[idx], current, idx, visited);
+                BuildDfsList(current->Children[idx], current, idx, visited, subplanIU);
             }
             if (!visited.contains(current)) {
-                DfsList.push_back(IteratorItem(current, parent, childIdx));
+                DfsList.push_back(IteratorItem(current, parent, childIdx, subplanIU));
             }
             visited.insert(current);
         }

@@ -677,6 +677,33 @@ TString TOpMap::ToString(TExprContext& ctx) {
 }
 
 /**
+ * OpAddDependencies methods
+ */
+TOpAddDependencies::TOpAddDependencies(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& columns, const TVector<const TTypeAnnotationNode*>& types) :
+    IUnaryOperator(EOperator::AddDependencies, pos, input), Dependencies(columns), Types(types) {}
+
+TVector<TInfoUnit> TOpAddDependencies::GetOutputIUs() {
+    auto ius = GetInput()->GetOutputIUs();
+    ius.insert(ius.begin(), Dependencies.begin(), Dependencies.end());
+    return ius;
+}
+
+TString TOpAddDependencies::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    
+    auto res = TStringBuilder();
+    res << "Correlated [";
+    for (size_t i=0; i<Dependencies.size(); i++) {
+        res << Dependencies[i].GetFullName();
+        if (i!=Dependencies.size()-1) {
+            res << ",";
+        }
+    }
+    res << "]";
+    return res;
+}
+
+/**
  * OpProject methods
  */
 

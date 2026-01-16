@@ -16,7 +16,7 @@ namespace NKqp {
 
  class TRemoveIdenityMapRule : public ISimplifiedRule {
   public:
-    TRemoveIdenityMapRule() : ISimplifiedRule("Remove identity map", ERuleProperties::RequireParents) {}
+    TRemoveIdenityMapRule() : ISimplifiedRule("Remove identity map", ERuleProperties::RequireParents, true) {}
 
     virtual std::shared_ptr<IOperator> SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };

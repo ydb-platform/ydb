@@ -18,11 +18,13 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
     NUri::TUri uri;
     NUri::TUri::TState::EParsed parseStatus = uri.Parse(
         connectionString, 
-        NUri::TFeature::FeaturesAll | NUri::TFeature::FeatureSchemeFlexible
+        NUri::TFeature::FeaturesDefault | NUri::TFeature::FeatureSchemeFlexible
     );
     
     if (parseStatus != NUri::TUri::TState::EParsed::ParsedOK) {
-        ythrow TContractViolation("Failed to parse connection string: invalid URI format");
+        ythrow TContractViolation(TStringBuilder() 
+            << "Failed to parse connection string: " 
+            << NUri::ParsedStateToString(parseStatus));
     }
 
     // Validate and extract scheme
@@ -33,8 +35,9 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
         }
         connectionInfo.EnableSsl = (scheme == "grpcs");
     } else {
-        // No scheme provided, assume localhost without SSL
-        connectionInfo.EnableSsl = false;
+        // No scheme provided - enable SSL if host is not localhost
+        TStringBuf host = uri.GetHost();
+        connectionInfo.EnableSsl = (host != "localhost");
     }
 
     // Extract host and port
@@ -48,24 +51,30 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
         // No port specified
         connectionInfo.Endpoint = std::string(host);
     } else {
-        connectionInfo.Endpoint = TStringBuilder() << host << ":" << port;
+        connectionInfo.Endpoint = std::string(host) + ":" + std::to_string(port);
     }
 
     // Extract database from path or query parameter
     TStringBuf path = uri.GetField(NUri::TUri::FieldPath);
     TStringBuf query = uri.GetField(NUri::TUri::FieldQuery);
 
-    // First, try to get database from query parameter
+    bool hasQueryDatabase = false;
     if (!query.empty()) {
         TCgiParameters queryParams(query);
         if (queryParams.Has("database")) {
             connectionInfo.Database = queryParams.Get("database");
+            hasQueryDatabase = true;
         }
+    }
+
+    // Database cannot be in both query params and path
+    if (hasQueryDatabase && !path.empty()) {
+        ythrow TContractViolation("Database cannot be specified in both path and query parameter");
     }
 
     // If database not found in query and path exists, use path as database
     // Note: NUri already includes the leading '/' in the path
-    if (connectionInfo.Database.empty() && !path.empty()) {
+    if (!hasQueryDatabase && !path.empty()) {
         connectionInfo.Database = std::string(path);
     }
 

@@ -67,19 +67,11 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
         }
     }
 
-    // Database cannot be in both query params and path
-    if (hasQueryDatabase && !path.empty()) {
-        ythrow TContractViolation("Database cannot be specified in both path and query parameter");
-    }
-
-    // If database not found in query and path exists, use path as database
-    // TUri removes leading '/' from path, so we need to add it back
-    if (!hasQueryDatabase && !path.empty()) {
-        if (path[0] != '/') {
-            connectionInfo.Database = "/" + std::string(path);
-        } else {
-            connectionInfo.Database = std::string(path);
+    if (!path.empty()) {
+        if (hasQueryDatabase) {
+            ythrow TContractViolation("Database cannot be specified in both path and query parameter");
         }
+        connectionInfo.Database = "/" + std::string(path);
     }
 
     return connectionInfo;

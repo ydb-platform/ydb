@@ -1434,7 +1434,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), UseStreamIndex ? 2 : 1); // TODO: avoid unnecessary UPDATE operation for StreamIndex
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
             }
 

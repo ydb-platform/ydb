@@ -141,6 +141,8 @@ public:
                 FillSrcSnapshot(txState, ui64(dstDatashardId), *combined.MutableSendSnapshot());
 
                 // Get coordinated version from source table's AlterData (shared across both drop and create)
+                // GrabTable is needed for proper rollback if operation fails
+                context.MemChanges.GrabTable(context.SS, txState->SourcePathId);
                 auto srcTable = context.SS->Tables.at(txState->SourcePathId);
                 srcTable->InitAlterData(OperationId);
                 ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);

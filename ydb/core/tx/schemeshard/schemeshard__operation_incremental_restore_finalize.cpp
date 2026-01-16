@@ -300,10 +300,18 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     continue;
                 }
 
+                // Store coordinated version BEFORE calling FinishAlter (which resets AlterData)
+                ui64 coordVersion = table->AlterData->CoordinatedSchemaVersion.GetOrElse(table->AlterVersion + 1);
+
                 // Finalize the alter - this commits AlterData to the main table state
                 LOG_I("SyncIndexSchemaVersions: Finalizing ALTER for table " << implTablePathId
                       << " version: " << table->AlterVersion << " -> " << table->AlterData->AlterVersion);
-                
+
+                // Release AlterData tracking before FinishAlter resets it
+                if (table->ReleaseAlterData(OperationId)) {
+                    context.SS->PersistClearAlterTableFull(db, implTablePathId);
+                }
+
                 table->FinishAlter();
                 context.SS->PersistTableAltered(db, implTablePathId, table);
                 
@@ -320,10 +328,8 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     if (context.SS->Indexes.contains(indexPathId)) {
                         auto oldVersion = context.SS->Indexes[indexPathId]->AlterVersion;
 
-                        // Use the coordinated version from the table's AlterData
-                        ui64 targetVersion = table->AlterData ?
-                            table->AlterData->CoordinatedSchemaVersion.GetOrElse(table->AlterVersion + 1) :
-                            table->AlterVersion + 1;
+                        // Use the coordinated version stored before FinishAlter
+                        ui64 targetVersion = coordVersion;
 
                         if (context.SS->Indexes[indexPathId]->AlterVersion < targetVersion) {
                             auto index = context.SS->Indexes[indexPathId];

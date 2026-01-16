@@ -346,11 +346,8 @@ public:
         : TSubOperation(id, state)
         , DropSnapshot(dropSnapshot)
     {
-        // Re-extract stream names from transaction when restored from state
-        const auto& op = Transaction.GetDropCdcStream();
-        for (const auto& name : op.GetStreamName()) {
-            StreamNames.push_back(name);
-        }
+        // StreamNames are not needed during state reconstruction -
+        // FillNotice dynamically finds streams marked PlannedToDrop
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {

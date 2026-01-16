@@ -1743,7 +1743,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                             YQL_ENSURE(settings.UnpackTo(sourceSettings), "Failed to parse source settings");
                             FillScanTaskLockTxId(*sourceSettings);
                             sourceSettings->ClearSnapshot();
-                        } if (settings.Is<NKikimrKqp::TKqpFullTextSourceSettings>()) {
+                        } else if (settings.Is<NKikimrKqp::TKqpFullTextSourceSettings>()) {
                             auto sourceSettings = newInput.Meta.FullTextSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpFullTextSourceSettings>();
                             YQL_ENSURE(settings.UnpackTo(sourceSettings), "Failed to parse full text source settings");
                             sourceSettings->ClearSnapshot();

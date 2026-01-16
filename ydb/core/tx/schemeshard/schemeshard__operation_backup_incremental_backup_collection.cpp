@@ -183,8 +183,6 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Incremental backup is disabled on this collection")};
     }
 
-    bool omitIndexes = bc->Description.GetIncrementalBackupConfig().GetOmitIndexes();
-
     TVector<TPathId> streams;
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
@@ -205,7 +203,7 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
         TString err;
         if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
             result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
-            return result;
+            return {};
         }
         auto& relativeItemPath = paths.second;
 
@@ -223,30 +221,44 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
             return result;
         }
         streams.push_back(stream);
+    }
 
-        if (!omitIndexes) {
+    // Process indexes if they are not omitted
+    bool omitIndexes = bc->Description.GetIncrementalBackupConfig().GetOmitIndexes();
+    if (!omitIndexes) {
+        for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+            const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
+            auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+
+            std::pair<TString, TString> paths;
+            TString err;
+            if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
+                result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
+                return result;
+            }
+            auto& relativeItemPath = paths.second;
+
+            // Iterate through table's children to find indexes
             for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-                if (!context.SS->PathsById.contains(childPathId)) {
-                    continue;
-                }
                 auto childPath = context.SS->PathsById.at(childPathId);
 
+                // Skip non-index children (CDC streams, etc.)
                 if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
                     continue;
                 }
-
+                
+                // Skip deleted indexes
                 if (childPath->Dropped()) {
                     continue;
                 }
 
-                if (!context.SS->Indexes.contains(childPathId)) {
-                    continue;
-                }
+                // Get index info and filter for global sync only
                 auto indexInfo = context.SS->Indexes.at(childPathId);
                 if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
                     continue;
                 }
 
+                // Get index implementation table (single child of index)
                 auto indexPath = TPath::Init(childPathId, context.SS);
                 Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
                 auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
@@ -255,15 +267,15 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 TString indexImplTableRelPath = JoinPath({relativeItemPath, childName, implTableName});
 
                 // Create AlterContinuousBackup for index impl table
-                NKikimrSchemeOp::TModifyScheme indexModifyScheme;
-                indexModifyScheme.SetWorkingDir(tx.GetWorkingDir());
-                indexModifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup);
-                indexModifyScheme.SetInternal(true);
+                NKikimrSchemeOp::TModifyScheme modifyScheme;
+                modifyScheme.SetWorkingDir(tx.GetWorkingDir());
+                modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup);
+                modifyScheme.SetInternal(true);
 
-                auto& indexCb = *indexModifyScheme.MutableAlterContinuousBackup();
-                indexCb.SetTableName(indexImplTableRelPath);  // Relative path: table1/index1/indexImplTable
+                auto& cb = *modifyScheme.MutableAlterContinuousBackup();
+                cb.SetTableName(indexImplTableRelPath);  // Relative path: table1/index1/indexImplTable
 
-                auto& indexIb = *indexCb.MutableTakeIncrementalBackup();
+                auto& ib = *cb.MutableTakeIncrementalBackup();
                 // Destination: {backup_collection}/{timestamp}_inc/__ydb_backup_meta/indexes/{table_path}/{index_name}
                 TString dstPath = JoinPath({
                     tx.GetBackupIncrementalBackupCollection().GetName(),
@@ -273,13 +285,13 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                     relativeItemPath,  // Relative table path (e.g., "table1")
                     childName          // Index name (e.g., "index1")
                 });
-                indexIb.SetDstPath(dstPath);
+                ib.SetDstPath(dstPath);
 
-                TPathId indexStream;
-                if (!CreateAlterContinuousBackup(opId, indexModifyScheme, context, result, indexStream)) {
+                TPathId stream;
+                if (!CreateAlterContinuousBackup(opId, modifyScheme, context, result, stream)) {
                     return result;
                 }
-                streams.push_back(indexStream);
+                streams.push_back(stream);
             }
         }
     }

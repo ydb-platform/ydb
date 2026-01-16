@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
+#include <ydb/core/persqueue/pqtablet/fix_transaction_states.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -3153,6 +3154,370 @@ Y_UNIT_TEST_F(ReadQuoter_ExclusiveLock, TPQTabletFixture)
 
     SendReleaseExclusiveLock();
     WaitReadQuotaAcquired();
+}
+
+}
+
+Y_UNIT_TEST_SUITE(TFixTransactionStatesTests) {
+
+class TFixture : public NUnitTest::TBaseFixture {
+protected:
+    void AddTransaction(ui64 txId, const TVector<ui32>& partitions);
+
+    void AddReadRange();
+    void AddPairFromPQ(ui64 txId);
+    void AddPairFromPartition(ui64 txId, ui32 partitionId);
+    void AddPair(const TString& key, ui64 txId, NKikimrPQ::TTransaction::EState state);
+
+    void InvokeFixTransactionStates();
+
+    void EnsureTransactionState(ui64 txId, NKikimrPQ::TTransaction::EState state) const;
+
+private:
+    TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult> ReadRanges;
+    THashMap<ui64, TDistributedTransaction> Txs;
+};
+
+void TFixture::AddTransaction(ui64 txId, const TVector<ui32>& partitions)
+{
+    auto& tx = Txs[txId];
+    tx.State = NKikimrPQ::TTransaction::CALCULATED;
+    tx.Partitions.insert(partitions.begin(), partitions.end());
+}
+
+void TFixture::AddReadRange()
+{
+    NKikimrClient::TKeyValueResponse::TReadRangeResult readRange;
+    readRange.SetStatus(NKikimrProto::OK);
+
+    ReadRanges.emplace_back(std::move(readRange));
+}
+
+void TFixture::AddPair(const TString& key, ui64 txId, NKikimrPQ::TTransaction::EState state)
+{
+    NKikimrPQ::TTransaction tx;
+    tx.SetTxId(txId);
+    tx.SetState(state);
+
+    TString value;
+    UNIT_ASSERT(tx.SerializeToString(&value));
+
+    auto& readRange = ReadRanges.back();
+    auto* pair = readRange.AddPair();
+    pair->SetKey(key);
+    pair->SetValue(value);
+}
+
+void TFixture::AddPairFromPQ(ui64 txId)
+{
+    AddPair(GetTxKey(txId), txId, NKikimrPQ::TTransaction::CALCULATED);
+}
+
+void TFixture::AddPairFromPartition(ui64 txId, ui32 partitionId)
+{
+    AddPair(GetTxKey(txId, partitionId), txId, NKikimrPQ::TTransaction::EXECUTED);
+}
+
+void TFixture::InvokeFixTransactionStates()
+{
+    FixTransactionStates(ReadRanges, Txs);
+}
+
+void TFixture::EnsureTransactionState(ui64 txId, NKikimrPQ::TTransaction::EState state) const
+{
+    UNIT_ASSERT(Txs.contains(txId));
+    UNIT_ASSERT_EQUAL_C(Txs.at(txId).State, state,
+                        NKikimrPQ::TTransaction_EState_Name(Txs.at(txId).State) << " != " << NKikimrPQ::TTransaction_EState_Name(state));
+}
+
+Y_UNIT_TEST_F(Minimal_Transaction_Checking_Full_Transaction_With_1_Partition, TFixture)
+{
+    AddTransaction(123, {1});
+
+    EnsureTransactionState(123, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(123);
+    AddPairFromPartition(123, 1);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(123, NKikimrPQ::TTransaction::EXECUTED);
+}
+
+Y_UNIT_TEST_F(Multiple_Partitions_Checking_Full_Transaction_With_3_Partitions, TFixture)
+{
+    AddTransaction(456, {1, 2, 3});
+
+    EnsureTransactionState(456, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(456);
+    AddPairFromPartition(456, 1);
+    AddPairFromPartition(456, 2);
+    AddPairFromPartition(456, 3);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(456, NKikimrPQ::TTransaction::EXECUTED);
+}
+
+Y_UNIT_TEST_F(Incomplete_Transaction_Checking_State_Doesnt_Change_If_Not_All_Partitions_Were_Written, TFixture)
+{
+    AddTransaction(789, {1, 2, 3});
+
+    EnsureTransactionState(789, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(789);
+    AddPairFromPartition(789, 1);
+    AddPairFromPartition(789, 2);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(789, NKikimrPQ::TTransaction::CALCULATED);
+}
+
+Y_UNIT_TEST_F(Split_Across_2_ReadRange_Checking_Counter_Is_Preserved_Between_ReadRange, TFixture)
+{
+    AddTransaction(333, {1, 2, 3});
+
+    EnsureTransactionState(333, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(333);
+    AddPairFromPartition(333, 1);
+
+    AddReadRange();
+    AddPairFromPartition(333, 2);
+    AddPairFromPartition(333, 3);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(333, NKikimrPQ::TTransaction::EXECUTED);
+}
+
+Y_UNIT_TEST_F(Incomplete_Split_Across_2_ReadRange_Checking_Incomplete_Transaction_Is_Not_Fixed_When_Split, TFixture)
+{
+    AddTransaction(555, {1, 2, 3});
+
+    EnsureTransactionState(555, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(555);
+    AddPairFromPartition(555, 1);
+
+    AddReadRange();
+    AddPairFromPartition(555, 2);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(555, NKikimrPQ::TTransaction::CALCULATED);
+}
+
+Y_UNIT_TEST_F(Split_Across_3_ReadRange_Checking_Extreme_Splitting_Of_Full_Transaction, TFixture)
+{
+    AddTransaction(999, {1, 2, 3, 4, 5});
+
+    EnsureTransactionState(999, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(999);
+
+    AddReadRange();
+    AddPairFromPartition(999, 1);
+    AddPairFromPartition(999, 2);
+
+    AddReadRange();
+    AddPairFromPartition(999, 3);
+    AddPairFromPartition(999, 4);
+
+    AddReadRange();
+    AddPairFromPartition(999, 5);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(999, NKikimrPQ::TTransaction::EXECUTED);
+}
+
+Y_UNIT_TEST_F(Incomplete_Split_Across_3_ReadRange_Checking_Incomplete_Transaction_Is_Not_Fixed_With_Multiple_Splitting, TFixture)
+{
+    AddTransaction(888, {1, 2, 3, 4, 5});
+
+    EnsureTransactionState(888, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(888);
+
+    AddReadRange();
+    AddPairFromPartition(888, 1);
+    AddPairFromPartition(888, 2);
+
+    AddReadRange();
+    AddPairFromPartition(888, 3);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(888, NKikimrPQ::TTransaction::CALCULATED);
+}
+
+Y_UNIT_TEST_F(Multiple_Transactions_In_One_ReadRange_Checking_Correctness_When_Mixing_Transactions, TFixture)
+{
+    AddTransaction(111, {1});
+    AddTransaction(222, {1, 2});
+
+    EnsureTransactionState(111, NKikimrPQ::TTransaction::CALCULATED);
+    EnsureTransactionState(222, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(111);
+    AddPairFromPartition(111, 1);
+    AddPairFromPQ(222);
+    AddPairFromPartition(222, 1);
+    AddPairFromPartition(222, 2);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(111, NKikimrPQ::TTransaction::EXECUTED);
+    EnsureTransactionState(222, NKikimrPQ::TTransaction::EXECUTED);
+}
+
+Y_UNIT_TEST_F(Mixed_Complete_And_Incomplete_Transactions_Checking_Complete_Ones_Are_Fixed_Incomplete_Are_Not, TFixture)
+{
+    AddTransaction(111, {1, 2});
+    AddTransaction(222, {1, 2});
+
+    EnsureTransactionState(111, NKikimrPQ::TTransaction::CALCULATED);
+    EnsureTransactionState(222, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(111);
+    AddPairFromPartition(111, 1);
+
+    AddReadRange();
+    AddPairFromPartition(111, 2);
+    AddPairFromPQ(222);
+    AddPairFromPartition(222, 1);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(111, NKikimrPQ::TTransaction::EXECUTED);
+    EnsureTransactionState(222, NKikimrPQ::TTransaction::CALCULATED);
+}
+
+Y_UNIT_TEST_F(Three_Complete_Split_Transactions_Checking_Parallel_Processing_Of_Multiple_Complete_Transactions, TFixture)
+{
+    AddTransaction(111, {1, 2});
+    AddTransaction(222, {1, 2});
+    AddTransaction(333, {1, 2});
+
+    EnsureTransactionState(111, NKikimrPQ::TTransaction::CALCULATED);
+    EnsureTransactionState(222, NKikimrPQ::TTransaction::CALCULATED);
+    EnsureTransactionState(333, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(111);
+    AddPairFromPartition(111, 1);
+
+    AddReadRange();
+    AddPairFromPartition(111, 2);
+    AddPairFromPQ(222);
+    AddPairFromPartition(222, 1);
+
+    AddReadRange();
+    AddPairFromPartition(222, 2);
+    AddPairFromPQ(333);
+    AddPairFromPartition(333, 1);
+    AddPairFromPartition(333, 2);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(111, NKikimrPQ::TTransaction::EXECUTED);
+    EnsureTransactionState(222, NKikimrPQ::TTransaction::EXECUTED);
+    EnsureTransactionState(333, NKikimrPQ::TTransaction::EXECUTED);
+}
+
+Y_UNIT_TEST_F(Two_Complete_And_One_Incomplete_Checking_Mixing_Of_Different_Completion_Types, TFixture)
+{
+    AddTransaction(111, {1, 2});
+    AddTransaction(222, {1, 2, 3});
+    AddTransaction(333, {1, 2, 3});
+
+    EnsureTransactionState(111, NKikimrPQ::TTransaction::CALCULATED);
+    EnsureTransactionState(222, NKikimrPQ::TTransaction::CALCULATED);
+    EnsureTransactionState(333, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(111);
+    AddPairFromPartition(111, 1);
+
+    AddReadRange();
+    AddPairFromPartition(111, 2);
+    AddPairFromPQ(222);
+    AddPairFromPartition(222, 1);
+    AddPairFromPartition(222, 2);
+
+    AddReadRange();
+    AddPairFromPartition(222, 3);
+    AddPairFromPQ(333);
+    AddPairFromPartition(333, 1);
+    AddPairFromPartition(333, 2);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(111, NKikimrPQ::TTransaction::EXECUTED);
+    EnsureTransactionState(222, NKikimrPQ::TTransaction::EXECUTED);
+    EnsureTransactionState(333, NKikimrPQ::TTransaction::CALCULATED);
+}
+
+Y_UNIT_TEST_F(Extreme_Splitting_Checking_Stability_With_Large_Number_Of_ReadRange, TFixture)
+{
+    AddTransaction(111, {1, 2});
+    AddTransaction(222, {1, 2, 3});
+    AddTransaction(333, {1, 2, 3});
+
+    EnsureTransactionState(111, NKikimrPQ::TTransaction::CALCULATED);
+    EnsureTransactionState(222, NKikimrPQ::TTransaction::CALCULATED);
+    EnsureTransactionState(333, NKikimrPQ::TTransaction::CALCULATED);
+
+    AddReadRange();
+    AddPairFromPQ(111);
+
+    AddReadRange();
+    AddPairFromPartition(111, 1);
+
+    AddReadRange();
+    AddPairFromPartition(111, 2);
+
+    AddReadRange();
+    AddPairFromPQ(222);
+
+    AddReadRange();
+    AddPairFromPartition(222, 1);
+
+    AddReadRange();
+    AddPairFromPartition(222, 2);
+
+    AddReadRange();
+    AddPairFromPartition(222, 3);
+
+    AddReadRange();
+    AddPairFromPQ(333);
+
+    AddReadRange();
+    AddPairFromPartition(333, 1);
+
+    AddReadRange();
+    AddPairFromPartition(333, 2);
+
+    AddReadRange();
+    AddPairFromPartition(333, 3);
+
+    InvokeFixTransactionStates();
+
+    EnsureTransactionState(111, NKikimrPQ::TTransaction::EXECUTED);
+    EnsureTransactionState(222, NKikimrPQ::TTransaction::EXECUTED);
+    EnsureTransactionState(333, NKikimrPQ::TTransaction::EXECUTED);
 }
 
 }

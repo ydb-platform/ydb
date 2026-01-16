@@ -641,8 +641,6 @@ private:
     bool HasTxPersistSpan = false;
     bool HasTxDeleteSpan = false;
     ui8 WriteTxsSpanVerbosity = 0;
-
-    void FixTransactionStates(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges);
 };
 
 }// NPQ

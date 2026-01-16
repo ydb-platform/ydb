@@ -1,6 +1,7 @@
 
 #include "pq_impl.h"
 #include "pq_impl_types.h"
+#include "fix_transaction_states.h"
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
@@ -56,7 +57,6 @@ static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
 static constexpr ui32 MAX_TXS = 1000;
-static const size_t TX_KEY_LENGTH = GetTxKey(0).size();
 
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
@@ -742,48 +742,6 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
     NewSupportivePartitions.clear();
 }
 
-bool IsMainContextOfTransaction(const TString& key)
-{
-    Y_ENSURE(key.size() >= TX_KEY_LENGTH);
-    return key.size() == TX_KEY_LENGTH;
-}
-
-void TPersQueue::FixTransactionStates(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges)
-{
-    TMaybe<ui64> txId;
-    size_t current = 0;
-    size_t expected = 0;
-
-    for (const auto& readRange : readRanges) {
-        for (size_t i = 0; i < readRange.PairSize(); ++i) {
-            const auto& pair = readRange.GetPair(i);
-
-            if (!IsMainContextOfTransaction(pair.GetKey())) {
-                ++current;
-                continue;
-            }
-
-            NKikimrPQ::TTransaction tx;
-            PQ_ENSURE(tx.ParseFromString(pair.GetValue()));
-
-            if (txId.Defined() && (current == expected)) {
-                // All the parties managed to record the status. We need to fix the transaction status
-                Txs[*txId].State = NKikimrPQ::TTransaction::EXECUTED;
-            }
-
-            txId = tx.GetTxId();
-
-            current = 0;
-            expected = Txs[*txId].Partitions.size();
-        }
-    }
-
-    if (txId.Defined() && (current == expected)) {
-        // All the partitions of the last transaction managed to record the status. We need to fix her status
-        Txs[*txId].State = NKikimrPQ::TTransaction::EXECUTED;
-    }
-}
-
 void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read,
                             const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges,
                             const TActorContext& ctx)
@@ -899,7 +857,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         }
     }
 
-    FixTransactionStates(readRanges);
+    FixTransactionStates(readRanges, Txs);
 
     EndInitTransactions();
     EndReadConfig(ctx);

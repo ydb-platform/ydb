@@ -77,6 +77,21 @@ std::shared_ptr<ISimpleBlockingKeyedWriteSession> TTopicClient::TImpl::CreateSim
     return session;
 }
 
+std::shared_ptr<IKeyedWriteSession> TTopicClient::TImpl::CreateKeyedWriteSession(const TKeyedWriteSessionSettings& settings) {
+    auto alteredSettings = settings;
+    {
+        std::lock_guard guard(Lock);
+        alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
+        if (!settings.CompressionExecutor_) {
+            alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
+        }
+    }
+
+    return std::make_shared<TKeyedWriteSession>(
+        alteredSettings, shared_from_this(), Connections_, DbDriverState_
+    );
+}
+
 std::shared_ptr<TTopicClient::TImpl::IReadSessionConnectionProcessorFactory> TTopicClient::TImpl::CreateReadSessionConnectionProcessorFactory() {
     using TService = Ydb::Topic::V1::TopicService;
     using TRequest = Ydb::Topic::StreamReadMessage::FromClient;

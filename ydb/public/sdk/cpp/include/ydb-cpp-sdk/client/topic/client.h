@@ -49,6 +49,7 @@ public:
     //! Create write session.
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings);
     std::shared_ptr<ISimpleBlockingKeyedWriteSession> CreateSimpleBlockingKeyedWriteSession(const TKeyedWriteSessionSettings& settings);
+    std::shared_ptr<IKeyedWriteSession> CreateKeyedWriteSession(const TKeyedWriteSessionSettings& settings);
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
 
     // Commit offset

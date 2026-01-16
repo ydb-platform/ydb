@@ -5,7 +5,6 @@
 using namespace NYdb;
 
 TEST(ConnectionStringParser, ParseWithQueryParameter) {
-    // Test: grpc://localhost:2135/?database=/local
     auto connInfo = ParseConnectionString("grpc://localhost:2135/?database=/local");
     EXPECT_EQ(connInfo.Endpoint, "localhost:2135");
     EXPECT_EQ(connInfo.Database, "/local");
@@ -13,7 +12,6 @@ TEST(ConnectionStringParser, ParseWithQueryParameter) {
 }
 
 TEST(ConnectionStringParser, ParseWithQueryParameterNoSlash) {
-    // Test: grpc://localhost:2135?database=/local
     auto connInfo = ParseConnectionString("grpc://localhost:2135?database=/local");
     EXPECT_EQ(connInfo.Endpoint, "localhost:2135");
     EXPECT_EQ(connInfo.Database, "/local");
@@ -21,7 +19,6 @@ TEST(ConnectionStringParser, ParseWithQueryParameterNoSlash) {
 }
 
 TEST(ConnectionStringParser, ParseWithPathAsDatabase) {
-    // Test: grpc://localhost:2135/local
     auto connInfo = ParseConnectionString("grpc://localhost:2135/local");
     EXPECT_EQ(connInfo.Endpoint, "localhost:2135");
     EXPECT_EQ(connInfo.Database, "/local");
@@ -29,7 +26,6 @@ TEST(ConnectionStringParser, ParseWithPathAsDatabase) {
 }
 
 TEST(ConnectionStringParser, ParseSecureConnection) {
-    // Test: grpcs://localhost:2135/?database=/local
     auto connInfo = ParseConnectionString("grpcs://localhost:2135/?database=/local");
     EXPECT_EQ(connInfo.Endpoint, "localhost:2135");
     EXPECT_EQ(connInfo.Database, "/local");
@@ -37,7 +33,6 @@ TEST(ConnectionStringParser, ParseSecureConnection) {
 }
 
 TEST(ConnectionStringParser, ParseSecureConnectionNoSlash) {
-    // Test: grpcs://localhost:2135?database=/local
     auto connInfo = ParseConnectionString("grpcs://localhost:2135?database=/local");
     EXPECT_EQ(connInfo.Endpoint, "localhost:2135");
     EXPECT_EQ(connInfo.Database, "/local");
@@ -45,7 +40,6 @@ TEST(ConnectionStringParser, ParseSecureConnectionNoSlash) {
 }
 
 TEST(ConnectionStringParser, ParseSecureConnectionWithPath) {
-    // Test: grpcs://localhost:2135/local
     auto connInfo = ParseConnectionString("grpcs://localhost:2135/local");
     EXPECT_EQ(connInfo.Endpoint, "localhost:2135");
     EXPECT_EQ(connInfo.Database, "/local");
@@ -53,7 +47,6 @@ TEST(ConnectionStringParser, ParseSecureConnectionWithPath) {
 }
 
 TEST(ConnectionStringParser, ParseNoSchemeLocalhost) {
-    // Test: localhost:2135/?database=/local
     auto connInfo = ParseConnectionString("localhost:2135/?database=/local");
     EXPECT_EQ(connInfo.Endpoint, "localhost:2135");
     EXPECT_EQ(connInfo.Database, "/local");
@@ -61,7 +54,6 @@ TEST(ConnectionStringParser, ParseNoSchemeLocalhost) {
 }
 
 TEST(ConnectionStringParser, ParseNoSchemeNonLocalhost) {
-    // Test: example.com:2135/?database=/local (should use SSL)
     auto connInfo = ParseConnectionString("example.com:2135/?database=/local");
     EXPECT_EQ(connInfo.Endpoint, "example.com:2135");
     EXPECT_EQ(connInfo.Database, "/local");
@@ -69,7 +61,6 @@ TEST(ConnectionStringParser, ParseNoSchemeNonLocalhost) {
 }
 
 TEST(ConnectionStringParser, ParseNoSchemeWithPath) {
-    // Test: localhost:2135/local
     auto connInfo = ParseConnectionString("localhost:2135/local");
     EXPECT_EQ(connInfo.Endpoint, "localhost:2135");
     EXPECT_EQ(connInfo.Database, "/local");
@@ -77,7 +68,6 @@ TEST(ConnectionStringParser, ParseNoSchemeWithPath) {
 }
 
 TEST(ConnectionStringParser, ParseNoDatabaseInQuery) {
-    // Test: grpc://localhost:2135
     auto connInfo = ParseConnectionString("grpc://localhost:2135");
     EXPECT_EQ(connInfo.Endpoint, "localhost:2135");
     EXPECT_EQ(connInfo.Database, "");
@@ -85,7 +75,6 @@ TEST(ConnectionStringParser, ParseNoDatabaseInQuery) {
 }
 
 TEST(ConnectionStringParser, InvalidScheme) {
-    // Test: http://localhost:2135/?database=/local
     EXPECT_THROW(
         ParseConnectionString("http://localhost:2135/?database=/local"),
         TContractViolation
@@ -93,7 +82,6 @@ TEST(ConnectionStringParser, InvalidScheme) {
 }
 
 TEST(ConnectionStringParser, EmptyConnectionString) {
-    // Test: empty string
     EXPECT_THROW(
         ParseConnectionString(""),
         TContractViolation
@@ -101,7 +89,6 @@ TEST(ConnectionStringParser, EmptyConnectionString) {
 }
 
 TEST(ConnectionStringParser, DatabaseInBothPathAndQuery) {
-    // Test: grpc://localhost:2135/local?database=/other (should throw)
     EXPECT_THROW(
         ParseConnectionString("grpc://localhost:2135/local?database=/other"),
         TContractViolation

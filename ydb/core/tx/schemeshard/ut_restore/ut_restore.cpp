@@ -5435,7 +5435,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .RunFakeConfigDispatcher(true)
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
-        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
@@ -5533,7 +5532,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .RunFakeConfigDispatcher(true)
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
-        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 

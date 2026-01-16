@@ -2426,7 +2426,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewWithNamedExpressions) {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2447,7 +2446,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewSelectFromIndex) {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2471,7 +2469,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             return; // TODO: fix me issue@26498
         }
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2524,9 +2521,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        // query client lives on the node 0, so it is enough to enable the views only on it
-        server.GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
-
         const TString view = JoinFsPaths(alice, "view");
         const TString table = JoinFsPaths(alice, "a", "b", "c", "table");
         const TString restoredView = JoinFsPaths(bob, "view");
@@ -2545,7 +2539,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewDependentOnAnotherView) {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2738,7 +2731,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestViewBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -3763,7 +3755,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_DEBUG);
             runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_DEBUG);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
-            runtime.GetAppData().FeatureFlags.SetEnableViews(true);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
         }
 

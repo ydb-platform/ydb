@@ -388,13 +388,21 @@ void AssertMessageAvaialbleThroughLogbrokerApiAndCommit(std::shared_ptr<NTopic::
     responseFromLogbrokerApi[0].GetMessages()[0].Commit();
 }
 
-void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 minActivePartitions, std::vector<TString> consumers, std::optional<ui64> retentionSeconds = std::nullopt) {
+void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 minActivePartitions,
+                std::vector<TString> consumers,
+                std::optional<ui64> retentionSeconds = std::nullopt,
+                std::optional<TString> timestampType = std::nullopt,
+                EStatus expectedStatus = EStatus::SUCCESS) {
     auto topicSettings = NYdb::NTopic::TCreateTopicSettings()
                             .PartitioningSettings(minActivePartitions, 100);
 
     if(retentionSeconds) {
         Cerr << "===Create topic with retention = " << *retentionSeconds << " seconds" << Endl;
         topicSettings.RetentionPeriod(TDuration::Seconds(*retentionSeconds));
+    }
+    if (timestampType) {
+        Cerr << "===Create topic with timestampType = " << *timestampType << Endl;
+        topicSettings.AddAttribute("_timestamp_type", *timestampType);
     }
     for (auto& consumer : consumers) {
         topicSettings.BeginAddConsumer(consumer).EndAddConsumer();
@@ -405,7 +413,7 @@ void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 
                                 .ExtractValueSync();
 
     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
 }
 
 void AlterTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, std::vector<TString> consumers) {
@@ -2489,6 +2497,44 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         RunCreateTopicsScenario(testServer, client);
     } // Y_UNIT_TEST(CreateTopicsScenarioWithoutKafkaAuth)
 
+    Y_UNIT_TEST(CreateTopicTimestampTypeScenario) {
+        TInsecureTestServer testServer("2");
+
+        TString topic1Name = "/Root/topic-1-test";
+        TString topic2Name = "/Root/topic-2-test";
+        TString topic3Name = "/Root/topic-3-test";
+        TString topic4Name = "/Root/topic-4-test";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+
+        CreateTopic(pqClient, topic1Name, 10, {});
+        CreateTopic(pqClient, topic2Name, 10, {}, std::nullopt, "CreateTime");
+        CreateTopic(pqClient, topic3Name, 10, {}, std::nullopt, "LogAppendTime");
+        CreateTopic(pqClient, topic3Name, 10, {}, std::nullopt, "Incorrect", EStatus::BAD_REQUEST);
+
+        TKafkaTestClient client(testServer.Port);
+        client.AuthenticateToKafka();
+
+        auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
+
+        // check that timestamp_type has "CreateTime" value by default
+        auto result1 = pqClient.DescribeTopic(topic1Name, describeTopicSettings).GetValueSync();
+        UNIT_ASSERT(result1.IsSuccess());
+        UNIT_ASSERT_EQUAL(result1.GetTopicDescription().GetAttributes().at("_timestamp_type"), "CreateTime");
+
+        auto result2 = pqClient.DescribeTopic(topic2Name, describeTopicSettings).GetValueSync();
+        UNIT_ASSERT(result2.IsSuccess());
+        UNIT_ASSERT_EQUAL(result2.GetTopicDescription().GetAttributes().at("_timestamp_type"), "CreateTime");
+
+        auto result3 = pqClient.DescribeTopic(topic3Name, describeTopicSettings).GetValueSync();
+        UNIT_ASSERT(result3.IsSuccess());
+        UNIT_ASSERT_EQUAL(result3.GetTopicDescription().GetAttributes().at("_timestamp_type"), "LogAppendTime");
+
+        // checking that it is impossible to create a topic with incorrect timestamp type
+        auto result4 = pqClient.DescribeTopic(topic4Name, describeTopicSettings).GetValueSync();
+        UNIT_ASSERT(!result4.IsSuccess());
+    }
+
     Y_UNIT_TEST(CreatePartitionsScenario) {
 
         TInsecureTestServer testServer("2");
@@ -3138,6 +3184,57 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT(result1.IsSuccess());
             UNIT_ASSERT_VALUES_EQUAL(result1.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
             UNIT_ASSERT_VALUES_EQUAL(result1.GetTopicDescription().GetRetentionStorageMb().value(), retentionBytes / (1024 * 1024));
+        }
+
+        {
+            // Set valid timestamp type
+            ui64 retentionMs = 168 * 60 * 60 * 1000;
+            ui64 retentionBytes = 51'200 * 1_MB;
+
+            TString timestampType = "LogAppendTime";
+
+            auto msg = client.AlterConfigs({
+                    TTopicConfig(shortTopic0Name, 1, std::to_string(retentionMs), std::to_string(retentionBytes), {}, 1, timestampType)
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
+
+            auto result0 = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result0.IsSuccess());
+            auto d = result0.GetTopicDescription();
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), retentionMs);
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionStorageMb().value(), retentionBytes / (1024 * 1024));
+            UNIT_ASSERT_VALUES_EQUAL(d.GetAttributes().at("_timestamp_type"), timestampType);
+        }
+
+        {
+            // Set invalid timestamp type
+            ui64 oldRetentionMs = 168 * 60 * 60 * 1000;
+            ui64 oldRetentionBytes = 51'200 * 1_MB;
+
+            ui64 newRetentionMs = 154 * 60 * 60 * 1000;
+            ui64 newRetentionBytes = 40'000 * 1_MB;
+
+            TString oldTimestampType = "LogAppendTime";
+            TString newTimestampType = "Invalid";
+
+            auto msg = client.AlterConfigs({
+                    TTopicConfig(shortTopic0Name, 1, std::to_string(newRetentionMs), std::to_string(newRetentionBytes), {}, 1, newTimestampType)
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_REQUEST);
+
+            auto result0 = pqClient.DescribeTopic(shortTopic0Name, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result0.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionPeriod().MilliSeconds(), oldRetentionMs);
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetRetentionStorageMb().value(), oldRetentionBytes / (1024 * 1024));
+            UNIT_ASSERT_VALUES_EQUAL(result0.GetTopicDescription().GetAttributes().at("_timestamp_type"), oldTimestampType);
         }
 
         {

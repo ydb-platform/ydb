@@ -11,6 +11,7 @@ PEERDIR(
     ydb/library/login/hashes_checker
     ydb/library/login/protos
     ydb/library/login/password_checker
+    ydb/library/login/sasl
 )
 
 SRCS(

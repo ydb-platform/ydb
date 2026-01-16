@@ -597,6 +597,7 @@ TMessagePtr<TAlterConfigsResponseData> TKafkaTestClient::AlterConfigs(std::vecto
 
         addConfig(topicToModify.RetentionMs, "retention.ms");
         addConfig(topicToModify.RetentionBytes, "retention.bytes");
+        addConfig(topicToModify.TimestampType, "message.timestamp.type");
 
         for (auto const& [name, value] : topicToModify.Configs) {
             NKafka::TAlterConfigsRequestData::TAlterConfigsResource::TAlterableConfig config;

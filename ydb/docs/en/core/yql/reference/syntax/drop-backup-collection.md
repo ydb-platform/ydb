@@ -1,5 +1,7 @@
 # DROP BACKUP COLLECTION
 
+{% include [feature_enterprise.md](../../../_includes/feature_enterprise.md) %}
+
 The `DROP BACKUP COLLECTION` statement deletes a [backup collection](../../../concepts/datamodel/backup-collection.md) and all its backups.
 
 ```yql

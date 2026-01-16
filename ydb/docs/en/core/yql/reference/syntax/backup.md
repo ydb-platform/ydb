@@ -1,5 +1,7 @@
 # BACKUP
 
+{% include [feature_enterprise.md](../../../_includes/feature_enterprise.md) %}
+
 The `BACKUP` statement creates a backup of tables in a [backup collection](../../../concepts/datamodel/backup-collection.md).
 
 ```yql

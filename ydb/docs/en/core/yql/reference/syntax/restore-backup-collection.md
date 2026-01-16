@@ -1,5 +1,7 @@
 # RESTORE
 
+{% include [feature_enterprise.md](../../../_includes/feature_enterprise.md) %}
+
 The `RESTORE` statement restores tables from a [backup collection](../../../concepts/datamodel/backup-collection.md).
 
 ```yql

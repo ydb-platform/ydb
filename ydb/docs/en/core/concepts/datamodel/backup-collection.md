@@ -1,5 +1,7 @@
 # Backup Collection
 
+{% include [feature_enterprise.md](../../_includes/feature_enterprise.md) %}
+
 A backup collection is a [schema object](index.md) for selected [row-oriented tables](table.md#row-oriented-tables) that provides structured and automated backup functionality. It organizes full and incremental backups into managed chains, supporting efficient disaster recovery and protection against accidental data loss from actions like deletions or modifications.
 
 {% note info %}
@@ -152,12 +154,6 @@ Restoration recovers data from a backup chain to a specified point in time.
 1. **Import from external storage** (if applicable): If backups were exported, import the full backup and all incremental backups up to the desired restore point.
 
 2. **Execute restore**: Restore all tables from the backup collection. The system applies the full backup and all incremental backups in sequence to reach the most recent backup point.
-
-{% note warning %}
-
-The restore operation overwrites existing tables with the same names. Back up or rename existing tables before restoring if you need to preserve their current data.
-
-{% endnote %}
 
 The restore operation maintains transactional consistency across all tables in the collection.
 

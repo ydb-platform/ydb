@@ -529,9 +529,8 @@ void TConsumerActor::ProcessEventQueue() {
     UnlockRequestsQueue.clear();
 
     for (auto& ev : ChangeMessageDeadlineRequestsQueue) {
-        auto deadlineTimestamp = ev->Get()->GetDeadlineTimestamp();
-        for (auto offset : ev->Get()->Record.GetOffset()) {
-            Storage->ChangeMessageDeadline(offset, deadlineTimestamp);
+        for (const auto &message : ev->Get()->Record.GetMessage()) {
+            Storage->ChangeMessageDeadline(message.GetOffset(), TInstant::Seconds(message.GetDeadlineTimestampSeconds()));
         }
 
         PendingChangeMessageDeadlineQueue.emplace_back(ev->Sender, ev->Cookie);

@@ -12,7 +12,7 @@ namespace NKikimr::NKqp {
 
 // Creates all needed tables.
 // Sends result event back when the work is done.
-IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags, ui64 generation = 0);
+IActor* CreateScriptExecutionsTablesCreator(bool enableSecureScriptExecutions, ui64 generation = 0);
 
 // Create script execution and run it.
 IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, TDuration maxRunTime = SCRIPT_TIMEOUT_LIMIT);

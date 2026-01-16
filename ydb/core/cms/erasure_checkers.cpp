@@ -262,7 +262,6 @@ TSimpleSharedPtr<IErasureCounter> CreateErasureCounter(TErasureType::EErasureSpe
         case TErasureType::Erasure3Plus1Block:
         case TErasureType::Erasure4Plus2Block:
         case TErasureType::Erasure3Plus2Block:
-        case TErasureType::ErasureMirror3Plus2:
         case TErasureType::Erasure4Plus3Block:
         case TErasureType::Erasure3Plus3Block:
         case TErasureType::ErasureMirror3of4:

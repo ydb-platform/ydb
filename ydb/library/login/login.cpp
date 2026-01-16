@@ -1063,7 +1063,13 @@ NLoginProto::TSecurityState TLoginProvider::GetSecurityState() const {
             for (const auto& subSid : sidInfo.Members) {
                 sid.AddMembers(subSid);
             }
-            // no user hash here
+
+            // only init params of user hash
+            for (const auto& [hashType, hashRecord] : sidInfo.HashStorage) {
+                auto& hashParams = *sid.AddHashesInitParams();
+                hashParams.SetHashType(hashType);
+                hashParams.SetInitParams(hashRecord.HashInitParams);
+            }
         }
     }
     return state;

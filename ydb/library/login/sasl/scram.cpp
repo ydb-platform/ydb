@@ -70,7 +70,7 @@ std::string Hi(const EVP_MD* md,
 
 	    PRINT_HASH ("Hi() HMAC inside loop", tempResult, hashSize);
 
-        for (k = 0; k < hashSize; k++) {
+        for (k = 0; k < hashSize; ++k) {
             result[k] ^= tempResult[k];
         }
 
@@ -152,6 +152,55 @@ bool GenerateScramSecrets(const std::string& hashType,
     }
 
     return true;
+}
+
+bool ComputeServerKey(const std::string& hashType,
+    const std::string& password, const std::string& salt, ui32 iterationsCount,
+    std::string& serverKey, std::string& errorText)
+{
+    std::string digestName = GetDigestNameFromHashType(hashType);
+    const EVP_MD* md = EVP_get_digestbyname(digestName.c_str());
+    if (md == nullptr) {
+        errorText = "Unsupported hash type: " + hashType;
+        return false;
+    }
+
+    std::string prepPassword;
+    auto saslPrepRC = SaslPrep(password, prepPassword);
+    if (saslPrepRC != ESaslPrepReturnCodes::Success) {
+        errorText = "Unsupported password format";
+        return false;
+    }
+
+    // SaltedPassword := Hi(Normalize(password), salt, i)
+    std::string saltedPassword = Hi(md, prepPassword, salt, iterationsCount);
+
+    size_t hashSize = EVP_MD_size(md);
+    ui32 hashLen = 0;
+
+    serverKey.resize(hashSize);
+    // ServerKey := HMAC(SaltedPassword, "Server Key")
+    if (HMAC(md, saltedPassword.data(), saltedPassword.size(),
+	    reinterpret_cast<const unsigned char*>(SERVER_KEY_CONSTANT.data()), SERVER_KEY_CONSTANT.size(),
+	    reinterpret_cast<unsigned char*>(serverKey.data()), &hashLen) == nullptr)
+    {
+        errorText = "HMAC call failed";
+        return false;
+    }
+
+    return true;
+}
+
+std::string PrepareSaslPlainAuthMsg(const std::string& authenticationId, const std::string& password,
+    const std::string& authorizationId) {
+    std::string res;
+    res.reserve(authenticationId.size() + password.size() + authorizationId.size() + 2);
+    res += authorizationId;
+    res.push_back('\0');
+    res += authenticationId;
+    res.push_back('\0');
+    res += password;
+    return res;
 }
 
 } // namespace NLogin::NSasl

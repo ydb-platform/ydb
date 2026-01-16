@@ -159,7 +159,7 @@ public:
         const auto it = ExecuterToPartition.find(ev->Sender);
 
         if (it != ExecuterToPartition.end()) {
-            PE_LOG_W("Got TEvAbortExecution from actorId = " << ev->Sender
+            PE_LOG_W("Got TEvAbortExecution from ExecuterActor with actorId = " << ev->Sender
                 << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
                 << ", message: " << issues.ToOneLineString());
 

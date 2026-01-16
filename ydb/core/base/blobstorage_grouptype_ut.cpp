@@ -13,7 +13,7 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
 
     Y_UNIT_TEST(TestCorrectLayout) {
-        TBlobStorageGroupType groupType(TBlobStorageGroupType::Erasure3Plus1Block);
+        TBlobStorageGroupType groupType(TBlobStorageGroupType::Erasure4Plus2Block);
 
         ui32 blobSubgroupSize = groupType.BlobSubgroupSize();
         ui32 totalPartCount = groupType.TotalPartCount();

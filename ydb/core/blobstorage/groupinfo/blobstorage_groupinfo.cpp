@@ -493,7 +493,6 @@ IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGr
     switch (gtype.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::ErasureMirror3:
-        case TBlobStorageGroupType::Erasure3Plus1Block:
         case TBlobStorageGroupType::Erasure4Plus2Block:
         case TBlobStorageGroupType::Erasure3Plus2Block:
         case TBlobStorageGroupType::Erasure4Plus3Block:
@@ -515,7 +514,6 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
     switch (topology->GType.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::ErasureMirror3:
-        case TBlobStorageGroupType::Erasure3Plus1Block:
         case TBlobStorageGroupType::Erasure4Plus2Block:
         case TBlobStorageGroupType::Erasure3Plus2Block:
         case TBlobStorageGroupType::Erasure4Plus3Block:
@@ -541,7 +539,6 @@ TBlobStorageGroupInfo::TTopology::CreateDataIntegrityChecker(const TTopology* to
     switch (topology->GType.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::ErasureMirror3:
-        case TBlobStorageGroupType::Erasure3Plus1Block:
         case TBlobStorageGroupType::Erasure3Plus2Block:
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure3Plus3Block:

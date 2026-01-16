@@ -488,14 +488,6 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
     }
 
     // Block tests
-    Y_UNIT_TEST(TestBlock31LossOfAllPossible1) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus1Block);
-        constexpr ui32 maxMissingParts = 1;
-        constexpr ui32 maxParts = 3 + 1;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
     Y_UNIT_TEST(TestBlock42LossOfAllPossible2) {
         // Set up the erasure
         TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus2Block);

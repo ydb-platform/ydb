@@ -45,6 +45,17 @@ const std::optional<std::vector<TIndexMetadata>>& TMetadata::GetIndexes() const 
     return Indexes;
 }
 
+void TMetadata::AddRateLimiterResource(const TRateLimiterResourceMetadata& resource) {
+    if (!RateLimiterResources) {
+        RateLimiterResources.emplace();
+    }
+    RateLimiterResources->push_back(resource);
+}
+
+const std::optional<std::vector<TRateLimiterResourceMetadata>>& TMetadata::GetRateLimiterResources() const {
+    return RateLimiterResources;
+}
+
 void TMetadata::SetEnablePermissions(bool enablePermissions) {
     EnablePermissions = enablePermissions;
 }
@@ -99,6 +110,17 @@ TString TMetadata::Serialize() const {
     }
     m["indexes"] = indexes;
 
+    NJson::TJsonArray rateLimiters;
+    if (RateLimiterResources) {
+        for (const auto& rateLimiter : *RateLimiterResources) {
+            NJson::TJsonMap rateLimiterMap;
+            rateLimiterMap["prefix"] = rateLimiter.ExportPrefix;
+            rateLimiterMap["name"] = rateLimiter.Name;
+            rateLimiters.AppendValue(std::move(rateLimiterMap));
+        }
+    }
+    m["rate_limiter_resources"] = rateLimiters;
+
     return NJson::WriteJson(&m, false);
 }
 
@@ -136,6 +158,17 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
             result.AddIndex({
                 .ExportPrefix = index["export_prefix"].GetString(),
                 .ImplTablePrefix = index["impl_table_prefix"].GetString(),
+            });
+        }
+    }
+
+    if (json.Has("rate_limiter_resources")) {
+        result.RateLimiterResources.emplace();
+        const NJson::TJsonValue& rateLimiters = json["rate_limiter_resources"];
+        for (const NJson::TJsonValue& rateLimiter : rateLimiters.GetArray()) {
+            result.AddRateLimiterResource({
+                .ExportPrefix = rateLimiter["prefix"].GetString(),
+                .Name = rateLimiter["name"].GetString(),
             });
         }
     }

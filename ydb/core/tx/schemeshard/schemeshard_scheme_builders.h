@@ -6,6 +6,10 @@ namespace NKikimrScheme {
     class TEvDescribeSchemeResult;
 }
 
+namespace NKikimrKesus {
+    class TStreamingQuoterResource;
+}
+
 namespace NKikimr::NSchemeShard {
 
 bool BuildScheme(
@@ -13,5 +17,9 @@ bool BuildScheme(
     TString& scheme,
     const TString& databaseRoot,
     TString& error);
+
+bool BuildRateLimiterResourceScheme(
+    const NKikimrKesus::TStreamingQuoterResource& rateLimiterDesc,
+    TString& scheme);
 
 } // namespace NKikimr::NSchemeShard

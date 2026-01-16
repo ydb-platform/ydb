@@ -78,7 +78,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         TString err;
         if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
             result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
-            return result;
+            return {};
         }
         auto& relativeItemPath = paths.second;
         desc.SetDstPath(JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName(), tx.GetBackupBackupCollection().GetTargetDir(), relativeItemPath}));
@@ -137,24 +137,18 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             
             if (incrBackupEnabled && !omitIndexes) {
                 const auto tablePath = sPath;
-
+                
                 for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-                    if (!context.SS->PathsById.contains(childPathId)) {
-                        continue;
-                    }
                     auto childPath = context.SS->PathsById.at(childPathId);
-
+                    
                     if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
                         continue;
                     }
-
+                    
                     if (childPath->Dropped()) {
                         continue;
                     }
-
-                    if (!context.SS->Indexes.contains(childPathId)) {
-                        continue;
-                    }
+                    
                     auto indexInfo = context.SS->Indexes.at(childPathId);
                     if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
                         continue;
@@ -202,20 +196,14 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             if (incrBackupEnabled && !omitIndexes) {
                 // Also invalidate cache for index impl tables
                 for (const auto& [childName, childPathId] : sPath.Base()->GetChildren()) {
-                    if (!context.SS->PathsById.contains(childPathId)) {
-                        continue;
-                    }
                     auto childPath = context.SS->PathsById.at(childPathId);
-                    if (childPath->PathType == NKikimrSchemeOp::EPathTypeTableIndex && !childPath->Dropped()) {
+                    if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex && !childPath->Dropped()) {
                         auto indexInfo = context.SS->Indexes.find(childPathId);
-                        if (indexInfo != context.SS->Indexes.end() &&
+                        if (indexInfo != context.SS->Indexes.end() && 
                             indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobal) {
-
+                            
                             auto indexPath = TPath::Init(childPathId, context.SS);
                             for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
-                                if (!context.SS->PathsById.contains(implTablePathId)) {
-                                    continue;
-                                }
                                 auto implTablePath = context.SS->PathsById.at(implTablePathId);
                                 if (implTablePath->IsTable()) {
                                     context.SS->ClearDescribePathCaches(implTablePath);
@@ -235,21 +223,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
     if (incrBackupEnabled) {
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
-            const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
-
-            {
-                auto checks = sPath.Check();
-                checks
-                    .IsResolved()
-                    .NotDeleted()
-                    .IsTable();
-
-                if (!checks) {
-                    result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-                    return result;
-                }
-            }
-
             NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
             createCdcStreamOp.SetTableName(item.GetPath());
             auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
@@ -257,6 +230,21 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
+            const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
+            
+            {
+                auto checks = sPath.Check();
+                checks
+                    .IsResolved()
+                    .NotDeleted()
+                    .IsTable();
+                
+                if (!checks) {
+                    result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+                    return result;
+                }
+            }
+            
             auto table = context.SS->Tables.at(sPath.Base()->PathId);
 
             TVector<TString> boundaries;
@@ -278,37 +266,33 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         if (incrBackupEnabled && !omitIndexes) {
             for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
                 const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
-
+                
+                // Iterate through table's children to find indexes
                 for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-                    if (!context.SS->PathsById.contains(childPathId)) {
-                        continue;
-                    }
                     auto childPath = context.SS->PathsById.at(childPathId);
-
+                    
+                    // Skip non-index children (CDC streams, etc.)
                     if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
                         continue;
                     }
-
+                    
+                    // Skip deleted indexes
                     if (childPath->Dropped()) {
                         continue;
                     }
-
-                    if (!context.SS->Indexes.contains(childPathId)) {
-                        continue;
-                    }
+                    
+                    // Get index info and filter for global sync only
                     auto indexInfo = context.SS->Indexes.at(childPathId);
                     if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
                         continue;
                     }
-
+                
+                    // Get index implementation table (the only child of index)
                     auto indexPath = TPath::Init(childPathId, context.SS);
                     Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
                     auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
-
+                    
                     auto indexTablePath = indexPath.Child(implTableName);
-                    if (!context.SS->Tables.contains(implTablePathId)) {
-                        continue;
-                    }
                     auto indexTable = context.SS->Tables.at(implTablePathId);
                     
                     NKikimrSchemeOp::TCreateCdcStream indexCdcStreamOp;

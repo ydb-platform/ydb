@@ -6,6 +6,8 @@
 
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
+
 namespace NKikimr::NDDisk {
 
     struct TEv {
@@ -80,4 +82,7 @@ namespace NKikimr::NDDisk {
     DECLARE_DDISK_EVENT(ListPersistentBufferResult) {
     };
 
-}
+    IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+
+} // NKikimr::NDDisk

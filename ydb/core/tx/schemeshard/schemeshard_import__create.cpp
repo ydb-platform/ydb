@@ -100,8 +100,7 @@ bool RewriteCreateQuery(
         return NYdb::NDump::RewriteCreateTransferQuery(query, dbRestoreRoot, dbPath, issues);
     } else if (IsCreateExternalDataSourceQuery(query)) {
         return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
-    }
-    if (IsCreateExternalTableQuery(query)) {
+    } else if (IsCreateExternalTableQuery(query)) {
         return NYdb::NDump::RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues);
     }
 
@@ -113,13 +112,22 @@ TString GetDatabase(TSchemeShard& ss) {
     return CanonizePath(ss.RootPathElements);
 }
 
-bool IsRetryableQueryExecutionError(NKikimrScheme::EStatus status) {
-    return IsIn({
-        NKikimrScheme::StatusPathDoesNotExist,
-        NKikimrScheme::StatusSchemeError,
-        NKikimrScheme::StatusMultipleModifications,
-        NKikimrScheme::StatusNotAvailable,
-    }, status);
+bool ShouldDelayQueryExecutionOnError(
+    const NKikimrSchemeOp::TModifyScheme& preparedQuery,
+    NKikimrScheme::EStatus status)
+{
+    switch (preparedQuery.GetOperationType()) {
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
+            return status == NKikimrScheme::StatusNotAvailable;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
+            return IsIn({
+                NKikimrScheme::StatusPathDoesNotExist,
+                NKikimrScheme::StatusSchemeError,
+                NKikimrScheme::StatusMultipleModifications,
+            }, status);
+        default:
+            return false;
+    }
 }
 
 }
@@ -1480,10 +1488,13 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
-        if (IsCreatedByQuery(item)
-            && IsRetryableQueryExecutionError(record.GetStatus())) {
-            // Query compiled, but execution was unsuccessful
-            return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
+        if (IsCreatedByQuery(item)) {
+            // As for created by query objects query must be compiled to execute
+            Y_ABORT_UNLESS(item.PreparedCreationQuery);
+
+            if (ShouldDelayQueryExecutionOnError(*item.PreparedCreationQuery, record.GetStatus())) {
+                return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
+            }
         }
 
         if (record.GetStatus() != NKikimrScheme::StatusAccepted) {

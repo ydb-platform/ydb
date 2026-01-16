@@ -304,6 +304,31 @@ public:
     virtual ~IWriteSession() = default;
 };
 
+//! Keyed write session.
+class IKeyedWriteSession : public TThrRefBase {
+public:
+    //! Write single message.
+    //! continuationToken - a token earlier provided to client with ReadyToAccept event.
+    virtual void Write(TContinuationToken&& continuationToken, const std::string& key, TWriteMessage&& message,
+        TTransactionBase* tx = nullptr) = 0;
+
+    //! Future that is set when next event is available.
+    virtual NThreading::TFuture<void> WaitEvent() = 0;
+
+    //! Wait and return next event. Use WaitEvent() for non-blocking wait.
+    virtual std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block = false) = 0;
+
+    //! Get several events in one call.
+    //! If blocking = false, instantly returns up to maxEventsCount available events.
+    //! If blocking = true, blocks till maxEventsCount events are available.
+    //! If maxEventsCount is unset, write session decides the count to return itself.
+    virtual std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false, std::optional<size_t> maxEventsCount = std::nullopt) = 0;
+
+    virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
+    virtual TWriterCounters::TPtr GetCounters() = 0;
+    virtual ~IKeyedWriteSession() = default;
+};
+
 class ISimpleBlockingKeyedWriteSession {
 public:
     //! Write single message.

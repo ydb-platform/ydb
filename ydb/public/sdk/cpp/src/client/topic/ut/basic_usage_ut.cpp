@@ -28,7 +28,12 @@
 #include <atomic>
 #include <util/stream/zlib.h>
 
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <thread>
 #include <unordered_map>
+#include <unordered_set>
 
 using namespace std::chrono_literals;
 
@@ -902,7 +907,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     }
 
-    Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_NoAutoPartitioning) {
+    Y_UNIT_TEST(KeyedWriteSession_NoAutoPartitioning) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
 
@@ -923,7 +928,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Codec(ECodec::RAW);
         writeSettings.SessionTimeout(TDuration::Seconds(30));
 
-        auto session = publicClient.CreateSimpleBlockingKeyedWriteSession(writeSettings);
+        auto session = publicClient.CreateKeyedWriteSession(writeSettings);
+
+        struct TTokenIssuer : public TContinuationTokenIssuer {
+            using TContinuationTokenIssuer::IssueContinuationToken;
+        };
 
         const std::string key0 = FindKeyForBucket(0, 2);
         const std::string key1 = FindKeyForBucket(1, 2);
@@ -932,10 +941,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         const ui64 count1 = 11;
 
         for (ui64 i = 0; i < count0; ++i) {
-            UNIT_ASSERT(session->Write(key0, TWriteMessage("msg0")));
+            session->Write(TTokenIssuer::IssueContinuationToken(), key0, TWriteMessage("msg0"));
         }
         for (ui64 i = 0; i < count1; ++i) {
-            UNIT_ASSERT(session->Write(key1, TWriteMessage("msg1")));
+            session->Write(TTokenIssuer::IssueContinuationToken(), key1, TWriteMessage("msg1"));
         }
 
         UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
@@ -970,6 +979,78 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                              << "expected (" << count0 << "," << count1 << ") in any order"
         );
         session->Close(TDuration::Zero());
+    }
+
+    Y_UNIT_TEST(KeyedWriteSession_EventLoop_Acks) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        auto client = setup.MakeClient();
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.MessageGroupId(TEST_MESSAGE_GROUP_ID);
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.SessionTimeout(TDuration::Seconds(30));
+
+        auto session = client.CreateKeyedWriteSession(writeSettings);
+
+        const std::string key = "key";
+        const ui64 count = 20;
+
+        auto getReadyToken = [&](TDuration timeout) -> TContinuationToken {
+            const TInstant deadline = TInstant::Now() + timeout;
+            while (TInstant::Now() < deadline) {
+                session->WaitEvent().Wait(TDuration::Seconds(5));
+                for (auto& ev : session->GetEvents(false)) {
+                    if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&ev)) {
+                        return std::move(ready->ContinuationToken);
+                    }
+                    // ignore acks here
+                }
+            }
+            UNIT_FAIL("Timed out waiting for ReadyToAcceptEvent");
+            Y_ABORT("Unreachable");
+        };
+
+        // Typical event-loop usage: take token from ReadyToAccept, then Write with that token.
+        for (ui64 i = 1; i <= count; ++i) {
+            auto token = getReadyToken(TDuration::Seconds(30));
+            auto msg = TWriteMessage("data");
+            msg.SeqNo(i);
+            session->Write(std::move(token), key, std::move(msg));
+        }
+
+        std::unordered_set<ui64> ackedSeqNos;
+        ackedSeqNos.reserve(count);
+        std::vector<ui64> ackOrder;
+        ackOrder.reserve(count);
+
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (ackedSeqNos.size() < count && TInstant::Now() < deadline) {
+            session->WaitEvent().Wait(TDuration::Seconds(5));
+            for (auto& ev : session->GetEvents(false)) {
+                if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&ev)) {
+                    for (const auto& ack : acks->Acks) {
+                        if (ackedSeqNos.insert(ack.SeqNo).second) {
+                            ackOrder.push_back(ack.SeqNo);
+                        }
+                    }
+                }
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(ackedSeqNos.size(), count);
+        UNIT_ASSERT_VALUES_EQUAL(ackOrder.size(), count);
+        for (ui64 i = 0; i < count; ++i) {
+            UNIT_ASSERT_C(
+                ackOrder[i] == i + 1,
+                TStringBuilder() << "Unexpected ack order at index " << i
+                                 << ": got SeqNo=" << ackOrder[i]
+                                 << ", expected SeqNo=" << (i + 1)
+            );
+        }
+        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
     }
 
 } // Y_UNIT_TEST_SUITE(BasicUsage)

@@ -3119,7 +3119,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
-                Name: "AsyncTable"
+                Name: "Table"
                 Columns { Name: "id" Type: "Uint64" }
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["id"]
@@ -3132,7 +3132,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/AsyncTable/idx_async"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_async"), {
             NLs::PathExist,
             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
             NLs::IndexKeys({"value"})
@@ -3143,7 +3143,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             ExplicitEntryList {
                 Entries {
                     Type: ETypeTable
-                    Path: "/MyRoot/AsyncTable"
+                    Path: "/MyRoot/Table"
                 }
             }
             Cluster: {}
@@ -3167,32 +3167,32 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             R"(Name: ".backups/collections/AsyncCollection")");
         env.TestWaitNotification(runtime, txId);
 
-        TestDropTable(runtime, ++txId, "/MyRoot", "AsyncTable");
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/AsyncTable"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/AsyncCollection")");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/AsyncTable"), {
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
             NLs::PathExist,
             NLs::IsTable,
             NLs::IndexesCount(1)
         });
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/AsyncTable/idx_async"), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_async"), {
             NLs::PathExist,
             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
             NLs::IndexKeys({"value"})
         });
 
-        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/AsyncTable/idx_async", true, true);
+        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/Table/idx_async", true, true);
         UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
         TString implName = indexDesc.GetPathDescription().GetChildren(0).GetName();
         
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/AsyncTable/idx_async/" + implName), {
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_async/" + implName), {
             NLs::PathExist,
             NLs::IsTable
         });

@@ -106,7 +106,9 @@ public:
                 hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandlePrepare);
                 hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                    << "KqpPartitionedExecuterActor got an unknown message from actorId = " << ev->Sender
+                    << ", type = " << ev->GetTypeRewrite() << ", state = " << CurrentStateFuncName())}));
             }
         } catch (...) {
             AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
@@ -115,41 +117,58 @@ public:
     }
 
     void HandlePrepare(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        auto* request = ev->Get()->Request.Get();
+        const auto* request = ev->Get()->Request.Get();
 
         PE_LOG_D("Got TEvResolveKeySetResult from actorId = " << ev->Sender);
 
         if (request->ErrorCount > 0) {
-            PE_LOG_E("Failed to resolve table partitioning, errorCount = " << request->ErrorCount);
             AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
-                << "KqpPartitionedExecuterActor could not resolve a partitioning of the table, state = " << CurrentStateFuncName())}));
+                << "KqpPartitionedExecuterActor could not resolve a partitioning of the table, errorCount = "
+                << request->ErrorCount << ", state = " << CurrentStateFuncName())}));
             return;
         }
 
-        YQL_ENSURE(request->ResultSet.size() == 1);
+        if (request->ResultSet.size() != 1) {
+            AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "KqpPartitionedExecuterActor could not resolve a partitioning of the table, resultSet is empty, state = " << CurrentStateFuncName())}));
+            return;
+        }
 
-        TablePartitioning = request->ResultSet[0].KeyDescription->Partitioning;
+        const auto& result = request->ResultSet[0].KeyDescription;
+        if (!result || !result->Partitioning) {
+            AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "KqpPartitionedExecuterActor could not resolve a partitioning of the table, partitioning is null, state = " << CurrentStateFuncName())}));
+            return;
+        }
 
+        if (result->Partitioning->empty()) {
+            AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                << "KqpPartitionedExecuterActor could not resolve a partitioning of the table, partitioning is empty for tableId = "
+                << result->TableId << ", state = " << CurrentStateFuncName())}));
+            return;
+        }
+
+        TablePartitioning = result->Partitioning;
         CreateExecutersWithBuffers();
     }
 
     void HandlePrepare(TEvKqp::TEvAbortExecution::TPtr& ev) {
-        auto& msg = ev->Get()->Record;
+        const auto& msg = ev->Get()->Record;
         auto issues = ev->Get()->GetIssues();
 
-        auto it = ExecuterToPartition.find(ev->Sender);
+        const auto it = ExecuterToPartition.find(ev->Sender);
 
         if (it != ExecuterToPartition.end()) {
             PE_LOG_W("Got TEvAbortExecution from actorId = " << ev->Sender
-            << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-            << ", message: " << issues.ToOneLineString());
+                << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
+                << ", message: " << issues.ToOneLineString());
 
-            auto [_, partInfo] = *it;
+            const auto& [_, partInfo] = *it;
             AbortBuffer(partInfo->BufferId);
             ForgetExecuterAndBuffer(partInfo);
             ForgetPartition(partInfo);
         } else {
-            PE_LOG_D("Got TEvAbortExecution from ActorId = " << ev->Sender
+            PE_LOG_W("Got TEvAbortExecution from unknown actor with actorId = " << ev->Sender
                 << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
                 << ", message: " << issues.ToOneLineString()
                 << ", isSessionActor: " << (ev->Sender == SessionActorId));
@@ -166,7 +185,9 @@ public:
                 hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
                 hFunc(TEvKqpBuffer::TEvError, HandleExecute);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                    << "KqpPartitionedExecuterActor got an unknown message from actorId = " << ev->Sender
+                    << ", type = " << ev->GetTypeRewrite() << ", state = " << CurrentStateFuncName())}));
             }
         } catch (...) {
             AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
@@ -274,7 +295,8 @@ public:
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleAbort);
             default:
-                PE_LOG_W("Got unknown message from actorId = " << ev->Sender);
+                PE_LOG_W("KqpPartitionedExecuterActor got an unknown message from actorId = " << ev->Sender
+                    << ", type = " << ev->GetTypeRewrite() << ", state = " << CurrentStateFuncName() << ", ignore");
             }
         } catch (...) {
             AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
@@ -365,8 +387,8 @@ public:
 
     TString LogPrefix() const {
         TStringBuilder result = TStringBuilder()
-            << "[PARTITIONED] ActorId: " << SelfId() << ", "
-            << "ActorState: " << CurrentStateFuncName() << ", ";
+            << "[PARTITIONED] actorId: " << SelfId() << ", "
+            << "actorState: " << CurrentStateFuncName() << ", ";
         return result;
     }
 
@@ -456,7 +478,7 @@ private:
     }
 
     void CreateExecutersWithBuffers() {
-        YQL_ENSURE(TablePartitioning);
+        YQL_ENSURE(TablePartitioning && !TablePartitioning->empty(), "No partitions to execute");
 
         PE_LOG_I("Resolved " << TablePartitioning->size() << " partitions, starting first "
             << std::min(Settings.PartitionExecutionLimit, TablePartitioning->size()) << " in parallel");
@@ -563,7 +585,7 @@ private:
         }
 
         PE_LOG_I("Sending abort to " << ExecuterToPartition.size() << " executers");
-        for (auto& [exId, partInfo] : ExecuterToPartition) {
+        for (const auto& [exId, partInfo] : ExecuterToPartition) {
             AbortExecuter(exId, ReturnIssues.ToOneLineString());
         }
     }
@@ -742,7 +764,7 @@ private:
 
     void AbortWithError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         if (CurrentStateFunc() == &TKqpPartitionedExecuter::AbortState) {
-            PE_LOG_D("Ignoring error " << Ydb::StatusIds_StatusCode_Name(code)
+            PE_LOG_N("Ignoring error " << Ydb::StatusIds_StatusCode_Name(code)
                 << " because already in AbortState with error: " << Ydb::StatusIds_StatusCode_Name(ReturnStatus));
 
             if (CheckExecutersAreFinished()) {

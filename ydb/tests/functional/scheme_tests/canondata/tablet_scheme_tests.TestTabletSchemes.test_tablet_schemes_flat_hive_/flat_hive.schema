@@ -101,6 +101,11 @@
                 "ColumnId": 2,
                 "ColumnName": "Config",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "StringValue",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -109,7 +114,8 @@
                 "Columns": [
                     0,
                     1,
-                    2
+                    2,
+                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,

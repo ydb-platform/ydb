@@ -185,6 +185,13 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL("[[[["
             R"(["4";"0";"11"]];)"
         "%false]]]", rows);
+
+        // Check that the index is successfully dropped
+        TestDropTableIndex(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot", R"(
+            TableName: "texts"
+            IndexName: "fulltext_idx"
+        )");
+        env.TestWaitNotification(runtime, txId);
     }
 
 }

@@ -62,13 +62,7 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
     if (!query.empty()) {
         TCgiParameters queryParams(query);
         if (queryParams.Has("database")) {
-            std::string dbValue = queryParams.Get("database");
-            // Ensure database starts with '/'
-            if (!dbValue.empty() && dbValue[0] != '/') {
-                connectionInfo.Database = "/" + dbValue;
-            } else {
-                connectionInfo.Database = dbValue;
-            }
+            connectionInfo.Database = queryParams.Get("database");
             hasQueryDatabase = true;
         }
     }
@@ -79,8 +73,13 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
     }
 
     // If database not found in query and path exists, use path as database
+    // TUri removes leading '/' from path, so we need to add it back
     if (!hasQueryDatabase && !path.empty()) {
-        connectionInfo.Database = std::string(path);
+        if (path[0] != '/') {
+            connectionInfo.Database = "/" + std::string(path);
+        } else {
+            connectionInfo.Database = std::string(path);
+        }
     }
 
     return connectionInfo;

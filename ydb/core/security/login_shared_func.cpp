@@ -7,7 +7,7 @@
 
 namespace NKikimr {
 
-bool IsLdapAuthenticationEnable(const NKikimrProto::TAuthConfig& config) {
+bool IsLdapAuthenticationEnabled(const NKikimrProto::TAuthConfig& config) {
     return config.HasLdapAuthentication();
 }
 

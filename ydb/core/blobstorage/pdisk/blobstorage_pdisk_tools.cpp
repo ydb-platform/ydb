@@ -52,7 +52,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
     const ui64 &diskGuid, const NPDisk::TKey &chunkKey, const NPDisk::TKey &logKey, const NPDisk::TKey &sysLogKey,
     const NPDisk::TKey &mainKey, TString textMessage, const bool isErasureEncodeUserLog, bool trimEntireDevice,
     TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization, std::optional<TRcBuf> metadata,
-    bool plainDataChunks)
+    bool plainDataChunks, bool enableMetadataEncryption, std::optional<bool> enableSectorEncryption)
 {
     TActorSystemCreator creator;
 
@@ -95,7 +95,8 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
                 TPDiskCategory(deviceType, 0).GetRaw()));
     cfg->SectorMap = sectorMap;
     // Disable encryption for SectorMap
-    cfg->EnableSectorEncryption = !cfg->SectorMap;
+    cfg->EnableSectorEncryption = enableSectorEncryption.value_or(!cfg->SectorMap);
+    cfg->EnableMetadataEncryption = enableMetadataEncryption;
     cfg->PlainDataChunks = plainDataChunks;
 
     if (!isBlockDevice && !cfg->UseSpdkNvmeDriver && !sectorMap) {
@@ -159,7 +160,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
             NPDisk::TReqId(NPDisk::TReqId::ReadFormatInfo, 0), {});
 
     for (auto& key : mainKey.Keys) {
-        NPDisk::TPDiskStreamCypher cypher(true); // Format record is always encrypted
+        NPDisk::TPDiskStreamCypher cypher(true); // Format record is always encrypted (except some tests, which don't rely on this func)
         cypher.SetKey(key);
         bool isOk = false;
         alignas(16) NPDisk::TDiskFormat format;

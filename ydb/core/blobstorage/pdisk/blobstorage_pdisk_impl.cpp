@@ -139,7 +139,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
     ui32 mainKeySize = mainKey.Keys.size();
 
     for (ui32 k = 0; k < mainKeySize; ++k) {
-        TPDiskStreamCypher cypher(true); // Format record is always encrypted
+        TPDiskStreamCypher cypher(Cfg->EnableMetadataEncryption);
         cypher.SetKey(mainKey.Keys[k]);
 
         ui32 lastGoodIdx = (ui32)-1;
@@ -223,7 +223,12 @@ bool TPDisk::IsFormatMagicValid(ui8 *magicData8, ui32 magicDataSize, const TMain
     if (magicOr == 0ull || isIncompleteFormatMagicPresent) {
         return true;
     }
-    auto format = CheckMetadataFormatSector(magicData8, magicDataSize, mainKey, PCtx->PDiskLogPrefix);
+    auto format = CheckMetadataFormatSector(
+        magicData8,
+        magicDataSize,
+        mainKey,
+        PCtx->PDiskLogPrefix,
+        Cfg->EnableMetadataEncryption);
     return format.has_value();
 }
 
@@ -1738,7 +1743,7 @@ void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
 
         // Encrypt chunk0 format record using mainKey
         ui64 nonce = 1;
-        bool encrypt = true; // Always write encrypter format because some tests use wrong main key to initiate errors
+        bool encrypt = Cfg->EnableMetadataEncryption;
         TSysLogWriter formatWriter(Mon, *BlockDevice.Get(), Format, nonce, mainKey, BufferPool.Get(),
                 0, ReplicationFactor, Format.MagicFormatChunk, 0, nullptr, 0, nullptr, PCtx,
                 &DriveModel, encrypt);
@@ -1770,6 +1775,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     alignas(16) TDiskFormat format;
     format.Clear();
     format.SetPlainDataChunks(plainDataChunks);
+    format.SetEncryptFormat(Cfg->EnableMetadataEncryption);
     format.DiskSize = diskSizeBytes;
     format.SectorSize = sectorSizeBytes;
     ui64 erasureFlags = FormatFlagErasureEncodeUserLog;

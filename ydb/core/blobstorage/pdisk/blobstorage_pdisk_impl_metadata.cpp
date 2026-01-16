@@ -162,7 +162,7 @@ namespace NKikimr::NPDisk {
                 } else if (Buffer.size() < sizeof(TMetadataHeader)) {
                     req->ErrorReason = "buffer is too small to hold TMetadataHeader";
                 } else {
-                    TPDiskStreamCypher cypher(true);
+                    TPDiskStreamCypher cypher(PDisk->Cfg->EnableMetadataEncryption);
                     cypher.SetKey(Format.DataKey);
 
                     auto *header = reinterpret_cast<TMetadataHeader*>(Buffer.GetDataMut());
@@ -223,7 +223,11 @@ namespace NKikimr::NPDisk {
                 if (FormatIndex != -1) {
                     Y_VERIFY_S(static_cast<ui32>(FormatIndex) < ReplicationFactor, PDisk->PCtx->PDiskLogPrefix);
                     Payload = TRcBuf::UninitializedPageAligned(FormatSectorSize);
-                    TPDisk::MakeMetadataFormatSector(reinterpret_cast<ui8*>(Payload.GetDataMut()), MainKey, Format);
+                    TPDisk::MakeMetadataFormatSector(
+                        reinterpret_cast<ui8*>(Payload.GetDataMut()),
+                        MainKey,
+                        Format,
+                        PDisk->Cfg->EnableMetadataEncryption);
                 }
 
                 STLOGX(*PDisk->PCtx->ActorSystem, PRI_DEBUG, BS_PDISK, BPD01, "TCompletionWriteUnformattedMetadata::IssueQuery",
@@ -802,7 +806,7 @@ namespace NKikimr::NPDisk {
     }
 
     std::optional<TMetadataFormatSector> TPDisk::CheckMetadataFormatSector(const ui8 *data, size_t len,
-            const TMainKey& mainKey, const TString& logPrefix) {
+            const TMainKey& mainKey, const TString& logPrefix, bool encryption) {
         if (len != FormatSectorSize * ReplicationFactor) {
             Y_UNUSED(logPrefix);
             Y_DEBUG_ABORT_S(logPrefix << "unexpected metadata format sector size");
@@ -812,7 +816,7 @@ namespace NKikimr::NPDisk {
         constexpr ui32 usefulDataSize = FormatSectorSize - sizeof(TDataSectorFooter);
         static_assert(sizeof(TMetadataFormatSector) <= usefulDataSize);
 
-        TPDiskStreamCypher cypher(true);
+        TPDiskStreamCypher cypher(encryption);
         auto decrypted = TRcBuf::Uninitialized(usefulDataSize);
         auto& decryptedSector = *reinterpret_cast<TMetadataFormatSector*>(decrypted.GetDataMut());
 
@@ -837,7 +841,7 @@ namespace NKikimr::NPDisk {
         return winner;
     }
 
-    void TPDisk::MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format) {
+    void TPDisk::MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format, bool encryption) {
         TReallyFastRng32 rng(RandomNumber<ui64>());
         for (ui32 *p = reinterpret_cast<ui32*>(data); static_cast<void*>(p) < data + FormatSectorSize; ++p) {
             *p = rng();
@@ -857,7 +861,7 @@ namespace NKikimr::NPDisk {
         footer.Version = PDISK_DATA_VERSION;
         footer.Hash = hasher.GetHashResult();
 
-        TPDiskStreamCypher cypher(true);
+        TPDiskStreamCypher cypher(encryption);
         cypher.SetKey(mainKey.Keys.back());
         cypher.StartMessage(footer.Nonce);
         cypher.InplaceEncrypt(data, usefulDataSize);

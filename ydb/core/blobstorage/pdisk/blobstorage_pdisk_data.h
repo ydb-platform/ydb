@@ -598,7 +598,7 @@ enum EFormatFlags {
     FormatFlagErasureEncodeFormat = 1 << 3,  // Always on, flag is useless
     FormatFlagErasureEncodeNextChunkReference = 1 << 4,  // Always on, flag is useless
     FormatFlagEncryptFormat = 1 << 5,  // Always on, flag is useless
-    FormatFlagEncryptData = 1 << 6,  // Always on, flag is useless
+    FormatFlagEncryptData = 1 << 6,
     FormatFlagFormatInProgress = 1 << 7,  // Not implemented (Must be OFF for a formatted disk)
 
     FormatFlagPlainDataChunks = 1 << 8,  // Default is off, means "encrypted", for backward compatibility
@@ -741,6 +741,14 @@ struct TDiskFormat {
         }
     }
 
+    void SetEncryptFormat(bool encrypt) {
+        if (encrypt) {
+            FormatFlags |= FormatFlagEncryptFormat;
+        } else {
+            FormatFlags &= ~FormatFlagEncryptFormat;
+        }
+    }
+
     ui64 Offset(TChunkIdx chunkIdx, ui32 sectorIdx, ui64 offset) const {
         return (ui64)ChunkSize * chunkIdx + (ui64)SectorSize * sectorIdx + offset;
     }
@@ -786,7 +794,7 @@ struct TDiskFormat {
     }
 
     void PrepareMagic(TKey &key, ui64 nonce, ui64 &magic) {
-        NPDisk::TPDiskStreamCypher cypher(true);
+        NPDisk::TPDiskStreamCypher cypher(IsEncryptFormat());
         cypher.SetKey(key);
         cypher.StartMessage(nonce);
         cypher.InplaceEncrypt(&magic, sizeof(magic));
@@ -908,6 +916,7 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
+        SetEncryptFormat(format.IsEncryptFormat());
         SetPlainDataChunks(format.IsPlainDataChunks());
 
         Y_VERIFY(format.Version <= Version);

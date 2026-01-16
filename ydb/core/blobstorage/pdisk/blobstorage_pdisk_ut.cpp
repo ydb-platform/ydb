@@ -624,6 +624,44 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         vdisk.SendEvLogSync();
     }
 
+    Y_UNIT_TEST(TestStartWithAllEncryptionDisabled) {
+        TActorTestContext::TSettings settings{};
+        settings.UseSectorMap = false;
+
+        TActorTestContext testCtx(settings);
+        {
+            auto cfg = testCtx.GetPDiskConfig();
+            cfg->EnableSectorEncryption = false;
+            cfg->EnableMetadataEncryption = false;
+            testCtx.UpdateConfigRecreatePDisk(cfg, true);
+        }
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        UNIT_ASSERT_VALUES_EQUAL(vdisk.Chunks[EChunkState::COMMITTED].size(), 1);
+        const ui32 chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+        vdisk.SendEvLogSync();
+
+        const TString writeData = PrepareData(4096);
+        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+                new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    chunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
+                NKikimrProto::OK);
+
+        testCtx.RestartPDiskSync();
+
+        vdisk.InitFull();
+
+        const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                    chunk, 0, writeData.size(), 0, nullptr),
+                NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
+    }
+
     Y_UNIT_TEST(PDiskOwnerSlayRace) {
         TActorTestContext testCtx{{}};
         testCtx.GetPDisk(); // inits pdisk

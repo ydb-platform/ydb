@@ -448,8 +448,8 @@ public:
     bool WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format);
 
     static std::optional<TMetadataFormatSector> CheckMetadataFormatSector(const ui8 *data, size_t len,
-        const TMainKey& mainKey, const TString& logPrefix);
-    static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format);
+        const TMainKey& mainKey, const TString& logPrefix, bool encryption);
+    static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format, bool encryption);
 
     NMeta::TFormatted& GetFormattedMeta();
     NMeta::TUnformatted& GetUnformattedMeta();

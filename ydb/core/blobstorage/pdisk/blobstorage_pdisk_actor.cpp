@@ -377,7 +377,12 @@ public:
     void CheckMagicSector(ui8 *magicData, ui32 magicDataSize) {
         bool isFormatMagicValid = PDisk->IsFormatMagicValid(magicData, magicDataSize, MainKey);
         if (isFormatMagicValid) {
-            auto format = PDisk->CheckMetadataFormatSector(magicData, magicDataSize, MainKey, PCtx->PDiskLogPrefix);
+            auto format = PDisk->CheckMetadataFormatSector(
+                magicData,
+                magicDataSize,
+                MainKey,
+                PCtx->PDiskLogPrefix,
+                Cfg->EnableMetadataEncryption);
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TPushUnformattedMetadataSector>(format,
                 !Cfg->MetadataOnly));
             if (Cfg->MetadataOnly) {

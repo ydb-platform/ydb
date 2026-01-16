@@ -118,9 +118,14 @@ private:
             } else {
                 op->TxBroken = BrokenFlag;
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
-                // we cannot send the ack right away, we must make sure that we have stored the TxBroken value
-                // but we can proceed right away, because we received from the primary the decision
-                Self->EnqueueProgressTx(ctx, TxId);
+
+                // me must check IsInProgress, because the ReadSet and the Ack from the primary may come in any order,
+                // and we do not want to enqueue the progress tx twice
+                if (!op->IsInProgress()) {
+                    // we cannot send the ack right away, we must make sure that we have stored the TxBroken value
+                    // but we can proceed right away, because we received from the primary the decision and the ack
+                    Self->EnqueueProgressTx(ctx, TxId);
+                }
             }
             return true;
         }

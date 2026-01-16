@@ -1890,7 +1890,6 @@ private:
                     if (existsMask[index]
                             && IsEqual(
                                 row,
-                                {},
                                 lookupInfo.KeyIndexes,
                                 lookupInfo.OldKeyIndexes,
                                 TConstArrayRef<NScheme::TTypeInfo>(lookupInfo.Lookup->GetKeyColumnTypes())
@@ -2021,7 +2020,6 @@ private:
                         || !hasMainTableLookup
                         || !IsEqual(
                             row,
-                            {},
                             actorInfo.NewColumnsIndexes,
                             actorInfo.OldColumnsIndexes,
                             actorInfo.ColumnTypes);

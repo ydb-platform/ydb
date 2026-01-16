@@ -744,7 +744,8 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
 
 bool IsMainContextOfTransaction(const TString& key)
 {
-    return key.size() > TX_KEY_LENGTH;
+    Y_ENSURE(key.size() >= TX_KEY_LENGTH);
+    return key.size() == TX_KEY_LENGTH;
 }
 
 void TPersQueue::FixTransactionStates(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges)

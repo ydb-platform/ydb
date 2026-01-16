@@ -66,7 +66,11 @@ class TKafkaTestClient {
 
         TMessagePtr<TSaslHandshakeResponseData> SaslHandshake(const TString& mechanism = "PLAIN");
 
-        TMessagePtr<TSaslAuthenticateResponseData> SaslAuthenticate(const TString& user, const TString& password);
+        TMessagePtr<TSaslAuthenticateResponseData> SaslPlainAuthenticate(const TString& user, const TString& password);
+
+        TMessagePtr<TSaslAuthenticateResponseData> SaslScramAuthenticateFirstMsg(const TString& user, const TString& clientNonce);
+
+        TMessagePtr<TSaslAuthenticateResponseData> SaslScramAuthenticateFinalMsg(const TString& nonce, const TString& clientProof);
 
         TMessagePtr<TInitProducerIdResponseData> InitProducerId(const std::optional<TString>& transactionalId = {}, ui64 txnTimeoutMs = 1000);
 
@@ -138,9 +142,13 @@ class TKafkaTestClient {
 
         void UnknownApiKey();
 
-        void AuthenticateToKafka();
+        void PlainAuthenticateToKafka();
 
-        void AuthenticateToKafka(const TString& userName, const TString& userPassword);
+        void PlainAuthenticateToKafka(const TString& userName, const TString& userPassword);
+
+        void ScramAuthenticateToKafka();
+
+        void ScramAuthenticateToKafka(const TString& userName, const TString& userPassword);
 
         TRequestHeaderData Header(NKafka::EApiKey apiKey, TKafkaVersion version);
 

@@ -202,6 +202,23 @@ bool IsPrintable(const std::string_view str) {
 	return true;
 }
 
+bool IsPositiveInt(const std::string_view str) {
+    if (str.empty()) {
+	    return false;
+	}
+
+	try {
+        ui32 result = std::stoul(std::string(str));
+        if (result == 0) {
+            return false;
+        } else {
+            return true;
+        }
+    } catch (...) {
+        return false;
+    }
+}
+
 } // namespace
 
 namespace NLogin::NSasl {
@@ -728,6 +745,157 @@ EParseMsgReturnCodes ParseFinalClientMsg(const std::string& msg, TFinalClientMsg
     }
 
     parsedMsg.ClientFinalMessageWithoutProof = msgView.substr(0, clientFinalMsgWithoutProofLength);
+    return EParseMsgReturnCodes::Success;
+}
+
+EParseMsgReturnCodes ParseFirstServerMsg(const std::string& msg, TFirstServerMsg& parsedMsg) {
+    if (msg.empty()) {
+        return EParseMsgReturnCodes::InvalidFormat;
+    }
+
+    const std::string_view msgView = msg;
+    size_t i = 0;
+
+    // read nonce
+    if (auto nonceAttr = ReadAttribute(msgView, i); nonceAttr.has_value()) {
+        if (nonceAttr->first != 'r') {
+            return EParseMsgReturnCodes::InvalidFormat;
+        }
+
+        const std::string_view nonce = nonceAttr->second;
+        if (!IsPrintable(nonce)) {
+            return EParseMsgReturnCodes::InvalidEncoding;
+        } else {
+            parsedMsg.Nonce = nonce;
+        }
+    } else {
+        return EParseMsgReturnCodes::InvalidFormat;
+    }
+
+    if (i == msgView.size() || msgView[i++] != ',') {
+        return EParseMsgReturnCodes::InvalidFormat;
+    }
+
+    // read salt
+    if (auto saltAttr = ReadAttribute(msgView, i); saltAttr.has_value()) {
+        if (saltAttr->first != 's') {
+            return EParseMsgReturnCodes::InvalidFormat;
+        }
+
+        const std::string_view salt = saltAttr->second;
+        if (!IsBase64(salt)) {
+            return EParseMsgReturnCodes::InvalidEncoding;
+        } else {
+            parsedMsg.Salt = salt;
+        }
+    } else {
+        return EParseMsgReturnCodes::InvalidFormat;
+    }
+
+    if (i == msgView.size() || msgView[i++] != ',') {
+        return EParseMsgReturnCodes::InvalidFormat;
+    }
+
+    // read iterations count
+    if (auto iterAttr = ReadAttribute(msgView, i); iterAttr.has_value()) {
+        if (iterAttr->first != 'i') {
+            return EParseMsgReturnCodes::InvalidFormat;
+        }
+
+        const std::string_view iterStr = iterAttr->second;
+        if (!IsPositiveInt(iterStr)) {
+            return EParseMsgReturnCodes::InvalidFormat;
+        } else {
+            parsedMsg.IterationsCount = std::stoul(std::string(iterStr));
+        }
+    } else {
+        return EParseMsgReturnCodes::InvalidFormat;
+    }
+
+    // read extensions
+    while (i != msgView.size()) {
+        if (msgView[i++] != ',') {
+            return EParseMsgReturnCodes::InvalidFormat;
+        }
+
+        if (auto attr = ReadAttribute(msgView, i); attr.has_value()) {
+            if (RESERVED_ATTRIBUTE_NAMES.contains(attr->first)) {
+                return EParseMsgReturnCodes::InvalidFormat;
+            }
+
+            const std::string_view attrValue = attr->second;
+            if (!IsUtf(attrValue.data(), attrValue.size())) {
+                return EParseMsgReturnCodes::InvalidEncoding;
+            } else {
+                if (!parsedMsg.Extensions.emplace(attr->first, attrValue).second){
+                    return EParseMsgReturnCodes::InvalidFormat;
+                }
+            }
+        } else {
+            return EParseMsgReturnCodes::InvalidFormat;
+        }
+    }
+
+    return EParseMsgReturnCodes::Success;
+}
+
+EParseMsgReturnCodes ParseFinalServerMsg(const std::string& msg, TFinalServerMsg& parsedMsg) {
+    if (msg.empty()) {
+        return EParseMsgReturnCodes::InvalidFormat;
+    }
+
+    const std::string_view msgView = msg;
+    size_t i = 0;
+
+    // read first attribute (either 'v' for server signature or 'e' for error)
+    if (auto firstAttr = ReadAttribute(msgView, i); firstAttr.has_value()) {
+        if (firstAttr->first == 'v') {
+            // server signature
+            const std::string_view serverSignature = firstAttr->second;
+            if (!IsBase64(serverSignature)) {
+                return EParseMsgReturnCodes::InvalidEncoding;
+            } else {
+                parsedMsg.ServerSignature = serverSignature;
+            }
+        } else if (firstAttr->first == 'e') {
+            // error
+            const std::string_view error = firstAttr->second;
+            if (!IsPrintable(error)) {
+                return EParseMsgReturnCodes::InvalidEncoding;
+            } else {
+                parsedMsg.Error = error;
+            }
+        } else {
+            return EParseMsgReturnCodes::InvalidFormat;
+        }
+    } else {
+        return EParseMsgReturnCodes::InvalidFormat;
+    }
+
+    // read extensions
+    while (i != msgView.size()) {
+        if (msgView[i++] != ',') {
+            return EParseMsgReturnCodes::InvalidFormat;
+        }
+
+        if (auto attr = ReadAttribute(msgView, i); attr.has_value()) {
+            if (RESERVED_ATTRIBUTE_NAMES.contains(attr->first)) {
+                return EParseMsgReturnCodes::InvalidFormat;
+            }
+
+            const std::string_view attrValue = attr->second;
+            if (!IsUtf(attrValue.data(), attrValue.size())) {
+                return EParseMsgReturnCodes::InvalidEncoding;
+            } else {
+                if (!parsedMsg.Extensions.emplace(attr->first, attrValue).second){
+                    return EParseMsgReturnCodes::InvalidFormat;
+                }
+            }
+        } else {
+            return EParseMsgReturnCodes::InvalidFormat;
+        }
+    }
+
     return EParseMsgReturnCodes::Success;
 }
 

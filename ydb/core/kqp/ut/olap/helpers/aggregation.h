@@ -81,7 +81,7 @@ private:
     bool UseLlvm = true;
 public:
     void FillExpectedAggregationGroupByPlanOptions() {
-        AddExpectedPlanOptions("DqPhyHashCombine");
+        AddExpectedPlanOptions("WideCombiner");
     }
     TString GetFixedQuery() const {
         TStringBuilder queryFixed;

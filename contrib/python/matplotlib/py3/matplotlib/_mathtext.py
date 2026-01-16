@@ -42,7 +42,7 @@ if T.TYPE_CHECKING:
     from collections.abc import Iterable
     from .ft2font import Glyph
 
-ParserElement.enablePackrat()
+ParserElement.enable_packrat()
 _log = logging.getLogger("matplotlib.mathtext")
 
 

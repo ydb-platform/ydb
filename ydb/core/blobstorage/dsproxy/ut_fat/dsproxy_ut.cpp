@@ -4241,9 +4241,11 @@ public:
                 TString filePath = databaseDirectory + "/pdisk.dat";
                 if (!SectorMapByPath[filePath]) {
                     SectorMapByPath[filePath].Reset(new NPDisk::TSectorMap(diskSizeBytes));
+                    TFormatOptions options;
+                    options.SectorMap = SectorMapByPath[filePath];
+                    options.EnableSmallDiskOptimization = false;
                     FormatPDisk(filePath, diskSizeBytes, 4 << 10, chunkSize, pDiskGuid,
-                            0x123, 0x456, 0x789, isBad ? badMainKey : mainKey, "", false, false,
-                            SectorMapByPath[filePath], false);
+                            0x123, 0x456, 0x789, isBad ? badMainKey : mainKey, "", options);
                 }
 
                 TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(filePath, pDiskGuid, i + 1, pDiskCategory);

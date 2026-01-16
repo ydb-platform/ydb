@@ -497,8 +497,10 @@ void TestPayloadOffset(ui64 firstSector, ui64 lastSector, ui64 currentSector, ui
         NPDisk::TKey sysLogKey{};
 
         TPDiskConfig cfg("SectorMap:1024042", 12345, 0, {});
+        TFormatOptions options;
+        options.SectorMap = sectorMap;
         FormatPDisk(cfg.Path, 0, 4096, MIN_CHUNK_SIZE, cfg.PDiskGuid, chunkKey, logKey, sysLogKey,
-                YdbDefaultPDiskSequence, TString(), false, false, sectorMap);
+                YdbDefaultPDiskSequence, TString(), options);
     }
 
     Y_UNIT_TEST(SectorMapStoreLoadFromFile) {

@@ -184,8 +184,10 @@ public:
     }
 
     virtual int Run(TConfig&) override {
-        FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey, MainKey.Keys.back(), TextMessage,
-                IsErasureEncode, false, nullptr, true);
+        TFormatOptions options;
+        options.IsErasureEncodeUserLog = IsErasureEncode;
+        FormatPDisk(Path, DiskSize, SectorSize, ChunkSize, Guid, ChunkKey, LogKey, SysLogKey,
+                MainKey.Keys.back(), TextMessage, options);
         return 0;
     }
 };

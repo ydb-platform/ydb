@@ -145,8 +145,11 @@ struct TPDiskFailureInjectionTest {
         PDiskGuid = Now().GetValue();
 
         // format pdisk
+        TFormatOptions options;
+        options.IsErasureEncodeUserLog = ErasureEncode;
+        options.EnableSmallDiskOptimization = false;
         NKikimr::FormatPDisk(PDiskFilePath, DiskSize, SectorSize, ChunkSize, PDiskGuid, 1, 1, 1, 1, "text message",
-                ErasureEncode, false, nullptr, false);
+                options);
 
         Cerr << "created pdisk at " << PDiskFilePath << Endl;
     }

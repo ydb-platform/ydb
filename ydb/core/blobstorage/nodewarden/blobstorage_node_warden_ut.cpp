@@ -73,10 +73,13 @@ void FormatPDiskRandomKeys(TString path, ui32 diskSize, ui32 chunkSize, ui64 gui
         SafeEntropyPoolRead(&guid, sizeof(guid));
     }
 
+    TFormatOptions options;
+    options.SectorMap = sectorMap;
+    options.EnableSmallDiskOptimization = enableSmallDiskOptimization;
+
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize,
             guid, chunkKey, logKey,
-            sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Test",
-            false, false, sectorMap, enableSmallDiskOptimization);
+            sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Test", options);
 }
 
 void SetupLogging(TTestActorRuntime& runtime) {
@@ -211,9 +214,12 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
             ui64 pDiskGuid = 1;
             static ui64 iteration = 0;
             ++iteration;
+            TFormatOptions options;
+            options.SectorMap = sectorMap;
+            options.EnableSmallDiskOptimization = false;
             ::NKikimr::FormatPDisk(pDiskPath0, 0, 4 << 10, 32u << 20u, pDiskGuid,
                 0x1234567890 + iteration, 0x4567890123 + iteration, 0x7890123456 + iteration,
-                NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap, false);
+                NPDisk::YdbDefaultPDiskSequence, "", options);
 
 
             // Magic path from testlib, do not change it

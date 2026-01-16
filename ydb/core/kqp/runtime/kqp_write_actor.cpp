@@ -1516,7 +1516,6 @@ public:
         std::vector<ui32> OldColumnsIndexes;
         TKqpTableWriteActor* WriteActor = nullptr;
         std::vector<NScheme::TTypeInfo> ColumnTypes;
-        bool SkipEqualRows = false;
         bool NeedWriteProjection = true;
     };
 
@@ -2024,26 +2023,34 @@ private:
                 }
             }
 
+            const bool hasMainTableLookup = PathLookupInfo.contains(PathId);
+
             for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
+                auto rowPossiblyChanged = [&actorInfo, &hasMainTableLookup, this](const TConstArrayRef<TCell> row) {
+                    return OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+                        || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT
+                        || !hasMainTableLookup
+                        || !IsEqual(
+                            row,
+                            {},
+                            actorInfo.NewColumnsIndexes,
+                            actorInfo.OldColumnsIndexes,
+                            actorInfo.ColumnTypes);
+                };
+
                 // At first, write to indexes
                 if (PathId != actorPathId) {
-                    const bool hasDelete = !actorInfo.DeleteKeysIndexes.empty();
-                    if (hasDelete) {
+                    const bool hasAdditionalDelete = !actorInfo.DeleteKeysIndexes.empty();
+                    if (hasAdditionalDelete) {
                         AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
                             && OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
                         {
                             auto deleteProjection = CreateDataBatchProjection(
                                 actorInfo.DeleteKeysIndexes, Alloc);
                             for (const auto& [key, rowAndExists] : keyToRow) {
-                                if (rowAndExists.second && (
-                                        !actorInfo.SkipEqualRows
-                                        || !IsEqual(
-                                            rowAndExists.first,
-                                            {},
-                                            actorInfo.NewColumnsIndexes,
-                                            actorInfo.OldColumnsIndexes,
-                                            actorInfo.ColumnTypes))) {
-                                    deleteProjection->AddRow(rowAndExists.first);
+                                const auto& [row, exists] = rowAndExists;
+                                if (exists && rowPossiblyChanged(row)) {
+                                    deleteProjection->AddRow(row);
                                 }
                             }
                             auto preparedKeyBatch = deleteProjection->Flush();
@@ -2059,13 +2066,9 @@ private:
                                 actorInfo.NewColumnsIndexes, Alloc);
 
                     for (const auto& [key, rowAndExists] : keyToRow) {
-                        if (!rowAndExists.second || !actorInfo.SkipEqualRows || !IsEqual(
-                                rowAndExists.first,
-                                {},
-                                actorInfo.NewColumnsIndexes,
-                                actorInfo.OldColumnsIndexes,
-                                actorInfo.ColumnTypes)) {
-                            projection->AddRow(rowAndExists.first);
+                        const auto& [row, exists] = rowAndExists;
+                        if (!exists || rowPossiblyChanged(row)) {
+                            projection->AddRow(row);
                         }
                     }
                     auto preparedBatch = projection->Flush();
@@ -3136,8 +3139,6 @@ public:
                         }
                         return result;
                     }(),
-                    .SkipEqualRows = !settings.LookupColumns.empty()
-                        && (settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE),
                     .NeedWriteProjection = true,
                 });
 
@@ -3240,8 +3241,6 @@ public:
                     }
                     return result;
                 }(),
-                .SkipEqualRows = !settings.LookupColumns.empty()
-                    && (settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE),
                 .NeedWriteProjection = !settings.LookupColumns.empty(),
             });
 

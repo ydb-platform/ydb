@@ -237,8 +237,6 @@ ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExter
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableMixedCluster.test_external_data_source[mixed_prestable-26-1_and_stable-25-4]
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableRollingUpgradeAndDowngrade.test_external_data_source[rolling_stable-25-4-1_to_prestable-26-1]
 ydb/tests/compatibility/federated_queries test_external_data_source.py.TestExternalDataTableRollingUpgradeAndDowngrade.test_external_data_source[rolling_stable-25-4_to_prestable-26-1]
-ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-25-4-1_to_prestable-26-1]
-ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-25-4_to_prestable-26-1]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_prestable-26-1_to_prestable-26-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_limit_ordered_columns[restart_prestable-26-1_to_prestable-26-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_column_alias[restart_prestable-26-1_to_prestable-26-1-COLUMN]

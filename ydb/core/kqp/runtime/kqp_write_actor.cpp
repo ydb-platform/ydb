@@ -1526,7 +1526,6 @@ public:
         std::vector<ui32> OldKeyIndexes; // Old secondary key
 
         IKqpBufferTableLookup* Lookup = nullptr;
-        bool SkipEqualRowsForUniqCheck = false;
     };
 
 private:
@@ -1577,7 +1576,6 @@ public:
                 AFL_ENSURE(lookup.OldKeyIndexes.empty());
                 AFL_ENSURE(lookup.FullKeyIndexes.empty());
                 AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.empty());
-                AFL_ENSURE(!lookup.SkipEqualRowsForUniqCheck);
             } else {
                 AFL_ENSURE(lookup.OldKeyIndexes.size() == lookup.KeyIndexes.size());
                 AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.size() == KeyColumnTypes.size());
@@ -1894,18 +1892,15 @@ private:
                 AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
                 for (size_t index = 0; index < writeRows.size(); ++index) {
                     const auto& row = writeRows[index];
-                    if (isPrimaryKeySubset && existsMask[index]
-                            && OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
-                        Error = ConflictWithExistingKeyErrorText;
-                        return false;
-                    }
-                    if (!isPrimaryKeySubset && lookupInfo.SkipEqualRowsForUniqCheck && IsEqual(
-                            row,
-                            {},
-                            lookupInfo.KeyIndexes,
-                            lookupInfo.OldKeyIndexes,
-                            TConstArrayRef<NScheme::TTypeInfo>(lookupInfo.Lookup->GetKeyColumnTypes())
-                                .first(lookupInfo.KeyIndexes.size()))) {
+                    // Only UPSERT/REPLACE/UPDATE here
+                    if (!isPrimaryKeySubset
+                            && IsEqual(
+                                row,
+                                {},
+                                lookupInfo.KeyIndexes,
+                                lookupInfo.OldKeyIndexes,
+                                TConstArrayRef<NScheme::TTypeInfo>(lookupInfo.Lookup->GetKeyColumnTypes())
+                                    .first(lookupInfo.KeyIndexes.size()))) {
                         // skip unchanged keys
                         continue;
                     }
@@ -3177,7 +3172,6 @@ public:
                                     indexSettings.KeyPrefixSize},
                                 /* preferAdditionalInputColumns */ true),
                         .Lookup = lookupActor,
-                        .SkipEqualRowsForUniqCheck = !settings.LookupColumns.empty(),
                     });
 
                     lookupActor->SetLookupSettings(
@@ -3198,7 +3192,6 @@ public:
                     .PrimaryInFullKeyIndexes = {},
                     .OldKeyIndexes = {},
                     .Lookup = lookupActor,
-                    .SkipEqualRowsForUniqCheck = false,
                 });
 
                 lookupActor->SetLookupSettings(

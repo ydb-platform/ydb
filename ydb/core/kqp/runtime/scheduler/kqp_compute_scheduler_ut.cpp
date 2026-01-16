@@ -39,7 +39,7 @@ namespace {
     }
 } // namespace
 
-Y_UNIT_TEST_SUITE(TKqpScheduler) {
+Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
 
     Y_UNIT_TEST(SingleDatabasePoolQueryStructure) {
         /*

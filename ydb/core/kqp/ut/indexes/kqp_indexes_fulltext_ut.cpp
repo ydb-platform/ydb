@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NKikimr::NKqp {
 
@@ -4181,6 +4182,118 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
         ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
     }
 }
+
+Y_UNIT_TEST(ExplainFulltextIndexContains) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db);
+
+    auto tableClient = kikimr.GetTableClient();
+    auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+    TString query = R"sql(
+        SELECT Key, Text
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FullText::Contains(Text, "cats")
+    )sql";
+    auto result = session.ExplainDataQuery(query).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    Cerr << result.GetPlan() << Endl;
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+    UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+    // Verify ReadFullTextIndex operator is present
+    auto readFullTextIndex = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+    UNIT_ASSERT(readFullTextIndex.IsDefined());
+
+    // Verify operator properties
+    const auto& opProps = readFullTextIndex.GetMapSafe();
+    UNIT_ASSERT(opProps.contains("Table"));
+    UNIT_ASSERT(opProps.contains("Index"));
+    UNIT_ASSERT(opProps.contains("Columns"));
+    UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
+}
+
+Y_UNIT_TEST(ExplainFulltextIndexRelevance) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, "flat_relevance");
+
+    auto tableClient = kikimr.GetTableClient();
+    auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+    TString query = R"sql(
+        SELECT Key, Text, FullText::Relevance(Text, "cats") as Relevance
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        ORDER BY Relevance DESC
+    )sql";
+    auto result = session.ExplainDataQuery(query).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    Cerr << result.GetPlan() << Endl;
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+    UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+    // Verify ReadFullTextIndex operator is present
+    auto readFullTextIndex = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+    UNIT_ASSERT(readFullTextIndex.IsDefined());
+
+    // Verify operator properties
+    const auto& opProps = readFullTextIndex.GetMapSafe();
+    UNIT_ASSERT(opProps.contains("Table"));
+    UNIT_ASSERT(opProps.contains("Index"));
+    UNIT_ASSERT(opProps.contains("Columns"));
+    UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
+}
+
+Y_UNIT_TEST(ExplainFulltextIndexScanQuery) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db);
+
+    auto tableClient = kikimr.GetTableClient();
+    TStreamExecScanQuerySettings querySettings;
+    querySettings.Explain(true);
+
+    TString query = R"sql(
+        SELECT Key, Text
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FullText::Contains(Text, "cats")
+    )sql";
+    auto it = tableClient.StreamExecuteScanQuery(query, querySettings).GetValueSync();
+    auto res = CollectStreamResult(it);
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    UNIT_ASSERT(res.PlanJson);
+
+    Cerr << *res.PlanJson << Endl;
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+    UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+    // Verify ReadFullTextIndex operator is present
+    auto readFullTextIndex = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+    UNIT_ASSERT(readFullTextIndex.IsDefined());
+
+    // Verify operator properties
+    const auto& opProps = readFullTextIndex.GetMapSafe();
+    UNIT_ASSERT(opProps.contains("Table"));
+    UNIT_ASSERT(opProps.contains("Index"));
+    UNIT_ASSERT(opProps.contains("Columns"));
+    UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
+}
+
 
 }
 

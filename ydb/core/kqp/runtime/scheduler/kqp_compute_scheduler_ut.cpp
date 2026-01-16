@@ -1,12 +1,12 @@
 #include "kqp_compute_scheduler_service.h"
 
-#include "fwd.h"
+#include "kqp_schedulable_actor.h"
+#include "kqp_schedulable_task.h"
 #include "tree/dynamic.h"
 #include "tree/snapshot.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/testlib/helpers.h>
-#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_task.h>
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -961,6 +961,77 @@ namespace {
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery(databaseId, "non-existent", queryId, {}), yexception);
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("non-existent", "non-existent", queryId, {}), yexception);
     }
+
+    Y_UNIT_TEST(StressTest) {
+        constexpr ui64 kCpuLimit = 100;
+
+        const TOptions options{
+            .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
+            .DelayParams = kDefaultDelayParams,
+        };
+
+        TComputeScheduler scheduler(options.Counters, options.DelayParams);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        const TString poolId = "pool1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, poolId, {});
+
+        std::atomic<NHdrf::TQueryId> queryId = 1;
+        std::atomic<bool> shutdown = false;
+
+        auto updateFairShare = [&] {
+            while(!shutdown) {
+                scheduler.UpdateFairShare();
+            }
+        };
+
+        struct TSchedulableActorMock : public TSchedulableActorBase {
+            explicit TSchedulableActorMock(NHdrf::NDynamic::TQueryPtr query) : TSchedulableActorBase({query, true}) {}
+
+            void ExecuteAndPassAway(std::atomic<bool>& shutdown) {
+                std::thread([&shutdown, this] {
+                    while (!StartExecution(Now()) && !shutdown) {
+                        Sleep(CalculateDelay(Now()));
+                    }
+
+                    if (!shutdown) {
+                        bool forcedResume = false;
+                        StopExecution(forcedResume);
+                    }
+                }).join();
+            }
+        };
+
+        auto instantQuery1Task = [&] {
+            while(!shutdown) {
+                auto query = scheduler.AddOrUpdateQuery(databaseId, poolId, queryId.fetch_add(1), {});
+                TSchedulableActorMock(query).ExecuteAndPassAway(shutdown);
+                scheduler.RemoveQuery(std::get<NHdrf::TQueryId>(query->GetId()));
+            }
+        };
+
+        std::thread updateThread(updateFairShare);
+        std::list<std::thread> queryThreads;
+
+        // Make sure to use excessive number of threads to cause more jittering and yields
+        for (auto i = 0u; i < std::thread::hardware_concurrency() * 4; ++i) {
+            queryThreads.emplace_back(instantQuery1Task);
+        }
+
+        Sleep(TDuration::Minutes(5));
+        shutdown = true;
+
+        updateThread.join();
+        for (auto& thread : queryThreads) {
+            thread.join();
+        }
+
+        // TODO: check proper counters' values
+    }
+
 }
+
 } // namespace NKikimr::NKqp::NScheduler
 

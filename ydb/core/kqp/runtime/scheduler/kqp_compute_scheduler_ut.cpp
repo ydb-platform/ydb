@@ -958,7 +958,6 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         const TOptions options{
             .Counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()),
             .DelayParams = kDefaultDelayParams,
-            .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
 
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
@@ -975,7 +974,6 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         auto updateFairShare = [&] {
             while(!shutdown) {
                 scheduler.UpdateFairShare();
-                Sleep(options.UpdateFairSharePeriod);
             }
         };
 
@@ -983,14 +981,16 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
             explicit TSchedulableActorMock(NHdrf::NDynamic::TQueryPtr query) : TSchedulableActorBase({query, true}) {}
 
             void ExecuteAndPassAway(std::atomic<bool>& shutdown) {
-                while (!StartExecution(Now()) && !shutdown) {
-                    Sleep(CalculateDelay(Now()));
-                }
+                std::thread([&shutdown, this] {
+                    while (!StartExecution(Now()) && !shutdown) {
+                        Sleep(CalculateDelay(Now()));
+                    }
 
-                if (!shutdown) {
-                    bool forcedResume;
-                    StopExecution(forcedResume);
-                }
+                    if (!shutdown) {
+                        bool forcedResume = false;
+                        StopExecution(forcedResume);
+                    }
+                }).join();
             }
         };
 
@@ -1003,18 +1003,22 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         };
 
         std::thread updateThread(updateFairShare);
-        std::array<std::thread, 20> queryThreads;
-        for (auto& thread : queryThreads) {
-            thread = std::thread(instantQuery1Task);
+        std::list<std::thread> queryThreads;
+
+        // Make sure to use excessive number of threads to cause more jittering and yields
+        for (auto i = 0u; i < std::thread::hardware_concurrency() * 4; ++i) {
+            queryThreads.emplace_back(instantQuery1Task);
         }
 
-        Sleep(TDuration::Minutes(1));
+        Sleep(TDuration::Minutes(5));
         shutdown = true;
 
         updateThread.join();
         for (auto& thread : queryThreads) {
             thread.join();
         }
+
+        // TODO: check proper counters' values
     }
 
 }

@@ -9,13 +9,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
     template <class TSnapshotPtr>
     class TSnapshotSwitch {
         public:
-            TSnapshotSwitch() {
-                for (auto& snapshot : Snapshots) {
-                    snapshot = TSnapshotPtr();
-                    Y_ASSERT(!snapshot);
-                }
-            }
-
             // returns previous snapshot
             TSnapshotPtr SetSnapshot(const TSnapshotPtr& snapshot) {
                 ui8 oldSnapshotIdx = SnapshotIdx;

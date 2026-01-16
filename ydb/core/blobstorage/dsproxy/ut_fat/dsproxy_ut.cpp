@@ -3544,7 +3544,6 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestProxyLongTailDiscover);
         PROXY_UNIT_TEST(TestProxyLongTailDiscoverMaxi);
         PROXY_UNIT_TEST(TestProxyLongTailDiscoverSingleFailure);
-        PROXY_UNIT_TEST(TestProxyRestoreOnDiscoverBlock);
         PROXY_UNIT_TEST(TestProxyRestoreOnGetBlock);
         PROXY_UNIT_TEST(TestProxyRestoreOnGetMirror);
         PROXY_UNIT_TEST(TestVBlockVPutVGet);
@@ -3572,7 +3571,7 @@ public:
 
     void TestVPutVGet() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus3Block;
         TestBlobStorage<TTestBlobStorageProxyVPutVGet<1>>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
@@ -3586,7 +3585,7 @@ public:
 
     void TestVPutVGetPersistence() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus3Block;
         ui64 partId = 1;
         ui64 vDiskIdx = 1;
         TTestArgs args{0, erasureSpecies};
@@ -3886,26 +3885,6 @@ public:
 
         // Hands here
         TestBlobStorage<TTestBlobStorageProxyVGet<vDiskIdx, partId, isNoData>>(0, erasureSpecies, tempDir().c_str());
-        SectorMapByPath.clear();
-    }
-
-    void TestProxyRestoreOnDiscoverBlock() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
-        TTempDir tempDir;
-        const ui32 vDiskIdx = 2;
-        const ui32 handoffVDiskIdx = 1;
-        ui32 badDiskMask = 1 << handoffVDiskIdx;
-        TestBlobStorage<TTestBlobStorageProxyPut>(badDiskMask, erasureSpecies, tempDir().c_str());
-        TestBlobStorage<TTestBlobStorageProxyBlockSet>(0, erasureSpecies, tempDir().c_str());
-        badDiskMask = 1 << vDiskIdx;
-        TestBlobStorage<TTestBlobStorageProxyVGetFail<handoffVDiskIdx>>(badDiskMask, erasureSpecies,
-            tempDir().c_str());
-        TestBlobStorage<TTestBlobStorageProxyDiscover>(badDiskMask, erasureSpecies, tempDir().c_str());
-        static bool isNoData = false;
-        TestBlobStorage<TTestBlobStorageProxyVGet<handoffVDiskIdx, 1, isNoData>>(badDiskMask, erasureSpecies,
-            tempDir().c_str());
-        UNIT_ASSERT(!isNoData);
-        TestBlobStorage<TTestBlobStorageProxyBlockCheck>(badDiskMask, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 

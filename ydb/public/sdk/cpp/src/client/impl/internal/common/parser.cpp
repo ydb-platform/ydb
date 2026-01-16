@@ -28,13 +28,13 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
     }
 
     // Extract host and port
-    TStringBuf host = uri.GetHost();
+    std::string_view host = uri.GetHost();
     if (host.empty()) {
         ythrow TContractViolation("Connection string must contain a host");
     }
 
     // Validate and extract scheme
-    TStringBuf scheme = uri.GetField(NUri::TUri::FieldScheme);
+    std::string_view scheme = uri.GetField(NUri::TUri::FieldScheme);
     if (!scheme.empty()) {
         if (scheme != "grpc" && scheme != "grpcs") {
             ythrow TContractViolation("Invalid scheme in connection string: only 'grpc' and 'grpcs' are allowed");
@@ -54,8 +54,8 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
     }
 
     // Extract database from path or query parameter
-    TStringBuf path = uri.GetField(NUri::TUri::FieldPath);
-    TStringBuf query = uri.GetField(NUri::TUri::FieldQuery);
+    std::string_view path = uri.GetField(NUri::TUri::FieldPath);
+    std::string_view query = uri.GetField(NUri::TUri::FieldQuery);
 
     bool hasQueryDatabase = false;
     if (!query.empty()) {

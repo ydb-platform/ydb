@@ -470,6 +470,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - C# (.NET)
 
   {% cut "ADO.NET" %}
+  
   ```csharp
   using Ydb.Sdk.Ado;
   using Ydb.Sdk.Services.Query;
@@ -480,7 +481,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
   await command.ExecuteNonQueryAsync();
   await transaction.CommitAsync();
-  ```
   {% endcut %}
 
   {% cut "Entity Framework" %}

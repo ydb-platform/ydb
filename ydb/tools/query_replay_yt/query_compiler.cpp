@@ -210,6 +210,7 @@ public:
         Config->EnableAntlr4Parser = enableAntlr4Parser;
         Config->DefaultCostBasedOptimizationLevel = 2;
         Config->EnableOltpSink = enableOltpSink;
+        Config->EnableBatchUpdates = true;
     }
 
     void Bootstrap() {

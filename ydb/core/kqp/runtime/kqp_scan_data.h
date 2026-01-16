@@ -238,6 +238,7 @@ public:
             // Produce statistics
             TDuration ScanCpuTime;
             TDuration ScanWaitTime;   // IScan waiting data time
+            THashMap<TString, TDuration> ScanCpuTimeByStep;
         };
 
         enum class EReadType {

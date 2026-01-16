@@ -128,15 +128,9 @@ void TScanCounters::FillStats(::NKikimrTableStats::TTableStats& output) const {
 }
 
 TConcreteScanCounters::TConcreteScanCounters(
-    const TScanCounters& counters, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program)
+    const TScanCounters& counters, [[maybe_unused]] const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>&  program)
     : TBase(counters)
-    , Aggregations(TBase::BuildAggregations()) {
-    if (program) {
-        for (auto&& i : program->GetNodes()) {
-            SkipNodesCount.emplace(i.first, std::make_shared<TAtomicCounter>());
-            ExecuteNodesCount.emplace(i.first, std::make_shared<TAtomicCounter>());
-        }
-    }
-}
+    , Aggregations(TBase::BuildAggregations()) 
+    {}
 
 }   // namespace NKikimr::NColumnShard

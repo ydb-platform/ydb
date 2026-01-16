@@ -35,7 +35,10 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         const TMonotonic startInstant = TMonotonic::Now();
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
         const auto executionTime = TMonotonic::Now() - startInstant;
-        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionTime);
+        const NColumnShard::TConcreteScanCounters& counters = source->GetContext()->GetCommonContext()->GetCounters();
+
+        counters.ExecutionTimeCounterForStep(step->GetName())->Add(executionTime.MicroSeconds());
+        counters.AddExecutionDuration(executionTime);
 
         Script->AddStepDuration(CurrentStepIdx, executionTime, TMonotonic::Now() - StepStartInstant);
         if (resultStep.IsFail()) {

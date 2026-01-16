@@ -3,6 +3,7 @@
 
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
+#include <ydb/core/tx/columnshard/counters/thread_safe_value.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/counters.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/resources/memory.h>
@@ -372,26 +373,26 @@ private:
     std::shared_ptr<TAtomicCounter> TotalExecutionDurationUs = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> TotalRawBytes = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> AccessorsForConstructionGuard = std::make_shared<TAtomicCounter>();
-    THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
-    THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
+    using TStepName = TString;
+    NColumnShard::TThreadSafeValue<THashMap<TStepName, std::shared_ptr<TAtomicCounter>>> StepExecutionDurations;
 
 public:
     TScanAggregations Aggregations;
 
-    void OnSkipGraphNode(const ui32 nodeId) const {
-        if (SkipNodesCount.size()) {
-            auto it = SkipNodesCount.find(nodeId);
-            AFL_VERIFY(it != SkipNodesCount.end());
-            it->second->Inc();
+    const std::shared_ptr<TAtomicCounter>& ExecutionTimeCounterForStep(const TString& stepName) const {
+        auto* counterIfExists = [&]{
+            auto lock = StepExecutionDurations.ReadGuard();
+            return lock.Value.FindPtr(stepName);
+        }();
+        if  (counterIfExists) [[likely]] {
+            return *counterIfExists;
         }
+        auto lock = StepExecutionDurations.WriteGuard();
+        auto [it, ok] = lock.Value.emplace(stepName, std::make_shared<TAtomicCounter>());
+        return it->second;
     }
-
-    void OnExecuteGraphNode(const ui32 nodeId) const {
-        if (ExecuteNodesCount.size()) {
-            auto it = ExecuteNodesCount.find(nodeId);
-            AFL_VERIFY(it != ExecuteNodesCount.end());
-            it->second->Inc();
-        }
+    auto GetExecutionTimePerSteps() const {
+        return StepExecutionDurations.ReadGuard();
     }
 
     void AddExecutionDuration(const TDuration d) const {
@@ -475,13 +476,6 @@ public:
                FilterFetchingGuard->Val() || AbortsGuard->Val() || AccessorsForConstructionGuard->Val();
     }
 
-    const THashMap<ui32, std::shared_ptr<TAtomicCounter>>& GetSkipStats() const {
-        return SkipNodesCount;
-    }
-
-    const THashMap<ui32, std::shared_ptr<TAtomicCounter>>& GetExecutionStats() const {
-        return ExecuteNodesCount;
-    }
 
     void OnBlobsWaitDuration(const TDuration d, const TDuration fullScanDuration) const {
         TBase::OnBlobsWaitDuration(d);

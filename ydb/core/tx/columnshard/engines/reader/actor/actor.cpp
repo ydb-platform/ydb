@@ -412,6 +412,14 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     LastResultInstant = TMonotonic::Now();
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();
+    Result->CpuTimePerStep = [&]{
+        auto lock = ScanCountersPool.GetExecutionTimePerSteps();
+        THashMap<TString, TDuration> timesPerStep;
+        for(const auto& kv: lock.Value) {
+            timesPerStep.emplace(kv.first, TDuration::MicroSeconds(kv.second->Val()));
+        }
+        return timesPerStep;
+    }();
     Result->WaitTime = WaitTime;
     Result->RawBytes = ScanCountersPool.GetRawBytes();
 

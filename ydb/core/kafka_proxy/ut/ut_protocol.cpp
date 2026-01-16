@@ -2205,7 +2205,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         CreateTopic(pqClient, topic3Name, 10, {}, std::nullopt, "Incorrect", EStatus::BAD_REQUEST);
 
         TKafkaTestClient client(testServer.Port);
-        client.AuthenticateToKafka();
+        client.PlainAuthenticateToKafka();
 
         auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
 

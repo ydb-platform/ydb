@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class TestIncorrectCompression(object):
+    ''' Implements https://github.com/ydb-platform/ydb/issues/13626 '''
     test_name = "try_incorrect_compression"
 
     @classmethod
@@ -43,7 +44,6 @@ class TestIncorrectCompression(object):
 
     @pytest.mark.parametrize("suffix, compression_settings, error_text", COMPRESSION_CASES)
     def test_create_with_wrong_compression(self, suffix, compression_settings, error_text):
-        ''' Implements https://github.com/ydb-platform/ydb/issues/13626 '''
         compressed_table_path = f"{self.test_dir}/create_{suffix}"
 
         try:
@@ -57,7 +57,7 @@ class TestIncorrectCompression(object):
                     WITH (
                         STORE = COLUMN
                     )
-                    """
+                """
             )
             assert False, 'Should Fail'
         except Exception as ex:
@@ -65,7 +65,6 @@ class TestIncorrectCompression(object):
 
     @pytest.mark.parametrize("suffix, compression_settings, error_text", COMPRESSION_CASES)
     def test_alter_to_wrong_compression(self, suffix, compression_settings, error_text):
-        ''' Implements https://github.com/ydb-platform/ydb/issues/13626 '''
         table_path = f"{self.test_dir}/alter_{suffix}"
 
         self.ydb_client.query(
@@ -78,7 +77,7 @@ class TestIncorrectCompression(object):
                 WITH (
                     STORE = COLUMN
                 )
-                """
+            """
         )
 
         try:
@@ -91,3 +90,20 @@ class TestIncorrectCompression(object):
             assert False, 'Should Fail'
         except Exception as ex:
             assert error_text in ex.message
+
+    def test_create_row_based_table_with_compression(self):
+        compressed_table_path = f"{self.test_dir}/create_row_table"
+
+        try:
+            self.ydb_client.query(
+                f"""
+                    CREATE TABLE `{compressed_table_path}` (
+                        key Uint64 NOT NULL,
+                        vStr Utf8 COMPRESSION(algorithm=lz4),
+                        PRIMARY KEY(key),
+                    )
+                """
+            )
+            assert False, 'Should Fail'
+        except Exception as ex:
+            assert "Column Compression is not supported in row tables" in ex.message

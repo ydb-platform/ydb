@@ -6,16 +6,16 @@ if False:  # MYPY
 
 _package_data = dict(
     full_package_name='ruamel.yaml',
-    version_info=(0, 18, 17),
-    __version__='0.18.17',
-    version_timestamp='2025-12-17 20:59:33',
+    version_info=(0, 19, 0),
+    __version__='0.19.0',
+    version_timestamp='2025-12-31 17:42:26',
     author='Anthon van der Neut',
     author_email='a.van.der.neut@ruamel.eu',
     description='ruamel.yaml is a YAML parser/emitter that supports roundtrip preservation of comments, seq/map flow style, and map key order',  # NOQA
     entry_points=None,
     since=2014,
     extras_require={
-        ':platform_python_implementation=="CPython" and python_version<"3.15"': ['ruamel.yaml.clib>=0.2.15'],  # NOQA
+        ':platform_python_implementation=="CPython"': ['ruamel.yaml.clibz>=0.3.3'],  # NOQA
         'jinja2': ['ruamel.yaml.jinja2>=0.2'],
         'docs': ['ryd', 'mercurial>5.7'],
     },

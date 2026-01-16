@@ -1,13 +1,12 @@
 #include "tool_base.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log_defs.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
-TToolBase::TToolBase(const NJson::TJsonValue& parametersSchema, const TString& description, const TInteractiveLogger& log)
-    : Log(log)
-    , ParametersSchema(parametersSchema)
+TToolBase::TToolBase(const NJson::TJsonValue& parametersSchema, const TString& description)
+    : ParametersSchema(parametersSchema)
     , Description(description)
 {}
 

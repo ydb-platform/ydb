@@ -32,7 +32,8 @@ void TGRpcOperationService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         GRpcRequestProxyId_,                                  \
         CQ_,                                                  \
         nullptr,                                              \
-        nullptr)
+        nullptr,                                              \
+        isRlAllowed = IsRlAllowed())
 
     SETUP_OPERATION_METHOD(GetOperation, DoGetOperationRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
     SETUP_OPERATION_METHOD(CancelOperation, DoCancelOperationRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Operations), TGrpcRequestNoOperationCall);

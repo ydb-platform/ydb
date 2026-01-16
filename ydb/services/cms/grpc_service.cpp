@@ -1,5 +1,6 @@
 #include "grpc_service.h"
 
+
 #include <ydb/core/grpc_services/service_cms.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -30,7 +31,9 @@ void TGRpcCmsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         GRpcRequestProxyId_,                                                                             \
         CQ_,                                                                                             \
         nullptr,                                                                                         \
-        nullptr)
+        nullptr,                                                                                         \
+        isRlAllowed = IsRlAllowed()                                                                      \
+            )
 
     SETUP_CMS_METHOD(CreateDatabase, DoCreateTenantRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), TGrpcRequestOperationCall);
     SETUP_CMS_METHOD(AlterDatabase, DoAlterTenantRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), TGrpcRequestOperationCall);

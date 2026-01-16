@@ -70,7 +70,8 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 GRpcProxies_[proxyCounter % GRpcProxies_.size()],                      \
                 cq,                                                                    \
                 nullptr,                                                               \
-                nullptr                                                                \
+                nullptr,                                                               \
+                isRlAllowed = IsRlAllowed()                                            \
             );                                                                         \
             ++proxyCounter;                                                            \
         }                                                                              \
@@ -96,7 +97,8 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 GRpcProxies_[proxyCounter % GRpcProxies_.size()],                                                             \
                 cq,                                                                                                           \
                 limiter,                                                                                                      \
-                nullptr                                                                                                       \
+                nullptr,                                                                                                      \
+                isRlAllowed = IsRlAllowed()                                                                                   \
             );                                                                                                                \
             ++proxyCounter;                                                                                                   \
         }                                                                                                                     \

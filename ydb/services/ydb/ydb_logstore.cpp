@@ -16,7 +16,7 @@ void TGRpcYdbLogStoreService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
 #endif
 
 #define SETUP_LOGSTORE_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, logstore, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, logstore, auditMode, isRlAllowed = IsRlAllowed())
 
     SETUP_LOGSTORE_METHOD(CreateLogStore, DoCreateLogStoreRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_LOGSTORE_METHOD(DescribeLogStore, DoDescribeLogStoreRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());

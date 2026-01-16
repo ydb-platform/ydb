@@ -49,7 +49,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error SETUP_PQ_STREAM_METHOD macro already defined
 #endif
 
-#define SETUP_PQ_METHOD_IN_OUT(methodName, inputType, outputType, methodCallback, rlMode, requestType, auditMode) \
+#define SETUP_PQ_METHOD_IN_OUT(methodName, inputType, outputType, methodCallback, rlMode, requestType, auditMode,...) \
     SETUP_RUNTIME_EVENT_METHOD(methodName,                           \
         inputType,                                                   \
         outputType,                                                  \
@@ -63,10 +63,11 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         GRpcRequestProxyId_,                                         \
         CQ_,                                                         \
         nullptr,                                                     \
-        nullptr)
+        nullptr,                                                     \
+        isRlAllowed = IsRlAllowed(),## __VA_ARGS__)
 
-#define SETUP_PQ_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_PQ_METHOD_IN_OUT(methodName, YDB_API_DEFAULT_REQUEST_TYPE(methodName), YDB_API_DEFAULT_RESPONSE_TYPE(methodName), methodCallback, rlMode, requestType, auditMode)
+#define SETUP_PQ_METHOD(methodName, methodCallback, rlMode, requestType, auditMode,...) \
+    SETUP_PQ_METHOD_IN_OUT(methodName, YDB_API_DEFAULT_REQUEST_TYPE(methodName), YDB_API_DEFAULT_RESPONSE_TYPE(methodName), methodCallback, rlMode, requestType, auditMode,##__VA_ARGS__)
 
 #define SETUP_PQ_STREAM_METHOD(methodName, rlMode, requestType, auditMode, operationCallClass) \
         SETUP_RUNTIME_EVENT_STREAM_METHOD(methodName,                           \
@@ -84,8 +85,8 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     SETUP_PQ_METHOD_IN_OUT(GetReadSessionsInfo, ReadInfoRequest, ReadInfoResponse, DoPQReadInfoRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_PQ_METHOD(DropTopic, DoPQDropTopicRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
-    SETUP_PQ_METHOD(CreateTopic, std::bind(DoPQCreateTopicRequest, _1, _2, ClustersCfgProvider->GetCfg()), RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
-    SETUP_PQ_METHOD(AlterTopic, std::bind(DoPQAlterTopicRequest, _1, _2, ClustersCfgProvider->GetCfg()), RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_PQ_METHOD(CreateTopic, std::bind(DoPQCreateTopicRequest, _1, _2, clustersCfgProvider->GetCfg()), RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), clustersCfgProvider = ClustersCfgProvider); // XXX ClustersCfgProvider is plain pointer, time-to-live unclear
+    SETUP_PQ_METHOD(AlterTopic, std::bind(DoPQAlterTopicRequest, _1, _2, clustersCfgProvider->GetCfg()), RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), clustersCfgProvider = ClustersCfgProvider); // XXX ClustersCfgProvider is plain pointer, time-to-live unclear
     SETUP_PQ_METHOD(DescribeTopic, DoPQDescribeTopicRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
     SETUP_PQ_METHOD(AddReadRule, DoPQAddReadRuleRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_PQ_METHOD(RemoveReadRule, DoPQRemoveReadRuleRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));

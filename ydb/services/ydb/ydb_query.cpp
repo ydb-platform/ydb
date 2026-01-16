@@ -55,7 +55,8 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 GRpcProxies_[proxyCounter % GRpcProxies_.size()],                      \
                 cq,                                                                    \
                 nullptr,                                                               \
-                nullptr                                                                \
+                nullptr,                                                               \
+                isRlAllowed = IsRlAllowed()                                            \
             );                                                                         \
             ++proxyCounter;                                                            \
         }                                                                              \

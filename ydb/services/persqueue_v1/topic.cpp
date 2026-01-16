@@ -78,7 +78,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error SETUP_TOPIC_STREAM_METHOD macro already defined
 #endif
 
-#define SETUP_TOPIC_METHOD(methodName, methodCallback, rlMode, requestType, auditMode, customAttributeProcessorCallback) \
+#define SETUP_TOPIC_METHOD(methodName, methodCallback, rlMode, requestType, auditMode, customAttributeProcessorCallback,...) \
     SETUP_RUNTIME_EVENT_METHOD(methodName,                                                                \
         YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                                         \
         YDB_API_DEFAULT_RESPONSE_TYPE(methodName),                                                        \
@@ -92,9 +92,10 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         GRpcRequestProxyId_,                                                                              \
         CQ_,                                                                                              \
         nullptr,                                                                                          \
-        customAttributeProcessorCallback)
+        customAttributeProcessorCallback,\
+        isRlAllowed = IsRlAllowed(), ##__VA_ARGS__)
 
-#define SETUP_TOPIC_STREAM_METHOD(methodName, rlMode, requestType, auditMode, operationCallClass) \
+#define SETUP_TOPIC_STREAM_METHOD(methodName, rlMode, requestType, auditMode, operationCallClass,...) \
         SETUP_RUNTIME_EVENT_STREAM_METHOD(methodName,                \
             Y_CAT(methodName, Message)::FromClient,                  \
             Y_CAT(methodName, Message)::FromServer,                  \
@@ -106,11 +107,11 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             GRpcRequestProxyId_,                                     \
             CQ_,                                                     \
             nullptr,                                                 \
-            nullptr)
+            nullptr, isRlAllowed = IsRlAllowed(), ##__VA_ARGS__)
 
     SETUP_TOPIC_METHOD(CommitOffset, DoCommitOffsetRequest, RLSWITCH(Rps), TOPIC_COMMITOFFSET, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), nullptr);
     SETUP_TOPIC_METHOD(DropTopic, DoDropTopicRequest, RLSWITCH(Rps), TOPIC_DROPTOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
-    SETUP_TOPIC_METHOD(CreateTopic, std::bind(DoCreateTopicRequest, _1, _2, ClustersCfgProvider->GetCfg()), RLSWITCH(Rps), TOPIC_CREATETOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_TOPIC_METHOD(CreateTopic, std::bind(DoCreateTopicRequest, _1, _2, clustersCfgProvider->GetCfg()), RLSWITCH(Rps), TOPIC_CREATETOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr, clustersCfgProvider = ClustersCfgProvider);
     SETUP_TOPIC_METHOD(AlterTopic, DoAlterTopicRequest, RLSWITCH(Rps), TOPIC_ALTERTOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
     SETUP_TOPIC_METHOD(DescribeTopic, DoDescribeTopicRequest, RLSWITCH(Rps), TOPIC_DESCRIBETOPIC, TAuditMode::NonModifying(), nullptr);
     SETUP_TOPIC_METHOD(DescribeConsumer, DoDescribeConsumerRequest, RLSWITCH(Rps), TOPIC_DESCRIBECONSUMER, TAuditMode::NonModifying(), nullptr);

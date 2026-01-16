@@ -1715,8 +1715,24 @@ private:
                         });
 
                         if (needLookup) {
+                            AFL_ENSURE(settingsProto.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+
+                            THashSet<TStringBuf> lookupColumnsSet;
+                            for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+                                const auto& indexDescription = tableMeta->Indexes[index];
+
+                                if (indexDescription.Type == TIndexDescription::EType::GlobalSync
+                                        || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
+                                    const auto& implTable = tableMeta->ImplTables[index];
+
+                                    for (const auto& [columnName, columnMeta] : implTable->Columns) {
+                                        lookupColumnsSet.insert(columnName);
+                                    }
+                                }
+                            }
+
                             for (const auto& [columnName, columnMeta] : tableMeta->Columns) {
-                                if (!mainKeyColumnsSet.contains(columnName)) {
+                                if (!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.contains(columnName)) {
                                     lookupColumns.push_back(columnName);
                                     auto columnProto = settingsProto.AddLookupColumns();
                                     fillColumnProto(columnName, &columnMeta, columnProto);

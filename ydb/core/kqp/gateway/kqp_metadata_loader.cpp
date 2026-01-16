@@ -1141,7 +1141,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     // Create an apply for the future that will fetch table statistics and save it in the metadata
     // This method will only run if cost based optimization is enabled
 
-    if (!Config || !Config->FeatureFlags.GetEnableStatistics()){
+    if (!Config || !AppData()->FeatureFlags.GetEnableStatistics()){
         return future;
     }
 

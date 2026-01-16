@@ -191,8 +191,6 @@ public:
         Gateway = CreateKikimrIcGateway(Settings.Cluster, QueryState->RequestEv->GetType(), Settings.Database, QueryState->RequestEv->GetDatabaseId(), std::move(loader),
             ctx.ActorSystem(), ctx.SelfID.NodeId(), RequestCounters, QueryServiceConfig);
 
-        Config->FeatureFlags = AppData(ctx)->FeatureFlags;
-
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, FederatedQuerySetup,
             QueryState->RequestEv->GetUserToken(), GUCSettings, QueryServiceConfig, Settings.ApplicationName, AppData(ctx)->FunctionRegistry,
             !Settings.LongSession, false, nullptr, nullptr, nullptr, QueryState->RequestEv->GetUserRequestContext());

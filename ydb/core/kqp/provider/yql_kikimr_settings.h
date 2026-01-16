@@ -193,8 +193,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
 
     TKikimrSettings::TConstPtr Snapshot() const;
 
-    NKikimrConfig::TFeatureFlags FeatureFlags;
-
     NYql::EBackportCompatibleFeaturesMode GetYqlBackportMode() const;
     NSQLTranslation::EBindingsMode GetYqlBindingsMode() const;
     NDq::EHashShuffleFuncType GetDqDefaultHashShuffleFuncType() const;

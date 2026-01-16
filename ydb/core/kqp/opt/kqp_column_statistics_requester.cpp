@@ -48,7 +48,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 
     output = input;
     auto optLvl = Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel);
-    auto enableColumnStats = Config->FeatureFlags.GetEnableColumnStatistics();
+    auto enableColumnStats = AppData()->FeatureFlags.GetEnableColumnStatistics();
     if (!(optLvl > 0 && enableColumnStats)) {
         return IGraphTransformer::TStatus::Ok;
     }

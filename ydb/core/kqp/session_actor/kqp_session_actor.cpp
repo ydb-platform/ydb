@@ -235,8 +235,6 @@ public:
         Counters->ReportSessionActorCreated(Settings.DbCounters);
         CreationTime = TInstant::Now();
 
-        Config->FeatureFlags = AppData()->FeatureFlags;
-
         RequestControls.Reqister(TlsActivationContext->AsActorContext());
         Become(&TKqpSessionActor::ReadyState);
     }

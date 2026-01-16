@@ -3066,7 +3066,7 @@ public:
         }
 
         TFuture<TGenericResult> StartModification(const TString& cluster, const NYql::TSecretSettings& settings) {
-            if (!SessionCtx_->Config().FeatureFlags.GetEnableSchemaSecrets()) {
+            if (!AppData()->FeatureFlags.GetEnableSchemaSecrets()) {
                 return MakeErrorFuture<IKikimrGateway::TGenericResult>(
                     std::make_exception_ptr(yexception() << "Secrets are disabled. Please contact your system administrator to enable it")
                 );

@@ -1626,7 +1626,7 @@ public:
             auto& table = SessionCtx->Tables().GetTable(cluster, TString(maybeCreate.Cast().Table()));
 
             auto tableTypeItem = table.Metadata->TableType;
-            if (tableTypeItem == ETableType::ExternalTable && !SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
+            if (tableTypeItem == ETableType::ExternalTable && !NKikimr::AppData()->FeatureFlags.GetEnableExternalDataSources()) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
                     TStringBuilder() << "External tables are disabled. Please contact your system administrator to enable it"));
                 return SyncError();
@@ -1696,7 +1696,7 @@ public:
                     return SyncError();
             }
 
-            if (tableTypeItem == ETableType::ExternalTable && !SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()) {
+            if (tableTypeItem == ETableType::ExternalTable && !NKikimr::AppData()->FeatureFlags.GetEnableExternalDataSources()) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
                     TStringBuilder() << "External table are disabled. Please contact your system administrator to enable it"));
                 return SyncError();
@@ -1936,7 +1936,7 @@ public:
                             if (value == "drop_not_null") {
                                 alter_columns->set_not_null(false);
                             } else if (value == "set_not_null") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableSetColumnConstraint()) {
+                                if (!NKikimr::AppData()->FeatureFlags.GetEnableSetColumnConstraint()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
                                         << "SET NOT NULL is currently not supported."));
                                     return SyncError();
@@ -2005,7 +2005,7 @@ public:
                                     auto level = FromString<i32>(familySetting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                                     f->set_compression_level(level);
                                 } else if (name == "cache_mode") {
-                                    if (!SessionCtx->Config().FeatureFlags.GetEnableTableCacheModes()) {
+                                    if (!NKikimr::AppData()->FeatureFlags.GetEnableTableCacheModes()) {
                                         ctx.AddError(TIssue(ctx.GetPosition(familySetting.Name().Pos()),
                                             TStringBuilder() << "Setting cache_mode is not allowed"));
                                         return SyncError();
@@ -2104,14 +2104,14 @@ public:
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
+                                if (!NKikimr::AppData()->FeatureFlags.GetEnableVectorIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                         TStringBuilder() << "Vector index support is disabled"));
                                     return SyncError();
                                 }
                                 add_index->mutable_global_vector_kmeans_tree_index();
                             } else if (type == "globalFulltext") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                                if (!NKikimr::AppData()->FeatureFlags.GetEnableFulltextIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                         TStringBuilder() << "Fulltext index support is disabled"));
                                     return SyncError();
@@ -3084,7 +3084,7 @@ public:
         }
 
         if (auto maybeAnalyze = TMaybeNode<TKiAnalyzeTable>(input)) {
-            if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+            if (!NKikimr::AppData()->FeatureFlags.GetEnableColumnStatistics()) {
                 ctx.AddError(TIssue("ANALYZE command is not supported because `EnableColumnStatistics` feature flag is off"));
                 return SyncError();
             }

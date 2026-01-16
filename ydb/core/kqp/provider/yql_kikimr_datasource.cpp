@@ -274,7 +274,7 @@ public:
                 IKikimrGateway::TLoadTableMetadataSettings()
                             .WithTableStats(table.GetNeedsStats())
                             .WithPrivateTables(IsInternalCall)
-                            .WithExternalDatasources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
+                            .WithExternalDatasources(AppData()->FeatureFlags.GetEnableExternalDataSources())
                             .WithAuthInfo(table.GetNeedAuthInfo())
                             .WithExternalSourceFactory(ExternalSourceFactory)
                             .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
@@ -819,7 +819,7 @@ public:
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 }
             } else if (tableDesc.Metadata->Kind == EKikimrTableKind::View && !IsShowCreate(*read)) {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableViews()) {
+                if (!AppData()->FeatureFlags.GetEnableViews()) {
                     ctx.AddError(TIssue(node->Pos(ctx),
                                         "Views are disabled. Please contact your system administrator to enable the feature"));
                     return nullptr;

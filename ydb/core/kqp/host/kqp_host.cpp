@@ -1028,7 +1028,7 @@ private:
             }
         }
 
-        if (!SessionCtx->Config().FeatureFlags.GetEnableImplicitScanQueryInScripts()) {
+        if (!AppData()->FeatureFlags.GetEnableImplicitScanQueryInScripts()) {
             return false;
         }
 
@@ -1140,7 +1140,7 @@ public:
                                                                                  ActorSystem,
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(),
                                                                                  FederatedQuerySetup ? FederatedQuerySetup->CredentialsFactory : nullptr,
-                                                                                 Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
+                                                                                 AppData()->FeatureFlags.GetEnableExternalSourceSchemaInference(),
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
                                                                                  QueryServiceConfig.GetAllExternalDataSourcesAreAvailable(),
                                                                                  std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
@@ -1301,11 +1301,11 @@ private:
         std::shared_ptr<NYql::TAstParseResult> queryAst;
         if (!query.AstResult) {
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
-                .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
+                .SetIsEnableExternalDataSources(AppData()->FeatureFlags.GetEnableExternalDataSources())
                 .SetIsEnablePgConstsToParams(SessionCtx->Config().GetEnablePgConstsToParams())
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
-                .SetIsEnablePgSyntax(SessionCtx->Config().FeatureFlags.GetEnablePgSyntax())
+                .SetIsEnablePgSyntax(AppData()->FeatureFlags.GetEnablePgSyntax())
                 .SetFromConfig(SessionCtx->Config());
             NSQLTranslation::TTranslationSettings effectiveSettings;
             auto astRes = ParseQuery(

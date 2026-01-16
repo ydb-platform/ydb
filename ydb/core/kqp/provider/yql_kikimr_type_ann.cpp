@@ -203,7 +203,7 @@ private:
 
                 auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
-                if (!SessionCtx->Config().FeatureFlags.GetEnableShowCreate()) {
+                if (!NKikimr::AppData()->FeatureFlags.GetEnableShowCreate()) {
                     for (auto setting : readTable.Settings()) {
                         auto name = setting.Name().Value();
                         if (name == "showCreateTable" || name == "showCreateView") {
@@ -1044,13 +1044,13 @@ private:
             } else if (type == "syncGlobalUnique") {
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
+                if (!NKikimr::AppData()->FeatureFlags.GetEnableVectorIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Vector index support is disabled"));
                     return TStatus::Error;
                 }
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
             } else if (type == "globalFulltext") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                if (!NKikimr::AppData()->FeatureFlags.GetEnableFulltextIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
                     return TStatus::Error;
                 }
@@ -2090,7 +2090,7 @@ private:
     }
 
     virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) override {
-        if (!SessionCtx->Config().FeatureFlags.GetEnableAlterDatabase()) {
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableAlterDatabase()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
                 TStringBuilder() << "ALTER DATABASE statement is not supported"));
             return TStatus::Error;

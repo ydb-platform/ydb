@@ -4,7 +4,7 @@ namespace NKikimr::NColumnShard {
 
 
 // Warning: doing complex logic under WriteGuard may result in blocking many threads in actor system. 
-// WriteLock should for lightweight computations, for example inserting 1 element in hashmap(this is useful for e.g. metrics collection)
+// WriteLock should be used for lightweight computations, for example inserting 1 element in hashmap(this is useful for e.g. metrics collection)
 template<typename TValue>
 class TThreadSafeValue {
     mutable absl::Mutex ValueMutex_;

@@ -1767,6 +1767,35 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, buildIndex2Tx);
     }
 
+    Y_UNIT_TEST(UnknownSamples) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        {
+            TString writeQuery = R"(
+                (
+                    (let key '( '('Id (Uint64 '100)) '('Row (Uint32 '0)) ) )
+                    (let value '( '('Probability (Uint64 '0)) '('Data (String '"")) ) )
+                    (return (AsList (UpdateRow 'KMeansTreeSample key value) ))
+                )
+            )";
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        }
+
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        {
+            auto buildIndexOperations = TestListBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 0);
+        }
+    }
+
     Y_UNIT_TEST(CreateBuildProposeReject) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

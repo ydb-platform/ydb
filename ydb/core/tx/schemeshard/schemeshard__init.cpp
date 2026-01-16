@@ -4694,7 +4694,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             auto fillBuildInfoByIdSafe = [&](TIndexBuildId id, const TString& stepName, const auto& fill) {
                 const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
-                Y_ASSERT(buildInfoPtr);
                 if (!buildInfoPtr) {
                     LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX,
                         "Init " << stepName << " BuildInfo not found: id#" << id);

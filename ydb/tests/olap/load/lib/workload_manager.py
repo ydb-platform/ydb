@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import allure
 import json
+import os
 import pytest
 import time
 import traceback
 import yatest.common
 import ydb
+import ydb.tests.olap.lib.remote_execution as re
 
 from . import tpch
 from .conftest import LoadSuiteBase
@@ -432,6 +434,30 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
     tpcc_process: yatest.common.process._Execution = None
     tpcc_warehouses: int = 4500
     tpcc_threads: int = 4
+    __static_nodes: list[YdbCluster.Node] = []
+
+    @classmethod
+    def get_remote_tmpdir(cls):
+        tmpdir = '/tmp'
+        for node in cls.__static_nodes:
+            if re.is_localhost(node.host):
+                tmpdir = os.getenv('TMP') or os.getenv('TMPDIR') or yatest.common.work_path()
+                break
+        return os.path.join(tmpdir, 'scripts', 'tpcc')
+
+    @classmethod
+    def do_setup_class(cls) -> None:
+        cls.__static_nodes = YdbCluster.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)
+        results = re.deploy_binaries_to_hosts(
+            [YdbCliHelper.get_cli_path()],
+            [n.host for n in cls.__static_nodes],
+            cls.get_remote_tmpdir()
+        )
+        for host, host_results in results.items():
+            for bin, res in host_results.items():
+                assert res.get('success', False), f'host: {host}, bin: {bin}, path: {res.get('path')}, error: {res.get('error')}'
+
+        super().do_setup_class()
 
     @classmethod
     def get_tpcc_path(cls):
@@ -440,12 +466,13 @@ class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
 
     @classmethod
     def run_tpcc(cls, time: float, user: str):
-        cmd = YdbCliHelper.get_cli_command()
+        node = cls.__static_nodes[0]
+        cmd = [f'{cls.get_remote_tmpdir()}/ydb', '-e', f'grpc://{node.host}:{node.grpc_port}', '-d', f'/{YdbCluster.ydb_database}']
         if user:
             cmd += ['--user', user, '--no-password']
         cmd += ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(cls.get_tpcc_path()), 'run', '--no-tui', '--warmup', '1s', '--format', 'Json']
-        cmd += ['-t', f'{time}s', '-w', str(cls.tpcc_warehouses)] # , '--threads', str(cls.tpcc_threads)]
-        cls.tpcc_process = yatest.common.execute(command=cmd, wait=False)
+        cmd += ['-t', f'{time}s', '-w', str(cls.tpcc_warehouses)]  # , '--threads', str(cls.tpcc_threads)]
+        cls.tpcc_process = cls.execute_ssh(node.host, ' '.join(cmd))
 
     @classmethod
     def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):

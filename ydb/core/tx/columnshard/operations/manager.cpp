@@ -36,10 +36,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
             LinkInsertWriteIdToOperationWriteId(operation->GetInsertWriteIds(), operation->GetWriteId());
 
-            auto it = LockFeatures.find(lockId);
-            if (it == LockFeatures.end()) {
-                it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0)).first;
-            }
+            auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
             it->second.AddWriteOperation(operation);
             // all the operations are finished at the moment of transaction proposal (or later) 
             it->second.OnWriteOperationFinished();
@@ -60,10 +57,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             const ui64 txId = rowset.GetValue<Schema::OperationTxIds::TxId>();
             const bool broken = rowset.GetValueOrDefault<Schema::OperationTxIds::Broken>(true);
 
-            auto it = LockFeatures.find(lockId);
-            if (it == LockFeatures.end()) {
-                it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0)).first;
-            }
+            auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
             auto& lock = it->second;
 
             lock.SetTxId(txId);

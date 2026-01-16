@@ -76,7 +76,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
                                          writeResult.GetRecordsCount(), writeResult.GetDataSize(), op->GetModificationType(), Self->TabletID());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), op->GetCookie());
 
-            if (Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
+            if (!writeResult.GetNoDataToWrite() && Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
                 // detect active reads which the given noTxWrite has conflicts with
                 auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
                     writeMeta.GetPathId().InternalPathId, writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
@@ -126,7 +126,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         }
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         pathIds.emplace(op->GetPathId().InternalPathId);
-        if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock) {
+        if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock && Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
             // detect active reads which the given tx has conflicts with
             auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
                 writeMeta.GetPathId().InternalPathId, writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());

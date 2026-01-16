@@ -1948,7 +1948,7 @@ const std::unordered_map<TErasureType::EErasureSpecies, TString> TErasureType::E
     {TErasureType::EErasureSpecies::Erasure4Plus2Block ,"block-4-2"},
     {TErasureType::EErasureSpecies::ErasureMirror3dc ,"mirror-3-dc"},
     {TErasureType::EErasureSpecies::Erasure4Plus3Block ,"block-4-3"},
-    {TErasureType::EErasureSpecies::Erasure3Plus3Block ,"block-3-3"},
+    // {TErasureType::EErasureSpecies::Erasure3Plus3Block ,"block-3-3"},
     {TErasureType::EErasureSpecies::ErasureMirror3of4 ,"mirror-3of4"},
 }};
 

@@ -19,7 +19,7 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
     // Update period for load_factor polling from Node Whiteboard.
     // Synchronized with Node Whiteboard's internal update period (15 seconds)
     // to ensure we always get fresh data without unnecessary polling.
-    static constexpr int LOAD_FACTOR_UPDATE_PERIOD_SECONDS = 15;
+    static constexpr TDuration LOAD_FACTOR_UPDATE_PERIOD_SECONDS = TDuration::Seconds(15);
     
     // Minimum relative change in load_factor to trigger an update (1%).
     // This prevents excessive updates to State Storage Board when load fluctuates slightly.
@@ -110,7 +110,7 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
         Become(&TThis::StateWork);
         
         // Schedule periodic load factor updates
-        Schedule(TDuration::Seconds(LOAD_FACTOR_UPDATE_PERIOD_SECONDS), new TEvents::TEvWakeup());
+        Schedule(LOAD_FACTOR_UPDATE_PERIOD_SECONDS, new TEvents::TEvWakeup());
     }
 
     void Handle(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
@@ -137,6 +137,11 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
 
             if (PublishActor) {
                 UpdatePublishActor();
+            } else {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+                    "Cannot update load_factor: PublishActor is not initialized. "
+                    "Database: " << AppData()->TenantName << ", "
+                    "load_factor: " << newLoadFactor);
             }
         }
     }
@@ -145,7 +150,7 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
              new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest());
         
-        Schedule(TDuration::Seconds(LOAD_FACTOR_UPDATE_PERIOD_SECONDS), new TEvents::TEvWakeup());
+        Schedule(LOAD_FACTOR_UPDATE_PERIOD_SECONDS, new TEvents::TEvWakeup());
     }
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

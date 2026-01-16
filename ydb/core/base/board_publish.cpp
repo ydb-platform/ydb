@@ -292,6 +292,7 @@ public:
     STATEFN(StateResolve) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
+            hFunc(TEvStateStorage::TEvBoardPublishUpdate, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
             cFunc(TEvents::TEvUndelivered::EventType, HandleUndelivered);
         }

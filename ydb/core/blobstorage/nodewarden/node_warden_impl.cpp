@@ -1286,25 +1286,27 @@ void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPt
             record.GetConfig().HasBlobStorageConfig() &&
             record.GetConfig().GetBlobStorageConfig().HasInferPDiskSlotCountSettings()) {
         auto inferSettings = record.GetConfig().GetBlobStorageConfig().GetInferPDiskSlotCountSettings();
-        InferPDiskSlotCountSettings.CopyFrom(inferSettings);
+        auto equals = ::google::protobuf::util::MessageDifferencer::Equals;
+        if (!equals(InferPDiskSlotCountSettings, inferSettings)) {
+            InferPDiskSlotCountSettings.CopyFrom(inferSettings);
+            for (auto& [key, localPDisk] : LocalPDisks) {
+                TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(localPDisk.Record);
+                ui64 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
+                ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
 
-        for (auto& [key, localPDisk] : LocalPDisks) {
-            TIntrusivePtr<TPDiskConfig> newPDiskConfig = CreatePDiskConfig(localPDisk.Record);
-            ui64 newExpectedSlotCount = newPDiskConfig->ExpectedSlotCount;
-            ui32 newSlotSizeInUnits = newPDiskConfig->SlotSizeInUnits;
+                if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
+                        newSlotSizeInUnits != localPDisk.SlotSizeInUnits) {
+                    STLOG(PRI_DEBUG, BS_NODE, NW112, "SendChangeExpectedSlotCount from config notification",
+                        (PDiskId, key.PDiskId),
+                        (ExpectedSlotCount, newExpectedSlotCount),
+                        (SlotSizeInUnits, newSlotSizeInUnits));
 
-            if (newExpectedSlotCount != localPDisk.ExpectedSlotCount ||
-                    newSlotSizeInUnits != localPDisk.SlotSizeInUnits) {
-                STLOG(PRI_DEBUG, BS_NODE, NW112, "SendChangeExpectedSlotCount from config notification",
-                    (PDiskId, key.PDiskId),
-                    (ExpectedSlotCount, newExpectedSlotCount),
-                    (SlotSizeInUnits, newSlotSizeInUnits));
+                    const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
+                    Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(newExpectedSlotCount, newSlotSizeInUnits));
 
-                const TActorId pdiskActorId = MakeBlobStoragePDiskID(LocalNodeId, key.PDiskId);
-                Send(pdiskActorId, new NPDisk::TEvChangeExpectedSlotCount(newExpectedSlotCount, newSlotSizeInUnits));
-
-                localPDisk.ExpectedSlotCount = newExpectedSlotCount;
-                localPDisk.SlotSizeInUnits = newSlotSizeInUnits;
+                    localPDisk.ExpectedSlotCount = newExpectedSlotCount;
+                    localPDisk.SlotSizeInUnits = newSlotSizeInUnits;
+                }
             }
         }
     }

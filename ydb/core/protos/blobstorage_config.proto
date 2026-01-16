@@ -647,7 +647,7 @@ message TRecommissionGroups {
 }
 
 message TInferPDiskSlotCountForDriveTypeSettings {
-    // NodeWarded infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits by the formula
+    // NodeWarden infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits by the formula
     // ExpectedSlotCount = TotalSize / (UnitSize * SlotSizeInUnits)
     // where SlotSizeInUnits = 2^N is chosen to meet ExpectedSlotCount <= MaxSlots
     optional uint64 UnitSize = 1; // in bytes

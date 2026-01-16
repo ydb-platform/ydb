@@ -68,4 +68,22 @@ NKikimrScheme::TEvLogin CreatePlainLdapLoginRequest(const TString& username, con
     return record;
 }
 
+NKikimrScheme::TEvLogin CreateScramLoginRequest(const TString& username, NLoginProto::EHashType::HashType hashType,
+    const TString& clientProof, const TString& authMessage,  const TString& peerName, const NKikimrProto::TAuthConfig& config)
+{
+    NKikimrScheme::TEvLogin record;
+    record.SetUser(username);
+    record.MutableHashToValidate()->SetAuthMech(NLoginProto::ESaslAuthMech::Scram);
+    record.MutableHashToValidate()->SetHashType(hashType);
+    record.MutableHashToValidate()->SetHash(clientProof);
+    record.MutableHashToValidate()->SetAuthMessage(authMessage);
+
+    if (config.HasLoginTokenExpireTime()) {
+        record.SetExpiresAfterMs(TDuration::Parse(config.GetLoginTokenExpireTime()).MilliSeconds());
+    }
+
+    record.SetPeerName(peerName);
+    return record;
+}
+
 } // namespace NKikimr

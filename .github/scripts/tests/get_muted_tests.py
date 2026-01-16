@@ -9,7 +9,7 @@ import time
 import ydb
 from get_diff_lines_of_file import get_diff_lines_of_file
 from mute_utils import pattern_to_re
-from transform_ya_junit import YaMuteCheck
+from mute_check import YaMuteCheck
 
 # Add analytics directory to path for ydb_wrapper import
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))

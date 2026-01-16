@@ -21,5 +21,5 @@ class TestYdbLogWorkload(StressFixture):
             "--endpoint", self.endpoint,
             "--database", self.database,
             "--store_type", store_type,
-            "--duration", "120",
+            "--duration", self.base_duration,
         ])

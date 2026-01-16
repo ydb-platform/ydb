@@ -66,7 +66,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
         rels.push_back(relNode);
         nodeMap.insert({child.get(), relNode});
     }
-    
+
     for (auto node : cboTree->TreeNodes) {
         auto join = CastOperator<TOpJoin>(node);
         auto leftNode = nodeMap.at(join->GetLeftInput().get());
@@ -82,11 +82,11 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(std::shared_ptr<TOpCBOTree> 
             rightKeys.push_back(TJoinColumn(mappedRightKey.GetAlias(), mappedRightKey.GetColumnName()));
         }
 
-        result = std::make_shared<TJoinOptimizerNode>(leftNode, 
-            rightNode, 
-            leftKeys, 
-            rightKeys, 
-            ConvertToJoinKind(join->JoinKind), 
+        result = std::make_shared<TJoinOptimizerNode>(leftNode,
+            rightNode,
+            leftKeys,
+            rightKeys,
+            ConvertToJoinKind(join->JoinKind),
             EJoinAlgoType::Undefined,
             false,
             false,
@@ -171,12 +171,12 @@ namespace NKqp {
 
 /**
  * Run dynamic programming CBO and convert the resulting tree into operator tree
- * 
+ *
  * In order to support good CBO with pg syntax, where all the variables in the joins
  * are transformed into Pg types, we remap the synthenic variables back into original ones
  * to run the CBO, and then map them back
  */
-std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
     if (input->Kind != EOperator::CBOTree) {
@@ -184,14 +184,14 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleTestAndApply(const std::s
     }
 
     auto & Config = ctx.KqpCtx.Config;
-    auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel);
+    auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
 
     if (optLevel <= 1) {
         return input;
     }
 
     auto cboTree = CastOperator<TOpCBOTree>(input);
-    
+
     // Check that all inputs have statistics
     for (auto c : cboTree->Children) {
         if (!c->Props.Statistics.has_value()) {
@@ -222,7 +222,7 @@ std::shared_ptr<IOperator> TOptimizeCBOTreeRule::SimpleTestAndApply(const std::s
     };
 
     // Shuffle elimination is currently disabled
-    //bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->DefaultEnableShuffleElimination);
+    //bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
 
     auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel);
     auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx.ExprCtx, false, nullptr, nullptr));

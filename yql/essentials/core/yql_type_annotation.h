@@ -39,7 +39,7 @@ using TTypeAnnCallableFactory = std::function<TAutoPtr<IGraphTransformer>()>;
 
 class IUrlLoader : public TThrRefBase {
 public:
-    ~IUrlLoader() = default;
+    ~IUrlLoader() override = default;
 
     virtual TString Load(const TString& url, const TString& token) = 0;
 

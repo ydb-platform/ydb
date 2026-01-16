@@ -48,6 +48,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                     Y_ABORT("unexpected DecommitStatus for dynamic group with bound BlobDepotId");
 
                 case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
+                case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
                     // create proxy that will be used by blob depot agent to fetch underlying data
                     proxyActorId = as->Register(CreateBlobStorageGroupProxyConfigured(
                         TIntrusivePtr<TBlobStorageGroupInfo>(info), group.NodeLayoutInfo, false, DsProxyNodeMon,

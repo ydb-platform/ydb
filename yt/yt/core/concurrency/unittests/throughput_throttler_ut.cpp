@@ -349,11 +349,11 @@ TEST(TReconfigurableThroughputThrottlerTest, Release)
         TThroughputThrottlerConfig::Create(100));
 
     auto future = throttler->Throttle(100);
-    EXPECT_EQ(future, VoidFuture);
+    EXPECT_EQ(future, OKFuture);
 
     throttler->Release(100);
     future = throttler->Throttle(150);
-    EXPECT_EQ(future, VoidFuture);
+    EXPECT_EQ(future, OKFuture);
 
     future = throttler->Throttle(100);
     EXPECT_FALSE(future.IsSet());
@@ -441,7 +441,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, OneRequest)
 {
     EXPECT_CALL(*Underlying_, Throttle(_))
         .Times(1)
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
 }
@@ -450,7 +450,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, ManyRequests)
 {
     EXPECT_CALL(*Underlying_, Throttle(_))
         .Times(4)
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     for (int i = 0; i < 1'000; ++i) {
         EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
@@ -461,7 +461,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, SpikeAmount)
 {
     EXPECT_CALL(*Underlying_, Throttle(_))
         .Times(4)
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     for (int i = 0; i < 3; ++i) {
         EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
@@ -517,7 +517,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, Release)
 {
     EXPECT_CALL(*Underlying_, Throttle(_))
         .Times(1)
-        .WillRepeatedly(Return(VoidFuture));
+        .WillRepeatedly(Return(OKFuture));
 
     EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
     EXPECT_TRUE(Throttler_->IsOverdraft());
@@ -525,7 +525,7 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, Release)
     Throttler_->Release(1);
     EXPECT_FALSE(Throttler_->IsOverdraft());
 
-    EXPECT_EQ(Throttler_->Throttle(1), VoidFuture);
+    EXPECT_EQ(Throttler_->Throttle(1), OKFuture);
     EXPECT_TRUE(Throttler_->IsOverdraft());
 }
 

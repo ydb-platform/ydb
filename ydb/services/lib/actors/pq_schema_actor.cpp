@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/util/proto_duration.h>
 
@@ -496,8 +497,19 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     Ydb::StatusIds::StatusCode CheckConfig(const NKikimrPQ::TPQTabletConfig& config,
                               const TClientServiceTypes& supportedClientServiceTypes,
-                              TString& error, const NKikimrPQ::TPQConfig& pqConfig, const Ydb::StatusIds::StatusCode dubsStatus)
+                              TString& error, const NKikimrPQ::TPQConfig& pqConfig,
+                              const Ydb::StatusIds::StatusCode dubsStatus)
     {
+        if (config.GetPartitionConfig().HasStorageLimitBytes() && config.GetPartitionConfig().GetStorageLimitBytes() > 0) {
+            auto hasMLP = AnyOf(config.GetConsumers(), [](const auto& consumer) {
+                return consumer.GetType() == ::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
+            });
+            if (hasMLP) {
+                error = TStringBuilder() << "Retention by storage size is not supported for shared consumers";
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+        }
+
         ui32 speed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
         ui32 burst = config.GetPartitionConfig().GetBurstSize();
 
@@ -524,7 +536,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         ui32 lifeTimeSeconds = config.GetPartitionConfig().GetLifetimeSeconds();
         ui64 storageBytes = config.GetPartitionConfig().GetStorageLimitBytes();
-
 
 
         auto retentionLimits = AppData()->PQConfig.GetValidRetentionLimits();
@@ -685,6 +696,13 @@ namespace NKikimr::NGRpcProxy::V1 {
                 }
             } else if (pair.first == "_cleanup_policy") {
                 config->SetEnableCompactification(pair.second == "compact");
+            } else if (pair.first == "_timestamp_type") {
+                if (!pair.second || pair.second == NKafka::MESSAGE_TIMESTAMP_CREATE_TIME || pair.second == NKafka::MESSAGE_TIMESTAMP_LOG_APPEND) {
+                    config->SetTimestampType(pair.second ? pair.second :  NKafka::MESSAGE_TIMESTAMP_CREATE_TIME);
+                } else {
+                    error = TStringBuilder() << "Attribute " << pair.first << " is " << pair.second << ", which is an incorrect value.";
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
             } else {
                 error = TStringBuilder() << "Attribute " << pair.first << " is not supported";
                 return Ydb::StatusIds::BAD_REQUEST;
@@ -1205,7 +1223,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         } else {
             partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
         }
-
         if (local) {
             auto partSpeed = request.partition_write_speed_bytes_per_second();
             if (partSpeed == 0) {

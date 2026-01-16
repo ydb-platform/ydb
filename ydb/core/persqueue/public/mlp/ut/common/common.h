@@ -21,9 +21,12 @@ using namespace NYdb::NTopic::NTests;
 std::shared_ptr<TTopicSdkTestSetup> CreateSetup();
 
 void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query);
-void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
+TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
     NYdb::NTopic::TCreateTopicSettings& settings);
-void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, size_t partitionCount = 1, bool keepMessagesOrder = false);
+TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
+    const TString& consumerName, size_t partitionCount = 1, bool keepMessagesOrder = false);
+TStatus AlterTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
+    NYdb::NTopic::TAlterTopicSettings& settings);
 TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings);
 TActorId CreateWriterActor(NActors::TTestActorRuntime& runtime, TWriterSettings&& settings);
 TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommitterSettings&& settings);

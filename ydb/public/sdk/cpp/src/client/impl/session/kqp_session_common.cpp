@@ -168,6 +168,8 @@ void TKqpSessionCommon::CloseFromServer(std::weak_ptr<ISessionClient> client) no
 std::function<void(TKqpSessionCommon*)> TKqpSessionCommon::GetSmartDeleter(std::shared_ptr<ISessionClient> client)
 {
     return [client](TKqpSessionCommon* sessionImpl) {
+        sessionImpl->PropagatedDeadline_ = std::nullopt;
+
         switch (sessionImpl->GetState()) {
             case TKqpSessionCommon::S_STANDALONE:
             case TKqpSessionCommon::S_BROKEN:

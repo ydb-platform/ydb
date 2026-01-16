@@ -97,7 +97,8 @@ public:
 
             if (mstats && !HasVectorTopK) {
                 switch(LookupStrategy) {
-                    case NKqpProto::EStreamLookupStrategy::LOOKUP: {
+                    case NKqpProto::EStreamLookupStrategy::LOOKUP:
+                    case NKqpProto::EStreamLookupStrategy::UNIQUE: {
                         // in lookup case without top-K pushdown we return as result actual data, that we read from the datashard.
                         rowsReadEstimate = mstats->Inputs[InputIndex]->RowsConsumed;
                         bytesReadEstimate = mstats->Inputs[InputIndex]->BytesConsumed;
@@ -400,8 +401,15 @@ private:
             return RuntimeError(errorMsg, NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
 
-        if (IsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
+        if (IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
             YQL_ENSURE(!LockTxId, "SnapshotReadOnly should not take locks");
+        }
+        if (LockTxId && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW && LookupStrategy == NKqpProto::EStreamLookupStrategy::UNIQUE) {
+            YQL_ENSURE(LockMode == NKikimrDataEvents::OPTIMISTIC);
+        } else if (LockTxId && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW) {
+            YQL_ENSURE(LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+        } else if (LockTxId && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SERIALIZABLE) {
+            YQL_ENSURE(LockMode == NKikimrDataEvents::OPTIMISTIC);
         }
         LookupActorStateSpan.EndOk();
 
@@ -866,7 +874,7 @@ private:
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
-    NKikimrKqp::EIsolationLevel IsolationLevel;
+    NKqpProto::EIsolationLevel IsolationLevel;
     const TString Database;
 
     // stats

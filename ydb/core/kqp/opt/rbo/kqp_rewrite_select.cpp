@@ -76,7 +76,8 @@ void CollectAggregationsImpl(TExprNode::TPtr node, TVector<TExprNode::TPtr>& agg
         }
 
         if (!!GetSetting(*node->Child(1), "distinct")) {
-            Y_ENSURE(!IsExpression(node->ChildPtr(2)), "Nested distinct on expression is not supported, aka f(distinct a x b)");
+            const ui32 index = node->ChildrenSize() == 3 ? 2 : 3;
+            Y_ENSURE(!IsExpression(node->ChildPtr(index)), "Nested distinct on expression is not supported, aka f(distinct a x b)");
         }
 
         const TString aggFunction = GetAggregationFunction(node->ChildPtr(0));
@@ -220,17 +221,20 @@ TVector<std::pair<TInfoUnit, TExprNode::TPtr>> BuildExpressionsFromColumns(const
 }
 
 TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
-                                            const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& aggFieldsExpressionsMap,
+                                            const TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& aggFieldsExpressionsMap,
                                             const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
                                             TExprContext& ctx, TPositionHandle pos) {
     // Add expressions
     TVector<TExprNode::TPtr> mapElements;
-    for (const auto& [colName, expr] : aggFieldsExpressionsMap) {
+    for (const auto& [colName, expr, forceOptional] : aggFieldsExpressionsMap) {
         // clang-format off
         mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, pos)
             .Input(resultExpr)
             .Variable()
                 .Value(colName.GetFullName())
+            .Build()
+            .ForceOptional()
+                .Value(forceOptional ? "True" : "False")
             .Build()
             .Lambda(expr)
         .Done().Ptr());
@@ -282,6 +286,7 @@ void ToCamelCase(std::string& s) {
     std::transform(s.begin(), s.end(), s.begin(), f);
 }
 
+// FIXME: This function has a bug.
 TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext &ctx) {
     if (input->IsLambda()) {
         auto lambda = TCoLambda(input);
@@ -323,18 +328,30 @@ TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext &ctx) {
                 .Seal()
             .Build();
             // clnag-format on
-        }
-        else if (input->IsCallable()){
-            TVector<TExprNode::TPtr> newChildren;
-            for (auto c : input->Children()) {
-                newChildren.push_back(ReplacePgOps(c, ctx));
-            }
-            // clang-format off
+    } else if (input->IsCallable("PgNot")) {
+        // clang-format off
             return ctx.Builder(input->Pos())
-                .Callable(input->Content())
-                    .Add(std::move(newChildren))
+                .Callable("ToPg")
+                    .Callable(0, "Not")
+                        .Callable(0, "FromPg")
+                            .Add(0, ReplacePgOps(input->ChildPtr(0), ctx))
+                        .Seal()
+                    .Seal()
                 .Seal()
             .Build();
+            // clnag-format on
+    }
+    else if (input->IsCallable()){
+        TVector<TExprNode::TPtr> newChildren;
+        for (auto c : input->Children()) {
+            newChildren.push_back(ReplacePgOps(c, ctx));
+        }
+        // clang-format off
+        return ctx.Builder(input->Pos())
+            .Callable(input->Content())
+                .Add(std::move(newChildren))
+            .Seal()
+        .Build();
         // clang-format on
     } else if (input->IsList()) {
         TVector<TExprNode::TPtr> newChildren;
@@ -526,15 +543,119 @@ TExprNode::TPtr NormalizeMemberNames(TExprNode::TPtr node, TExprContext& ctx, TP
     return replaces.empty() ? node : ctx.ReplaceNodes(std::move(node), replaces);
 }
 
+void SplitByAnd(TExprNode::TPtr node, TVector<TExprNode::TPtr>& predicates) {
+    // TODO: Here we need to build a predicate tree to handle OR.
+    Y_ENSURE(!TCoOr::Match(node.Get()), "OR in join predicate is not supported");
+
+    if (!TCoAnd::Match(node.Get())) {
+        predicates.push_back(node);
+        return;
+    }
+
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+        SplitByAnd(node->ChildPtr(i), predicates);
+    }
+}
+
+bool IsJoinKeys(TExprNode::TPtr node, TExprNode::TPtr lambdaArg) {
+    if (!TCoCmpEqual::Match(node.Get())) {
+        return false;
+    }
+
+    auto equalOp = TCoCmpEqual(node);
+    auto left = equalOp.Left().Ptr();
+    auto right = equalOp.Right().Ptr();
+    if (!left->IsCallable("Member") || !right->IsCallable("Member")) {
+        return false;
+    }
+
+    return left->ChildPtr(0) == lambdaArg.Get() && right->ChildPtr(0) == lambdaArg.Get();
+}
+
+void ExtractJoinKeysAndPredicates(TExprNode::TPtr node, TVector<TInfoUnit>& joinKeys, TVector<TExprNode::TPtr>& joinPredicates) {
+    Y_ENSURE(node->IsLambda());
+    auto lambda = TCoLambda(node);
+    TVector<TExprNode::TPtr> predicates;
+    SplitByAnd(lambda.Body().Ptr(), predicates);
+
+    for (const auto& predicate : predicates) {
+        if (IsJoinKeys(predicate, lambda.Args().Arg(0).Ptr())) {
+            TVector<TInfoUnit> currentJoinKeys;
+            GetAllMembers(predicate, currentJoinKeys);
+            joinKeys.insert(joinKeys.end(), currentJoinKeys.begin(), currentJoinKeys.end());
+        } else {
+            joinPredicates.push_back(predicate);
+        }
+    }
+}
+
+void SplitJoinPredicatesByAliases(const TVector<TExprNode::TPtr>& joinPredicates, const TString& leftSideAlias, const TString& rightSideAlias,
+                                  TVector<TExprNode::TPtr>& leftSidePredicates, TVector<TExprNode::TPtr>& rightSidePredicates) {
+    for (const auto& predicate : joinPredicates) {
+        TVector<TInfoUnit> members;
+        GetAllMembers(predicate, members);
+        bool isLeftSidePredicate = false;
+        bool isRightSidePredicate = false;
+        for (const auto& member : members) {
+            const auto alias = member.GetAlias();
+            if (alias == leftSideAlias) {
+                isLeftSidePredicate = true;
+            } else if (alias == rightSideAlias) {
+                isRightSidePredicate = true;
+            } else {
+                Y_ENSURE(false, "Invalid alias in join predicate" + member.GetAlias());
+            }
+        }
+        Y_ENSURE((isLeftSidePredicate && !isRightSidePredicate) || (isRightSidePredicate && !isLeftSidePredicate));
+        if (isLeftSidePredicate) {
+            leftSidePredicates.push_back(predicate);
+        } else {
+            rightSidePredicates.push_back(predicate);
+        }
+    }
+}
+
+TExprNode::TPtr CombineByAnd(TVector<TExprNode::TPtr> &predicates, TExprContext &ctx, TPositionHandle pos) {
+    Y_ENSURE(predicates.size());
+    if (predicates.size() == 1) {
+        return predicates.front();
+    }
+
+    // clang-format off
+    return Build<TCoAnd>(ctx, pos)
+        .Add(predicates)
+    .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildFilter(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, TVector<TExprNode::TPtr> &predicates, TExprContext &ctx, TPositionHandle pos) {
+    auto predicate = CombineByAnd(predicates, ctx, pos);
+    // clang-format off
+    return Build<TKqpOpFilter>(ctx, pos)
+        .Input(input)
+        .Lambda<TCoLambda>()
+            .Args({"_filter_arg_"})
+            .Body<TExprApplier>()
+                .Apply(TExprBase(predicate))
+                .With(TExprBase(lambdaArg), "_filter_arg_")
+            .Build()
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
+bool IsForceOptionalNeeded(TExprNode::TPtr typeNode, const TString& aggFunc) {
+    return typeNode && TMaybeNode<TCoOptionalType>(typeNode.Get()) && (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg");
+}
+
 } // namespace
 
 namespace NKikimr {
 namespace NKqp {
 
-TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, const TKqpOptimizeContext& kqpCtx, bool pgSyntax) {
+TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx, const TKqpOptimizeContext& kqpCtx, ui64& uniqueSourceIdCounter, bool pgSyntax) {
     Y_UNUSED(typeCtx);
     Y_UNUSED(pgSyntax);
-
     TVector<TString> finalColumnOrder;
 
     auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
@@ -604,6 +725,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         .Alias(alias)
                         .Columns(readExpr.Columns())
                         .SourceType(GetTableSourceType(tableDesc, ctx, node->Pos()))
+                        .UniqueId().Value(std::to_string(uniqueSourceIdCounter)).Build()
                     .Done().Ptr();
                     // clang-format on
                 }
@@ -616,6 +738,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
 
         THashSet<TString> processedInputs;
         auto joinOps = GetSetting(setItem->Tail(), "join_ops");
+        ui32 ansiCrossJoinCount = 0;
         if (joinOps) {
             for (ui32 i = 0; i < joinOps->Tail().ChildrenSize(); ++i) {
                 ui32 tableInputsCount = 0;
@@ -627,8 +750,10 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         ++tableInputsCount;
                         continue;
                     }
-                    // FIXME: join on clause may include expressions, we need to handle this case
+
                     TVector<TInfoUnit> joinKeys;
+                    TVector<TExprNode::TPtr> joinPredicates;
+                    TExprNode::TPtr joinLambda;
                     Y_ENSURE(join->ChildrenSize() > 1 && join->Child(1)->ChildrenSize() > 1);
                     if (pgSyntax) {
                         auto pgResolvedOps = FindNodes(join->Child(1)->Child(1)->TailPtr(), [](const TExprNode::TPtr& node) {
@@ -644,27 +769,42 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                             joinKeys.insert(joinKeys.end(), keys.begin(), keys.end());
                         }
                     } else {
-                        // FIXME: Add verification for that we do not have expressions.
                         auto yqlWhere = join->ChildPtr(1);
                         Y_ENSURE(yqlWhere->IsCallable("YqlWhere"), yqlWhere->Content());
-                        GetAllMembers(yqlWhere, joinKeys);
+                        Y_ENSURE(yqlWhere->ChildPtr(1)->IsLambda(), "YqlWhere invalid child type.");
+                        joinLambda = TCoLambda(ctx.DeepCopyLambda(*(yqlWhere->Child(1)))).Ptr();
+                        ExtractJoinKeysAndPredicates(joinLambda, joinKeys, joinPredicates);
                     }
 
                     TJoinTableAliases joinAliases;
                     TExprNode::TPtr leftInput;
                     TExprNode::TPtr rightInput;
+                    TVector<TExprNode::TPtr> leftSidePredicates;
+                    TVector<TExprNode::TPtr> rightSidePredicates;
+                    TString leftSideAlias;
+                    TString rightSideAlias;
 
+                    if (joinKeys.empty()) {
+                        // Ansi cross join.
+                        ++ansiCrossJoinCount;
+                        continue;
+                    }
+
+                    Y_ENSURE(joinKeys.size() && !ansiCrossJoinCount, "Ansi cross joins mixed with other joins");
                     if (tableInputsCount == 2) {
                         joinAliases = GatherJoinAliasesTwoInputs(joinKeys);
-                        const auto leftSideAlias = *joinAliases.LeftSideAliases.begin();
-                        const auto rightSideAlias = *joinAliases.RightSideAliases.begin();
+                        leftSideAlias = *joinAliases.LeftSideAliases.begin();
+                        rightSideAlias = *joinAliases.RightSideAliases.begin();
                         Y_ENSURE(aliasToInputMap.count(leftSideAlias), "Left side alias is not present in input tables");
                         Y_ENSURE(aliasToInputMap.count(rightSideAlias), "Right sided alias is not present input tables");
                         leftInput = aliasToInputMap[leftSideAlias];
                         rightInput = aliasToInputMap[rightSideAlias];
-                    } else if (tableInputsCount == 1) {
+
+                   } else if (tableInputsCount == 1) {
                         joinAliases = GatherJoinAliasesLeftSideMultiInputs(joinKeys, processedInputs);
-                        const auto rightSideAlias = *joinAliases.RightSideAliases.begin();
+                        // TODO: Add support to build a join filter with multi input side.
+                        leftSideAlias = *joinAliases.LeftSideAliases.begin();
+                        rightSideAlias = *joinAliases.RightSideAliases.begin();
                         Y_ENSURE(aliasToInputMap.contains(rightSideAlias), "Right side alias is not present in input tables");
                         leftInput = joinExpr;
                         rightInput = aliasToInputMap[rightSideAlias];
@@ -672,6 +812,17 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
 
                     auto joinKind = TString(joinType);
                     ToCamelCase(joinKind.MutRef());
+
+                    if (joinLambda && (joinKind == "Left" || joinKind == "Inner")) {
+                        auto lambdaArg = TCoLambda(joinLambda).Args().Arg(0).Ptr();
+                        SplitJoinPredicatesByAliases(joinPredicates, leftSideAlias, rightSideAlias, leftSidePredicates, rightSidePredicates);
+                        if (leftSidePredicates.size()) {
+                            leftInput = BuildFilter(leftInput, lambdaArg, leftSidePredicates, ctx, node->Pos());
+                        }
+                        if (rightSidePredicates.size()) {
+                            rightInput = BuildFilter(rightInput, lambdaArg, rightSidePredicates, ctx, node->Pos());
+                        }
+                    }
 
                     // clang-format off
                     joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
@@ -687,10 +838,11 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                 }
             }
 
-            // Build in order
+            // Ansi cross joins, processing inputs in the given order.
             if (!joinExpr) {
                 ui32 inputIndex = 0;
                 if (inputsInOrder.size() > 1) {
+                    Y_ENSURE(pgSyntax || (!pgSyntax && inputsInOrder.size() == ansiCrossJoinCount + 1), "Invalid input count for ansi cross joins.");
                     while (inputIndex < inputsInOrder.size()) {
                         auto leftTableInput = inputIndex == 0 ? inputsInOrder[inputIndex] : joinExpr;
                         auto rightTableInput = inputIndex == 0 ? inputsInOrder[inputIndex + 1] : inputsInOrder[inputIndex];
@@ -718,13 +870,21 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         auto where = GetSetting(setItem->Tail(), "where");
 
         if (where) {
-            TExprNode::TPtr lambda = where->Child(1)->Child(1);
-            lambda = ReplacePgOps(lambda, ctx);
-            lambda = FlattenNestedConjunctions(lambda, ctx);
+            TExprNode::TPtr lambdaPtr = ctx.DeepCopyLambda(*(where->Child(1)->Child(1)));
+            if (pgSyntax) {
+                lambdaPtr = ReplacePgOps(lambdaPtr, ctx);
+            }
+            auto lambda = TCoLambda(FlattenNestedConjunctions(lambdaPtr, ctx));
             // clang-format off
             filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
                 .Input(filterExpr)
-                .Lambda(lambda)
+                .Lambda<TCoLambda>()
+                    .Args({"_filter_arg_"})
+                    .Body<TExprApplier>()
+                        .Apply(lambda.Body())
+                        .With(lambda.Args().Arg(0), "_filter_arg_")
+                    .Build()
+                .Build()
             .Done().Ptr();
             // clang-format on
         }
@@ -785,10 +945,11 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         auto result = GetSetting(setItem->Tail(), "result");
         Y_ENSURE(result);
         auto finalType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        const bool IsEmptyGroupByKeys = groupByKeysExpressionsMap.empty();
 
         // Aggregations.
-        TVector<std::pair<TInfoUnit, TExprNode::TPtr>> expressionsMapPreAgg;
-        TVector<std::pair<TInfoUnit, TExprNode::TPtr>> expressionsMapPostAgg;
+        TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPreAgg;
+        TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>> expressionsMapPostAgg;
         bool distinctPreAggregate = false;
         for (ui32 i = 0; i < result->Child(1)->ChildrenSize(); ++i) {
             const auto resultItem = result->Child(1)->ChildPtr(i);
@@ -811,6 +972,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                     TExprNode::TPtr exprBody;
                     const ui32 aggInputIndex = aggregation->ChildrenSize() == 3 ? 2 : 3;
                     const bool aggHasInput = aggregation->ChildrenSize() > 2;
+                    const bool aggHasType = aggHasInput;
 
                     // Aggregation with column specified.
                     if (aggHasInput) {
@@ -828,6 +990,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                             // For example: f(a) -> map(a -> a) -> f(a).
                             // This is needed to simplify logic for translation from PgSelect to KqpOp.
                             exprBody = GetMember(aggInput);
+
                             Y_ENSURE(exprBody, "Aggregation input is not a member");
                             auto member = TCoMember(exprBody);
                             // f(a), g(a) => map(a -> a, a -> b) -> f(a), g(b)
@@ -845,10 +1008,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                         // Here we create a new column with non optional type,
                         // because aggregation for optional and non optional is different.
                         // count(*) counts nulls, count(a) does not.
-
                         exprBody = Build<TCoUint64>(ctx, node->Pos()).Literal().Build("1").Done().Ptr();
                     }
-
 
                     // clang-format off
                     auto exprLambda = Build<TCoLambda>(ctx, node->Pos())
@@ -860,7 +1021,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                     .Done().Ptr();
                     // clang-format on
 
-                    expressionsMapPreAgg.push_back({aggColName, exprLambda});
+                    // This is a special case to force optional type for non optional column.
+                    const bool forceOptional = aggHasType ? (IsEmptyGroupByKeys && IsForceOptionalNeeded(aggregation->ChildPtr(2), aggFuncName)) : false;
+                    expressionsMapPreAgg.push_back({aggColName, exprLambda, forceOptional});
                     aggregationsForReplacement[aggregation] = aggColName.GetFullName();
 
                     // Distinct for column or expression f(distinct a) => (distinct a) as b -> f(b).
@@ -914,7 +1077,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                 // clang-format on
 
                 auto colName = TInfoUnit(resultColName);
-                expressionsMapPostAgg.push_back({colName, exprLambda});
+                expressionsMapPostAgg.push_back({colName, exprLambda, false});
 
                 // Case for distinct after aggregation.
                 if (distinctAll) {
@@ -1086,7 +1249,13 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
             resultElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())
                 .Input(resultExpr)
                 .Variable(variable)
-                .Lambda(lambda)
+                .Lambda<TCoLambda>()
+                    .Args({"_map_arg_"})
+                    .Body<TExprApplier>()
+                        .Apply(TCoLambda(lambda))
+                        .With(TCoLambda(lambda).Args().Arg(0), "_map_arg_")
+                    .Build()
+                .Build()
             .Done().Ptr());
             // clang-format on
             
@@ -1144,7 +1313,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         auto sort = GetSetting(setItem->Tail(), "sort");
         if (sort) {
             auto sortDependencies = GetSortDependencies(sort, groupByKeysExpressionsMap, pgSyntax);
-            for (auto iu : sortDependencies) {
+            for (const auto& iu : sortDependencies) {
                 if (std::find(finalProjection.begin(), finalProjection.end(), iu.GetFullName()) == finalProjection.end()) {
                     // clang-format off
                     resultElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
@@ -1174,12 +1343,12 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
 
             TVector<TExprNode::TPtr> projectElements;
 
-            for (auto c : finalProjection) {
+            for (const auto& column : finalProjection) {
                 // clang-format off
                 projectElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
                     .Input(setItemPtr)
-                    .Variable().Value(c).Build()
-                    .From().Value(c).Build()
+                    .Variable().Value(column).Build()
+                    .From().Value(column).Build()
                 .Done().Ptr());
                 // clang-format on
             }
@@ -1242,8 +1411,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
     }
 
     TVector<TCoAtom> columnAtomList;
-    for (auto c : finalColumnOrder) {
-        columnAtomList.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(c).Done());
+    for (const auto& column : finalColumnOrder) {
+        columnAtomList.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(column).Done());
     }
     auto columnOrder = Build<TCoAtomList>(ctx, node->Pos()).Add(columnAtomList).Done().Ptr();
 

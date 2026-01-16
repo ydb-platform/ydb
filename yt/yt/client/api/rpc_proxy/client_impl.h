@@ -361,6 +361,12 @@ public:
         const NYson::TYsonString& parameters,
         const NApi::TPollJobShellOptions& options) override;
 
+    TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr> RunJobShellCommand(
+        NJobTrackerClient::TJobId jobId,
+        const std::optional<std::string>& shellName,
+        const std::string& command,
+        const NApi::TRunJobShellCommandOptions& options) override;
+
     TFuture<void> AbortJob(
         NJobTrackerClient::TJobId jobId,
         const NApi::TAbortJobOptions& options) override;
@@ -392,6 +398,16 @@ public:
 
     TFuture<ITablePartitionReaderPtr> CreateTablePartitionReader(
         const TTablePartitionCookiePtr& tablePartitionDescriptor,
+        const TReadTablePartitionOptions& options) override;
+
+    TFuture<IFormattedTableReaderPtr> CreateFormattedTableReader(
+        const NYPath::TRichYPath& path,
+        const NYson::TYsonString& format,
+        const TTableReaderOptions& options) override;
+
+    TFuture<IFormattedTableReaderPtr> CreateFormattedTablePartitionReader(
+        const TTablePartitionCookiePtr& cookie,
+        const NYson::TYsonString& format,
         const TReadTablePartitionOptions& options) override;
 
     TFuture<void> TruncateJournal(
@@ -633,7 +649,7 @@ public:
 
     TFuture<TFlowExecuteResult> FlowExecute(
         const NYPath::TYPath& pipelinePath,
-        const TString& command,
+        const std::string& command,
         const NYson::TYsonString& argument,
         const TFlowExecuteOptions& options = {}) override;
 

@@ -46,7 +46,6 @@ public:
 
         if (autopartitioningEnabled) {
             appConfig.MutableFeatureFlags()->SetEnableTopicSplitMerge(true);
-            appConfig.MutableFeatureFlags()->SetEnablePQConfigTransactionsAtSchemeShard(true);
             appConfig.MutableFeatureFlags()->SetEnableTopicServiceTx(true);
         }
 

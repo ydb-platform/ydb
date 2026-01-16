@@ -10,7 +10,7 @@
 #include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
 
 namespace NKikimr::NColumnShard::NBackup {
-    
+
 TConclusion<std::unique_ptr<NActors::IActor>> CreateAsyncJobImportDownloader(const NActors::TActorId& subscriberActorId, ui64 txId, const NKikimrSchemeOp::TRestoreTask& restoreTask, const NKikimr::NDataShard::TTableInfo& tableInfo) {
     const auto settingsKind = restoreTask.GetSettingsCase();
     switch (settingsKind) {
@@ -34,7 +34,7 @@ public:
         , TableInfo(tableInfo)
         , YdbSchema(ydbSchema) {
     }
-    
+
     void Bootstrap() {
         auto result = CreateAsyncJobImportDownloader(SelfId(), TxId, RestoreTask, TableInfo);
         if (!result) {
@@ -43,7 +43,7 @@ public:
         Register(result.DetachResult().release());
         Become(&TThis::StateMain);
     }
-    
+
     STRICT_STFUNC(
         StateMain,
         hFunc(NKikimr::TEvDataShard::TEvGetS3DownloadInfo, Handle)
@@ -52,49 +52,49 @@ public:
         hFunc(NKikimr::TEvDataShard::TEvAsyncJobComplete, Handle)
         hFunc(TEvPrivate::TEvBackupImportRecordBatchResult, Handle)
     )
-    
-    void Handle(TEvPrivate::TEvBackupImportRecordBatchResult::TPtr&) {   
+
+    void Handle(TEvPrivate::TEvBackupImportRecordBatchResult::TPtr&) {
         auto response = std::make_unique<NKikimr::TEvDataShard::TEvS3UploadRowsResponse>();
         response->Info = LastInfo;
         Send(LastActorId, std::move(response));
     }
-    
+
     void Handle(NKikimr::TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev) {
         Send(ev->Sender, std::make_unique<NKikimr::TEvDataShard::TEvS3DownloadInfo>());
     }
-    
+
     void Handle(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev) {
         AFL_VERIFY(google::protobuf::util::MessageDifferencer::Equals(ev->Get()->Info.DownloadState, NKikimrBackup::TS3DownloadState()));
         Send(ev->Sender, std::make_unique<NKikimr::TEvDataShard::TEvS3DownloadInfo>(ev->Get()->Info));
     }
 
-    void Handle(NKikimr::TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev) {        
+    void Handle(NKikimr::TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev) {
         TSerializedCellVec keyCells;
         TSerializedCellVec valueCells;
-        
+
         NArrow::TArrowBatchBuilder batchBuilder;
         const auto startStatus = batchBuilder.Start(YdbSchema);
         if (!startStatus.ok()) {
             return Fail(startStatus.ToString());
         }
-        
+
         for (const auto& r : ev->Get()->Record.GetRows()) {
             keyCells.Parse(r.GetKeyColumns());
             valueCells.Parse(r.GetValueColumns());
             batchBuilder.AddRow(keyCells.GetCells(), valueCells.GetCells());
         }
-        
+
         auto resultBatch = batchBuilder.FlushBatch(false);
         LastInfo = ev->Get()->Info;
         LastActorId = ev->Sender;
         Send(SubscriberActorId, std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(resultBatch, false));
     }
-    
+
     void Handle(NKikimr::TEvDataShard::TEvAsyncJobComplete::TPtr&) {
         Send(SubscriberActorId, std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true));
         PassAway();
     }
-    
+
     void Fail(const TString& error) {
         auto result = std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true);
         result->Error = error;

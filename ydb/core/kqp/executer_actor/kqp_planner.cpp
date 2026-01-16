@@ -234,6 +234,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         if (BufferPageAllocSize) {
             serializedTask->SetBufferPageAllocSize(*BufferPageAllocSize);
         }
+        serializedTask->SetDqChannelVersion(TasksGraph.GetMeta().DqChannelVersion);
         request.AddTasks()->Swap(serializedTask);
     }
 
@@ -272,6 +273,11 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
+    }
+
+    if (UserRequestContext->IsStreamingQuery) {
+        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(1000);
+        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(5000);
     }
 
     if (UserToken) {
@@ -497,6 +503,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         taskDesc->SetBufferPageAllocSize(*BufferPageAllocSize);
     }
 
+    taskDesc->SetDqChannelVersion(TasksGraph.GetMeta().DqChannelVersion);
     auto startResult = CaFactory_->CreateKqpComputeActor({
         .ExecuterId = ExecuterId,
         .TxId = TxId,
@@ -531,6 +538,15 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     TActorId* actorId = std::get_if<TActorId>(&startResult);
     Y_ABORT_UNLESS(actorId);
     Y_ABORT_UNLESS(AcknowledgeCA(taskId, *actorId, nullptr));
+
+    for (auto& output : task.Outputs) {
+        for (auto channelId : output.Channels) {
+            auto& channel = TasksGraph.GetChannel(channelId);
+            if (!channel.DstTask) {
+                ResultChannels.emplace(channelId, task.ComputeActorId);
+            }
+        }
+    }
 
     THashMap<TActorId, THashSet<ui64>> updates;
     CollectTaskChannelsUpdates(task, updates);

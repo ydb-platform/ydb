@@ -275,7 +275,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::YtDqProcessWrite(TExprB
         [] (const TExprNode::TPtr& node) { return node->IsCallable({TCoToFlow::CallableName(), TCoIterator::CallableName()}) && node->Head().IsCallable(TYtTableContent::CallableName()); });
         !contents.empty()) {
         TNodeOnNodeOwnedMap replaces(contents.size());
-        const bool addToken = !State_->Configuration->Auth.Get().GetOrElse(TString()).empty();
 
         for (const auto& cont : contents) {
             const TYtTableContent content(cont->HeadPtr());
@@ -285,9 +284,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::YtDqProcessWrite(TExprB
             if (output) {
                 input = ConvertContentInputToRead(output.Cast(), {}, ctx);
             }
+
+            const auto cluster = input.Cast<TYtReadTable>().DataSource().Cluster().StringValue();
             TMaybeNode<TCoSecureParam> secParams;
-            if (addToken) {
-                const auto cluster = input.Cast<TYtReadTable>().DataSource().Cluster();
+            if (State_->ResolveClusterToken(cluster)) {
                 secParams = Build<TCoSecureParam>(ctx, node.Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
             }
 

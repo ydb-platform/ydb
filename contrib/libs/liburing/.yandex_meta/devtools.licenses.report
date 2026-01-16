@@ -154,6 +154,7 @@ BELONGS ya.make
         test/fd-pass.c [2:2]
         test/fdinfo-sqpoll.c [2:2]
         test/fdinfo.c [2:2]
+        test/fifo-futex-poll.c [2:2]
         test/fifo-nonblock-read.c [2:2]
         test/file-exit-unreg.c [2:2]
         test/file-register.c [2:2]
@@ -207,6 +208,8 @@ BELONGS ya.make
         test/nolibc.c [2:2]
         test/nop-all-sizes.c [2:2]
         test/nop.c [2:2]
+        test/nop32-overflow.c [2:2]
+        test/nop32.c [2:2]
         test/nvme.h [1:1]
         test/ooo-file-unreg.c [2:2]
         test/open-close.c [2:2]
@@ -253,6 +256,8 @@ BELONGS ya.make
         test/resize-rings.c [2:2]
         test/ring-leak.c [2:2]
         test/ring-leak2.c [2:2]
+        test/ring-query.c [2:2]
+        test/ringbuf-loop.c [2:2]
         test/ringbuf-read.c [2:2]
         test/ringbuf-status.c [2:2]
         test/rsrc_tags.c [2:2]
@@ -282,6 +287,9 @@ BELONGS ya.make
         test/sq-poll-kthread.c [2:2]
         test/sq-poll-share.c [2:2]
         test/sq-space_left.c [2:2]
+        test/sqe-mixed-bad-wrap.c [2:2]
+        test/sqe-mixed-nop.c [2:2]
+        test/sqe-mixed-uring_cmd.c [2:2]
         test/sqpoll-disable-exit.c [2:2]
         test/sqpoll-exec.c [2:2]
         test/sqpoll-exit-hang.c [2:2]
@@ -350,6 +358,7 @@ BELONGS ya.make
         Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
     Files with this license:
         src/include/liburing/io_uring.h [1:1]
+        src/include/liburing/io_uring/query.h [1:1]
     Scancode info:
         Original SPDX id: Linux-syscall-note
         Score           : 100.00
@@ -357,6 +366,7 @@ BELONGS ya.make
         Links           : https://spdx.org/licenses/Linux-syscall-note
     Files with this license:
         src/include/liburing/io_uring.h [1:1]
+        src/include/liburing/io_uring/query.h [1:1]
     Scancode info:
         Original SPDX id: MIT
         Score           : 100.00
@@ -364,6 +374,7 @@ BELONGS ya.make
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
         src/include/liburing/io_uring.h [1:1]
+        src/include/liburing/io_uring/query.h [1:1]
 
 KEEP     MIT                  8384d75c38c570f3edb87cf9f64f2ec2
 BELONGS ya.make

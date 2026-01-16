@@ -45,7 +45,7 @@ TStringBuf GetServiceHostName(TStringBuf address);
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Constructs an address of the form |[address]:port|.
-TString FormatNetworkAddress(TStringBuf address, int port);
+std::string FormatNetworkAddress(TStringBuf address, int port);
 
 class TIP6Address;
 
@@ -74,8 +74,8 @@ public:
 
     static TNetworkAddress CreateIPv6Any(int port);
     static TNetworkAddress CreateIPv6Loopback(int port);
-    static TNetworkAddress CreateUnixDomainSocketAddress(const TString& socketPath);
-    static TNetworkAddress CreateAbstractUnixDomainSocketAddress(const TString& socketName);
+    static TNetworkAddress CreateUnixDomainSocketAddress(const std::string& socketPath);
+    static TNetworkAddress CreateAbstractUnixDomainSocketAddress(const std::string& socketName);
 
     TIP6Address ToIP6Address() const;
 
@@ -98,7 +98,7 @@ struct TNetworkAddressFormatOptions
 };
 
 void FormatValue(TStringBuilderBase* builder, const TNetworkAddress& address, TStringBuf spec);
-TString ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options = {});
+std::string ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options = {});
 
 bool operator == (const TNetworkAddress& lhs, const TNetworkAddress& rhs);
 

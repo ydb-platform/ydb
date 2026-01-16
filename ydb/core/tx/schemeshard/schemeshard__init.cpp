@@ -2050,6 +2050,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 backupCollection->AlterVersion = rowset.GetValue<Schema::BackupCollection::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Description.ParseFromString(rowset.GetValue<Schema::BackupCollection::Description>());
                 Self->IncrementPathDbRefCount(pathId);
+                Self->RegisterBackupCollectionTables(backupCollection);
 
                 if (!rowset.Next()) {
                     return false;
@@ -4048,7 +4049,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& sid = *securityState.AddSids();
                 sid.SetName(rowset.GetValue<Schema::LoginSids::SidName>());
                 sid.SetType(rowset.GetValue<Schema::LoginSids::SidType>());
-                sid.SetHash(rowset.GetValue<Schema::LoginSids::SidHash>());
+                sid.SetArgonHash(rowset.GetValue<Schema::LoginSids::SidHash>());
+                sid.SetPasswordHashes(rowset.GetValue<Schema::LoginSids::PasswordHashes>());
                 sid.SetCreatedAt(rowset.GetValueOrDefault<Schema::LoginSids::CreatedAt>());
                 sid.SetFailedLoginAttemptCount(rowset.GetValueOrDefault<Schema::LoginSids::FailedAttemptCount>());
                 sid.SetLastFailedLogin(rowset.GetValueOrDefault<Schema::LoginSids::LastFailedAttempt>());
@@ -4458,16 +4460,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     exportInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::EndTime>());
                     exportInfo->EnableChecksums = rowset.GetValueOrDefault<Schema::Exports::EnableChecksums>(false);
                     exportInfo->EnablePermissions = rowset.GetValueOrDefault<Schema::Exports::EnablePermissions>(false);
-                    exportInfo->MaterializeIndexes = rowset.GetValueOrDefault<Schema::Exports::MaterializeIndexes>(false);
+                    exportInfo->IncludeIndexData = rowset.GetValueOrDefault<Schema::Exports::IncludeIndexData>(false);
 
                     if (rowset.HaveValue<Schema::Exports::ExportMetadata>()) {
                         exportInfo->ExportMetadata = rowset.GetValue<Schema::Exports::ExportMetadata>();
                     }
 
-                    Self->Exports[id] = exportInfo;
-                    if (uid) {
-                        Self->ExportsByUid[uid] = exportInfo;
-                    }
+                    Self->AddExport(exportInfo);
 
                     if (exportInfo->WaitTxId != InvalidTxId) {
                         Self->TxIdToExport[exportInfo->WaitTxId] = {id, Max<ui32>()};
@@ -4561,10 +4560,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     importInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::StartTime>());
                     importInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::EndTime>());
 
-                    Self->Imports[id] = importInfo;
-                    if (uid) {
-                        Self->ImportsByUid[uid] = importInfo;
-                    }
+                    Self->AddImport(importInfo);
 
                     switch (importInfo->State) {
                     case TImportInfo::EState::DownloadExportMetadata:
@@ -4739,13 +4735,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     // Note: broken build are also added to IndexBuilds
-                    Y_ASSERT(!Self->IndexBuilds.contains(buildInfo->Id));
-                    Self->IndexBuilds[buildInfo->Id] = buildInfo;
-
-                    if (buildInfo->Uid) {
-                        Y_ASSERT(!Self->IndexBuildsByUid.contains(buildInfo->Uid));
-                        Self->IndexBuildsByUid[buildInfo->Uid] = buildInfo;
-                    }
+                    Self->AddIndexBuild(buildInfo);
 
                     OnComplete.ToProgress(buildInfo->Id);
 

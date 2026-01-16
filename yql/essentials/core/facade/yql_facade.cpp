@@ -950,6 +950,21 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     return FillParseResult(SqlToYql(translators, SourceCode_, *currentSettings, &warningRules), &warningRules);
 }
 
+TProgram::TStatus TProgram::TestPartialTypecheck() {
+    YQL_PROFILE_FUNC(TRACE);
+
+    Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
+
+    TIssues issues;
+    auto ret = PartialAnnonateTypes(AstRoot_, LangVer_, issues, [&](TTypeAnnotationContext& newTypeCtx) {
+        return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
+    })
+                   ? TProgram::TStatus::Ok
+                   : TProgram::TStatus::Error;
+    ExprCtx_->IssueManager.AddIssues(issues);
+    return ret;
+}
+
 bool TProgram::Compile(const TString& username, bool skipLibraries) {
     YQL_PROFILE_FUNC(TRACE);
 
@@ -1418,7 +1433,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
@@ -1497,7 +1512,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
@@ -2205,7 +2220,13 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     tokenResolvers.push_back(BuildDefaultTokenResolver(typeAnnotationContext->Credentials));
-    typeAnnotationContext->UserDataStorage->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
+    auto tokenResolver = BuildCompositeTokenResolver(std::move(tokenResolvers));
+
+    typeAnnotationContext->UserDataStorage->SetTokenResolver(tokenResolver);
+
+    if (auto* urlListerManager = typeAnnotationContext->UrlListerManager.Get()) {
+        urlListerManager->SetTokenResolver(std::move(tokenResolver));
+    }
 
     return typeAnnotationContext;
 }

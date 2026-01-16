@@ -80,7 +80,9 @@ public:
         UNIT_ASSERT_C(!AppConfig, "AppConfig is already initialized");
         EnsureNotInitialized("AppConfig");
 
-        return AppConfig.emplace();
+        auto& result = AppConfig.emplace();
+        result.MutableTableServiceConfig()->SetDqChannelVersion(1u);
+        return result;
     }
 
     TIntrusivePtr<IMockPqGateway> SetupMockPqGateway() {
@@ -113,10 +115,13 @@ public:
 
             auto& featureFlags = *AppConfig->MutableFeatureFlags();
             featureFlags.SetEnableStreamingQueries(true);
-            featureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
+            featureFlags.SetEnableSchemaSecrets(true);
 
             auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
             queryServiceConfig.SetEnableMatchRecognize(true);
+
+            auto& tableServiceConfig = *AppConfig->MutableTableServiceConfig();
+            tableServiceConfig.SetDqChannelVersion(1u);
 
             LogSettings
                 .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
@@ -132,7 +137,7 @@ public:
                 .UseLocalCheckpointsInStreamingQueries = true,
             });
 
-            Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
+            Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableStreamingQueries(true);
         }
 
@@ -282,7 +287,7 @@ public:
             auto event = readSession->GetEvent(/* block */ true);
             if (const auto dataEvent = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                 for (const auto& message : dataEvent->GetMessages()) {
-                    received.push_back(message.GetData()); 
+                    received.push_back(message.GetData());
                 }
 
                 if (received.size() == expectedMessages.size()) {
@@ -425,13 +430,13 @@ public:
 
     void CreateYdbSource(const TString& ydbSourceName) {
         ExecQuery(fmt::format(R"(
-            UPSERT OBJECT ydb_source_secret (TYPE SECRET) WITH (value = "{token}");
+            CREATE SECRET ydb_source_secret WITH (value = "{token}");
             CREATE EXTERNAL DATA SOURCE `{ydb_source}` WITH (
                 SOURCE_TYPE = "Ydb",
                 LOCATION = "{ydb_location}",
                 DATABASE_NAME = "{ydb_database_name}",
                 AUTH_METHOD = "TOKEN",
-                TOKEN_SECRET_NAME = "ydb_source_secret",
+                TOKEN_SECRET_PATH = "ydb_source_secret",
                 USE_TLS = "FALSE"
             );)",
             "ydb_source"_a = ydbSourceName,
@@ -569,7 +574,7 @@ public:
         UNIT_ASSERT_C(reply, "CreateScript response is empty");
         UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Status, Ydb::StatusIds::SUCCESS, reply->Get()->Issues.ToString());
 
-        const auto& executionId = reply->Get()->ExecutionId;    
+        const auto& executionId = reply->Get()->ExecutionId;
         UNIT_ASSERT(executionId);
         const auto& operationId = TOperation::TOperationId(ScriptExecutionOperationFromExecutionId(executionId));
 
@@ -808,6 +813,7 @@ public:
 public:
     void Setup() {
         LogSettings.AddLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_DEBUG);
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
         UNIT_ASSERT_C(!InputTopic, "Setup called twice");
         InputTopic = TStringBuilder() << INPUT_TOPIC_NAME << Name_;
@@ -872,7 +878,7 @@ public:
 
             const bool expectExecutions = row.Run && IsIn({"RUNNING", "COMPLETED", "CANCELLED", "FAILED"}, row.Status);
             if (expectExecutions || row.CheckPlan) {
-                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);                
+                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);
                 UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Ast").GetOptionalUtf8(), row.Ast ? *row.Ast : JoinPath({"/Root", PQ_SOURCE}));
             }
 
@@ -949,7 +955,7 @@ public:
         , Message(1_KB, 'x')
     {}
 
-    STRICT_STFUNC(StateFunc, 
+    STRICT_STFUNC(StateFunc,
         sFunc(TEvents::TEvWakeup, WriteMessages)
     )
 
@@ -1657,6 +1663,77 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n{\"data\": \"x\"}");
     }
 
+    Y_UNIT_TEST_F(S3AtomicUploadCommitDisabledForStreamingQueries, TStreamingTestFixture) {
+        constexpr char sourceBucket[] = "test_bucket_disable_atomic_upload_commit";
+        constexpr char objectPath[] = "test_bucket_object.json";
+        constexpr char objectContent[] = R"({"data": "x"})";
+        CreateBucketWithObject(sourceBucket, objectPath, objectContent);
+
+        constexpr char s3SourceName[] = "s3Source";
+        CreateS3Source(sourceBucket, s3SourceName);
+
+        const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
+            PRAGMA s3.AtomicUploadCommit = "true";
+            INSERT INTO `{s3_source}`.`path/` WITH (
+                FORMAT = "json_each_row"
+            ) SELECT * FROM `{s3_source}`.`{object_path}` WITH (
+                FORMAT = "json_each_row",
+                SCHEMA (
+                    data String NOT NULL
+                )
+            )
+        )", "s3_source"_a = s3SourceName, "object_path"_a = objectPath), {
+            .SaveState = true
+        }, /* waitRunning */ false);
+
+        const auto& readyOp = WaitScriptExecution(operationId);
+        UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n{\"data\": \"x\"}");
+    }
+
+    Y_UNIT_TEST_F(S3PartitioningKeysFlushTimeout, TStreamingTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+        constexpr char sourceBucket[] = "test_bucket_partitioning_keys_flush";
+        constexpr char s3SourceName[] = "s3Source";
+        CreateBucket(sourceBucket);
+        CreateS3Source(sourceBucket, s3SourceName);
+
+        constexpr char inputTopicName[] = "inputTopicName";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(inputTopicName);
+        CreatePqSource(pqSourceName);
+
+        const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
+            PRAGMA s3.OutputKeyFlushTimeout = "1s";
+            PRAGMA ydb.DisableCheckpoints = "TRUE";
+            PRAGMA ydb.MaxTasksPerStage = "1";
+
+            INSERT INTO `{s3_source}`.`path/` WITH (
+                FORMAT = json_each_row,
+                PARTITIONED_BY = key
+            ) SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                FORMAT = json_each_row,
+                SCHEMA (
+                    data String NOT NULL,
+                    key Uint64 NOT NULL
+                )
+            )
+        )", "s3_source"_a = s3SourceName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName), {
+            .SaveState = true
+        });
+
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        readSession->AddDataReceivedEvent(0, R"({"data": "x", "key": 0})");
+
+        Sleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "");
+
+        readSession->AddDataReceivedEvent(1, R"({"data": "y", "key": 1})");
+
+        Sleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n");
+    }
+
     Y_UNIT_TEST_F(CrossJoinWithNotExistingDataSource, TStreamingTestFixture) {
         const auto connectorClient = SetupMockConnectorClient();
 
@@ -1964,10 +2041,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         LAST(V4.key) as v4
                     ONE ROW PER MATCH
                     PATTERN (V1 V? V4)
-                    DEFINE 
+                    DEFINE
                         V1 as V1.value = "value1",
                         V as True,
-                        V4 as V4.value = "value4" 
+                        V4 as V4.value = "value4"
                 );
 
                 INSERT INTO `{pq_source}`.`{output_topic}`
@@ -2153,7 +2230,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryWithSolomonInsert, TStreamingTestFixture) {
         const auto pqGateway = SetupMockPqGateway();
 
-        constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
+        constexpr char inputTopicName[] = "streamingQuerySolomonInsertInputTopic";
         CreateTopic(inputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
@@ -2246,6 +2323,60 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
   }
 ])";
         UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithS3Insert, TStreamingTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopicName[] = "streamingQueryS3InsertInputTopic";
+        constexpr char pqSourceName[] = "sourceName";
+        CreateTopic(inputTopicName);
+        CreatePqSource(pqSourceName);
+
+        constexpr char sourceBucket[] = "test_bucket_streaming_query_s3_insert";
+        constexpr char s3SinkName[] = "sinkName";
+        CreateBucket(sourceBucket);
+        CreateS3Source(sourceBucket, s3SinkName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{s3_sink}`.`test/` WITH (
+                    FORMAT = raw
+                ) SELECT
+                    Data
+                FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "s3_sink"_a = s3SinkName,
+            "input_topic"_a = inputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        readSession->AddDataReceivedEvent(0, "1234");
+        Sleep(TDuration::Seconds(2));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "1234");
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, "4321");
+        Sleep(TDuration::Seconds(2));
+
+        if (const auto& s3Data = GetAllObjects(sourceBucket); !IsIn({"12344321", "43211234"}, s3Data)) {
+            UNIT_FAIL("Unexpected S3 data: " << s3Data);
+        }
+
+        const auto& keys = GetObjectKeys(sourceBucket);
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 2);
+        for (const auto& key : keys) {
+            UNIT_ASSERT_STRING_CONTAINS(key, "test/");
+            UNIT_ASSERT_C(!key.substr(5).Contains("/"), key);
+        }
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithS3Join, TStreamingTestFixture) {
@@ -2651,6 +2782,111 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
     }
 
+    Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "streamingQueryWithLocalYdbJoinInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryWithLocalYdbJoinOutputTopic";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+        CreatePqSource(pqSourceName);
+
+        constexpr char streamLookupTableName[] = "oltpStreamLookupTable";
+        constexpr char oltpTableName[] = "oltpTable";
+        constexpr char olapTableName[] = "olapTable";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{oltp_streamlookup_table}` (
+                Key Int32 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `{oltp_table}` (
+                Key Int32 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Value)
+            );
+            CREATE TABLE `{olap_table}` (
+                Key Int32 NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            ) WITH (
+                STORE = COLUMN
+            );)",
+            "oltp_streamlookup_table"_a = streamLookupTableName,
+            "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            UPSERT INTO `{oltp_streamlookup_table}`(Key, Value)
+            VALUES (1, "oltp_slj1"), (2, "oltp_slj2");
+
+            UPSERT INTO `{oltp_table}`(Key, Value)
+            VALUES (1, "oltp1"), (2, "oltp2");
+
+            INSERT INTO `{olap_table}`(Key, Value)
+            VALUES (1, "olap1"), (2, "olap2");)",
+            "oltp_streamlookup_table"_a = streamLookupTableName,
+            "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName
+        ));
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.HashJoinMode = "map";
+                PRAGMA ydb.DqChannelVersion = "1";
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT
+                    Unwrap(oltp_slj.Value || "-" || oltp.Value || "-" || olap.Value)
+                FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        Key Int32 NOT NULL
+                    )
+                ) AS topic
+                LEFT JOIN `{oltp_streamlookup_table}` AS oltp_slj ON topic.Key = oltp_slj.Key
+                LEFT JOIN `{oltp_table}` AS oltp ON topic.Key = oltp.Key
+                LEFT JOIN `{olap_table}` AS olap ON topic.Key = olap.Key
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "oltp_streamlookup_table"_a = streamLookupTableName,
+            "oltp_table"_a = oltpTableName,
+            "olap_table"_a = olapTableName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"Key": 1})");
+        ReadTopicMessage(outputTopicName, "oltp_slj1-oltp1-olap1");
+        Sleep(TDuration::Seconds(1));
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        WriteTopicMessage(inputTopicName, R"({"Key": 2})");
+        const auto disposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        ReadTopicMessage(outputTopicName, "oltp_slj2-oltp2-olap2", disposition);
+    }
+
     Y_UNIT_TEST_F(StreamingQueryUnderSecureScriptExecutions, TStreamingTestFixture) {
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);
@@ -2776,6 +3012,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(OffsetsRecoveryAfterManualAndInternalRetry, TStreamingTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
         constexpr char inputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,InputTopic";
         constexpr char outputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,OutputTopic";
         CreateTopic(inputTopicName);
@@ -3382,6 +3620,61 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName, "B-P3", readDisposition);
     }
 
+    Y_UNIT_TEST_F(CheckpointPropagationWithS3Insert, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "s3InsertCheckpointsInputTopicName";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(inputTopicName);
+        CreatePqSource(pqSourceName);
+
+        constexpr char sourceBucket[] = "test_bucket_streaming_query_s3_insert_checkpoint_propagation";
+        constexpr char s3SinkName[] = "sinkName";
+        CreateBucket(sourceBucket);
+        CreateS3Source(sourceBucket, s3SinkName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{s3_sink}`.`test/` WITH (
+                    FORMAT = raw
+                ) SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "s3_sink"_a = s3SinkName,
+            "input_topic"_a = inputTopicName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "data-1");
+        Sleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "data-1");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        WriteTopicMessage(inputTopicName, "data-2");
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        Sleep(TDuration::Seconds(2));
+        if (const auto& s3Data = GetAllObjects(sourceBucket); !IsIn({"data-1data-2", "data-2data-1"}, s3Data)) {
+            UNIT_FAIL("Unexpected S3 data: " << s3Data);
+        }
+    }
+
     void CheckTable(TStreamingTestFixture& self, const TString& tableName, const std::map<TString, TString>& rows) {
         const auto results = self.ExecQuery(fmt::format(
             "SELECT * FROM `{table}` ORDER BY Key",
@@ -3651,6 +3944,46 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         CheckScriptExecutionsCount(0, 0);
+    }
+
+    Y_UNIT_TEST_F(CreateStreamingQueryUnderTimeout, TStreamingWithSchemaSecretsTestFixture) {
+        auto& config = *SetupAppConfig().MutableQueryServiceConfig();
+        config.SetQueryTimeoutDefaultSeconds(3);
+        config.SetScriptOperationTimeoutDefaultSeconds(3);
+
+        constexpr char inputTopicName[] = "createStreamingQueryUnderTimeoutInputTopic";
+        constexpr char outputTopicName[] = "createStreamingQueryUnderTimeoutOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(5));
+
+        WriteTopicMessage(inputTopicName, "data1");
+        ReadTopicMessage(outputTopicName, "data1");
+        Sleep(TDuration::Seconds(5));
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        const auto& result = ExecQuery("SELECT RetryCount FROM `.sys/streaming_queries`");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), 0);
+        });
     }
 }
 

@@ -153,4 +153,12 @@ NThreading::TFuture<IYtGateway::TDumpResult> TYtForwardingGatewayBase::Dump(TDum
     return Slave_->Dump(std::move(options));
 }
 
+NThreading::TFuture<IYtGateway::TDownloadTableResult> TYtForwardingGatewayBase::DownloadTable(TDownloadTableOptions&& options) {
+    return Slave_->DownloadTable(std::move(options));
+}
+
+IYtTokenResolver::TPtr TYtForwardingGatewayBase::GetYtTokenResolver() const {
+    return Slave_->GetYtTokenResolver();
+}
+
 } // namspace NYql

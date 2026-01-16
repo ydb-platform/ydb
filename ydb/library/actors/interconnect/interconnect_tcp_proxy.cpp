@@ -567,6 +567,10 @@ namespace NActors {
     void TInterconnectProxyTCP::EnqueueSessionEvent(STATEFN_SIG) {
         ICPROXY_PROFILED;
 
+        if (ev->Flags & IEventHandle::FlagFailFastWhenDisconnected) {
+            return DropSessionEvent(ev);
+        }
+
         ValidateEvent(ev, "EnqueueSessionEvent");
         const ui32 size = ev->GetSize();
         PendingSessionEventsSize += size;

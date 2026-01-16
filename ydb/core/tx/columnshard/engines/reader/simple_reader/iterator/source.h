@@ -236,7 +236,7 @@ public:
     virtual ~IDataSource() = default;
 };
 
-class TPortionDataSource: public IDataSource, public NCommon::IPortionDataSource {
+class TPortionDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
     const TPortionInfo::TConstPtr Portion;
@@ -407,7 +407,7 @@ public:
             context->GetDuplicatesManagerVerified(), new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
     }
 
-    ui64 GetPortionId() const override {
+    std::optional<ui64> GetPortionIdOptional() const override {
         return Portion->GetPortionId();
     }
 
@@ -503,6 +503,10 @@ private:
             recordsCount += i->GetStageData().GetTable().GetRecordsCountActualVerified();
         }
         return recordsCount;
+    }
+
+    std::optional<ui64> GetPortionIdOptional() const override {
+        return std::nullopt;
     }
 
 public:

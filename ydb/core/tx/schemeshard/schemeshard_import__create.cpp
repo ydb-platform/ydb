@@ -13,6 +13,8 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -45,10 +47,6 @@ bool AllDone(const THashMap<EState, int>& stateCounts) {
     return AllOf(stateCounts, [](const auto& stateCount) { return stateCount.first == EState::Done; });
 }
 
-bool AllWaiting(const THashMap<EState, int>& stateCounts) {
-    return AllOf(stateCounts, [](const auto& stateCount) { return stateCount.first == EState::Waiting; });
-}
-
 bool AllDoneOrWaiting(const THashMap<EState, int>& stateCounts) {
     return AllOf(stateCounts, [](const auto& stateCount) {
         return stateCount.first == EState::Done
@@ -59,6 +57,42 @@ bool AllDoneOrWaiting(const THashMap<EState, int>& stateCounts) {
 // the item is to be created by query, i.e. it is not a table
 bool IsCreatedByQuery(const TItem& item) {
     return !item.CreationQuery.empty();
+}
+
+bool IsCreateViewQuery(const TString& query) {
+    return query.Contains("CREATE VIEW");
+}
+
+bool IsCreateReplicationQuery(const TString& query) {
+    return query.Contains("CREATE ASYNC REPLICATION");
+}
+
+bool IsCreateTransferQuery(const TString& query) {
+    return query.Contains("CREATE TRANSFER");
+}
+
+bool IsCreateExternalDataSourceQuery(const TString& query) {
+    return query.Contains("CREATE EXTERNAL DATA SOURCE");
+}
+
+bool RewriteCreateQuery(
+    TString& query,
+    const TString& dbRestoreRoot,
+    const TString& dbPath,
+    NYql::TIssues& issues)
+{
+    if (IsCreateViewQuery(query)) {
+        return NYdb::NDump::RewriteCreateViewQuery(query, dbRestoreRoot, true, dbPath, issues);
+    } else if (IsCreateReplicationQuery(query)) {
+        return NYdb::NDump::RewriteCreateAsyncReplicationQuery(query, dbRestoreRoot, dbPath, issues);
+    } else if (IsCreateTransferQuery(query)) {
+        return NYdb::NDump::RewriteCreateTransferQuery(query, dbRestoreRoot, dbPath, issues);
+    } else if (IsCreateExternalDataSourceQuery(query)) {
+        return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
+    }
+
+    issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);
+    return false;
 }
 
 TString GetDatabase(TSchemeShard& ss) {
@@ -193,9 +227,9 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 }
 
                 if (!AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
-                    switch (settings.index_filling_mode()) {
-                    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
-                    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+                    switch (settings.index_population_mode()) {
+                    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+                    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
                         return Reply(
                             std::move(response),
                             Ydb::StatusIds::PRECONDITION_FAILED,
@@ -255,11 +289,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         importInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistImportState(db, *importInfo);
 
-        Self->Imports[id] = importInfo;
-        if (uid) {
-            Self->ImportsByUid[uid] = importInfo;
-        }
-
+        Self->AddImport(importInfo);
         Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *importInfo);
 
         Progress = true;
@@ -318,10 +348,14 @@ private:
     bool FillItems(TImportInfo& importInfo, const Ydb::Import::ImportFromS3Settings& settings, TString& explain) {
         THashSet<TString> dstPaths;
 
+        if (!importInfo.CompileExcludeRegexps(explain)) {
+            return false;
+        }
+
         importInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const TString& dstPath = settings.items(itemIdx).destination_path();
-            
+
             if (!ValidateAndAddDestinationPath(dstPath, dstPaths, explain)) {
                 return false;
             }
@@ -332,9 +366,16 @@ private:
                 return false;
             }
 
-            auto& item = importInfo.Items.emplace_back(dstPath);
-            item.SrcPrefix = NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
-            item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
+            if (!importInfo.IsExcludedFromImport(dstPath)) {
+                auto& item = importInfo.Items.emplace_back(dstPath);
+                item.SrcPrefix = NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
+                item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
+            }
+        }
+
+        if (settings.items().size() && importInfo.Items.empty()) {
+            explain = TStringBuilder() << "no items to import";
+            return false;
         }
 
         return true;
@@ -347,7 +388,7 @@ private:
         importInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const TString& dstPath = settings.items(itemIdx).destination_path();
-            
+
             if (!ValidateAndAddDestinationPath(dstPath, dstPaths, explain)) {
                 return false;
             }
@@ -479,7 +520,7 @@ private:
         LOG_I("TImport::TTxProgress: Get scheme"
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
-        
+
         if (importInfo->Kind == TImportInfo::EKind::S3) {
             item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
             Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
@@ -573,26 +614,58 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    void RetryViewsCreation(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    void DelayObjectCreation(
+        TImportInfo::TPtr importInfo,
+        ui32 itemIdx,
+        NIceDb::TNiceDb& db,
+        const TString& error,
+        const TActorContext& ctx)
+    {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+
+        LOG_D("TImport::TTxProgress: delay scheme object query execution"
+            << ": id# " << importInfo->Id
+            << ", delayed item# " << itemIdx);
+
+        item.State = EState::Waiting;
+        Self->PersistImportItemState(db, *importInfo, itemIdx);
+
+        const auto stateCounts = CountItemsByState(importInfo->Items);
+        if (AllDoneOrWaiting(stateCounts)) {
+            if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjects) {
+                // No progress has been made since the last scheme object creation retry.
+                return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed, no progress");
+            }
+            RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
+        }
+    }
+
+    void RetrySchemeObjectsQueryExecution(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const auto database = GetDatabase(*Self);
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo.Items.size())) {
             auto& item = importInfo.Items[itemIdx];
-            if (item.State == EState::Waiting && IsCreatedByQuery(item)) {
+            if (item.State != EState::Waiting || !IsCreatedByQuery(item)) {
+                continue;
+            }
+            if (item.PreparedCreationQuery) {
+                AllocateTxId(importInfo, itemIdx);
+            } else {
                 item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                     Self->SelfId(), importInfo.Id, itemIdx, item.CreationQuery, database
                 ));
                 Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
-
-                item.State = EState::CreateSchemeObject;
-                Self->PersistImportItemState(db, importInfo, itemIdx);
-
-                retriedItems.emplace_back(itemIdx);
             }
+
+            item.State = EState::CreateSchemeObject;
+            Self->PersistImportItemState(db, importInfo, itemIdx);
+
+            retriedItems.emplace_back(itemIdx);
         }
         if (!retriedItems.empty()) {
-            importInfo.WaitingViews = std::ssize(retriedItems);
-            LOG_D("TImport::TTxProgress: retry view creation"
+            importInfo.WaitingSchemeObjects = std::ssize(retriedItems);
+            LOG_D("TImport::TTxProgress: retry scheme object query execution"
                 << ": id# " << importInfo.Id
                 << ", retried items# " << JoinSeq(", ", retriedItems)
             );
@@ -1098,14 +1171,14 @@ private:
         if (IsCreatedByQuery(item)) {
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
-            const TString source = TStringBuilder()
-                << importInfo->GetItemSrcPrefix(msg.ItemIdx) << NYdb::NDump::NFiles::CreateView().FileName;
+            const TString source = TStringBuilder() << item.SrcPath;
 
             NYql::TIssues issues;
-            if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
+            if (!RewriteCreateQuery(item.CreationQuery, database, item.DstPathName, issues)) {
                 issues.AddIssue(TStringBuilder() << "path: " << source);
-                return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid view creation query");
+                return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid creation query");
             }
+
             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                 Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database
             ));
@@ -1234,23 +1307,8 @@ private:
         Self->RunningImportSchemeQueryExecutors.erase(std::exchange(item.SchemeQueryExecutor, {}));
 
         if (message.Status == Ydb::StatusIds::SCHEME_ERROR) {
-            // Scheme error happens when the view depends on a table (or a view) that is not yet imported.
-            // Instead of tracking view dependencies, we simply retry the creation of the view later.
-            item.State = EState::Waiting;
-            Self->PersistImportItemState(db, *importInfo, message.ItemIdx);
-
-            const auto stateCounts = CountItemsByState(importInfo->Items);
-            if (AllWaiting(stateCounts)) {
-                // Cancel the import, or we will end up waiting indefinitely.
-                return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
-            } else if (AllDoneOrWaiting(stateCounts)) {
-                if (stateCounts.at(EState::Waiting) == importInfo->WaitingViews) {
-                    // No progress has been made since the last view creation retry.
-                    return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
-                }
-                RetryViewsCreation(*importInfo, db, ctx);
-            }
-            return;
+            // Scheme error happens when the creation query depends on other objects that are not yet imported.
+            return DelayObjectCreation(importInfo, message.ItemIdx, db, error, ctx);
         }
 
         if (message.Status != Ydb::StatusIds::SUCCESS || !error.empty()) {
@@ -1260,6 +1318,11 @@ private:
         if (item.State == EState::CreateSchemeObject) {
             item.PreparedCreationQuery = std::get<NKikimrSchemeOp::TModifyScheme>(message.Result);
             PersistImportItemPreparedCreationQuery(db, *importInfo, message.ItemIdx);
+            if (item.PreparedCreationQuery->HasReplication()) {
+                // In case async replication or transfer is created, it is essential to execute modify scheme
+                // After all other objects, as they do not fail in case their dependencies are not imported yet
+                return DelayObjectCreation(importInfo, message.ItemIdx, db, error, ctx);
+            }
             AllocateTxId(*importInfo, message.ItemIdx);
         }
     }
@@ -1362,7 +1425,7 @@ private:
         Self->TxIdToImport[txId] = {importInfo->Id, *itemIdx};
     }
 
-    void OnModifyResult(TTransactionContext& txc, const TActorContext&) {
+    void OnModifyResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(ModifyResult);
         const auto& record = ModifyResult->Get()->Record;
 
@@ -1392,6 +1455,11 @@ private:
 
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
+
+        if (record.GetStatus() == NKikimrScheme::StatusNotAvailable) {
+            // Query compiled, but execution was unsuccessful
+            return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
+        }
 
         if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
             Self->TxIdToImport.erase(txId);
@@ -1655,7 +1723,7 @@ private:
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         } else if (AllDoneOrWaiting(stateCounts)) {
-            RetryViewsCreation(*importInfo, db, ctx);
+            RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
         }
 
         Self->PersistImportItemState(db, *importInfo, itemIdx);

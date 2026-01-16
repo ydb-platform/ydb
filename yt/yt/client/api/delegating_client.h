@@ -415,6 +415,18 @@ public:
         const TReadTablePartitionOptions& options),
         (descriptor, options))
 
+    DELEGATE_METHOD(TFuture<IFormattedTableReaderPtr>, CreateFormattedTableReader, (
+        const NYPath::TRichYPath& path,
+        const NYson::TYsonString& format,
+        const TTableReaderOptions& options),
+        (path, format, options))
+
+    DELEGATE_METHOD(TFuture<IFormattedTableReaderPtr>, CreateFormattedTablePartitionReader, (
+        const TTablePartitionCookiePtr& cookie,
+        const NYson::TYsonString& format,
+        const TReadTablePartitionOptions& options),
+        (cookie, format, options))
+
     // Journals
     DELEGATE_METHOD(TFuture<void>, TruncateJournal, (
         const NYPath::TYPath& path,
@@ -611,6 +623,13 @@ public:
         const NYson::TYsonString& parameters,
         const TPollJobShellOptions& options),
         (jobId, shellName, parameters, options))
+
+    DELEGATE_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, RunJobShellCommand, (
+        NJobTrackerClient::TJobId jobId,
+        const std::optional<std::string>& shellName,
+        const std::string& command,
+        const TRunJobShellCommandOptions& options),
+        (jobId, shellName, command, options))
 
     DELEGATE_METHOD(TFuture<void>, AbortJob, (
         NJobTrackerClient::TJobId jobId,
@@ -918,7 +937,7 @@ public:
 
     DELEGATE_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (
         const NYPath::TYPath& pipelinePath,
-        const TString& command,
+        const std::string& command,
         const NYson::TYsonString& argument,
         const TFlowExecuteOptions& options = {}),
         (pipelinePath, command, argument, options))

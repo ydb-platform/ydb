@@ -48,7 +48,7 @@ namespace NKikimr::NPDisk {
                         // already have all the buffer
                         header->EncryptData(cypher);
                         if (header->CheckDataHash()) {
-                            Req->ErrorReason = {}; 
+                            Req->ErrorReason = {};
                             Req->Header = *header;
                             Req->Payload = TRcBuf(TRcBuf::Piece, reinterpret_cast<const char*>(header + 1), header->Length, Buffer);
                         } else {

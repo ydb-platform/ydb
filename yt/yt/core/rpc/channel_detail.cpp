@@ -134,7 +134,7 @@ TFuture<void> TClientRequestControlThunk::SendStreamingPayload(const TStreamingP
     auto promise = NewPromise<void>();
     PendingStreamingPayloads_.push_back({
         payload,
-        promise
+        promise,
     });
     return promise.ToFuture();
 }

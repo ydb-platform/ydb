@@ -205,9 +205,9 @@ void TCms::GenerateNodeState(IOutputStream& out)
             TABLEBODY() {
                 for (const auto& node : ClusterInfo->AllNodes()) {
                     auto currentInMemoryState = INodesChecker::NODE_STATE_UNSPECIFIED;
-                    const auto& nodeState = ClusterInfo->ClusterNodes[node.second->PileId.GetOrElse(0)]->GetNodeToState();
-                    if (nodeState.contains(node.first)) {
-                        currentInMemoryState = nodeState.at(node.first);
+                    const auto& nodes = ClusterInfo->ClusterNodes[node.second->PileId.GetOrElse(0)]->GetNodes();
+                    if (nodes.contains(node.first)) {
+                        currentInMemoryState = nodes.at(node.first).State;
                     }
                     TABLER() {
                         TABLED() {
@@ -390,6 +390,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         opts.TenantPolicy = request.GetTenantPolicy();
         opts.AvailabilityMode = request.GetAvailabilityMode();
         opts.PartialPermissionAllowed = allowPartial;
+        opts.Priority = request.GetPriority();
 
         TErrorInfo error;
 
@@ -409,7 +410,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             permission->SetDeadline(error.Deadline.GetValue());
             AddPermissionExtensions(action, *permission);
 
-            ClusterInfo->AddTempLocks(action, &ctx);
+            ClusterInfo->AddTempLocks(action, request.GetPriority(), &ctx);
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
                       ToString(error.Code).data(), error.Reason.GetMessage().data());
@@ -461,7 +462,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     if (schedule && response.GetStatus().GetCode() != TStatus::ALLOW_PARTIAL) {
         if (response.GetStatus().GetCode() == TStatus::DISALLOW_TEMP
             || response.GetStatus().GetCode() == TStatus::ERROR_TEMP)
-        {   
+        {
             if (!allowPartial) {
                 // Only the first problem action was scheduled during
                 // the actions check loop. Merge it with rest actions.
@@ -843,7 +844,7 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
     }
 
     for (auto &tabletType : ClusterInfo->NodeToTabletTypes[node.NodeId]) {
-        if (!ClusterInfo->SysNodesCheckers[node.PileId.GetOrElse(0)][tabletType]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason)) {
+        if (!ClusterInfo->SysNodesCheckers[node.PileId.GetOrElse(0)][tabletType]->TryToLockNode(node.NodeId, opts.AvailabilityMode, opts.Priority, error.Reason)) {
             error.Code = TStatus::DISALLOW_TEMP;
             error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
             return false;
@@ -861,7 +862,7 @@ bool TCms::TryToLockNode(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
     duration += opts.PermissionDuration;
 
-    if (!ClusterInfo->ClusterNodes[node.PileId.GetOrElse(0)]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason)) {
+    if (!ClusterInfo->ClusterNodes[node.PileId.GetOrElse(0)]->TryToLockNode(node.NodeId, opts.AvailabilityMode, opts.Priority, error.Reason)) {
         error.Code = TStatus::DISALLOW_TEMP;
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
         return false;
@@ -869,7 +870,7 @@ bool TCms::TryToLockNode(const TAction& action,
 
     if (node.Tenant
         && opts.TenantPolicy != NONE
-        && !ClusterInfo->TenantNodesChecker[node.PileId.GetOrElse(0)][node.Tenant]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason))
+        && !ClusterInfo->TenantNodesChecker[node.PileId.GetOrElse(0)][node.Tenant]->TryToLockNode(node.NodeId, opts.AvailabilityMode, opts.Priority, error.Reason))
     {
         error.Code = TStatus::DISALLOW_TEMP;
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
@@ -886,7 +887,7 @@ bool TCms::TryToLockPDisk(const TAction &action,
 {
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
     duration += opts.PermissionDuration;
-    
+
     if (pdisk.IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration))
         return false;
 
@@ -943,7 +944,7 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
         const auto &group = ClusterInfo->BSGroup(groupId);
         TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
 
-        if (group.Erasure.GetErasure() == TErasureType::ErasureSpeciesCount) {
+        if (!TBlobStorageGroupType::ErasureNames.contains(group.Erasure.GetErasure())) {
             error.Code = TStatus::ERROR;
             error.Reason = Sprintf("Affected group %u has unknown erasure type", groupId);
             error.Deadline = defaultDeadline;
@@ -1038,7 +1039,7 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
 }
 
 void TCms::AcceptPermissions(TPermissionResponse &resp, const TString &requestId,
-                             const TString &owner, const TActorContext &ctx, bool check)
+                             const TString &owner, i32 priority, const TActorContext &ctx, bool check)
 {
     auto acceptTaskPermission = [](auto &tasks, auto &requests, const TString &requestId, const TString &permissionId) {
         auto reqIt = requests.find(requestId);
@@ -1057,12 +1058,13 @@ void TCms::AcceptPermissions(TPermissionResponse &resp, const TString &requestId
     for (size_t i = 0; i < resp.PermissionsSize(); ++i) {
         auto &permission = *resp.MutablePermissions(i);
         permission.SetId(owner + "-p-" + ToString(State->NextPermissionId++));
-        State->Permissions.emplace(permission.GetId(), TPermissionInfo(permission, requestId, owner));
+        State->Permissions.emplace(permission.GetId(), TPermissionInfo(permission, requestId, owner, priority));
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Accepting permission"
             << ": id# " << permission.GetId()
             << ", requestId# " << requestId
-            << ", owner# " << owner);
-        ClusterInfo->AddLocks(permission, requestId, owner, &ctx);
+            << ", owner# " << owner
+            << ", priority# " << priority);
+        ClusterInfo->AddLocks(permission, requestId, owner, priority, &ctx);
 
         if (!check) {
             continue;
@@ -1545,10 +1547,9 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
             TErrorInfo error;
             TDuration duration = TDuration::MicroSeconds(action.GetDuration());
             duration += TDuration::MicroSeconds(copy->Request.GetDuration());
-            // To get permissions ASAP and not in the priority order.
-            item->DeactivateScheduledLocks(Min<i32>());
+            item->SetPriorityToCheck(Min<i32>());
             bool isLocked = item->IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration);
-            item->ReactivateScheduledLocks();
+            item->ResetPriorityToCheck();
             if (isLocked) {
                 return ReplyWithError<TEvCms::TEvManageRequestResponse>(
                     ev, TStatus::WRONG_REQUEST, "Request has already locked items: " + error.Reason.GetMessage(), ctx);
@@ -1565,7 +1566,7 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
 
     it->second = *copy;
 
-    AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), ctx, true);
+    AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), Min<i32>(), ctx, true);
 
     auto actor = new TRequestApproveActor(requestId, State, ev->Sender);
     TActorId approveActorId = ctx.RegisterWithSameMailbox(actor);
@@ -2099,13 +2100,13 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
     for (const auto &[_, scheduledRequest] : State->ScheduledRequests) {
         if (scheduledRequest.Priority < priority) {
             for (const auto &action : scheduledRequest.Request.GetActions()) {
-                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
+                ClusterInfo->LogManager.ApplyAction(action, scheduledRequest.Priority, ClusterInfo);
             }
         }
     }
-    ClusterInfo->DeactivateScheduledLocks(priority);
+    ClusterInfo->SetPriorityToCheck(priority);
     bool ok = CheckPermissionRequest(rec, resp->Record, scheduled.Request, ctx);
-    ClusterInfo->ReactivateScheduledLocks();
+    ClusterInfo->ResetPriorityToCheck();
     ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
@@ -2134,7 +2135,7 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         }
 
         if (ok)
-            AcceptPermissions(resp->Record, reqId, user, ctx);
+            AcceptPermissions(resp->Record, reqId, user, priority, ctx);
 
         TMaybe<TString> maintenanceTaskId;
         if (rec.HasMaintenanceTaskId()) {
@@ -2177,14 +2178,14 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     for (const auto &scheduled_request : State->ScheduledRequests) {
         if (scheduled_request.second.Priority < request.Priority) {
             for (const auto &action : scheduled_request.second.Request.GetActions())
-                ClusterInfo->LogManager.ApplyAction(action, ClusterInfo);
+                ClusterInfo->LogManager.ApplyAction(action, scheduled_request.second.Priority, ClusterInfo);
         }
     }
 
-    ClusterInfo->DeactivateScheduledLocks(request.Priority);
+    ClusterInfo->SetPriorityToCheck(request.Priority);
     request.Request.SetAvailabilityMode(rec.GetAvailabilityMode());
     bool ok = CheckPermissionRequest(request.Request, resp->Record, scheduled.Request, ctx);
-    ClusterInfo->ReactivateScheduledLocks();
+    ClusterInfo->ResetPriorityToCheck();
     ClusterInfo->LogManager.RollbackOperations();
 
     // Schedule request if required.
@@ -2215,7 +2216,7 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
         }
 
         if (ok)
-            AcceptPermissions(resp->Record, rec.GetRequestId(), user, ctx, true);
+            AcceptPermissions(resp->Record, rec.GetRequestId(), user, priority, ctx, true);
 
         auto handle = new IEventHandle(ev->Sender, SelfId(), resp.Release(), 0, ev->Cookie);
         Execute(CreateTxStorePermissions(std::move(ev->Release()), handle, user, std::move(copy)), ctx);

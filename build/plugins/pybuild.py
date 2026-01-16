@@ -90,7 +90,7 @@ def mangle(name):
     return ''.join('{}{}'.format(len(s), s) for s in name.split('.'))
 
 
-def parse_pyx_includes(filename, path, source_root, seen=None):
+def parse_pyx_includes(filename, path, source_root, seen=None, py3=True):
     def normpath(*args):
         return os.path.normpath(os.path.join(*args))
 
@@ -119,15 +119,16 @@ def parse_pyx_includes(filename, path, source_root, seen=None):
             incname, incpath = normpath(file_dirname, incfile), normpath(path_dirname, incfile)
             yield (incname, incpath)
             # search for includes in the included files
-            for e in parse_pyx_includes(incname, incpath, source_root, seen):
+            for e in parse_pyx_includes(incname, incpath, source_root, seen, py3):
                 yield e
         else:
             # There might be arcadia root or cython relative include.
             # Don't treat such file as missing, because there must be PEERDIR on py_library
             # which contains it.
+            cython_dir = "/contrib/tools/cython/" if py3 else "/contrib/tools/cython_py2/"
             for path in [
                 source_root,
-                source_root + "/contrib/tools/cython/Cython/Includes",
+                source_root + cython_dir + "Cython/Includes",
             ]:
                 if os.path.exists(normpath(path, incfile)):
                     break
@@ -208,11 +209,7 @@ def py_program(unit, py3):
         if py3:
             peers = ['library/python/runtime_py3/main']
             if unit.get('PYTHON_SQLITE3') != 'no':
-                peer = (
-                    'contrib/tools/python3_prev/Modules/_sqlite'
-                    if unit.get('USE_PYTHON3_PREV') == 'yes'
-                    else 'contrib/tools/python3/Modules/_sqlite'
-                )
+                peer = unit.get('PYTHON3_TOOL_PEERDIR') + '/Modules/_sqlite'
                 peers.append(peer)
         else:
             peers = ['library/python/runtime/main']
@@ -465,7 +462,7 @@ def onpy_srcs(unit, *args):
                 else:
                     cpp_files2res.add((filename + with_ext + out_suffix, path + with_ext + out_suffix))
                 # used includes
-                for entry in parse_pyx_includes(filename, path, unit.resolve('$S')):
+                for entry in parse_pyx_includes(filename, path, unit.resolve('$S'), None, py3):
                     py_files2res.add(entry)
                     include_arc_rel = entry[0]
                     include_map[filename].add(include_arc_rel)
@@ -476,13 +473,14 @@ def onpy_srcs(unit, *args):
                 pass
 
         obj_suff = unit.get('OBJ_SUF')
+        cython_suff = unit.get('CYTHON_SUFFIX')
         assert obj_suff is not None
         for pyxs, cython, out_suffix, with_ext in [
-            (pyxs_c, unit.on_buildwith_cython_c_dep, ".c", obj_suff),
-            (pyxs_c_h, unit.on_buildwith_cython_c_h, ".c", None),
-            (pyxs_c_api_h, unit.on_buildwith_cython_c_api_h, ".c", None),
-            (pyxs_cpp, unit.on_buildwith_cython_cpp_dep, ".cpp", obj_suff),
-            (pyxs_cpp_h, unit.on_buildwith_cython_cpp_h, ".cpp", None),
+            (pyxs_c, unit.on_buildwith_cython_c_dep, f"{cython_suff}.c", obj_suff),
+            (pyxs_c_h, unit.on_buildwith_cython_c_h, f"{cython_suff}.c", None),
+            (pyxs_c_api_h, unit.on_buildwith_cython_c_api_h, f"{cython_suff}.c", None),
+            (pyxs_cpp, unit.on_buildwith_cython_cpp_dep, f"{cython_suff}.cpp", obj_suff),
+            (pyxs_cpp_h, unit.on_buildwith_cython_cpp_h, f"{cython_suff}.cpp", None),
         ]:
             for path, mod in pyxs:
                 filename = rootrel_arc_src(path, unit)
@@ -528,13 +526,15 @@ def onpy_srcs(unit, *args):
                 unit.onresource_files(['DONT_COMPRESS'] + [x for name, path in files2res for x in ('DEST', name, path)])
 
         if include_map:
-            data = ['DONT_COMPRESS']
-            prefix = 'resfs/cython/include'
-            for line in sorted(
-                '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files))) for filename, files in include_map.items()
-            ):
-                data += ['-', line]
-            unit.onresource(data)
+            for cython in ['cython' if py3 else 'cython_py2']:
+                data = ['DONT_COMPRESS']
+                prefix = f'resfs/{cython}/include'
+                for line in sorted(
+                    '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files)))
+                    for filename, files in include_map.items()
+                ):
+                    data += ['-', line]
+                unit.onresource(data)
 
     for swigs, on_swig_python in [
         (swigs_c, unit.on_swig_python_c),

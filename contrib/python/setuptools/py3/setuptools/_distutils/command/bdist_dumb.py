@@ -6,6 +6,7 @@ $exec_prefix)."""
 
 import os
 from distutils._log import log
+from typing import ClassVar
 
 from ..core import Command
 from ..dir_util import ensure_relative, remove_tree
@@ -54,7 +55,7 @@ class bdist_dumb(Command):
         ),
     ]
 
-    boolean_options = ['keep-temp', 'skip-build', 'relative']
+    boolean_options: ClassVar[list[str]] = ['keep-temp', 'skip-build', 'relative']
 
     default_format = {'posix': 'gztar', 'nt': 'zip'}
 

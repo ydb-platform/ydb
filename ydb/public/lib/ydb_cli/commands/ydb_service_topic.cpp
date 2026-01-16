@@ -1,9 +1,12 @@
+#include <fmt/format.h>
 #include <openssl/sha.h>
 
 #include "ydb_service_topic.h"
+#include <util/generic/serialized_enum.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
@@ -164,28 +167,6 @@ namespace NYdb::NConsoleClient {
             }
 
             return exists->second;
-        }
-
-        TDuration ParseDurationHours(const TStringBuf str) {
-            double hours = 0;
-            if (!TryFromString(str, hours)) {
-                throw TMisuseException() << "Invalid hours duration '" << str << "'";
-            }
-            if (hours < 0) {
-                throw TMisuseException() << "Duration must be non-negative";
-            }
-            if (!std::isfinite(hours)) {
-                throw TMisuseException() << "Duration must be finite";
-            }
-            return TDuration::Seconds(hours * 3600); // using floating-point ctor with saturation
-        }
-
-        TDuration ParseDuration(TStringBuf str) {
-            StripInPlace(str);
-            if (!str.empty() && !IsAsciiAlpha(str.back())) {
-                throw TMisuseException() << "Duration must ends with a unit name (ex. 'h' for hours, 's' for seconds)";
-            }
-            return TDuration::Parse(str);
         }
     }
 
@@ -369,7 +350,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&MinActivePartitions_)
             .DefaultValue(1);
         config.Opts->AddLongOption("retention-period-hours", TStringBuilder()
-                << "Duration in hours for which data in topic is stored "
+                << "Duration in hours for which data in topic is stored. Supports time units (e.g., '72h', '1440m'). Plain number interpreted as hours "
                 << "(default: " << NColorizer::StdOut().CyanColor() << RetentionPeriod_.Hours() << NColorizer::StdOut().OldColor() << ")")
             .Hidden()
             .Optional()
@@ -469,7 +450,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partitions-count", "Initial and minimum number of partitions for topic")
             .Optional()
             .StoreResult(&MinActivePartitions_);
-        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
+        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored. Supports time units (e.g., '72h', '1440m'). Plain number interpreted as hours.")
             .Hidden()
             .Optional()
             .RequiredArgument("HOURS")
@@ -645,6 +626,26 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("availability-period", "Duration for which uncommited data in topic is retained (ex. '72h', '1440m')")
             .Optional()
             .StoreMappedResult(&AvailabilityPeriod_, ParseDuration);
+        config.Opts->AddLongOption("type", "Consumer type. Available options: streaming, shared")
+            .DefaultValue("streaming")
+            .Hidden()
+            .StoreResult(&ConsumerType_);
+        config.Opts->AddLongOption("keep-messages-order", "Keep messages order for shared consumer")
+            .Optional()
+            .Hidden()
+            .StoreResult(&KeepMessagesOrder_);
+        config.Opts->AddLongOption("default-processing-timeout", "Default processing timeout for shared consumer (ex. '1h', '1m', '1s)")
+            .Optional()
+            .Hidden()
+            .StoreMappedResult(&DefaultProcessingTimeout_, ParseDuration);
+        config.Opts->AddLongOption("max-processing-attempts", "Max processing attempts for DLQ for shared consumer")
+            .Optional()
+            .Hidden()
+            .StoreResult(&MaxProcessingAttempts_);
+        config.Opts->AddLongOption("dlq-queue-name", "DLQ queue name for shared consumer")
+            .Optional()
+            .Hidden()
+            .StoreResult(&DlqQueueName_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -654,6 +655,26 @@ namespace NYdb::NConsoleClient {
         TYdbCommand::Parse(config);
         ParseCodecs();
         ParseTopicName(config, 0);
+    }
+
+    void TCommandTopicConsumerAdd::ValidateConsumerOptions(const TMaybe<NTopic::EConsumerType>& consumerType) {
+        if (consumerType.Defined() && *consumerType != NTopic::EConsumerType::Shared) {
+            if (MaxProcessingAttempts_.Defined()) {
+                throw TMisuseException() << "Invalid option: max-processing-attempts. This option is available only for shared consumer";
+            }
+
+            if (DlqQueueName_.Defined()) {
+                throw TMisuseException() << "Invalid option: dlq-queue-name. This option is available only for shared consumer";
+            }
+
+            if (DefaultProcessingTimeout_.Defined()) {
+                throw TMisuseException() << "Invalid option: default-processing-timeout. This option is available only for shared consumer";
+            }
+
+            if (KeepMessagesOrder_.Defined()) {
+                throw TMisuseException() << "Invalid option: keep-messages-order. This option is available only for shared consumer";
+            }
+        }
     }
 
     int TCommandTopicConsumerAdd::Run(TConfig& config) {
@@ -677,6 +698,40 @@ namespace NYdb::NConsoleClient {
         consumerSettings.SetImportant(IsImportant_);
         if (AvailabilityPeriod_.Defined()) {
             consumerSettings.AvailabilityPeriod(*AvailabilityPeriod_);
+        }
+
+        auto consumerType = TryFromString<NTopic::EConsumerType>(to_title(ConsumerType_));
+        if (!consumerType.Defined()) {
+            throw TMisuseException() << "Invalid consumer type: " << to_title(ConsumerType_) << ". Valid types: " << GetEnumAllNames<NTopic::EConsumerType>();
+        }
+
+        ValidateConsumerOptions(consumerType);
+
+        consumerSettings.ConsumerType(*consumerType);
+        consumerSettings.KeepMessagesOrder(KeepMessagesOrder_.GetOrElse(false));
+        if (DefaultProcessingTimeout_.Defined()) {
+            consumerSettings.DefaultProcessingTimeout(*DefaultProcessingTimeout_);
+        }
+
+        if (MaxProcessingAttempts_.Defined() || DlqQueueName_.Defined()) {
+            NYdb::NTopic::TDeadLetterPolicySettings dlqSettings;
+            dlqSettings.Enabled(true);
+            
+            NYdb::NTopic::TDeadLetterPolicyConditionSettings conditionSettings;
+            if (MaxProcessingAttempts_.Defined()) {
+                conditionSettings.MaxProcessingAttempts(*MaxProcessingAttempts_);
+            }
+        
+            dlqSettings.Condition(conditionSettings);
+            
+            if (DlqQueueName_.Defined()) {
+                dlqSettings.Action(NTopic::EDeadLetterAction::Move);
+                dlqSettings.DeadLetterQueue(*DlqQueueName_);
+            } else {
+                dlqSettings.Action(NTopic::EDeadLetterAction::Delete);
+            }
+                        
+            consumerSettings.DeadLetterPolicy(dlqSettings);
         }
 
         readRuleSettings.AppendAddConsumers(consumerSettings);
@@ -880,7 +935,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
             .StoreResult(&File_);
-        config.Opts->AddLongOption("idle-timeout", "Max wait duration for the first message. Topic is considered empty if no new messages arrive within this period.")
+        config.Opts->AddLongOption("idle-timeout", "Max wait duration for the first message. Topic is considered empty if no new messages arrive within this period. Value must include a time unit suffix (e.g., '5s', '1m').")
             .Optional()
             .DefaultValue(DefaultIdleTimeout)
             .StoreResult(&IdleTimeout_);
@@ -1026,7 +1081,7 @@ namespace NYdb::NConsoleClient {
         ValidateConfig();
 
         auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
+            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
         NTopic::TTopicClient topicClient(*driver);
 
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
@@ -1108,10 +1163,10 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .RequiredArgument("INDEX")
             .StoreResult(&PartitionId_);
-        config.Opts->AddLongOption("init-seqno-timeout", "Max wait duration for initial seqno")
+        config.Opts->AddLongOption("init-seqno-timeout", "Max wait duration for initial seqno. Supports time units (e.g., '5s', '1m'). Plain number interpreted as seconds.")
             .Optional()
             .Hidden()
-            .Handler([this](const TString& arg) { MessagesWaitTimeout_ = TDuration::Seconds(FromString<ui8>(arg)); });
+            .StoreMappedResult(&MessagesWaitTimeout_, &ParseDurationSeconds);
 
         AddTransform(config);
     }
@@ -1164,7 +1219,7 @@ namespace NYdb::NConsoleClient {
         SetInterruptHandlers();
 
         auto driver =
-            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TClientCommand::TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
+            std::make_unique<TDriver>(CreateDriver(config, std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)).Release())));
         NTopic::TTopicClient topicClient(*driver);
 
         {

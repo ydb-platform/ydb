@@ -98,6 +98,7 @@ struct TYtState {
     bool IsHybridEnabled() const;
     bool IsHybridEnabledForCluster(const std::string_view& cluster) const;
     bool HybridTakesTooLong() const;
+    TMaybe<TString> ResolveClusterToken(const TString& cluster);
 
     TYtState(TTypeAnnotationContext* types, const TQContext& qContext = {}) {
         Types = types;

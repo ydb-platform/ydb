@@ -25,7 +25,14 @@ ADDINCL(
 
 DATA (
     arcadia/ydb/core/kqp/ut/join/data
+    arcadia/ydb/core/kqp/ut/rbo/data
 )
+
+RESOURCE(
+    ydb/library/benchmarks/gen_queries/consts.yql consts.yql
+    ydb/library/benchmarks/gen_queries/consts_decimal.yql consts_decimal.yql
+)
+
 
 IF (OS_WINDOWS)
 CFLAGS(

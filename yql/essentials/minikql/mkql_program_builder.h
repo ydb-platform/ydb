@@ -199,7 +199,7 @@ public:
     TRuntimeNode NewVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType);
     TRuntimeNode NewVariant(TRuntimeNode item, const std::string_view& member, TType* variantType);
 
-    TRuntimeNode ToDynamicLinear(TRuntimeNode item);
+    TRuntimeNode ToDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column);
     TRuntimeNode FromDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column);
 
     TRuntimeNode ToMutDict(TRuntimeNode dict, TType* mdictType, const TArrayRef<const TRuntimeNode>& dependentNodes);
@@ -527,7 +527,9 @@ public:
                                   const TBinaryLambda& merge,
                                   const TTernaryLambda& finish,
                                   TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay,
-                                  TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode);
+                                  TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode,
+                                  TRuntimeNode farFutureCountMax, TRuntimeNode farFutureTimeMax,
+                                  TRuntimeNode earlyPolicy, TRuntimeNode latePolicy);
 
     TRuntimeNode Chopper(TRuntimeNode flow, const TUnaryLambda& keyExtractor, const TBinaryLambda& groupSwitch, const TBinaryLambda& groupHandler);
 

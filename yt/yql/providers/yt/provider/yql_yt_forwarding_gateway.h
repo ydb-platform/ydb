@@ -79,6 +79,10 @@ public:
 
     NThreading::TFuture<TDumpResult> Dump(TDumpOptions&& options) override;
 
+    NThreading::TFuture<TDownloadTableResult> DownloadTable(TDownloadTableOptions&& options) override;
+
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override;
+
 protected:
     IYtGateway::TPtr Slave_;
 };

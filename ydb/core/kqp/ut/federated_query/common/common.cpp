@@ -84,6 +84,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableScriptExecutionOperations(true);
         featureFlags.SetEnableExternalSourceSchemaInference(true);
         featureFlags.SetEnableMoveColumnTable(true);
+        featureFlags.SetEnableSchemaSecrets(true);
 
         if (appConfig && appConfig->HasFeatureFlags()) {
             const auto& appFlags = appConfig->GetFeatureFlags();
@@ -100,6 +101,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig.emplace();
             appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         }
+
+        appConfig->MutableQueryServiceConfig()->MutableS3()->SetAllowLocalFiles(true);
 
         auto settings = TKikimrSettings(*appConfig);
 

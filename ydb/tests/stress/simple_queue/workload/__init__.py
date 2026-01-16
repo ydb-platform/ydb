@@ -12,6 +12,7 @@ import itertools
 import queue
 import traceback
 import ydb
+from ydb.tests.stress.common.instrumented_pools import InstrumentedQuerySessionPool
 from library.python.monlib.metric_registry import MetricRegistry
 
 BLOB_MIN_SIZE = 128 * 1024
@@ -456,7 +457,7 @@ class Workload:
     def __init__(self, endpoint, database, duration, mode):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
-        self.pool = ydb.QuerySessionPool(self.driver, size=200)
+        self.pool = InstrumentedQuerySessionPool(self.driver, size=200)
         self.round_size = 1000
         self.duration = duration
         self.delayed_events = queue.Queue()

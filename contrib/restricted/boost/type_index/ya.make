@@ -6,14 +6,13 @@ LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.89.0)
+VERSION(1.90.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/type_index/archive/boost-1.89.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/type_index/archive/boost-1.90.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/boost/config
     contrib/restricted/boost/container_hash
-    contrib/restricted/boost/core
     contrib/restricted/boost/throw_exception
 )
 

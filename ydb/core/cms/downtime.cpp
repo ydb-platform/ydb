@@ -50,10 +50,10 @@ void TDowntime::AddDowntime(const TLockableItem &item, TInstant now) {
     if (item.State != NKikimrCms::UP)
         AddDowntime(item.Timestamp, now, "known downtime");
 
-    if (item.Lock.Defined()) {
-        auto end = Min(now + TDuration::MicroSeconds(item.Lock->Action.GetDuration()),
-                       item.Lock->ActionDeadline);
-        AddDowntime(now, end, item.Lock->PermissionId);
+    for (auto &lock : item.Locks) {
+        auto end = Min(now + TDuration::MicroSeconds(lock.Action.GetDuration()),
+                       lock.ActionDeadline);
+        AddDowntime(now, end, lock.PermissionId);
     }
 
     for (auto &lock : item.ExternalLocks) {

@@ -10,39 +10,16 @@ class TPKRangeFilter: public TMoveOnly {
 private:
     TPredicateContainer PredicateFrom;
     TPredicateContainer PredicateTo;
-    TPKRangeFilter(TPredicateContainer&& f, TPredicateContainer&& t)
-        : PredicateFrom(std::move(f))
-        , PredicateTo(std::move(t)) {
-    }
+    TPKRangeFilter(TPredicateContainer&& f, TPredicateContainer&& t);
 
 public:
-    TPKRangeFilter& operator=(TPKRangeFilter&& rhs) {
-        PredicateFrom = std::move(rhs.PredicateFrom);
-        PredicateTo = std::move(rhs.PredicateTo);
-        return *this;
-    }
+    TPKRangeFilter& operator=(TPKRangeFilter&& rhs);
 
-    TPKRangeFilter(TPKRangeFilter&& rhs)
-        : PredicateFrom([&]() {
-            return std::move(rhs.PredicateFrom);
-        }())
-        , PredicateTo([&]() {
-            return std::move(rhs.PredicateTo);
-        }()) {
-    }
+    TPKRangeFilter(TPKRangeFilter&& rhs);
 
-    bool IsEmpty() const {
-        return PredicateFrom.IsAll() && PredicateTo.IsAll();
-    }
+    bool IsEmpty() const;
 
-    bool IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema) const {
-        if (PredicateFrom.IsAll() || PredicateTo.IsAll()) {
-            return false;
-        }
-        return PredicateFrom.GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL &&
-               PredicateTo.GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL && PredicateFrom.IsEqualPointTo(PredicateTo) &&
-               PredicateFrom.IsSchemaEqualTo(pkSchema);
-    }
+    bool IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema) const;
 
     const TPredicateContainer& GetPredicateFrom() const {
         return PredicateFrom;

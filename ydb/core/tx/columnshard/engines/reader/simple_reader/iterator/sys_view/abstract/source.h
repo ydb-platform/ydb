@@ -137,6 +137,10 @@ private:
         return TConclusionStatus::Fail("incorrect method usage DoCheckHeader");
     }
 
+    std::optional<ui64> GetPortionIdOptional() const override {
+        return std::nullopt;
+    }
+
 protected:
     virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override {
         const ui32 recordsCount = GetRecordsCount();

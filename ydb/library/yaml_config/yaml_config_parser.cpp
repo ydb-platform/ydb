@@ -281,8 +281,8 @@ namespace NKikimr::NYaml {
         if (TryFromString(info, result)) {
             return result;
         }
-        TErasureType::EErasureSpecies species = TErasureType::ErasureSpeciesByName(info);
-        Y_ENSURE_BT(species != TErasureType::ErasureSpeciesCount, "unknown erasure " << info);
+        TErasureType::EErasureSpecies species;
+        Y_ENSURE_BT(TErasureType::ParseErasureName(species, info), "unknown erasure " << info);
         return species;
     }
 

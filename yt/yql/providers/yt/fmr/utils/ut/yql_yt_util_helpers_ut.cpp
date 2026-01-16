@@ -5,7 +5,9 @@
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/test_tools/yson/yql_yt_yson_helpers.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
-#include <yt/yql/providers/yt/fmr/yt_job_service/mock/yql_yt_job_service_mock.h>
+#include <yt/yql/providers/yt/fmr/yt_job_service/file/yql_yt_file_yt_job_service.h>
+
+#include <util/stream/file.h>
 
 using namespace NYql::NFmr;
 
@@ -14,21 +16,29 @@ Y_UNIT_TEST_SUITE(UtilHelperTests) {
         TString inputYsonContent = "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
                                    "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n";
         auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
-        TYtTableRef testYtTable(richPath);
-        std::unordered_map<TString, TString> inputTables{{NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath)), inputYsonContent}};
-        std::unordered_map<TString, TString> outputTables;
+        TTempFileHandle inputFile{};
+        {
+            TFileOutput out(inputFile.Name());
+            out.Write(inputYsonContent.data(), inputYsonContent.size());
+        }
+        TTempFileHandle outputFile{};
 
-        auto ytJobService = MakeMockYtJobService(inputTables, outputTables);
+        TYtTableRef inputYtTable(richPath, inputFile.Name());
+        TYtTableRef outputYtTable(richPath, outputFile.Name());
 
-        auto reader = ytJobService->MakeReader(testYtTable);
-        auto writer = ytJobService->MakeWriter(testYtTable, TClusterConnection());
+        auto ytJobService = MakeFileYtJobService();
+
+        auto reader = ytJobService->MakeReader(inputYtTable);
+        auto writer = ytJobService->MakeWriter(outputYtTable, TClusterConnection());
         auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
         ParseRecords(reader, writer, 1, 10, cancelFlag);
         writer->Flush();
-        UNIT_ASSERT_VALUES_EQUAL(outputTables.size(), 1);
-        TString serializedRichPath = SerializeRichPath(richPath);
-        UNIT_ASSERT(outputTables.contains(serializedRichPath));
-        UNIT_ASSERT_NO_DIFF(outputTables[serializedRichPath], inputYsonContent);
+
+        const TString outputYsonContent = TFileInput(outputFile.Name()).ReadAll();
+        UNIT_ASSERT_NO_DIFF(
+            GetTextYson(GetBinaryYson(outputYsonContent)),
+            GetTextYson(GetBinaryYson(inputYsonContent))
+        );
     }
     Y_UNIT_TEST(SplitYsonByColumnGroups) {
         const TString ysonRowStr = "{\"key\"=\"075\";\"subkey\"=[\"1\"];\"fir_value\"=\"abc\";\"sec_value\"={\"a\"=1;\"b\"=2}};\n";

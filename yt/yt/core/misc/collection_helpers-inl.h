@@ -4,6 +4,8 @@
 #include "collection_helpers.h"
 #endif
 
+#include <library/cpp/yt/string/format.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -171,7 +173,8 @@ template <class TMap, class TKey>
 auto GetIteratorOrCrash(TMap&& map, const TKey& key)
 {
     auto it = map.find(key);
-    YT_VERIFY(it != map.end());
+    YT_VERIFY(it != map.end(), Format("GetIteratorOrCrash failed, key is not found in map (MapType: %v, KeyType: %v)",
+        TypeName<TMap>(), TypeName<TKey>()));
     return it;
 }
 
@@ -184,14 +187,16 @@ auto& GetOrCrash(TMap&& map, const TKey& key)
 template <class TMap, class TKey>
 void EraseOrCrash(TMap&& map, const TKey& key)
 {
-    YT_VERIFY(std::forward<TMap>(map).erase(key) > 0);
+    YT_VERIFY(std::forward<TMap>(map).erase(key) > 0, Format("EraseOrCrash failed, key is not found in map (MapType: %v, KeyType: %v)",
+        TypeName<TMap>(), TypeName<TKey>()));
 }
 
 template <class TContainer, class TArg>
 auto InsertOrCrash(TContainer&& container, TArg&& arg)
 {
     auto [it, inserted] = std::forward<TContainer>(container).insert(std::forward<TArg>(arg));
-    YT_VERIFY(inserted);
+    YT_VERIFY(inserted, Format("InsertOrCrash failed, item is already in container (ContainerType: %v, ItemArgType: %v)",
+        TypeName<TContainer>(), TypeName<TArg>()));
     return it;
 }
 
@@ -199,7 +204,8 @@ template <class TContainer, class... TArgs>
 auto EmplaceOrCrash(TContainer&& container, TArgs&&... args)
 {
     auto [it, emplaced] = std::forward<TContainer>(container).emplace(std::forward<TArgs>(args)...);
-    YT_VERIFY(emplaced);
+    YT_VERIFY(emplaced, Format("EmplaceOrCrash failed, item is already in container (ContainerType: %v, ItemArgsTupleType: %v)",
+        TypeName<TContainer>(), TypeName<std::tuple<TArgs...>>()));
     return it;
 }
 
@@ -216,7 +222,8 @@ template <class T, class... TVariantArgs>
 T& GetOrCrash(std::variant<TVariantArgs...>& variant)
 {
     auto* item = get_if<T>(&variant);
-    YT_VERIFY(item);
+    YT_VERIFY(item, Format("GetOrCrash failed, bad variant alternative (VariantType: %v, AlternativeType: %v)",
+        TypeName<std::variant<TVariantArgs...>>(), TypeName<T>()));
     return *item;
 }
 
@@ -224,7 +231,8 @@ template <class T, class... TVariantArgs>
 const T& GetOrCrash(const std::variant<TVariantArgs...>& variant)
 {
     const auto* item = get_if<T>(&variant);
-    YT_VERIFY(item);
+    YT_VERIFY(item, Format("GetOrCrash failed, bad variant alternative (VariantType: %v, AlternativeType: %v)",
+        TypeName<std::variant<TVariantArgs...>>(), TypeName<T>()));
     return *item;
 }
 

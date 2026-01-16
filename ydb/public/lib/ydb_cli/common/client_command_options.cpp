@@ -3,7 +3,6 @@
 
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
-#include <library/cpp/colorizer/colors.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <library/cpp/yaml/as/tstring.h>
 
@@ -621,7 +620,7 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             for (const auto& envInfo : opt.Opt->EnvInfo) {
                 if (TMaybe<TString> mbValue = TryGetEnv(envInfo.EnvName)) {
                     TStringBuilder txt;
-                    Cerr << " from " << envInfo.EnvName << " enviroment variable";
+                    Cerr << " from " << envInfo.EnvName << " environment variable";
                     break;
                 }
             }

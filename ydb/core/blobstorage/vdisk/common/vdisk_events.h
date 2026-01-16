@@ -3248,7 +3248,7 @@ namespace NKikimr {
     public:
         ui32 MinHugeBlobInBytes;
 
-        TEvMinHugeBlobSizeUpdate(ui32 minHugeBlobInBytes) : MinHugeBlobInBytes(minHugeBlobInBytes) {  
+        TEvMinHugeBlobSizeUpdate(ui32 minHugeBlobInBytes) : MinHugeBlobInBytes(minHugeBlobInBytes) {
         };
     };
 } // NKikimr

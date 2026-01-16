@@ -48,7 +48,7 @@ void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bo
     TVector<NPersQueue::TDiscoveryConverterPtr> topics;
     for (const auto& topic : Topics) {
         topics.push_back(topic.second.DiscoveryConverter);
-        Y_ABORT_UNLESS(topic.second.DiscoveryConverter->IsValid());
+        AFL_ENSURE(topic.second.DiscoveryConverter->IsValid());
     }
 
     //LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " describe topics: " << JoinSeq(", ", topicNames));
@@ -68,6 +68,17 @@ void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth is DEAD");
 
     TActorBootstrapped<TReadInitAndAuthActor>::Die(ctx);
+}
+
+bool TReadInitAndAuthActor::OnUnhandledException(const std::exception& exc) {
+    auto ctx = *NActors::TlsActivationContext;
+    LOG_CRIT_S(ctx, NKikimrServices::PQ_READ_PROXY,
+        TStringBuilder() << PQ_LOG_PREFIX << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+            << TBackTrace::FromCurrentException().PrintToString());
+
+    CloseSession("Internal error", PersQueue::ErrorCode::ErrorCode::ERROR, ctx.AsActorContext());
+
+    return true;
 }
 
 void TReadInitAndAuthActor::CloseSession(const TString& errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode code,
@@ -95,7 +106,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         THashMap<TString, TTopicHolder>::iterator topicsIter,
         const TActorContext& ctx
 ) {
-    Y_ABORT_UNLESS(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
+    AFL_ENSURE(entry.PQGroupInfo); // checked at ProcessMetaCacheTopicResponse()
     auto& pqDescr = entry.PQGroupInfo->Description;
     topicsIter->second.TabletID = pqDescr.GetBalancerTabletID();
     topicsIter->second.CloudId = pqDescr.GetPQTabletConfig().GetYcCloudId();
@@ -122,7 +133,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
         topicsIter->second.CdcStreamPath
     );
-    Y_ABORT_UNLESS(topicsIter->second.FullConverter->IsValid());
+    AFL_ENSURE(topicsIter->second.FullConverter->IsValid());
     return CheckTopicACL(entry, topicsIter->first, ctx);
 }
 
@@ -136,10 +147,10 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
     for (const auto& entry : ev->Get()->Result->ResultSet) {
         const auto& path = topicsRequested[i++]->GetOriginalPath();
         auto it = Topics.find(path);
-        Y_ABORT_UNLESS(it != Topics.end());
+        AFL_ENSURE(it != Topics.end());
 
         if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-            Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+            AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
             const auto& topic = entry.ListNodeEntry->Children.at(0);
 
             // primary path used to re-describe
@@ -226,7 +237,7 @@ void TReadInitAndAuthActor::HandleClientSchemeCacheResponse(
     TEvTxProxySchemeCache::TEvNavigateKeySetResult* msg = ev->Get();
     const NSchemeCache::TSchemeCacheNavigate* navigate = msg->Request.Get();
 
-    Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
+    AFL_ENSURE(navigate->ResultSet.size() == 1);
     auto& entry = navigate->ResultSet.front();
     auto path = "/" + JoinPath(entry.Path); // ToDo [migration] - through converter ?
     if (navigate->ErrorCount > 0) {

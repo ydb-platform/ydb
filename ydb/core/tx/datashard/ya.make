@@ -83,6 +83,8 @@ SRCS(
     datashard__write.cpp
     datashard_active_transaction.cpp
     datashard_active_transaction.h
+    datashard_cdc_stream_common.cpp
+    datashard_cdc_stream_common.h
     datashard_change_receiving.cpp
     datashard_change_sender_activation.cpp
     datashard_change_sending.cpp
@@ -304,7 +306,6 @@ ELSE()
     SRCS(
         export_s3_buffer.cpp
         export_s3_uploader.cpp
-        extstorage_usage_config.cpp
         import_s3.cpp
     )
 ENDIF()

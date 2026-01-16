@@ -69,6 +69,14 @@ ui64 GetResultRowsLimit(const TResWriteBase& resWrite) {
     return 0;
 }
 
+bool GetResultDiscard(const TResWriteBase& resWrite) {
+    auto discardSetting = GetSetting(resWrite.Settings().Ref(), "discard");
+    if (discardSetting) {
+        return true;
+    }
+    return false;
+}
+
 enum class TPrimitiveYdbOperation : ui32 {
     Read = 1 << 0,
     Write = 1 << 1
@@ -191,8 +199,22 @@ struct TKiExploreTxResults {
             const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
             TString indexTable;
             if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                YQL_ENSURE(indexTables.size() >= 2, "K-means tree index should have at least 2 tables");
                 indexTable = indexTables[1];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltext) {
+                const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index.SpecializedIndexDescription);
+                YQL_ENSURE(fulltextDesc);
+                const bool withRelevance = fulltextDesc->GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+                const size_t n = (withRelevance ? 4 : 1);
+                YQL_ENSURE(indexTables.size() == n, "Global fulltext index should have " << n << " tables");
+                indexTable = indexTables[n-1];
+                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
+                if (withRelevance) {
+                    auto dictTable = indexTables[0];
+                    ops[dictTable] |= TPrimitiveYdbOperation::Read;
+                    ops[dictTable] |= TPrimitiveYdbOperation::Write;
+                }
             } else {
                 YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
                 indexTable = indexTables[0];
@@ -848,6 +870,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
                 .Value(resWrite.Data())
                 .Columns(GetResultColumns(resWrite, ctx))
                 .RowsLimit().Build(GetResultRowsLimit(resWrite))
+                .Discard().Build(GetResultDiscard(resWrite))
                 .Done();
 
             queryResults.push_back(kiResult.Ptr());
@@ -1324,6 +1347,7 @@ TExprNode::TPtr KiBuildResult(TExprBase node, const TString& cluster, TExprConte
                 .Value(resFill.Data())
                 .Columns(GetResultColumns(resFill, ctx))
                 .RowsLimit().Build(GetResultRowsLimit(resFill))
+                .Discard().Build(GetResultDiscard(resFill))
                 .Build()
             .Build()
         .Effects()

@@ -3392,11 +3392,34 @@ void TSchemeShard::PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, 
 void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (BackupCollections.contains(pathId)) {
+        UnregisterBackupCollectionTables(BackupCollections[pathId]);
         BackupCollections.erase(pathId);
         DecrementPathDbRefCount(pathId);
     }
 
     db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::RegisterBackupCollectionTables(const TBackupCollectionInfo::TPtr& collection) {
+    if (!collection) return;
+    const auto& desc = collection->Description;
+    for (const auto& entry : desc.GetExplicitEntryList().GetEntries()) {
+        TPath path = TPath::Resolve(entry.GetPath(), this);
+        if (path.IsResolved() && path->IsTable()) {
+            TableInBackupCollections.insert(path.Base()->PathId);
+        }
+    }
+}
+
+void TSchemeShard::UnregisterBackupCollectionTables(const TBackupCollectionInfo::TPtr& collection) {
+    if (!collection) return;
+    const auto& desc = collection->Description;
+    for (const auto& entry : desc.GetExplicitEntryList().GetEntries()) {
+        TPath path = TPath::Resolve(entry.GetPath(), this);
+        if (path.IsResolved() && path->IsTable()) {
+            TableInBackupCollections.erase(path.Base()->PathId);
+        }
+    }
 }
 
 void TSchemeShard::PersistSecret(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo) {
@@ -5102,7 +5125,6 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableBorrowedSplitCompaction = appData->FeatureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = appData->FeatureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
-    EnablePQConfigTransactionsAtSchemeShard = appData->FeatureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
@@ -5122,6 +5144,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     ConfigureStatsOperations(appData->SchemeShardConfig, ctx);
     MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
     MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
+    MaxTTLShardsInFlight = appData->SchemeShardConfig.GetMaxTTLShardsInFlight();
 
     SendStatsIntervalSecondsDedicated = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsDedicated();
     SendStatsIntervalSecondsServerless = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsServerless();
@@ -7781,6 +7804,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         ConfigureStatsOperations(schemeShardConfig, ctx);
         MaxCdcInitialScanShardsInFlight = schemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
         MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
+        MaxTTLShardsInFlight = schemeShardConfig.GetMaxTTLShardsInFlight();
     }
 
     if (appConfig.HasTableProfilesConfig()) {
@@ -7824,7 +7848,6 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableBorrowedSplitCompaction = featureFlags.GetEnableBorrowedSplitCompaction();
     EnableMoveIndex = featureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
-    EnablePQConfigTransactionsAtSchemeShard = featureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = featureFlags.GetEnableStatistics();
     EnableServerlessExclusiveDynamicNodes = featureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();

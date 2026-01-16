@@ -11,10 +11,9 @@
 
 namespace NKafka {
 
-struct TestAccessor;    
+struct TestAccessor;
 
 class TKafkaFetchActor: public NActors::TActorBootstrapped<TKafkaFetchActor> {
-    friend struct TestAccessor;
 public:
     TKafkaFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TFetchRequestData>& message)
         : Context(context)
@@ -31,16 +30,18 @@ private:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKikimr::TEvPQ::TEvFetchResponse, Handle);
+            hFunc(TEvKafka::TEvFetchActorStateRequest, Handle);
         }
     }
 
     void Handle(NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKafka::TEvFetchActorStateRequest::TPtr& ev);
 
     void SendFetchRequests(const TActorContext& ctx);
     TVector<NKikimr::NPQ::TPartitionFetchRequest> PrepareFetchRequestData(const size_t topicIndex);
     void HandleErrorResponse(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, TFetchResponseData::TFetchableTopicResponse& topicResponse);
     void HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev, TFetchResponseData::TFetchableTopicResponse& topicResponse, const TActorContext& ctx);
-    void FillRecordsBatch(const NKikimrClient::TPersQueueFetchResponse_TPartResult& partPQResponse, TKafkaRecordBatch& recordsBatch, const TActorContext& ctx);
+    void FillRecordsBatch(const NKikimrClient::TPersQueueFetchResponse_TPartResult& partPQResponse, TKafkaRecordBatch& recordsBatch, const std::optional<TString> timestampType, const TActorContext& ctx);
     void RespondIfRequired(const TActorContext& ctx);
     size_t CheckTopicIndex(const NKikimr::TEvPQ::TEvFetchResponse::TPtr& ev);
 

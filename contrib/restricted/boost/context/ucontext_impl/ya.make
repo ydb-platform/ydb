@@ -4,9 +4,9 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(1.89.0)
+VERSION(1.90.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/context/archive/boost-1.89.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/context/archive/boost-1.90.0.tar.gz)
 
 LICENSE(BSL-1.0)
 

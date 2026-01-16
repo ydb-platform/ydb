@@ -2,20 +2,20 @@
 
 #include "yql_http_header.h"
 
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
-
 #include <yql/essentials/public/issue/yql_issue.h>
+
+#include <contrib/libs/curl/include/curl/curl.h>
+
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/retry/retry_policy.h>
 
-#include <contrib/libs/curl/include/curl/curl.h>
-
 #include <atomic>
-#include <variant>
 #include <functional>
 
 namespace NYql {
+
+class THttpGatewayConfig;
 
 class IHTTPGateway {
 public:
@@ -142,4 +142,4 @@ public:
         const TString& awsSigV4 = {});
 };
 
-}
+} // namespace NYql

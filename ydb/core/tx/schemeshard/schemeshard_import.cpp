@@ -292,7 +292,21 @@ void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const T
     }
 }
 
+void TSchemeShard::AddImport(const TImportInfo::TPtr& importInfo) {
+    Imports[importInfo->Id] = importInfo;
+    ImportsByTime.emplace(importInfo->StartTime, importInfo->Id);
+    if (importInfo->Uid) {
+        ImportsByUid[importInfo->Uid] = importInfo;
+    }
+}
+
 void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+    if (importInfo.Uid) {
+        ImportsByUid.erase(importInfo.Uid);
+    }
+    ImportsByTime.erase(std::make_pair(importInfo.StartTime, importInfo.Id));
+    Imports.erase(importInfo.Id);
+
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
     }
@@ -454,12 +468,12 @@ bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     auto& item = importInfo.Items.at(itemIdx);
 
-    switch (importInfo.GetS3Settings().index_filling_mode()) {
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD:
+    switch (importInfo.GetS3Settings().index_population_mode()) {
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD:
             return true;
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
             return item.ChildItems.empty();
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
             return false;
         default:
             return true;

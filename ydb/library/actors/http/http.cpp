@@ -412,8 +412,33 @@ THttpOutgoingDataChunkPtr THttpOutgoingResponse::CreateIncompleteDataChunk() {
     return new THttpOutgoingDataChunk(this);
 }
 
-THttpIncomingRequestPtr THttpIncomingRequest::Duplicate() {
-    THttpIncomingRequestPtr request = new THttpIncomingRequest(*this);
+THttpIncomingRequestPtr THttpIncomingRequest::Duplicate(const THeaders& extraHeaders) const {
+    THttpIncomingRequestPtr request = new THttpIncomingRequest(Endpoint, Address);
+    request->Append(Method.Data(), Method.Size());
+    request->Append(' ');
+    request->Append(URL.Data(), URL.Size());
+    request->Append(' ');
+    request->Append(Protocol.Data(), Protocol.Size());
+    request->Append('/');
+    request->Append(Version.Data(), Version.Size());
+    request->Append('\r');
+    request->Append('\n');
+    THeadersBuilder headers(Headers);
+    headers.Erase("Transfer-Encoding"); // we do not want to copy chunked encoding
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            headers.Set(key, value);
+        } else {
+            headers.Erase(key);
+        }
+    }
+    auto renderedHeaders = headers.Render();
+    request->Append(renderedHeaders.data(), renderedHeaders.size());
+    request->Append('\r');
+    request->Append('\n');
+    if (Body) {
+        request->Append(Body.Data(), Body.Size());
+    }
     request->Reparse();
     request->Timer.Reset();
     return request;
@@ -442,18 +467,49 @@ THttpOutgoingRequestPtr THttpIncomingRequest::Forward(TStringBuf baseUrl) const 
     return request;
 }
 
-THttpIncomingResponsePtr THttpIncomingResponse::Duplicate(THttpOutgoingRequestPtr request) {
-    THttpIncomingResponsePtr response = new THttpIncomingResponse(*this);
+THttpIncomingResponsePtr THttpIncomingResponse::Duplicate(THttpOutgoingRequestPtr request, const THeaders& extraHeaders) {
+    THttpIncomingResponsePtr response = new THttpIncomingResponse(request);
+    response->Append(Protocol.Data(), Protocol.Size());
+    response->Append('/');
+    response->Append(Version.Data(), Version.Size());
+    response->Append(' ');
+    response->Append(Status.Data(), Status.Size());
+    response->Append(' ');
+    response->Append(Message.Data(), Message.Size());
+    response->Append('\r');
+    response->Append('\n');
+    THeadersBuilder headers(Headers);
+    headers.Erase("Transfer-Encoding"); // we do not want to copy chunked encoding
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            headers.Set(key, value);
+        } else {
+            headers.Erase(key);
+        }
+    }
+    auto renderedHeaders = headers.Render();
+    response->Append(renderedHeaders.data(), renderedHeaders.size());
+    response->Append('\r');
+    response->Append('\n');
+    if (Body) {
+        response->Append(Body.Data(), Body.Size());
+    }
     response->Reparse();
-    response->Request = request;
     return response;
 }
 
-THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPtr request) {
+THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPtr request, const THeaders& extraHeaders) {
     THeadersBuilder headers(Headers);
     if (!headers.Has("X-Worker-Name")) {
         if (!request->Endpoint->WorkerName.empty()) {
             headers.Set("X-Worker-Name", request->Endpoint->WorkerName);
+        }
+    }
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            headers.Set(key, value);
+        } else {
+            headers.Erase(key);
         }
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(request);
@@ -598,9 +654,22 @@ THttpOutgoingRequestPtr THttpOutgoingRequest::CreateHttpRequest(TStringBuf metho
     return request;
 }
 
-THttpOutgoingRequestPtr THttpOutgoingRequest::Duplicate() {
-    THttpOutgoingRequestPtr request = new THttpOutgoingRequest(*this);
-    request->Reparse();
+THttpOutgoingRequestPtr THttpOutgoingRequest::Duplicate(const THeaders& extraHeaders) {
+    THttpOutgoingRequestPtr request = new THttpOutgoingRequest();
+    request->Secure = Secure;
+    request->InitRequest(Method, URL, Protocol, Version);
+    THeadersBuilder headers(Headers);
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            headers.Set(key, value);
+        } else {
+            headers.Erase(key);
+        }
+    }
+    request->Set(headers);
+    if (Body) {
+        request->SetBody(Body);
+    }
     return request;
 }
 

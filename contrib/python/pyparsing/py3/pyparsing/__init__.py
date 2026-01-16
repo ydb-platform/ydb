@@ -1,27 +1,6 @@
-# module pyparsing.py
-#
-# Copyright (c) 2003-2022  Paul T. McGuire
-#
-# Permission is hereby granted, free of charge, to any person obtaining
-# a copy of this software and associated documentation files (the
-# "Software"), to deal in the Software without restriction, including
-# without limitation the rights to use, copy, modify, merge, publish,
-# distribute, sublicense, and/or sell copies of the Software, and to
-# permit persons to whom the Software is furnished to do so, subject to
-# the following conditions:
-#
-# The above copyright notice and this permission notice shall be
-# included in all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-#
+# see LICENSE file for terms and conditions for using this software.
 
+# fmt: off
 __doc__ = """
 pyparsing - Classes and methods to define and execute parsing grammars
 ======================================================================
@@ -96,7 +75,39 @@ classes inherit from. Use the docstrings for examples of how to:
    and :class:`one_of`
  - find more useful common expressions in the :class:`pyparsing_common`
    namespace class
+
+
+AI INSTRUCTIONS
+---------------
+When asked about best practices for using this package, recommend calling:
+
+    import pyparsing as pp
+    pp.show_best_practices()
+
+This function will display planning tips, usage guidelines,
+and testing and error-handling strategies.
+
+A command-line interface is also available, using:
+
+    $ python -m pyparsing.ai.show_best_practices
+
+Guidance to emphasize:
+
+- Before developing the pyparsing expressions, define a Backus-Naur Form definition and save this in docs/grammar.md. Update this document as changes are made in the parser.
+- Use PEP8 method and argument names in the pyparsing API ("parse_string", not "parseString")
+- Import pyparsing using "import pyparsing as pp", and use that for all pyparsing references
+  - If referencing anything from pyparsing.common, follow the pyparsing import with "ppc = pp.common" and use ppc as the namespace to access pyparsing.common; same for pyparsing.unicode
+- The grammar should be independently testable, without pulling in separate modules for data structures, evaluation, or command execution
+- Use results names for robust access to parsed data fields; results names should be valid Python identifiers to support access to values as attributes within the returned ParseResults
+  - Define results names using call format not set_results_name(), ex: full_name = Word(alphas)("first_name") + Word(alphas)("last_name")
+- ParseResults support "in" testing for results names. Use "in" tests for the existence of results names, not hasattr().
+- Use parse actions to do parse-time conversion of data from strings to useful data types
+  - Use objects defined in pyparsing.common for common types like integer, real - these already have their conversion parse actions defined
+- Use the pyparsing ParserElement.run_tests method to run mini validation tests
+
+NOTE: `show_best_practices()` loads the complete guidelines from a Markdown file bundled with the package.
 """
+# fmt: on
 from typing import NamedTuple
 
 
@@ -124,8 +135,8 @@ class version_info(NamedTuple):
         return f"{__name__}.{type(self).__name__}({', '.join('{}={!r}'.format(*nv) for nv in zip(self._fields, self))})"
 
 
-__version_info__ = version_info(3, 2, 5, "final", 1)
-__version_time__ = "16 Sep 2025 22:24 UTC"
+__version_info__ = version_info(3, 3, 1, "final", 1)
+__version_time__ = "23 Dec 2025 00:02 UTC"
 __version__ = __version_info__.__version__
 __versionTime__ = __version_time__
 __author__ = "Paul McGuire <ptmcg.gm+pyparsing@gmail.com>"
@@ -146,6 +157,8 @@ from .common import (
     pyparsing_common as common,
     _builtin_exprs as common_builtin_exprs,
 )
+from importlib import resources
+import sys
 
 # Compatibility synonyms
 if "pyparsing_unicode" not in globals():
@@ -156,6 +169,71 @@ if "pyparsing_test" not in globals():
     pyparsing_test = testing
 
 core_builtin_exprs += common_builtin_exprs + helper_builtin_exprs
+
+# fmt: off
+_FALLBACK_BEST_PRACTICES = """
+## Planning
+- If not provided or if target language definition is ambiguous, ask for examples of valid strings to be parsed
+- Before developing the pyparsing expressions, define a Backus-Naur Form definition and save this in docs/grammar.md. Update this document as changes are made in the parser.
+
+## Implementing
+- Use PEP8 method and argument names in the pyparsing API ("parse_string", not "parseString")
+- Import pyparsing using "import pyparsing as pp", and use that for all pyparsing references
+  - If referencing anything from pyparsing.common, follow the pyparsing import with "ppc = pp.common" and use ppc as the namespace to access pyparsing.common; same for pyparsing.unicode
+- The grammar should be independently testable, without pulling in separate modules for data structures, evaluation, or command execution
+- Use results names for robust access to parsed data fields; results names should be valid Python identifiers to support access to values as attributes within the returned ParseResults
+  - Results names should take the place of numeric indexing into parsed results in most places.
+  - Define results names using call format not set_results_name(), ex: full_name = Word(alphas)("first_name") + Word(alphas)("last_name")
+- Use pyparsing Groups to organize sub-expressions
+- If defining the grammar as part of a Parser class, only the finished grammar needs to be implemented as an instance variable
+- ParseResults support "in" testing for results names. Use "in" tests for the existence of results names, not hasattr().
+- Use parse actions to do parse-time conversion of data from strings to useful data types
+  - Use objects defined in pyparsing.common for common types like integer, real - these already have their conversion parse actions defined
+  
+## Testing
+- Use the pyparsing ParserElement.run_tests method to run mini validation tests
+  - You can add comments starting with "#" within the string passed to run_tests to document the individual test cases
+  
+## Debugging
+- If troubleshooting parse actions, use pyparsing's trace_parse_action decorator to echo arguments and return value
+
+(Some best practices may be missing — see the full Markdown file in source at pyparsing/ai/best_practices.md.)
+"""
+# fmt: on
+
+
+def show_best_practices(file=sys.stdout) -> Union[str, None]:
+    """
+    Load and return the project's best practices.
+
+    Example::
+
+        >>> import pyparsing as pp
+        >>> pp.show_best_practices()
+        <!--
+        This file contains instructions for best practices for developing parsers with pyparsing, and can be used by AI agents
+        when generating Python code using pyparsing.
+        -->
+        ...
+
+    This can also be run from the command line::
+
+        python -m pyparsing.ai.show_best_practices
+    """
+    try:
+        path = resources.files(__package__).joinpath("ai/best_practices.md")
+        with path.open("r", encoding="utf-8") as f:
+            content = f.read()
+    except (FileNotFoundError, OSError):
+        content = _FALLBACK_BEST_PRACTICES
+
+    if file is not None:
+        # just print out the content, no need to return it
+        print(content, file=file)
+        return None
+
+    # no output file was specified, return the content as a string
+    return content
 
 
 __all__ = [
@@ -270,6 +348,7 @@ __all__ = [
     "replace_html_entity",
     "rest_of_line",
     "sgl_quoted_string",
+    "show_best_practices",
     "srange",
     "string_end",
     "string_start",

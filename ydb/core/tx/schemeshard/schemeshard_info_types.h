@@ -49,6 +49,8 @@
 
 #include <ydb/services/lib/sharding/sharding.h>
 
+#include <library/cpp/regex/pcre/regexp.h>
+
 #include <google/protobuf/util/message_differencer.h>
 
 #include <util/generic/guid.h>
@@ -156,6 +158,7 @@ struct TColumnFamiliesMerger {
     bool Has(ui32 familyId) const;
     NKikimrSchemeOp::TFamilyDescription* Get(ui32 familyId, TString &errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(ui32 familyId, TString& errDescr);
+    NKikimrSchemeOp::TFamilyDescription* Get(const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* Get(ui32 familyId, const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(ui32 familyId, const TString&  familyName, TString& errDescr);
@@ -179,11 +182,13 @@ struct TPartitionConfigMerger {
     static bool ApplyChanges(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
+        const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
         const TAppData* appData, const bool isServerlessDomain, TString& errDescr);
 
     static bool ApplyChangesInColumnFamilies(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
+        const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
         const bool isServerlessDomain, TString& errDescr);
 
     static THashMap<ui32, size_t> DeduplicateColumnFamiliesById(NKikimrSchemeOp::TPartitionConfig& config);
@@ -3026,7 +3031,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
     bool EnableChecksums = false;
     bool EnablePermissions = false;
-    bool MaterializeIndexes = false;
+    bool IncludeIndexData = false;
 
     NKikimrSchemeOp::TExportMetadata ExportMetadata;
     TActorId ExportMetadataUploader;
@@ -3204,12 +3209,14 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;
-    int WaitingViews = 0;
+    int WaitingSchemeObjects = 0;
 
     TSet<TActorId> Subscribers;
 
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
+
+    TMaybe<std::vector<TRegExMatch>> ExcludeRegexps;
 
 private:
     template <typename TSettingsPB>
@@ -3260,6 +3267,10 @@ public:
             return settings.skip_checksum_validation();
         });
     }
+
+    bool CompileExcludeRegexps(TString& errorDescription);
+
+    bool IsExcludedFromImport(const TString& path) const;
 
     explicit TImportInfo(
             const ui64 id,

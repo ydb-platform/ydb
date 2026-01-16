@@ -1,8 +1,11 @@
 #pragma once
 
-#include <util/system/types.h>
-#include <util/generic/vector.h>
+#include <ydb/library/login/protos/login.pb.h>
+
+#include <util/generic/hash.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/system/types.h>
 
 namespace NLogin {
 
@@ -11,21 +14,25 @@ enum class EHashClass {
     Scram,
 };
 
-enum class EHashType {
-    Argon,
-    ScramSha256,
-};
-
 struct THashTypeDescription {
     const EHashClass Class;
-    const EHashType Type;
+    const NLoginProto::EHashType::HashType Type;
     const TString Name;
     const ui32 IterationsCount;
     const ui32 SaltSize;
     const ui32 HashSize;
-    const bool IsNullPasswordAllowed;
+    const bool IsEmptyPasswordAllowed;
 };
 
-const extern TVector<THashTypeDescription> HashesRegistry;
+struct THashTypesRegistry {
+
+    THashTypesRegistry();
+
+    static const TVector<THashTypeDescription> HashTypeDescriptions;
+
+    THashMap<NLoginProto::EHashType::HashType, const THashTypeDescription&> HashTypesMap;
+    THashMap<TStringBuf, const THashTypeDescription&> HashNamesMap;
+
+} const extern HashesRegistry;
 
 } // namespace NLogin

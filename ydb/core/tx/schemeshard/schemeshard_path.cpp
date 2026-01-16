@@ -957,6 +957,28 @@ const TPath::TChecker& TPath::TChecker::IsBackupCollection(EStatus status) const
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+namespace {
+
+bool CheckAvailableInExports(NKikimrSchemeOp::EPathType pathType) {
+    switch (pathType) {
+        case NKikimrSchemeOp::EPathTypeView:
+            return AppData()->FeatureFlags.GetEnableViewExport();
+        case NKikimrSchemeOp::EPathTypeColumnTable:
+            return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
+        case NKikimrSchemeOp::EPathTypeTable:
+        case NKikimrSchemeOp::EPathTypePersQueueGroup:
+        case NKikimrSchemeOp::EPathTypeReplication:
+        case NKikimrSchemeOp::EPathTypeTransfer:
+        case NKikimrSchemeOp::EPathTypeExternalDataSource:
+        case NKikimrSchemeOp::EPathTypeExternalTable:
+            return true;
+        default:
+            return false;
+    };
+}
+
+} // anonymous namespace
+
 const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) const {
     if (Failed) {
         return *this;
@@ -966,11 +988,7 @@ const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) con
     // when we can be certain that the database will never be downgraded to a version
     // which does not support the YQL export process. Otherwise, they will be considered as tables,
     // and we might cause the process to be aborted.
-    if (Path.Base()->IsTable()
-        || (Path.Base()->IsColumnTable() && AppData()->FeatureFlags.GetEnableColumnTablesBackup())
-        || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
-        || Path.Base()->IsPQGroup()
-    )  {
+    if (CheckAvailableInExports(Path.Base()->PathType)) {
         return *this;
     }
 
@@ -986,14 +1004,6 @@ const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus stat
 
     TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
     const ui64 shardInPath = Path.Shards();
-
-    if (Path.IsResolved() && !Path.IsDeleted()) {
-        const auto allShards = Path.SS->CollectAllShards({Path.Base()->PathId});
-        Y_VERIFY_DEBUG_S(allShards.size() == shardInPath, "pedantic check"
-            << ": CollectAllShards(): " << allShards.size()
-            << ", Path.Shards(): " << shardInPath
-            << ", path: " << Path.PathString());
-    }
 
     if (!delta || shardInPath + delta <= domainInfo->GetSchemeLimits().MaxShardsInPath) {
         return *this;
@@ -1208,17 +1218,17 @@ const TPath::TChecker& TPath::TChecker::Or(TCheckerMethodPtr leftFunc, TCheckerM
     if (Failed) {
         return *this;
     }
-    
+
     TChecker left(*this);
     (left.*leftFunc)(status);
-    
+
     if (!left.Failed) {
         return *this;
     }
-    
+
     TChecker right(*this);
     (right.*rightFunc)(status);
-    
+
     if (right.Failed) {
         return Fail(left.Status, TStringBuilder() << left.Error << " and " << right.Error);
     }
@@ -1571,7 +1581,8 @@ bool TPath::IsUnderOperation() const {
             + (ui32)IsUnderDeleting()
             + (ui32)IsUnderDomainUpgrade()
             + (ui32)IsUnderMoving()
-            + (ui32)IsUnderOutgoingIncrementalRestore();
+            + (ui32)IsUnderOutgoingIncrementalRestore()
+            + (ui32)IsUnderIncomingIncrementalRestore();
         Y_VERIFY_S(sum == 1,
                    "only one operation at the time"
                        << " pathId: " << Base()->PathId
@@ -1664,6 +1675,12 @@ bool TPath::IsUnderOutgoingIncrementalRestore() const {
 
     return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore
         || Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
+}
+
+bool TPath::IsUnderIncomingIncrementalRestore() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateIncomingIncrementalRestore;
 }
 
 TPath& TPath::RiseUntilOlapStore() {

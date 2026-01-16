@@ -13,7 +13,7 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
 
     Y_UNIT_TEST(TestCorrectLayout) {
-        TBlobStorageGroupType groupType(TBlobStorageGroupType::Erasure3Plus1Stripe);
+        TBlobStorageGroupType groupType(TBlobStorageGroupType::Erasure3Plus1Block);
 
         ui32 blobSubgroupSize = groupType.BlobSubgroupSize();
         ui32 totalPartCount = groupType.TotalPartCount();
@@ -125,8 +125,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
     }
 
     Y_UNIT_TEST(OutputInfoAboutErasureSpecies) {
-        for (int i = TErasureType::ErasureNone; i < TErasureType::ErasureSpeciesCount; i++) {
-            auto es = (TErasureType::EErasureSpecies)i;
+
+        for (auto [es, _] : TErasureType::ErasureNames) {
             TBlobStorageGroupType groupType(es);
             STR << groupType.ToString() << ":\n";
             STR << "  ParityParts:                " << groupType.ParityParts() << "\n";

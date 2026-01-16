@@ -32,8 +32,9 @@ struct TMPMCRingQueueV4Correct {
 // OBSERVE
 
     static constexpr ui32 MaxSize = 1 << MaxSizeBits;
+    static constexpr ui64 OvertakenBit = 1ull << 63;
 
-    struct alignas(ui64) TSlot {
+    struct TSlot {
         static constexpr ui64 EmptyBit = 1ull << 63;
         static constexpr ui64 OvertakenMask = 0xffffull << 32;
         ui32 Value = 0;
@@ -64,6 +65,7 @@ struct TMPMCRingQueueV4Correct {
     NThreading::TPadded<std::atomic<ui64>> ReadRevolvingCounter{0};
     NThreading::TPadded<std::atomic<ui64>> WriteRevolvingCounter{0};
     NThreading::TPadded<std::atomic<ui64>> OvertakenSlots{0};
+    alignas(64) ui64 SafeOverhead;
 
     static constexpr ui32 ConvertIdx(ui32 idx) {
         idx = idx % MaxSize;
@@ -77,20 +79,9 @@ struct TMPMCRingQueueV4Correct {
         return (idx & ~0xff) | ((idx & 0xf) << 4) | ((idx >> 4) & 0xf);
     }
 
-    static constexpr ui32 ConvertOvertakenIdx(ui32 idx) {
-        idx = idx % 4096;
-        if constexpr (MaxSize < 0x100) {
-            return idx;
-        }
-        // 0, 16, 32, .., 240,
-        // 1, 17, 33, .., 241,
-        // ...
-        // 15, 31, 63, ..., 255,
-        return (idx & ~0xff) | ((idx & 0xf) << 4) | ((idx >> 4) & 0xf);
-    }
-
-    TMPMCRingQueueV4Correct(ui64)
+    TMPMCRingQueueV4Correct(ui64 readerCount)
         : Buffer(new std::atomic<ui64>[MaxSize])
+        , SafeOverhead(readerCount / 2)
     {
         for (ui32 idx = 0; idx < MaxSize; ++idx) {
             Buffer[idx] = TSlot::MakeEmpty(0);
@@ -98,7 +89,8 @@ struct TMPMCRingQueueV4Correct {
     }
 
     ~TMPMCRingQueueV4Correct() {
-        for (ui32 idx = 0; idx < OvertakenSlots.load(std::memory_order_acquire); ++idx) {
+        ui64 overTakenSlots = OvertakenSlots.load(std::memory_order_acquire) & ~OvertakenBit;
+        for (ui32 idx = 0; idx < overTakenSlots; ++idx) {
             OvertakenQueue.Pop(idx);
         }
     }
@@ -164,10 +156,11 @@ struct TMPMCRingQueueV4Correct {
 
     std::optional<ui32> TryPop() {
         ui64 overtakenSlots = OvertakenSlots.load(std::memory_order_acquire);
-        if (overtakenSlots) {
+        if (overtakenSlots != 0 && overtakenSlots != OvertakenBit) {
             bool success = false;
-            while (overtakenSlots) {
-                if (OvertakenSlots.compare_exchange_strong(overtakenSlots, overtakenSlots - 1, std::memory_order_acq_rel)) {
+            while (overtakenSlots != 0 && overtakenSlots != OvertakenBit) {
+                ui64 newOvertakenSlots = OvertakenBit | (overtakenSlots - 1);
+                if (OvertakenSlots.compare_exchange_strong(overtakenSlots, newOvertakenSlots, std::memory_order_acq_rel)) {
                     success = true;
                     break;
                 }
@@ -187,47 +180,42 @@ struct TMPMCRingQueueV4Correct {
             if (currentHead >= currentTail) {
                 return std::nullopt;
             }
-        }
-
-        for (ui32 it = 0;; ++it) {
-            OBSERVE_WITH_CONDITION(LongFastPop10It, it == 10);
-            OBSERVE_WITH_CONDITION(LongFastPop100It, it == 100);
-            OBSERVE_WITH_CONDITION(LongFastPop1000It, it == 1000);
-
-            ui64 currentHead = Head.fetch_add(1, std::memory_order_relaxed);
-            OBSERVE(AfterReserveSlotInFastPop);
-
-            ui64 slotIdx = ConvertIdx(currentHead);
-            std::atomic<ui64> &currentSlot = Buffer[slotIdx];
-
-            ui64 expected = currentSlot.load(std::memory_order_relaxed);
-
-            while (true) {
-                TSlot slot = TSlot::Recognise(expected);
-                if (slot.IsEmpty) {
-                    ui64 newSlotValue = TSlot::MakeEmpty(slot.Overtakens + 1);
-                    if (currentSlot.compare_exchange_strong(expected, newSlotValue, std::memory_order_acq_rel)) {
-                        break;
-                    }
-                } else {
-                    ui64 newSlotValue = TSlot::MakeEmpty(slot.Overtakens);
-                    if (currentSlot.compare_exchange_strong(expected, newSlotValue, std::memory_order_acq_rel)) {
-                        OBSERVE(SuccessFastPop);
-                        return slot.Value;
-                    }
-                }
-            }
-
+        } else if (overtakenSlots == OvertakenBit) {
             ui64 currentTail = Tail.load(std::memory_order_acquire);
-            if (currentTail <= currentHead) {
-                OBSERVE(FailedFastPop);
+            ui64 currentHead = Head.load(std::memory_order_acquire);
+            if (currentTail >= currentHead + SafeOverhead) {
+                OvertakenSlots.compare_exchange_strong(overtakenSlots, 0, std::memory_order_acq_rel);
+            } else if (currentHead >= currentTail) {
                 return std::nullopt;
             }
+        }
 
-            OBSERVE(FailedFastPopAttempt);
+        ui64 currentHead = Head.fetch_add(1, std::memory_order_relaxed);
+        OBSERVE(AfterReserveSlotInFastPop);
+
+        ui64 slotIdx = ConvertIdx(currentHead);
+        std::atomic<ui64> &currentSlot = Buffer[slotIdx];
+
+        ui64 expected = currentSlot.load(std::memory_order_relaxed);
+
+        while (true) {
+            TSlot slot = TSlot::Recognise(expected);
+            if (slot.IsEmpty) {
+                ui64 newSlotValue = TSlot::MakeEmpty(slot.Overtakens + 1);
+                if (currentSlot.compare_exchange_strong(expected, newSlotValue, std::memory_order_acq_rel)) {
+                    break;
+                }
+            } else {
+                ui64 newSlotValue = TSlot::MakeEmpty(slot.Overtakens);
+                if (currentSlot.compare_exchange_strong(expected, newSlotValue, std::memory_order_acq_rel)) {
+                    OBSERVE(SuccessFastPop);
+                    return slot.Value;
+                }
+            }
             SpinLockPause();
         }
 
+        OBSERVE(FailedFastPop);
         return std::nullopt;
     }
 

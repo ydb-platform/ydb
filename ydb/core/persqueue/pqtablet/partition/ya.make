@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    account_read_quoter.cpp
     autopartitioning_manager.cpp
     consumer_offset_tracker.cpp
     message_id_deduplicator.cpp
@@ -17,12 +16,9 @@ SRCS(
     partition_read.cpp
     partition_sourcemanager.cpp
     partition_write.cpp
-    quota_tracker.cpp
-    read_quoter.cpp
     sourceid.cpp
     subscriber.cpp
     user_info.cpp
-    write_quoter.cpp
 )
 
 
@@ -39,6 +35,7 @@ PEERDIR(
     ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/pqtablet/partition/mirrorer
     ydb/core/persqueue/pqtablet/partition/mlp
+    ydb/core/persqueue/pqtablet/quota
 )
 
 END()

@@ -12,13 +12,13 @@ public:
     }
 
     bool Prepare(const TExprNode::TPtr& filterLambdaNode, const TTypeAnnotationNode& rowType,
-                 THashSet<TString>& possibleIndexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) override final;
+                 THashSet<TString>& possibleIndexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) final;
 
     TExprNode::TPtr GetPreparedRange() const {
         return Range_;
     }
 
-    TBuildResult BuildComputeNode(const TVector<TString>& indexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) const override final;
+    TBuildResult BuildComputeNode(const TVector<TString>& indexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) const final;
 
 private:
     const TPredicateExtractorSettings Settings_;

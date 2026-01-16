@@ -242,6 +242,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TDecompressionQueueIte
 
 template<bool UseMigrationProtocol>
 TSingleClusterReadSessionImpl<UseMigrationProtocol>::~TSingleClusterReadSessionImpl() {
+    std::lock_guard guard(Lock);
+
     for (auto&& [_, partitionStream] : PartitionStreams) {
         partitionStream->ClearQueue();
     }
@@ -514,9 +516,7 @@ inline void TSingleClusterReadSessionImpl<true>::InitImpl(TDeferredActions<true>
 
 template<>
 inline bool TSingleClusterReadSessionImpl<false>::IsDirectRead() {
-    // TODO(qyryq) Replace this return with the next one when direct read is ready for production.
-    return ExperimentalDirectRead;
-    // return Settings.DirectRead_;
+    return ExperimentalDirectRead && Settings.DirectRead_;
 }
 
 template<>
@@ -529,7 +529,10 @@ inline void TSingleClusterReadSessionImpl<false>::InitImpl(TDeferredActions<fals
 
     init.set_consumer(TStringType{Settings.ConsumerName_});
     init.set_auto_partitioning_support(Settings.AutoPartitioningSupport_);
-    init.set_direct_read(IsDirectRead());
+    if (IsDirectRead()) {
+        init.set_direct_read(true);
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Enable direct read");
+    }
 
     for (const TTopicReadSettings& topic : Settings.Topics_) {
         auto* topicSettings = init.add_topics_read_settings();
@@ -1696,6 +1699,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     if (partitionStreamIt == PartitionStreams.end()) {
         return;
     }
+
     bool pushRes = EventsQueue->PushEvent(partitionStreamIt->second,
                             TReadSessionEvent::TPartitionSessionStatusEvent(
                                 partitionStreamIt->second, msg.committed_offset(),
@@ -2101,8 +2105,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UnregisterPartition(ui
 
 template<bool UseMigrationProtocol>
 std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId) {
-    std::lock_guard guard(HierarchyDataLock);
-
     auto it = HierarchyData.find(partitionId);
     if (it == HierarchyData.end()) {
         return {};
@@ -2129,6 +2131,7 @@ std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParent
 
 template<bool UseMigrationProtocol>
 bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBeenRead(ui32 partitionId, ui64 partitionSessionId) {
+    std::lock_guard guard(HierarchyDataLock);
     for (auto id : GetParentPartitionSessions(partitionId, partitionSessionId)) {
         if (!ReadingFinishedData.contains(id)) {
             return false;
@@ -2140,7 +2143,10 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBe
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds) {
-    ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
+    {
+        std::lock_guard guard(HierarchyDataLock);
+        ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
+    }
     for (auto& [_, s] : PartitionStreams) {
         for (auto partitionId : childIds) {
             if (s->GetPartitionId() == partitionId) {
@@ -3049,7 +3055,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                     ) {
                         const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(data.codec()));
                         std::string decompressed = codecImpl->Decompress(data.data());
-                        data.set_data(TStringType{decompressed});
+                        data.set_data(TStringType{std::move(decompressed)});
                         data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
                     }
                 } else {
@@ -3059,7 +3065,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                     ) {
                         const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
                         std::string decompressed = codecImpl->Decompress(data.data());
-                        data.set_data(TStringType{decompressed});
+                        data.set_data(TStringType{std::move(decompressed)});
                     }
                 }
             } catch (...) {

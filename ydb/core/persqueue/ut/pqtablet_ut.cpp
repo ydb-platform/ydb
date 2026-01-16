@@ -2,7 +2,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
-#include <ydb/core/persqueue/pqtablet/partition/read_quoter.h>
+#include <ydb/core/persqueue/pqtablet/quota/read_quoter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -1904,7 +1904,13 @@ Y_UNIT_TEST_F(Cancel_Tx, TPQTabletFixture)
 
     StartPQWriteTxsObserver();
 
+    // запись о транзакции не удаляется сразу
     SendCancelTransactionProposal({.TxId=txId});
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Senders={22222}, .Receivers={22222},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
 
     WaitForPQWriteTxs();
 }
@@ -2287,101 +2293,6 @@ Y_UNIT_TEST_F(Huge_ProposeTransacton, TPQTabletFixture)
     //WaitPlanStepAccepted({.Step=100});
 }
 
-Y_UNIT_TEST_F(After_Restarting_The_Tablet_Sends_A_TEvReadSet_For_Transactions_In_The_EXECUTED_State, TPQTabletFixture)
-{
-    const ui64 txId_1 = 67890;
-    const ui64 txId_2 = txId_1 + 1;
-    const ui64 mockTabletId = 22222;
-
-    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
-    PQTabletPrepare({.partitions=1}, {}, *Ctx);
-
-    // 1st tx
-    SendProposeTransactionRequest({.TxId=txId_1,
-                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    WaitProposeTransactionResponse({.TxId=txId_1,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-
-    SendPlanStep({.Step=100, .TxIds={txId_1}});
-
-    WaitForCalcPredicateResult();
-
-    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId_1, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
-
-    WaitProposeTransactionResponse({.TxId=txId_1,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-
-    WaitForTxState(txId_1, NKikimrPQ::TTransaction::EXECUTED);
-
-    tablet->ReadSet = Nothing();
-
-    // 2nd tx
-    SendProposeTransactionRequest({.TxId=txId_2,
-                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    WaitProposeTransactionResponse({.TxId=txId_2,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-
-    SendPlanStep({.Step=110, .TxIds={txId_2}});
-
-    WaitForCalcPredicateResult();
-
-    WaitReadSetEx(*tablet, {.Step=110, .TxId=txId_2, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Count=1});
-
-    // the PQ tablet has moved a step forward
-    WaitForExecStep(110);
-
-    // restart PQ tablet
-    PQTabletRestart(*Ctx);
-
-    // the PQ tablet should send a TEvReadSet for the executed transaction
-    WaitReadSetEx(*tablet, {.Step=100, .TxId=txId_1, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Count=2});
-}
-
-Y_UNIT_TEST_F(TEvReadSet_Is_Not_Sent_Ahead_Of_Time, TPQTabletFixture)
-{
-    const ui64 txId = 67890;
-    const ui64 mockTabletId = 22222;
-
-    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
-    PQTabletPrepare({.partitions=1}, {}, *Ctx);
-
-    SendProposeTransactionRequest({.TxId=txId,
-                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
-                                  .TxOps={
-                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
-                                  }});
-    WaitProposeTransactionResponse({.TxId=txId,
-                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-
-    SendPlanStep({.Step=100, .TxIds={txId}});
-
-    WaitForCalcPredicateResult();
-
-    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
-
-    //WaitProposeTransactionResponse({.TxId=txId,
-    //                               .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-
-    TAutoPtr<IEventHandle> kvRequest;
-    InterceptSaveTxState(kvRequest);
-
-    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
-
-    WaitForNoReadSetAck(*tablet);
-
-    SendSaveTxState(kvRequest);
-
-    WaitForTxState(txId, NKikimrPQ::TTransaction::EXECUTED);
-
-    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=22222, .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
-}
-
 Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)
 {
     const ui64 txId = 67890;
@@ -2431,6 +2342,13 @@ Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)
                         {.Step=100, .TxId=txId, .Target=Ctx->TabletId, .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
 
     WaitProposeTransactionResponse({.TxId=txId, .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    // We will send a TEvProposeTransaction to delete the previous transaction
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
 
     // Instead of TEvReadSetAck, the PQ tablet will receive TEvClientConnected with the Dead flag. The transaction
     // will switch from the WAIT_RS_AKS state to the DELETING state.
@@ -2647,6 +2565,14 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_TEvDeletePartitionDone_
                              Ctx->Edge,
                              deleteDoneEvent.Release(),
                              0, 0);
+
+    // We will send a TEvProposeTransaction to delete the previous transaction
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+
     WaitForTheTransactionToBeDeleted(txId);
 
     // check that information about a transaction with this WriteId has been renewed on disk
@@ -2704,6 +2630,13 @@ Y_UNIT_TEST_F(Kafka_Transaction_Several_Partitions_One_Tablet_Deleting_State, TP
                              deleteDoneEvents[i].Release(),
                              0, i);
     }
+
+    // We will send a TEvProposeTransaction to delete the previous transaction
+    SendProposeTransactionRequest({.TxId=txId + 1,
+                                  .Senders={Ctx->TabletId}, .Receivers={Ctx->TabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
 
     WaitForTheTransactionToBeDeleted(txId);
 
@@ -3153,7 +3086,7 @@ void TPQTabletFixture::SendReadQuotaConsumed(ui64 cookie)
 
     Ctx->Runtime->Send(ReadQuoter->Quoter,
                        Ctx->Edge,
-                       new TEvPQ::TEvConsumed(1024, cookie, "client"));
+                       new TEvPQ::TEvConsumed(1024, 0, cookie, "client"));
 }
 
 void TPQTabletFixture::SendReleaseExclusiveLock()

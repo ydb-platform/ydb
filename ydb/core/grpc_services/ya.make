@@ -118,6 +118,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/backup/common
+    ydb/core/backup/regexp
     ydb/core/base
     ydb/core/control/lib
     ydb/core/counters_info
@@ -134,7 +135,6 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
-    ydb/core/kqp/session_actor
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view
@@ -147,6 +147,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/core/security
     ydb/core/security/ldap_auth_provider
+    ydb/core/security/sasl
     ydb/library/aclib
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber

@@ -16,12 +16,34 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DEFINE_GLOBAL(const NLogging::TLogger, TestLogger, "Test");
+
+////////////////////////////////////////////////////////////////////////////////
+
+// NB: Creates config with:
+// - disabled batch update
+// - enabled expiration and refresh with same period
+// - expire_after_* parameters equal to three times the expiration_period
+TAsyncExpiringCacheConfigPtr CreateSimpleAsyncExpiringCacheConfig()
+{
+    auto config = New<TAsyncExpiringCacheConfig>();
+    config->BatchUpdate = false;
+    config->ExpireAfterAccessTime = TDuration::MilliSeconds(30);
+    config->ExpireAfterSuccessfulUpdateTime = TDuration::MilliSeconds(30);
+    config->ExpireAfterFailedUpdateTime = TDuration::MilliSeconds(30);
+    config->ExpirationPeriod = TDuration::MilliSeconds(10);
+    config->RefreshTime = TDuration::MilliSeconds(10);
+    return config;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TSimpleExpiringCache
     : public TAsyncExpiringCache<int, int>
 {
 public:
     explicit TSimpleExpiringCache(TAsyncExpiringCacheConfigPtr config, float successProbability = 1.0)
-        : TAsyncExpiringCache<int, int>(std::move(config), NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker())
+        : TAsyncExpiringCache<int, int>(std::move(config), NRpc::TDispatcher::Get()->GetHeavyInvoker(), TestLogger())
         , Generator_(RandomDevice_())
         , Bernoulli_(successProbability)
     { }
@@ -67,7 +89,7 @@ class TDelayedExpiringCache
 {
 public:
     TDelayedExpiringCache(TAsyncExpiringCacheConfigPtr config, const TDuration& delay)
-        : TAsyncExpiringCache<int, int>(std::move(config), NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker())
+        : TAsyncExpiringCache<int, int>(std::move(config), NRpc::TDispatcher::Get()->GetHeavyInvoker())
         , Delay_(delay)
     { }
 
@@ -330,6 +352,127 @@ TEST(TAsyncExpiringCacheTest, TestSetWithRefresh)
     }
 }
 
+TEST(TAsyncExpiringCacheTest, TestExpirationWithoutRefresh1)
+{
+    auto config = CreateSimpleAsyncExpiringCacheConfig();
+    config->RefreshTime = std::nullopt;
+
+    auto cache = New<TSimpleExpiringCache>(config);
+    std::vector<TFuture<void>> futures;
+    for (int i = 0; i < 100; ++i) {
+        futures.push_back(cache->Get(i).AsVoid());
+    }
+    WaitFor(AllSucceeded(std::move(futures))).ThrowOnError();
+    EXPECT_EQ(100, cache->GetSize());
+
+    Sleep(TDuration::MilliSeconds(40));
+    EXPECT_EQ(0, cache->GetSize());
+}
+
+TEST(TAsyncExpiringCacheTest, TestExpirationWithoutRefresh2)
+{
+    auto config = CreateSimpleAsyncExpiringCacheConfig();
+    config->RefreshTime = std::nullopt;
+
+    auto cache = New<TSimpleExpiringCache>(std::move(config));
+    std::vector<TFuture<void>> futures;
+    for (int i = 0; i < 100; ++i) {
+        futures.push_back(cache->Get(i).AsVoid());
+    }
+    WaitFor(AllSucceeded(std::move(futures))).ThrowOnError();
+    EXPECT_EQ(100, cache->GetSize());
+
+    config = CreateSimpleAsyncExpiringCacheConfig();
+    // Increase ExpireAfter* parameters a lot.
+    config->ExpireAfterAccessTime = TDuration::MilliSeconds(300);
+    config->ExpireAfterSuccessfulUpdateTime = TDuration::MilliSeconds(300);
+    config->ExpireAfterFailedUpdateTime = TDuration::MilliSeconds(300);
+    cache->Reconfigure(std::move(config));
+
+    for (int i = 0; i < 100; ++i) {
+        cache->Set(i, i);
+    }
+    EXPECT_EQ(100, cache->GetSize());
+
+    Sleep(TDuration::MilliSeconds(400));
+    EXPECT_EQ(0, cache->GetSize());
+}
+
+TEST(TAsyncExpiringCacheTest, TestExpirationAfterDisableRefresh)
+{
+    auto config = CreateSimpleAsyncExpiringCacheConfig();
+
+    auto cache = New<TSimpleExpiringCache>(std::move(config));
+    std::vector<TFuture<void>> futures;
+    for (int i = 0; i < 100; ++i) {
+        futures.push_back(cache->Get(i).AsVoid());
+    }
+    WaitFor(AllSucceeded(std::move(futures))).ThrowOnError();
+
+    EXPECT_EQ(100, cache->GetSize());
+
+    config = CreateSimpleAsyncExpiringCacheConfig();
+    config->RefreshTime = std::nullopt;
+    cache->Reconfigure(std::move(config));
+
+    Sleep(TDuration::MilliSeconds(5));
+    EXPECT_EQ(100, cache->GetSize());
+    Sleep(TDuration::MilliSeconds(35));
+    EXPECT_EQ(0, cache->GetSize());
+}
+
+TEST(TAsyncExpiringCacheTest, TestEnableDisabledExpirationNoBatch)
+{
+    auto config = CreateSimpleAsyncExpiringCacheConfig();
+    config->ExpirationPeriod = std::nullopt;
+    config->RefreshTime = std::nullopt;
+
+    auto cache = New<TSimpleExpiringCache>(std::move(config));
+    std::vector<TFuture<void>> futures;
+    for (int i = 0; i < 100; ++i) {
+        futures.push_back(cache->Get(i).AsVoid());
+    }
+    WaitFor(AllSucceeded(std::move(futures))).ThrowOnError();
+
+    EXPECT_EQ(100, cache->GetSize());
+    Sleep(TDuration::MilliSeconds(40));
+
+    config = CreateSimpleAsyncExpiringCacheConfig();
+    config->RefreshTime = std::nullopt;
+    cache->Reconfigure(std::move(config));
+
+    EXPECT_EQ(100, cache->GetSize());
+    Sleep(TDuration::MilliSeconds(40));
+    EXPECT_EQ(0, cache->GetSize());
+}
+
+TEST(TAsyncExpiringCacheTest, TestEnableDisabledExpirationBatch)
+{
+    auto config = CreateSimpleAsyncExpiringCacheConfig();
+    config->BatchUpdate = true;
+    config->RefreshTime = std::nullopt;
+    config->ExpirationPeriod = std::nullopt;
+
+    auto cache = New<TSimpleExpiringCache>(std::move(config));
+    std::vector<TFuture<void>> futures;
+    for (int i = 0; i < 100; ++i) {
+        futures.push_back(cache->Get(i).AsVoid());
+    }
+    WaitFor(AllSucceeded(std::move(futures))).ThrowOnError();
+
+    EXPECT_EQ(100, cache->GetSize());
+    Sleep(TDuration::MilliSeconds(40));
+
+    config = CreateSimpleAsyncExpiringCacheConfig();
+    config->BatchUpdate = true;
+    config->RefreshTime = std::nullopt;
+    cache->Reconfigure(std::move(config));
+
+    EXPECT_EQ(100, cache->GetSize());
+    Sleep(TDuration::MilliSeconds(40));
+    EXPECT_EQ(0, cache->GetSize());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TRevisionCache
@@ -337,7 +480,7 @@ class TRevisionCache
 {
 public:
     TRevisionCache(const TAsyncExpiringCacheConfigPtr& config)
-        : TAsyncExpiringCache<int, int>(config, NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker())
+        : TAsyncExpiringCache<int, int>(config, NRpc::TDispatcher::Get()->GetHeavyInvoker())
     { }
 
     std::atomic<int> InitialFetchCount = 0;

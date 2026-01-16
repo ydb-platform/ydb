@@ -693,8 +693,8 @@ public:
 
         if (auto maybeYtReadTable = TMaybeNode<TYtReadTable>(read)) {
             TMaybeNode<TCoSecureParam> secParams;
-            const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster();
-            if (ytState->Configuration->Auth.Get().GetOrElse(TString()) || ytState->Configuration->Tokens.Value(cluster, "")) {
+            const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster().StringValue();
+            if (ytState->ResolveClusterToken(cluster)) {
                 secParams = Build<TCoSecureParam>(ctx, read->Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
             }
             return Build<TDqReadWrap>(ctx, read->Pos())
@@ -940,10 +940,10 @@ public:
             param("external_tx", GetGuidAsString(externalTx));
         }
         TString tokenName;
-        if (auto auth = ytState->Configuration->Auth.Get().GetOrElse(TString())) {
+        if (auto token = ytState->ResolveClusterToken(cluster)) {
             tokenName = TString("cluster:default_").append(cluster);
             if (!secureParams.contains(tokenName)) {
-                secureParams[tokenName] = auth;
+                secureParams[tokenName] = *token;
             }
         }
         param("token", tokenName);

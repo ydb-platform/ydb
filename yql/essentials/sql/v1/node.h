@@ -312,70 +312,70 @@ public:
     }
 
 protected:
-    virtual bool IsNull() const override;
-    virtual bool IsLiteral() const override;
-    virtual TString GetLiteralType() const override;
-    virtual TString GetLiteralValue() const override;
-    virtual bool IsIntegerLiteral() const override;
-    virtual TPtr ApplyUnaryOp(TContext& ctx, TPosition pos, const TString& opName) const override;
-    virtual bool IsAsterisk() const override;
-    virtual const TString* SubqueryAlias() const override;
-    virtual TString GetOpName() const override;
-    virtual const TString* GetLiteral(const TString& type) const override;
-    virtual const TString* GetColumnName() const override;
-    virtual bool IsPlainColumn() const override;
-    virtual bool IsTableRow() const override;
-    virtual void AssumeColumn() override;
-    virtual const TString* GetSourceName() const override;
-    virtual const TString* GetAtomContent() const override;
-    virtual bool IsOptionalArg() const override;
-    virtual size_t GetTupleSize() const override;
-    virtual TPtr GetTupleElement(size_t index) const override;
-    virtual ITableKeys* GetTableKeys() override;
-    virtual ISource* GetSource() override;
-    virtual TVector<INode::TPtr>* ContentListPtr() override;
-    virtual TAggregationPtr GetAggregation() const override;
-    virtual void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
-    virtual TPtr WindowSpecFunc(const TPtr& type) const override;
-    virtual bool SetViewName(TContext& ctx, TPosition pos, const TString& view) override;
-    virtual bool SetPrimaryView(TContext& ctx, TPosition pos) override;
-    virtual bool UsedSubquery() const override;
-    virtual bool IsSelect() const override;
-    virtual bool HasSelectResult() const override;
-    virtual const TString* FuncName() const override;
-    virtual const TString* ModuleName() const override;
-    virtual bool IsScript() const override;
-    virtual bool HasSkip() const override;
+    bool IsNull() const override;
+    bool IsLiteral() const override;
+    TString GetLiteralType() const override;
+    TString GetLiteralValue() const override;
+    bool IsIntegerLiteral() const override;
+    TPtr ApplyUnaryOp(TContext& ctx, TPosition pos, const TString& opName) const override;
+    bool IsAsterisk() const override;
+    const TString* SubqueryAlias() const override;
+    TString GetOpName() const override;
+    const TString* GetLiteral(const TString& type) const override;
+    const TString* GetColumnName() const override;
+    bool IsPlainColumn() const override;
+    bool IsTableRow() const override;
+    void AssumeColumn() override;
+    const TString* GetSourceName() const override;
+    const TString* GetAtomContent() const override;
+    bool IsOptionalArg() const override;
+    size_t GetTupleSize() const override;
+    TPtr GetTupleElement(size_t index) const override;
+    ITableKeys* GetTableKeys() override;
+    ISource* GetSource() override;
+    TVector<INode::TPtr>* ContentListPtr() override;
+    TAggregationPtr GetAggregation() const override;
+    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
+    TPtr WindowSpecFunc(const TPtr& type) const override;
+    bool SetViewName(TContext& ctx, TPosition pos, const TString& view) override;
+    bool SetPrimaryView(TContext& ctx, TPosition pos) override;
+    bool UsedSubquery() const override;
+    bool IsSelect() const override;
+    bool HasSelectResult() const override;
+    const TString* FuncName() const override;
+    const TString* ModuleName() const override;
+    bool IsScript() const override;
+    bool HasSkip() const override;
 
-    virtual TColumnNode* GetColumnNode() override;
-    virtual const TColumnNode* GetColumnNode() const override;
+    TColumnNode* GetColumnNode() override;
+    const TColumnNode* GetColumnNode() const override;
 
-    virtual TTupleNode* GetTupleNode() override;
-    virtual const TTupleNode* GetTupleNode() const override;
+    TTupleNode* GetTupleNode() override;
+    const TTupleNode* GetTupleNode() const override;
 
-    virtual TCallNode* GetCallNode() override;
-    virtual const TCallNode* GetCallNode() const override;
+    TCallNode* GetCallNode() override;
+    const TCallNode* GetCallNode() const override;
 
-    virtual TStructNode* GetStructNode() override;
-    virtual const TStructNode* GetStructNode() const override;
+    TStructNode* GetStructNode() override;
+    const TStructNode* GetStructNode() const override;
 
-    virtual TAccessNode* GetAccessNode() override;
-    virtual const TAccessNode* GetAccessNode() const override;
+    TAccessNode* GetAccessNode() override;
+    const TAccessNode* GetAccessNode() const override;
 
-    virtual TLambdaNode* GetLambdaNode() override;
-    virtual const TLambdaNode* GetLambdaNode() const override;
+    TLambdaNode* GetLambdaNode() override;
+    const TLambdaNode* GetLambdaNode() const override;
 
-    virtual TUdfNode* GetUdfNode() override;
-    virtual const TUdfNode* GetUdfNode() const override;
+    TUdfNode* GetUdfNode() override;
+    const TUdfNode* GetUdfNode() const override;
 
 protected:
-    virtual void DoUpdateState() const override;
-    virtual void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const override;
-    virtual bool InitReference(TContext& ctx) override;
-    virtual bool DoInit(TContext& ctx, ISource* src) override;
+    void DoUpdateState() const override;
+    void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const override;
+    bool InitReference(TContext& ctx) override;
+    bool DoInit(TContext& ctx, ISource* src) override;
 
 private:
-    virtual void DoAdd(TPtr node) override;
+    void DoAdd(TPtr node) override;
 
 protected:
     const TNodePtr Inner_;
@@ -452,7 +452,7 @@ protected:
 class TAstListNode: public INode {
 public:
     TAstListNode(TPosition pos);
-    virtual ~TAstListNode();
+    ~TAstListNode() override;
 
     TAstNode* Translate(TContext& ctx) const override;
 
@@ -881,7 +881,7 @@ public:
     TColumnNode(TPosition pos, const TString& column, const TString& source, bool maybeType);
     TColumnNode(TPosition pos, const TNodePtr& column, const TString& source);
 
-    virtual ~TColumnNode();
+    ~TColumnNode() override;
     bool IsAsterisk() const override;
     virtual bool IsArtificial() const;
     const TString* GetColumnName() const override;
@@ -983,8 +983,8 @@ private:
 class TUdfNode: public INode {
 public:
     TUdfNode(TPosition pos, const TVector<TNodePtr>& args);
-    bool DoInit(TContext& ctx, ISource* src) override final;
-    TNodePtr DoClone() const override final;
+    bool DoInit(TContext& ctx, ISource* src) final;
+    TNodePtr DoClone() const final;
     TAstNode* Translate(TContext& ctx) const override;
     const TNodePtr GetExternalTypes() const;
     const TString& GetFunction() const;
@@ -1130,7 +1130,7 @@ template <typename T>
 class TLiteralNumberNode: public TLiteralNode {
 public:
     TLiteralNumberNode(TPosition pos, const TString& type, const TString& value, bool implicitType = false);
-    TPtr DoClone() const override final;
+    TPtr DoClone() const final;
     bool DoInit(TContext& ctx, ISource* src) override;
     bool IsIntegerLiteral() const override;
     TPtr ApplyUnaryOp(TContext& ctx, TPosition pos, const TString& opName) const override;

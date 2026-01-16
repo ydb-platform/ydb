@@ -416,7 +416,7 @@ namespace NSchemeShardUT_Private {
         NKikimrSchemeOp::EIndexType IndexType = NKikimrSchemeOp::EIndexTypeGlobal;
         TVector<TString> IndexColumns;
         TVector<TString> DataColumns;
-        TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings = {};
+        TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings;
         // implementation note: it was made a pointer, not optional, to enable forward declaration
         std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> KMeansTreeSettings = {};
     };
@@ -592,6 +592,10 @@ namespace NSchemeShardUT_Private {
         const TString& user, const TString& password,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& user, const TString& hashedPassword, const TString& hashedPasswordOldFormat,
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
     void CreateAlterLoginRemoveUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
@@ -612,6 +616,10 @@ namespace NSchemeShardUT_Private {
 
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
         const TString& user, const TString& password);
+
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
+        const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech,
+        NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage = "");
 
     NKikimrScheme::TEvLoginResult LoginFinalize(
         TTestActorRuntime& runtime,

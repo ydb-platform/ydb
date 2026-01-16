@@ -1,6 +1,6 @@
 #include "mlp_writer.h"
-#include "mlp_message_attributes.h"
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
@@ -23,6 +23,7 @@ void TWriterActor::PassAway() {
         Send(ChildActorId, new TEvents::TEvPoison());
     }
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+    TBaseActor::PassAway();
 }
 
 void TWriterActor::DoDescribe() {
@@ -82,22 +83,22 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 
     if (item.MessageGroupId) {
         auto* m = proto.AddMessageMeta();
-        m->set_key(MESSAGE_KEY);
+        m->set_key(MESSAGE_ATTRIBUTE_KEY);
         m->set_value(std::move(*item.MessageGroupId));
     }
     if (item.MessageDeduplicationId.has_value()) {
         auto* m = proto.AddMessageMeta();
-        m->set_key(NPQ::NMLP::NMessageConsts::MessageDeduplicationId);
+        m->set_key(MESSAGE_ATTRIBUTE_DEDUPLICATION_ID);
         m->set_value(std::move(*item.MessageDeduplicationId));
     }
     if (item.SerializedMessageAttributes.has_value()) {
         auto* m = proto.AddMessageMeta();
-        m->set_key(NPQ::NMLP::NMessageConsts::MessageAttributes);
+        m->set_key(MESSAGE_ATTRIBUTE_ATTRIBUTES);
         m->set_value(std::move(*item.SerializedMessageAttributes));
     }
     if (item.Delay != TDuration::Zero()) {
         auto* m = proto.AddMessageMeta();
-        m->set_key(NPQ::NMLP::NMessageConsts::DelaySeconds);
+        m->set_key(MESSAGE_ATTRIBUTE_DELAY_SECONDS);
         m->set_value(ToString(item.Delay.Seconds()));
     }
 

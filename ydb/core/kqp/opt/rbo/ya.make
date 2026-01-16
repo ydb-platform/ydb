@@ -14,6 +14,8 @@ SRCS(
     kqp_rbo_compute_statistics.cpp
     kqp_rbo_statistics.cpp
     kqp_rbo_dp_cost_based.cpp
+    kqp_prune_columns_stage.cpp
+    kqp_rbo_physical_aggregation_builder.cpp
 )
 
 PEERDIR(

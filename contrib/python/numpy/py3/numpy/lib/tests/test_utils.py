@@ -87,6 +87,7 @@ def test_deprecate_with_doc_decorator_message():
     assert_('Rather use new_func7' in old_func7.__doc__)
 
 
+@pytest.mark.skipif(sys.version_info >= (3, 13), reason="Skip Python 3.13")
 @pytest.mark.skipif(sys.flags.optimize == 2, reason="-OO discards docstrings")
 @pytest.mark.parametrize('old_func, new_func', [
     (old_func4, new_func4),
@@ -111,6 +112,7 @@ def _compare_docs(old_func, new_func):
     assert_equal(new_doc[index:], old_doc)
 
 
+@pytest.mark.skipif(sys.version_info >= (3, 13), reason="Skip Python 3.13")
 @pytest.mark.skipif(sys.flags.optimize == 2, reason="-OO discards docstrings")
 def test_deprecate_preserve_whitespace():
     assert_('\n        Bizarre' in new_func5.__doc__)

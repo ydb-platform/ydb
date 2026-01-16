@@ -2024,7 +2024,7 @@ TExprNode::TPtr BuildProjectionLambda(
     const TStructExprType* finalType,
     const TColumnOrder* nodeColumnOrder,
     const TColumnOrder* setItemColumnOrder,
-    bool subLink,
+    bool isExternalInputExist,
     bool emitPgStar,
     bool isYql,
     TExprContext& ctx)
@@ -2074,7 +2074,9 @@ TExprNode::TPtr BuildProjectionLambda(
 
                     ui32 actualPgTypeId;
                     bool convertToPg;
-                    Y_ENSURE(ExtractPgType(actualTypeNode, actualPgTypeId, convertToPg, pos, ctx));
+                    bool isUniversal;
+                    Y_ENSURE(ExtractPgType(actualTypeNode, actualPgTypeId, convertToPg, pos, ctx, isUniversal));
+                    Y_ENSURE(!isUniversal);
 
                     auto needPgCast = (expectedType->GetId() != actualPgTypeId);
 
@@ -2135,7 +2137,7 @@ TExprNode::TPtr BuildProjectionLambda(
 
                         for (const auto& item : type->GetItems()) {
                             TStringBuf column = item->GetName();
-                            auto columnName = subLink ? column : NTypeAnnImpl::RemoveAlias(column);
+                            auto columnName = isExternalInputExist ? column : NTypeAnnImpl::RemoveAlias(column);
                             auto rightColumnName = order.AddColumn(localOrder.Find(TString(columnName)));
 
                             auto listBuilder = parent.List(index++);
@@ -3819,6 +3821,9 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
     const bool isYql = node->IsCallable("YqlSelect");
     const bool isOrderedColumns = !isYql || optCtx.Types->OrderedColumns;
 
+    const bool isOneRow = (outerInputAliases.size() == 1 && outerInputAliases[0].empty());
+    const bool isExternalInputExist = !outerInputAliases.empty() && !isOneRow;
+
     TMaybe<TColumnOrderInfo> columnOrder;
     if (auto order = optCtx.Types->LookupColumnOrder(*node)) {
         columnOrder.ConstructInPlace();
@@ -3912,7 +3917,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 finalType,
                 columnOrder ? &columnOrder->Node : nullptr,
                 childOrder.Get(),
-                subLinkId.Defined(),
+                isExternalInputExist,
                 emitPgStar,
                 isYql,
                 ctx);

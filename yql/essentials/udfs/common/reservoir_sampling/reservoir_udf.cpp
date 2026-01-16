@@ -81,17 +81,17 @@ public:
     {
     }
 
-    TGUID GenGuid() noexcept override final {
+    TGUID GenGuid() noexcept final {
         TGuard guard(Mutex_);
         return Underlying_->GenGuid();
     }
 
-    TGUID GenUuid4() noexcept override final {
+    TGUID GenUuid4() noexcept final {
         TGuard guard(Mutex_);
         return Underlying_->GenUuid4();
     }
 
-    ui64 GenRand() noexcept override final {
+    ui64 GenRand() noexcept final {
         TGuard guard(Mutex_);
         return Underlying_->GenRand();
     }

@@ -29,5 +29,6 @@ public:
 
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
     const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
-    const TVector<NPackedTuple::EColumnRole>& roles, arrow::MemoryPool* pool);
+    const TVector<NPackedTuple::EColumnRole>& roles, arrow::MemoryPool* pool,
+    bool rememberNullBitmaps = true);
 }

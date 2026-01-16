@@ -69,11 +69,11 @@ template <>
 class [[nodiscard]] TErrorOr<void>
 {
 public:
-    TErrorOr();
+    constexpr TErrorOr() = default;
     ~TErrorOr();
 
     TErrorOr(const TError& other);
-    TErrorOr(TError&& other) noexcept;
+    TErrorOr(TError&& other) noexcept = default;
 
     TErrorOr(const TErrorException& errorEx) noexcept;
 
@@ -98,7 +98,7 @@ public:
         TArgs&&... args);
 
     TError& operator = (const TError& other);
-    TError& operator = (TError&& other) noexcept;
+    TError& operator = (TError&& other) noexcept = default;
 
     static TError FromSystem();
     static TError FromSystem(int error);
@@ -235,7 +235,14 @@ public:
 
 private:
     class TImpl;
-    std::unique_ptr<TImpl> Impl_;
+
+    // Since TImpl is incomplete, we must provide a custom explicit deleter.
+    struct TImplDeleter
+    {
+        void operator()(TImpl* impl) const;
+    };
+
+    std::unique_ptr<TImpl, TImplDeleter> Impl_;
 
     explicit TErrorOr(std::unique_ptr<TImpl> impl);
 
@@ -378,25 +385,38 @@ class [[nodiscard]] TErrorOr
     : public TError
 {
 public:
-    TErrorOr();
+    TErrorOr()
+        requires std::is_default_constructible_v<T>;
 
-    TErrorOr(const T& value);
-    TErrorOr(T&& value) noexcept;
+    TErrorOr(const T& value)
+        requires std::is_copy_constructible_v<T>;
+    TErrorOr(T&& value) noexcept
+        requires std::is_move_constructible_v<T>;
 
-    TErrorOr(const TErrorOr<T>& other);
-    TErrorOr(TErrorOr<T>&& other) noexcept;
+    TErrorOr(const TErrorOr<T>& other)
+        requires std::is_copy_constructible_v<T>;
 
-    TErrorOr(const TError& other);
-    TErrorOr(TError&& other) noexcept;
+    TErrorOr(TErrorOr<T>&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
+        requires std::is_move_constructible_v<T>;
+
+    template <class TErrorLike>
+    TErrorOr(const TErrorLike& other)
+        requires std::is_same_v<TErrorLike, TError>;
+
+    template <class TErrorLike>
+    TErrorOr(TErrorLike&& other) noexcept
+        requires std::is_same_v<TErrorLike, TError>;
 
     TErrorOr(const TErrorException& errorEx) noexcept;
 
     TErrorOr(const std::exception& ex);
 
     template <class U>
-    TErrorOr(const TErrorOr<U>& other);
+    TErrorOr(const TErrorOr<U>& other)
+         requires std::is_constructible_v<T, const U&>;
     template <class U>
-    TErrorOr(TErrorOr<U>&& other) noexcept;
+    TErrorOr(TErrorOr<U>&& other) noexcept
+        requires std::is_constructible_v<T, U&&>;
 
     TErrorOr<T>& operator = (const TErrorOr<T>& other)
         requires std::is_copy_assignable_v<T>;

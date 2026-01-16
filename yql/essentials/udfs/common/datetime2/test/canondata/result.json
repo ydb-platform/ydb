@@ -104,6 +104,21 @@
             "uri": "file://test.test_ParseLim_/results.txt"
         }
     ],
+    "test.test[ParseTzNameVsTzOffset]": [
+        {
+            "uri": "file://test.test_ParseTzNameVsTzOffset_/extracted"
+        }
+    ],
+    "test.test[ParseTzOffsetVsTzName]": [
+        {
+            "uri": "file://test.test_ParseTzOffsetVsTzName_/extracted"
+        }
+    ],
+    "test.test[ParseTzOffset]": [
+        {
+            "uri": "file://test.test_ParseTzOffset_/results.txt"
+        }
+    ],
     "test.test[Parse]": [
         {
             "uri": "file://test.test_Parse_/results.txt"

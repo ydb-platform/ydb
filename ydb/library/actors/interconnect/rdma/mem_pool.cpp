@@ -33,6 +33,8 @@ struct ibv_mr {
 #include <mutex>
 #include <thread>
 
+#include <set>
+
 #include <cstdlib>
 #include <cstring>
 #include <cerrno>
@@ -49,13 +51,27 @@ static constexpr size_t HPageSz = (1 << 21);
 
 using ::NMonitoring::TDynamicCounters;
 
+struct TMemRegCompare {
+    using is_transparent = void;
+    bool operator ()(const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& a, const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& b) const noexcept {
+        return a->Chunk.Get() < b->Chunk.Get();
+    }
+    bool operator ()(const NInterconnect::NRdma::TChunkPtr& a, const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& b) const noexcept {
+        return a.Get() < b->Chunk.Get();
+    }
+    bool operator ()(const TIntrusivePtr<NInterconnect::NRdma::TMemRegion>& a, const NInterconnect::NRdma::TChunkPtr& b) const noexcept {
+        return a->Chunk.Get() < b.Get();
+    }
+};
+
 namespace NInterconnect::NRdma {
 
     // Cross-platform memory management
     static void* allocateMemory(size_t size, size_t alignment, bool hp);
     static void freeMemory(void* ptr) noexcept;
 
-    class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
+    class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk>, public TIntrusiveListItem<TChunk> {
+        friend class TMemPoolBase;
     public:
 
     TChunk(std::vector<ibv_mr*>&& mrs, IMemPool* pool) noexcept
@@ -65,7 +81,7 @@ namespace NInterconnect::NRdma {
     }
 
     ~TChunk() {
-        MemPool->DealocateMr(MRs);
+        MemPool->DealocateMr(this);
     }
 
     ibv_mr* GetMr(size_t deviceIndex) noexcept {
@@ -87,9 +103,105 @@ namespace NInterconnect::NRdma {
         return MemPool->Alloc(size, flags);
     }
 
+    bool TryReclaim() noexcept {
+        return ReclaimSemaphore.TryReclaim();
+    }
+
+    void DoRelease() noexcept {
+        ReclaimSemaphore.Release();
+    }
+
+    bool TryAcquire(ui64 expGeneration) noexcept {
+        return ReclaimSemaphore.TryAcquire(expGeneration);
+    }
+
+    ui64 GetGeneration() const noexcept {
+        return ReclaimSemaphore.GetGeneration();
+    }
+
+    size_t Size() const noexcept {
+        Y_ABORT_UNLESS(!MRs.empty());
+        return MRs[0]->length;
+    }
+
     private:
         std::vector<ibv_mr*> MRs;
         IMemPool* MemPool;
+        class TChunkUseLock {
+            // Prevent reclaming just after new chunk allocation
+            std::atomic<ui64> Lock = ReclaimingBitMask;
+            static constexpr ui64 ReclaimingBitMask = 1ul << 63;
+            static constexpr size_t GenerationBits = 46u;
+            static constexpr size_t UseCountBits = 17u;
+            static constexpr ui64 UseCountMask = (1ul << UseCountBits) - 1u;
+        public:
+            void Release() noexcept {
+                //TODO: remove this verify it is a bit expensive
+                Y_ABORT_UNLESS(static_cast<i64>(Lock.load() & UseCountMask) > 0);
+                //Just decrease use count, no need to be synchronized with other threads
+                Lock.fetch_sub(1, std::memory_order_relaxed);
+            }
+
+            bool TryAcquire(ui64 expectedGeneration) noexcept {
+                ui64 x = Lock.fetch_add(1, std::memory_order_acq_rel);
+                Y_ABORT_UNLESS((x & UseCountMask) < UseCountMask);
+                if (Y_LIKELY(((x & (~ReclaimingBitMask)) >> UseCountBits) == expectedGeneration)) {
+                    // Check we need to unset reclaiming bit
+                    if (Y_UNLIKELY(x & ReclaimingBitMask)) {
+                        // In most cases (x & UseCountMask) == 0 here but there is a chanse that parallel TryAcquire
+                        // will increase UseCount in moment (the time between Lock.fetch_add and Lock.fetch_sub) but
+                        // there is only one thread which call TryAcquire with aim to unset Reclaiming bit.
+                        // All other threads have not seen the updated generation yiet so they can't be in this part of code.
+                        // That all mean we can set UseCount 1 and unset Reclaiming bit
+                        const ui64 newX = (x & (~(ReclaimingBitMask | UseCountMask))) | 1ul; //generation without reclaiming bit and witn
+                        x = (x & (~UseCountMask)) | 1ul; // value already incremented in the memory - expect single use count
+                        while (!Lock.compare_exchange_strong(x, newX,
+                            std::memory_order_release, std::memory_order_acquire)) {
+                                // The only way to fail compare exchange here is parallel TryAcuire - see comment above
+                                // So verify everething is as expected and try again
+                                Y_ABORT_UNLESS(x & ReclaimingBitMask); //still reclaiming
+                                Y_ABORT_UNLESS(((x & (~ReclaimingBitMask)) >> UseCountBits) == expectedGeneration); //still expected generation
+                                Y_ABORT_UNLESS((x & UseCountMask) > 1ul); //it is the reson of CAS fail
+
+                                x = (x & (~UseCountMask)) | 1ul; // It is what we expect in the memory
+                            }
+                    }
+                    return true;
+                } else {
+                    Lock.fetch_sub(1, std::memory_order_release);
+                    return false;
+                }
+            }
+
+            bool TryReclaim() noexcept {
+                ui64 oldX = Lock.load(std::memory_order_relaxed);
+                ui64 newX;
+                do {
+                    // Check the chunk is currently not in progress of reclaim
+                    if (oldX & ReclaimingBitMask) {
+                        return false;
+                    }
+                    // Check use count
+                    if ((oldX & UseCountMask) != 0) {
+                        return false;
+                    }
+                    // Bump generation. We have 46 bits for generation.
+                    // 1 << 46 is 70368744177664, which mean even if we have 1000000 reclaimations per second
+                    // we need ((1 << 46) / 1000000 ) / 3600 / 24 / 365 = 2.23 yaar of continuous reclaimations
+                    // to rollower this counter.
+                    // Also set Reclaimint bit to prevent possible multiple reclaim of same chunk (the time
+                    // between Reclaim and first Acquire)
+                    newX = (((oldX >> UseCountBits) + 1ul) << UseCountBits) | ReclaimingBitMask;
+                } while (!Lock.compare_exchange_weak(oldX, newX,
+                    std::memory_order_release, std::memory_order_relaxed));
+
+                return true;
+            }
+
+            ui64 GetGeneration() const noexcept {
+                return (Lock.load(std::memory_order_relaxed) & ~ReclaimingBitMask) >> UseCountBits;
+            }
+        } ReclaimSemaphore;
     };
 
     TMemRegion::TMemRegion(TChunkPtr chunk, uint32_t offset, uint32_t size) noexcept
@@ -103,7 +215,8 @@ namespace NInterconnect::NRdma {
     }
 
     TMemRegion::~TMemRegion() {
-        Chunk->Free(std::move(*this));
+        if (Chunk)
+            Chunk->Free(std::move(*this));
     }
 
     void* TMemRegion::GetAddr() const {
@@ -286,19 +399,19 @@ namespace NInterconnect::NRdma {
     }
 
     TMemRegionPtr IMemPool::Alloc(int size, ui32 flags) noexcept {
-        TMemRegion* region = AllocImpl(size, flags);
+        TMemRegionPtr region = AllocImpl(size, flags);
         if (!region) {
             return nullptr;
         }
-        return TMemRegionPtr(region);
+        return region;
     }
 
     std::optional<TRcBuf> IMemPool::AllocRcBuf(int size, ui32 flags) noexcept {
-        TMemRegion* region = AllocImpl(size, flags);
+        TIntrusivePtr<TMemRegion>  region = AllocImpl(size, flags);
         if (!region) {
             return {};
         }
-        return TRcBuf(IContiguousChunk::TPtr(region));
+        return TRcBuf(region);
     }
 
     static NMonitoring::TDynamicCounterPtr MakeCounters(TDynamicCounters* counters) {
@@ -324,19 +437,31 @@ namespace NInterconnect::NRdma {
             AllocatedCounter = counter->GetCounter("RdmaPoolAllocatedUserBytes", false);
             AllocatedChunksCounter = counter->GetCounter("RdmaPoolAllocatedChunks", false);
             MaxAllocated.Counter = counter->GetCounter("RdmaPoolAllocatedUserMaxBytes", false);
+            ReclaimationRunCounter = counter->GetCounter("RdmaPoolReclaimationRunCounter", true);
+            ReclaimationFailCounter = counter->GetCounter("RdmaPoolReclaimationFailCounter", true);
 
             Y_ABORT_UNLESS((Alignment & Alignment - 1) == 0, "Alignment must be a power of two %zu", Alignment);
         }
+
+        size_t GetAllocatedChunksCount() const noexcept {
+            return AllocatedChunks.load(std::memory_order_relaxed);
+        }
+
+        size_t GetMaxChunks() const noexcept {
+            return MaxChunk;
+        }
+
     protected:
         TChunkPtr AllocNewChunk(size_t size, bool hp) noexcept {
             const std::lock_guard<std::mutex> lock(Mutex);
             Y_ABORT_UNLESS(AllocatedChunks <= MaxChunk);
 
-            if (AllocatedChunks == MaxChunk) {
-                return nullptr;
-            }
-
             size = AlignUp(size, Alignment);
+
+            if (Y_UNLIKELY(AllocatedChunks == MaxChunk)) {
+                //return nullptr;
+                return TryReclaim(size);
+            }
 
             void* ptr = allocateMemory(size, Alignment, hp);
             if (!ptr) {
@@ -352,12 +477,21 @@ namespace NInterconnect::NRdma {
             AllocatedChunksCounter->Inc();
             AllocatedChunks++;
 
-            return MakeIntrusive<TChunk>(std::move(mrs), this);
+            auto chunk = MakeIntrusive<TChunk>(std::move(mrs), this);
+            Chunks.PushBack(chunk.Get());
+
+            if (ReclaimIt.Item() == nullptr) {
+                ReclaimIt = Chunks.Begin();
+            }
+
+            return chunk;
         }
 
-        void DealocateMr(std::vector<ibv_mr*>& mrs) noexcept override {
+        void DealocateMr(TChunk* chunk) noexcept override {
+            std::vector<ibv_mr*>& mrs = chunk->MRs;
             {
                 const std::lock_guard<std::mutex> lock(Mutex);
+                chunk->Unlink();
                 AllocatedChunks--;
                 AllocatedChunksCounter->Dec();
             }
@@ -388,20 +522,52 @@ namespace NInterconnect::NRdma {
                 }
             }
         }
+    private:
+        TChunkPtr TryReclaim(size_t size) noexcept {
+            ReclaimationRunCounter->Inc();
+
+            auto it = ReclaimIt;
+
+            for (; it!= Chunks.End(); it++) {
+                if (it->Size() == size && it->TryReclaim()) {
+                    TChunkPtr ptr = &(*it);
+                    ReclaimIt = ++it;
+                    return ptr;
+                }
+            }
+
+            it = Chunks.Begin();
+            for (; it != ReclaimIt; it++) {
+                if (it->Size() == size && it->TryReclaim()) {
+                    TChunkPtr ptr = &(*it);
+                    ReclaimIt = ++it;
+                    return ptr;
+                }
+            }
+
+            ReclaimationFailCounter->Inc();
+            return nullptr;
+        }
+
+    protected:
 
         const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;
         const size_t MaxChunk;
         const size_t Alignment;
         ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedCounter;
         ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunksCounter;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ReclaimationRunCounter;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ReclaimationFailCounter;
         struct {
            NMonotonic::TMonotonic Time;
            std::atomic<i64> Val = 0;
            ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
         } MaxAllocated;
-        size_t AllocatedChunks = 0;
+        std::atomic<size_t> AllocatedChunks = 0;
     private:
         std::mutex Mutex;
+        TIntrusiveList<TChunk> Chunks;
+        TIntrusiveList<TChunk>::TIterator ReclaimIt;
 
         void Tick(NMonotonic::TMonotonic time) noexcept override {
             constexpr TDuration holdTime = TDuration::Seconds(15);
@@ -420,7 +586,7 @@ namespace NInterconnect::NRdma {
             : TMemPoolBase(-1, MakeCounters(nullptr))
         {}
 
-        TMemRegion* AllocImpl(int size, ui32) noexcept override {
+        TMemRegionPtr AllocImpl(int size, ui32) noexcept override {
             auto chunk = AllocNewChunk(size, false);
             if (!chunk) {
                 return nullptr;
@@ -450,35 +616,73 @@ namespace NInterconnect::NRdma {
 
     class TSlotMemPool: public TMemPoolBase {
         struct TChain {
+            using TMemRegcontainer = std::multiset<TIntrusivePtr<TMemRegion>, TMemRegCompare>; 
             TChain() = default;
             void Init(ui32 slotSize) {
                 SlotSize = slotSize;
                 SlotsInBatch = GetSlotsInBatch(slotSize);
             }
-            TMemRegion* TryGetSlot() noexcept {
+            TMemRegionPtr TryGetSlot() noexcept {
                 if (Slots.empty()) {
                     return nullptr;
                 }
-                // TMemRegion* slot = Slots.front();
-                TMemRegion* slot = Slots.front().release();
-                Slots.pop_front();
-                return slot;
-            }
-            void PutSlot(std::unique_ptr<TMemRegion>&& slot) noexcept {
-                Slots.push_back(std::move(slot));
-            }
-            void PutSlotsBatch(std::list<std::unique_ptr<TMemRegion>>&& slots) noexcept {
-                Slots.splice(Slots.end(), slots);
-            }
-            std::list<std::unique_ptr<TMemRegion>> GetSlotsBatch(ui32 batchSize) {
-                Y_ABORT_UNLESS(Slots.size() >= batchSize, "Not enough slots in chain");
-                std::list<std::unique_ptr<TMemRegion>> res;
                 auto it = Slots.begin();
-                std::advance(it, batchSize);
-                res.splice(res.end(), Slots, Slots.begin(), it);
+                TIntrusivePtr<TMemRegion> slot = *it;
+                const TChunk* const curChunkPtr = slot->Chunk.Get();
+                const ui64 curGeneration = slot->Generation;
+                if (Y_LIKELY(slot->Chunk->TryAcquire(curGeneration))) {
+                    Slots.erase(it);
+                    return slot;
+                } else {
+                    // Search for slots with same chunk and same (important!) generation to remove it from local cache
+                    // The generation check is mandatory here because the cache can contain slots with same parent chunk but with different generation
+                    // we need to delete only slots with generation we check in TryAcquire
+                    while ((it != Slots.end()) && ((*it)->Chunk.Get() == curChunkPtr) && ((*it)->Generation == curGeneration)) {
+                        (*it)->Chunk.Reset();
+                        Slots.erase(it++);
+                    }
+                    return TryGetSlot();
+                }
+            }
+            void PutSlot(TIntrusivePtr<TMemRegion> slot) noexcept {
+                Slots.insert(slot);
+            }
+            TMemRegcontainer::iterator PutSlot(TIntrusivePtr<TMemRegion> slot, TMemRegcontainer::iterator hint) noexcept {
+                return Slots.insert(hint, slot);
+            }
+            TMemRegcontainer::iterator FindHint(const TChunkPtr& p) noexcept {
+                return Slots.find(p);
+            }
+            void PutSlotsBatch(std::list<TIntrusivePtr<TMemRegion>>&& slots) noexcept {
+                for (auto& x : slots) {
+                    PutSlot(x);
+                }
+            }
+            std::list<TIntrusivePtr<TMemRegion>> GetSlotsBatch(ui32 batchSize) {
+                Y_ABORT_UNLESS(Slots.size() >= batchSize, "Not enough slots in chain");
+                std::list<TIntrusivePtr<TMemRegion>> res;
+                auto it = Slots.begin();
+                for (size_t i = 0; i < batchSize; i++) {
+                    res.insert(res.end(), *it);
+                    it = Slots.erase(it);
+                }
                 return res;
             }
-            std::list<std::unique_ptr<TMemRegion>> Slots;
+            //TODO: It shoult be possible to improve it using more optimised container and may be using raw pointer to store TMemRegion
+            // Requirements:
+            // * We need to group all regions with same Chunk
+            // * We need to be able to delete only slots with given chunk + generation
+            // * We need some way to prevent cal "Free" during deletion
+            //
+            // multiset here is a bit naive approach but it works
+            // unordered_multiset works much worse due to div op inside hash calculation.
+            //
+            // Some ideas to think about:
+            //  - The size of chunk relative large (32Mb+) - so 25 low bits in addres are same
+            //  - The user address space less than 64 bits
+            //  - Probably we can reserve address on startup to get linear space
+            TMemRegcontainer Slots;
+
             ui32 SlotSize;
             ui32 SlotsInBatch;
         };
@@ -489,24 +693,33 @@ namespace NInterconnect::NRdma {
                 SlotSize = slotSize;
                 SlotsInBatch = GetSlotsInBatch(slotSize);
             }
-            std::optional<std::list<std::unique_ptr<TMemRegion>>> GetSlotsBatch() {
-                std::list<std::unique_ptr<TMemRegion>> res;
+            std::optional<std::list<TIntrusivePtr<TMemRegion>>> GetSlotsBatch(bool allowIncompleted) {
+                std::list<TIntrusivePtr<TMemRegion>> res;
                 if (FullBatchesSlots.Dequeue(&res)) {
                     return res;
                 }
+                if (allowIncompleted) {
+                    {
+                        std::lock_guard<std::mutex> lock(IncompleteBatchMutex);
+                        res.swap(IncompleteBatch);
+                    }
+                    if (res.size()) {
+                        return res;
+                    }
+                }
                 return std::nullopt;
             }
-            void PutSlotsBatches(std::list<std::unique_ptr<TMemRegion>>&& slots) {
+            void PutSlotsBatches(std::list<TIntrusivePtr<TMemRegion>>&& slots) {
                 Y_DEBUG_ABORT_UNLESS(slots.size() == SlotsInBatch, "Invalid slots size: %zu, expected: %u", slots.size(), SlotsInBatch);
                 FullBatchesSlots.Enqueue(std::move(slots));
             }
-            void PutSlotsBatches(std::list<std::list<std::unique_ptr<TMemRegion>>>&& slots) {
+            void PutSlotsBatches(std::list<std::list<TIntrusivePtr<TMemRegion>>>&& slots) {
                 for (auto& batch : slots) {
                     Y_DEBUG_ABORT_UNLESS(batch.size() == SlotsInBatch, "Invalid slots size: %zu, expected: %u", batch.size(), SlotsInBatch);
                     FullBatchesSlots.Enqueue(std::move(batch));
                 }
             }
-            void PutSlot(std::unique_ptr<TMemRegion>&& slot) noexcept {
+            void PutSlotUnderLock(TIntrusivePtr<TMemRegion> slot) noexcept {
                 std::lock_guard<std::mutex> lock(IncompleteBatchMutex);
                 IncompleteBatch.push_back(std::move(slot));
                 if (IncompleteBatch.size() >= SlotsInBatch) {
@@ -515,20 +728,20 @@ namespace NInterconnect::NRdma {
                 }
             }
 
-            TLockFreeStack<std::list<std::unique_ptr<TMemRegion>>> FullBatchesSlots;
+            TLockFreeStack<std::list<TIntrusivePtr<TMemRegion>>> FullBatchesSlots;
             ui32 SlotSize;
             ui32 SlotsInBatch;
 
             std::mutex IncompleteBatchMutex;
-            std::list<std::unique_ptr<TMemRegion>> IncompleteBatch;
+            std::list<TIntrusivePtr<TMemRegion>> IncompleteBatch;
         };
 
         static constexpr ui32 MinAllocSz = 512;
-        static constexpr ui32 MaxAllocSz = 8 * 1024 * 1024;
+        static constexpr ui32 MaxAllocSz = 32 * 1024 * 1024;
         static_assert((MinAllocSz & (MinAllocSz - 1)) == 0, "MinAllocSz must be a power of 2");
         static_assert((MaxAllocSz & (MaxAllocSz - 1)) == 0, "MaxAllocSz must be a power of 2");
         static constexpr ui32 ChainsNum = GetNumChains(MinAllocSz, MaxAllocSz);
-        static constexpr ui32 BatchSizeBytes = 32 * 1024 * 1024; // 32 MB
+        static constexpr ui64 BatchSizeBytes = 32 * 1024 * 1024; // 32 MB
 
         static constexpr ui32 GetChainIndex(ui32 size) noexcept {
             return GetPowerOfTwo(std::max(size, MinAllocSz)) - GetPowerOfTwo(MinAllocSz);
@@ -547,7 +760,25 @@ namespace NInterconnect::NRdma {
             ~TSlotMemPoolCache() {
                 Stopped = true;
             }
-            TMemRegion* AllocImpl(int size, ui32 flags, TSlotMemPool& pool) noexcept {
+
+            bool AllocAndSplitNewChunk(TChain& chain, TSlotMemPool& pool) {
+                TChunkPtr chunk = pool.AllocNewChunk(BatchSizeBytes, true);
+                if (!chunk) {
+                    return false;
+                }
+                TChain::TMemRegcontainer::iterator it = chain.FindHint(chunk);
+                const ui64 generation = chunk->GetGeneration();
+                for (ui32 i = 0; i < chain.SlotsInBatch; ++i) {
+                    auto x = MakeIntrusive<TMemRegion>(chunk, i * chain.SlotSize, chain.SlotSize);
+                    //TODO: Use Y_DEBUG_ABORT_UNLESS instead
+                    Y_ABORT_UNLESS(generation == chunk->GetGeneration());
+                    x->Generation = generation;
+                    it = chain.PutSlot(x, it);
+                }
+                return true;
+            }
+
+            TMemRegionPtr AllocImpl(int size, ui32 flags, TSlotMemPool& pool) noexcept {
                 if (flags & IMemPool::PAGE_ALIGNED && static_cast<size_t>(size) < pool.Alignment) {
                     size = pool.Alignment;
                 }
@@ -559,39 +790,46 @@ namespace NInterconnect::NRdma {
                 Y_ABORT_UNLESS(chainIndex < ChainsNum, "Invalid chain index: %u", chainIndex);
                 // Try to get slot from local cache
                 auto& localChain = Chains[chainIndex];
-                TMemRegion* slot = localChain.TryGetSlot();
+                TMemRegionPtr slot = localChain.TryGetSlot();
                 if (slot) {
                     return slot;
                 }
+
+                const bool allChunksAllocated = pool.GetAllocatedChunksCount() == pool.GetMaxChunks();
+
                 // If no slot in local cache, try to get from global pool
-                auto batch = pool.Chains[chainIndex].GetSlotsBatch();
-                if (batch) {
-                    localChain.PutSlotsBatch(std::move(*batch));
-                    return localChain.TryGetSlot();
+                for (;;) {
+                    auto batch = pool.Chains[chainIndex].GetSlotsBatch(allChunksAllocated);
+                    if (batch) {
+                        localChain.PutSlotsBatch(std::move(*batch));
+                        if (auto memRegion = localChain.TryGetSlot()) {
+                            return memRegion;
+                        }
+                    } else {
+                        break;
+                    }
                 }
                 // If no slots in global pool, allocate new chunk
-                auto chunk = pool.AllocNewChunk(BatchSizeBytes, true);
-                if (!chunk) {
+                if (!AllocAndSplitNewChunk(localChain, pool)) {
                     return nullptr;
                 }
-                for (size_t i = 0; i < localChain.SlotsInBatch; ++i) {
-                    auto region = std::make_unique<TMemRegion>(chunk, i * localChain.SlotSize, localChain.SlotSize);
-                    localChain.PutSlot(std::move(region));
-                }
+
                 return localChain.TryGetSlot();
             }
 
             void Free(TMemRegion&& mr, TSlotMemPool& pool) noexcept {
                 ui32 chainIndex = GetChainIndex(mr.GetSize());
-                if (Stopped) {
+                if (Y_UNLIKELY(Stopped)) {
                     // current thread is stopped, return mr to global pool
-                    pool.Chains[chainIndex].PutSlot(std::make_unique<TMemRegion>(std::move(mr)));
+                    pool.Chains[chainIndex].PutSlotUnderLock(MakeIntrusive<TMemRegion>(std::move(mr)));
                     return;
                 }
 
+                mr.Chunk->DoRelease();
+
                 auto& chain = Chains[chainIndex];
                 Y_ABORT_UNLESS(chainIndex < ChainsNum, "Invalid chain index: %u", chainIndex);
-                chain.PutSlot(std::make_unique<TMemRegion>(std::move(mr)));
+                chain.PutSlot(MakeIntrusive<TMemRegion>(std::move(mr)));
 
                 if (chain.Slots.size() >= 2 * chain.SlotsInBatch) { // TODO: replace constant 2
                     // If we have too much slots in local cache, put them back to global pool
@@ -609,10 +847,12 @@ namespace NInterconnect::NRdma {
             if (!settings.has_value())
                 return 128; //default
 
-            if (settings->SizeLimitMb * 1024 * 1024 < BatchSizeBytes)
+            const ui64 sizeLimit = settings->SizeLimitMb * (1ull << 20);
+
+            if (sizeLimit < BatchSizeBytes)
                 return 1; //Do not allow zerro limit
 
-            return settings->SizeLimitMb * 1024 * 1024 / BatchSizeBytes;
+            return sizeLimit / BatchSizeBytes;
         }
     public:
         TSlotMemPool(NMonitoring::TDynamicCounterPtr counter, const std::optional<TMemPoolSettings>& settings)
@@ -620,6 +860,23 @@ namespace NInterconnect::NRdma {
         {
             for (ui32 i = GetPowerOfTwo(MinAllocSz); i <= GetPowerOfTwo(MaxAllocSz); ++i) {
                 Chains[GetChainIndex(1 << i)].Init(1 << i);
+            }
+        }
+
+        ~TSlotMemPool() {
+            for (size_t i = 0; i < Chains.size(); i++) {
+                TLockFreeChain& chain = Chains[i];
+                for (auto& x : chain.IncompleteBatch) {
+                    x->Chunk.Reset();
+                }
+
+                std::list<TIntrusivePtr<TMemRegion>> tmp;
+                while (chain.FullBatchesSlots.Dequeue(&tmp)) {
+                    for (auto& x : tmp) {
+                        x->Chunk.Reset();
+                    }
+                    tmp.clear();
+                }
             }
         }
 
@@ -632,7 +889,7 @@ namespace NInterconnect::NRdma {
         }
 
     protected:
-        TMemRegion* AllocImpl(int size, ui32 flags) noexcept override {
+        TMemRegionPtr AllocImpl(int size, ui32 flags) noexcept override {
             if (auto memReg = LocalCache.AllocImpl(size, flags, *this)) {
                 memReg->Resize(size);
                 i64 newVal = AllocatedCounter->Add(size);

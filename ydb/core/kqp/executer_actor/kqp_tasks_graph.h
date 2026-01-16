@@ -19,6 +19,10 @@ namespace NKikimrTxDataShard {
     class TKqpReadRangesSourceSettings;
 }
 
+namespace NKikimrKqp {
+    class TKqpFullTextSourceSettings;
+}
+
 namespace NKikimr::NKqp {
 
 class TPartitionPruner;
@@ -100,6 +104,7 @@ struct TShardKeyRanges {
     void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange* proto) const;
     void SerializeTo(NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta_TReadOpMeta* proto) const;
     void SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettings* proto, bool allowPoints = true) const;
+    void ParseFrom(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& proto);
 
     std::pair<const TSerializedCellVec*, bool> GetRightBorder() const;
 };
@@ -208,7 +213,7 @@ struct TGraphMeta {
     TMaybe<ui64> LockTxId;
     ui64 TxId = 0;
     ui32 LockNodeId = 0;
-    NKikimrKqp::EIsolationLevel RequestIsolationLevel;
+    NKqpProto::EIsolationLevel RequestIsolationLevel;
     TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
@@ -234,6 +239,8 @@ struct TGraphMeta {
     bool ShardsResolved = false;
     TMap<ui64 /* shardId */, ui64 /* nodeId */> ShardIdToNodeId;
     TMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> ShardsOnNode;
+
+    ui32 DqChannelVersion = 1u;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;
@@ -264,6 +271,7 @@ struct TGraphMeta {
 struct TTaskInputMeta {
     // these message are allocated using the protobuf arena.
     NKikimrTxDataShard::TKqpReadRangesSourceSettings* SourceSettings = nullptr;
+    NKikimrKqp::TKqpFullTextSourceSettings* FullTextSourceSettings = nullptr;
     NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
     NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
     NKikimrTxDataShard::TKqpVectorResolveSettings* VectorResolveSettings = nullptr;
@@ -401,7 +409,6 @@ public:
     TString DumpToString() const;
 
 public:
-    static constexpr ui64 PriorityTxShift = 32;
     THolder<TPartitionPruner> PartitionPruner; // TODO: temporary public - used by Data Executer
 
 private:
@@ -411,7 +418,9 @@ private:
     bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
     void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
     void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);
+    void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
     void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount);
+    void FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings);
     TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, TQueryExecutionStats* stats);
 
     void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
@@ -449,8 +458,10 @@ private:
     void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
 
     void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) const;
-    void BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) const;
-    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) const;
+    void BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
+    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
+
+    std::vector<std::pair<ui64, i64>> BuildInternalSinksPriorityOrder();
 
 private:
     const TVector<IKqpGateway::TPhysicalTxData>& Transactions;

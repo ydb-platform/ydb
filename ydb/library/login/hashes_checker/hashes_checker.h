@@ -10,9 +10,24 @@ namespace NLogin {
 
 constexpr ui16 HASHES_JSON_SCHEMA_VERSION = 1;
 
+struct THashSecret {
+    TString HashInitParams;
+    TString HashValues;
+};
+
 struct TArgonSecret {
     TString Salt;
     TString Hash;
+};
+
+struct TScramInitHashParams {
+    TString IterationsCount;
+    TString Salt;
+};
+
+struct TScramHashValues {
+    TString StoredKey;
+    TString ServerKey;
 };
 
 struct TScramSecret {
@@ -28,11 +43,16 @@ struct THashes {
 };
 
 TMaybe<TString> ArgonHashToNewFormat(const TStringBuf oldArgonHash);
+TString HashedPasswordFromNewArgonHashFormat(const TString& argonHash);
 TMaybe<TString> ArgonHashToOldFormat(const TStringBuf newArgonHash);
 TMaybe<THashes> ConvertHashes(const TString& hash);
 
-TArgonSecret ParseArgonHash(const TStringBuf hash);
-TScramSecret ParseScramHash(const TStringBuf hash);
+THashSecret SplitPasswordHash(const TStringBuf hash);
+TArgonSecret ParseArgonHash(const TStringBuf argonHash);
+TScramInitHashParams ParseScramHashInitParams(const TStringBuf hashInitParams);
+TScramHashValues ParseScramHashValues(const TStringBuf hashValues);
+TScramSecret ParseScramHash(const TStringBuf scramHash);
+THashMap<NLoginProto::EHashType::HashType, TString> MakePasswordHashesMap(const TString& hashes);
 
 class THashesChecker {
 public:
@@ -41,13 +61,9 @@ public:
         TString Error;
     };
 
-    THashesChecker();
-    TResult OldFormatCheck(const TString& hash) const;
-    TResult NewFormatCheck(const TString& hashes) const;
-    const THashTypeDescription* GetHashParams(const TString& hashName) const;
+static TResult OldFormatCheck(const TString& hash);
+static TResult NewFormatCheck(const TString& hashes);
 
-private:
-    THashMap<TStringBuf, const THashTypeDescription&> AvailableHashTypes;
 };
 
 } // NLogin

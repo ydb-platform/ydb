@@ -53,7 +53,7 @@ class IFunctionRegistry: public TThrRefBase {
 public:
     typedef TIntrusivePtr<IFunctionRegistry> TPtr;
 
-    virtual ~IFunctionRegistry() = default;
+    ~IFunctionRegistry() override = default;
 
     virtual const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const = 0;
 

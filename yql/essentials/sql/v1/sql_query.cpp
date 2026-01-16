@@ -1,4 +1,6 @@
 #include "sql_query.h"
+
+#include "select_yql.h"
 #include "sql_expression.h"
 #include "sql_select.h"
 #include "sql_select_yql.h"
@@ -186,6 +188,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
             "flush_interval",
             "batch_size_bytes",
             "directory",
+            "metrics_level",
         };
         for (const auto& names : REPLICATION_AND_TRANSFER_SECRETS_SETTINGS) {
             settings.insert(names.Name);
@@ -204,6 +207,12 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "consumer",
     };
 
+    static const TSet<TString> MetricsLevelValues = {
+        "database",
+        "object",
+        "detailed",
+    };
+
     const auto keyName = to_lower(key.Name);
     if (!ConfigSettings.count(keyName) && !StateSettings.contains(keyName) && !CreateOnlySettings.contains(keyName)) {
         ctx.Context().Error() << "Unknown transfer setting: " << key.Name;
@@ -220,6 +229,24 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         return false;
     }
 
+    if (keyName == "metrics_level") {
+        auto literalValue = value->GetLiteralValue();
+        if (!literalValue) {
+            ctx.Error() << " metrics_level value must be a string literal";
+            return false;
+        }
+
+        auto valueStr = to_lower(literalValue);
+        if (!MetricsLevelValues.contains(valueStr)) {
+            TStringBuilder validOptions;
+            for (const auto& val : MetricsLevelValues) {
+                validOptions << val << ", ";
+            }
+            ctx.Error() << "Invalid metrics_level value: " << valueStr
+                        << ". Allowed values: " << validOptions;
+            return false;
+        }
+    }
     if (!out.emplace(keyName, value).second) {
         ctx.Context().Error() << "Duplicate transfer setting: " << key.Name;
     }
@@ -287,40 +314,33 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            if (Ctx_.GetYqlSelectMode() != EYqlSelectMode::Disable) {
-                const NYql::TLangVersion langVer = YqlSelectLangVersion();
-                if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
-                    Error() << "YqlSelect is not available before "
-                            << FormatLangVersion(langVer);
-                    return false;
-                }
+            const auto& stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
+            TNodePtr node = YqlSelectOrLegacy(
+                [&]() -> TNodeResult {
+                    return BuildYqlSelectStatement(Ctx_, Mode_, stmt);
+                },
+                [&]() -> TNodePtr {
+                    Ctx_.BodyPart();
 
-                const auto stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
-                if (auto result = BuildYqlSelect(Ctx_, Mode_, stmt)) {
-                    blocks.emplace_back(std::move(*result));
-                    break;
-                } else if (
-                    result.error() == ESQLError::UnsupportedYqlSelect &&
-                    Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
-                {
-                    Error() << "Translation of the statement "
-                            << "to YqlSelect was forced, but unsupported";
-                    return false;
-                } else if (result.error() == ESQLError::Basic) {
-                    return false;
-                }
-            }
+                    TPosition pos;
+                    TSourcePtr source = TSqlSelect(Ctx_, Mode_).Build(stmt, pos);
+                    if (!source) {
+                        return nullptr;
+                    }
 
-            Ctx_.BodyPart();
-            TSqlSelect select(Ctx_, Mode_);
-            TPosition pos;
-            auto source = select.Build(core.GetAlt_sql_stmt_core2().GetRule_select_stmt1(), pos);
-            if (!source) {
+                    return BuildSelectResult(
+                        pos,
+                        std::move(source),
+                        Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
+                        Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
+                        Ctx_.Scoped);
+                });
+
+            if (!node) {
                 return false;
             }
-            blocks.emplace_back(BuildSelectResult(pos, std::move(source),
-                                                  Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY, Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
-                                                  Ctx_.Scoped));
+
+            blocks.emplace_back(std::move(node));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore3: {
@@ -330,6 +350,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!nodeExpr) {
                 return false;
             }
+
             TVector<TNodePtr> nodes;
             auto subquery = nodeExpr->GetSource();
             if (subquery && Mode_ == NSQLTranslation::ESqlMode::LIBRARY && Ctx_.ScopeLevel == 0) {
@@ -358,6 +379,16 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     }
                 } else {
                     nodes.push_back(std::move(nodeExpr));
+                }
+            } else if (auto source = GetYqlSource(nodeExpr)) {
+                const auto alias = Ctx_.MakeName("yqlsubquerynode");
+                const auto ref = Ctx_.MakeName("yqlsubquery");
+
+                blocks.push_back(BuildYqlSubquery(source, alias));
+                blocks.back()->SetLabel(ref);
+
+                for (size_t i = 0; i < names.size(); ++i) {
+                    nodes.push_back(BuildYqlSubqueryRef(blocks.back(), ref));
                 }
             } else {
                 const auto ref = Ctx_.MakeName("namedexprnode");
@@ -707,38 +738,34 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            if (Ctx_.GetYqlSelectMode() != EYqlSelectMode::Disable) {
-                const NYql::TLangVersion langVer = YqlSelectLangVersion();
-                if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
-                    Error() << "YqlSelect is not available before "
-                            << FormatLangVersion(langVer);
-                    return false;
-                }
+            const auto& stmt = core.GetAlt_sql_stmt_core21().GetRule_values_stmt1();
+            TNodePtr node = YqlSelectOrLegacy(
+                [&]() -> TNodeResult {
+                    return BuildYqlSelectStatement(Ctx_, Mode_, stmt);
+                },
+                [&]() -> TNodePtr {
+                    Ctx_.BodyPart();
 
-                const auto stmt = core.GetAlt_sql_stmt_core21().GetRule_values_stmt1();
-                if (auto result = BuildYqlSelect(Ctx_, Mode_, stmt)) {
-                    blocks.emplace_back(std::move(*result));
-                    break;
-                } else if (
-                    result.error() == ESQLError::UnsupportedYqlSelect &&
-                    Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
-                {
-                    Error() << "Translation of the statement "
-                            << "to YqlSelect was forced, but unsupported";
-                    return false;
-                }
-            }
+                    TPosition pos;
+                    TSourcePtr source = TSqlValues(Ctx_, Mode_).Build(stmt, pos, {}, TPosition());
 
-            Ctx_.BodyPart();
-            TSqlValues values(Ctx_, Mode_);
-            TPosition pos;
-            auto source = values.Build(core.GetAlt_sql_stmt_core21().GetRule_values_stmt1(), pos, {}, TPosition());
-            if (!source) {
+                    if (!source) {
+                        return nullptr;
+                    }
+
+                    return BuildSelectResult(
+                        pos,
+                        std::move(source),
+                        Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY,
+                        Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
+                        Ctx_.Scoped);
+                });
+
+            if (!node) {
                 return false;
             }
-            blocks.emplace_back(BuildSelectResult(pos, std::move(source),
-                                                  Mode_ != NSQLTranslation::ESqlMode::LIMITED_VIEW && Mode_ != NSQLTranslation::ESqlMode::SUBQUERY, Mode_ == NSQLTranslation::ESqlMode::SUBQUERY,
-                                                  Ctx_.Scoped));
+
+            blocks.emplace_back(std::move(node));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore22: {

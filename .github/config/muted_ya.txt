@@ -295,8 +295,6 @@ ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLe
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[21]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[22]
 ydb/tests/olap py3test.[*/*] chunk
-ydb/tests/olap test_create.py.TestCreate.test_create_all_opt_ints
-ydb/tests/olap test_create.py.TestCreate.test_create_real_opt
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap/large test_log_scenario.py.TestLogScenario.test_log_uniform
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

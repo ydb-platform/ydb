@@ -13,11 +13,11 @@ The table below lists the common attributes.
 
 #|
 || **Attribute**          | **Description**                                                                                                                                                | **Optional/Required** ||
-|| `subject`              | Event source [SID](../../concepts/glossary.md#access-sid) if mandatory authentication is enabled, or `{none}` otherwise.                                         | Required ||
-|| `sanitized_token`      | A partially masked authentication token that was used to execute the request. Can be used to link related events while keeping the original credentials hidden. If authentication was not performed, the value will be `{none}`. | Required ||
-|| `operation`            | Operation name (for example, `ALTER DATABASE`, `CREATE TABLE`).                                                                                              | Required ||
-|| `component`            | Unique identifier (UID) of the *audit event source*.                                                                                                          | Required ||
-|| `status`               | Operation completion status.<br/>Possible values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul> | Required ||
+|| `subject`              | Event source [SID](../../concepts/glossary.md#access-sid) if mandatory authentication is enabled, or `{none}` otherwise.                                         | Optional ||
+|| `sanitized_token`      | A partially masked authentication token that was used to execute the request. Can be used to link related events while keeping the original credentials hidden. If authentication was not performed, the value will be `{none}`. | Optional ||
+|| `operation`            | Operation name (for example, `ALTER DATABASE`, `CREATE TABLE`).                                                                                              | Optional ||
+|| `component`            | Unique identifier (UID) of the *audit event source*.                                                                                                          | Optional ||
+|| `status`               | Operation completion status.<br/>Possible values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul> | Optional ||
 || `reason`               | Error message.                                                                                                                                                | Optional ||
 || `request_id`           | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context. | Optional ||
 || `remote_address`       | IP address (IPv4 or IPv6) of the client that delivered the request. Can be a comma-separated list of addresses, where the enumeration indicates the chain of addresses the request passed through. Port numbers may be included after a colon (e.g., `192.0.2.1:54321`) | Optional ||

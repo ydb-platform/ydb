@@ -1875,12 +1875,6 @@ private:
                     continue;
                 }
 
-                const bool isPrimaryKeySubset = std::equal(
-                    lookupInfo.KeyIndexes.begin(),
-                    lookupInfo.KeyIndexes.end(),
-                    lookupInfo.OldKeyIndexes.begin(),
-                    lookupInfo.OldKeyIndexes.end());
-
                 TUniqueSecondaryKeyCollector collector(
                         KeyColumnTypes,
                         lookupInfo.Lookup->GetKeyColumnTypes(),
@@ -1891,9 +1885,9 @@ private:
                 AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
                 AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
                 for (size_t index = 0; index < writeRows.size(); ++index) {
-                    const auto& row = writeRows[index];
                     // Only UPSERT/REPLACE/UPDATE here
-                    if (!isPrimaryKeySubset
+                    const auto& row = writeRows[index];
+                    if (existsMask[index]
                             && IsEqual(
                                 row,
                                 {},

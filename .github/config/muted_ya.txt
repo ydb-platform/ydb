@@ -299,12 +299,6 @@ ydb/tests/olap test_create.py.TestCreate.test_create_all_opt_ints
 ydb/tests/olap test_create.py.TestCreate.test_create_real_opt
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap/large test_log_scenario.py.TestLogScenario.test_log_uniform
-ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_change_data_during_execution
-ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_drop_table_during_export
-ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_rename_table_during_export
-ydb/tests/olap/s3_import test_simple_table.py.TestSimpleTable.test_unavailable_during_import
-ydb/tests/olap/s3_import test_tpch_import.py.TestS3TpchImport.test_import_and_export
-ydb/tests/olap/s3_import test_types_and_formats.py.TestTypesAndFormats.test_parquet_format
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]

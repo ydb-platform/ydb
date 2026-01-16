@@ -46,6 +46,11 @@ struct TIndexMetadata {
     TString ImplTablePrefix;
 };
 
+struct TRateLimiterResourceMetadata {
+    TString ExportPrefix;
+    TString Name;
+};
+
 class TMetadata {
 public:
     TMetadata() = default;
@@ -63,6 +68,9 @@ public:
 
     void AddIndex(const TIndexMetadata& index);
     const std::optional<std::vector<TIndexMetadata>>& GetIndexes() const;
+
+    void AddRateLimiterResource(const TRateLimiterResourceMetadata& index);
+    const std::optional<std::vector<TRateLimiterResourceMetadata>>& GetRateLimiterResources() const;
 
     void SetEnablePermissions(bool enablePermissions = true);
     bool HasEnablePermissions() const;
@@ -88,6 +96,12 @@ private:
     // []: The export has no materialized indexes
     // [...]: The export must have all materialized indexes listed here
     std::optional<std::vector<TIndexMetadata>> Indexes;
+
+    // Indexes:
+    // Undefined (previous versions): we don't know if we see the export with _materialized_ indexes or without them, so list suitable S3 files to find out all materialized indexes
+    // []: The export has no materialized indexes
+    // [...]: The export must have all materialized indexes listed here
+    std::optional<std::vector<TRateLimiterResourceMetadata>> RateLimiterResources;
 
     // EnablePermissions:
     // Undefined (previous versions): we don't know if we see the export with permissions or without them, so check S3 for the permissions file existence

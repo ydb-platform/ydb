@@ -10,6 +10,9 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
@@ -26,6 +29,28 @@
 #include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NSchemeShard {
+
+namespace {
+
+TString GetDestinationPrefix(const Ydb::Export::ExportToS3Settings& settings, ui32 itemIdx) {
+    if (itemIdx < ui32(settings.items_size())) {
+        return settings.items(itemIdx).destination_prefix();
+    }
+    return settings.destination_prefix();
+}
+
+TMaybe<NBackup::TEncryptionIV> MakeIV(
+    const TMaybe<NBackup::TEncryptionIV>& IV,
+    NBackup::EBackupFileType fileType)
+{
+    TMaybe<NBackup::TEncryptionIV> iv;
+    if (IV) {
+        iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber: already combined */, 0 /* shardNumber */);
+    }
+    return iv;
+}
+
+}
 
 template <class TDerived>
 class TExportFilesUploader: public TActorBootstrapped<TDerived> {
@@ -171,6 +196,10 @@ protected:
         IActor::PassAway();
     }
 
+    const Ydb::Export::ExportToS3Settings& GetSettings() {
+        return Settings;
+    }
+
 private:
     Ydb::Export::ExportToS3Settings Settings;
     TString DestinationPrefix;
@@ -183,6 +212,177 @@ private:
     TDuration Delay = TDuration::Minutes(1);
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 };
+
+class TKesusResourcesUploader : public TExportFilesUploader<TKesusResourcesUploader> {
+    void CreatePipe() {
+        NTabletPipe::TClientConfig cfg;
+        cfg.RetryPolicy = {
+            .RetryLimitCount = 3u
+        };
+        KesusPipeClient = Register(NTabletPipe::CreateClient(this->SelfId(), KesusTabletId, cfg));
+    }
+
+    void GetAllResources() {
+        using namespace NKesus;
+        if (!KesusPipeClient) {
+            CreatePipe();
+        }
+        THolder<TEvKesus::TEvDescribeQuoterResources> req = MakeHolder<TEvKesus::TEvDescribeQuoterResources>();
+        req->Record.SetRecursive(true);
+
+        NTabletPipe::SendData(SelfId(), KesusPipeClient, req.Release());
+        Become(&TThis::StateDescribeResources);
+    }
+
+    void HandleConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            Finish(false, "Failed to connect to coordination node.");
+        }
+    }
+
+    void HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+        Finish(false, "Connection to coordination node was lost.");
+    }
+
+    void HandleResourcesDescription(NKesus::TEvKesus::TEvDescribeQuoterResourcesResult::TPtr ev) {
+        auto& record = ev->Get()->Record;
+        LOG_D("HandleResourcesDescription"
+            << ", self: " << this->SelfId()
+            << ", status: " << record.GetError().GetStatus());
+
+        if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) {
+            return Finish(false, "cannot get rate limiter resources describe");
+        }
+
+        Resources = std::move(*record.MutableResources());
+        ResourcesKeys.reserve(Resources.size());
+
+        UploadBatch();
+    }
+
+    bool AddFiles(const TString& fileName, const TString& content) {
+        if (!AddFile(fileName, content, MakeIV(IV, NBackup::EBackupFileType::CoordinationNodeCreateRateLimiter))) {
+            return false;
+        }
+
+        return !EnableChecksums
+            || AddFile(NBackup::ChecksumKey(fileName), NBackup::ComputeChecksum(content));
+    }
+
+    void UploadBatch() {
+        LOG_D("UploadBatch"
+            << ", self: " << this->SelfId()
+            << ", ExportId: " << ExportId
+            << ", ItemIdx: " << ItemIdx
+            << ", Offset: " << Offset);
+
+        i32 batchEnd = std::min(Offset + BatchSize, Resources.size());
+        for (i32 resourceIdx = Offset; resourceIdx < batchEnd; ++resourceIdx) {
+            auto& resource = Resources[resourceIdx];
+            TString scheme;
+            BuildRateLimiterResourceScheme(resource, scheme);
+
+            TStringBuilder fileName;
+            fileName << resource.GetResourcePath() << '/' << NYdb::NDump::NFiles::CreateRateLimiter().FileName;
+            ResourcesKeys.push_back(fileName);
+
+            if (!AddFiles(fileName, scheme)) {
+                return;
+            }
+        }
+
+        Offset += BatchSize;
+
+        UploadFiles();
+    }
+
+    void OnFilesUploaded(bool success, const TString& error) override {
+        if (!success || Offset >= Resources.size()) {
+            return Finish(success, error);
+        }
+        UploadBatch();
+    }
+
+    void Finish(bool success = true, const TString& error = TString()) {
+        LOG_I("Finish"
+            << ", self: " << SelfId()
+            << ", success: " << success
+            << ", error: " << error
+        );
+
+        Send(ReplyTo, new TEvPrivate::TEvExportUploadKesusResourcesResult(ExportId, ItemIdx, success, error, ResourcesKeys));
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (KesusPipeClient) {
+            NTabletPipe::CloseClient(this->SelfId(), KesusPipeClient);
+            KesusPipeClient = {};
+        }
+        TExportFilesUploader<TKesusResourcesUploader>::PassAway();
+    }
+
+public:
+    TKesusResourcesUploader(
+        ui64 kesusTabletId,
+        TActorId replyTo,
+        ui64 exportId,
+        ui32 itemIdx,
+        const Ydb::Export::ExportToS3Settings& settings,
+        TMaybe<NBackup::TEncryptionIV> iv,
+        const bool enableChecksums
+    )
+        : TExportFilesUploader<TKesusResourcesUploader>(settings, GetDestinationPrefix(settings, itemIdx))
+        , KesusTabletId(kesusTabletId)
+        , ReplyTo(replyTo)
+        , ExportId(exportId)
+        , ItemIdx(itemIdx)
+        , IV(iv)
+        , EnableChecksums(enableChecksums)
+    {
+    }
+
+    void Bootstrap() {
+        GetAllResources();
+    }
+
+    STATEFN(StateDescribeResources) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NKesus::TEvKesus::TEvDescribeQuoterResourcesResult, HandleResourcesDescription);
+            hFunc(TEvTabletPipe::TEvClientConnected, HandleConnected);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, HandleDestroyed);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
+private:
+    ui64 KesusTabletId = 0;
+    TActorId KesusPipeClient;
+    TActorId ReplyTo;
+
+    ui64 ExportId;
+    ui32 ItemIdx;
+
+    TMaybe<NBackup::TEncryptionIV> IV;
+
+    const bool EnableChecksums;
+
+    i32 BatchSize = 100;
+    i32 Offset = 0;
+
+    google::protobuf::RepeatedPtrField<NKikimrKesus::TStreamingQuoterResource> Resources;
+    TVector<TString> ResourcesKeys;
+}; // TKesusResourcesUploader
+
+IActor* CreateKesusResourcesUploader(
+    ui64 kesusTabletId, TActorId replyTo,
+    ui64 exportId, ui32 itemIdx,
+    const Ydb::Export::ExportToS3Settings &settings,
+    TMaybe<NBackup::TEncryptionIV> iv,
+    const bool enableChecksums
+) {
+    return new TKesusResourcesUploader(kesusTabletId, replyTo, exportId, itemIdx, settings, iv, enableChecksums);
+}
 
 class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
     void GetDescription() {
@@ -235,6 +435,57 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
             return Finish(false, "cannot infer permissions");
         }
 
+        if (describeResult.GetPathDescription().GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeKesus) {
+            // Upload resources before to store them in metadata
+            Y_ABORT_UNLESS(describeResult.GetPathDescription().HasKesus());
+            StartUploadKesusResources(describeResult.GetPathDescription().GetKesus().GetKesusTabletId());
+        } else {
+            StartUploadFiles();
+        }
+    }
+
+    void StartUploadKesusResources(ui64 kesusTabletId) {
+        KesusResourcesUploader = Register(CreateKesusResourcesUploader(
+            kesusTabletId,
+            SelfId(),
+            ExportId,
+            ItemIdx,
+            GetSettings(),
+            IV,
+            EnableChecksums
+        ));
+        Become(&TThis::StateUploadKesusResources);
+    }
+
+    void HandleResourcesUploaded(TEvPrivate::TEvExportUploadKesusResourcesResult::TPtr ev) {
+        const auto& record = ev->Get();
+        LOG_D("HandleResourcesUploaded"
+            << ", self: " << SelfId()
+            << ", success: " << record->Success
+            << ", error: " << record->Error);
+
+        if (!record->Success) {
+            Finish(false, record->Error);
+        }
+
+        // Fill metadata with rate limiter resources
+        ui32 excryptedIdx = 0;
+        auto metadata = NBackup::TMetadata::Deserialize(Metadata);
+        for (const auto& rateLimiter : record->ResourcesKeys) {
+            NBackup::TRateLimiterResourceMetadata resourceData;
+            resourceData.Name = rateLimiter;
+            if (IV) {
+                std::stringstream prefix;
+                prefix << std::setfill('0') << std::setw(3) << std::right << ++excryptedIdx;
+                resourceData.ExportPrefix = prefix.str();
+            } else {
+                resourceData.ExportPrefix = rateLimiter;
+            }
+        }
+
+        Metadata = metadata.Serialize();
+
+        // Upload everything else
         StartUploadFiles();
     }
 
@@ -243,7 +494,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
             return Finish(false, "cannot infer scheme");
         }
 
-        if (!AddFile(FileName, Scheme, MakeIV(SchemeFileType))) {
+        if (!AddFile(FileName, Scheme, MakeIV(IV, SchemeFileType))) {
             return;
         }
 
@@ -258,7 +509,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
                 return Finish(false, "cannot infer permissions");
             }
 
-            if (!AddFile("permissions.pb", Permissions, MakeIV(NBackup::EBackupFileType::Permissions))) {
+            if (!AddFile("permissions.pb", Permissions, MakeIV(IV, NBackup::EBackupFileType::Permissions))) {
                 return;
             }
 
@@ -286,14 +537,6 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         UploadFiles();
     }
 
-    TMaybe<NBackup::TEncryptionIV> MakeIV(NBackup::EBackupFileType fileType) {
-        TMaybe<NBackup::TEncryptionIV> iv;
-        if (IV) {
-            iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber: already combined */, 0 /* shardNumber */);
-        }
-        return iv;
-    }
-
     void Finish(bool success = true, const TString& error = TString()) {
         LOG_I("Finish"
             << ", self: " << SelfId()
@@ -309,11 +552,9 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         Finish(success, error);
     }
 
-    static TString GetDestinationPrefix(const Ydb::Export::ExportToS3Settings& settings, ui32 itemIdx) {
-        if (itemIdx < ui32(settings.items_size())) {
-            return settings.items(itemIdx).destination_prefix();
-        }
-        return settings.destination_prefix();
+    void PassAway() override {
+        Send(KesusResourcesUploader, new TEvents::TEvPoisonPill());
+        TExportFilesUploader<TSchemeUploader>::PassAway();
     }
 
 public:
@@ -353,6 +594,13 @@ public:
         }
     }
 
+    STATEFN(StateUploadKesusResources) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvExportUploadKesusResourcesResult, HandleResourcesUploaded);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
 private:
     TActorId SchemeShard;
 
@@ -371,6 +619,8 @@ private:
     const bool EnableChecksums;
     TString Permissions;
     TString Metadata;
+
+    TActorId KesusResourcesUploader;
 }; // TSchemeUploader
 
 class TExportMetadataUploader: public TExportFilesUploader<TExportMetadataUploader> {

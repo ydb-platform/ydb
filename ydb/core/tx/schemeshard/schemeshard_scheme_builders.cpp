@@ -5,10 +5,13 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/ydb_convert/external_data_source_description.h>
 #include <ydb/core/ydb_convert/external_table_description.h>
+#include <ydb/core/ydb_convert/kesus_description.h>
 #include <ydb/core/ydb_convert/replication_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
@@ -179,6 +182,26 @@ bool BuildExternalTableScheme(
     return true;
 }
 
+bool BuildCoordinationNodeScheme(
+    const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
+    TString& scheme,
+    TString& error)
+{
+    const auto& pathDesc = describeResult.GetPathDescription();
+    if (!pathDesc.HasKesus()) {
+        error = "Path description does not contain a description of coordination node";
+        return false;
+    }
+
+    Ydb::Coordination::DescribeNodeResult descNodeResult;
+    FillKesusDescription(descNodeResult, pathDesc.GetKesus(), pathDesc.GetSelf());
+
+    Ydb::Coordination::CreateNodeRequest request;
+    *request.mutable_config() = std::move(*descNodeResult.mutable_config());
+
+    return google::protobuf::TextFormat::PrintToString(request, &scheme);
+}
+
 bool BuildScheme(
     const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
     TString& scheme,
@@ -200,10 +223,25 @@ bool BuildScheme(
             return BuildExternalDataSourceScheme(describeResult, scheme, databaseRoot, error);
         case NKikimrSchemeOp::EPathTypeExternalTable:
             return BuildExternalTableScheme(describeResult, scheme, databaseRoot, error);
+        case NKikimrSchemeOp::EPathTypeKesus:
+            return BuildCoordinationNodeScheme(describeResult, scheme, error);
         default:
             error = TStringBuilder() << "unsupported path type: " << pathType;
             return false;
     }
+}
+
+bool BuildRateLimiterResourceScheme(
+    const NKikimrKesus::TStreamingQuoterResource& rateLimiterDesc,
+    TString& scheme)
+{
+    Ydb::RateLimiter::Resource descResourceResult;
+    FillRateLimiterDescription(descResourceResult, rateLimiterDesc);
+
+    Ydb::RateLimiter::CreateResourceRequest request;
+    *request.mutable_resource() = std::move(descResourceResult);
+
+    return google::protobuf::TextFormat::PrintToString(request, &scheme);
 }
 
 } // namespace NKikimr::NSchemeShard

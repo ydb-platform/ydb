@@ -27,6 +27,7 @@ namespace TEvPrivate {
         EvImportSchemeQueryResult,
         EvExportSchemeUploadResult,
         EvExportUploadMetadataResult,
+        EvExportUploadKesusResourcesResult,
         EvServerlessStorageBilling,
         EvCleanDroppedPaths,
         EvCleanDroppedSubDomains,
@@ -174,6 +175,27 @@ namespace TEvPrivate {
             : ExportId(id)
             , Success(success)
             , Error(error)
+        {}
+    };
+
+    struct TEvExportUploadKesusResourcesResult: public TEventLocal<TEvExportUploadKesusResourcesResult, EvExportUploadKesusResourcesResult> {
+        const ui64 ExportId;
+        const ui32 ItemIdx;
+        const bool Success;
+        const TString Error;
+        TVector<TString> ResourcesKeys;
+
+        TEvExportUploadKesusResourcesResult(
+            ui64 id,
+            ui32 itemIdx,
+            bool success,
+            const TString& error,
+            const TVector<TString> keys)
+            : ExportId(id)
+            , ItemIdx(itemIdx)
+            , Success(success)
+            , Error(error)
+            , ResourcesKeys(keys)
         {}
     };
 

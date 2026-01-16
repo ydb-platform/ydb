@@ -30,7 +30,7 @@ private:
     int DescribePath(const TString& path, const TDescribeOptions& options, EDataFormat format);
     int PrintPathResponse(const TString& path, const NScheme::TDescribePathResult& result, const TDescribeOptions& options, EDataFormat format);
     int DescribeEntryDefault(NScheme::TSchemeEntry entry, const TDescribeOptions& options);
-    
+
     int DescribeTable(const TString& path, const TDescribeOptions& options, EDataFormat format);
     int DescribeColumnTable(const TString& path, const TDescribeOptions& options, EDataFormat format);
     int PrintTableResponsePretty(const NTable::TTableDescription& tableDescription, const TDescribeOptions& options) const;

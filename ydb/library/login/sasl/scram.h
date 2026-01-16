@@ -37,6 +37,19 @@ struct TFinalClientMsg {
     std::string ClientFinalMessageWithoutProof;
 };
 
+struct TFirstServerMsg {
+    std::string Nonce;
+    std::string Salt;
+    ui32 IterationsCount;
+    std::unordered_map<char, std::string> Extensions;
+};
+
+struct TFinalServerMsg {
+    std::string ServerSignature;
+    std::string Error;
+    std::unordered_map<char, std::string> Extensions;
+};
+
 enum class EParseMsgReturnCodes {
     Success,
     InvalidEncoding,
@@ -78,6 +91,8 @@ bool VerifyClientProof(const std::string& hashType, const std::string& clientPro
 
 EParseMsgReturnCodes ParseFirstClientMsg(const std::string& msg, TFirstClientMsg& parsedMsg);
 EParseMsgReturnCodes ParseFinalClientMsg(const std::string& msg, TFinalClientMsg& parsedMsg);
+EParseMsgReturnCodes ParseFirstServerMsg(const std::string& msg, TFirstServerMsg& parsedMsg);
+EParseMsgReturnCodes ParseFinalServerMsg(const std::string& msg, TFinalServerMsg& parsedMsg);
 
 std::string BuildFirstServerMsg(const std::string& nonce, const std::string& salt, const std::string& iterationsCount,
     const std::unordered_map<char, std::string>& extensions = {});

@@ -20,8 +20,8 @@ class TModelAnthropic final : public TModelBase {
     static constexpr ui64 MAX_COMPLETION_TOKENS = 1024;
 
 public:
-    TModelAnthropic(const TAnthropicModelSettings& settings, const TInteractiveLogger& log)
-        : TBlase(CreateApiUrl(settings.BaseUrl, "/messages"), settings.ApiKey, log)
+    explicit TModelAnthropic(const TAnthropicModelSettings& settings)
+        : TBlase(CreateApiUrl(settings.BaseUrl, "/messages"), settings.ApiKey)
         , Tools(ChatCompletionRequest["tools"].SetType(NJson::JSON_ARRAY).GetArraySafe())
         , Conversation(ChatCompletionRequest["messages"].SetType(NJson::JSON_ARRAY).GetArraySafe())
     {
@@ -124,8 +124,8 @@ private:
 
 } // anonymous namespace
 
-IModel::TPtr CreateAnthropicModel(const TAnthropicModelSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<TModelAnthropic>(settings, log);
+IModel::TPtr CreateAnthropicModel(const TAnthropicModelSettings& settings) {
+    return std::make_shared<TModelAnthropic>(settings);
 }
 
 } // namespace NYdb::NConsoleClient::NAi

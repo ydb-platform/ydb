@@ -5,6 +5,7 @@
 #include "ydb_dynamic_config.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -70,7 +71,7 @@ void TCommandClusterDump::Parse(TConfig& config) {
 }
 
 int TCommandClusterDump::Run(TConfig& config) {
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));
@@ -103,7 +104,7 @@ void TCommandClusterRestore::Parse(TConfig& config) {
 }
 
 int TCommandClusterRestore::Run(TConfig& config) {
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriorityChatty(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     auto settings = NDump::TRestoreClusterSettings()

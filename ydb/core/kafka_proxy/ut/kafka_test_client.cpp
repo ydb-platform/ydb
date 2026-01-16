@@ -1,8 +1,12 @@
 #include "kafka_test_client.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/library/login/sasl/scram.h>
+
+#include <util/random/random.h>
 
 static constexpr TKafkaUint16 ASSIGNMENT_VERSION = 3;
 
@@ -62,16 +66,49 @@ TMessagePtr<TSaslHandshakeResponseData> TKafkaTestClient::SaslHandshake(const TS
     return WriteAndRead<TSaslHandshakeResponseData>(header, request);
 }
 
-TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslAuthenticate(const TString& user, const TString& password) {
+TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslPlainAuthenticate(const TString& user, const TString& password) {
     Cerr << ">>>>> SaslAuthenticateRequestData\n";
 
     TStringBuilder authBytes;
-    authBytes << "ignored" << '\0' << user << '\0' << password;
+    authBytes << "authzid" << '\0' << user << '\0' << password;
 
     TRequestHeaderData header = Header(NKafka::EApiKey::SASL_AUTHENTICATE, 2);
 
     TSaslAuthenticateRequestData request;
     request.AuthBytes = ToRawBytes(authBytes);
+
+    return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
+}
+
+TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslScramAuthenticateFirstMsg(const TString& user, const TString& clientNonce) {
+    Cerr << ">>>>> SaslAuthenticateRequestData (SCRAM first message)\n";
+
+    // Build first client message
+    TString gs2Header = "n,,"; // No channel binding, no authzid
+    TString clientFirstMessageBare = TStringBuilder() << "n=" << user << ",r=" << clientNonce;
+    TString clientFirstMessage = gs2Header + clientFirstMessageBare;
+
+    TRequestHeaderData header = Header(NKafka::EApiKey::SASL_AUTHENTICATE, 2);
+    TSaslAuthenticateRequestData request;
+    request.AuthBytes = ToRawBytes(clientFirstMessage);
+
+    return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
+}
+
+TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslScramAuthenticateFinalMsg(const TString& nonce, const TString& clientProof) {
+    Cerr << ">>>>> SaslAuthenticateRequestData (SCRAM final message)\n";
+
+    // Build client final message without proof
+    TString gs2Header = "n,,"; // No channel binding, no authzid
+    TString channelBinding = Base64Encode(gs2Header);
+    TString clientFinalMessageWithoutProof = TStringBuilder() << "c=" << channelBinding << ",r=" << nonce;
+
+    // Build final client message (clientProof is already base64 encoded)
+    TString clientFinalMessage = clientFinalMessageWithoutProof + ",p=" + clientProof;
+
+    TRequestHeaderData header = Header(NKafka::EApiKey::SASL_AUTHENTICATE, 2);
+    TSaslAuthenticateRequestData request;
+    request.AuthBytes = ToRawBytes(clientFinalMessage);
 
     return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
 }
@@ -597,6 +634,7 @@ TMessagePtr<TAlterConfigsResponseData> TKafkaTestClient::AlterConfigs(std::vecto
 
         addConfig(topicToModify.RetentionMs, "retention.ms");
         addConfig(topicToModify.RetentionBytes, "retention.bytes");
+        addConfig(topicToModify.TimestampType, "message.timestamp.type");
 
         for (auto const& [name, value] : topicToModify.Configs) {
             NKafka::TAlterConfigsRequestData::TAlterConfigsResource::TAlterableConfig config;
@@ -707,11 +745,11 @@ void TKafkaTestClient::UnknownApiKey() {
     Write(So, &header, &request);
 }
 
-void TKafkaTestClient::AuthenticateToKafka() {
-    AuthenticateToKafka("ouruser@/Root", "ourUserPassword");
+void TKafkaTestClient::PlainAuthenticateToKafka() {
+    PlainAuthenticateToKafka("ouruser@/Root", "ourUserPassword");
 }
 
-void TKafkaTestClient::AuthenticateToKafka(const TString& userName, const TString& userPassword) {
+void TKafkaTestClient::PlainAuthenticateToKafka(const TString& userName, const TString& userPassword) {
     {
         auto msg = ApiVersions();
 
@@ -723,15 +761,165 @@ void TKafkaTestClient::AuthenticateToKafka(const TString& userName, const TStrin
         auto msg = SaslHandshake();
 
         UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+        UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[1], "SCRAM-SHA-256");
     }
 
     {
-        auto msg = SaslAuthenticate(userName, userPassword);
+        auto msg = SaslPlainAuthenticate(userName, userPassword);
         UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     }
 
+}
+
+void TKafkaTestClient::ScramAuthenticateToKafka() {
+    ScramAuthenticateToKafka("ouruser", "ourUserPassword");
+}
+
+void TKafkaTestClient::ScramAuthenticateToKafka(const TString& userName, const TString& userPassword) {
+    {
+        auto msg = ApiVersions();
+
+        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
+    }
+
+    {
+        auto msg = SaslHandshake("SCRAM-SHA-256");
+
+        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+        UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[1], "SCRAM-SHA-256");
+    }
+
+    // Generate random client nonce (16 random bytes encoded as base64)
+    TString randomBytes;
+    randomBytes.reserve(16);
+    for (size_t i = 0; i < 16; ++i) {
+        randomBytes += static_cast<char>(RandomNumber<ui8>());
+    }
+    TString clientNonce = Base64Encode(randomBytes);
+
+    // Build first client message bare for auth message computation
+    TString clientFirstMessageBare = TStringBuilder() << "n=" << userName << ",r=" << clientNonce;
+
+    // Send first SCRAM message
+    auto response1 = SaslScramAuthenticateFirstMsg(userName, clientNonce);
+
+    // Check for errors in the first response
+    if (response1->ErrorCode != static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)) {
+        // Try to parse as error message
+        std::string errorMessage(response1->AuthBytes->data(), response1->AuthBytes->size());
+        NLogin::NSasl::TFinalServerMsg errorMsg;
+        auto parseErrorResult = NLogin::NSasl::ParseFinalServerMsg(errorMessage, errorMsg);
+        if (parseErrorResult == NLogin::NSasl::EParseMsgReturnCodes::Success && !errorMsg.Error.empty()) {
+            UNIT_FAIL("SCRAM authentication failed with error: " + TString(errorMsg.Error));
+        } else {
+            UNIT_FAIL("SCRAM authentication failed with error code: " + ToString(response1->ErrorCode));
+        }
+    }
+
+    // Parse server first message
+    UNIT_ASSERT(response1->AuthBytes.has_value());
+    const auto& authBytes1 = response1->AuthBytes.value();
+    std::string serverFirstMessage(reinterpret_cast<const char*>(authBytes1.data()), authBytes1.size());
+
+    NLogin::NSasl::TFirstServerMsg parsedServerMsg;
+    auto parseResult = NLogin::NSasl::ParseFirstServerMsg(serverFirstMessage, parsedServerMsg);
+    UNIT_ASSERT_C(parseResult == NLogin::NSasl::EParseMsgReturnCodes::Success, "Failed to parse server first message");
+
+    // Decode salt from base64
+    TString decodedSalt = Base64StrictDecode(parsedServerMsg.Salt);
+
+    // Build client final message without proof
+    TString gs2Header = "n,,"; // No channel binding, no authzid
+    TString channelBinding = Base64Encode(gs2Header);
+    TString clientFinalMessageWithoutProof = TStringBuilder() << "c=" << channelBinding << ",r=" << parsedServerMsg.Nonce;
+
+    // Compute auth message
+    TString authMessage = clientFirstMessageBare + "," + serverFirstMessage + "," + clientFinalMessageWithoutProof;
+
+    // Compute client proof
+    std::string clientProof;
+    std::string errorText;
+    bool success = NLogin::NSasl::ComputeClientProof(
+        "SCRAM-SHA-256",
+        std::string(userPassword.data(), userPassword.size()),
+        std::string(decodedSalt.data(), decodedSalt.size()),
+        parsedServerMsg.IterationsCount,
+        std::string(authMessage.data(), authMessage.size()),
+        clientProof,
+        errorText
+    );
+    UNIT_ASSERT_C(success, TString(errorText));
+
+    // Encode client proof to base64
+    TString encodedClientProof = Base64Encode(clientProof);
+
+    // Send final SCRAM message
+    auto response2 = SaslScramAuthenticateFinalMsg(TString(parsedServerMsg.Nonce), encodedClientProof);
+    UNIT_ASSERT_VALUES_EQUAL(response2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+    // Parse server final message to verify server signature
+    UNIT_ASSERT(response2->AuthBytes.has_value());
+    const auto& authBytes2 = response2->AuthBytes.value();
+    std::string serverFinalMessage(reinterpret_cast<const char*>(authBytes2.data()), authBytes2.size());
+
+    Cerr << ">>>>> Server final message: " << serverFinalMessage << Endl;
+    Cerr << ">>>>> Server final message length: " << serverFinalMessage.size() << Endl;
+
+    // DEBUG: Print raw bytes
+    Cerr << ">>>>> Raw bytes: ";
+    for (size_t i = 0; i < authBytes2.size(); ++i) {
+        Cerr << "0x" << Hex((unsigned char)authBytes2[i]) << " ";
+    }
+    Cerr << Endl;
+
+    NLogin::NSasl::TFinalServerMsg parsedFinalServerMsg;
+    auto parseFinalResult = NLogin::NSasl::ParseFinalServerMsg(serverFinalMessage, parsedFinalServerMsg);
+    UNIT_ASSERT_C(parseFinalResult == NLogin::NSasl::EParseMsgReturnCodes::Success,
+        "Failed to parse server final message. Message: '" + TString(serverFinalMessage) + "'");
+
+    // Check if there's an error in the server response
+    UNIT_ASSERT_C(parsedFinalServerMsg.Error.empty(), "Server returned error: " + TString(parsedFinalServerMsg.Error));
+
+    // Verify server signature
+    UNIT_ASSERT_C(!parsedFinalServerMsg.ServerSignature.empty(), "Server signature is empty");
+
+    // Compute expected server signature
+    std::string serverKey;
+    std::string errorText2;
+    bool success2 = NLogin::NSasl::ComputeServerKey(
+        "SCRAM-SHA-256",
+        std::string(userPassword.data(), userPassword.size()),
+        std::string(decodedSalt.data(), decodedSalt.size()),
+        parsedServerMsg.IterationsCount,
+        serverKey,
+        errorText2
+    );
+    UNIT_ASSERT_C(success2, TString(errorText2));
+
+    std::string expectedServerSignature;
+    success2 = NLogin::NSasl::ComputeServerSignature(
+        "SCRAM-SHA-256",
+        serverKey,
+        std::string(authMessage.data(), authMessage.size()),
+        expectedServerSignature,
+        errorText2
+    );
+    UNIT_ASSERT_C(success2, TString(errorText2));
+
+    // Decode received server signature from base64
+    TString decodedServerSignature = Base64StrictDecode(parsedFinalServerMsg.ServerSignature);
+
+    // Compare signatures
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        TString(expectedServerSignature.data(), expectedServerSignature.size()),
+        decodedServerSignature,
+        "Server signature verification failed"
+    );
 }
 
 TRequestHeaderData TKafkaTestClient::Header(NKafka::EApiKey apiKey, TKafkaVersion version) {

@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <library/cpp/uri/uri.h>
 #include <library/cpp/cgiparam/cgiparam.h>
+#include <util/string/builder.h>
 
 namespace NYdb::inline Dev {
 
@@ -44,10 +45,10 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
     
     ui16 port = uri.GetPort();
     if (port == 0) {
-        // No port specified - this might be an error or we use a default
-        connectionInfo.Endpoint = TString(host);
+        // No port specified
+        connectionInfo.Endpoint = std::string(host);
     } else {
-        connectionInfo.Endpoint = TString::Join(host, ":", ToString(port));
+        connectionInfo.Endpoint = TStringBuilder() << host << ":" << port;
     }
 
     // Extract database from path or query parameter
@@ -64,7 +65,7 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
 
     // If database not found in query and path exists, use path as database
     if (connectionInfo.Database.empty() && !path.empty()) {
-        connectionInfo.Database = TString(path);
+        connectionInfo.Database = std::string(path);
     }
 
     return connectionInfo;

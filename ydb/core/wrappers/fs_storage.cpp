@@ -209,7 +209,11 @@ public:
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
             if (!HandleFileLockError<TEvPutObjectResponse>(ex, ev->Sender, key, "PutObject")) {
-                throw;
+                FS_LOG_E("PutObject failed with system error"
+                    << ": key# " << key
+                    << ", error# " << ex.what()
+                    << ", errno# " << ex.Status());
+                ReplyError<TEvPutObjectResponse>(ev->Sender, key, ex.what());
             }
         } catch (const std::exception& ex) {
             FS_LOG_E("PutObject failed"
@@ -375,7 +379,11 @@ public:
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
             if (!HandleFileLockError<TEvCreateMultipartUploadResponse>(ex, ev->Sender, key, "CreateMultipartUpload")) {
-                throw;
+                FS_LOG_E("CreateMultipartUpload failed with system error"
+                    << ": key# " << key
+                    << ", error# " << ex.what()
+                    << ", errno# " << ex.Status());
+                ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, key, ex.what());
             }
         } catch (const std::exception& ex) {
             FS_LOG_E("CreateMultipartUpload failed"
@@ -431,7 +439,12 @@ public:
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
             if (!HandleFileLockError<TEvUploadPartResponse>(ex, ev->Sender, key, "UploadPart")) {
-                throw;
+                FS_LOG_E("UploadPart failed with system error"
+                    << ": key# " << key
+                    << ", uploadId# " << uploadId
+                    << ", error# " << ex.what()
+                    << ", errno# " << ex.Status());
+                ReplyError<TEvUploadPartResponse>(ev->Sender, key, ex.what());
             }
         } catch (const std::exception& ex) {
             FS_LOG_E("UploadPart failed"

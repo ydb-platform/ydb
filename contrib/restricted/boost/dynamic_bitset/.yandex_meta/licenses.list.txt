@@ -5,7 +5,7 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 
 ====================BSL-1.0====================
-* Submit your patches as pull requests against **develop** branch. Note that by submitting patches you agree to license your modifications under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
+* Submit your patches as pull requests against the **develop** branch. Note that by submitting patches you agree to license your modifications under the [Boost Software License, Version 1.0](https://www.boost.org/LICENSE_1_0.txt).
 
 
 ====================BSL-1.0====================
@@ -40,6 +40,10 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 ====================COPYRIGHT====================
+//      Copyright (c) 2003-2004, 2008, 2025 Gennaro Prota
+
+
+====================COPYRIGHT====================
 //   Copyright (c) 2001-2002 Chuck Allison and Jeremy Siek
 //            Copyright (c) 2003-2004 Gennaro Prota
 
@@ -51,18 +55,18 @@ DEALINGS IN THE SOFTWARE.
 
 ====================COPYRIGHT====================
 //   Copyright (c) 2001-2002 Chuck Allison and Jeremy Siek
-//        Copyright (c) 2003-2006, 2008 Gennaro Prota
+//      Copyright (c) 2003-2006, 2008, 2025 Gennaro Prota
 
 
 ====================COPYRIGHT====================
 //   Copyright (c) 2001-2002 Chuck Allison and Jeremy Siek
-//        Copyright (c) 2003-2006, 2008 Gennaro Prota
+//      Copyright (c) 2003-2006, 2008, 2025 Gennaro Prota
 //             Copyright (c) 2014 Ahmed Charles
 
 
 ====================COPYRIGHT====================
 //   Copyright (c) 2001-2002 Chuck Allison and Jeremy Siek
-//   Copyright (c) 2003-2006, 2008 Gennaro Prota
+//   Copyright (c) 2003-2006, 2008, 2025 Gennaro Prota
 //   Copyright (c) 2014 Glen Joseph Fernandes
 //       (glenjofe@gmail.com)
 //   Copyright (c) 2018 Evgeny Shulgin

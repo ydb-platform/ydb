@@ -13,6 +13,7 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
@@ -46,10 +47,6 @@ bool AllDone(const THashMap<EState, int>& stateCounts) {
     return AllOf(stateCounts, [](const auto& stateCount) { return stateCount.first == EState::Done; });
 }
 
-bool AllWaiting(const THashMap<EState, int>& stateCounts) {
-    return AllOf(stateCounts, [](const auto& stateCount) { return stateCount.first == EState::Waiting; });
-}
-
 bool AllDoneOrWaiting(const THashMap<EState, int>& stateCounts) {
     return AllOf(stateCounts, [](const auto& stateCount) {
         return stateCount.first == EState::Done
@@ -74,6 +71,10 @@ bool IsCreateTransferQuery(const TString& query) {
     return query.Contains("CREATE TRANSFER");
 }
 
+bool IsCreateExternalDataSourceQuery(const TString& query) {
+    return query.Contains("CREATE EXTERNAL DATA SOURCE");
+}
+
 bool RewriteCreateQuery(
     TString& query,
     const TString& dbRestoreRoot,
@@ -82,12 +83,12 @@ bool RewriteCreateQuery(
 {
     if (IsCreateViewQuery(query)) {
         return NYdb::NDump::RewriteCreateViewQuery(query, dbRestoreRoot, true, dbPath, issues);
-    }
-    if (IsCreateReplicationQuery(query)) {
+    } else if (IsCreateReplicationQuery(query)) {
         return NYdb::NDump::RewriteCreateAsyncReplicationQuery(query, dbRestoreRoot, dbPath, issues);
-    }
-    if (IsCreateTransferQuery(query)) {
+    } else if (IsCreateTransferQuery(query)) {
         return NYdb::NDump::RewriteCreateTransferQuery(query, dbRestoreRoot, dbPath, issues);
+    } else if (IsCreateExternalDataSourceQuery(query)) {
+        return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
     }
 
     issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);
@@ -288,11 +289,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         importInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistImportState(db, *importInfo);
 
-        Self->Imports[id] = importInfo;
-        if (uid) {
-            Self->ImportsByUid[uid] = importInfo;
-        }
-
+        Self->AddImport(importInfo);
         Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *importInfo);
 
         Progress = true;
@@ -627,17 +624,18 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
+        LOG_D("TImport::TTxProgress: delay scheme object query execution"
+            << ": id# " << importInfo->Id
+            << ", delayed item# " << itemIdx);
+
         item.State = EState::Waiting;
         Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
-        if (AllWaiting(stateCounts)) {
-            // Cancel the import, or we will end up waiting indefinitely.
-            return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed");
-        } else if (AllDoneOrWaiting(stateCounts)) {
+        if (AllDoneOrWaiting(stateCounts)) {
             if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjects) {
-                // No progress has been made since the last scheme objec creation retry.
-                return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed");
+                // No progress has been made since the last scheme object creation retry.
+                return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed, no progress");
             }
             RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
         }
@@ -1320,6 +1318,11 @@ private:
         if (item.State == EState::CreateSchemeObject) {
             item.PreparedCreationQuery = std::get<NKikimrSchemeOp::TModifyScheme>(message.Result);
             PersistImportItemPreparedCreationQuery(db, *importInfo, message.ItemIdx);
+            if (item.PreparedCreationQuery->HasReplication()) {
+                // In case async replication or transfer is created, it is essential to execute modify scheme
+                // After all other objects, as they do not fail in case their dependencies are not imported yet
+                return DelayObjectCreation(importInfo, message.ItemIdx, db, error, ctx);
+            }
             AllocateTxId(*importInfo, message.ItemIdx);
         }
     }

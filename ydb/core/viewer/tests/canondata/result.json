@@ -3529,10 +3529,12 @@
                         "PublicKeys": "not-empty-array",
                         "Sids": [
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "monitoring",
                                 "Type": 1
                             },
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "viewer",
                                 "Type": 1
                             },
@@ -3554,6 +3556,7 @@
                                 "Type": 2
                             },
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "database",
                                 "Type": 1
                             },
@@ -3608,6 +3611,7 @@
                                 "Type": 2
                             },
                             {
+                                "HashesInitParams": "not-empty-array",
                                 "Name": "root",
                                 "Type": 1
                             }

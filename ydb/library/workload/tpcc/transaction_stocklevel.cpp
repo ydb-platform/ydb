@@ -44,7 +44,7 @@ TAsyncExecuteQueryResult GetDistrictOrderId(
 
     auto result = session.ExecuteQuery(
         query,
-        TTxControl::BeginTx(TTxSettings::SerializableRW()),
+        TTxControl::BeginTx(context.TxMode),
         std::move(params));
 
     LOG_T("Terminal " << context.TerminalID << " waiting for district order ID result");

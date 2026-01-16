@@ -3521,7 +3521,6 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestDoubleFailure);
         PROXY_UNIT_TEST(TestNormalMirror);
         PROXY_UNIT_TEST(TestSingleFailureMirror);
-        PROXY_UNIT_TEST(TestDoubleFailureMirror3Plus2);
         PROXY_UNIT_TEST(TestProxySimpleDiscover);
         PROXY_UNIT_TEST(TestProxySimpleDiscoverNone);
         PROXY_UNIT_TEST(TestProxySimpleDiscoverMaxi);
@@ -3536,7 +3535,6 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestPutGetStatusErasure3Plus1Block);
         PROXY_UNIT_TEST(TestPutGetStatusErasure4Plus2Block);
         PROXY_UNIT_TEST(TestPutGetStatusErasure3Plus2Block);
-        PROXY_UNIT_TEST(TestPutGetStatusErasureMirror3Plus2);
 
         PROXY_UNIT_TEST(TestVPutVCollectVGetRace);
 
@@ -3550,7 +3548,6 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestProxyRestoreOnDiscoverBlock);
         PROXY_UNIT_TEST(TestProxyRestoreOnGetBlock);
         PROXY_UNIT_TEST(TestProxyRestoreOnGetMirror);
-        PROXY_UNIT_TEST(TestProxyRestoreOnGetMirror3Plus2);
         PROXY_UNIT_TEST(TestVBlockVPutVGet);
         PROXY_UNIT_TEST(TestEmptyDiscover);
         PROXY_UNIT_TEST(TestEmptyDiscoverMaxi);
@@ -3921,10 +3918,6 @@ public:
         TestProxyRestoreOnGet<2, 1>(TBlobStorageGroupType::ErasureMirror3);
     }
 
-    void TestProxyRestoreOnGetMirror3Plus2() {
-        TestProxyRestoreOnGet<2, 1>(TBlobStorageGroupType::ErasureMirror3Plus2);
-    }
-
     void TestPartialGetBlock() {
         TestBlobStorage<TTestBlobStorageProxyPartialGet>(0, TBlobStorageGroupType::Erasure3Plus1Block,
             nullptr);
@@ -3989,11 +3982,6 @@ public:
         SectorMapByPath.clear();
     }
 
-    void TestDoubleFailureMirror3Plus2() {
-        TestBlobStorage<TTestBlobStorageProxyBasic1>(3, TBlobStorageGroupType::ErasureMirror3Plus2, nullptr);
-        SectorMapByPath.clear();
-    }
-
     void TestNormalNone() {
         TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::ErasureNone, nullptr);
         SectorMapByPath.clear();
@@ -4046,11 +4034,6 @@ public:
 
     void TestPutGetStatusErasure3Plus2Block() {
         TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure3Plus2Block, nullptr);
-        SectorMapByPath.clear();
-    }
-
-    void TestPutGetStatusErasureMirror3Plus2() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::ErasureMirror3Plus2, nullptr);
         SectorMapByPath.clear();
     }
 

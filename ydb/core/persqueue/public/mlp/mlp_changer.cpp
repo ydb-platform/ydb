@@ -1,4 +1,5 @@
 #include "mlp_changer.h"
+#include <util/generic/overloaded.h>
 
 #define Service TBase::Service
 #define LogBuilder TBase::LogBuilder
@@ -17,10 +18,15 @@ TEvPQ::TEvMLPUnlockRequest* TChangerActor<TEvPQ::TEvMLPUnlockRequest, TEvPQ::TEv
 
 template<>
 TEvPQ::TEvMLPChangeMessageDeadlineRequest* TChangerActor<TEvPQ::TEvMLPChangeMessageDeadlineRequest, TEvPQ::TEvMLPChangeMessageDeadlineResponse,  TMessageDeadlineChangerSettings>::CreateRequest(ui32 partitionId, const std::vector<ui64>& offsets) {
-    return new TEvPQ::TEvMLPChangeMessageDeadlineRequest(Settings.TopicName, Settings.Consumer, partitionId, offsets, Settings.Deadline);
+    return std::visit(TOverloaded{
+        [&](const TInstant& deadline) {
+            return new TEvPQ::TEvMLPChangeMessageDeadlineRequest(Settings.TopicName, Settings.Consumer, partitionId, offsets, deadline);
+        },
+        [&](const std::vector<TInstant>& deadlines) {
+            return new TEvPQ::TEvMLPChangeMessageDeadlineRequest(Settings.TopicName, Settings.Consumer, partitionId, offsets, deadlines);
+        }
+    }, Settings.Deadlines);
 }
-
-
 
 IActor* CreateCommitter(const NActors::TActorId& parentId, TCommitterSettings&& settings) {
     return new TChangerActor<TEvPQ::TEvMLPCommitRequest, TEvPQ::TEvMLPCommitResponse, TCommitterSettings>(parentId, std::move(settings), NKikimrServices::EServiceKikimr::PQ_MLP_COMMITTER);

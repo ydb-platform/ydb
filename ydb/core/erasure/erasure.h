@@ -256,14 +256,10 @@ struct TErasureType {
         Erasure4Plus2Block = 4,
         Erasure3Plus2Block = 5,
 
-        ErasureMirror3Plus2 = 8,
         ErasureMirror3dc = 9,
 
         Erasure4Plus3Block = 10,
         Erasure3Plus3Block = 12,
-        Erasure2Plus3Block = 14,
-
-        Erasure2Plus2Block = 16,
 
         ErasureMirror3of4 = 18,
     };

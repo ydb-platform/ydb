@@ -1527,15 +1527,8 @@ struct TEvPQ {
     struct TEvMLPChangeMessageDeadlineRequest : TEventPB<TEvMLPChangeMessageDeadlineRequest, NKikimrPQ::TEvMLPChangeMessageDeadlineRequest, EvMLPChangeMessageDeadlineRequest> {
         TEvMLPChangeMessageDeadlineRequest() = default;
 
-        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::vector<ui64>& offsets, TInstant deadlineTimestamp) {
-            Record.SetTopic(topic);
-            Record.SetConsumer(consumer);
-            Record.SetPartitionId(partitionId);
-            Record.SetDeadlineTimestampSeconds(deadlineTimestamp.Seconds());
-            for (auto offset : offsets) {
-                Record.AddOffset(offset);
-            }
-        }
+        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::span<const ui64> offsets, const std::span<const TInstant> deadlineTimestamps);
+        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::span<const ui64> offsets, TInstant deadlineTimestamp);
 
         const TString& GetTopic() const {
             return Record.GetTopic();
@@ -1549,9 +1542,8 @@ struct TEvPQ {
             return Record.GetPartitionId();
         }
 
-        TInstant GetDeadlineTimestamp() const {
-            return TInstant::Seconds(Record.GetDeadlineTimestampSeconds());
-        }
+    private:
+        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::span<const ui64> offsets, const std::span<const TInstant> deadlineTimestamps, bool useCommonDeadline);
     };
 
     //

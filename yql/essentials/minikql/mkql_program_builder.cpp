@@ -2576,7 +2576,7 @@ TRuntimeNode TProgramBuilder::NewVariant(TRuntimeNode item, const std::string_vi
     return TRuntimeNode(TVariantLiteral::Create(item, index, type, Env_), true);
 }
 
-TRuntimeNode TProgramBuilder::ToDynamicLinear(TRuntimeNode item) {
+TRuntimeNode TProgramBuilder::ToDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column) {
     if constexpr (RuntimeVersion < 68U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
     }
@@ -2588,6 +2588,12 @@ TRuntimeNode TProgramBuilder::ToDynamicLinear(TRuntimeNode item) {
 
     TCallableBuilder callableBuilder(Env_, __func__, retType);
     callableBuilder.Add(item);
+    if constexpr (RuntimeVersion >= 71U) {
+        callableBuilder.Add(NewDataLiteral<NUdf::EDataSlot::String>(file));
+        callableBuilder.Add(NewDataLiteral(row));
+        callableBuilder.Add(NewDataLiteral(column));
+    }
+
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

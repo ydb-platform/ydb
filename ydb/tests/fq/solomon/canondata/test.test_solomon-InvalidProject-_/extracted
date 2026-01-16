@@ -1,5 +1,5 @@
 Failed to execute query, reason:
-Request finished with status: EXTERNAL_ERROR
+Request finished with status: BAD_REQUEST
 Issues:
 <main>: Error: Monitoring api get data response: Project invalid does not exist
 

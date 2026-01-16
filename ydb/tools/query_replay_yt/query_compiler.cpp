@@ -209,6 +209,7 @@ public:
     {
         Config->SetEnableOltpSink(enableOltpSink);
         Config->SetAntlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError);
+        Config->SetEnableBatchUpdates(true);
     }
 
     void Bootstrap() {

@@ -362,6 +362,7 @@ public:
     struct TPerStepCounters{
         std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds;
         std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds;
+        std::shared_ptr<TAtomicCounter> BytesReadFromBS;
     };
 private:
     using TBase = TScanCounters;

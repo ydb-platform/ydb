@@ -414,14 +414,16 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();
     Result->PerStepTimings = [&]{
         auto lock = ScanCountersPool.StepExecutionDurations.WriteGuard();
-        THashMap<TString, NKqp::TPerStepScanTimings> timesPerStep;
+        THashMap<TString, NKqp::TPerStepScanStats> timesPerStep;
         for(auto& kv: lock.Value) {
-            NKqp::TPerStepScanTimings timings;
-            timings.ExecutionDuration = TDuration::MicroSeconds(kv.second.ExecutionDurationMicroSeconds->Val());
+            NKqp::TPerStepScanStats stats;
+            stats.ExecutionDuration = TDuration::MicroSeconds(kv.second.ExecutionDurationMicroSeconds->Val());
             *kv.second.ExecutionDurationMicroSeconds = TAtomicCounter{0};
-            timings.WaitDuration = TDuration::MicroSeconds(kv.second.WaitDurationMicroSeconds->Val());
+            stats.WaitDuration = TDuration::MicroSeconds(kv.second.WaitDurationMicroSeconds->Val());
             *kv.second.WaitDurationMicroSeconds = TAtomicCounter{0};
-            timesPerStep.emplace(kv.first, timings);
+            stats.BytesReadFromBS = kv.second.BytesReadFromBS->Val();
+            *kv.second.BytesReadFromBS = TAtomicCounter{};
+            timesPerStep.emplace(kv.first, stats);
         }
         return timesPerStep;
     }();

@@ -2840,6 +2840,10 @@ attributes {
   key: "_message_group_seqno_retention_period_ms"
   value: "1382400000"
 }
+attributes {
+  key: "_timestamp_type"
+  value: "CreateTime"
+}
 )", i));
 
                 const auto* changefeedChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb.sha256");

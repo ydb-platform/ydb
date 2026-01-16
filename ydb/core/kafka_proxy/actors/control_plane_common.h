@@ -395,4 +395,7 @@ enum class ECleanupPolicy {
 std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPolicy(const std::optional<TString>& configValue,
                                                                                     std::optional<ECleanupPolicy>& cleanupPolicy);
 
+std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertTimestampType(
+        const std::optional<TString>& configValue, std::optional<TString>& correctTimestampType);
+
 } //namespace NKafka

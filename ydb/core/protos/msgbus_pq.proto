@@ -439,6 +439,7 @@ message TPersQueueFetchResponse {
     }
 
     repeated TPartResult PartResult = 1;
+    optional string TimestampType = 2;
 }
 
 

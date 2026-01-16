@@ -1,6 +1,8 @@
 #include "parser.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <library/cpp/uri/uri.h>
+#include <library/cpp/cgiparam/cgiparam.h>
 
 namespace NYdb::inline Dev {
 
@@ -9,39 +11,60 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
         ythrow TContractViolation("Empty connection string");
     }
 
-    const std::string databaseFlag = "/?database=";
-    const std::string grpcProtocol = "grpc://";
-    const std::string grpcsProtocol = "grpcs://";
-    const std::string localhostDomain = "localhost:";
-
     TConnectionInfo connectionInfo;
-    std::string endpoint;
 
-    size_t pathIndex = connectionString.find(databaseFlag);
-    if (pathIndex == std::string::npos){
-        pathIndex = connectionString.length();
-    }
-    if (pathIndex != connectionString.length()) {
-        connectionInfo.Database = connectionString.substr(pathIndex + databaseFlag.length());
-        endpoint = connectionString.substr(0, pathIndex);
-    } else {
-        endpoint = connectionString;
+    // Parse the URI with flexible scheme support
+    NUri::TUri uri;
+    NUri::TUri::TState::EParsed parseStatus = uri.Parse(
+        connectionString, 
+        NUri::TFeature::FeaturesAll | NUri::TFeature::FeatureSchemeFlexible
+    );
+    
+    if (parseStatus != NUri::TUri::TState::EParsed::ParsedOK) {
+        ythrow TContractViolation("Failed to parse connection string: invalid URI format");
     }
 
-    if (!std::string_view{endpoint}.starts_with(grpcProtocol) && !std::string_view{endpoint}.starts_with(grpcsProtocol) &&
-        !std::string_view{endpoint}.starts_with(localhostDomain))
-    {
-        connectionInfo.Endpoint = endpoint;
-        connectionInfo.EnableSsl = true;
-    } else if (std::string_view{endpoint}.starts_with(grpcProtocol)) {
-        connectionInfo.Endpoint = endpoint.substr(grpcProtocol.length());
-        connectionInfo.EnableSsl = false;
-    } else if (std::string_view{endpoint}.starts_with(grpcsProtocol)) {
-        connectionInfo.Endpoint = endpoint.substr(grpcsProtocol.length());
-        connectionInfo.EnableSsl = true;
+    // Validate and extract scheme
+    TStringBuf scheme = uri.GetField(NUri::TUri::FieldScheme);
+    if (!scheme.empty()) {
+        if (scheme != "grpc" && scheme != "grpcs") {
+            ythrow TContractViolation("Invalid scheme in connection string: only 'grpc' and 'grpcs' are allowed");
+        }
+        connectionInfo.EnableSsl = (scheme == "grpcs");
     } else {
-        connectionInfo.Endpoint = endpoint;
+        // No scheme provided, assume localhost without SSL
         connectionInfo.EnableSsl = false;
+    }
+
+    // Extract host and port
+    TStringBuf host = uri.GetHost();
+    if (host.empty()) {
+        ythrow TContractViolation("Connection string must contain a host");
+    }
+    
+    ui16 port = uri.GetPort();
+    if (port == 0) {
+        // No port specified - this might be an error or we use a default
+        connectionInfo.Endpoint = TString(host);
+    } else {
+        connectionInfo.Endpoint = TString::Join(host, ":", ToString(port));
+    }
+
+    // Extract database from path or query parameter
+    TStringBuf path = uri.GetField(NUri::TUri::FieldPath);
+    TStringBuf query = uri.GetField(NUri::TUri::FieldQuery);
+
+    // First, try to get database from query parameter
+    if (!query.empty()) {
+        TCgiParameters queryParams(query);
+        if (queryParams.Has("database")) {
+            connectionInfo.Database = queryParams.Get("database");
+        }
+    }
+
+    // If database not found in query and path exists, use path as database
+    if (connectionInfo.Database.empty() && !path.empty()) {
+        connectionInfo.Database = TString(path);
     }
 
     return connectionInfo;

@@ -10,6 +10,8 @@ SRCS(
 PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/public/sdk/cpp/src/library/issue
+    library/cpp/uri
+    library/cpp/cgiparam
 )
 
 END()

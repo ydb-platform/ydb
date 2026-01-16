@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -61,13 +62,14 @@ private:
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TKeyedWriteSession
 
-class TKeyedWriteSession : public IKeyedWriteSession, public TContinuationTokenIssuer {
+class TKeyedWriteSession : public IKeyedWriteSession,
+                           public TContinuationTokenIssuer,
+                           public std::enable_shared_from_this<TKeyedWriteSession> {
 private:
     static constexpr auto MAX_CLEANED_SESSIONS_COUNT = 100;
     static constexpr auto MAX_MESSAGES_IN_MEMORY = 100000;
-    static constexpr auto MESSAGES_NOT_EMPTY_FUTURE_INDEX = 0;
-    static constexpr auto CLOSE_FUTURE_INDEX = 1;
-    static constexpr auto EVENTS_PROCESSED_FUTURE_INDEX = 2;
+    // static constexpr auto MESSAGES_NOT_EMPTY_FUTURE_INDEX = 0;
+    // static constexpr auto CLOSE_FUTURE_INDEX = 1;
 
     using WriteSessionPtr = std::shared_ptr<IWriteSession>;
 
@@ -184,17 +186,23 @@ private:
     WrappedWriteSessionPtr CreateWriteSession(ui64 partitionId);
 
     using TSessionsIndexIterator = std::unordered_map<ui64, WrappedWriteSessionPtr>::iterator;
-    void DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout);
+    void DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout, bool alreadyClosed = false);
 
     void SaveMessage(TWriteMessage&& message, ui64 partitionId, TTransactionBase* tx);
 
     void RunMessageSender();
 
-    TContinuationToken GetContinuationToken(ui64 partitionId);
+    std::optional<TContinuationToken> GetContinuationToken(ui64 partitionId);
 
-    void ProcessEventsUntilReadyToAccept(ui64 partitionId);
+    // void ProcessEventsUntilReadyToAccept(ui64 partitionId);
 
     void TransferEventsToGlobalQueue();
+
+    void AddReadyFuture(ui64 index);
+
+    void ConsumeEvents(WrappedWriteSessionPtr wrappedSession);
+
+    void AddEventToPartitionQueue(ui64 partitionId, TWriteSessionEvent::TEvent& event);
     
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -242,11 +250,21 @@ private:
 
     NThreading::TPromise<void> MessagesNotEmptyPromise;
     NThreading::TPromise<void> ClosePromise;
+    NThreading::TFuture<void> CloseFuture;
     NThreading::TPromise<void> EventsProcessedPromise;
+    NThreading::TFuture<void> EventsProcessedFuture;
 
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;
     TDuration CloseTimeout = TDuration::Zero();
+
+    // IMPORTANT: must not be protected by GlobalLock, because callbacks from Future::Subscribe()
+    // can be executed inline, and taking GlobalLock there can deadlock the session thread.
+    std::mutex ReadyFuturesLock;
+    std::vector<ui64> ReadyFutures;
+
+    size_t MessagesNotEmptyFutureIndex;
+    size_t CloseFutureIndex;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

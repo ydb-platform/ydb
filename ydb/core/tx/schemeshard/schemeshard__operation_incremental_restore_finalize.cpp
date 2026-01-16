@@ -104,7 +104,6 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 // InitAlterData() sets AlterVersion = CurrentVersion + 1 and also sets CoordinatedSchemaVersion
                 table->InitAlterData(OperationId);
 
-                // Persist AlterData with CoordinatedSchemaVersion for crash recovery
                 context.SS->PersistAddAlterTable(db, tablePathId, table->AlterData);
 
                 LOG_I(DebugHint() << " Preparing ALTER for table " << tablePathId
@@ -208,7 +207,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
         }
 
     public:
-        TFinalizationPropose(TOperationId id, const TTxTransaction& tx)
+        TFinalizationPropose(TOperationId id, const TTxTransaction& tx) 
             : OperationId(id), Transaction(tx) {}
 
         bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -314,11 +313,11 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
 
                 table->FinishAlter();
                 context.SS->PersistTableAltered(db, implTablePathId, table);
-                
+
                 // Clear describe path caches and publish to scheme board
                 context.SS->ClearDescribePathCaches(path.Base());
                 context.OnComplete.PublishToSchemeBoard(OperationId, implTablePathId);
-                
+
                 LOG_I("SyncIndexSchemaVersions: Finalized schema version for: " << tablePath);
 
                 // Also update the parent index version

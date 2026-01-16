@@ -48,13 +48,12 @@ THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPat
         if (!context.SS->PathsById.contains(pathId)) {
             continue;
         }
-
+        
         auto streamPath = context.SS->PathsById.at(pathId);
         if (!streamPath || streamPath->Dropped()) {
             continue;
         }
 
-        // Only drop backup streams (Proto format), not user streams (Json format)
         if (cdcStreamInfo->Format != NKikimrSchemeOp::ECdcStreamFormatProto) {
             continue;
         }
@@ -63,14 +62,14 @@ THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPat
             if (!context.SS->PathsById.contains(streamPath->ParentPathId)) {
                 continue;
             }
-
+            
             auto tablePath = context.SS->PathsById.at(streamPath->ParentPathId);
             if (!tablePath || !tablePath->IsTable() || tablePath->Dropped()) {
                 continue;
             }
-
+            
             TString tablePathStr = TPath::Init(streamPath->ParentPathId, context.SS).PathString();
-
+            
             auto& tableEntry = plan->CdcStreamsByTable[streamPath->ParentPathId];
             if (tableEntry.StreamNames.empty()) {
                 tableEntry.TablePathId = streamPath->ParentPathId;

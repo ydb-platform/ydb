@@ -147,7 +147,6 @@ public:
                 srcTable->InitAlterData(OperationId);
                 ui64 coordVersion = srcTable->AlterData->CoordinatedSchemaVersion.GetOrElse(srcTable->AlterVersion + 1);
 
-                // Persist AlterData with CoordinatedSchemaVersion for crash recovery
                 NIceDb::TNiceDb db(context.GetDB());
                 context.SS->PersistAddAlterTable(db, txState->SourcePathId, srcTable->AlterData);
 
@@ -302,7 +301,6 @@ public:
                 context.MemChanges.GrabTable(context.SS, srcPathId);
                 auto srcTable = context.SS->Tables.at(srcPathId);
 
-                // Use coordinated version from AlterData (set in ConfigureParts)
                 // Don't call InitAlterData() here - it was already called in ConfigureParts,
                 // and calling it again after another subop's Done() updated AlterVersion
                 // would incorrectly create a new version.

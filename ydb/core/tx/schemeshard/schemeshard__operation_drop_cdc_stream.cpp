@@ -232,11 +232,9 @@ protected:
         auto& notice = *tx.MutableDropCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());
 
-        // Use coordinated version from AlterData
         table->InitAlterData(OperationId);
         notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
 
-        // Persist AlterData with CoordinatedSchemaVersion for crash recovery
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
 
@@ -346,8 +344,6 @@ public:
         : TSubOperation(id, state)
         , DropSnapshot(dropSnapshot)
     {
-        // StreamNames are not needed during state reconstruction -
-        // FillNotice dynamically finds streams marked PlannedToDrop
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {

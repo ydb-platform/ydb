@@ -157,7 +157,6 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
 
     NIceDb::TNiceDb db(context.GetDB());
 
-    // Use coordinated version from AlterData (set in ConfigureParts/FillNotice)
     // Don't call InitAlterData() here - it was already called in ConfigureParts,
     // and calling it again after another subop's Done() updated AlterVersion
     // would incorrectly create a new version.

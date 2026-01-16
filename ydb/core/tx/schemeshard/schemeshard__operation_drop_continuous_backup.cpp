@@ -47,7 +47,6 @@ TVector<ISubOperation::TPtr> CreateDropContinuousBackup(TOperationId opId, const
                     continue;
                 }
                 const auto& streamInfo = context.SS->CdcStreams.at(childPathId);
-                // Only drop backup streams (Proto format), not user streams (Json format)
                 if (streamInfo->Format != NKikimrSchemeOp::ECdcStreamFormatProto) {
                     continue;
                 }

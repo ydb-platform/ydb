@@ -446,11 +446,9 @@ protected:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxRotateCdcStreamAtTable);
 
-        // Use coordinated version from AlterData
         table->InitAlterData(OperationId);
         notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
 
-        // Persist AlterData with CoordinatedSchemaVersion for crash recovery
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
 

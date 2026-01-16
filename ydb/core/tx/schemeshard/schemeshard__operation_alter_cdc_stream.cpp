@@ -246,11 +246,9 @@ protected:
         auto& notice = *tx.MutableAlterCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());
 
-        // Use coordinated version from AlterData
         table->InitAlterData(OperationId);
         notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
 
-        // Persist AlterData with CoordinatedSchemaVersion for crash recovery
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
 

@@ -65,10 +65,10 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
-
-    bool omitIndexes = bc->Description.GetOmitIndexes() ||
+    
+    bool omitIndexes = bc->Description.GetOmitIndexes() || 
                        (incrBackupEnabled && bc->Description.GetIncrementalBackupConfig().GetOmitIndexes());
-
+    
     TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
 
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
@@ -84,27 +84,27 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         desc.SetDstPath(JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName(), tx.GetBackupBackupCollection().GetTargetDir(), relativeItemPath}));
         
         desc.SetOmitIndexes(omitIndexes);
-
+        
         desc.SetOmitFollowers(true);
         desc.SetAllowUnderSameOperation(true);
 
         if (incrBackupEnabled) {
             NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
-
+            
             {
                 auto checks = sPath.Check();
                 checks
                     .IsResolved()
                     .NotDeleted()
                     .IsTable();
-
+                
                 if (!checks) {
                     result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
                     return result;
                 }
             }
-
+            
             createCdcStreamOp.SetTableName(sPath.LeafName());
             auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
             streamDescription.SetName(streamName);
@@ -159,7 +159,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
                         continue;
                     }
-
+                
                     auto indexPath = TPath::Init(childPathId, context.SS);
                     Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
                     auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
@@ -187,7 +187,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     indexStreamDescription.SetName(streamName);
                     indexStreamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
                     indexStreamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
-
+                    
                     NCdc::DoCreateStreamImpl(result, indexCdcStreamOp, opId, indexTablePath, false, false);
                     (*desc.MutableIndexImplTableCdcStreams())[childName].CopyFrom(indexCdcStreamOp);
 
@@ -279,24 +279,20 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
                 const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
 
-                // Iterate through table's children to find indexes
                 for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
                     if (!context.SS->PathsById.contains(childPathId)) {
                         continue;
                     }
                     auto childPath = context.SS->PathsById.at(childPathId);
 
-                    // Skip non-index children (CDC streams, etc.)
                     if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
                         continue;
                     }
 
-                    // Skip deleted indexes
                     if (childPath->Dropped()) {
                         continue;
                     }
 
-                    // Get index info and filter for global sync only
                     if (!context.SS->Indexes.contains(childPathId)) {
                         continue;
                     }
@@ -305,7 +301,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                         continue;
                     }
 
-                    // Get index implementation table (the only child of index)
                     auto indexPath = TPath::Init(childPathId, context.SS);
                     Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
                     auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
@@ -315,14 +310,14 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                         continue;
                     }
                     auto indexTable = context.SS->Tables.at(implTablePathId);
-
+                    
                     NKikimrSchemeOp::TCreateCdcStream indexCdcStreamOp;
                     indexCdcStreamOp.SetTableName(implTableName);
                     auto& indexStreamDescription = *indexCdcStreamOp.MutableStreamDescription();
                     indexStreamDescription.SetName(streamName);
                     indexStreamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
                     indexStreamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
-
+                    
                     TVector<TString> indexBoundaries;
                     const auto& indexPartitions = indexTable->GetPartitions();
                     indexBoundaries.reserve(indexPartitions.size() - 1);
@@ -332,7 +327,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                             indexBoundaries.push_back(partition.EndOfRange);
                         }
                     }
-
+                    
                     const auto indexStreamPath = indexTablePath.Child(streamName);
                     NCdc::DoCreatePqPart(result, indexCdcStreamOp, opId, indexStreamPath, streamName, indexTable, indexBoundaries, false);
                 }

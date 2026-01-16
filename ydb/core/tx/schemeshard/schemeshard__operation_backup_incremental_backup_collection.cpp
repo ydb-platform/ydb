@@ -194,13 +194,13 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 .IsResolved()
                 .NotDeleted()
                 .IsTable();
-
+            
             if (!checks) {
                 result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
                 return result;
             }
         }
-
+        
         std::pair<TString, TString> paths;
         TString err;
         if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
@@ -224,26 +224,21 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
         }
         streams.push_back(stream);
 
-        // Process indexes for this table if they are not omitted
         if (!omitIndexes) {
-            // Iterate through table's children to find indexes
             for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
                 if (!context.SS->PathsById.contains(childPathId)) {
                     continue;
                 }
                 auto childPath = context.SS->PathsById.at(childPathId);
 
-                // Skip non-index children (CDC streams, etc.)
                 if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
                     continue;
                 }
 
-                // Skip deleted indexes
                 if (childPath->Dropped()) {
                     continue;
                 }
 
-                // Get index info and filter for global sync only
                 if (!context.SS->Indexes.contains(childPathId)) {
                     continue;
                 }
@@ -252,7 +247,6 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                     continue;
                 }
 
-                // Get index implementation table (single child of index)
                 auto indexPath = TPath::Init(childPathId, context.SS);
                 Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
                 auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();

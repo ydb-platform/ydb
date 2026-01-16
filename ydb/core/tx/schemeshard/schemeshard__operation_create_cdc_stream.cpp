@@ -374,7 +374,6 @@ protected:
         table->InitAlterData(OperationId);
         notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
 
-        // Persist AlterData with CoordinatedSchemaVersion for crash recovery
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
     }

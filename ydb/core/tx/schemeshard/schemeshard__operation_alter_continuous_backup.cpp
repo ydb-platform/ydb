@@ -75,11 +75,6 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     result.push_back(CreateNewTable(NextPartId(opId, result), outTx));
 }
 
-bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
-    TPathId unused;
-    return CreateAlterContinuousBackup(opId, tx, context, result, unused);
-}
-
 bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result, TPathId& outStream) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup);
 
@@ -211,6 +206,11 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
 
     outStream = streamPath->PathId;
     return true;
+}
+
+bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
+    TPathId unused;
+    return CreateAlterContinuousBackup(opId, tx, context, result, unused);
 }
 
 TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {

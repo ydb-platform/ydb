@@ -7,6 +7,10 @@
 
 namespace NKikimr {
 
+bool IsLdapAuthenticationEnable(const NKikimrProto::TAuthConfig& config) {
+    return config.HasLdapAuthentication();
+}
+
 bool IsUsernameFromLdapAuthDomain(const TString& username, const NKikimrProto::TAuthConfig& config) {
     if (config.HasLdapAuthentication() && !config.GetLdapAuthenticationDomain().empty()) {
         const TString ldapDomain = "@" + config.GetLdapAuthenticationDomain();

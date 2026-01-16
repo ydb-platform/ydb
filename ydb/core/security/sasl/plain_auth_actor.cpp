@@ -190,7 +190,7 @@ private:
                 const auto scramInitParams = ParseScramHashInitParams(itHashesInitParams->second);
                 ui32 iterationsCount;
                 if (!TryFromString(scramInitParams.IterationsCount, iterationsCount)
-                    || !IsBase64(scramInitParams.Salt)) {
+                    || (iterationsCount == 0) || !IsBase64(scramInitParams.Salt)) {
                     LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
                         ActorName << "# " << ctx.SelfID.ToString() <<
                         ", " << "Authentication failed: " <<

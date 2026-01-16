@@ -7,6 +7,7 @@
 #include <ydb/core/security/login_shared_func.h>
 #include <ydb/core/security/sasl/plain_auth_actor.h>
 #include <ydb/core/security/sasl/plain_ldap_auth_proxy_actor.h>
+#include <ydb/library/login/sasl/plain.h>
 #include <ydb/core/security/sasl/scram_auth_actor.h>
 #include <ydb/library/login/sasl/scram.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
@@ -293,12 +294,12 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
 
 void TKafkaSaslAuthActor::SendPlainLoginRequest(const NActors::TActorContext& ctx) {
     std::unique_ptr<IActor> authActor;
-    if (IsUsernameFromLdapDomain(ClientAuthData.UserName, AppData()->AuthConfig)) {
+    if (IsUsernameFromLdapAuthDomain(ClientAuthData.UserName, AppData()->AuthConfig)) {
         const TString ldapUsername = PrepareLdapUsername(ClientAuthData.UserName, AppData()->AuthConfig);
-        const TString authMsg = PrepareSaslPlainAuthMsg(ldapUsername, ClientAuthData.Password);
+        const TString authMsg = NLogin::NSasl::BuildSaslPlainAuthMsg(ldapUsername, ClientAuthData.Password);
         authActor = CreatePlainLdapAuthProxyActor(ctx.SelfID, DatabasePath, authMsg, Address->ToString());
     } else {
-        const TString authMsg = PrepareSaslPlainAuthMsg(ClientAuthData.UserName, ClientAuthData.Password);
+        const TString authMsg = NLogin::NSasl::BuildSaslPlainAuthMsg(ClientAuthData.UserName, ClientAuthData.Password);
         authActor = CreatePlainAuthActor(ctx.SelfID, DatabasePath, authMsg, Address->ToString());
     }
 

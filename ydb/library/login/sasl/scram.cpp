@@ -202,20 +202,21 @@ bool IsPrintable(const std::string_view str) {
 	return true;
 }
 
-bool IsUnsignedInt(const std::string_view str) {
-	   if (str.empty()) {
-	       return false;
-	   }
+bool IsPositiveInt(const std::string_view str) {
+    if (str.empty()) {
+	    return false;
+	}
 
-	   try {
-	       ui32 result = std::stoul(std::string(str));
-	       if (result == 0) {
-	           return false;
-	       }
-	       return true;
-	   } catch (...) {
-	       return false;
-	   }
+	try {
+        ui32 result = std::stoul(std::string(str));
+        if (result == 0) {
+            return false;
+        } else {
+            return true;
+        }
+    } catch (...) {
+        return false;
+    }
 }
 
 } // namespace
@@ -802,7 +803,7 @@ EParseMsgReturnCodes ParseFirstServerMsg(const std::string& msg, TFirstServerMsg
         }
 
         const std::string_view iterStr = iterAttr->second;
-        if (!IsUnsignedInt(iterStr)) {
+        if (!IsPositiveInt(iterStr)) {
             return EParseMsgReturnCodes::InvalidFormat;
         } else {
             parsedMsg.IterationsCount = std::stoul(std::string(iterStr));

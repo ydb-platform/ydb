@@ -65,6 +65,9 @@ class TKeyedWriteSession : public IKeyedWriteSession, public TContinuationTokenI
 private:
     static constexpr auto MAX_CLEANED_SESSIONS_COUNT = 100;
     static constexpr auto MAX_MESSAGES_IN_MEMORY = 100000;
+    static constexpr auto MESSAGES_NOT_EMPTY_FUTURE_INDEX = 0;
+    static constexpr auto CLOSE_FUTURE_INDEX = 1;
+    static constexpr auto EVENTS_PROCESSED_FUTURE_INDEX = 2;
 
     using WriteSessionPtr = std::shared_ptr<IWriteSession>;
 
@@ -129,7 +132,7 @@ private:
         TTransactionBase* Tx;
     };
 
-    void WaitForEvents(const NThreading::TFuture<void>& messagesFuture);
+    void WaitForEvents();
 
     void WaitSomeAction(std::unique_lock<std::mutex>& lock);
 
@@ -222,11 +225,13 @@ private:
     TDbDriverStatePtr DbDriverState;
 
     std::vector<TPartitionInfo> Partitions;
+    std::vector<NThreading::TFuture<void>> Futures;
     std::unique_ptr<IPartitionChooser> PartitionChooser;
 
     std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
     std::unordered_map<ui64, TContinuationToken> ContinuationTokens;
-    std::map<TPartitionBound, TPartitionInfo*> PartitionsIndex;
+    std::unordered_map<ui64, ui64> PartitionsPrimaryIndex;
+    std::map<TPartitionBound, ui64> PartitionsIndex;
 
     TKeyedWriteSessionSettings Settings;
     std::unordered_map<ui64, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
@@ -236,11 +241,11 @@ private:
     std::list<TMessageInfo> InFlightMessages;
 
     NThreading::TPromise<void> MessagesNotEmptyPromise;
-    NThreading::TFuture<void> MessagesNotEmptyFuture;
+    // NThreading::TFuture<void> MessagesNotEmptyFuture;
     NThreading::TPromise<void> ClosePromise;
-    NThreading::TFuture<void> CloseFuture;
+    // NThreading::TFuture<void> CloseFuture;
     NThreading::TPromise<void> EventsProcessedPromise;
-    NThreading::TFuture<void> EventsProcessedFuture;
+    // NThreading::TFuture<void> EventsProcessedFuture;
 
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;

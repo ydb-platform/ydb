@@ -11,7 +11,6 @@ In parallel with designing the schema, you need to set up your development envir
 Choose the {{ ydb-short-name }} API you want to use; there are several options:
 
 - The recommended way for mainstream programming languages is using a [{{ ydb-short-name }} SDK](../reference/ydb-sdk/index.md). They provide high-level APIs and implement best practices on working with {{ ydb-short-name }}. {{ ydb-short-name }} SDKs are available for several popular languages and strive for feature parity, but not all are feature-complete. Refer to the [SDK feature comparison table](../reference/ydb-sdk/feature-parity.md) to check if the SDK for the programming language you had in mind will fit your needs or to choose a programming language with better feature coverage if you're flexible.
-- Alternatively, {{ ydb-short-name }} provides [PostgreSQL-compatible API](../postgresql/intro.md). It is intended to simplify migrating existing applications that have outgrown PostgreSQL. However, it is also useful for exotic programming languages that have a PostgreSQL client library but don't have a {{ ydb-short-name }} SDK. Refer to PostgreSQL compatibility documentation to check if its completeness will suit your needs.
 - If you are interested in [{{ ydb-short-name }} topics](../concepts/datamodel/topic.md) feature, it is worth noting that they also provide [Kafka-compatible API](../reference/kafka-api/index.md). Follow that link if this use case is relevant.
 - As a last resort, {{ ydb-short-name }}'s native API is based on the [gRPC](https://grpc.io/) protocol, which has an ecosystem around it, including code generation of clients. [{{ ydb-short-name}}'s gRPC specs are hosted on GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/public/api/grpc) and you could leverage them in your application. The generated clients are low-level and will require extra work to handle aspects like retries and timeouts properly, so go this route only if other options above aren't possible and you know what you're doing.
 
@@ -35,11 +34,6 @@ Additionally, you'd want to set up at least one of the available ways to run ad-
 - Check out [SDK recipies](../recipes/ydb-sdk/index.md) for typical SDK use cases, which you can refer to later.
 - Learn how to [handle {{ ydb-short-name }} SDK errors](../reference/ydb-sdk/error_handling.md).
 - Leverage your IDE capabilities to navigate the SDK code.
-
-### For PostgreSQL-compatibility route
-
-- Learn how to [connect PostgreSQL driver with {{ ydb-short-name }} cluster](../postgresql/docker-connect.md).
-- The rest should be similar to using vanilla PostgreSQL. Use your experience with it or refer to any favorite resources. However, refer to the list of [functions](../postgresql/functions.md) and statements to adjust your expectations.
 
 ## Testing
 

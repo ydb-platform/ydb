@@ -4,7 +4,7 @@
 
 ## Audit log configuration {#audit-log-configuration}
 
-Audit logging works cluster-wide. For the basic configuration, add the `audit_config` section to the [cluster configuration](../configuration/index.md) and specify one or more stream destinations (`file_backend`, `unified_agent_backend`, `stderr_backend`):
+Audit logging works cluster-wide. For the basic configuration, add the `audit_config` section to the [cluster configuration](../configuration/index.md) and specify one or more stream destinations ([`file_backend`](#audit-config), [`unified_agent_backend`](#audit-config), [`stderr_backend`](#audit-config)):
 
 ```yaml
 audit_config:
@@ -30,6 +30,18 @@ All fields are optional.
 || `log_class_config`       | An array of audit rules for different log classes. See the [log class configuration](#log-class-config). ||
 || `heartbeat`              | Optional heartbeat configuration. See the [heartbeat settings](#heartbeat-settings). ||
 |#
+
+### Log rotation {#log-rotation}
+
+Audit logs written to files do not have a built-in log rotation mechanism. To rotate audit logs, use an external tool (for example, `logrotate`). The audit logger can reopen log files on `SIGHUP`.
+
+After rotating the log file, send `SIGHUP` to the {{ ydb-short-name }} process so it starts writing to a new file.
+
+Example:
+
+```bash
+kill -HUP <ydb_pid>
+```
 
 ### Backend settings {#backend-settings}
 

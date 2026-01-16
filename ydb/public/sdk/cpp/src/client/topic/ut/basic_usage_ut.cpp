@@ -930,21 +930,33 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto session = publicClient.CreateKeyedWriteSession(writeSettings);
 
-        struct TTokenIssuer : public TContinuationTokenIssuer {
-            using TContinuationTokenIssuer::IssueContinuationToken;
-        };
-
         const std::string key0 = FindKeyForBucket(0, 2);
         const std::string key1 = FindKeyForBucket(1, 2);
 
         const ui64 count0 = 7;
         const ui64 count1 = 11;
 
+        auto getReadyToken = [&](TDuration timeout) -> TContinuationToken {
+            const TInstant deadline = TInstant::Now() + timeout;
+            while (TInstant::Now() < deadline) {
+                session->WaitEvent().Wait(TDuration::Seconds(5));
+                for (auto& ev : session->GetEvents(false)) {
+                    if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&ev)) {
+                        return std::move(ready->ContinuationToken);
+                    }
+                }
+            }
+            UNIT_FAIL("Timed out waiting for ReadyToAcceptEvent");
+            Y_ABORT("Unreachable");
+        };
+
         for (ui64 i = 0; i < count0; ++i) {
-            session->Write(TTokenIssuer::IssueContinuationToken(), key0, TWriteMessage("msg0"));
+            auto token = getReadyToken(TDuration::Seconds(30));
+            session->Write(std::move(token), key0, TWriteMessage("msg0"));
         }
         for (ui64 i = 0; i < count1; ++i) {
-            session->Write(TTokenIssuer::IssueContinuationToken(), key1, TWriteMessage("msg1"));
+            auto token = getReadyToken(TDuration::Seconds(30));
+            session->Write(std::move(token), key1, TWriteMessage("msg1"));
         }
 
         UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
@@ -978,7 +990,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                              << "partitionId1=" << partitionId1 << " endOffset1=" << endOffset1 << ", "
                              << "expected (" << count0 << "," << count1 << ") in any order"
         );
-        session->Close(TDuration::Zero());
     }
 
     Y_UNIT_TEST(KeyedWriteSession_EventLoop_Acks) {
@@ -1050,6 +1061,110 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                                  << ", expected SeqNo=" << (i + 1)
             );
         }
+        UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
+    }
+
+    Y_UNIT_TEST(KeyedWriteSession_MultiThreadedWrite_Acks) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        auto client = setup.MakeClient();
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.MessageGroupId(TEST_MESSAGE_GROUP_ID);
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.SessionTimeout(TDuration::Seconds(30));
+
+        auto session = client.CreateKeyedWriteSession(writeSettings);
+
+        constexpr ui64 threadsCount = 4;
+        constexpr ui64 perThread = 25;
+        constexpr ui64 total = threadsCount * perThread;
+
+        std::unordered_set<ui64> ackedSeqNos;
+        ackedSeqNos.reserve(total);
+
+        std::deque<TContinuationToken> readyTokens;
+        std::mutex tokensLock;
+        std::condition_variable tokensCv;
+
+        std::mutex ackLock;
+        std::condition_variable ackCv;
+        std::atomic_bool stopEventLoop{false};
+        std::thread eventLoop([&]() {
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+            while (!stopEventLoop.load() && TInstant::Now() < deadline) {
+                session->WaitEvent().Wait(TDuration::Seconds(5));
+                for (auto& ev : session->GetEvents(false)) {
+                    if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&ev)) {
+                        {
+                            std::lock_guard g(tokensLock);
+                            readyTokens.push_back(std::move(ready->ContinuationToken));
+                        }
+                        tokensCv.notify_one();
+                    } else if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&ev)) {
+                        bool done = false;
+                        {
+                            std::lock_guard g(ackLock);
+                            for (const auto& ack : acks->Acks) {
+                                ackedSeqNos.insert(ack.SeqNo);
+                            }
+                            done = (ackedSeqNos.size() >= total);
+                        }
+                        std::cerr << "acks: " << ackedSeqNos.size() << std::endl;
+                        ackCv.notify_all();
+                        if (done) {
+                            stopEventLoop.store(true);
+                            tokensCv.notify_all();
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+
+        std::atomic<ui64> nextSeqNo{1};
+        std::vector<std::thread> threads;
+        threads.reserve(threadsCount);
+
+        auto popToken = [&]() -> TContinuationToken {
+            std::unique_lock lk(tokensLock);
+            tokensCv.wait(lk, [&]() { return !readyTokens.empty() || stopEventLoop.load(); });
+            UNIT_ASSERT_C(!readyTokens.empty(), "No ready tokens available");
+            auto t = std::move(readyTokens.front());
+            readyTokens.pop_front();
+            return t;
+        };
+
+        for (ui64 t = 0; t < threadsCount; ++t) {
+            threads.emplace_back([&, t]() {
+                auto key = TStringBuilder() << "key-" << t;
+                for (ui64 i = 0; i < perThread; ++i) {
+                    std::cerr << "thread " << t << " writing message " << i << std::endl;
+                    auto token = popToken();
+                    const ui64 seqNo = nextSeqNo.fetch_add(1);
+                    auto msg = TWriteMessage("data");
+                    msg.SeqNo(seqNo);
+                    session->Write(std::move(token), key, std::move(msg));
+                }
+            });
+        }
+
+        for (auto& th : threads) {
+            th.join();
+        }
+
+        {
+            std::unique_lock lk(ackLock);
+            ackCv.wait_for(lk, std::chrono::seconds(60), [&]() { return ackedSeqNos.size() >= total; });
+        }
+
+        stopEventLoop.store(true);
+        tokensCv.notify_all();
+        eventLoop.join();
+
+        UNIT_ASSERT_VALUES_EQUAL(ackedSeqNos.size(), total);
         UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
     }
 

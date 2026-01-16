@@ -97,20 +97,21 @@ void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregat
 }
 
 void TLocalBuffer::Push(TDataChunk&& data) {
-    if (PushStats.CollectBasic()) {
-        PushStats.Chunks++;
-        PushStats.Rows += data.Rows;
-        PushStats.Bytes += data.Bytes;
-        PushStats.Resume();
+    if (!Finished.load()) {
+        if (PushStats.CollectBasic()) {
+            PushStats.Chunks++;
+            PushStats.Rows += data.Rows;
+            PushStats.Bytes += data.Bytes;
+            PushStats.Resume();
+        }
+
+        (*Registry->LocalBufferChunks)++;
+        *Registry->LocalBufferBytes += data.Bytes;
+        PushDataChunk(std::move(data));
     }
+}
 
-    (*Registry->LocalBufferChunks)++;
-    *Registry->LocalBufferBytes += data.Bytes;
-
-    if (EarlyFinished.load()) {
-        return;
-    }
-
+void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     std::lock_guard lock(Mutex);
 
     EDqFillLevel fillLevel = FillLevel;
@@ -148,17 +149,8 @@ void TLocalBuffer::Push(TDataChunk&& data) {
     NotifyInput();
 }
 
-bool TLocalBuffer::IsEarlyFinished() {
-    return EarlyFinished.load();
-}
-
-bool TLocalBuffer::IsFlushed() {
-    std::lock_guard lock(Mutex);
-    auto result = InputBinded.load() || Queue.empty();
-    if (!result) {
-        NeedToNotifyOutput.store(true);
-    }
-    return result;
+bool TLocalBuffer::IsFinished() {
+    return Finished.load();
 }
 
 bool TLocalBuffer::IsEmpty() {
@@ -190,39 +182,40 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     }
     *Registry->LocalBufferLatency += (TInstant::Now() - data.Timestamp).MicroSeconds();
 
-    if (data.Finished) {
-        Finished.store(true);
-    }
+    EDqFillLevel fillLevel = FillLevel;
 
     Y_ENSURE(InflightBytes.load() >= data.Bytes);
     InflightBytes -= data.Bytes;
 
-    while (InflightBytes.load() < MinInflightBytes && !SpilledChunkBytes.empty()) {
-        auto bytes = SpilledChunkBytes.front();
-        SpilledChunkBytes.pop();
-        InflightBytes += bytes;
-        Y_ENSURE(TailBlobId < HeadBlobId);
-
-        TLoadingInfo info(++TailBlobId, bytes);
-        info.Loaded = Storage->Get(info.BlobId, info.Buffer);
-        if (LoadingQueue.empty() && info.Loaded) {
-            TDataChunk data;
-            BufferToData(data, std::move(info.Buffer));
-            Queue.emplace(std::move(data));
-            SpilledBytes -= bytes;
-        } else {
-            LoadingQueue.emplace(std::move(info));
-        }
-    }
-
-    EDqFillLevel fillLevel = FillLevel;
-
-    if (SpilledBytes.load() == 0 && InflightBytes.load() < MinInflightBytes) {
+    if (data.Finished) {
+        Finished.store(true);
         fillLevel = EDqFillLevel::NoLimit;
-    } else if (Storage) {
-        fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
-    } else if (InflightBytes.load() >= MaxInflightBytes) {
-        fillLevel = EDqFillLevel::HardLimit;
+    } else {
+        while (InflightBytes.load() < MinInflightBytes && !SpilledChunkBytes.empty()) {
+            auto bytes = SpilledChunkBytes.front();
+            SpilledChunkBytes.pop();
+            InflightBytes += bytes;
+            Y_ENSURE(TailBlobId < HeadBlobId);
+
+            TLoadingInfo info(++TailBlobId, bytes);
+            info.Loaded = Storage->Get(info.BlobId, info.Buffer);
+            if (LoadingQueue.empty() && info.Loaded) {
+                TDataChunk data;
+                BufferToData(data, std::move(info.Buffer));
+                Queue.emplace(std::move(data));
+                SpilledBytes -= bytes;
+            } else {
+                LoadingQueue.emplace(std::move(info));
+            }
+        }
+
+        if (SpilledBytes.load() == 0 && InflightBytes.load() < MinInflightBytes) {
+            fillLevel = EDqFillLevel::NoLimit;
+        } else if (Storage) {
+            fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
+        } else if (InflightBytes.load() >= MaxInflightBytes) {
+            fillLevel = EDqFillLevel::HardLimit;
+        }
     }
 
     if (FillLevel != fillLevel) {
@@ -239,17 +232,14 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
 }
 
 void TLocalBuffer::EarlyFinish() {
-    EarlyFinished.store(true);
-
-    std::lock_guard lock(Mutex);
-
-    if (FillLevel != EDqFillLevel::NoLimit) {
-        if (Aggregator) {
-            Aggregator->UpdateCount(FillLevel, EDqFillLevel::NoLimit);
+    if (!EarlyFinished.exchange(true)) {
+        if (OutputBound.load()) {
+            if (Finished.exchange(true)) {
+                NotifyInput();
+                NotifyOutput(true);
+            }
         }
-        FillLevel = EDqFillLevel::NoLimit;
     }
-    NotifyOutput(true);
 }
 
 void TLocalBuffer::StorageWakeupHandler() {
@@ -290,8 +280,19 @@ void TLocalBuffer::StorageWakeupHandler() {
 }
 
 void TLocalBuffer::BindInput() {
-    if (!InputBinded.exchange(true)) {
+    if (!InputBound.exchange(true)) {
         NotifyOutput(false);
+    }
+}
+
+void TLocalBuffer::BindOutput() {
+    if (!OutputBound.exchange(true)) {
+        if (EarlyFinished.load()) {
+            if (Finished.exchange(true)) {
+                NotifyInput();
+                NotifyOutput(true);
+            }
+        }
     }
 }
 
@@ -563,12 +564,8 @@ void TOutputBuffer::UpdatePopStats() {
     }
 }
 
-bool TOutputBuffer::IsEarlyFinished() {
+bool TOutputBuffer::IsFinished() {
     return Descriptor->EarlyFinished.load();
-}
-
-bool TOutputBuffer::IsFlushed() {
-    return Descriptor->IsFlushed();
 }
 
 bool TOutputBuffer::IsEmpty() {
@@ -661,12 +658,8 @@ void TInputBuffer::Push(TDataChunk&&) {
     Y_ENSURE(false, "TInputBuffer::Push not allowed");
 }
 
-bool TInputBuffer::IsEarlyFinished() {
+bool TInputBuffer::IsFinished() {
     return Descriptor->IsEarlyFinished();
-}
-
-bool TInputBuffer::IsFlushed() {
-    return true;
 }
 
 bool TInputBuffer::Pop(TDataChunk& data) {
@@ -1744,14 +1737,8 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannel
     auto buffer = LocalBufferRegistry->GetOrCreateLocalBuffer(LocalBufferRegistry, info, created);
     if (bindInput) {
         buffer->BindInput();
-        if (created) {
-            std::lock_guard lock(Mutex);
-            LocalBufferHolders.emplace(info, buffer);
-            UnbindedInputs.emplace(info, TInstant::Now() + UnbindedWaitPeriod);
-        }
     } else {
-        std::lock_guard lock(Mutex);
-        LocalBufferHolders.erase(info);
+        buffer->BindOutput();
     }
     if (storage) {
         buffer->BindStorage(buffer, storage);
@@ -1784,7 +1771,6 @@ void TDqChannelService::CleanupUnbindedInputs() {
         if (front.second > now) {
             break;
         }
-        LocalBufferHolders.erase(front.first);
         UnbindedInputs.pop();
     }
 
@@ -1870,12 +1856,6 @@ void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
     auto buffer = service->GetInputBuffer(Buffer->Info);
     buffer->PushStats.Level = Buffer->PushStats.Level;
     buffer->PopStats.Level = Buffer->PopStats.Level;
-
-    auto earlyFinished = Buffer->IsEarlyFinished();
-    Buffer = buffer;
-    if (earlyFinished) {
-        Buffer->EarlyFinish();
-    }
 
     Service.reset();
 }

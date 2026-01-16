@@ -148,12 +148,8 @@ public:
         YQL_ENSURE(false, "Stub must be binded before Push");
     }
 
-    bool IsEarlyFinished() final {
-        return EarlyFinished;
-    }
-
-    bool IsFlushed() final {
-        return true;
+    bool IsFinished() final {
+        return false;
     }
 
     bool IsEmpty() final {
@@ -165,11 +161,10 @@ public:
     }
 
     void EarlyFinish() final {
-        EarlyFinished = true;
+        YQL_ENSURE(false, "Stub must be binded before EarlyFinish");
     }
 
     std::shared_ptr<TDqFillAggregator> Aggregator;
-    bool EarlyFinished = false;
 };
 
 struct TLoadingInfo {
@@ -195,7 +190,8 @@ public:
         , NeedToNotifyOutput(false)
         , NeedToNotifyInput(false)
         , EarlyFinished(false)
-        , InputBinded(false)
+        , OutputBound(false)
+        , InputBound(false)
         , Finished(false)
     {
         PushStats.ChannelId = info.ChannelId;
@@ -209,17 +205,18 @@ public:
     EDqFillLevel GetFillLevel() const override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override;
     void Push(TDataChunk&& data) override;
-    bool IsEarlyFinished() override;
-    bool IsFlushed() override;
+    bool IsFinished() override;
 
     bool IsEmpty() override;
     bool Pop(TDataChunk& data) override;
     void EarlyFinish() override;
 
     void BindInput();
+    void BindOutput();
     void BindStorage(std::shared_ptr<TLocalBuffer>& self, IDqChannelStorage::TPtr storage);
     void StorageWakeupHandler();
 
+    void PushDataChunk(TDataChunk&& data);
     void NotifyInput();
     void NotifyOutput(bool force);
 
@@ -245,7 +242,8 @@ public:
     std::atomic<bool> NeedToNotifyOutput;
     std::atomic<bool> NeedToNotifyInput;
     std::atomic<bool> EarlyFinished;
-    std::atomic<bool> InputBinded;
+    std::atomic<bool> OutputBound;
+    std::atomic<bool> InputBound;
     std::atomic<bool> Finished;
 };
 
@@ -370,8 +368,7 @@ public:
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator>aggregator) override;
     void Push(TDataChunk&& data) override;
     void UpdatePopStats() override;
-    bool IsEarlyFinished() override;
-    bool IsFlushed() override;
+    bool IsFinished() override;
     bool IsEmpty() override;
     bool Pop(TDataChunk& data) override;
     void EarlyFinish() override;
@@ -453,7 +450,6 @@ public:
 
     ~TInputBuffer() override;
 
-    bool IsEmpty() override;
 
     EDqFillLevel GetFillLevel() const override {
         return EDqFillLevel::NoLimit;
@@ -463,8 +459,8 @@ public:
     }
 
     void Push(TDataChunk&&) override;
-    bool IsEarlyFinished() override;
-    bool IsFlushed() override;
+    bool IsFinished() override;
+    bool IsEmpty() override;
     bool Pop(TDataChunk& data) override;
     void EarlyFinish() override;
 
@@ -714,7 +710,6 @@ public:
     ui32 PoolId;
     std::weak_ptr<TDqChannelService> Self;
     std::shared_ptr<TLocalBufferRegistry> LocalBufferRegistry;
-    mutable std::unordered_map<TChannelInfo, std::shared_ptr<TLocalBuffer>> LocalBufferHolders;
     mutable std::queue<std::pair<TChannelInfo, TInstant>> UnbindedInputs;
     mutable std::unordered_map<ui32, std::shared_ptr<TNodeState>> NodeStates;
     mutable std::mutex Mutex;
@@ -726,13 +721,6 @@ class TFastDqOutputChannel : public IDqOutputChannel {
 public:
     TFastDqOutputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer, bool localChannel)
         : Service(service), Serializer(CreateSerializer(settings, buffer, localChannel)), Storage(settings.ChannelStorage) {
-    }
-
-    ~TFastDqOutputChannel() {
-        if (!Finished) {
-            Serializer->Flush(false);
-        }
-        Serializer->Buffer->PushTerminated();
     }
 
 // IDqOutput
@@ -755,13 +743,13 @@ public:
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {
-        if (!Finished) {
+        if (!Serializer->Buffer->IsFinished()) {
             Serializer->Push(std::move(value));
         }
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
-        if (!Finished) {
+        if (!Serializer->Buffer->IsFinished()) {
             Serializer->WidePush(values, width);
         }
     }
@@ -775,19 +763,13 @@ public:
     }
 
     void Finish() override {
-        if (!Finished) {
-            Finished = true;
-            Serializer->Flush(true);
-        }
+        Serializer->Flush(true);
     }
 
     bool IsFinished() const override {
-        bool finishCheckResult = Serializer->Buffer->IsEarlyFinished()
-            || (Finished && Serializer->Buffer->IsFlushed());
-
+        bool finishCheckResult = Serializer->Buffer->IsFinished();
         Serializer->Buffer->PopStats.FinishCheckTime = TInstant::Now();
         Serializer->Buffer->PopStats.FinishCheckResult = finishCheckResult;
-
         return finishCheckResult;
     }
 
@@ -846,8 +828,6 @@ public:
 
     std::weak_ptr<TDqChannelService> Service;
     std::unique_ptr<TOutputSerializer> Serializer;
-    bool Finished = false;
-    bool Binded = false;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     IDqChannelStorage::TPtr Storage;
 };
@@ -859,10 +839,6 @@ public:
     TFastDqInputChannel(std::weak_ptr<TDqChannelService> service, const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer)
         : Service(service), Buffer(buffer) {
         Deserializer = CreateDeserializer(settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.BufferPageAllocSize, *settings.HolderFactory);
-    }
-
-    ~TFastDqInputChannel() {
-        Buffer->PopTerminated();
     }
 
 // IDqInput
@@ -878,7 +854,7 @@ public:
     bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override;
 
     bool IsFinished() const override {
-        return Finished || Buffer->IsEarlyFinished();
+        return Finished;
     }
 
     NKikimr::NMiniKQL::TType* GetInputType() const override {

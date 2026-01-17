@@ -419,7 +419,7 @@ public:
     bool PopDataChunk(TDataChunk& data);
     ui32 GetQueueSize();
 
-    bool IsEarlyFinished();
+    bool IsFinished();
     void EarlyFinish();
     void Terminate();
 

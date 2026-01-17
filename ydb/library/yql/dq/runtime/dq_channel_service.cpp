@@ -637,8 +637,8 @@ void TInputDescriptor::PushDataChunk(TDataChunk&& data) {
 
 }
 
-bool TInputDescriptor::IsEarlyFinished() {
-    return EarlyFinished.load();
+bool TInputDescriptor::IsFinished() {
+    return Finished.load();
 }
 
 bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
@@ -680,7 +680,7 @@ void TInputBuffer::Push(TDataChunk&&) {
 }
 
 bool TInputBuffer::IsFinished() {
-    return Descriptor->IsEarlyFinished();
+    return Descriptor->IsFinished();
 }
 
 bool TInputBuffer::Pop(TDataChunk& data) {

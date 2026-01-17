@@ -1350,7 +1350,7 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor, u
     NActors::ActorIdToProto(descriptor->Info.InputActorId, evUpdate->Record.MutableDstActorId());
     evUpdate->Record.SetChannelId(descriptor->Info.ChannelId);
 
-    evUpdate->Record.SetEarlyFinished(descriptor->IsEarlyFinished());
+    evUpdate->Record.SetEarlyFinished(descriptor->EarlyFinished.load());
     evUpdate->Record.SetPopBytes(popBytes);
 
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;

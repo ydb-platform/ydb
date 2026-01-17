@@ -1,3 +1,4 @@
+/* yt can not */
 use plato;
 PRAGMA yt.ConvertDynamicTablesToStatic = "all";
 

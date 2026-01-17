@@ -74,6 +74,7 @@ Y_UNIT_TEST_SUITE(KqpScanLogs) {
 Y_UNIT_TEST_TWIN(WideCombine, EnabledLogs) {
     auto query = R"(
         --!syntax_v1
+        PRAGMA ydb.UseDqHashCombine='true';
         select count(t.Key) from `/Root/KeyValue` as t group by t.Value
     )";
 

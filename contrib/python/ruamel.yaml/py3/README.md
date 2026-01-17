@@ -5,7 +5,7 @@
 | | |
 | - | - |
 | version |0.19.0 |
-| updated |2025-12-31 |
+| updated |2025-01-02 |
 | documentation |https://yaml.dev/doc/ruamel.yaml |
 | repository |https://sourceforge.net/projects/ruamel-yaml |
 | pypi |https://pypi.org/project/ruamel.yaml |
@@ -34,24 +34,40 @@ My experience with other such service downgrades (Bitbucket, Readthedocs), has n
 
 
 
-Starting with 0.19.0 `ruamel.yaml` no longer has `ruamel.yaml.clib` as a dependency,
-as this has been replaced with `ruamel.yaml.clibz`.
+Starting with 0.19.1 `ruamel.yaml` no longer has a dependency on `ruamel.yaml.clibz`
+nor on the old `ruamel.yaml.clib`.
+
+Some deployment issues were reported on 0.19.0, due to the lack of proper pinning of the
+`ruamel.yaml` version used. Most of these issues had to do with
+the environment not having updated `setuptools` installed and the build
+dependency `setuptools-zig` for `ruamel.yaml.clibz` not being invoked, with
+Python falling back to invoking gcc (which was even less likely to be installed).
+
+The already indicated simple solution of using:
+
+```
+    python -m pip install --no-deps ruamel.yaml ruamel.yaml.clib
+
+```
+turned out not to work for at least one setup.
+
+As I am not aware that you can create an install requirement that removes
+a dependency, the default (Cython) dependency is removed and you should
+use `ruamel.yaml[libyaml]` resp. `ruamel.yaml[oldlibyaml]` as your requirements.
+(this is the preferred way over using `ruamel.yaml.clibz` and `ruamel.yaml.clib`
+directly).
+If you are using `ruamel.yaml` in its default (round-trip, `YAML(typ='rt')`) mode,
+there is currently no advantage of installing either optional extension.
+
+
 The C sources are functionally unchanged,
 but they are now always compiled (using `setuptools-zig` and `ziglang`) on your system,
 instead of being downloaded as pre-compiled wheels (if available).
 For this to function properly your Python (virtual) environment needs to have
 an up-to-date version of `setuptools` and `wheels` pre-installed.
 
-If you run into trouble, you can install `ruamel.yaml.clib` explicitly, without
-using `ruamel.yaml.clibz` at all, using:
-
-```
-    python -m pip install --no-deps ruamel.yaml ruamel.yaml.clib
-
-```
-
 The code to load `ruamel.yaml.clib` has priority over `ruamel.yaml.clibz`
-if both are installed (so `--no-deps` is not strictly necessary.
+if both are installed.
 This compatibility will at least be available during the 0.19 `ruamel.yaml` series
 (so pin your usage of `ruamel.yaml` if necessary and report any problems).
 
@@ -137,6 +153,10 @@ For packaging purposes you can use a download of the [tar balls of tagged source
 <a href="https://pypi.org/project/oitnb/"><img src="https://sourceforge.net/p/oitnb/code/ci/default/tree/_doc/_static/oitnb.svg?format=raw"></a>
 <a href="http://mypy-lang.org/"><img src="http://www.mypy-lang.org/static/mypy_badge.svg"></a>
 <a href="https://www.pepy.tech/projects/ruamel.yaml"><img src="https://img.shields.io/pepy/dt/ruamel.yaml.svg"></a>
+
+0.19.0 (2025-01-02):
+
+- removed dependency on `ruamel.yaml.clibz`
 
 0.19.0 (2025-12-31):
 

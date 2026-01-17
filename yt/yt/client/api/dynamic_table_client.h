@@ -54,7 +54,9 @@ struct TMultiLookupOptions
     : public TTimeoutOptions
     , public TTabletReadOptionsBase
     , public TMultiplexingBandOptions
-{ };
+{
+    std::optional<std::string> ExecutionPool;
+};
 
 struct TExplainQueryOptions
     : public TSelectRowsOptionsBase

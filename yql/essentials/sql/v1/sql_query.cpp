@@ -461,11 +461,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            if (existingOk && tr.Service == YtProviderName) {
-                Error() << "CREATE TABLE IF NOT EXISTS is not supported for " << tr.Service << " provider.";
-                return false;
-            }
-
             TCreateTableParameters params{.TableType = tableType, .Temporary = temporary};
             if (!CreateTableEntry(rule.GetRule_create_table_entry7(), params, isCreateTableAs)) {
                 return false;

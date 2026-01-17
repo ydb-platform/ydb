@@ -806,13 +806,13 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         for (size_t i = 0; i < readRange.PairSize(); ++i) {
             const auto& pair = readRange.GetPair(i);
 
-            if (pair.HasKey() && !IsMainContextOfTransaction(pair.GetKey())) {
-                continue;
-            }
-
             PQ_LOG_D("ReadRange pair." <<
                      " Key " << (pair.HasKey() ? pair.GetKey() : "unknown") <<
                      ", Status " << pair.GetStatus());
+
+            if (pair.HasKey() && !IsMainContextOfTransaction(pair.GetKey())) {
+                continue;
+            }
 
             NKikimrPQ::TTransaction tx;
             PQ_ENSURE(tx.ParseFromString(pair.GetValue()));
@@ -836,6 +836,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
                      "TxId: " << tx.GetTxId() <<
                      ", Step: " << tx.GetStep() <<
                      ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.GetState()) <<
+                     ", Predicate: " << tx.GetPredicate() << " (" << (tx.HasPredicate() ? "+" : "-") << ")" <<
                      ", WriteId: " << tx.GetWriteId().ShortDebugString());
 
             if (tx.GetState() == NKikimrPQ::TTransaction::CALCULATED) {
@@ -846,10 +847,6 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             Txs.emplace(tx.GetTxId(), tx);
             SetTxInFlyCounter();
 
-            if (tx.HasStep()) {
-                PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
-            }
-
             if (tx.HasWriteId()) {
                 PQ_LOG_TX_I("Link TxId " << tx.GetTxId() << " with WriteId " << GetWriteId(tx));
                 TxWrites[GetWriteId(tx)].TxId = tx.GetTxId();
@@ -858,6 +855,17 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     }
 
     FixTransactionStates(readRanges, Txs);
+
+    for (const auto& [txId, tx] : Txs) {
+        PQ_LOG_D("TxId: " << txId <<
+                 ", Step: " << tx.Step <<
+                 ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
+                 ", Decision: " << NKikimrTx::TReadSetData_EDecision_Name(tx.ParticipantsDecision));
+
+        if (tx.Step != Max<ui64>()) {
+            PlannedTxs.emplace_back(tx.Step, txId);
+        }
+    }
 
     EndInitTransactions();
     EndReadConfig(ctx);

@@ -13,7 +13,6 @@ items:
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
 - { name: ALTER TRANSFER,               href: alter-transfer.md}
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
-- { name: ANALYZE,                      href: analyze.md, when: backend_name == "YDB" }
 - { name: BATCH DELETE,                 href: batch-delete.md }
 - { name: BATCH UPDATE,                 href: batch-update.md }
 - { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md }

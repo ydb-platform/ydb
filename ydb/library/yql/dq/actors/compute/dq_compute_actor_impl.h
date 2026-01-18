@@ -1476,14 +1476,16 @@ protected:
                 html << "AsyncData.Watermark: " << info.AsyncData->Watermark << "<br />";
             }
 
-            if (const auto* channelStats = Channels->GetOutputChannelStats(id)) {
-                DUMP_PREFIXED("OutputChannelStats.", (*channelStats), ResentMessages);
+            if (Channels) {
+                if (const auto* channelStats = Channels->GetOutputChannelStats(id)) {
+                    DUMP_PREFIXED("OutputChannelStats.", (*channelStats), ResentMessages);
+                }
+                const auto& peerState = Channels->GetOutputChannelInFlightState(id);
+                html << "OutputChannelInFlightState: " << peerState.DebugString() << "<br />";
+                DUMP((*Channels), ShouldSkipData, (id));
+                DUMP((*Channels), HasFreeMemoryInChannel, (id));
+                DUMP((*Channels), CanSendChannelData, (id));
             }
-            const auto& peerState = Channels->GetOutputChannelInFlightState(id);
-            html << "OutputChannelInFlightState: " << peerState.DebugString() << "<br />";
-            DUMP((*Channels), ShouldSkipData, (id));
-            DUMP((*Channels), HasFreeMemoryInChannel, (id));
-            DUMP((*Channels), CanSendChannelData, (id));
 
             if (const auto& stats = info.Stats) {
                 DUMP((*stats), BlockedByCapacity);
@@ -1510,9 +1512,13 @@ protected:
 
             if (channel) {
                 html << "DqOutputChannel.ChannelId: " << channel->GetChannelId() << "<br />";
-                html << "DqOutputChannel.ValuesCount: " << channel->GetValuesCount() << "<br />";
+                if (Task.GetDqChannelVersion() <= 1u) {
+                    html << "DqOutputChannel.ValuesCount: " << channel->GetValuesCount() << "<br />";
+                }
                 html << "DqOutputChannel.FillLevel: " << static_cast<ui32>(channel->GetFillLevel()) << "<br />";
-                html << "DqOutputChannel.HasData: " << channel->HasData() << "<br />";
+                if (Task.GetDqChannelVersion() <= 1u) {
+                    html << "DqOutputChannel.HasData: " << channel->HasData() << "<br />";
+                }
                 html << "DqOutputChannel.IsFinished: " << channel->IsFinished() << "<br />";
                 html << "DqOutputChannel.OutputType: " << (channel->GetOutputType() ? channel->GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
 

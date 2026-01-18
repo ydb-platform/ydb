@@ -36,7 +36,7 @@ private:
 
         explicit TMultipartUploadSession(const TString& key)
             : Key(key)
-            , File(key, CreateAlways | WrOnly | ForAppend)
+            , File(key, OpenAlways | WrOnly | ForAppend)
         {
             File.Flock(LOCK_EX | LOCK_NB);
         }
@@ -111,7 +111,7 @@ private:
             FS_LOG_W(operation << ": failed to acquire lock (file is busy)"
                 << ": key# " << key);
             ReplyError<TEvResponse>(sender, key, "File is locked by another process",
-                Aws::S3::S3Errors::SLOW_DOWN, true /* retryable */);
+                Aws::S3::S3Errors::INTERNAL_FAILURE, true /* retryable */);
             return true;
         }
         return false;
@@ -209,7 +209,7 @@ public:
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
             if (!HandleFileLockError<TEvPutObjectResponse>(ex, ev->Sender, key, "PutObject")) {
-                FS_LOG_E("PutObject failed with system error"
+                FS_LOG_E("PutObject: failed to acquire lock"
                     << ": key# " << key
                     << ", error# " << ex.what()
                     << ", errno# " << ex.Status());
@@ -379,7 +379,7 @@ public:
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
             if (!HandleFileLockError<TEvCreateMultipartUploadResponse>(ex, ev->Sender, key, "CreateMultipartUpload")) {
-                FS_LOG_E("CreateMultipartUpload failed with system error"
+                FS_LOG_E("CreateMultipartUpload: failed to acquire lock"
                     << ": key# " << key
                     << ", error# " << ex.what()
                     << ", errno# " << ex.Status());

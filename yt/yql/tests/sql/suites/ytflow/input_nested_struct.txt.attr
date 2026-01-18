@@ -1,0 +1,102 @@
+{
+    "_yql_row_spec" = {
+        "UseNativeYtTypes" = %true;
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "$timestamp";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Uint64"
+                        ]
+                    ];
+                ];
+                [
+                    "$cumulative_data_weight";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
+                ];
+                [
+                    "int64_field";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
+                ];
+                [
+                    "nested_struct_field";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "bool_field";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ];
+                            ];
+                            [
+                                "string_field";
+                                [
+                                    "DataType";
+                                    "String"
+                                ];
+                            ];
+                        ];
+                    ];
+                ];
+            ]
+        ]
+    };
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "$timestamp";
+            "type" = "uint64";
+            "required" = %false;
+        };
+        {
+            "name" = "$cumulative_data_weight";
+            "type" = "int64";
+            "required" = %false;
+        };
+        {
+            "name" = "int64_field";
+            "type" = "int64";
+            "required" = %false;
+        };
+        {
+            "name" = "nested_struct_field";
+            "type_v3" = {
+                "type_name" = "struct";
+                "members" = [
+                    {
+                        "name" = "bool_field";
+                        "type" = "bool";
+                        "required" = %true;
+                    };
+                    {
+                        "name" = "string_field";
+                        "type" = "string";
+                        "required" = %true;
+                    };
+                ];
+            };
+        };
+    ];
+    "_yql_dynamic" = %true;
+    "_yql_dynamic_native_write" = %true;
+}

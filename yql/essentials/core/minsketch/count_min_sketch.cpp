@@ -63,6 +63,27 @@ ui32 TCountMinSketch::Probe(const char* data, size_t size) const {
     return minValue;
 }
 
+// Returns the cardinality of two-way join.
+// NOTE: this method work given the same column domain, hashing method and seeds, and equal width and depth.
+TMaybe<ui32> TCountMinSketch::GetOverlappingCardinality(const TCountMinSketch& rhs) const {
+    if (Width_ != rhs.Width_ || Depth_ != rhs.Depth_) {
+        return Nothing();
+    }
+
+    ui32 minCardinality = std::numeric_limits<ui32>::max();
+
+    for (ui64 d = 0; d < Depth_; ++d) {
+        ui32 cardinality = 0;
+        for (ui64 w = 0; w < Width_; ++w) {
+            ui64 idx = d * Width_ + w;
+            cardinality += Buckets()[idx] * rhs.Buckets()[idx];
+        }
+        minCardinality = std::min(minCardinality, cardinality);
+    }
+
+    return minCardinality;
+}
+
 TCountMinSketch& TCountMinSketch::operator+=(const TCountMinSketch& rhs) {
     if (Width_ != rhs.Width_ || Depth_ != rhs.Depth_) {
         return *this;

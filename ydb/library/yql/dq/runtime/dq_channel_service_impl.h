@@ -403,11 +403,13 @@ public:
         : Info(info)
         , ActorSystem(actorSystem)
         , QueueSize(0)
+        , QueueBytes(0)
         , PopBytes(0)
         , BufferPushBytes(0)
         , BufferPushChunks(0)
         , BufferPushRows(0)
         , NeedToNotifyInput(false)
+        , FinishPushed(false)
         , Finished(false)
         , EarlyFinished(false)
         , InputBufferBytes(inputBufferBytes)
@@ -415,12 +417,12 @@ public:
     {}
 
     bool IsEmpty();
-    void PushDataChunk(TDataChunk&& data);
+    bool PushDataChunk(TDataChunk&& data);
     bool PopDataChunk(TDataChunk& data);
     ui32 GetQueueSize();
 
     bool IsFinished();
-    void EarlyFinish();
+    bool EarlyFinish();
     void Terminate();
 
     TChannelFullInfo Info;
@@ -431,6 +433,7 @@ public:
 
     mutable std::mutex QueueMutex;
     std::atomic<ui64> QueueSize;
+    std::atomic<ui64> QueueBytes;
     mutable std::queue<TInputItem> Queue;
 
     std::atomic<ui64> PopBytes;
@@ -439,6 +442,7 @@ public:
     std::atomic<ui64> BufferPushRows;
 
     std::atomic<bool> NeedToNotifyInput;
+    std::atomic<bool> FinishPushed;
     std::atomic<bool> Finished;
     std::atomic<bool> EarlyFinished;
 
@@ -562,7 +566,7 @@ public:
     void SendFromWaiters(ui64 deltaBytes);
     void ConnectSession(NActors::TActorId& sender, ui64 genMajor);
     virtual TString GetDebugInfo();
-    void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor, ui64 popBytes);
+    void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
 
     void HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev);
     void StartReconciliation(bool major);

@@ -226,10 +226,11 @@ private:
     void MaybeGrowStorage() {
         if (Free.empty()) {
             const size_t fieldsCount = Indexes.size();
-            TStorage& newStorageBlock = Storage.emplace_back(GetStorageBlockSize() * fieldsCount);
+            const size_t blockSize = std::min(GetStorageBlockSize(), GetStorageSize());
+            TStorage& newStorageBlock = Storage.emplace_back(blockSize * fieldsCount);
             auto* ptr = newStorageBlock.data();
-            Free.reserve(Free.size() + GetStorageBlockSize());
-            for (size_t i = 0; i < GetStorageBlockSize(); ++i) {
+            Free.reserve(Free.size() + blockSize);
+            for (size_t i = 0; i < blockSize; ++i) {
                 Free.emplace_back(ptr);
                 ptr += fieldsCount;
             }

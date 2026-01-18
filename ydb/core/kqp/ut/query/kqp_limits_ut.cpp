@@ -1456,7 +1456,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST(BigSortingLimitInParam) {
-        return; // TODO: remove
         SetRandomSeed(42);
 
         auto settings = TKikimrSettings()
@@ -1466,8 +1465,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_NODE, NLog::EPriority::PRI_DEBUG)
                 .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_COMPILE_SERVICE, NLog::EPriority::PRI_DEBUG))
             .SetLogStream(&Cerr);
-        // This line will fix the test: // TODO: remove
-        //settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_SCALAR);
         TKikimrRunner kikimr(settings);
 
         auto db = kikimr.GetQueryClient();

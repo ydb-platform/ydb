@@ -113,7 +113,7 @@ TStringBuf GetServiceHostName(TStringBuf address)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::string FormatNetworkAddress(TStringBuf address, int port)
+TString FormatNetworkAddress(TStringBuf address, int port)
 {
     return Format("[%v]:%v", address, port);
 }
@@ -349,7 +349,7 @@ TNetworkAddress TNetworkAddress::CreateIPv6Loopback(int port)
     return TNetworkAddress(reinterpret_cast<const sockaddr&>(serverAddress), sizeof(serverAddress));
 }
 
-TNetworkAddress TNetworkAddress::CreateUnixDomainSocketAddress(const std::string& socketPath)
+TNetworkAddress TNetworkAddress::CreateUnixDomainSocketAddress(const TString& socketPath)
 {
 #ifdef _linux_
     // Abstract unix sockets are supported only on Linux.
@@ -372,9 +372,9 @@ TNetworkAddress TNetworkAddress::CreateUnixDomainSocketAddress(const std::string
 #endif
 }
 
-TNetworkAddress TNetworkAddress::CreateAbstractUnixDomainSocketAddress(const std::string& socketName)
+TNetworkAddress TNetworkAddress::CreateAbstractUnixDomainSocketAddress(const TString& socketName)
 {
-    return CreateUnixDomainSocketAddress(std::string("\0", 1) + socketName);
+    return CreateUnixDomainSocketAddress(TString("\0", 1) + socketName);
 }
 
 TNetworkAddress TNetworkAddress::Parse(TStringBuf address)
@@ -404,7 +404,7 @@ void FormatValue(TStringBuilderBase* builder, const TNetworkAddress& address, TS
     FormatValue(builder, ToString(address), spec);
 }
 
-std::string ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options)
+TString ToString(const TNetworkAddress& address, const TNetworkAddressFormatOptions& options)
 {
     const auto& sockAddr = address.GetSockAddr();
 

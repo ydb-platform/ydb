@@ -254,6 +254,43 @@ Y_UNIT_TEST_LLVM(TopBySecondKeyDesc) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 
+Y_UNIT_TEST_LLVM(TopWithLargeCount) {
+    TSetup<LLVM> setup;
+    setup.Alloc.SetLimit(1_MB);
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
+    const auto tupleType = pb.NewTupleType({dataType, dataType});
+
+    const auto keyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("key one");
+    const auto keyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("key two");
+
+    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 1");
+    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 2");
+
+    const auto data1 = pb.NewTuple(tupleType, {keyOne, value1});
+    const auto data2 = pb.NewTuple(tupleType, {keyTwo, value2});
+
+    const auto list = pb.NewList(tupleType, {data1, data2});
+
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTop(pb.ExpandMap(pb.ToFlow(list),
+                                                                           [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                              pb.NewDataLiteral<ui64>(4000000000ULL), {{0U, pb.NewDataLiteral<bool>(true)}}),
+                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto iterator = graph->GetValue().GetListIterator();
+    NUdf::TUnboxedValue item;
+    UNIT_ASSERT(iterator.Next(item));
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "key two");
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value 2");
+    UNIT_ASSERT(iterator.Next(item));
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "key one");
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value 1");
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
+}
+
 Y_UNIT_TEST_LLVM(TopSortByFirstSecondAscDesc) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
@@ -548,6 +585,43 @@ Y_UNIT_TEST_LLVM(TopSortLargeList) {
     UNBOXED_VALUE_STR_EQUAL(item, "1997-11-01,Africa/Mbabane");
     UNIT_ASSERT(iterator.Next(item));
     UNBOXED_VALUE_STR_EQUAL(item, "1997-12-01,Africa/Mbabane");
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
+}
+
+Y_UNIT_TEST_LLVM(TopSortLargeCount) {
+    TSetup<LLVM> setup;
+    setup.Alloc.SetLimit(1_MB);
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto dataType = pb.NewDataType(NUdf::TDataType<const char*>::Id);
+    const auto tupleType = pb.NewTupleType({dataType, dataType});
+
+    const auto keyOne = pb.NewDataLiteral<NUdf::EDataSlot::String>("key one");
+    const auto keyTwo = pb.NewDataLiteral<NUdf::EDataSlot::String>("key two");
+
+    const auto value1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 1");
+    const auto value2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("value 2");
+
+    const auto data1 = pb.NewTuple(tupleType, {keyOne, value1});
+    const auto data2 = pb.NewTuple(tupleType, {keyTwo, value2});
+
+    const auto list = pb.NewList(tupleType, {data1, data2});
+
+    const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideTopSort(pb.ExpandMap(pb.ToFlow(list),
+                                                                               [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
+                                                                  pb.NewDataLiteral<ui64>(4000000000ULL), {{0U, pb.NewDataLiteral<bool>(true)}, {1U, pb.NewDataLiteral<bool>(false)}}),
+                                                   [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(tupleType, items); }));
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto iterator = graph->GetValue().GetListIterator();
+    NUdf::TUnboxedValue item;
+    UNIT_ASSERT(iterator.Next(item));
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "key one");
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value 1");
+    UNIT_ASSERT(iterator.Next(item));
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(0), "key two");
+    UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "value 2");
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
 }

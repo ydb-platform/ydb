@@ -284,9 +284,10 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxPrepareIndexValidation = 220 [(CounterOpts) = {Name: "InFlightOps/PrepareIndexValidation"}];
 
-    COUNTER_TEST_SHARD_COUNT = 221                     [(CounterOpts) = {Name: "TestShardCount"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateTestShard = 222      [(CounterOpts) = {Name: "InFlightOps/CreateTestShard"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropTestShard = 223        [(CounterOpts) = {Name: "InFlightOps/DropTestShard"}];
+    COUNTER_TEST_SHARD_SET_COUNT = 221                     [(CounterOpts) = {Name: "TestShardSetCount"}];
+    COUNTER_TEST_SHARD_COUNT = 222                         [(CounterOpts) = {Name: "TestShardCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateTestShardSet = 223      [(CounterOpts) = {Name: "InFlightOps/CreateTestShardSet"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 224        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
 }
 
 enum ECumulativeCounters {
@@ -470,8 +471,8 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxPrepareIndexValidation = 140 [(CounterOpts) = {Name: "FinishedOps/PrepareIndexValidation"}];
 
-    COUNTER_FINISHED_OPS_TxCreateTestShard = 141      [(CounterOpts) = {Name: "FinishedOps/CreateTestShard"}];
-    COUNTER_FINISHED_OPS_TxDropTestShard = 142        [(CounterOpts) = {Name: "FinishedOps/DropTestShard"}];
+    COUNTER_FINISHED_OPS_TxCreateTestShardSet = 141      [(CounterOpts) = {Name: "FinishedOps/CreateTestShardSet"}];
+    COUNTER_FINISHED_OPS_TxDropTestShardSet = 142        [(CounterOpts) = {Name: "FinishedOps/DropTestShardSet"}];
 }
 
 enum EPercentileCounters {

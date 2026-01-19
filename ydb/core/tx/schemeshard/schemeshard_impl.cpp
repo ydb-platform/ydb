@@ -1764,7 +1764,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateLongIncrementalBackupOp:
     case TTxState::TxCreateSecret:
     case TTxState::TxCreateStreamingQuery:
-    case TTxState::TxCreateTestShard:
+    case TTxState::TxCreateTestShardSet:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1838,7 +1838,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropSysView:
     case TTxState::TxDropSecret:
     case TTxState::TxDropStreamingQuery:
-    case TTxState::TxDropTestShard:
+    case TTxState::TxDropTestShardSet:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -3567,40 +3567,41 @@ void TSchemeShard::PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId path
     db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
-void TSchemeShard::PersistTestShard(NIceDb::TNiceDb& db, TPathId pathId) {
+void TSchemeShard::PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
     const auto path = PathsById.find(pathId);
     Y_ABORT_UNLESS(path != PathsById.end());
-    Y_ABORT_UNLESS(path->second && path->second->IsTestShard());
+    Y_ABORT_UNLESS(path->second && path->second->IsTestShardSet());
 
-    const auto testShardIt = TestShards.find(pathId);
-    Y_ABORT_UNLESS(testShardIt != TestShards.end());
-    const auto testShard = testShardIt->second;
-    Y_ABORT_UNLESS(testShard);
+    const auto testShardSetIt = TestShardSets.find(pathId);
+    Y_ABORT_UNLESS(testShardSetIt != TestShardSets.end());
+    const auto testShardSet = testShardSetIt->second;
+    Y_ABORT_UNLESS(testShardSet);
 
-    db.Table<Schema::TestShards>().Key(pathId.LocalPathId).Update(
-        NIceDb::TUpdate<Schema::TestShards::Version>(testShard->Version)
+    NKikimrSchemeOp::TTestShardSetDescription description;
+    for (const auto& [shardIdx, tabletId] : testShardSet->TestShards) {
+        auto* shardDesc = description.AddShards();
+        shardDesc->SetShardIdx(ui64(shardIdx.GetLocalId()));
+        shardDesc->SetTabletId(ui64(tabletId));
+    }
+    TString serializedTestShards;
+    Y_ABORT_UNLESS(description.SerializeToString(&serializedTestShards));
+
+    db.Table<Schema::TestShardSet>().Key(pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::TestShardSet::AlterVersion>(testShardSet->AlterVersion),
+        NIceDb::TUpdate<Schema::TestShardSet::TestShards>(serializedTestShards)
     );
 
-    for (const auto& [shardIdx, tabletId] : testShard->TestShards) {
-        db.Table<Schema::TestShardTablets>().Key(pathId.LocalPathId, shardIdx.GetLocalId()).Update(
-            NIceDb::TUpdate<Schema::TestShardTablets::TabletId>(tabletId)
-        );
-    }
 }
 
-void TSchemeShard::PersistRemoveTestShard(NIceDb::TNiceDb& db, TPathId pathId) {
+void TSchemeShard::PersistRemoveTestShardSet(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
-    if (const auto it = TestShards.find(pathId); it != TestShards.end()) {
-        const auto testShard = it->second;
-        for (const auto& [shardIdx, _] : testShard->TestShards) {
-            db.Table<Schema::TestShardTablets>().Key(pathId.LocalPathId, shardIdx.GetLocalId()).Delete();
-        }
-        TestShards.erase(it);
+    if (const auto it = TestShardSets.find(pathId); it != TestShardSets.end()) {
+        TestShardSets.erase(it);
         DecrementPathDbRefCount(pathId);
     }
-    db.Table<Schema::TestShards>().Key(pathId.LocalPathId).Delete();
+    db.Table<Schema::TestShardSet>().Key(pathId.LocalPathId).Delete();
 }
 
 void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) {
@@ -4968,10 +4969,10 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetStreamingQueryVersion();
                 break;
             }
-            case NKikimrSchemeOp::EPathType::EPathTypeTestShard: {
-                const auto it = TestShards.find(pathId);
-                Y_ABORT_UNLESS(it != TestShards.end());
-                result.SetTestShardVersion(it->second->Version);
+            case NKikimrSchemeOp::EPathType::EPathTypeTestShardSet: {
+                const auto it = TestShardSets.find(pathId);
+                Y_ABORT_UNLESS(it != TestShardSets.end());
+                result.SetTestShardVersion(it->second->AlterVersion);
                 generalVersion += result.GetTestShardVersion();
                 break;
             }
@@ -5937,8 +5938,8 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     case TPathElement::EPathType::EPathTypeStreamingQuery:
         TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Sub(1);
         break;
-    case TPathElement::EPathType::EPathTypeTestShard:
-        TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Sub(1);
+    case TPathElement::EPathType::EPathTypeTestShardSet:
+        TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");
@@ -6035,8 +6036,8 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             break;
         case TPathElement::EPathType::EPathTypeBlobDepot:
             Y_ABORT("not implemented");
-        case TPathElement::EPathType::EPathTypeTestShard:
-            PersistRemoveTestShard(db, node->PathId);
+        case TPathElement::EPathType::EPathTypeTestShardSet:
+            PersistRemoveTestShardSet(db, node->PathId);
             break;
         default:
             // not all path types support removal

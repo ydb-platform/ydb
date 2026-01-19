@@ -209,7 +209,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreaming
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShard>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet>
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateDirsFromName = true;

@@ -261,8 +261,8 @@ public:
                 return NKikimrSchemeOp::EPathTypeSecret;
             case TNavigate::KindStreamingQuery:
                 return NKikimrSchemeOp::EPathTypeStreamingQuery;
-            case TNavigate::KindTestShard:
-                return NKikimrSchemeOp::EPathTypeTestShard;
+            case TNavigate::KindTestShardSet:
+                return NKikimrSchemeOp::EPathTypeTestShardSet;
             case TNavigate::KindIndex:
                 return NKikimrSchemeOp::EPathTypeTableIndex;
             case TNavigate::KindUnknown:

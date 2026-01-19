@@ -593,7 +593,7 @@ public:
         SysView,
         Secret,
         StreamingQuery,
-        TestShard,
+        TestShardSet,
     };
 
     TSchemaObject(TSchemaObject&&) = default;

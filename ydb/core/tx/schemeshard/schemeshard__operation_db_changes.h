@@ -54,7 +54,7 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<TPathId> StreamingQueries;
 
-    TDeque<TPathId> TestShards;
+    TDeque<TPathId> TestShardSets;
 
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
@@ -172,8 +172,8 @@ public:
         StreamingQueries.emplace_back(pathId);
     }
 
-    void PersistTestShard(const TPathId& pathId) {
-        TestShards.emplace_back(pathId);
+    void PersistTestShardSet(const TPathId& pathId) {
+        TestShardSets.emplace_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

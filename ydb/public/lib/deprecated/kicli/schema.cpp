@@ -150,8 +150,8 @@ void TSchemaObject::Drop() {
     case EPathType::StreamingQuery:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery);
         break;
-    case EPathType::TestShard:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShard);
+    case EPathType::TestShardSet:
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet);
         break;
     case EPathType::Unknown:
     case EPathType::SubDomain:
@@ -257,8 +257,8 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
         return TSchemaObject::EPathType::Secret;
     case NKikimrSchemeOp::EPathTypeStreamingQuery:
         return TSchemaObject::EPathType::StreamingQuery;
-    case NKikimrSchemeOp::EPathTypeTestShard:
-        return TSchemaObject::EPathType::TestShard;
+    case NKikimrSchemeOp::EPathTypeTestShardSet:
+        return TSchemaObject::EPathType::TestShardSet;
     case NKikimrSchemeOp::EPathTypeTableIndex:
     case NKikimrSchemeOp::EPathTypeExtSubDomain:
     case NKikimrSchemeOp::EPathTypeCdcStream:

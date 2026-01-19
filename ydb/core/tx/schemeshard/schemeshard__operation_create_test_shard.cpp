@@ -15,7 +15,7 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-bool ValidateConfig(const NKikimrSchemeOp::TCreateTestShard& op, TString& errStr)
+bool ValidateConfig(const NKikimrSchemeOp::TCreateTestShardSet& op, TString& errStr)
 {
     if (op.GetCount() == 0) {
         errStr = "count must be greater than zero";
@@ -35,12 +35,12 @@ bool ValidateConfig(const NKikimrSchemeOp::TCreateTestShard& op, TString& errStr
     return true;
 }
 
-TTestShardInfo::TPtr CreateTestShard(const NKikimrSchemeOp::TCreateTestShard& op, TTxState& state, TSchemeShard* ss)
+TTestShardSetInfo::TPtr CreateTestShardSet(const NKikimrSchemeOp::TCreateTestShardSet& op, TTxState& state, TSchemeShard* ss)
 {
-    TTestShardInfo::TPtr testShard = new TTestShardInfo(1);
+    TTestShardSetInfo::TPtr testShardSet = new TTestShardSetInfo(1);
 
     state.Shards.clear();
-    testShard->TestShards.clear();
+    testShardSet->TestShards.clear();
 
     ui64 count = op.GetCount();
 
@@ -48,26 +48,26 @@ TTestShardInfo::TPtr CreateTestShard(const NKikimrSchemeOp::TCreateTestShard& op
     auto startShardIdx = ss->ReserveShardIdxs(count);
     for (ui64 i = 0; i < count; ++i) {
         const auto idx = ss->NextShardIdx(startShardIdx, i);
-        testShard->TestShards[idx] = InvalidTabletId;
+        testShardSet->TestShards[idx] = InvalidTabletId;
         state.Shards.emplace_back(idx, TTabletTypes::TestShard, TTxState::CreateParts);
     }
 
-    return testShard;
+    return testShardSet;
 }
 
 class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
-    const NKikimrSchemeOp::TCreateTestShard& Op;
+    const NKikimrSchemeOp::TCreateTestShardSet& Op;
 
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TCreateTestShard TConfigureParts"
+                << "TCreateTestShardSet TConfigureParts"
                 << ", operationId: " << OperationId;
     }
 
 public:
-    TConfigureParts(TOperationId id, const NKikimrSchemeOp::TCreateTestShard& op)
+    TConfigureParts(TOperationId id, const NKikimrSchemeOp::TCreateTestShardSet& op)
         : OperationId(id)
         , Op(op)
     {
@@ -86,7 +86,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTestShard);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTestShardSet);
 
         auto idx = context.SS->MustGetShardIdx(tabletId);
         txState->ShardsInProgress.erase(idx);
@@ -112,9 +112,9 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTestShard);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTestShardSet);
 
-        auto testShardInfo = context.SS->TestShards[txState->TargetPathId];
+        auto testShardInfo = context.SS->TestShardSets[txState->TargetPathId];
         Y_VERIFY_S(testShardInfo, "test shard info is null. PathId: " << txState->TargetPathId);
 
         txState->ClearShardsInProgress();
@@ -144,7 +144,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TCreateTestShard TPropose"
+                << "TCreateTestShardSet TPropose"
                 << ", operationId: " << OperationId;
     }
 public:
@@ -192,14 +192,14 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTestShard);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTestShardSet);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
     }
 };
 
-class TCreateTestShard: public TSubOperation {
+class TCreateTestShardSet: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -225,7 +225,7 @@ class TCreateTestShard: public TSubOperation {
         case TTxState::CreateParts:
             return MakeHolder<TCreateParts>(OperationId);
         case TTxState::ConfigureParts:
-            return MakeHolder<TConfigureParts>(OperationId, Transaction.GetCreateTestShard());
+            return MakeHolder<TConfigureParts>(OperationId, Transaction.GetCreateTestShardSet());
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
@@ -242,13 +242,13 @@ public:
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
-        const auto& op = Transaction.GetCreateTestShard();
+        const auto& op = Transaction.GetCreateTestShardSet();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = op.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateTestShard Propose"
+                     "TCreateTestShardSet Propose"
                          << ", path: "<< parentPathStr << "/" << name
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId
@@ -295,7 +295,7 @@ public:
                 checks
                     .IsResolved()
                     .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeTestShard, acceptExisted);
+                    .FailOnExist(TPathElement::EPathType::EPathTypeTestShardSet, acceptExisted);
             } else {
                 checks
                     .NotEmpty()
@@ -366,12 +366,12 @@ public:
         const auto pathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, pathId);
         context.MemChanges.GrabPath(context.SS, parentPath->PathId);
-        context.MemChanges.GrabNewTestShard(context.SS, pathId);
+        context.MemChanges.GrabNewTestShardSet(context.SS, pathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(pathId);
         context.DbChanges.PersistPath(parentPath->PathId);
-        context.DbChanges.PersistTestShard(pathId);
+        context.DbChanges.PersistTestShardSet(pathId);
         context.DbChanges.PersistTxState(OperationId);
 
         dstPath.MaterializeLeaf(owner, pathId);
@@ -381,25 +381,25 @@ public:
         newPath->CreateTxId = OperationId.GetTxId();
         newPath->LastTxId = OperationId.GetTxId();
         newPath->PathState = TPathElement::EPathState::EPathStateCreate;
-        newPath->PathType = TPathElement::EPathType::EPathTypeTestShard;
+        newPath->PathType = TPathElement::EPathType::EPathTypeTestShardSet;
 
         if (!acl.empty()) {
             newPath->ApplyACL(acl);
         }
 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateTestShard, newPath->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateTestShardSet, newPath->PathId);
 
-        auto testShardInfo = CreateTestShard(op, txState, context.SS);
+        auto testShardInfo = CreateTestShardSet(op, txState, context.SS);
         if (!testShardInfo.Get()) {
             result->SetError(status, errStr);
             return result;
         }
 
-        context.SS->TestShards[newPath->PathId] = testShardInfo;
-        context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(op.GetCount());
+        context.SS->TestShardSets[newPath->PathId] = testShardInfo;
+        context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Add(1); // Count TestShardSet objects, not tablets
         context.SS->IncrementPathDbRefCount(newPath->PathId);
 
-        TShardInfo shardInfo = TShardInfo::TestShardInfo(OperationId.GetTxId(), newPath->PathId);
+        TShardInfo shardInfo = TShardInfo::TestShardSetInfo(OperationId.GetTxId(), newPath->PathId);
         shardInfo.BindedChannels = channelsBinding;
 
         for (const auto& part: testShardInfo->TestShards) {
@@ -431,12 +431,12 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TCreateTestShard");
+        Y_ABORT("no AbortPropose for TCreateTestShardSet");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateTestShard AbortUnsafe"
+                     "TCreateTestShardSet AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
                          << ", at schemeshard: " << context.SS->TabletID());
@@ -449,7 +449,7 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShard>;
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet>;
 
 namespace NOperation {
 
@@ -458,7 +458,7 @@ std::optional<TString> GetTargetName<TTag>(
     TTag,
     const TTxTransaction& tx)
 {
-    return tx.GetCreateTestShard().GetName();
+    return tx.GetCreateTestShardSet().GetName();
 }
 
 template <>
@@ -467,19 +467,19 @@ bool SetName<TTag>(
     TTxTransaction& tx,
     const TString& name)
 {
-    tx.MutableCreateTestShard()->SetName(name);
+    tx.MutableCreateTestShardSet()->SetName(name);
     return true;
 }
 
 } // namespace NOperation
 
-ISubOperation::TPtr CreateNewTestShard(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateTestShard>(id, tx);
+ISubOperation::TPtr CreateNewTestShardSet(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TCreateTestShardSet>(id, tx);
 }
 
-ISubOperation::TPtr CreateNewTestShard(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateNewTestShardSet(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TCreateTestShard>(id, state);
+    return MakeSubOperation<TCreateTestShardSet>(id, state);
 }
 
 }

@@ -272,8 +272,8 @@ public:
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(workingDir);
         
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShard);
-        auto* op = modifyScheme->MutableCreateTestShard();
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet);
+        auto* op = modifyScheme->MutableCreateTestShardSet();
 
         op->SetName(name);
         op->SetCount(req->count());
@@ -318,13 +318,13 @@ public:
         }
 
         const auto& pathDescription = record.GetPathDescription();
-        if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeTestShard) {
+        if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeTestShardSet) {
             return this->Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
         }
 
         Ydb::TestShard::CreateTestShardResult result;
-        const auto& testShardDesc = pathDescription.GetTestShardDescription();
-        for (auto tabletId : testShardDesc.GetTabletIds()) {
+        const auto& testShardSetDesc = pathDescription.GetTestShardSetDescription();
+        for (auto tabletId : testShardSetDesc.GetTabletIds()) {
             result.add_tablet_ids(tabletId);
         }
 
@@ -368,7 +368,7 @@ public:
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(workingDir);
         
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShard);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet);
         auto* op = modifyScheme->MutableDrop();
         
         op->SetName(name);

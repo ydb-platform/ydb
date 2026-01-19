@@ -133,8 +133,8 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistStreamingQuery(db, pId);
     }
 
-    for (const auto& pId : TestShards) {
-        ss->PersistTestShard(db, pId);
+    for (const auto& pId : TestShardSets) {
+        ss->PersistTestShardSet(db, pId);
     }
 }
 

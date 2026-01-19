@@ -85,7 +85,7 @@ bool IsCreate(ETxType t) {
         case TxCreateLongIncrementalBackupOp:
         case TxCreateSecret:
         case TxCreateStreamingQuery:
-        case TxCreateTestShard:
+        case TxCreateTestShardSet:
             return true; // IsCreate
         case TxIncrementalRestoreFinalize:
             return false; // IsCreate
@@ -131,7 +131,7 @@ bool IsCreate(ETxType t) {
         case TxDropSysView:
         case TxDropStreamingQuery:
         case TxDropSecret:
-        case TxDropTestShard:
+        case TxDropTestShardSet:
             return false; // IsCreate
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -222,7 +222,7 @@ bool IsDrop(ETxType t) {
         case TxDropSysView:
         case TxDropSecret:
         case TxDropStreamingQuery:
-        case TxDropTestShard:
+        case TxDropTestShardSet:
             return true; // IsDrop
         case TxIncrementalRestoreFinalize:
             return false; // IsDrop
@@ -271,7 +271,7 @@ bool IsDrop(ETxType t) {
         case TxCreateLongIncrementalBackupOp:
         case TxCreateSecret:
         case TxCreateStreamingQuery:
-        case TxCreateTestShard:
+        case TxCreateTestShardSet:
             return false; // IsDrop
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -353,7 +353,7 @@ bool CanDeleteParts(ETxType t) {
         case TxDropBlobDepot:
         case TxDropContinuousBackup:
         case TxDropBackupCollection:
-        case TxDropTestShard:
+        case TxDropTestShardSet:
             return true; // CanDeleteParts
         case TxDropTableIndex:
         case TxRmDir:
@@ -409,7 +409,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateSecret:
         case TxDropSecret:
         case TxCreateStreamingQuery:
-        case TxCreateTestShard:
+        case TxCreateTestShardSet:
             return false; // CanDeleteParts
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -591,8 +591,8 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpDropStreamingQuery: return TxDropStreamingQuery;
         case NKikimrSchemeOp::ESchemeOpTruncateTable: return TxTruncateTable;
         case NKikimrSchemeOp::ESchemeOpPrepareIndexValidation: return TxPrepareIndexValidation;
-        case NKikimrSchemeOp::ESchemeOpCreateTestShard: return TxCreateTestShard;
-        case NKikimrSchemeOp::ESchemeOpDropTestShard: return TxDropTestShard;
+        case NKikimrSchemeOp::ESchemeOpCreateTestShardSet: return TxCreateTestShardSet;
+        case NKikimrSchemeOp::ESchemeOpDropTestShardSet: return TxDropTestShardSet;
 
         // no matching tx-type
         case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:

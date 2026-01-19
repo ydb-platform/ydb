@@ -2329,21 +2329,15 @@ struct Schema : NIceDb::Schema {
 
         using TKey = TableKey<ShardIdx, OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<ShardIdx, OwnerPathId, LocalPathId>;
-    struct TestShards : Table<133> {
-        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct Version : Column<2, NScheme::NTypeIds::Uint64> {};
-
-        using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, Version>;
     };
 
-    struct TestShardTablets : Table<134> {
+    struct TestShardSet : Table<133> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct ShardIdx : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
-        struct TabletId : Column<3, NScheme::NTypeIds::Uint64> { using Type = TTabletId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct TestShards : Column<3, NScheme::NTypeIds::String> { using Type = TString; };
 
-        using TKey = TableKey<PathId, ShardIdx>;
-        using TColumns = TableColumns<PathId, ShardIdx, TabletId>;
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, TestShards>;
     };
 
     using TTables = SchemaTables<
@@ -2477,8 +2471,7 @@ struct Schema : NIceDb::Schema {
         ForcedCompactions,
         WaitingForcedCompactionShards,
         SharedShards,
-        TestShards,
-        TestShardTablets
+        TestShardSet
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

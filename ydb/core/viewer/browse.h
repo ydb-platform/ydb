@@ -104,8 +104,8 @@ public:
             return NKikimrViewer::EObjectType::Secret;
         case NKikimrSchemeOp::EPathType::EPathTypeStreamingQuery:
             return NKikimrViewer::EObjectType::StreamingQuery;
-        case NKikimrSchemeOp::EPathType::EPathTypeTestShard:
-            return NKikimrViewer::EObjectType::TestShard;
+        case NKikimrSchemeOp::EPathType::EPathTypeTestShardSet:
+            return NKikimrViewer::EObjectType::TestShardSet;
         case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
         case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
         case NKikimrSchemeOp::EPathType::EPathTypeInvalid:

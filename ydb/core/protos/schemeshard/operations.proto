@@ -213,9 +213,9 @@ enum EOperationType {
     // Publish shadow data and take snapshot in one step
     ESchemeOpPrepareIndexValidation = 134;
 
-    // TestShard
-    ESchemeOpCreateTestShard = 135;
-    ESchemeOpDropTestShard = 136;
+    // TestShardSet
+    ESchemeOpCreateTestShardSet = 135;
+    ESchemeOpDropTestShardSet = 136;
 
     // Some entries are grouped by semantics, so are out of order
 }

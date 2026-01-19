@@ -11,7 +11,7 @@ ALTER TRANSFER <name> [SET USING lambda | SET (option = value [, ...])]
 where:
 
 * `name` — the name of the transfer instance.
-* `lambda` — the [lambda-function](#lambda) for message transformation. <!-- markdownlint-disable-line MD051 -->
+* `lambda` — the [lambda-function](#lambda) for message transformation.
 * `SET (option = value [, ...])` — the transfer [parameters](#params).
 
 ### Parameters {#params}
@@ -59,6 +59,8 @@ ALTER TRANSFER my_transfer SET (
     FLUSH_INTERVAL = Interval('PT60S')
 );
 ```
+
+## Lambda function {#lambda}
 
 {% include [x](../_includes/transfer_lambda.md) %}
 

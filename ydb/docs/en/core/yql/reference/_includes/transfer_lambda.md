@@ -1,5 +1,3 @@
-## Lambda function {#lambda}
-
 A message transformation [lambda function](../syntax/expressions.md#lambda) takes a single structured parameter containing the message from the topic and returns a list of structures corresponding to the table rows for insertion.
 
 Example:

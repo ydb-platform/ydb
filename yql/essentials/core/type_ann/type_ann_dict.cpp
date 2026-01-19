@@ -114,6 +114,11 @@ IGraphTransformer::TStatus FromMutDictWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -401,6 +406,11 @@ IGraphTransformer::TStatus DictBlindOpWrapper(const TExprNode::TPtr& input, TExp
     if (type->GetKind() == ETypeAnnotationKind::Optional) {
         type = type->Cast<TOptionalExprType>()->GetItemType();
         isOptional = true;
+    }
+
+    if (type->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(type);
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (type->GetKind() != ETypeAnnotationKind::Dict) {

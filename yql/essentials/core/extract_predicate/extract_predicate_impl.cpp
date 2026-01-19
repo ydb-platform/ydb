@@ -971,8 +971,9 @@ TExprNode::TPtr BuildSingleComputeRange(const TStructExprType& rowType,
         const bool keyIsPg = firstKeyType->GetKind() == ETypeAnnotationKind::Pg;
         const TTypeAnnotationNode* rangeForType = firstKeyType;
         if (keyIsPg) {
-            const TTypeAnnotationNode* yqlType = NTypeAnnImpl::FromPgImpl(pos, firstKeyType, ctx);
-            YQL_ENSURE(yqlType);
+            bool isUniversal;
+            const TTypeAnnotationNode* yqlType = NTypeAnnImpl::FromPgImpl(pos, firstKeyType, ctx, isUniversal);
+            YQL_ENSURE(!isUniversal && yqlType);
             rangeForType = yqlType;
             YQL_ENSURE(opNode->Tail().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg);
         }

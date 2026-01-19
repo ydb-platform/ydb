@@ -800,7 +800,11 @@ public:
         }
 
         if (input->IsCallable({"Udf", "ScriptUdf", "EvaluateAtom",
-            "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode", "Parameter"})) {
+            "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode", "Parameter",
+            "SubqueryOrderBy", "SubqueryAssumeOrderBy", "SubqueryExtendFor", "SubqueryUnionAllFor",
+            "SubqueryMergeFor", "SubqueryUnionMergeFor",
+            "SubqueryExtend","SubqueryUnionAll", "SubqueryMerge", "SubqueryUnionMerge",
+            "EvaluateFor!", "EvaluateParallelFor!", "EvaluateIf!"})) {
             input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
         }
@@ -809,13 +813,6 @@ public:
             "SecureParam"})) {
             input->SetTypeAnn(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::String));
             return IGraphTransformer::TStatus::Ok;
-        }
-
-        for (auto child : input->Children()) {
-            if (child->GetTypeAnn() && child->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
-                input->SetTypeAnn(child->GetTypeAnn());
-                return IGraphTransformer::TStatus::Ok;
-            }
         }
 
         return TBase::DoCallableTransform(input, output, ctx);

@@ -255,7 +255,6 @@ public:
                         auto idleTimeoutUs = FromString<ui64>(Value(setting));
                         srcDesc.MutableWatermarks()->SetIdleTimeoutUs(idleTimeoutUs);
                         watermarksSettings.IdleTimeoutUs = idleTimeoutUs;
-                        Cerr << "Integration: idle timeout = " << idleTimeoutUs << Endl;
                     } else if (name == WatermarksIdlePartitionsSetting) {
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     } else if (name == SkipJsonErrors) {
@@ -484,25 +483,8 @@ public:
         if (!useSharedReading && maybeWatermark) {
             watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermark.Cast());
             if (!watermarksLateArrivalDelayUs) {
-                // XXX with this PR, watermarks are only enabled when WATERMARK = expression
-                // is specified; this implies, dq.WatermarksLateArrivalDelayMs only
-                // (mis)used for cicrular buffer sizing in HoppingWindow:
-                // 1) if watermark expression is not specifed: watermarks disabled;
-                // 2) if watermark expression is not recognized: error;
-                // 3) if watermark expression specified and decoded: it overrides PRAGMA
-                // for watermarks calculation
-                // 4) for shared reading case:
-                // a) watermarks are always evaluated from WATERMARK expression;
-                // b) there are no way to use SystemMetadata('write_time') in WATERMARK expression
-                // 5) circular buffer size is calculated from PRAGMA dq.LAD;
-                // when pragma is not specified, it defaults to 5S
-                // a) streaming-v2 specific: there are no PRAGMA dq.*, circular buffer size is hardcoded to default of 5S;
-#if 0
                 ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = (SystemMetadata('write_time') - Interval('PT5S'))"));
                 return {};
-#else
-                ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = (SystemMetadata('write_time') - Interval('PT5S'))"));
-#endif
             }
         }
         for (const auto& setting : settings.Raw()->Children()) {
@@ -619,7 +601,6 @@ public:
             }
         }
 
-        Cerr << "Integration: watermark=" << (maybeWatermark ? maybeWatermark.Raw()->Dump() : "NULL") << "/" << wrSettings.WatermarksMode << "  granularity " << watermarksGranularityUs << "/ " << "/" << wrSettings.WatermarksGranularityMs << " lateArrival=" << watermarksLateArrivalDelayUs << "/" << wrSettings.WatermarksLateArrivalDelayMs << " idleEnable=" << watermarksIdleTimeoutUs << "/" << wrSettings.WatermarksEnableIdlePartitions << "/" << wrSettings.WatermarksIdleTimeoutMs << Endl;
         if (wrSettings.WatermarksMode.GetOrElse("") == "default" && maybeWatermark) {
             Add(props, WatermarksEnableSetting, ToString(true), pos, ctx);
             Add(props, WatermarksGranularityUsSetting,

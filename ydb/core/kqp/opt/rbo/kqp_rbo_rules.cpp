@@ -260,6 +260,94 @@ std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std:
     return map->GetInput();
 }
 
+// Pull up correlated filter inside a subplan
+
+bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    if (input->Kind != EOperator::Filter && !input->IsSingleConsumer()) {
+        return false;
+    }
+
+    auto filter = CastOperator<TOpFilter>(input);
+
+    if (filter->GetInput()->Kind != EOperator::AddDependencies && !filter->GetInput()->IsSingleConsumer()) {
+        return false;
+    }
+
+    auto deps = CastOperator<TOpAddDependencies>(filter->GetInput());
+
+    auto conjInfo = filter->GetConjunctInfo(props);
+    if (conjInfo.JoinConditions.empty()) {
+        return false;
+    }
+
+    // Select a subset of join conditions that cover all dependencies
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> covered;
+    TVector<TJoinConditionInfo> subset;
+
+    for (auto jc : conjInfo.JoinConditions) {
+        if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), jc.LeftIU) != deps->Dependencies.end()) {
+            covered.insert(jc.LeftIU);
+            subset.push_back(jc);
+        }
+        if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), jc.RightIU) != deps->Dependencies.end()) {
+            covered.insert(jc.RightIU);
+            subset.push_back(jc);
+        }
+    }
+
+    if (covered.size() != deps->Dependencies.size()) {
+        return false;
+    }
+
+    // Check the parent operator, we have a few choices here:
+    // 1. Map operator
+    // 2. Aggregate
+
+    auto parentOp = filter->Parents[0].lock();
+    if (!parentOp->IsSingleConsumer()) {
+        return false;
+    }
+
+    if (parentOp->Kind == EOperator::Map) {
+        auto map = CastOperator<TOpMap>(parentOp);
+
+        // Stop if we compute something from one of the dependent columns, except for Just
+        for (auto mapEl : map->MapElements) {
+            for (auto iu : mapEl.InputIUs()) {
+                if (covered.contains(iu)) {
+                    if (!mapEl.IsSingleCallable("Just")) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        TVector<TInfoUnit> addToMap;
+
+        // Add all dependend columns to projecting map output
+        auto mapOutput = map->GetOutputIUs();
+        for (auto iu : covered) {
+            if (std::find(mapOutput.begin(), mapOutput.end(), iu) == mapOutput.end()) {
+                addToMap(iu);
+            }
+        }
+
+        // If the map has no parent, we don't pull up the filter any longer
+        // If we're also not adding anything to the map, stop
+        if (map->Parents.empty() && addToMap.empty()) {
+            return false;
+        }
+
+        
+
+    } else if (parentOp->Kind == EOperator::Aggregate) {
+
+    } else {
+        return false;
+    }
+
+}
+
 // Currently we only extract simple expressions where there is only one variable on either side
 
 bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {

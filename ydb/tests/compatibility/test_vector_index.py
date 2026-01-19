@@ -48,7 +48,7 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         if prefixed:
             prefix = "user, "
         if overlap:
-            overlap = f"overlap_clusters={overlap}"
+            overlap = f", overlap_clusters={overlap}"
         else:
             overlap = ""
         create_index_sql = f"""
@@ -99,7 +99,7 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
             for vector_type in self.vector_types.keys():
                 for distance in self.targets.keys():
                     for distance_func in self.targets[distance].keys():
-                        table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}"
+                        table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}_"
                         order = "ASC" if distance != "similarity" else "DESC"
                         vector = self.get_vector(f"{vector_type}Vector", 1)
                         where = ""

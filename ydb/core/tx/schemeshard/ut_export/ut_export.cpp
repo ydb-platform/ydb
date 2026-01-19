@@ -891,7 +891,7 @@ namespace {
 
             TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-            UNIT_ASSERT(HasS3File("/ExternalTable/create_external_table.sql"));
+            CheckPathWithChecksum("/ExternalTable/create_external_table.sql");
             const auto content = GetS3FileContent("/ExternalTable/create_external_table.sql");
 
             UNIT_ASSERT_C(content.find(expectedStartsWith) != TString::npos,
@@ -911,7 +911,7 @@ namespace {
                 static_cast<long>(expectedProperties.size()),
                 TStringBuilder() << "Properties count mismatch: ");
 
-            UNIT_ASSERT(HasS3File("/ExternalTable/permissions.pb"));
+            CheckPathWithChecksum("/ExternalTable/permissions.pb");
             const auto permissions = GetS3FileContent("/ExternalTable/permissions.pb");
             const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
             UNIT_ASSERT_EQUAL_C(

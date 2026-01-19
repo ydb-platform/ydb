@@ -86,8 +86,7 @@ std::vector<ui32> GetIndexes(
     const bool preferAdditionalInputColumns);
 
 bool IsEqual(
-    TConstArrayRef<TCell> firstCells,
-    TConstArrayRef<TCell> secondCells,
+    TConstArrayRef<TCell> cells,
     const std::vector<ui32>& newIndexes,
     const std::vector<ui32>& oldIndexes,
     TConstArrayRef<NScheme::TTypeInfo> types);

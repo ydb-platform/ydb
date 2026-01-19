@@ -1591,6 +1591,9 @@ private:
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
             } else if (settings.Mode().Cast().StringValue() == "update") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
+            } else if (settings.Mode().Cast().StringValue() == "update_conditional") {
+                AFL_ENSURE(Config->GetEnableIndexStreamWrite()); // Don't allow this mode for old versions.
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL);
             } else if (settings.Mode().Cast().StringValue() == "fill_table") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
             } else {
@@ -1669,7 +1672,8 @@ private:
                                 || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
                                 const auto& implTable = tableMeta->ImplTables[index];
 
-                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
+                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
+                                        || settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL) {
                                     if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
                                             return columnsSet.contains(column.first) && !mainKeyColumnsSet.contains(column.first);
                                         })) {
@@ -1711,8 +1715,24 @@ private:
                         });
 
                         if (needLookup) {
+                            AFL_ENSURE(settingsProto.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+
+                            THashSet<TStringBuf> lookupColumnsSet;
+                            for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+                                const auto& indexDescription = tableMeta->Indexes[index];
+
+                                if (indexDescription.Type == TIndexDescription::EType::GlobalSync
+                                        || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
+                                    const auto& implTable = tableMeta->ImplTables[index];
+
+                                    for (const auto& [columnName, columnMeta] : implTable->Columns) {
+                                        lookupColumnsSet.insert(columnName);
+                                    }
+                                }
+                            }
+
                             for (const auto& [columnName, columnMeta] : tableMeta->Columns) {
-                                if (!mainKeyColumnsSet.contains(columnName)) {
+                                if (!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.contains(columnName)) {
                                     lookupColumns.push_back(columnName);
                                     auto columnProto = settingsProto.AddLookupColumns();
                                     fillColumnProto(columnName, &columnMeta, columnProto);

@@ -1,3 +1,7 @@
+# Развёртывание кластера с использованием конфигурации V2
+
+Перед развёртыванием системы обязательно выполните подготовительные действия. Ознакомьтесь с документом [{#T}](deployment-preparation.md).
+
 ## Подготовьте конфигурационные файлы {#config}
 
 Подготовьте конфигурационный файл {{ ydb-short-name }}:
@@ -22,19 +26,19 @@ config:
     - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
       type: SSD
   hosts:
-  - host: ydb-node-zone-a.local
+  - host: static-node-andrei-1.ydb-cluster.com
     host_config_id: 1
     location:
       body: 1
       data_center: 'zone-a'
       rack: '1'
-  - host: ydb-node-zone-b.local
+  - host: static-node-andrei-2.ydb-cluster.com
     host_config_id: 1
     location:
       body: 2
       data_center: 'zone-b'
       rack: '2'
-  - host: ydb-node-zone-c.local
+  - host: static-node-andrei-3.ydb-cluster.com
     host_config_id: 1
     location:
       body: 3
@@ -79,7 +83,7 @@ config:
   client_certificate_authorization:
     request_client_certificate: true
     client_certificate_definitions:
-        - member_groups: ["databaseNodes@cert"]
+        - member_groups: ["ADMINS"]
           subject_terms:
           - short_name: "O"
             values: ["YDB"]
@@ -148,7 +152,7 @@ sudo chown -R ydb:ydb /opt/ydb/cfg
 
 Выполнив специальную команду на каждой машине, инициализируйте эту директорию файлом конфигурации.
 ```bash
-ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.yaml
+sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-config /tmp/config.yaml
 ```
 
 Исходный файл `/tmp/config.yaml` после выполнения этой команды больше не используется, его можно удалить.

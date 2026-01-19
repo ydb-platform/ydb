@@ -32,13 +32,6 @@ THashMap<ui64, NKikimrPQ::TTransaction> CollectTransactions(const TVector<NKikim
     ui32 expected = 0;
 
     for (const auto& readRange : readRanges) {
-        AFL_ENSURE(readRange.HasStatus());
-        if (readRange.GetStatus() != NKikimrProto::OK &&
-            readRange.GetStatus() != NKikimrProto::OVERRUN &&
-            readRange.GetStatus() != NKikimrProto::NODATA) {
-            AFL_ENSURE(false)("Transactions read error", readRange.GetStatus());
-        }
-
         for (size_t i = 0; i < readRange.PairSize(); ++i) {
             const auto& pair = readRange.GetPair(i);
 

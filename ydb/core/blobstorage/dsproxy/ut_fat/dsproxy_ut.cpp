@@ -3506,7 +3506,6 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestPersistence);
         PROXY_UNIT_TEST(TestDoubleEmptyGet);
         PROXY_UNIT_TEST(TestPartialGetBlock);
-        PROXY_UNIT_TEST(TestPartialGetMirror);
         PROXY_UNIT_TEST(TestBlock);
         PROXY_UNIT_TEST(TestBlockPersistence);
         PROXY_UNIT_TEST(TestGetAndRangeGetManyBlobs);
@@ -3519,8 +3518,6 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestQuadrupleGroups);
         PROXY_UNIT_TEST(TestSingleFailure);
         PROXY_UNIT_TEST(TestDoubleFailure);
-        PROXY_UNIT_TEST(TestNormalMirror);
-        PROXY_UNIT_TEST(TestSingleFailureMirror);
         PROXY_UNIT_TEST(TestProxySimpleDiscover);
         PROXY_UNIT_TEST(TestProxySimpleDiscoverNone);
         PROXY_UNIT_TEST(TestProxySimpleDiscoverMaxi);

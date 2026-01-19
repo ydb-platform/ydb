@@ -7,12 +7,11 @@
 
 #include <util/string/builder.h>
 
-#include <iostream>
 
 namespace NYdb::inline Dev {
 
 TConnectionInfo ParseConnectionString(const std::string& connectionString) {
-    if (connectionString.size() == 0) {
+    if (connectionString.empty()) {
         ythrow TContractViolation("Empty connection string ");
     }
 

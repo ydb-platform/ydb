@@ -87,8 +87,8 @@ struct TRowDispatcherReadActorMetrics {
         for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
             SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
         }
-        auto source = SubGroup->GetSubgroup("tx_id", TxId);
-        auto task = source->GetSubgroup("task_id", ToString(taskId));
+        Source = SubGroup->GetSubgroup("tx_id", TxId);
+        auto task = Source->GetSubgroup("task_id", ToString(taskId));
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
         ReInit = task->GetCounter("ReInit", true);
@@ -104,6 +104,7 @@ struct TRowDispatcherReadActorMetrics {
     TString TxId;
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounterPtr SubGroup;
+    ::NMonitoring::TDynamicCounterPtr Source;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyGetNextBatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReInit;
@@ -824,6 +825,7 @@ void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
 }
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
+    Y_DEBUG_ABORT_UNLESS(Parent == this); // called on Parent
     auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
     auto idleTimeoutUs = // TODO remove fallback
         SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
@@ -831,7 +833,8 @@ void TDqPqRdReadActor::InitWatermarkTracker() {
         lateArrivalDelayUs;
     TDqPqReadActorBase::InitWatermarkTracker(
             TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
-            TDuration::MicroSeconds(idleTimeoutUs));
+            TDuration::MicroSeconds(idleTimeoutUs),
+            Metrics.Counters ? Metrics.Source : nullptr);
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
@@ -1327,7 +1330,7 @@ void TDqPqRdReadActor::SendNoSession(const NActors::TActorId& recipient, ui64 co
 }
 
 void TDqPqRdReadActor::NotifyCA() {
-    // called on Parent
+    Y_DEBUG_ABORT_UNLESS(Parent == this); // called on Parent
     Metrics.InFlyAsyncInputData->Set(1);
     InFlyAsyncInputData = true;
     Counters.NotifyCA++;

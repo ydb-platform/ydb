@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include <openssl/sha.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -25,8 +26,8 @@ public:
                 QueryTexts.push_back(queryText);
                 // Keep only the last N queries to prevent unbounded memory growth
                 constexpr size_t MAX_QUERY_TEXTS = 100;
-                if (QueryTexts.size() > MAX_QUERY_TEXTS) {
-                    QueryTexts.erase(QueryTexts.begin(), QueryTexts.begin() + (QueryTexts.size() - MAX_QUERY_TEXTS));
+                while (QueryTexts.size() > MAX_QUERY_TEXTS) {
+                    QueryTexts.pop_front();
                 }
             }
         }
@@ -57,7 +58,7 @@ public:
     }
 
 private:
-    TVector<TString> QueryTexts;
+    std::deque<TString> QueryTexts;
 };
 
 inline void LogQueryTextImpl(TStringStream& ss, const TString& queryText, bool hashed) {
@@ -84,20 +85,12 @@ inline void LogQueryTextImpl(TStringStream& ss, const TString& queryText, bool h
 
 inline void LogQueryText(TStringStream& ss, const TString& queryText) {
     const auto& config = AppData()->DataIntegrityTrailsConfig;
-    const auto queryTextLogMode = config.HasQueryTextLogMode()
-        ? config.GetQueryTextLogMode()
-        : NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED;
-
-    LogQueryTextImpl(ss, queryText, queryTextLogMode == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED);
+    LogQueryTextImpl(ss, queryText, config.GetQueryTextLogMode() == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED);
 }
 
 inline void LogQueryTextTli(TStringStream& ss, const TString& queryText) {
     const auto& config = AppData()->LogTliConfig;
-    const auto queryTextLogMode = config.HasQueryTextLogMode()
-        ? config.GetQueryTextLogMode()
-        : NKikimrProto::TLogTliConfig_ELogMode_HASHED;
-
-    LogQueryTextImpl(ss, queryText, queryTextLogMode == NKikimrProto::TLogTliConfig_ELogMode_HASHED);
+    LogQueryTextImpl(ss, queryText, config.GetQueryTextLogMode() == NKikimrProto::TLogTliConfig_ELogMode_HASHED);
 }
 
 inline bool ShouldBeLogged(NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type) {

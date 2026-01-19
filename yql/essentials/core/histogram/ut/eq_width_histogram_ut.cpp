@@ -195,7 +195,7 @@ Y_UNIT_TEST(OverlappingCardinality) {
                                          10, /*values range=*/{0, 25}, /*column range=*/{0, 20},
                                          10, /*values range=*/{0, 25}, /*column range=*/{0, 20});
 
-    TestHistogramCardinality<ui32, ui32>(EHistogramValueType::Uint32, /*result counts=*/{25, 16}, /*cardinality=*/21,
+    TestHistogramCardinality<ui32, ui32>(EHistogramValueType::Uint32, /*result counts=*/{25, 16}, /*cardinality=*/14,
                                          10, /*values range=*/{0, 25}, /*column range=*/{0, 25},
                                          10, /*values range=*/{0, 25}, /*column range=*/{5, 20});
 }

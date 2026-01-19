@@ -1591,15 +1591,17 @@ protected:
         Y_UNUSED(str);
     }
 
-    void DefaultMonitoringPage(TStringStream& str) {
+    void DefaultMonitoringPage(TStringStream& str, TCgiParameters cgi) {
         HTML(str) {
             PRE() {
                 str << "TDqComputeActorBase, SelfId=" << this->SelfId() << ' ';
-                HREF(TStringBuilder() << "?ca=" << this->SelfId() << "&view=dump") {
+                cgi.ReplaceUnescaped("view", "dump");
+                HREF(TStringBuilder() << "?" << cgi.Print()) {
                     str << "Dump";
                 }
                 str << ' ';
-                HREF(TStringBuilder() << "?ca=" << this->SelfId() << "&view=run") {
+                cgi.ReplaceUnescaped("view", "run");
+                HREF(TStringBuilder() << "?" << cgi.Print()) {
                     str << "Run";
                 }
                 str << Endl;
@@ -1792,9 +1794,9 @@ protected:
             if (this->Running) {
                 this->DoExecute();
             }
-            DefaultMonitoringPage(str);
+            DefaultMonitoringPage(str, cgi);
         } else {
-            DefaultMonitoringPage(str);
+            DefaultMonitoringPage(str, cgi);
         }
 
         this->Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(str.Str()));

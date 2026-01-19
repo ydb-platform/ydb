@@ -95,23 +95,16 @@ TKeyedWriteSession::TKeyedWriteSession(
     std::shared_ptr<TTopicClient::TImpl> client,
     std::shared_ptr<TGRpcConnectionsImpl> connections,
     TDbDriverStatePtr dbDriverState
-): Connections(connections), Client(client), DbDriverState(dbDriverState), Settings(settings) {    
+): Connections(connections), Client(client), DbDriverState(dbDriverState), Settings(settings), MemoryUsage(0) {    
     TDescribeTopicSettings describeTopicSettings;
     auto topicConfig = client->DescribeTopic(settings.Path_, describeTopicSettings).GetValueSync();
     const auto& partitions = topicConfig.GetTopicDescription().GetPartitions();
     auto partitionChooserStrategy = settings.PartitionChooserStrategy_;
 
-    if (partitionChooserStrategy == TKeyedWriteSessionSettings::EPartitionChooserStrategy::Auto) {
-        partitionChooserStrategy = AutoPartitioningEnabled(topicConfig.GetTopicDescription()) ?
-            TKeyedWriteSessionSettings::EPartitionChooserStrategy::BoundWithHash :
-            TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash;
-    }
-
     ui64 idx = 0;
     switch (partitionChooserStrategy) {
-    case TKeyedWriteSessionSettings::EPartitionChooserStrategy::BoundWithHash:
-        Hasher = settings.Hasher_;
     case TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound:
+        PartitioningKeyHasher = settings.PartitioningKeyHasher_;
         for (const auto& partition : partitions) {
             Partitions.push_back(
                 TPartitionInfo().
@@ -218,63 +211,93 @@ TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::CreateWriteSessio
     auto writeSession = std::make_shared<WriteSessionWrapper>(WriteSessionWrapper{
         .Session = Client->CreateWriteSession(alteredSettings),
         .PartitionId = partitionId,
-        .ExpirationTime = TInstant::Now() + Settings.SessionTimeout_,
+        .ExpirationTime = TInstant::Now() + Settings.SubSessionIdleTimeout_,
     });
 
-    auto [it, inserted] = SessionsIndex.try_emplace(partitionId, writeSession);
-    auto resultSession = inserted ? writeSession : it->second;
-
-    auto partitionIndex = PartitionsPrimaryIndex.find(partitionId);
-    auto index = partitionIndex->second;
-
-    Futures[index] = resultSession->Session->WaitEvent();
+    WrappedWriteSessionPtr resultSession = nullptr;
+    size_t partitionIndex = 0;
     {
-        auto self = weak_from_this();
-        Futures[index].Subscribe([self, index](const NThreading::TFuture<void>&) {
-            if (auto s = self.lock()) {
-                s->AddReadyFuture(index);
-            }
-        });
+        std::unique_lock lock(GlobalLock);
+        auto [it, inserted] = SessionsIndex.try_emplace(partitionId, writeSession);
+        resultSession = inserted ? writeSession : it->second;
+
+        auto partitionIndexIt = PartitionsPrimaryIndex.find(partitionId);
+        partitionIndex = partitionIndexIt->second;
+
+        Futures[partitionIndex] = resultSession->Session->WaitEvent();
     }
+    
+    auto self = weak_from_this();
+    Futures[partitionIndex].Subscribe([self, partitionId](const NThreading::TFuture<void>&) {
+        if (auto s = self.lock()) {
+            s->RunEventLoop(partitionId);
+        }
+    });
 
     return resultSession;
 }
 
-bool TKeyedWriteSession::CheckSessionClosed(ui64 partitionId) {
+bool TKeyedWriteSession::RunEventLoop(ui64 partitionId) {
+    std::unique_lock lock(GlobalLock);
+
     auto sessionIter = SessionsIndex.find(partitionId);
     if (sessionIter == SessionsIndex.end()) {
         return true;
     }
 
+    bool gotSessionClosedEvent = false;
+    bool wasAck = false;
     while (true) {
         auto event = sessionIter->second->Session->GetEvent(false);
         if (!event) {
-            return false;
+            break;
         }
 
         if (auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event); sessionClosedEvent) {
-            HandleSessionClosedEvent(sessionClosedEvent->GetStatus());
-            return true;
+            HandleSessionClosedEvent(std::move(*sessionClosedEvent));
+            gotSessionClosedEvent = true;
+            break;
         }
 
         if (auto readyToAcceptEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-            ContinuationTokens.emplace(partitionId, std::move(readyToAcceptEvent->ContinuationToken));
+            HandleReadyToAcceptEvent(partitionId, *readyToAcceptEvent);
             continue;
         }
 
+        wasAck = true;
         HandleAcksEvent(partitionId, *event);
     }
-}
 
-TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::GetWriteSession(ui64 partitionId) {    
-    auto sessionIter = SessionsIndex.find(partitionId);    
+    auto partitionIndex = PartitionsPrimaryIndex.find(partitionId);
+    Y_ABORT_UNLESS(partitionIndex != PartitionsPrimaryIndex.end());
+    if (!gotSessionClosedEvent) {
+        Futures[partitionIndex->second] = sessionIter->second->Session->WaitEvent();
+        {
+            auto self = weak_from_this();
+            ui64 capturedPartitionId = partitionId; // Capture partitionId, not index
 
-    if (sessionIter == SessionsIndex.end()) {
-        return CreateWriteSession(partitionId);
+            lock.unlock();
+            Futures[partitionIndex->second].Subscribe([self, capturedPartitionId](const NThreading::TFuture<void>&) {
+                if (auto s = self.lock()) {
+                    s->RunEventLoop(capturedPartitionId);
+                }
+            });
+            lock.lock();
+        }
+    } else {
+        Futures[partitionIndex->second] = CloseFuture;
     }
 
-    if (CheckSessionClosed(partitionId)) {
-        return nullptr;
+    if (wasAck) {
+        TransferEventsToOutputQueue();
+    }
+    return gotSessionClosedEvent;
+}
+
+TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::GetWriteSession(ui64 partitionId) { 
+    auto sessionIter = SessionsIndex.find(partitionId);    
+    if (sessionIter == SessionsIndex.end()) {
+        return CreateWriteSession(partitionId);
     }
 
     if (sessionIter->second->IsExpired()) {
@@ -307,10 +330,11 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
         return;
     }
 
+    MemoryUsage += message.Data.size();
     const auto& partitionInfo = PartitionChooser->ChoosePartition(key);
     SaveMessage(std::move(message), partitionInfo.PartitionId_, tx);
-    
-    if (PendingMessages.size() + InFlightMessages.size() < MAX_MESSAGES_IN_MEMORY) {
+
+    if (MemoryUsage < Settings.MaxMemoryUsage_ / 2) {
         AddReadyToAcceptEvent();
     }
 }
@@ -324,27 +348,15 @@ void TKeyedWriteSession::HandleReadyToAcceptEvent(ui64 partitionId, TWriteSessio
     ContinuationTokens.emplace(partitionId, std::move(event.ContinuationToken));
 }
 
-void TKeyedWriteSession::HandleSessionClosedEvent(EStatus status) {
-    CloseStatus = status;
-    NonBlockingClose();
-}
-
-void TKeyedWriteSession::ConsumeEvents(WrappedWriteSessionPtr wrappedSession) {
-    auto events = wrappedSession->Session->GetEvents(false);
-    for (auto& event : events) {
-        if (auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&event); sessionClosedEvent) {
-            HandleSessionClosedEvent(sessionClosedEvent->GetStatus());
-            return;
-        }
-
-        if (std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
-            continue;
-        }
-        HandleAcksEvent(wrappedSession->PartitionId, event);
+void TKeyedWriteSession::HandleSessionClosedEvent(TSessionClosedEvent&& event) {
+    if (event.IsSuccess()) {
+        return;
     }
 
-    std::lock_guard lock(GlobalLock);
-    TransferEventsToOutputQueue();
+    if (!CloseEvent.has_value()) {
+        CloseEvent = std::move(event);
+    }
+    NonBlockingClose();
 }
 
 void TKeyedWriteSession::CleanExpiredSessions() {
@@ -385,20 +397,24 @@ bool TKeyedWriteSession::Close(TDuration closeTimeout) {
         MessageSenderWorker.join();
     }
 
-    std::lock_guard lock(GlobalLock);
-    AddSessionClosedEvent(CloseStatus);
-
     return true;
 }
 
-void TKeyedWriteSession::AddSessionClosedEvent(EStatus status) {
-    NIssue::TIssues issues;
-    TSessionClosedEvent sessionClosedEvent(status, std::move(issues));
-    EventsOutputQueue.push_back(std::move(sessionClosedEvent));
+void TKeyedWriteSession::AddSessionClosedEvent() {
+    if (!Closed.load()) {
+        return;
+    }
+
+    if (!CloseEvent.has_value()) {
+        CloseEvent = TSessionClosedEvent(EStatus::SUCCESS, {});
+    }
+
+    if (EventsOutputQueue.empty() && InFlightMessages.empty() && PendingMessages.empty()) {
+        EventsOutputQueue.push_back(*CloseEvent);
+    }
 }
 
 void TKeyedWriteSession::NonBlockingClose() {
-    AddSessionClosedEvent(CloseStatus);
     Closed.store(true);
     ClosePromise.TrySetValue();
 }
@@ -418,7 +434,8 @@ void TKeyedWriteSession::DestroyWriteSession(TSessionsIndexIterator& it, const T
         it->second->Session->Close(closeTimeout);
     }
 
-    ConsumeEvents(it->second);
+    RunEventLoop(it->second->PartitionId);
+
     auto partitionIndex = PartitionsPrimaryIndex.find(it->second->PartitionId);
     Y_ABORT_UNLESS(partitionIndex != PartitionsPrimaryIndex.end());
 
@@ -487,8 +504,11 @@ void TKeyedWriteSession::TransferEventsToOutputQueue() {
         eventsQueueIt->second.pop_front();
         hasEvents = true;
 
+        bool wasMemoryUsageOk = MemoryUsage < Settings.MaxMemoryUsage_;
+        MemoryUsage -= head.Message.Data.size();
+
         // Check if we need to add ReadyToAcceptEvent after removing this message
-        if (InFlightMessages.size() + PendingMessages.size() >= MAX_MESSAGES_IN_MEMORY) {
+        if (MemoryUsage < Settings.MaxMemoryUsage_ / 2 && !wasMemoryUsageOk) {
             shouldAddReadyEvent = true;
         }
 
@@ -532,10 +552,7 @@ std::optional<TWriteSessionEvent::TEvent> TKeyedWriteSession::GetEvent(bool bloc
     auto event = std::move(EventsOutputQueue.front());
     EventsOutputQueue.pop_front();
 
-    if (Closed.load()) {
-        AddSessionClosedEvent(CloseStatus);
-    }
-
+    AddSessionClosedEvent();
     return event;
 }
 
@@ -549,87 +566,41 @@ std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::GetEvents(bool block
     std::vector<TWriteSessionEvent::TEvent> events;
     events.reserve(maxEventsCount.value_or(EventsOutputQueue.size()));
     while (!EventsOutputQueue.empty() && events.size() < maxEventsCount.value_or(EventsOutputQueue.size())) {
-        events.push_back(std::move(EventsOutputQueue.front()));
+        auto event = std::move(EventsOutputQueue.front());
+        events.push_back(std::move(event));
         EventsOutputQueue.pop_front();
     }
 
-    if (Closed.load()) {
-        AddSessionClosedEvent(CloseStatus);
-    }
-
+    AddSessionClosedEvent();
     return events;
 }
 
 std::optional<TContinuationToken> TKeyedWriteSession::GetContinuationToken(ui64 partitionId) {
-    auto it = ContinuationTokens.find(partitionId);
-    while (it == ContinuationTokens.end()) {
-        if (!SessionsIndex.contains(partitionId)) {
-            break;
+    while (true) {
+        std::unique_lock lock(GlobalLock);
+        auto it = ContinuationTokens.find(partitionId);
+        if (it != ContinuationTokens.end()) {
+            auto token = std::move(it->second);
+            ContinuationTokens.erase(it);
+            return token;
         }
 
+        if (!SessionsIndex.contains(partitionId)) {
+            return std::nullopt;
+        }
+
+        lock.unlock();
         WaitForEvents();
-        it = ContinuationTokens.find(partitionId);
     }
-
-    if (it == ContinuationTokens.end()) {
-        return std::nullopt;
-    }
-
-    auto token = std::move(it->second);
-    ContinuationTokens.erase(it);
-
-    return token;
 }
 
 void TKeyedWriteSession::WaitForEvents() {
+    if (Closed.load()) {
+        NThreading::WaitAny(Futures).Wait(CloseTimeout);
+        return;
+    }
+
     NThreading::WaitAny(Futures).Wait();
-
-    std::vector<ui64> ready;
-    {
-        std::lock_guard lock(ReadyFuturesLock);
-        ready.swap(ReadyFutures);
-    }
-
-    std::lock_guard lock(GlobalLock);
-    for (auto futureIdx : ready) {
-        if (futureIdx >= Partitions.size() || futureIdx >= Futures.size()) {
-            continue;
-        }
-    
-        const size_t partitionIdx = futureIdx;    
-        auto partitionId = Partitions[partitionIdx].PartitionId_;
-        auto wrappedSession = SessionsIndex.find(partitionId);
-        Y_ABORT_UNLESS(wrappedSession != SessionsIndex.end(), "Session should be created before");
-
-        Futures[futureIdx] = wrappedSession->second->Session->WaitEvent();
-        {
-            auto self = weak_from_this();
-            Futures[futureIdx].Subscribe([self, futureIdx](const NThreading::TFuture<void>&) {
-                if (auto s = self.lock()) {
-                    s->AddReadyFuture(futureIdx);
-                }
-            });
-        }
-
-        auto event = wrappedSession->second->Session->GetEvent(false);
-        if (!event) {
-            continue;
-        }
-
-        if (auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event); sessionClosedEvent) {
-            HandleSessionClosedEvent(sessionClosedEvent->GetStatus());
-            continue;
-        }
-
-        if (auto readyToAcceptEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-            HandleReadyToAcceptEvent(partitionId, *readyToAcceptEvent);
-            continue;
-        }
-
-        HandleAcksEvent(partitionId, *event);
-    }
-
-    TransferEventsToOutputQueue();
 }
 
 void TKeyedWriteSession::RunMessageSender() {
@@ -648,13 +619,13 @@ void TKeyedWriteSession::RunMessageSender() {
                 Futures.pop_back();
             }
 
-            if (PendingMessages.empty() || InFlightMessages.size() >= MAX_IN_FLIGHT_MESSAGES) {
+            if (PendingMessages.empty()) {
                 if (Futures.size() > MessagesNotEmptyFutureIndex && (!Futures[MessagesNotEmptyFutureIndex].Initialized() || Futures[MessagesNotEmptyFutureIndex].IsReady())) {
                     MessagesNotEmptyPromise = NThreading::NewPromise();
                     Futures[MessagesNotEmptyFutureIndex] = MessagesNotEmptyPromise.GetFuture();
                 }
     
-                shouldWait = !Closed.load() || !InFlightMessages.empty();
+                shouldWait = !Closed.load() && !InFlightMessages.empty();
             } else {
                 msgToSend = &PendingMessages.front();
             }
@@ -681,8 +652,14 @@ void TKeyedWriteSession::RunMessageSender() {
         }
     }
 
-    for (auto it = SessionsIndex.begin(); it != SessionsIndex.end(); ) {
-        DestroyWriteSession(it, TDuration::Zero());
+    // Close all sessions and add SessionClosedEvent when all messages are processed
+    {
+        auto sessionsToClose = SessionsIndex.size();
+        for (auto it = SessionsIndex.begin(); it != SessionsIndex.end(); ) {
+            DestroyWriteSession(it, CloseTimeout / sessionsToClose);
+        }
+        // Add SessionClosedEvent only if not already added by Close()
+        AddSessionClosedEvent();
     }
 }
 
@@ -796,6 +773,28 @@ TSimpleBlockingKeyedWriteSession::TSimpleBlockingKeyedWriteSession(
     GotEventsFuture = GotEventsPromise.GetFuture();
 }
 
+void TSimpleBlockingKeyedWriteSession::RunEventLoop() {
+    while (true) {
+        auto event = Writer->GetEvent(false);
+        if (!event) {
+            break;
+        }
+
+        if (auto readyToAcceptEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+            ContinuationTokensQueue.push(std::move(readyToAcceptEvent->ContinuationToken));
+            continue;
+        }
+        if (auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event)) {
+            std::cerr << "Session closed: " << sessionClosedEvent->DebugString() << std::endl;
+            Closed.store(true);
+            return;
+        }
+        if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+            HandleAcksEvent(*acksEvent);
+        }
+    }
+}
+
 void TSimpleBlockingKeyedWriteSession::HandleAcksEvent(const TWriteSessionEvent::TAcksEvent& acksEvent) {
     for (auto ack : acksEvent.Acks) {
         AckedSeqNos.insert(ack.SeqNo);
@@ -808,91 +807,23 @@ void TSimpleBlockingKeyedWriteSession::RecreateGotEventsPromise() {
     GotEventsFuture = GotEventsPromise.GetFuture();
 }
 
-std::optional<TContinuationToken> TSimpleBlockingKeyedWriteSession::GetContinuationToken(const TDuration& timeout) {
+template<typename F>
+bool TSimpleBlockingKeyedWriteSession::Wait(const TDuration& timeout, F&& stopFunc) {
     std::unique_lock lock(Lock);
-
-    auto handleEvents = [&]() -> std::optional<TContinuationToken> {
-        while (auto event = Writer->GetEvent(false)) {
-            if (auto readyToAcceptEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-                return {std::move(readyToAcceptEvent->ContinuationToken)};
-            }
-            if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
-                HandleAcksEvent(*acksEvent);
-            }
-        }
-        return std::nullopt;
-    };
 
     auto deadline = TInstant::Now() + timeout;
     auto remainingTime = timeout;
-    while (true) {
-        if (TInstant::Now() > deadline) {
-            return std::nullopt;
-        }
-
-        if (!ContinuationTokensQueue.empty()) {
-            auto token = std::move(ContinuationTokensQueue.front());
-            ContinuationTokensQueue.pop();
-            return {std::move(token)};
-        }
-
-        if (auto token = handleEvents()) {
-            return token;
-        }
-        
-        std::vector<NThreading::TFuture<void>> futures;
-        futures.push_back(GotEventsFuture);
-        futures.push_back(CloseFuture);
-        futures.push_back(Writer->WaitEvent());
-        lock.unlock();
-        NThreading::WaitAny(futures).Wait(remainingTime);
-        lock.lock();
-
-        remainingTime = deadline - TInstant::Now();
-        RecreateGotEventsPromise();
-        
-        if (auto token = handleEvents()) {
-            return token;
-        }
-    }
-}
-
-bool TSimpleBlockingKeyedWriteSession::WaitForAck(ui64 seqNo, const TDuration& timeout) {
-    std::unique_lock lock(Lock);
-    auto deadline = TInstant::Now() + timeout;
-    auto remainingTime = timeout;
-
-    auto handleEvents = [&]() -> bool {
-        while (auto event = Writer->GetEvent(false)) {
-            if (auto readyToAcceptEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-                ContinuationTokensQueue.push(std::move(readyToAcceptEvent->ContinuationToken));
-            }
-            if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
-                HandleAcksEvent(*acksEvent);
-                if (AckedSeqNos.contains(seqNo)) {
-                    AckedSeqNos.erase(seqNo);
-                    return true;
-                }
-            }
-        }
-        return false;
-    };
-
     while (true) {
         if (TInstant::Now() > deadline) {
             return false;
         }
 
-        // Check for ack that might already be in AckedSeqNos
-        if (AckedSeqNos.contains(seqNo)) {
-            AckedSeqNos.erase(seqNo);
+        RunEventLoop();
+
+        if (stopFunc()) {
             return true;
         }
-
-        if (handleEvents()) {
-            return true;
-        }
-
+        
         std::vector<NThreading::TFuture<void>> futures;
         futures.push_back(GotEventsFuture);
         futures.push_back(CloseFuture);
@@ -903,11 +834,32 @@ bool TSimpleBlockingKeyedWriteSession::WaitForAck(ui64 seqNo, const TDuration& t
 
         remainingTime = deadline - TInstant::Now();
         RecreateGotEventsPromise();
-        
-        if (handleEvents()) {
+    }
+}
+
+std::optional<TContinuationToken> TSimpleBlockingKeyedWriteSession::GetContinuationToken(const TDuration& timeout) {
+    std::optional<TContinuationToken> token;
+
+    Wait(timeout, [&]() {
+        if (!ContinuationTokensQueue.empty()) {
+            token = std::move(ContinuationTokensQueue.front());
+            ContinuationTokensQueue.pop();
             return true;
         }
-    }
+        return false;
+    });
+
+    return token;
+}
+
+bool TSimpleBlockingKeyedWriteSession::WaitForAck(ui64 seqNo, const TDuration& timeout) {
+    return Wait(timeout, [&]() {
+        if (AckedSeqNos.contains(seqNo)) {
+            AckedSeqNos.erase(seqNo);
+            return true;
+        }
+        return false;
+    });
 }
 
 bool TSimpleBlockingKeyedWriteSession::Write(const std::string& key, TWriteMessage&& message, TTransactionBase* tx, const TDuration& blockTimeout) {

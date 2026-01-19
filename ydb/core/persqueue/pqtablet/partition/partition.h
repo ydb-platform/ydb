@@ -535,7 +535,6 @@ private:
     ::NMonitoring::TDynamicCounterPtr GetPerPartitionCounterSubgroup() const;
     void SetupDetailedMetrics();
     void ResetDetailedMetrics();
-    bool DetailedMetricsAreEnabled() const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

@@ -1590,16 +1590,22 @@ struct TEvPQ {
     struct TEvMLPConsumerUpdateConfig : TEventLocal<TEvMLPConsumerUpdateConfig, EvMLPConsumerUpdateConfig> {
 
         TEvMLPConsumerUpdateConfig(
+            const NKikimrPQ::TPQTabletConfig& topicConfig,
             const NKikimrPQ::TPQTabletConfig::TConsumer& config,
-            std::optional<TDuration> retentionPeriod
+            std::optional<TDuration> retentionPeriod,
+            NMonitoring::TDynamicCounterPtr detailedMetricsRoot
         )
-            : Config(config)
+            : TopicConfig(topicConfig)
+            , Config(config)
             , RetentionPeriod(retentionPeriod)
+            , DetailedMetricsRoot(std::move(detailedMetricsRoot))
         {
         }
 
+        NKikimrPQ::TPQTabletConfig TopicConfig;
         NKikimrPQ::TPQTabletConfig::TConsumer Config;
         std::optional<TDuration> RetentionPeriod;
+        NMonitoring::TDynamicCounterPtr DetailedMetricsRoot;
     };
 
     struct TEvMLPDLQMoverResponse : TEventLocal<TEvMLPDLQMoverResponse, EvMLPDLQMoverResponse> {

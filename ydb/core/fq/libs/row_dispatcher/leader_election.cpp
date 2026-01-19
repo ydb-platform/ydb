@@ -61,14 +61,15 @@ struct TEvPrivate {
     };
 
     struct TEvCreateSemaphoreResult : NActors::TEventLocal<TEvCreateSemaphoreResult, EvCreateSemaphoreResult> {
-        NYdb::NCoordination::TAsyncResult<void> Result;
-        explicit TEvCreateSemaphoreResult(const NYdb::NCoordination::TAsyncResult<void>& future)
+        NYdb::NCoordination::TResult<void> Result;
+        explicit TEvCreateSemaphoreResult(const NYdb::NCoordination::TResult<void>& future)
             : Result(std::move(future)) {}
     };
     struct TEvCreateSessionResult : NActors::TEventLocal<TEvCreateSessionResult, EvCreateSessionResult> {
         NYdb::NCoordination::TAsyncSessionResult Result;
         explicit TEvCreateSessionResult(NYdb::NCoordination::TAsyncSessionResult future)
             : Result(std::move(future)) {}
+        TEvCreateSessionResult() {}
     };
 
     struct TEvOnChangedResult : NActors::TEventLocal<TEvOnChangedResult, EvOnChangedResult> {};
@@ -80,8 +81,8 @@ struct TEvPrivate {
     };
 
     struct TEvAcquireSemaphoreResult : NActors::TEventLocal<TEvAcquireSemaphoreResult, EvAcquireSemaphoreResult> {
-        NYdb::NCoordination::TAsyncResult<bool> Result;
-        explicit TEvAcquireSemaphoreResult(NYdb::NCoordination::TAsyncResult<bool> future)
+        NYdb::NCoordination::TResult<bool> Result;
+        explicit TEvAcquireSemaphoreResult(NYdb::NCoordination::TResult<bool> future)
             : Result(std::move(future)) {}
     };
     struct TEvSessionStopped : NActors::TEventLocal<TEvSessionStopped, EvSessionStopped> {};
@@ -147,7 +148,9 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActor
     bool SessionClosed = false;
     ui64 PendingRpcResponses = 0;
 
-
+    uint64_t SessionSeqNo = 0;
+    uint64_t SessionId = 0;
+    uint64_t NextReqId = 1;
 
 public:
     TLeaderElection(
@@ -317,7 +320,7 @@ void TLeaderElection::ProcessState() {
         State = EState::WaitSessionCreated;
         [[fallthrough]];
     case EState::WaitSessionCreated:
-        if (!Session) {
+        if (!SessionId) {
             return;
         }
         if (!SemaphoreCreated) {
@@ -344,11 +347,18 @@ void TLeaderElection::ResetState() {
 }
 
 void TLeaderElection::CreateSemaphore() {
-    Session->CreateSemaphore(SemaphoreName, 1 /* limit */)
-        .Subscribe(
-        [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<void>& future) {
-            actorSystem->Send(actorId, new TEvPrivate::TEvCreateSemaphoreResult(future));
-        }); 
+    // Session->CreateSemaphore(SemaphoreName, 1 /* limit */)
+    //     .Subscribe(
+    //     [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<void>& future) {
+    //         actorSystem->Send(actorId, new TEvPrivate::TEvCreateSemaphoreResult(future));
+    //     }); 
+    LOG_ROW_DISPATCHER_DEBUG("Try to create semaphore");
+    TRpcIn message;
+    auto& inner = *message.mutable_create_semaphore();
+    inner.set_req_id(NextReqId++);
+    inner.set_name(SemaphoreName);
+    inner.set_limit(1);
+    AddSessionEvent(std::move(message));
 }
 
 void TLeaderElection::AcquireSemaphore() {
@@ -364,13 +374,21 @@ void TLeaderElection::AcquireSemaphore() {
         Y_ABORT("SerializeToString");
     }
     PendingAcquire = true;
-    Session->AcquireSemaphore(
-        SemaphoreName,
-        NYdb::NCoordination::TAcquireSemaphoreSettings().Count(1).Data(strActorId))
-        .Subscribe(
-            [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<bool>& future) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvAcquireSemaphoreResult(future));
-            });
+    // Session->AcquireSemaphore(
+    //     SemaphoreName,
+    //     NYdb::NCoordination::TAcquireSemaphoreSettings().Count(1).Data(strActorId))
+    //     .Subscribe(
+    //         [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<bool>& future) {
+    //             actorSystem->Send(actorId, new TEvPrivate::TEvAcquireSemaphoreResult(future));
+    //         });
+
+    TRpcIn message;
+    auto& inner = *message.mutable_acquire_semaphore();
+    inner.set_req_id(NextReqId++);
+    inner.set_name(SemaphoreName);
+    inner.set_count(1);
+    inner.set_data(strActorId);
+    AddSessionEvent(std::move(message));
 }
 
 void TLeaderElection::StartSession() {
@@ -424,21 +442,21 @@ void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
     ProcessState();
 }
 
-void TLeaderElection::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
-    auto result = ev->Get()->Result.GetValue();
-    if (!result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_ERROR("CreateSession failed, " << result.GetIssues());
-        Metrics.Errors->Inc();
-        ResetState();
-        return;
-    }
-    Session =  result.GetResult();
+void TLeaderElection::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& /*ev*/) {
+    // auto result = ev->Get()->Result.GetValue();
+    // if (!result.IsSuccess()) {
+    //     LOG_ROW_DISPATCHER_ERROR("CreateSession failed, " << result.GetIssues());
+    //     Metrics.Errors->Inc();
+    //     ResetState();
+    //     return;
+    // }
+    // Session =  result.GetResult();
     LOG_ROW_DISPATCHER_DEBUG("Session successfully created");
     ProcessState();
 }
 
 void TLeaderElection::Handle(TEvPrivate::TEvCreateSemaphoreResult::TPtr& ev) {
-    auto result = ev->Get()->Result.GetValue();
+    auto result = ev->Get()->Result;
     if (!IsTableCreated(result)) {
         LOG_ROW_DISPATCHER_ERROR("Semaphore creating error " << result.GetIssues());
         Metrics.Errors->Inc();
@@ -451,7 +469,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvCreateSemaphoreResult::TPtr& ev) {
 }
 
 void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
-    auto result = ev->Get()->Result.GetValue();
+    auto result = ev->Get()->Result;
     PendingAcquire = false;
 
     if (!result.IsSuccess()) {
@@ -619,7 +637,7 @@ void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvReadRequest::TPtr&) {
     SendSessionEvents();
 }
 void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvWriteRequest");
+   // LOG_ROW_DISPATCHER_DEBUG("Handle TEvWriteRequest");
     Y_VALIDATE(RpcActor, "RpcActor is not set before write request");
     auto response = std::make_unique<TLocalRpcCtx::TEvWriteFinished>();
 
@@ -650,10 +668,11 @@ void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPtr& ev
             LOG_ROW_DISPATCHER_DEBUG("kPing");
             //ComputeSessionMessage(message.init_response());
             {
-                            const auto& source = Response->ping();
-                TRequest req;
-                req.mutable_pong()->set_opaque(source.opaque());
-                processor->Write(std::move(req));
+                const auto& source = message.ping();
+                TRpcIn message;
+                message.mutable_pong()->set_opaque(source.opaque());;
+                AddSessionEvent(std::move(message));
+                
             }
             break;
         case TRpcOut::kPong:
@@ -677,7 +696,11 @@ void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPtr& ev
             break;
         case TRpcOut::kSessionStarted:
             LOG_ROW_DISPATCHER_DEBUG("kSessionStarted");
-            //ComputeSessionMessage(message.init_response());
+            {
+            const auto& source = message.session_started();
+            SessionId = source.session_id();
+            Send(SelfId(), new TEvPrivate::TEvCreateSessionResult());
+            }//ComputeSessionMessage(message.init_response());
             break;
         case TRpcOut::kSessionStopped:
             LOG_ROW_DISPATCHER_DEBUG("kSessionStopped");
@@ -689,6 +712,15 @@ void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPtr& ev
             break;
         case TRpcOut::kAcquireSemaphoreResult:
             LOG_ROW_DISPATCHER_DEBUG("kAcquireSemaphoreResult");
+            {
+            const auto& source = message.acquire_semaphore_result();
+             NYdb::NIssue::TIssues issues;
+            NYdb::NIssue::IssuesFromMessage(source.issues(), issues);
+            auto status = NYdb::TStatus(static_cast<NYdb::EStatus>(source.status()), std::move(issues));
+          //  TResult<bool>(MakeStatus(std::move(plain)), source.acquired()
+
+            Send(SelfId(), new TEvPrivate::TEvAcquireSemaphoreResult(NYdb::NCoordination::TResult<bool>(status, source.acquired())));
+            }
             //ComputeSessionMessage(message.init_response());
             break;
         case TRpcOut::kReleaseSemaphoreResult:
@@ -702,6 +734,21 @@ void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPtr& ev
         case TRpcOut::kDescribeSemaphoreChanged:
             LOG_ROW_DISPATCHER_DEBUG("DescribeSemaphoreChanged");
             //ComputeSessionMessage(message.init_response());
+            break;
+        case TRpcOut::kCreateSemaphoreResult:
+            LOG_ROW_DISPATCHER_DEBUG("CreateSemaphoreResult");
+             {
+            const auto& source = message.create_semaphore_result();
+          //  const uint64_t reqId = source.req_id();
+           // auto plain = MakePlainStatus(source.status(), source.issues());
+
+            NYdb::NIssue::TIssues issues;
+            NYdb::NIssue::IssuesFromMessage(source.issues(), issues);
+            auto status = NYdb::TStatus(static_cast<NYdb::EStatus>(source.status()), std::move(issues));
+
+            Send(SelfId(), new TEvPrivate::TEvCreateSemaphoreResult(NYdb::NCoordination::TResult<void>(status)));
+             }
+             //ComputeSessionMessage(message.init_response());
             break;
         case TRpcOut::kUpdateSemaphoreResult:
             LOG_ROW_DISPATCHER_DEBUG("UpdateSemaphoreResult");
@@ -743,17 +790,17 @@ void TLeaderElection::SendInitMessage() {
 }
 
 void TLeaderElection::AddSessionEvent(TRpcIn&& message) {
-        // if (SessionClosed) {
-        //     LOG_D("Session already closed, skip session event");
-        //     return;
-        // }
+    // if (SessionClosed) {
+    //     LOG_D("Session already closed, skip session event");
+    //     return;
+    // }
 
-        RpcResponses.push(message);
-        LOG_ROW_DISPATCHER_DEBUG("Added session event: " << static_cast<i64>(message.request_case()));
+    RpcResponses.push(message);
+    LOG_ROW_DISPATCHER_DEBUG("Added session event: " << static_cast<i64>(message.request_case()));
 
-        if (RpcActor) {
-            SendSessionEvents();            
-        }
+    if (RpcActor) {
+        SendSessionEvents();            
+    }
 }
 
 void TLeaderElection::SendSessionEvents() {

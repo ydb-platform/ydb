@@ -22,7 +22,9 @@ public:
     NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
     bool RemoveQuery(const NHdrf::TQueryId& queryId);
 
-    void UpdateFairShare();
+    // We want to allow FairShare to be over Limit.
+    // If you need to change this behaviour change variable's default value
+    void UpdateFairShare(bool allowFairShareOverlimit = true);
 
 private:
     TRWMutex Mutex;

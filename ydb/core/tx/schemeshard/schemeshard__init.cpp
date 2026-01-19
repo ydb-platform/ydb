@@ -4728,12 +4728,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         buildInfo->TargetName = TPath::Init(buildInfo->TablePathId, Self).PathString();
                     }
 
-                    // prevent build index from progress
-                    if (buildInfo->IsBuildVectorIndex() && !Self->EnableVectorIndex) {
-                        buildInfo->IsBroken = true;
-                        buildInfo->AddIssue(TStringBuilder() << "Vector index is not enabled");
-                    }
-
                     // Note: broken build are also added to IndexBuilds
                     Self->AddIndexBuild(buildInfo);
 

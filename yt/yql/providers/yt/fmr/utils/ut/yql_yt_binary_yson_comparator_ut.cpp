@@ -1,4 +1,4 @@
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_binary_yson_comparator.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
 #include <yt/yql/providers/yt/fmr/test_tools/yson/yql_yt_yson_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>

@@ -19,5 +19,4 @@ TString GetTableDataServiceMetaChunkId(ui64 chunkNum) {
     return TStringBuilder() << "__meta_" << chunkNum << "__";
 }
 
-
 } // namespace NYql::NFmr

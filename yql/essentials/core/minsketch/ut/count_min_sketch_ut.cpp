@@ -68,10 +68,13 @@ Y_UNIT_TEST(OverlappingCardinality) {
 
     TString str2("bar");
     countMinA->Count(str2.data(), str2.size());
+    countMinA->Count(str2.data(), str2.size());
+    countMinB->Count(str2.data(), str2.size());
+    countMinB->Count(str2.data(), str2.size());
     countMinB->Count(str2.data(), str2.size());
 
     auto cardinality = countMinA->GetOverlappingCardinality(*countMinB);
-    UNIT_ASSERT_VALUES_EQUAL(*cardinality, 2);
+    UNIT_ASSERT_VALUES_EQUAL(*cardinality, 3);
 }
 
 } // Y_UNIT_TEST_SUITE(CountMinSketch)

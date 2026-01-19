@@ -336,7 +336,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
             auto lhs = leftJoinKeys[0].AttributeName;
             lhsUniqueVals = leftStats.ColumnStatistics->Data[lhs].NumUniqueVals;
             auto rhs = rightJoinKeys[0].AttributeName;
-            rhsUniqueVals = leftStats.ColumnStatistics->Data[rhs].NumUniqueVals;
+            rhsUniqueVals = rightStats.ColumnStatistics->Data[rhs].NumUniqueVals;
         }
 
         if (lhsUniqueVals.has_value() && rhsUniqueVals.has_value()) {

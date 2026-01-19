@@ -76,7 +76,7 @@ TMaybe<ui32> TCountMinSketch::GetOverlappingCardinality(const TCountMinSketch& r
         ui32 cardinality = 0;
         for (ui64 w = 0; w < Width_; ++w) {
             ui64 idx = d * Width_ + w;
-            cardinality += Buckets()[idx] * rhs.Buckets()[idx];
+            cardinality += std::min(Buckets()[idx], rhs.Buckets()[idx]);
         }
         minCardinality = std::min(minCardinality, cardinality);
     }

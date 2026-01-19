@@ -19,8 +19,10 @@ namespace NYql::NDq {
 
 using namespace NActors;
 
-TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix)
-    : LogPrefix(logPrefix), Impl(logPrefix) {
+TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters)
+    : LogPrefix(logPrefix)
+    , Impl(logPrefix, counters)
+{
 }
 
 void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId, TDuration idleTimeout, TInstant systemTime) {

@@ -17,12 +17,13 @@ public:
         bool idlePartitionsEnabled,
         TDuration lateArrivalDelay,
         TDuration idleTimeout,
-        const TString& logPrefix)
+        const TString& logPrefix,
+        const ::NMonitoring::TDynamicCounterPtr& counters = {})
         : Granularity_(granularity)
         , IdlePartitionsEnabled_(idlePartitionsEnabled)
         , LateArrivalDelay_(lateArrivalDelay)
         , IdleTimeout_(idleTimeout)
-        , Impl_(logPrefix)
+        , Impl_(logPrefix, counters)
     {}
 
     [[nodiscard]] TMaybe<TInstant> NotifyNewPartitionTime(

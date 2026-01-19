@@ -28,13 +28,17 @@ using namespace NThreading;
 namespace {
 
 constexpr TDuration RestartDuration = TDuration::Seconds(3); // Delay before next restart after fatal error
-constexpr TDuration CoordinationSessionTimeout = TDuration::Seconds(30);
+//constexpr TDuration CoordinationSessionTimeout = TDuration::Seconds(30);
 constexpr char SemaphoreName[] = "RowDispatcher";
+
+using TRpcIn = Ydb::Coordination::SessionRequest;
+using TRpcOut = Ydb::Coordination::SessionResponse;
+using TLocalRpcCtx = NKikimr::NRpcService::TLocalRpcBiStreamingCtx<TRpcIn, TRpcOut>;
 
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
-        EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvBegin = TLocalRpcCtx::TRpcEvents::EvEnd,
         EvCreateNodeResult = EvBegin,
         EvCreateSemaphoreResult,
         EvCreateSessionResult,
@@ -104,9 +108,6 @@ struct TActorSystemPtrMixin {
 
 class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActorSystemPtrMixin {
 
-    // using TRpcIn = Ydb::Topic::StreamReadMessage::FromClient;
-    // using TRpcOut = Ydb::Topic::StreamReadMessage::FromServer;
-    // using TLocalRpcCtx = TLocalRpcBiStreamingCtx<TRpcIn, TRpcOut>;
 
     enum class EState {
         Init,
@@ -141,6 +142,13 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActor
     std::map<ui32, NodeInfo> RowDispatchersByNode;
     TLeaderElectionMetrics Metrics;
 
+    TActorId RpcActor;
+    std::queue<TRpcIn> RpcResponses;
+    bool SessionClosed = false;
+    ui64 PendingRpcResponses = 0;
+
+
+
 public:
     TLeaderElection(
         NActors::TActorId parentId,
@@ -165,6 +173,11 @@ public:
     void Handle(TEvPrivate::TEvRestart::TPtr&);
     void Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev);
     void Handle(TEvPrivate::TEvOnChangedResult::TPtr& ev);
+    void Handle(TLocalRpcCtx::TRpcEvents::TEvActorAttached::TPtr&);
+    void Handle(TLocalRpcCtx::TRpcEvents::TEvReadRequest::TPtr&);
+    void Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPtr&);
+    void Handle(TLocalRpcCtx::TRpcEvents::TEvFinishRequest::TPtr&);
+
     void HandleException(const std::exception& e);
 
     STRICT_STFUNC_EXC(StateFunc,
@@ -177,7 +190,11 @@ public:
         hFunc(TEvPrivate::TEvSessionStopped, Handle);
         hFunc(TEvPrivate::TEvRestart, Handle);
         hFunc(TEvPrivate::TEvDescribeSemaphoreResult, Handle);
-        cFunc(NActors::TEvents::TSystem::Poison, PassAway);,
+        cFunc(NActors::TEvents::TSystem::Poison, PassAway);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvActorAttached, Handle);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvReadRequest, Handle);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvWriteRequest, Handle);
+        hFunc(TLocalRpcCtx::TRpcEvents::TEvFinishRequest, Handle);,
         ExceptionFunc(std::exception, HandleException)
     )
 
@@ -191,6 +208,13 @@ private:
     void ResetState();
     void SetTimeout();
     NYdb::TDriverConfig GetYdbDriverConfig() const;
+
+    void SendInitMessage();
+    void AddSessionEvent(TRpcIn&& message);
+    void SendSessionEvents();
+    void SendSessionEvent(TRpcIn&& message, bool success = true);
+    void SendSessionEventFail();
+    void CloseSession(NYdb::EStatus, const NYql::TIssues& );
 
     template <typename TRpc, typename TSettings>
     NThreading::TFuture<NKikimr::NRpcService::TLocalRpcOperationResult> DoLocalRpcRequest(typename TRpc::TRequest&& proto, const NYdb::TOperationRequestSettings<TSettings>& settings, NKikimr::NRpcService::TLocalRpcOperationRequestCreator requestCreator) {
@@ -275,20 +299,6 @@ void TLeaderElection::Bootstrap() {
     Driver = std::make_unique<NYdb::TDriver>(GetYdbDriverConfig());
     YdbConnection = NewYdbConnection(Config.GetDatabase(), CredentialsProviderFactory, *Driver);
     ProcessState();
-
-
-    // const auto& token = /*CredentialsProvider ? std::optional<TString>(CredentialsProvider->GetAuthInfo()) : */std::nullopt;
-    // auto ctx = MakeIntrusive<TLocalRpcCtx>(ActorContext().ActorSystem(), SelfId(), TLocalRpcCtx::TSettings{
-    //     .Database = Config.GetDatabase().GetDatabase(),
-    //     .Token = token,
-    //     .PeerName = "localhost/local_topic_rpc_read",
-    //     .RequestType = /*Settings.RequestType_.empty() ?*/ std::nullopt /*: std::optional<TString>(Settings.RequestType_)*/,
-    //   //  .ParentTraceId = TString(Settings.TraceParent_),
-    //   //  .TraceId = TString(Settings.TraceId_),
-    //     .RpcMethodName = "TopicService.StreamRead",
-    //     });
-
-
 }
 
 void TLeaderElection::ProcessState() {
@@ -366,17 +376,40 @@ void TLeaderElection::AcquireSemaphore() {
 void TLeaderElection::StartSession() {
     LOG_ROW_DISPATCHER_DEBUG("Start session");
 
-    YdbConnection->CoordinationClient
-        .StartSession(
-            CoordinationNodePath, 
-            NYdb::NCoordination::TSessionSettings()
-                .Timeout(CoordinationSessionTimeout)
-                .OnStopped([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()]() {
-                    actorSystem->Send(actorId, new TEvPrivate::TEvSessionStopped());
-                }))
-        .Subscribe([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncSessionResult& future) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(future));
-            });
+    // YdbConnection->CoordinationClient
+    //     .StartSession(
+    //         CoordinationNodePath, 
+    //         NYdb::NCoordination::TSessionSettings()
+    //             .Timeout(CoordinationSessionTimeout)
+    //             .OnStopped([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()]() {
+    //                 actorSystem->Send(actorId, new TEvPrivate::TEvSessionStopped());
+    //             }))
+    //     .Subscribe([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncSessionResult& future) {
+    //             actorSystem->Send(actorId, new TEvPrivate::TEvCreateSessionResult(future));
+    //         });
+
+    const auto& token = /*CredentialsProvider ? std::optional<TString>(CredentialsProvider->GetAuthInfo()) : */std::nullopt;
+    auto ctx = MakeIntrusive<TLocalRpcCtx>(ActorContext().ActorSystem(), SelfId(), TLocalRpcCtx::TSettings{
+        .Database = Config.GetDatabase().GetDatabase(),
+        .Token = token,
+        .PeerName = "localhost/local_topic_rpc_read",
+        .RequestType = /*Settings.RequestType_.empty() ?*/ std::nullopt /*: std::optional<TString>(Settings.RequestType_)*/,
+      //  .ParentTraceId = TString(Settings.TraceParent_),
+      //  .TraceId = TString(Settings.TraceId_),
+        .RpcMethodName = "CoordinationService.Session",
+        });
+    
+
+    auto ev = std::make_unique<NKikimr::NGRpcService::TEvCoordinationSessionRequest>(std::move(ctx), NKikimr::NGRpcService::TRequestAuxSettings{.RequestType = NKikimr::NJaegerTracing::ERequestType::TOPIC_STREAMREAD});
+
+
+    // if (token) {
+    //     ev->SetInternalToken(MakeIntrusive<NACLib::TUserToken>(*token));
+    // }
+
+    Send(NKikimr::NGRpcService::CreateGRpcRequestProxyId(), ev.release(), IEventHandle::FlagTrackDelivery);
+    
+
 }
 
 void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
@@ -539,11 +572,11 @@ void TLeaderElection::CreateNode(const std::string& path,  const NYdb::NCoordina
     request.set_path(path);
     //request.set_include_stats(settings.IncludeStats_);
    // request.set_include_location(settings.IncludeLocation_);
-   Cerr << "CreateNode777 " << path << Endl;
+ //  Cerr << "CreateNode777 " << path << Endl;
 
     DoLocalRpcRequest<TCreateNodeRequest, NYdb::NCoordination::TCreateNodeSettings>(std::move(request), settings, &NKikimr::NGRpcService::DoCreateCoordinationNode).Subscribe([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NThreading::TFuture<NKikimr::NRpcService::TLocalRpcOperationResult>& f) {
         const auto [status, response] = f.GetValue();
-        Cerr << "TLocalRpcOperationResult22 " << status << "  - "  << status.IsSuccess() << Endl;
+      //  Cerr << "TLocalRpcOperationResult22 " << status << "  - "  << status.IsSuccess() << Endl;
         // Ydb::Topic::DescribeTopicResult result;
         // response.UnpackTo(&result);
             actorSystem->Send(actorId, new TEvPrivate::TEvCreateNodeResult(status));
@@ -563,6 +596,195 @@ void TLeaderElection::Handle(TEvPrivate::TEvCreateNodeResult::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Coordination node successfully created");
     CoordinationNodeCreated = true;
     ProcessState();
+}
+
+void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvActorAttached::TPtr& ev) {
+   // LOG_ROW_DISPATCHER_DEBUG("TEvActorAttached");
+    Y_VALIDATE(!RpcActor, "RpcActor is already set");
+    RpcActor = ev->Get()->RpcActor;
+
+    LOG_ROW_DISPATCHER_DEBUG("RpcActor attached: " << RpcActor);
+    SendInitMessage();
+}
+void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvReadRequest::TPtr&) {
+    PendingRpcResponses++;
+
+    if (SessionClosed) {
+        LOG_ROW_DISPATCHER_DEBUG("Rpc read request skipped, session is closed");
+        SendSessionEventFail();
+        return;
+    }
+
+    LOG_ROW_DISPATCHER_DEBUG("Rpc read request");
+    SendSessionEvents();
+}
+void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPtr& ev) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvWriteRequest");
+    Y_VALIDATE(RpcActor, "RpcActor is not set before write request");
+    auto response = std::make_unique<TLocalRpcCtx::TEvWriteFinished>();
+
+    if (SessionClosed) {
+        LOG_ROW_DISPATCHER_DEBUG("Rpc write request skipped, session is closed");
+        response->Success = false;
+        Send(RpcActor, response.release());
+        return;
+    }
+
+    response->Success = true;
+    Send(RpcActor, response.release());
+
+    auto& message = ev->Get()->Message;
+    // const auto status = message.status();
+    // if (status != Ydb::StatusIds::SUCCESS) {
+    //     NYql::TIssues issues;
+    //     IssuesFromMessage(message.issues(), issues);
+    //     LOG_ROW_DISPATCHER_DEBUG("Rpc write request, got error " << status << ", reason: " << issues.ToOneLineString());
+    //     return CloseSession(status, issues);
+    // }
+
+    const auto messageCase = message.response_case();
+    LOG_ROW_DISPATCHER_DEBUG("Rpc write request: " << static_cast<i64>(messageCase));
+
+    switch (messageCase) {
+        case TRpcOut::kPing:
+            LOG_ROW_DISPATCHER_DEBUG("kPing");
+            //ComputeSessionMessage(message.init_response());
+            {
+                            const auto& source = Response->ping();
+                TRequest req;
+                req.mutable_pong()->set_opaque(source.opaque());
+                processor->Write(std::move(req));
+            }
+            break;
+        case TRpcOut::kPong:
+            LOG_ROW_DISPATCHER_DEBUG("kPong");
+            //ComputeSessionMessage(message.init_response());
+            break;
+        case TRpcOut::kFailure:
+            LOG_ROW_DISPATCHER_DEBUG("kFailure");
+            {
+                auto failure = message.failure();
+
+                const auto status = failure.status();
+                if (status != Ydb::StatusIds::SUCCESS) {
+                    NYql::TIssues issues;
+                    IssuesFromMessage(failure.issues(), issues);
+                    LOG_ROW_DISPATCHER_DEBUG("Rpc write request, got error " << status << ", reason: " << issues.ToOneLineString());
+                    //return CloseSession(status, issues);
+                }
+            }
+            //ComputeSessionMessage(message.init_response());
+            break;
+        case TRpcOut::kSessionStarted:
+            LOG_ROW_DISPATCHER_DEBUG("kSessionStarted");
+            //ComputeSessionMessage(message.init_response());
+            break;
+        case TRpcOut::kSessionStopped:
+            LOG_ROW_DISPATCHER_DEBUG("kSessionStopped");
+            //ComputeSessionMessage(message.init_response());
+            break;
+        case TRpcOut::kAcquireSemaphorePending:
+            LOG_ROW_DISPATCHER_DEBUG("kAcquireSemaphorePending");
+            //ComputeSessionMessage(message.init_response());
+            break;
+        case TRpcOut::kAcquireSemaphoreResult:
+            LOG_ROW_DISPATCHER_DEBUG("kAcquireSemaphoreResult");
+            //ComputeSessionMessage(message.init_response());
+            break;
+        case TRpcOut::kReleaseSemaphoreResult:
+            LOG_ROW_DISPATCHER_DEBUG("ReleaseSemaphoreResult");
+            //ComputeSessionMessage(message.init_response());
+            break;
+        case TRpcOut::kDescribeSemaphoreResult:
+            LOG_ROW_DISPATCHER_DEBUG("DescribeSemaphoreResult");
+            //ComputeSessionMessage(message.init_response());
+            break;
+        case TRpcOut::kDescribeSemaphoreChanged:
+            LOG_ROW_DISPATCHER_DEBUG("DescribeSemaphoreChanged");
+            //ComputeSessionMessage(message.init_response());
+            break;
+        case TRpcOut::kUpdateSemaphoreResult:
+            LOG_ROW_DISPATCHER_DEBUG("UpdateSemaphoreResult");
+            //ComputeSessionMessage(message.init_response());
+            break;
+        case TRpcOut::kDeleteSemaphoreResult:
+            LOG_ROW_DISPATCHER_DEBUG("DeleteSemaphoreResult");
+            //ComputeSessionMessage(message.init_response());
+            break;
+        default:
+            LOG_ROW_DISPATCHER_DEBUG("Unknown message case");
+    }
+}
+void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvFinishRequest::TPtr&) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvFinishRequest");
+}
+
+void TLeaderElection::SendInitMessage() {
+    // TRequest req;
+    // auto* start = req.mutable_session_start();
+    // start->set_seq_no(seqNo);
+    // start->set_session_id(sessionId);
+    // start->set_path(TStringType{Path_});
+    // start->set_timeout_millis(Settings_.Timeout_ != TDuration::Max() ?
+    //     Settings_.Timeout_.MilliSeconds() : Max<uint64_t>());
+    // start->set_description(TStringType{Settings_.Description_});
+    // start->set_protection_key(TStringType{ProtectionKey_});
+    // processor->Write(std::move(req));
+
+    LOG_ROW_DISPATCHER_DEBUG("Sending init message");
+
+    TRpcIn message;
+
+    auto& start = *message.mutable_session_start();
+    start.set_seq_no(0);
+    start.set_path(CoordinationNodePath);
+
+    AddSessionEvent(std::move(message));
+}
+
+void TLeaderElection::AddSessionEvent(TRpcIn&& message) {
+        // if (SessionClosed) {
+        //     LOG_D("Session already closed, skip session event");
+        //     return;
+        // }
+
+        RpcResponses.push(message);
+        LOG_ROW_DISPATCHER_DEBUG("Added session event: " << static_cast<i64>(message.request_case()));
+
+        if (RpcActor) {
+            SendSessionEvents();            
+        }
+}
+
+void TLeaderElection::SendSessionEvents() {
+    Y_VALIDATE(RpcActor, "RpcActor is not set before read request");
+    LOG_ROW_DISPATCHER_DEBUG("Going to send session events, PendingRpcResponses: " << PendingRpcResponses << ", RpcResponses #" << RpcResponses.size());
+
+    while (PendingRpcResponses > 0 && !RpcResponses.empty()) {
+        SendSessionEvent(std::move(RpcResponses.front()));
+        RpcResponses.pop();
+    }
+}
+
+void TLeaderElection::SendSessionEvent(TRpcIn&& message, bool success) {
+    LOG_ROW_DISPATCHER_DEBUG("Sending session event: " << static_cast<i64>(message.request_case()) << ", success: " << success);
+    Y_VALIDATE(PendingRpcResponses > 0, "Rpc read is not expected");
+    PendingRpcResponses--;
+
+    auto ev = std::make_unique<TLocalRpcCtx::TEvReadFinished>();
+    ev->Success = success;
+    ev->Record = std::move(message);
+
+    Y_VALIDATE(RpcActor, "RpcActor is not set before read request");
+    Send(RpcActor, ev.release());
+}
+
+void TLeaderElection::SendSessionEventFail() {
+    SendSessionEvent({}, /* success */ false);
+}
+
+void TLeaderElection::CloseSession(NYdb::EStatus, const NYql::TIssues& ) {
+
 }
 
 } // anonymous namespace

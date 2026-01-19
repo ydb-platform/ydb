@@ -83,6 +83,50 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
     const auto& tableName = cbOp.GetTableName();
     const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
 
+    // Calculate coordinated schema version once
+    ui64 coordinatedVersion = 0;
+    if (context.SS->Tables.contains(tablePath.Base()->PathId)) {
+        auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+        coordinatedVersion = table->AlterVersion;
+
+        // Include global index versions
+        for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+            if (context.SS->Indexes.contains(childPathId)) {
+                auto indexInfo = context.SS->Indexes.at(childPathId);
+                if (indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobal) {
+                    coordinatedVersion = Max(coordinatedVersion, indexInfo->AlterVersion);
+                    // Include impl table version
+                    if (context.SS->PathsById.contains(childPathId)) {
+                        for (const auto& [implName, implPathId] : context.SS->PathsById.at(childPathId)->GetChildren()) {
+                            if (context.SS->Tables.contains(implPathId)) {
+                                auto implTable = context.SS->Tables.at(implPathId);
+                                coordinatedVersion = Max(coordinatedVersion, implTable->AlterVersion);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        coordinatedVersion += 1;  // Target version
+    }
+
+    // Delegate to the overload that accepts coordinatedVersion
+    return CreateAlterContinuousBackup(opId, tx, context, result, outStream, coordinatedVersion);
+}
+
+bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
+    TPathId unused;
+    return CreateAlterContinuousBackup(opId, tx, context, result, unused);
+}
+
+bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result, TPathId& outStream, ui64 coordinatedVersion) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterContinuousBackup);
+
+    const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+    const auto& cbOp = tx.GetAlterContinuousBackup();
+    const auto& tableName = cbOp.GetTableName();
+    const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
+
     TMaybeFail<TString> lastStreamName;
     static_assert(
         std::is_same_v<
@@ -170,6 +214,7 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
         NKikimrSchemeOp::TRotateCdcStream rotateCdcStreamOp;
         rotateCdcStreamOp.SetTableName(tableName);
         rotateCdcStreamOp.SetOldStreamName(*lastStreamName);
+        rotateCdcStreamOp.SetCoordinatedSchemaVersion(coordinatedVersion);
 
         NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
         createCdcStreamOp.SetTableName(tableName);
@@ -201,16 +246,12 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
         alterCdcStreamOp.SetTableName(tableName);
         alterCdcStreamOp.SetStreamName(*lastStreamName);
         alterCdcStreamOp.MutableDisable();
+        alterCdcStreamOp.SetCoordinatedSchemaVersion(coordinatedVersion);
         NCdc::DoAlterStream(result, alterCdcStreamOp, opId, workingDirPath, tablePath);
     }
 
     outStream = streamPath->PathId;
     return true;
-}
-
-bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
-    TPathId unused;
-    return CreateAlterContinuousBackup(opId, tx, context, result, unused);
 }
 
 TVector<ISubOperation::TPtr> CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {

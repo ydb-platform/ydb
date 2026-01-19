@@ -65,51 +65,102 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
-    
-    bool omitIndexes = bc->Description.GetOmitIndexes() || 
+
+    bool omitIndexes = bc->Description.GetOmitIndexes() ||
                        (incrBackupEnabled && bc->Description.GetIncrementalBackupConfig().GetOmitIndexes());
-    
+
     TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
 
+    // Store per-table coordinated versions for use in later loops
+    THashMap<TPathId, ui64> tableCoordinatedVersions;
+
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+        // Calculate coordinated version for THIS table and its indexes only
+        ui64 tableCoordinatedVersion = 0;
+        const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
+        if (tablePath.IsResolved() && !tablePath.IsDeleted() &&
+            context.SS->Tables.contains(tablePath.Base()->PathId)) {
+
+            auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+            tableCoordinatedVersion = Max(tableCoordinatedVersion, table->AlterVersion);
+
+            if (!omitIndexes) {
+                for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                    if (!context.SS->PathsById.contains(childPathId)) {
+                        continue;
+                    }
+                    auto childPath = context.SS->PathsById.at(childPathId);
+                    if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex || childPath->Dropped()) {
+                        continue;
+                    }
+                    if (!context.SS->Indexes.contains(childPathId)) {
+                        continue;
+                    }
+                    auto indexInfo = context.SS->Indexes.at(childPathId);
+                    if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
+                        continue;
+                    }
+                    tableCoordinatedVersion = Max(tableCoordinatedVersion, indexInfo->AlterVersion);
+
+                    auto indexPath = TPath::Init(childPathId, context.SS);
+                    Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
+                    auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
+                    if (!context.SS->Tables.contains(implTablePathId)) {
+                        continue;
+                    }
+                    auto implTable = context.SS->Tables.at(implTablePathId);
+                    tableCoordinatedVersion = Max(tableCoordinatedVersion, implTable->AlterVersion);
+                }
+            }
+            tableCoordinatedVersion += 1;  // Target version for THIS table
+            tableCoordinatedVersions[tablePath.Base()->PathId] = tableCoordinatedVersion;
+        }
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
         std::pair<TString, TString> paths;
         TString err;
         if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
             result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
-            return {};
+            return result;
         }
         auto& relativeItemPath = paths.second;
         desc.SetDstPath(JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName(), tx.GetBackupBackupCollection().GetTargetDir(), relativeItemPath}));
         
         desc.SetOmitIndexes(omitIndexes);
-        
+
         desc.SetOmitFollowers(true);
         desc.SetAllowUnderSameOperation(true);
+
+        // Pass coordinated version to copy-table for version synchronization
+        if (incrBackupEnabled && tableCoordinatedVersion > 0) {
+            desc.SetCoordinatedSchemaVersion(tableCoordinatedVersion);
+        }
 
         if (incrBackupEnabled) {
             NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
-            
+
             {
                 auto checks = sPath.Check();
                 checks
                     .IsResolved()
                     .NotDeleted()
                     .IsTable();
-                
+
                 if (!checks) {
                     result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
                     return result;
                 }
             }
-            
+
             createCdcStreamOp.SetTableName(sPath.LeafName());
             auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
             streamDescription.SetName(streamName);
             streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+            if (tableCoordinatedVersion > 0) {
+                createCdcStreamOp.SetCoordinatedSchemaVersion(tableCoordinatedVersion);
+            }
 
             TString oldStreamName;
             for (const auto& [childName, childId] : sPath.Base()->GetChildren()) {
@@ -137,23 +188,29 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             
             if (incrBackupEnabled && !omitIndexes) {
                 const auto tablePath = sPath;
-                
+
                 for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                    if (!context.SS->PathsById.contains(childPathId)) {
+                        continue;
+                    }
                     auto childPath = context.SS->PathsById.at(childPathId);
-                    
+
                     if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
                         continue;
                     }
-                    
+
                     if (childPath->Dropped()) {
                         continue;
                     }
-                    
+
+                    if (!context.SS->Indexes.contains(childPathId)) {
+                        continue;
+                    }
                     auto indexInfo = context.SS->Indexes.at(childPathId);
                     if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
                         continue;
                     }
-                
+
                     auto indexPath = TPath::Init(childPathId, context.SS);
                     Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
                     auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
@@ -181,7 +238,10 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                     indexStreamDescription.SetName(streamName);
                     indexStreamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
                     indexStreamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
-                    
+                    if (tableCoordinatedVersion > 0) {
+                        indexCdcStreamOp.SetCoordinatedSchemaVersion(tableCoordinatedVersion);
+                    }
+
                     NCdc::DoCreateStreamImpl(result, indexCdcStreamOp, opId, indexTablePath, false, false);
                     (*desc.MutableIndexImplTableCdcStreams())[childName].CopyFrom(indexCdcStreamOp);
 
@@ -196,14 +256,20 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             if (incrBackupEnabled && !omitIndexes) {
                 // Also invalidate cache for index impl tables
                 for (const auto& [childName, childPathId] : sPath.Base()->GetChildren()) {
+                    if (!context.SS->PathsById.contains(childPathId)) {
+                        continue;
+                    }
                     auto childPath = context.SS->PathsById.at(childPathId);
-                    if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex && !childPath->Dropped()) {
+                    if (childPath->PathType == NKikimrSchemeOp::EPathTypeTableIndex && !childPath->Dropped()) {
                         auto indexInfo = context.SS->Indexes.find(childPathId);
-                        if (indexInfo != context.SS->Indexes.end() && 
+                        if (indexInfo != context.SS->Indexes.end() &&
                             indexInfo->second->Type == NKikimrSchemeOp::EIndexTypeGlobal) {
-                            
+
                             auto indexPath = TPath::Init(childPathId, context.SS);
                             for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
+                                if (!context.SS->PathsById.contains(implTablePathId)) {
+                                    continue;
+                                }
                                 auto implTablePath = context.SS->PathsById.at(implTablePathId);
                                 if (implTablePath->IsTable()) {
                                     context.SS->ClearDescribePathCaches(implTablePath);
@@ -223,28 +289,38 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
     if (incrBackupEnabled) {
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
-            NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
-            createCdcStreamOp.SetTableName(item.GetPath());
-            auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
-            streamDescription.SetName(streamName);
-            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
-            streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
-
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
-            
+
             {
                 auto checks = sPath.Check();
                 checks
                     .IsResolved()
                     .NotDeleted()
                     .IsTable();
-                
+
                 if (!checks) {
                     result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
                     return result;
                 }
             }
-            
+
+            // Get per-table coordinated version
+            ui64 perTableVersion = 0;
+            auto versionIt = tableCoordinatedVersions.find(sPath.Base()->PathId);
+            if (versionIt != tableCoordinatedVersions.end()) {
+                perTableVersion = versionIt->second;
+            }
+
+            NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
+            createCdcStreamOp.SetTableName(item.GetPath());
+            auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
+            streamDescription.SetName(streamName);
+            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+            streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+            if (perTableVersion > 0) {
+                createCdcStreamOp.SetCoordinatedSchemaVersion(perTableVersion);
+            }
+
             auto table = context.SS->Tables.at(sPath.Base()->PathId);
 
             TVector<TString> boundaries;
@@ -266,42 +342,61 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         if (incrBackupEnabled && !omitIndexes) {
             for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
                 const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
-                
+
+                // Get per-table coordinated version for this table's indexes
+                ui64 perTableVersion = 0;
+                auto versionIt = tableCoordinatedVersions.find(tablePath.Base()->PathId);
+                if (versionIt != tableCoordinatedVersions.end()) {
+                    perTableVersion = versionIt->second;
+                }
+
                 // Iterate through table's children to find indexes
                 for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                    if (!context.SS->PathsById.contains(childPathId)) {
+                        continue;
+                    }
                     auto childPath = context.SS->PathsById.at(childPathId);
-                    
+
                     // Skip non-index children (CDC streams, etc.)
                     if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
                         continue;
                     }
-                    
+
                     // Skip deleted indexes
                     if (childPath->Dropped()) {
                         continue;
                     }
-                    
+
                     // Get index info and filter for global sync only
+                    if (!context.SS->Indexes.contains(childPathId)) {
+                        continue;
+                    }
                     auto indexInfo = context.SS->Indexes.at(childPathId);
                     if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
                         continue;
                     }
-                
+
                     // Get index implementation table (the only child of index)
                     auto indexPath = TPath::Init(childPathId, context.SS);
                     Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
                     auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
-                    
+
                     auto indexTablePath = indexPath.Child(implTableName);
+                    if (!context.SS->Tables.contains(implTablePathId)) {
+                        continue;
+                    }
                     auto indexTable = context.SS->Tables.at(implTablePathId);
-                    
+
                     NKikimrSchemeOp::TCreateCdcStream indexCdcStreamOp;
                     indexCdcStreamOp.SetTableName(implTableName);
                     auto& indexStreamDescription = *indexCdcStreamOp.MutableStreamDescription();
                     indexStreamDescription.SetName(streamName);
                     indexStreamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
                     indexStreamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
-                    
+                    if (perTableVersion > 0) {
+                        indexCdcStreamOp.SetCoordinatedSchemaVersion(perTableVersion);
+                    }
+
                     TVector<TString> indexBoundaries;
                     const auto& indexPartitions = indexTable->GetPartitions();
                     indexBoundaries.reserve(indexPartitions.size() - 1);
@@ -311,7 +406,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                             indexBoundaries.push_back(partition.EndOfRange);
                         }
                     }
-                    
+
                     const auto indexStreamPath = indexTablePath.Child(streamName);
                     NCdc::DoCreatePqPart(result, indexCdcStreamOp, opId, indexStreamPath, streamName, indexTable, indexBoundaries, false);
                 }

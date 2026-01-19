@@ -87,6 +87,10 @@ struct TTxState {
     TPathId CdcPathId = InvalidPathId;
     TMaybe<NKikimrSchemeOp::EPathState> TargetPathTargetState;
 
+    // Coordinated schema version for backup operations.
+    // When set, all related SubOps use this pre-agreed version instead of AlterVersion + 1.
+    TMaybe<ui64> CoordinatedSchemaVersion;
+
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them
     bool NeedUpdateObject = false;

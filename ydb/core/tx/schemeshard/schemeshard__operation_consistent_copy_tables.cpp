@@ -42,6 +42,10 @@ static NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath
     if (descr.HasTargetPathTargetState()) {
         operation->SetPathState(descr.GetTargetPathTargetState());
     }
+    // Propagate coordinated schema version for backup operations
+    if (descr.HasCoordinatedSchemaVersion()) {
+        operation->SetCoordinatedSchemaVersion(descr.GetCoordinatedSchemaVersion());
+    }
 
     return scheme;
 }
@@ -292,6 +296,11 @@ bool CreateConsistentCopyTables(
 
                 if (descr.HasTargetPathTargetState()) {
                     indexDescr.SetTargetPathTargetState(descr.GetTargetPathTargetState());
+                }
+
+                // Propagate coordinated schema version to index impl tables
+                if (descr.HasCoordinatedSchemaVersion()) {
+                    indexDescr.SetCoordinatedSchemaVersion(descr.GetCoordinatedSchemaVersion());
                 }
 
                 indexDescr.SetOmitIndexes(true); 

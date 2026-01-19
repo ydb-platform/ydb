@@ -143,8 +143,12 @@ public:
                 if (hasDrop) {
                     auto& dropNotice = *combined.MutableDropCdcStreamNotice();
                     txState->SourcePathId.ToProto(dropNotice.MutablePathId());
-                    dropNotice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion + 1);
-                    
+                    if (txState->CoordinatedSchemaVersion.Defined()) {
+                        dropNotice.SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
+                    } else {
+                        dropNotice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion + 1);
+                    }
+
                     for (const auto& id : streamsToDrop) {
                         id.ToProto(dropNotice.AddStreamPathId());
                     }
@@ -152,6 +156,9 @@ public:
 
                 if (hasCreate) {
                     NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
+                    if (txState->CoordinatedSchemaVersion.Defined()) {
+                        combined.MutableCreateCdcStreamNotice()->SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
+                    }
                 }
 
             } else {
@@ -222,6 +229,23 @@ public:
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
         context.SS->PersistTableCreated(db, pathId);
 
+        if (path->ParentPathId && context.SS->PathsById.contains(path->ParentPathId)) {
+            auto dstParentPath = context.SS->PathsById.at(path->ParentPathId);
+            if (dstParentPath->IsTableIndex() && context.SS->Indexes.contains(path->ParentPathId)) {
+                auto dstIndex = context.SS->Indexes.at(path->ParentPathId);
+                if (dstIndex->AlterVersion < table->AlterVersion) {
+                    dstIndex->AlterVersion = table->AlterVersion;
+                    if (dstIndex->AlterData && dstIndex->AlterData->AlterVersion < table->AlterVersion) {
+                        dstIndex->AlterData->AlterVersion = table->AlterVersion;
+                        context.SS->PersistTableIndexAlterData(db, path->ParentPathId);
+                    }
+                    context.SS->PersistTableIndexAlterVersion(db, path->ParentPathId, dstIndex);
+                    context.SS->ClearDescribePathCaches(dstParentPath);
+                    context.OnComplete.PublishToSchemeBoard(OperationId, path->ParentPathId);
+                }
+            }
+        }
+
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
 
         if (table->IsTTLEnabled() && !context.SS->TTLEnabledTables.contains(pathId)) {
@@ -252,15 +276,14 @@ public:
             srcPath->LastTxId = InvalidTxId;
             context.SS->PersistPath(db, srcPathId);
             context.SS->ClearDescribePathCaches(srcPath);
-            context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
             bool hasCdcChanges = (txState->CdcPathId != InvalidPathId);
 
             if (!hasCdcChanges) {
                 for (const auto& [name, id] : srcPath->GetChildren()) {
-                    if (context.SS->CdcStreams.contains(id)) {
+                    if (context.SS->CdcStreams.contains(id) && context.SS->PathsById.contains(id)) {
                         auto streamPath = context.SS->PathsById.at(id);
-                        if (streamPath->IsCdcStream() && 
+                        if (streamPath->IsCdcStream() &&
                             streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                             streamPath->DropTxId == OperationId.GetTxId()) {
                             hasCdcChanges = true;
@@ -271,12 +294,62 @@ public:
             }
 
             if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
+                context.MemChanges.GrabTable(context.SS, srcPathId);
                 auto srcTable = context.SS->Tables.at(srcPathId);
-                srcTable->AlterVersion += 1;
+
+                if (txState->CoordinatedSchemaVersion.Defined()) {
+                    srcTable->AlterVersion = Max(srcTable->AlterVersion, *txState->CoordinatedSchemaVersion);
+                } else {
+                    srcTable->AlterVersion += 1;
+                }
+
                 context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
 
-                NCdcStreamState::SyncChildIndexes(srcPath, srcTable->AlterVersion, OperationId, context, db);
+                TPathId parentPathId = srcPath->ParentPathId;
+                if (parentPathId && context.SS->PathsById.contains(parentPathId)) {
+                    auto parentPath = context.SS->PathsById.at(parentPathId);
+                    if (parentPath->IsTableIndex() && context.SS->Indexes.contains(parentPathId)) {
+                        context.MemChanges.GrabIndex(context.SS, parentPathId);
+                        auto index = context.SS->Indexes.at(parentPathId);
+                        if (index->AlterVersion < srcTable->AlterVersion) {
+                            index->AlterVersion = srcTable->AlterVersion;
+                            if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
+                                index->AlterData->AlterVersion = srcTable->AlterVersion;
+                                context.SS->PersistTableIndexAlterData(db, parentPathId);
+                            }
+                            context.SS->PersistTableIndexAlterVersion(db, parentPathId, index);
+                            context.SS->ClearDescribePathCaches(parentPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, parentPathId);
+                        }
+                    }
+                }
+
+                for (const auto& [childName, childPathId] : srcPath->GetChildren()) {
+                    if (!context.SS->PathsById.contains(childPathId)) {
+                        continue;
+                    }
+                    auto childPath = context.SS->PathsById.at(childPathId);
+                    if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                        continue;
+                    }
+                    if (context.SS->Indexes.contains(childPathId)) {
+                        context.MemChanges.GrabIndex(context.SS, childPathId);
+                        auto index = context.SS->Indexes.at(childPathId);
+                        if (index->AlterVersion < srcTable->AlterVersion) {
+                            index->AlterVersion = srcTable->AlterVersion;
+                            if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
+                                index->AlterData->AlterVersion = srcTable->AlterVersion;
+                                context.SS->PersistTableIndexAlterData(db, childPathId);
+                            }
+                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                            context.SS->ClearDescribePathCaches(childPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
+                        }
+                    }
+                }
             }
+
+            context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
             if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {
                 context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
@@ -747,6 +820,10 @@ public:
         }
         if (Transaction.GetCreateTable().HasPathState()) {
             txState.TargetPathTargetState = Transaction.GetCreateTable().GetPathState();
+        }
+        // Store coordinated schema version if available (from backup operations)
+        if (Transaction.GetCreateTable().HasCoordinatedSchemaVersion()) {
+            txState.CoordinatedSchemaVersion = Transaction.GetCreateTable().GetCoordinatedSchemaVersion();
         }
 
         TShardInfo datashardInfo = TShardInfo::DataShardInfo(OperationId.GetTxId(), newTable->PathId);

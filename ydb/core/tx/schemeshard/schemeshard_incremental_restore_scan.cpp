@@ -247,10 +247,13 @@ private:
         auto& finalize = *transaction.MutableIncrementalRestoreFinalize();
         finalize.SetOriginalOperationId(OperationId);
         finalize.SetBackupCollectionPathId(state.BackupCollectionPathId.LocalPathId);
-        
+
         CollectTargetTablePaths(state, finalize);
         CollectBackupTablePaths(state, finalize);
-        
+
+        // Calculate per-table coordinated versions for index impl tables being restored
+        CalculatePerTableCoordinatedVersions(finalize);
+
         LOG_I("Sending finalization operation with txId: " << finalizeTxId);
         Self->Send(Self->SelfId(), request.Release());
     }
@@ -329,6 +332,71 @@ private:
                         finalize.AddBackupTablePaths(pathString);
                     }
                 }
+            }
+        }
+    }
+
+    // Helper to find the main table PathId for a given path
+    // For regular tables: returns the path's PathId
+    // For index impl tables: goes up to find the main table (impl -> index -> main table)
+    TPathId FindMainTablePathId(const TPath& path) {
+        TPath parentPath = path.Parent();
+        if (parentPath.IsResolved() && parentPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
+            // This is an index impl table, go up one more level to main table
+            TPath mainTablePath = parentPath.Parent();
+            if (mainTablePath.IsResolved() && mainTablePath.Base()->IsTable()) {
+                return mainTablePath.Base()->PathId;
+            }
+        }
+        // Regular table or couldn't find parent - use path's own PathId
+        return path.Base()->PathId;
+    }
+
+    void CalculatePerTableCoordinatedVersions(NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize) {
+        // Group paths by their main table and calculate max version per table
+        THashMap<TPathId, ui64> tableVersions;
+
+        for (const auto& tablePath : finalize.GetTargetTablePaths()) {
+            TPath path = TPath::Resolve(tablePath, Self);
+            if (!path.IsResolved()) {
+                continue;
+            }
+
+            TPathId pathId = path.Base()->PathId;
+            TPathId mainTablePathId = FindMainTablePathId(path);
+
+            // Initialize entry if not exists
+            if (!tableVersions.contains(mainTablePathId)) {
+                tableVersions[mainTablePathId] = 0;
+            }
+
+            // Check if it's a table and get its version
+            if (Self->Tables.contains(pathId)) {
+                auto table = Self->Tables.at(pathId);
+                tableVersions[mainTablePathId] = Max(tableVersions[mainTablePathId], table->AlterVersion);
+            }
+
+            // If it's an index impl table, also check the parent index version
+            TPath parentPath = path.Parent();
+            if (parentPath.IsResolved() && parentPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
+                TPathId indexPathId = parentPath.Base()->PathId;
+                if (Self->Indexes.contains(indexPathId)) {
+                    tableVersions[mainTablePathId] = Max(tableVersions[mainTablePathId], Self->Indexes.at(indexPathId)->AlterVersion);
+                }
+            }
+
+            // Also include main table version if different from current path
+            if (mainTablePathId != pathId && Self->Tables.contains(mainTablePathId)) {
+                auto mainTable = Self->Tables.at(mainTablePathId);
+                tableVersions[mainTablePathId] = Max(tableVersions[mainTablePathId], mainTable->AlterVersion);
+            }
+        }
+
+        // Increment all versions by 1 and populate the map in finalize proto
+        for (auto& [pathId, version] : tableVersions) {
+            if (version > 0) {
+                version += 1;
+                (*finalize.MutableTableCoordinatedVersions())[pathId.LocalPathId] = version;
             }
         }
     }

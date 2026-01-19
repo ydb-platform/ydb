@@ -4,6 +4,8 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 
+#include <util/generic/maybe.h>
+
 namespace NKikimr::NSchemeShard {
 
 IActor* CreateContinuousBackupCleaner(TActorId txAllocatorClient,
@@ -12,6 +14,7 @@ IActor* CreateContinuousBackupCleaner(TActorId txAllocatorClient,
                                       TPathId item,
                                       const TString& workingDir,
                                       const TString& tableName,
-                                      const TString& streamName);
+                                      const TString& streamName,
+                                      TMaybe<ui64> coordinatedSchemaVersion = Nothing());
 
 } // namespace NKikimr::NSchemeShard

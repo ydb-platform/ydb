@@ -231,7 +231,14 @@ protected:
 
         auto& notice = *tx.MutableDropCdcStreamNotice();
         pathId.ToProto(notice.MutablePathId());
-        notice.SetTableSchemaVersion(table->AlterVersion + 1);
+
+        // Use coordinated schema version if available, otherwise increment
+        auto* txState = context.SS->FindTx(OperationId);
+        if (txState && txState->CoordinatedSchemaVersion) {
+            notice.SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
+        } else {
+            notice.SetTableSchemaVersion(table->AlterVersion + 1);
+        }
 
         // Collect all streams planned for drop on this table
         TVector<TPathId> streamPathIds;
@@ -339,6 +346,11 @@ public:
         : TSubOperation(id, state)
         , DropSnapshot(dropSnapshot)
     {
+        // Re-extract stream names from transaction when restored from state
+        const auto& op = Transaction.GetDropCdcStream();
+        for (const auto& name : op.GetStreamName()) {
+            StreamNames.push_back(name);
+        }
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
@@ -453,6 +465,11 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
+
+        // Store coordinated schema version if available (from backup operations)
+        if (op.HasCoordinatedSchemaVersion()) {
+            txState.CoordinatedSchemaVersion = op.GetCoordinatedSchemaVersion();
+        }
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
         tablePath.Base()->LastTxId = OperationId.GetTxId();

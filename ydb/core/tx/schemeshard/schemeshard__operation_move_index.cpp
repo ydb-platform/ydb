@@ -1,5 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path_element.h"
 
@@ -285,6 +286,13 @@ public:
 
         context.SS->PersistTableAlterVersion(db, path->PathId, table);
 
+        // Sync child index versions with main table to prevent version mismatch
+        // CRITICAL: Must sync and publish indexes BEFORE publishing main table
+        // so that main table's TIndexDescription.SchemaVersion values are current
+        NTableIndexVersion::SyncChildIndexVersions(path.Base(), table, table->AlterVersion, OperationId, context, db);
+
+        // Publish main table LAST so its TIndexDescription.SchemaVersion values are current
+        context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;

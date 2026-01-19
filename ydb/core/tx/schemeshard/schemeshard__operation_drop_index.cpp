@@ -1,5 +1,6 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
+#include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
@@ -171,6 +172,10 @@ public:
 
         table->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, pathId, table);
+
+        // Sync remaining child index versions with main table
+        // (excluding the one being dropped - skipPlannedToDrop=true)
+        NTableIndexVersion::SyncChildIndexVersions(path, table, table->AlterVersion, OperationId, context, db, true);
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);

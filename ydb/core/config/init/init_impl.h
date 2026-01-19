@@ -1166,7 +1166,7 @@ public:
             if (CommonAppOptions.SeedNodesFile) {
                 InitConfigFromSeedNodes(mainYamlConfigString.emplace(), storageYamlConfigString);
                 Y_ABORT_UNLESS(mainYamlConfigString);
-            } else if (!CommonAppOptions.ConfigDirPath.empty()) {
+            } else if (NodeKind != NODE_KIND_YQ) {
                 ythrow yexception() << "YAML config is not provided for static node and no seed nodes given";
             }
         }

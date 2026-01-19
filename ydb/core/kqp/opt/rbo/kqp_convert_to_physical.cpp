@@ -1,4 +1,6 @@
 #include "kqp_rbo.h"
+#include "kqp_rbo_physical_convertion_utils.h"
+#include "kqp_rbo_physical_sort_builder.h"
 #include "kqp_rbo_physical_aggregation_builder.h"
 
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -13,29 +15,6 @@ using namespace NYql::NNodes;
 namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
-
-TExprNode::TPtr BuildNarrowMapForWideOlapRead(TExprNode::TPtr input, const TVector<TString>& columns, TExprContext& ctx, const TPositionHandle pos) {
-    // clang-format off
-    return ctx.Builder(pos)
-        .Callable("NarrowMap")
-            .Add(0, input)
-            .Lambda(1)
-                .Params("wide_param", columns.size())
-                .Callable(0, "AsStruct")
-                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                    for (ui32 i = 0; i < columns.size(); ++i) {
-                        parent.List(i)
-                            .Atom(0, columns[i])
-                            .Arg(1, "wide_param", i)
-                        .Seal();
-                    }
-                    return parent;
-                })
-                .Seal()
-            .Seal()
-        .Seal().Build();
-    // clang-format on
-}
 
 TString GetValidJoinKind(const TString& joinKind) {
     const auto joinKindLowered = to_lower(joinKind);
@@ -360,79 +339,26 @@ TExprNode::TPtr BuildCrossJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExprNo
     // clang-format on
 }
 
-TExprNode::TPtr ExpandJoinInput(TExprNode::TPtr input, TVector<TInfoUnit> ius, TExprContext &ctx) {
-    // clang-format off
-    return ctx.Builder(input->Pos())
-        .Callable("ExpandMap")
-            .Add(0, input)
-            .Lambda(1)
-                .Param("item")
-                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                    auto i = 0U;
-                    for (const auto& iu: ius) {
-                        parent.Callable(i, "Member")
-                        .Arg(0, "item")
-                        .Atom(1, iu.GetFullName())
-                        .Seal();
-                        i++;
-                    }
-                    return parent;
-                })
-            .Seal()
-        .Seal()
-    .Build();
-    // clang-format on
-}
-
-TExprNode::TPtr CollapseJoinOutput(TExprNode::TPtr graceJoin, TVector<TInfoUnit> ius, TExprContext &ctx) {
-    // clang-format off
-    return ctx.Builder(graceJoin->Pos())
-        .Callable("NarrowMap")
-            .Add(0, graceJoin)
-            .Lambda(1)
-                .Params("output", ius.size())
-                .Callable("AsStruct")
-                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                    ui32 i = 0U;
-                    for (const auto& iu : ius) {
-                        parent.List(i)
-                        .Atom(0, iu.GetFullName())
-                        .Arg(1, "output", i)
-                        .Seal();
-                        i++;
-                    }
-                    return parent;
-                })
-                .Seal()
-            .Seal()
-        .Seal()
-    .Build();
-    // clang-format on
-}
-
 TExprNode::TPtr BuildGraceJoinCore(TOpJoin &join, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TExprContext &ctx,
                                    TPositionHandle pos) {
     TVector<TCoAtom> leftColumnIdxs;
     TVector<TCoAtom> rightColumnIdxs;
-
     TVector<TCoAtom> leftRenames, rightRenames;
-
     TVector<TCoAtom> leftKeyColumnNames;
     TVector<TCoAtom> rightKeyColumnNames;
 
     auto leftIUs = join.GetLeftInput()->GetOutputIUs();
-
+    auto rightIUs = join.GetRightInput()->GetOutputIUs();
     const bool leftSideOnly = (join.JoinKind == "LeftSemi" || join.JoinKind == "LeftOnly");
 
-    auto rightIUs = join.GetRightInput()->GetOutputIUs();
     if (leftSideOnly) {
         rightIUs.clear();
-        for ( auto &[left, right] : join.JoinKeys) {
+        for (const auto &[left, right] : join.JoinKeys) {
             rightIUs.push_back(right);
         }
     }
 
-    auto leftTupleSize = leftIUs.size();
+    const auto leftTupleSize = leftIUs.size();
     for (size_t i = 0; i < leftIUs.size(); i++) {
         leftRenames.push_back(Build<TCoAtom>(ctx, pos).Value(i).Done());
         leftRenames.push_back(Build<TCoAtom>(ctx, pos).Value(i).Done());
@@ -443,7 +369,7 @@ TExprNode::TPtr BuildGraceJoinCore(TOpJoin &join, TExprNode::TPtr leftInput, TEx
         rightRenames.push_back(Build<TCoAtom>(ctx, pos).Value(i + leftTupleSize).Done());
     }
 
-    for (auto k : join.JoinKeys) {
+    for (const auto& k : join.JoinKeys) {
         auto leftIdx = std::distance(leftIUs.begin(), std::find(leftIUs.begin(), leftIUs.end(), k.first));
         auto rightIdx = std::distance(rightIUs.begin(), std::find(rightIUs.begin(), rightIUs.end(), k.second));
 
@@ -455,14 +381,13 @@ TExprNode::TPtr BuildGraceJoinCore(TOpJoin &join, TExprNode::TPtr leftInput, TEx
     }
 
     // Convert to wide flow
-
     // clang-format off
     leftInput = Build<TCoToFlow>(ctx, pos)
         .Input(leftInput)
     .Done().Ptr();
     // clang-forat on
 
-    leftInput = ExpandJoinInput(leftInput, join.GetLeftInput()->GetOutputIUs(), ctx);
+    leftInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(leftInput, join.GetLeftInput()->GetOutputIUs(), ctx);
 
     // clang-format off
     rightInput = Build<TCoToFlow>(ctx, pos)
@@ -470,7 +395,7 @@ TExprNode::TPtr BuildGraceJoinCore(TOpJoin &join, TExprNode::TPtr leftInput, TEx
     .Done().Ptr();
     // clang-format on
 
-    rightInput = ExpandJoinInput(rightInput, rightIUs, ctx);
+    rightInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(rightInput, rightIUs, ctx);
 
     // clang-format off
     auto graceJoin = Build<TCoGraceJoinCore>(ctx, pos)
@@ -502,7 +427,7 @@ TExprNode::TPtr BuildGraceJoinCore(TOpJoin &join, TExprNode::TPtr leftInput, TEx
 
     // Convert back to narrow stream
     return Build<TCoFromFlow>(ctx, pos)
-        .Input(CollapseJoinOutput(graceJoin, join.GetOutputIUs(), ctx))
+        .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(graceJoin, join.GetOutputIUs(), ctx))
     .Done().Ptr();
     // clang-format on
 }
@@ -562,7 +487,7 @@ TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer& enforcer, TExpr
     auto [selector, dirs] = BuildSortKeySelector(enforcer.SortElements, ctx, pos);
 
     TExprNode::TPtr dirList;
-    if (dirs.size()==1){
+    if (dirs.size() == 1) {
         dirList = dirs[0];
     } else {
         dirList = Build<TExprList>(ctx, pos).Add(dirs).Done().Ptr();
@@ -731,7 +656,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
     THashMap<int, TExprNode::TPtr> stages;
     THashMap<int, TVector<TExprNode::TPtr>> stageArgs;
     THashMap<int, TPositionHandle> stagePos;
-
     auto &graph = root.PlanProps.StageGraph;
     for (auto id : graph.StageIds) {
         stageArgs[id] = TVector<TExprNode::TPtr>();
@@ -817,7 +741,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                     .Done().Ptr();
                     // clang-format on
 
-                    auto narrowMap = BuildNarrowMapForWideOlapRead(flowNonBlockRead, opSource->Columns, ctx, op->Pos);
+                    auto narrowMap = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(flowNonBlockRead, opSource->Columns, ctx);
 
                     // clang-format off
                     currentStageBody = Build<TCoFromFlow>(ctx, op->Pos)
@@ -846,13 +770,13 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
 
             auto filter = CastOperator<TOpFilter>(op);
 
-            auto filterBody = TCoLambda(filter->FilterLambda).Body();
-            auto filter_arg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
-            auto map_arg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
+            auto filterLambda = TCoLambda(filter->FilterLambda);
+            auto filterBody = filterLambda.Body();
+            auto filterArg = filterLambda.Args().Arg(0);
+            auto mapArg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
 
-            auto newFilterBody = ReplaceArg(filterBody.Ptr(), filter_arg, ctx);
             // FIXME: Eliminate this for YQL pipeline.
-            newFilterBody = ctx.Builder(op->Pos).Callable("FromPg").Add(0, newFilterBody).Seal().Build();
+            auto newFilterBody = ctx.Builder(op->Pos).Callable("FromPg").Add(0, filterBody.Ptr()).Seal().Build();
 
             TVector<TExprBase> items;
             for (const auto& iu : op->GetOutputIUs()) {
@@ -861,7 +785,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                 auto tuple = Build<TCoNameValueTuple>(ctx, op->Pos)
                     .Name().Build(memberName)
                     .Value<TCoMember>()
-                        .Struct(map_arg)
+                        .Struct(mapArg)
                         .Name().Build(memberName)
                     .Build()
                 .Done();
@@ -874,9 +798,12 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                 .Input<TCoFilter>()
                     .Input(TExprBase(currentStageBody))
                     .Lambda<TCoLambda>()
-                        .Args({filter_arg})
+                        .Args({"filter_arg"})
                         .Body<TCoCoalesce>()
-                            .Predicate(newFilterBody)
+                            .Predicate<TExprApplier>()
+                                .Apply(TExprBase(newFilterBody))
+                                .With(filterArg, "filter_arg")
+                            .Build()
                             .Value<TCoBool>()
                                 .Literal().Build("false")
                                 .Build()
@@ -884,7 +811,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                         .Build()
                     .Build()
                 .Lambda<TCoLambda>()
-                    .Args({map_arg})
+                    .Args({mapArg})
                     .Body<TCoAsStruct>()
                         .Add(items)
                     .Build()
@@ -991,42 +918,15 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Limit " << opStageId;
         } else if (op->Kind == EOperator::Sort) {
+            auto sort = CastOperator<TOpSort>(op);
             if (!currentStageBody) {
                 auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *op->Children[0]->Props.StageId);
                 stageArgs[opStageId].push_back(stageArg);
                 currentStageBody = stageInput;
             }
 
-            auto sort = CastOperator<TOpSort>(op);
-            auto [selector, dirs] = BuildSortKeySelector(sort->SortElements, ctx, sort->Pos);
-
-            TExprNode::TPtr dirList;
-            if (dirs.size()==1){
-                dirList = dirs[0];
-            } else {
-                dirList = Build<TExprList>(ctx, sort->Pos).Add(dirs).Done().Ptr();
-            }
-
-            if (sort->LimitCond) {
-                // clang-format off
-                currentStageBody = Build<TCoTopSort>(ctx, sort->Pos)
-                    .Input(currentStageBody)
-                    .Count(sort->LimitCond)
-                    .SortDirections(dirList)
-                    .KeySelectorLambda(selector)
-                    .Done().Ptr();
-                // clang-format on
-            }
-            else {
-                // clang-format off
-                currentStageBody = Build<TCoSort>(ctx, sort->Pos)
-                    .Input(currentStageBody)
-                    .SortDirections(dirList)
-                    .KeySelectorLambda(selector)
-                    .Done().Ptr();
-                // clang-format on
-            }
-
+            TPhysicalSortBuilder physicalSortBuilder(sort, ctx, op->Pos);
+            currentStageBody = physicalSortBuilder.BuildPhysicalSort(currentStageBody);
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Sort " << opStageId;

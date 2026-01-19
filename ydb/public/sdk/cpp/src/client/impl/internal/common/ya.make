@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/cpp/src/client/types/exceptions
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/public/sdk/cpp/src/library/issue
     library/cpp/uri

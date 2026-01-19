@@ -1,53 +1,62 @@
 #include "parser.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+
 #include <library/cpp/uri/uri.h>
 #include <library/cpp/cgiparam/cgiparam.h>
+
 #include <util/string/builder.h>
+
+#include <iostream>
 
 namespace NYdb::inline Dev {
 
 TConnectionInfo ParseConnectionString(const std::string& connectionString) {
-    if (connectionString.length() == 0) {
-        ythrow TContractViolation("Empty connection string");
+    if (connectionString.size() == 0) {
+        ythrow TContractViolation("Empty connection string ");
+    }
+
+    std::string connectionStringWithScheme = connectionString;
+
+    if (connectionString.find("://") == std::string::npos) {
+        if (connectionString.starts_with("localhost:")) {
+            connectionStringWithScheme = "grpc://" + connectionString;
+        } else {
+            connectionStringWithScheme = "grpcs://" + connectionString;
+        }
     }
 
     TConnectionInfo connectionInfo;
 
-    // Parse the URI with flexible scheme support
     NUri::TUri uri;
     NUri::TUri::TState::EParsed parseStatus = uri.Parse(
-        connectionString, 
+        connectionStringWithScheme, 
         NUri::TFeature::FeaturesDefault | NUri::TFeature::FeatureSchemeFlexible
     );
-    
+
     if (parseStatus != NUri::TUri::TState::EParsed::ParsedOK) {
         ythrow TContractViolation(TStringBuilder() 
             << "Failed to parse connection string: " 
-            << NUri::ParsedStateToString(parseStatus));
+            << NUri::ParsedStateToString(parseStatus) << " ");
     }
 
-    // Extract host and port
     std::string_view host = uri.GetHost();
     if (host.empty()) {
-        ythrow TContractViolation("Connection string must contain a host");
+        ythrow TContractViolation("Connection string must contain a host ");
     }
 
     // Validate and extract scheme
     std::string_view scheme = uri.GetField(NUri::TUri::FieldScheme);
-    if (!scheme.empty()) {
-        if (scheme != "grpc" && scheme != "grpcs") {
-            ythrow TContractViolation("Invalid scheme in connection string: only 'grpc' and 'grpcs' are allowed");
-        }
-        connectionInfo.EnableSsl = (scheme == "grpcs");
+    if (scheme == "grpc") {
+        connectionInfo.EnableSsl = false;
+    } else if (scheme == "grpcs") {
+        connectionInfo.EnableSsl = true;
     } else {
-        // No scheme provided - enable SSL if host is not localhost
-        connectionInfo.EnableSsl = (host != "localhost");
+        ythrow TContractViolation("Invalid scheme in connection string: only 'grpc' and 'grpcs' are allowed ");
     }
-    
-    ui16 port = uri.GetPort();
+
+    std::uint16_t port = uri.GetPort();
     if (port == 0) {
-        // No port specified
         connectionInfo.Endpoint = std::string(host);
     } else {
         connectionInfo.Endpoint = std::string(host) + ":" + std::to_string(port);
@@ -66,15 +75,14 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
         }
     }
 
-    if (!path.empty()) {
+    if (!path.empty() && path != "/") {
         if (hasQueryDatabase) {
-            ythrow TContractViolation("Database cannot be specified in both path and query parameter");
+            ythrow TContractViolation("Database cannot be specified in both path and query parameter ");
         }
-        connectionInfo.Database = "/" + std::string(path);
+        connectionInfo.Database = path;
     }
 
     return connectionInfo;
 }
 
 } // namespace NYdb
-

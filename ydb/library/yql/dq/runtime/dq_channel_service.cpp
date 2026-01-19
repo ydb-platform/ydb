@@ -755,6 +755,12 @@ std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const
     if (it != LocalBuffers.end()) {
         auto result = it->second.lock();
         if (result) {
+            if (info.SrcStageId) {
+                result->Info.SrcStageId = info.SrcStageId;
+            }
+            if (info.DstStageId) {
+                result->Info.DstStageId = info.DstStageId;
+            }
             return result;
         } else {
             LocalBuffers.erase(it);

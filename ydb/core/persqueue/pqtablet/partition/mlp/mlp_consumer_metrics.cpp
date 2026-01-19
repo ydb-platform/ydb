@@ -1,6 +1,7 @@
 #include "mlp_consumer.h"
 #include "mlp_storage.h"
 
+#include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 
@@ -55,17 +56,28 @@ TDetailedMetrics::TDetailedMetrics(const NKikimrPQ::TPQTabletConfig::TConsumer& 
     InflightScheduledToDLQCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.scheduled_to_dlq_messages", true);
     CommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.committed_messages", true);
     PurgedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.purged_messages", true);
-    
-    MessageLocks = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.message_locks", false);
-    MessageLockingDuration = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.message_locking_duration_milliseconds", false);
+
+    MessageLocks = consumerGroup->GetExpiringNamedHistogram("name", "topic.partition.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS));
+    MessageLockingDuration = consumerGroup->GetExpiringNamedHistogram("name", "topic.partition.message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
 
     auto deletedMessagesGroup = consumerGroup->GetSubgroup("name", "topic.partition.deleted_messages");
     DeletedByRetentionPolicy = deletedMessagesGroup->GetExpiringNamedCounter("reason", "retention", true);
-    DeletedByDeadlinePolicy = consumerGroup->GetExpiringNamedCounter("reason", "delete_policy", true);
-    DeletedByMovedToDLQ = consumerGroup->GetExpiringNamedCounter("reason", "move_policy", true);
+    DeletedByDeadlinePolicy = deletedMessagesGroup->GetExpiringNamedCounter("reason", "delete_policy", true);
+    DeletedByMovedToDLQ = deletedMessagesGroup->GetExpiringNamedCounter("reason", "move_policy", true);
 }
 
-TDetailedMetrics::~TDetailedMetrics() {
+TDetailedMetrics::~TDetailedMetrics() = default;
+
+namespace {
+
+void SetCounters(NMonitoring::THistogramPtr& counter, const TTabletPercentileCounter& metrics, const auto& bounds) {
+    counter->Reset();
+    for (size_t i = 0; i < bounds.size(); ++i) {
+        counter->Collect(bounds[i], metrics.GetRangeValue(i));
+    }
+    counter->Collect(Max<double>(), metrics.GetRangeValue(bounds.size()));
+}
+
 }
 
 void TDetailedMetrics::UpdateMetrics(const TMetrics& metrics) {
@@ -77,8 +89,9 @@ void TDetailedMetrics::UpdateMetrics(const TMetrics& metrics) {
     CommittedCount->Set(metrics.TotalCommittedMessageCount);
     PurgedCount->Set(metrics.TotalPurgedMessageCount);
     
-    MessageLocks->Set(metrics.MessageLocks.GetRangeCount());
-    MessageLockingDuration->Set(metrics.MessageLockingDuration.GetRangeCount());
+    SetCounters(MessageLocks, metrics.MessageLocks, MLP_LOCKS_BOUNDS);
+    SetCounters(MessageLockingDuration, metrics.MessageLockingDuration, SLOW_LATENCY_BOUNDS);
+
     DeletedByRetentionPolicy->Set(metrics.TotalDeletedByRetentionMessageCount);
     DeletedByDeadlinePolicy->Set(metrics.TotalDeletedByDeadlinePolicyMessageCount);
     DeletedByMovedToDLQ->Set(metrics.TotalMovedToDLQMessageCount);

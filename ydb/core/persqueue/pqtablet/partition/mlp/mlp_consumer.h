@@ -132,8 +132,6 @@ public:
     void UpdateMetrics(const TMetrics& metrics);
 
 private:
-    NMonitoring::TDynamicCounterPtr CounterGroup;
-
     NMonitoring::TDynamicCounters::TCounterPtr InflightCommittedCount;
     NMonitoring::TDynamicCounters::TCounterPtr InflightLockedCount;
     NMonitoring::TDynamicCounters::TCounterPtr InflightDelayedCount;
@@ -142,8 +140,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CommittedCount;
     NMonitoring::TDynamicCounters::TCounterPtr PurgedCount;
 
-    NMonitoring::TDynamicCounters::TCounterPtr MessageLocks;
-    NMonitoring::TDynamicCounters::TCounterPtr MessageLockingDuration;
+    NMonitoring::THistogramPtr MessageLocks;
+    NMonitoring::THistogramPtr MessageLockingDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr DeletedByRetentionPolicy;
     NMonitoring::TDynamicCounters::TCounterPtr DeletedByDeadlinePolicy;

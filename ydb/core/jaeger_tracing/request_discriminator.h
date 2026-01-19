@@ -122,6 +122,11 @@ enum class ERequestType: size_t {
     TESTSHARD_CREATETESTSHARD,
     TESTSHARD_DELETETESTSHARD,
 
+    // Nbs 2.0 requests
+    NBS_CREATEPARTITION,
+    NBS_DELETEPARTITION,
+    NBS_LISTPARTITIONS,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 

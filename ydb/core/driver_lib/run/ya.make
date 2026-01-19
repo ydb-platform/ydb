@@ -172,6 +172,7 @@ PEERDIR(
     ydb/services/metadata
     ydb/services/metadata/ds_table
     ydb/services/monitoring
+    ydb/services/nbs
     ydb/services/persqueue_cluster_discovery
     ydb/services/persqueue_v1
     ydb/services/rate_limiter

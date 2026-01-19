@@ -72,6 +72,7 @@ SRCS(
     rpc_make_directory.cpp
     rpc_modify_permissions.cpp
     rpc_monitoring.cpp
+    rpc_nbs.cpp
     rpc_node_registration.cpp
     rpc_object_storage.cpp
     rpc_ping.cpp
@@ -135,6 +136,7 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view

@@ -456,6 +456,8 @@ enum EServiceKikimr {
     LOCAL_DB_BACKUP = 3700;
 
     SCHEMA_SECRET_CACHE = 3800;
+
+    NBS_PARTITION = 3900;
 };
 
 message TActivity {

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package Ydb.Nbs.V1;
+
+option java_package = "com.yandex.ydb.nbs.v1";
+option java_outer_classname = "NbsGrpc";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/draft/ydb_nbs.proto";
+
+// Service for managing nbs 2.0
+service NbsService {
+    // Create NBS partition
+    rpc CreatePartition(Ydb.Nbs.CreatePartitionRequest) returns (Ydb.Nbs.CreatePartitionResponse);
+
+    // Delete NBS partition
+    rpc DeletePartition(Ydb.Nbs.DeletePartitionRequest) returns (Ydb.Nbs.DeletePartitionResponse);
+
+    // List NBS partitions
+    rpc ListPartitions(Ydb.Nbs.ListPartitionsRequest) returns (Ydb.Nbs.ListPartitionsResponse);
+}

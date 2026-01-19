@@ -20,11 +20,19 @@ enum class EOption {
     DEBUG,
     TLS_CACERTFILE,
     TLS_CACERTDIR,
+    TLS_CERTFILE,
+    TLS_KEYFILE,
     TLS_REQUIRE_CERT,
     PROTOCOL_VERSION,
 };
 
-int Bind(LDAP* ld, const TString& dn, const TString& password);
+enum class ESaslMechanism {
+    SIMPLE,
+    PLAIN,
+    EXTERNAL,
+};
+
+int Bind(LDAP* ld, const TString& dn, const ESaslMechanism& mechanism, std::vector<char>* credentials);
 int Unbind(LDAP* ld);
 int Init(LDAP** ld, const TString& scheme, const TString& uris, ui32 port);
 int Search(LDAP* ld,

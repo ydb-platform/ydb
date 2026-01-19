@@ -26,6 +26,12 @@ int ConvertOption(const EOption& option) {
         case EOption::TLS_CACERTFILE: {
             return LDAP_OPT_X_TLS_CACERTFILE;
         }
+        case EOption::TLS_CERTFILE: {
+            return LDAP_OPT_X_TLS_CERTFILE;
+        }
+        case EOption::TLS_KEYFILE: {
+            return LDAP_OPT_X_TLS_KEYFILE;
+        }
         case EOption::TLS_REQUIRE_CERT: {
             return LDAP_OPT_X_TLS_REQUIRE_CERT;
         }
@@ -35,13 +41,22 @@ int ConvertOption(const EOption& option) {
     }
 }
 
+const char* ConvertSaslMechanism(const ESaslMechanism& mechanism);
+
 }
 
 char* noAttributes[] = {ldapNoAttribute, nullptr};
 const TString LDAPS_SCHEME = "ldaps";
 
-int Bind(LDAP* ld, const TString& dn, const TString& password) {
-    return ldap_simple_bind_s(ld, dn.c_str(), password.c_str());
+int Bind(LDAP* ld, const TString& dn, const ESaslMechanism& mechanism, std::vector<char>* credentials) {
+    BerValue* credPtr = nullptr;
+    BerValue cred;
+    if (credentials) {
+        cred.bv_len = credentials->size();
+        cred.bv_val = credentials->data();
+        credPtr = &cred;
+    }
+    return ldap_sasl_bind_s(ld, dn.c_str(), ConvertSaslMechanism(mechanism), credPtr, nullptr, nullptr, nullptr);
 }
 
 int Unbind(LDAP* ld) {
@@ -199,5 +214,23 @@ int ConvertRequireCert(const NKikimrProto::TLdapAuthentication::TUseTls::TCertRe
         }
     }
 }
+
+namespace {
+
+const char* ConvertSaslMechanism(const ESaslMechanism& mechanism) {
+    switch (mechanism) {
+        case ESaslMechanism::SIMPLE: {
+            return LDAP_SASL_SIMPLE;
+        }
+        case ESaslMechanism::PLAIN: {
+            return "PLAIN";
+        }
+        case ESaslMechanism::EXTERNAL: {
+            return "EXTERNAL";
+        }
+    }
+}
+
+} // namespace
 
 }

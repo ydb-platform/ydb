@@ -166,14 +166,13 @@ TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector
     // clang-format on
 }
 
-bool CanApplyPeepHoleWithFinalStageRules(TExprNode::TPtr input) {
+bool CanApplyPeepHole(TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) {
     auto blackList = [&](const TExprNode::TPtr& node) -> bool {
-        if (node->IsCallable({"WideCombiner"})) {
+        if (node->IsCallable(callableNames)) {
             return true;
         }
         return false;
     };
-
     return !FindNode(input, blackList);
 }
 
@@ -187,7 +186,8 @@ TExprNode::TPtr KqpPeepholeStageLambda(TExprNode::TPtr stageLambda, TRBOContext&
         argTypes.push_back(argTypeAnn);
     }
 
-    bool withFinalStageRules = CanApplyPeepHoleWithFinalStageRules(lambda.Body().Ptr());
+    // Yql has a strange bug in final stage peephole for `WideCombiner` with empty keys.
+    const bool withFinalStageRules = CanApplyPeepHole(lambda.Body().Ptr(), {"WideCombiner"});
     // clang-format off
     auto program = Build<TKqpProgram>(rboCtx.ExprCtx, stageLambda->Pos())
         .Lambda(rboCtx.ExprCtx.DeepCopyLambda(*stageLambda.Get()))
@@ -216,17 +216,17 @@ void ApplyTypeAnnotation(TExprNode::TPtr input, TRBOContext& rboCtx) {
 }
 
 // This function assumes that stages already sorted in topological orders.
-[[maybe_unused]]
-TVector<std::pair<TExprNode::TPtr, TPositionHandle>> ApplyKqpPeepholeForStages(TVector<std::pair<TExprNode::TPtr, TPositionHandle>> physicalStages, TRBOContext& rboCtx) {
+TVector<TExprNode::TPtr> ApplyKqpPeepholeForPhysicalStages(TVector<std::pair<TExprNode::TPtr, TPositionHandle>>&& physicalStages, TRBOContext& rboCtx) {
     Y_ENSURE(physicalStages.size());
     auto root = physicalStages.back().first;
+    // Type is required to wrap stage lambda to `KqpProgram`
     if (!root->GetTypeAnn()) {
         ApplyTypeAnnotation(root, rboCtx);
     }
     auto& ctx = rboCtx.ExprCtx;
 
     TNodeOnNodeOwnedMap replaces;
-    TVector<std::pair<TExprNode::TPtr, TPositionHandle>> newStages;
+    TVector<TExprNode::TPtr> newStages;
     for (auto& [stage, pos]: physicalStages) {
         auto dqPhyStage = TDqPhyStage(stage);
         auto stageLambdaAfterPeephole = KqpPeepholeStageLambda(dqPhyStage.Program().Ptr(), rboCtx);
@@ -239,7 +239,7 @@ TVector<std::pair<TExprNode::TPtr, TPositionHandle>> ApplyKqpPeepholeForStages(T
             .Outputs(dqPhyStage.Outputs())
         .Done().Ptr();
         // clang-format on
-        newStages.emplace_back(newStage, pos);
+        newStages.push_back(newStage);
         replaces[dqPhyStage.Raw()] = newStage;
     }
     return newStages;
@@ -632,12 +632,8 @@ void BuildPhysicalStageGraph(TStageGraph& graph, const THashMap<int, TVector<TEx
     }
 }
 
-TExprNode::TPtr BuildPhysicalQuery(TOpRoot& root, const TVector<std::pair<TExprNode::TPtr, TPositionHandle>>& physicalStages, TRBOContext& rboCtx) {
+TExprNode::TPtr BuildPhysicalQuery(TOpRoot& root, TVector<TExprNode::TPtr>&& physicalStages, TRBOContext& rboCtx) {
     Y_ENSURE(physicalStages.size());
-    TVector<TExprNode::TPtr> txStages;
-    for (const auto& phyStage : physicalStages) {
-        txStages.push_back(phyStage.first);
-    }
 
     auto& ctx = rboCtx.ExprCtx;
     TVector<TCoAtom> columnAtomList;
@@ -650,7 +646,7 @@ TExprNode::TPtr BuildPhysicalQuery(TOpRoot& root, const TVector<std::pair<TExprN
     // wrap in DqResult
     auto dqResult = Build<TDqCnResult>(ctx, root.Pos)
         .Output()
-            .Stage(txStages.back())
+            .Stage(physicalStages.back())
             .Index().Build("0")
         .Build()
         .ColumnHints(columnOrder)
@@ -666,7 +662,7 @@ TExprNode::TPtr BuildPhysicalQuery(TOpRoot& root, const TVector<std::pair<TExprN
     // Build PhysicalTx
     auto physTx = Build<TKqpPhysicalTx>(ctx, root.Pos)
         .Stages()
-            .Add(txStages)
+            .Add(physicalStages)
         .Build()
         .Results()
             .Add({dqResult})
@@ -704,6 +700,21 @@ TExprNode::TPtr BuildPhysicalQuery(TOpRoot& root, const TVector<std::pair<TExprN
         .Build()
         .Settings()
             .Add(querySettings)
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
+template <typename T>
+TExprNode::TPtr BuildMap(TExprNode::TPtr input, TExprNode::TPtr arg, TVector<TExprBase>&& items, TExprContext &ctx, TPositionHandle pos) {
+    // clang-format off
+    return Build<T>(ctx, pos)
+        .Input(input)
+        .template Lambda<TCoLambda>()
+            .Args({arg})
+            .template Body<TCoAsStruct>()
+                .Add(items)
+            .Build()
         .Build()
     .Done().Ptr();
     // clang-format on
@@ -892,6 +903,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
             }
 
             auto map = CastOperator<TOpMap>(op);
+            const bool isOrdered = map->IsOrdered();
 
             auto arg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
 
@@ -949,20 +961,11 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                 items.push_back(tuple);
             }
 
-            // clang-format off
-            currentStageBody = Build<TCoMap>(ctx, op->Pos)
-                .Input(TExprBase(currentStageBody))
-                .Lambda<TCoLambda>()
-                    .Args({arg})
-                    .Body<TCoAsStruct>()
-                        .Add(items)
-                    .Build()
-                .Build()
-            .Done().Ptr();
-            // clang-format on
+            currentStageBody = isOrdered ? BuildMap<TCoOrderedMap>(currentStageBody, arg, std::move(items), ctx, op->Pos)
+                                         : BuildMap<TCoMap>(currentStageBody, arg, std::move(items), ctx, op->Pos);
 
             if (IsMultiConsumerHandlerNeeded(op)) {
-               currentStageBody = BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);
+                currentStageBody = BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);
             }
 
             stages[opStageId] = currentStageBody;
@@ -1095,8 +1098,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
 
     TVector<std::pair<TExprNode::TPtr, TPositionHandle>> physicalStages;
     BuildPhysicalStageGraph(graph, stageArgs, stages, stagePos, physicalStages, rboCtx);
-    //physicalStages = ApplyKqpPeepholeForStages(physicalStages, rboCtx);
-    return BuildPhysicalQuery(root, physicalStages, rboCtx);
+    auto phyStagesAfterPeephole = ApplyKqpPeepholeForPhysicalStages(std::move(physicalStages), rboCtx);
+    return BuildPhysicalQuery(root, std::move(phyStagesAfterPeephole), rboCtx);
 }
 } // namespace NKqp
 } // namespace NKikimr

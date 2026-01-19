@@ -656,8 +656,8 @@ message TInferPDiskSlotCountForDriveTypeSettings {
 }
 
 message TInferPDiskSlotCountSettings {
-    optional TInferPDiskSlotCountForDriveTypeSettings Rot = 2;
-    optional TInferPDiskSlotCountForDriveTypeSettings Ssd = 3;
+    optional TInferPDiskSlotCountForDriveTypeSettings Rot = 1;
+    optional TInferPDiskSlotCountForDriveTypeSettings Ssd = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

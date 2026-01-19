@@ -1140,6 +1140,18 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             50_GB, 9, true);
         CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
             pdiskId, 6, 8u);
+
+        VERBOSE_COUT("- Test case 4 - remove InferPDiskSlotCountSettings");
+        auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        {
+            auto& record = request->Record;
+            record.MutableConfig()->MutableBlobStorageConfig();
+            TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(realNodeWarden, sender, request.release()));
+            runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender);
+        }
+        CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 13, 0u);
     }
 
     CUSTOM_UNIT_TEST(TestInferPDiskSlotCountWithRealNodeWarden) {

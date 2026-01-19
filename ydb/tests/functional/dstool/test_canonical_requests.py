@@ -221,22 +221,29 @@ class Test(TestBase):
     def test_infer_pdisk_slot_count(self):
         dynconfig_client = DynConfigClient(self.host, self.grpc_port)
 
-        generate_config_response = dynconfig_client.fetch_startup_config()
-        logger.info(f"{generate_config_response=}")
-        assert generate_config_response.operation.status == StatusIds.SUCCESS
+        def generate_config():
+            generate_config_response = dynconfig_client.fetch_startup_config()
+            logger.info(f"{generate_config_response=}")
+            assert generate_config_response.operation.status == StatusIds.SUCCESS
 
-        result = dynconfig.FetchStartupConfigResult()
-        generate_config_response.operation.result.Unpack(result)
+            result = dynconfig.FetchStartupConfigResult()
+            generate_config_response.operation.result.Unpack(result)
 
-        full_config = {
-            "metadata": {
-                "kind": "MainConfig",
-                "version": 0,
-                "cluster": "",
-            },
-            "config": yaml.safe_load(result.config)
-        }
+            return {
+                "metadata": {
+                    "kind": "MainConfig",
+                    "version": 0,
+                    "cluster": "",
+                },
+                "config": yaml.safe_load(result.config)
+            }
 
+        def replace_config(full_config):
+            replace_config_response = dynconfig_client.replace_config(yaml.dump(full_config))
+            logger.info(f"{replace_config_response=}")
+            assert replace_config_response.operation.status == StatusIds.SUCCESS
+
+        full_config = generate_config()
         full_config["config"]["blob_storage_config"]["infer_pdisk_slot_count_settings"] = {
             "rot": {
                 "prefer_inferred_settings_over_explicit": True,
@@ -244,10 +251,7 @@ class Test(TestBase):
                 "max_slots": 12,
             }
         }
-
-        replace_config_response = dynconfig_client.replace_config(yaml.dump(full_config))
-        logger.info(f"{replace_config_response=}")
-        assert replace_config_response.operation.status == StatusIds.SUCCESS
+        replace_config(full_config)
 
         def check_pdisk_metrics_updated():
             base_config = self.check_pdisk_metrics_collected()
@@ -262,6 +266,19 @@ class Test(TestBase):
             'ExpectedSlotCount',
             'SlotSizeInUnits',
         ]
-        return [
-            self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns),
-        ]
+
+        trace1 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns),
+
+        del full_config["config"]["blob_storage_config"]["infer_pdisk_slot_count_settings"]
+        full_config["metadata"]["version"] = 1
+        replace_config(full_config)
+
+        def check_pdisk_metrics_updated():
+            base_config = self.check_pdisk_metrics_collected()
+            for pdisk in base_config.PDisk:
+                assert pdisk.PDiskMetrics.SlotSizeInUnits == 0
+        retry_assertions(check_pdisk_metrics_updated)
+
+        trace2 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns),
+
+        return [trace1, trace2]

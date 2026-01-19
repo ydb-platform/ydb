@@ -1282,9 +1282,7 @@ void TNodeWarden::Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscrip
 
 void TNodeWarden::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev) {
     auto& record = ev->Get()->Record;
-    if (record.HasConfig() &&
-            record.GetConfig().HasBlobStorageConfig() &&
-            record.GetConfig().GetBlobStorageConfig().HasInferPDiskSlotCountSettings()) {
+    if (record.HasConfig() && record.GetConfig().HasBlobStorageConfig()) {
         auto inferSettings = record.GetConfig().GetBlobStorageConfig().GetInferPDiskSlotCountSettings();
         auto equals = ::google::protobuf::util::MessageDifferencer::Equals;
         if (!equals(InferPDiskSlotCountSettings, inferSettings)) {

@@ -1582,9 +1582,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         TKeyedWriteSessionSettings writeSettings;
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
         writeSettings.MessageGroupId(TEST_MESSAGE_GROUP_ID);
         writeSettings.Codec(ECodec::RAW);
-        writeSettings.SessionTimeout(TDuration::Seconds(30));
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         auto session = publicClient.CreateKeyedWriteSession(writeSettings);
 
@@ -1660,7 +1661,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.MessageGroupId(TEST_MESSAGE_GROUP_ID);
         writeSettings.Codec(ECodec::RAW);
-        writeSettings.SessionTimeout(TDuration::Seconds(30));
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
 
@@ -1732,7 +1733,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
         writeSettings.MessageGroupId(TEST_MESSAGE_GROUP_ID);
         writeSettings.Codec(ECodec::RAW);
-        writeSettings.SessionTimeout(TDuration::Seconds(30));
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
 
@@ -1843,7 +1844,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         const std::string key2 = "key2";
         
         // Write several messages with different keys
-        size_t seqNo = 0;
+        size_t seqNo = 1;
         for (int i = 0; i < 10; ++i) {
             TWriteMessage msg("message1-" + ToString(i));
             msg.SeqNo(seqNo++);

@@ -149,32 +149,29 @@ struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
     using TSelf = TKeyedWriteSessionSettings;
 
     enum class EPartitionChooserStrategy {
-        Auto,
         Bound,
-        BoundWithHash,
         Hash,
     };
 
     TKeyedWriteSessionSettings() = default;
     TKeyedWriteSessionSettings(const TKeyedWriteSessionSettings&) = default;
     TKeyedWriteSessionSettings(TKeyedWriteSessionSettings&&) = default;
-    TKeyedWriteSessionSettings(const std::string& path, const std::string& producerId, const std::string& messageGroupId) {
+    TKeyedWriteSessionSettings(const std::string& path, const std::string& producerId) {
         Path(path);
         ProducerId(producerId);
-        MessageGroupId(messageGroupId);
     }
 
     TKeyedWriteSessionSettings& operator=(const TKeyedWriteSessionSettings&) = default;
     TKeyedWriteSessionSettings& operator=(TKeyedWriteSessionSettings&&) = default;
 
     //! Session lifetime.
-    FLUENT_SETTING(TDuration, SessionTimeout);
+    FLUENT_SETTING(TDuration, SubSessionIdleTimeout);
 
     //! Partition chooser strategy.
-    FLUENT_SETTING_DEFAULT(EPartitionChooserStrategy, PartitionChooserStrategy, EPartitionChooserStrategy::Auto);
+    FLUENT_SETTING_DEFAULT(EPartitionChooserStrategy, PartitionChooserStrategy, EPartitionChooserStrategy::Bound);
 
     //! Hasher function.
-    FLUENT_SETTING_DEFAULT(std::function<std::string(const std::string& key)>, Hasher, [](const std::string& key) -> std::string {
+    FLUENT_SETTING_DEFAULT(std::function<std::string(const std::string& key)>, PartitioningKeyHasher, [](const std::string& key) -> std::string {
         return MD5::Calc(key);
     });
 };

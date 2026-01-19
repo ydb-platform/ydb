@@ -67,8 +67,6 @@ class TKeyedWriteSession : public IKeyedWriteSession,
                            public std::enable_shared_from_this<TKeyedWriteSession> {
 private:
     static constexpr auto MAX_CLEANED_SESSIONS_COUNT = 100;
-    static constexpr auto MAX_MESSAGES_IN_MEMORY = 100000;
-    static constexpr auto MAX_IN_FLIGHT_MESSAGES = 1000;
 
     using WriteSessionPtr = std::shared_ptr<IWriteSession>;
 
@@ -184,7 +182,7 @@ private:
 
     WrappedWriteSessionPtr GetWriteSession(ui64 partitionId);
 
-    bool CheckSessionClosed(ui64 partitionId);
+    bool RunEventLoop(ui64 partitionId);
 
     WrappedWriteSessionPtr CreateWriteSession(ui64 partitionId);
 
@@ -201,17 +199,15 @@ private:
 
     void AddReadyFuture(ui64 index);
 
-    void ConsumeEvents(WrappedWriteSessionPtr wrappedSession);
-
-    void HandleAcksEvent(ui64 partitionId, TWriteSessionEvent::TEvent& event);
-
     void AddReadyToAcceptEvent();
 
-    void AddSessionClosedEvent(EStatus status);
+    void AddSessionClosedEvent();
 
     void NonBlockingClose();
 
-    void HandleSessionClosedEvent(EStatus status);
+    void HandleAcksEvent(ui64 partitionId, TWriteSessionEvent::TEvent& event);
+
+    void HandleSessionClosedEvent(TSessionClosedEvent&& event);
 
     void HandleReadyToAcceptEvent(ui64 partitionId, TWriteSessionEvent::TReadyToAcceptEvent& event);
     
@@ -267,7 +263,7 @@ private:
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;
     TDuration CloseTimeout = TDuration::Zero();
-    EStatus CloseStatus = EStatus::SUCCESS;
+    std::optional<TSessionClosedEvent> CloseEvent;
 
     // IMPORTANT: must not be protected by GlobalLock, because callbacks from Future::Subscribe()
     // can be executed inline, and taking GlobalLock there can deadlock the session thread.
@@ -276,8 +272,9 @@ private:
 
     size_t MessagesNotEmptyFutureIndex;
     size_t CloseFutureIndex;
+    size_t MemoryUsage;
 
-    std::function<std::string(const std::string& key)> Hasher;
+    std::function<std::string(const std::string& key)> PartitioningKeyHasher;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -325,7 +322,12 @@ private:
 
     bool WaitForAck(ui64 seqNo, const TDuration& timeout);
 
+    template<typename F>
+    bool Wait(const TDuration& timeout, F&& stopFunc);
+
     void RecreateGotEventsPromise();
+
+    void RunEventLoop();
 
 public:
     TSimpleBlockingKeyedWriteSession(

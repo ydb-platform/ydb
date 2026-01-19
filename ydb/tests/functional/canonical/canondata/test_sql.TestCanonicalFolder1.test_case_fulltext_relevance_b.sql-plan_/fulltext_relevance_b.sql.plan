@@ -48,14 +48,14 @@
                                                 "Node Type": "ReadFullTextIndex",
                                                 "Operators": [
                                                     {
-                                                        "BFactor": "expr",
+                                                        "BFactor": "\"0.75\"",
                                                         "Columns": "Key, Text, _yql_full_text_relevance",
                                                         "Index": "fulltext_relevance_idx",
                                                         "Inputs": [],
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats dogs\"",
                                                         "QueryColumns": "Text",
-                                                        "QueryMode": "expr",
+                                                        "QueryMode": "\"and\"",
                                                         "RelevanceQuery": "True",
                                                         "Table": "/local/base_fulltext_relevance_b_sql_plan/FullTextTable"
                                                     }

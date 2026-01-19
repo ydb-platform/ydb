@@ -54,7 +54,7 @@
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats dogs\"",
                                                         "QueryColumns": "Text",
-                                                        "QueryMode": "expr",
+                                                        "QueryMode": "\"and\"",
                                                         "RelevanceQuery": "True",
                                                         "Table": "/local/base_fulltext_relevance_mode_minimum_sql_plan/FullTextTable"
                                                     }

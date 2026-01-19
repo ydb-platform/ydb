@@ -51,11 +51,11 @@
                                                         "Columns": "Key, Text, _yql_full_text_relevance",
                                                         "Index": "fulltext_relevance_idx",
                                                         "Inputs": [],
-                                                        "MinimumShouldMatch": "expr",
+                                                        "MinimumShouldMatch": "\"1\"",
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats dogs\"",
                                                         "QueryColumns": "Text",
-                                                        "QueryMode": "expr",
+                                                        "QueryMode": "\"or\"",
                                                         "RelevanceQuery": "True",
                                                         "Table": "/local/base_fulltext_relevance_minimum_should_match_sql_plan/FullTextTable"
                                                     }

@@ -48,11 +48,11 @@
                                                 "Node Type": "ReadFullTextIndex",
                                                 "Operators": [
                                                     {
-                                                        "BFactor": "expr",
+                                                        "BFactor": "\"0.75\"",
                                                         "Columns": "Key, Text, _yql_full_text_relevance",
                                                         "Index": "fulltext_relevance_idx",
                                                         "Inputs": [],
-                                                        "K1Factor": "expr",
+                                                        "K1Factor": "\"1.2\"",
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats dogs\"",
                                                         "QueryColumns": "Text",

@@ -241,7 +241,9 @@ common:
   - from: /reference/ydb-sdk/example/example-dotnet.md
     to: /dev/example-app/example-dotnet.md
   - from: /reference/ydb-sdk/example/example-nodejs.md
-    to: /dev/example-app/example-nodejs.md
+    to: /dev/example-app/example-js.md
+  - from: /dev/example-app/example-nodejs.md
+    to: /dev/example-app/example-js.md
   - from: /reference/ydb-sdk/example/example-php.md
     to: /dev/example-app/example-php.md
   - from: /reference/ydb-sdk/example/go/index.md

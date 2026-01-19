@@ -124,7 +124,7 @@ void TPartition::InitializeMLPConsumers() {
     for (auto it = MLPConsumers.begin(); it != MLPConsumers.end();) {
         auto &[name, consumerInfo] = *it;
         if (auto cit = consumers.find(name); cit != consumers.end()) {
-            LOG_I("Updateing MLP consumer '" << name << "' config");
+            LOG_I("Updating MLP consumer '" << name << "' config");
             auto& config = cit->second;
             Send(consumerInfo.ActorId, new TEvPQ::TEvMLPConsumerUpdateConfig(Config, config,
                 retentionPeriod(config), GetPerPartitionCounterSubgroup()));

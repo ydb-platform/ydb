@@ -21,6 +21,7 @@ SRCS(
     config.h
     console_interaction.h
     console_interaction.cpp
+    ddisk.cpp
     defs.h
     diff.h
     disk_metrics.cpp

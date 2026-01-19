@@ -10,9 +10,8 @@ namespace NYT::NChaosClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TReplicationCardId = NObjectClient::TObjectId;
 using TChaosObjectId = NObjectClient::TObjectId;
-// using TReplicationCardId = TChaosObjectId;
+using TReplicationCardId = TChaosObjectId;
 using TReplicationCardCollocationId = TChaosObjectId;
 using TChaosLeaseId = TChaosObjectId;
 using TReplicaId = NObjectClient::TObjectId;

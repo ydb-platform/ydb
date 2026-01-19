@@ -8,6 +8,7 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_opt_window.h>
 #include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/core/yql_window_features.h>
 
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
@@ -550,8 +551,13 @@ namespace {
                 isUniversal = true;
                 return IGraphTransformer::TStatus::Ok;
             }
-            bool frameCanBeEmpty = !TWindowFrameSettings::Parse(*winOn, ctx).IsNonEmpty();
-
+            bool isFrameUniversal;
+            auto frame = TWindowFrameSettings::TryParse(*winOn, ctx, isFrameUniversal);
+            if (isFrameUniversal) {
+                isUniversal = true;
+                return IGraphTransformer::TStatus::Ok;
+            }
+            YQL_ENSURE(frame, "Frame expected to be non-empty.");
             for (auto iterFunc = winOn->Children().begin() + 1; iterFunc != winOn->Children().end(); ++iterFunc) {
                 auto func = *iterFunc;
                 YQL_ENSURE(func->IsList());
@@ -619,7 +625,7 @@ namespace {
 
                 if (calcSpec->IsCallable("WindowTraits")) {
                     auto finishType = calcSpec->Child(4)->GetTypeAnn();
-                    if (frameCanBeEmpty) {
+                    if (!frame->IsNonEmpty()) {
                         auto defVal = calcSpec->Child(5);
                         if (!defVal->IsCallable("Null")) {
                             finishType = defVal->GetTypeAnn();
@@ -6423,7 +6429,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus WinOnWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus WinOnWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -6444,13 +6450,14 @@ namespace {
 
         bool isUniversal;
         auto frameSettings = TWindowFrameSettings::TryParse(*input, ctx.Expr, isUniversal);
-        if (!frameSettings) {
-            return IGraphTransformer::TStatus::Error;
-        }
 
         if (isUniversal) {
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (!frameSettings) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         auto frameType = frameSettings->GetFrameType();
@@ -6459,9 +6466,9 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (frameType == EFrameType::FrameByRange) {
+        if (frameType == EFrameType::FrameByRange && !IsRangeWindowFrameEnabled(ctx.Types)) {
             // only UNBOUNDED PRECEDING -> CURRENT ROW is currently supported
-            if (!(IsUnbounded(frameSettings->GetFirst()) && IsCurrentRow(frameSettings->GetLast()))) {
+            if (!(frameSettings->IsLeftInf() && frameSettings->IsRightCurrent())) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "RANGE in frame specification is not supported yet"));
                 return IGraphTransformer::TStatus::Error;
             }

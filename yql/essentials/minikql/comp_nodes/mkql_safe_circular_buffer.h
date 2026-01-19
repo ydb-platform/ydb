@@ -33,8 +33,8 @@ public:
         if (IsFull()) {
             Grow();
         }
-        Buffer_[RealIndex(Size_)] = std::move(data);
         Size_++;
+        Buffer_[RealIndex(Size_ - 1)] = std::move(data);
     }
 
     const T& Get(size_t index) const {
@@ -92,6 +92,13 @@ public:
         Buffer_.shrink_to_fit();
     }
 
+    void Reserve(size_t capacity) {
+        if (capacity <= Capacity()) {
+            return;
+        }
+        Grow(capacity);
+    }
+
 private:
     static inline constexpr size_t GrowFactor = 2;
 
@@ -99,21 +106,28 @@ private:
         return Size() == Capacity();
     }
 
-    void Grow() {
+    void Grow(size_t to) {
         YQL_ENSURE(Unbounded_, "Cannot reallocate buffer in Bounded mode");
         // Rotate elements so that logical first element is at position 0.
         std::rotate(Buffer_.begin(), Buffer_.begin() + Head_, Buffer_.end());
-        // Double buffer size.
-        Buffer_.resize(Capacity() * GrowFactor + 1, EmptyValue_);
+        Buffer_.resize(to, EmptyValue_);
         // Reset Head since elements now start at position 0.
         Head_ = 0;
+    }
+
+    void Grow() {
+        if (Capacity() == 0) {
+            Grow(1);
+        }
+        // Double buffer size.
+        Grow(Capacity() * GrowFactor);
     }
 
     size_t RealIndex(size_t index, bool mayOutOfBounds = false) const {
         auto capacity = Capacity();
         Y_ABORT_UNLESS(capacity);
         if (!mayOutOfBounds) {
-            Y_ABORT_UNLESS(index < capacity);
+            Y_ABORT_UNLESS(index < Size());
         }
         return (Head_ + index) % capacity;
     }

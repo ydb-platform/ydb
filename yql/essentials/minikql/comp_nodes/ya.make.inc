@@ -96,6 +96,7 @@ SET(ORIG_SOURCES
     mkql_pickle.cpp
     mkql_prepend.cpp
     mkql_queue.cpp
+    mkql_window_frames_collector_params_deserializer.cpp
     mkql_random.cpp
     mkql_range.cpp
     mkql_reduce.cpp

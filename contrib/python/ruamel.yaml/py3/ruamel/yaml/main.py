@@ -35,8 +35,8 @@ from ruamel.yaml.loader import Loader as UnsafeLoader  # NOQA
 from ruamel.yaml.comments import CommentedMap, CommentedSeq, C_PRE
 from ruamel.yaml.docinfo import DocInfo, version, Version
 
+from typing import List, Set, Dict, Tuple, Union, Any, Callable, Optional, Text, Type  # NOQA
 if False:  # MYPY
-    from typing import List, Set, Dict, Tuple, Union, Any, Callable, Optional, Text, Type  # NOQA
     from ruamel.yaml.compat import StreamType, StreamTextType, VersionType  # NOQA
     from types import TracebackType
     from pathlib import Path
@@ -94,6 +94,7 @@ class YAML:
         self.Serializer: Any = None
         self.default_flow_style: Any = None
         self.comment_handling = None
+        self.max_depth = 0
         typ_found = 1
         setup_rt = False
         if 'rt' in self.typ:

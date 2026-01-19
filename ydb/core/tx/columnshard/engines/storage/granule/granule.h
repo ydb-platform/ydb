@@ -13,11 +13,63 @@
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/index/index.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/library/range_treap/range_treap.h>
 
 namespace NKikimr::NOlap {
 
 namespace NLoading {
 class TPortionsLoadContext;
+}
+
+namespace GranuleInternal {
+
+struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::shared_ptr<TPortionInfo>> {
+    struct TValueHash {
+        ui64 operator()(const std::shared_ptr<TPortionInfo>& value) const {
+            return THash<TPortionAddress>()(value->GetAddress());
+        }
+    };
+
+    static bool Less(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {
+        return a->GetAddress() < b->GetAddress();
+    }
+
+    static bool Equal(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {
+        return a->GetAddress() == b->GetAddress();
+    }
+};
+
+class TTSortableBatchPositionBorderComparator {
+    using TBorder = NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>;
+
+public:
+    static int Compare(const TBorder& lhs, const TBorder& rhs) {
+        if (lhs.GetMode() == NRangeTreap::EBorderMode::LeftInf || rhs.GetMode() == NRangeTreap::EBorderMode::RightInf) {
+            return lhs.GetMode() == rhs.GetMode() ? 0 : -1;
+        } else if (lhs.GetMode() == NRangeTreap::EBorderMode::RightInf || rhs.GetMode() == NRangeTreap::EBorderMode::LeftInf) {
+            return lhs.GetMode() == rhs.GetMode() ? 0 : 1;
+        }
+
+        auto comp = lhs.GetKey().ComparePartial(rhs.GetKey());
+        if (comp == std::partial_ordering::less) {
+            return -1;
+        } else if (comp == std::partial_ordering::greater) {
+            return 1;
+        }
+
+        return NRangeTreap::TBorderModeTraits::CompareEqualPoint(lhs.GetMode(), rhs.GetMode());
+    }
+
+    static void ValidateKey(const NArrow::NMerger::TSortableBatchPosition& /*key*/) {
+        // Do nothing
+    }
+};
+
+using TPortionIntervalTree =
+    NRangeTreap::TRangeTreap<NArrow::NMerger::TSortableBatchPosition, std::shared_ptr<TPortionInfo>,
+                             NArrow::NMerger::TSortableBatchPosition, TPortionIntervalTreeValueTraits,
+                             TTSortableBatchPositionBorderComparator>;
+
 }
 
 class TGranulesStorage;
@@ -123,6 +175,7 @@ private:
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
     THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
+    GranuleInternal::TPortionIntervalTree Intervals;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
     void RebuildAdditiveMetrics() const;
@@ -360,6 +413,10 @@ public:
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
+    }
+
+    const auto& GetPortionsIntervals() const {
+        return Intervals;
     }
 
     const THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>>& GetInsertedPortions() const {

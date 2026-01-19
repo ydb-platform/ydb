@@ -23,6 +23,9 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     OnBeforeChangePortion(nullptr);
     Portions.emplace(info->GetPortionId(), info);
     OnAfterChangePortion(info, nullptr);
+
+    Intervals.AddRange(GranuleInternal::TPortionIntervalTree::TOwnedRange(info->IndexKeyStart().BuildSortablePosition(), true,
+                       info->IndexKeyEnd().BuildSortablePosition(), true), info);
 }
 
 void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& info) {
@@ -38,6 +41,7 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     } else {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
     }
+    Intervals.RemoveRanges(it->second);
     DataAccessorsManager->RemovePortion(it->second);
     OnBeforeChangePortion(it->second);
     Portions.erase(it);
@@ -164,6 +168,8 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
     } else {
         auto portionId = portion->GetPortionId();
         AFL_VERIFY(Portions.emplace(portionId, portion).second);
+        Intervals.AddRange(GranuleInternal::TPortionIntervalTree::TOwnedRange(portion->IndexKeyStart().BuildSortablePosition(), true,
+                    portion->IndexKeyEnd().BuildSortablePosition(), true), portion);
     }
 }
 

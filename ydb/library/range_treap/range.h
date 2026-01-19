@@ -25,6 +25,8 @@ enum class EBorderMode: ui8 {
     LeftInclusive = 1,
     RightInclusive = 2,
     LeftExclusive = 3,
+    LeftInf = 4,
+    RightInf = 5
 };
 
 class TBorderModeTraits {
@@ -61,6 +63,14 @@ public:
         return { key, inclusive ? EBorderMode::RightInclusive : EBorderMode::RightExclusive };
     }
 
+    static TBorder MakeLeftInf() noexcept {
+        return { EBorderMode::LeftInf };
+    }
+
+    static TBorder MakeRightInf() noexcept {
+        return { EBorderMode::RightInf };
+    }
+
     const TKeyView& GetKey() const {
         return Key;
     }
@@ -68,6 +78,11 @@ public:
     TBorder(const TKeyView& key, const EBorderMode mode)
         : Key(key)
         , Mode(mode)
+    {
+    }
+
+    TBorder(const EBorderMode mode)
+        : Mode(mode)
     {
     }
 };
@@ -81,7 +96,7 @@ public:
         if (lhs.GetKey() < rhs.GetKey()) {
             return -1;
         }
-        if (lhs.GetKey() > rhs.GetKey()) {
+        if (lhs.GetKey() > rhs.GetKey()) { // ??
             return 1;
         }
         return TBorderModeTraits::CompareEqualPoint(lhs.GetMode(), rhs.GetMode());

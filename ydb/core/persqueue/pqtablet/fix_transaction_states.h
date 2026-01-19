@@ -13,7 +13,5 @@ namespace NKikimr::NPQ {
 
 bool IsMainContextOfTransaction(const TString& key);
 THashMap<ui64, NKikimrPQ::TTransaction> CollectTransactions(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges);
-void FixTransactionStates(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges,
-                          THashMap<ui64, TDistributedTransaction>& txs);
 
 }

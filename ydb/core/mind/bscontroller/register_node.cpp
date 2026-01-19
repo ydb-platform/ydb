@@ -429,7 +429,7 @@ void TBlobStorageController::ReadGroups(TSet<TGroupId>& groupIDsToRead, bool dis
                     Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
                 }
 
-                SerializeGroupInfo(groupProto, *group, info.Name, scopeId);
+                SerializeGroupInfo(groupProto, *group, info, scopeId);
             } else if (nodeId) {
                 // group is not listable, so we have to postpone the request from NW
                 group->WaitingNodes.insert(nodeId);

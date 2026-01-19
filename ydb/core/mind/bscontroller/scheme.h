@@ -321,14 +321,16 @@ struct Schema : NIceDb::Schema {
         struct DefaultGroupSizeInUnits : Column<26, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         // does this storage pool work in bridge mode?
         struct BridgeMode : Column<27, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        // does this pool define DDisk pool instead of VDisk one?
+        struct DDisk : Column<28, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
         using TKey = TableKey<BoxId, StoragePoolId>;
 
         using TColumns = TableColumns<BoxId, StoragePoolId, Name, ErasureSpecies, RealmLevelBegin, RealmLevelEnd,
-          DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
-          VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
-          Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
-          DefaultGroupSizeInUnits, BridgeMode>;
+            DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
+            VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
+            Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
+            DefaultGroupSizeInUnits, BridgeMode, DDisk>;
     };
 
     struct BoxStoragePoolUser : Table<121> {

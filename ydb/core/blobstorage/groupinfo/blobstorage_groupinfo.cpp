@@ -692,7 +692,9 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
             bsDomain.VDisks.resize(domain.VDiskLocationsSize());
             for (ui32 vdiskIdx = 0; vdiskIdx < domain.VDiskLocationsSize(); ++vdiskIdx) {
                 const auto& id = domain.GetVDiskLocations(vdiskIdx);
-                TActorId vdiskActorId = MakeBlobStorageVDiskID(id.GetNodeID(), id.GetPDiskID(), id.GetVDiskSlotID());
+                TActorId vdiskActorId = group.GetDDisk()
+                    ? MakeBlobStorageDDiskID(id.GetNodeID(), id.GetPDiskID(), id.GetVDiskSlotID())
+                    : MakeBlobStorageVDiskID(id.GetNodeID(), id.GetPDiskID(), id.GetVDiskSlotID());
                 dyn.PushBackActorId(vdiskActorId);
             }
         }

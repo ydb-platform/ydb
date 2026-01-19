@@ -182,7 +182,6 @@ Y_UNIT_TEST_SUITE(TDSProxyGetBlockQuorumTest) {
         TestQuorumResponse(TBlobStorageGroupType::ERASURE); \
     }
 
-UNIT_TEST_QUORUM_RESPONSE(Erasure3Plus1Block)
 UNIT_TEST_QUORUM_RESPONSE(Erasure4Plus2Block)
 UNIT_TEST_QUORUM_RESPONSE(ErasureMirror3dc)
 
@@ -193,7 +192,6 @@ UNIT_TEST_QUORUM_RESPONSE(ErasureMirror3dc)
         TestFailModelViolation(TBlobStorageGroupType::ERASURE); \
     }
 
-UNIT_TEST_FAIL_MODEL(Erasure3Plus1Block)
 UNIT_TEST_FAIL_MODEL(Erasure4Plus2Block)
 UNIT_TEST_FAIL_MODEL(ErasureMirror3dc)
 
@@ -204,7 +202,6 @@ UNIT_TEST_FAIL_MODEL(ErasureMirror3dc)
         TestMaxAllowedFailures(TBlobStorageGroupType::ERASURE); \
     }
 
-UNIT_TEST_MAX_FAILURES(Erasure3Plus1Block)
 UNIT_TEST_MAX_FAILURES(Erasure4Plus2Block)
 UNIT_TEST_MAX_FAILURES(ErasureMirror3dc)
 

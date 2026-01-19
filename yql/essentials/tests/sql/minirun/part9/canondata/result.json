@@ -1873,5 +1873,47 @@
             "size": 983,
             "uri": "https://{canondata_backend}/1871102/116385eb6fe562fc7bfbaa4f34a104024a4dae99/resource.tar.gz#test.test_window-win_over_joined-default.txt-Results_/results.txt"
         }
+    ],
+    "test.test[window-win_range_int64_order_by_multiply--Debug]": [
+        {
+            "checksum": "4916124a2a600b1d21a7544a63d2b7d3",
+            "size": 1853,
+            "uri": "https://{canondata_backend}/1942415/abc8ff0bc7ce1b4382b676962a2321d49a930356/resource.tar.gz#test.test_window-win_range_int64_order_by_multiply--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_range_int64_order_by_multiply--Results]": [
+        {
+            "checksum": "1b703b12cc68cead213448c9d445199a",
+            "size": 1195,
+            "uri": "https://{canondata_backend}/995452/f47564f6c57d297ad9007057d5687a16a72d1529/resource.tar.gz#test.test_window-win_range_int64_order_by_multiply--Results_/results.txt"
+        }
+    ],
+    "test.test[window-win_range_tzdate--Debug]": [
+        {
+            "checksum": "e0a33e49d4226d5826f2ea159b72b043",
+            "size": 1506,
+            "uri": "https://{canondata_backend}/1942415/abc8ff0bc7ce1b4382b676962a2321d49a930356/resource.tar.gz#test.test_window-win_range_tzdate--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_range_tzdate--Results]": [
+        {
+            "checksum": "a575cbd7f19992ab67f1cfade2c77758",
+            "size": 987,
+            "uri": "https://{canondata_backend}/1942278/0ddda7a1843b8f1bd86bd3f85a3608f01cefd34f/resource.tar.gz#test.test_window-win_range_tzdate--Results_/results.txt"
+        }
+    ],
+    "test.test[window-win_range_unbounded_compact--Debug]": [
+        {
+            "checksum": "d6bf3ea2a4d79802126ffca10d6b63ba",
+            "size": 2005,
+            "uri": "https://{canondata_backend}/1942415/abc8ff0bc7ce1b4382b676962a2321d49a930356/resource.tar.gz#test.test_window-win_range_unbounded_compact--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_range_unbounded_compact--Results]": [
+        {
+            "checksum": "fd2a1086451c4b03d885b341c514e553",
+            "size": 1407,
+            "uri": "https://{canondata_backend}/1936997/f1acad6ad8fea2ff9a9ddc4955b72dc215714c63/resource.tar.gz#test.test_window-win_range_unbounded_compact--Results_/results.txt"
+        }
     ]
 }

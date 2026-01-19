@@ -20,6 +20,7 @@
 #include <yql/essentials/core/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
+#include <yql/essentials/core/yql_window_features.h>
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
 #include <yql/essentials/utils/log/log.h>
@@ -11426,7 +11427,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    bool EnsureQueueResource(const TExprNode* resourceArg, const TTypeAnnotationNode*& elementType, TExtContext& ctx) {
+    bool EnsureQueueResource(const TExprNode* resourceArg, const TTypeAnnotationNode*& elementType, TContext& ctx) {
         if (!EnsureResourceType(*resourceArg, ctx.Expr)) {
             return false;
         }
@@ -11451,8 +11452,99 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return true;
     }
 
+    IGraphTransformer::TStatus WinFramesCollectorWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto streamArg = input->Child(0);
+        auto resourceArg = input->Child(1);
+
+        if (!EnsureStreamType(*streamArg, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* expectedValueType;
+        if (!EnsureQueueResource(resourceArg, expectedValueType, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* streamType = streamArg->GetTypeAnn();
+        const TTypeAnnotationNode* itemType = streamType->Cast<TStreamExprType>()->GetItemType();
+        if (!IsSameAnnotation(*itemType, *expectedValueType)) {
+            ctx.Expr.AddError(TIssue(input->Pos(ctx.Expr), TStringBuilder() << "mismatch of stream and queue types: "
+                                                                            << *itemType << " != " << *expectedValueType));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto boundsSettings = input->Child(2);
+        if (!boundsSettings->IsCallable("AsStruct")) {
+            ctx.Expr.AddError(TIssue(boundsSettings->Pos(ctx.Expr), TStringBuilder() << "bounds settings must be Struct literal"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(streamType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus WinFrameWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 5);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto resourceArg = input->Child(0);
+        auto handle = input->Child(1);
+        auto isIncremental = input->Child(2);
+        auto isRange = input->Child(3);
+        auto isSingleElement = input->Child(4);
+
+        const TTypeAnnotationNode* expectedValueType;
+        if (!EnsureQueueResource(resourceArg, expectedValueType, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!NNodes::TMaybeNode<NNodes::TCoUint64>(handle)) {
+            ctx.Expr.AddError(TIssue(input->Pos(ctx.Expr),
+                                     TStringBuilder() << "Expecting literal value for handle argument"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!NNodes::TMaybeNode<NNodes::TCoBool>(isIncremental)) {
+            ctx.Expr.AddError(TIssue(input->Pos(ctx.Expr),
+                                     TStringBuilder() << "Expecting literal value for isIncremental argument"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!NNodes::TMaybeNode<NNodes::TCoBool>(isRange)) {
+            ctx.Expr.AddError(TIssue(input->Pos(ctx.Expr),
+                                     TStringBuilder() << "Expecting literal value for isRange argument"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto maybeBoolLiteral = NNodes::TMaybeNode<NNodes::TCoBool>(isSingleElement);
+        if (!maybeBoolLiteral) {
+            ctx.Expr.AddError(TIssue(input->Pos(ctx.Expr),
+                                     TStringBuilder() << "Expecting literal value for isSingleElement argument"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool isSingleElementValue = FromString<bool>(maybeBoolLiteral.Cast().Literal().Value());
+        if (!isSingleElementValue) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>((expectedValueType)));
+        } else {
+            input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(expectedValueType));
+        }
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus QueuePushWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
+        if (IsWindowNewPipelineEnabled(ctx.Types)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                     TStringBuilder() << "Queue API is deprecated for new window pipeline"));
+            return IGraphTransformer::TStatus::Error;
+        }
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -11474,8 +11566,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus QueuePopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus QueuePopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
+        if (IsWindowNewPipelineEnabled(ctx.Types)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                     TStringBuilder() << "Queue API is deprecated for new window pipeline"));
+            return IGraphTransformer::TStatus::Error;
+        }
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -11490,6 +11587,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus QueuePeekWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (IsWindowNewPipelineEnabled(ctx.Types)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                     TStringBuilder() << "Queue API is deprecated for new window pipeline"));
+            return IGraphTransformer::TStatus::Error;
+        }
         auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 2);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
@@ -11513,6 +11615,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus QueueRangeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (IsWindowNewPipelineEnabled(ctx.Types)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                     TStringBuilder() << "Queue API is deprecated for new window pipeline"));
+            return IGraphTransformer::TStatus::Error;
+        }
         auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 3);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
@@ -11540,6 +11647,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
     IGraphTransformer::TStatus PreserveStreamWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
+        if (IsWindowNewPipelineEnabled(ctx.Types)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                     TStringBuilder() << "PreserveStream API is deprecated for new window pipeline."));
+            return IGraphTransformer::TStatus::Error;
+        }
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -13945,9 +14057,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AggApplyManyState"] = &AggApplyWrapper;
         Functions["AggBlockApply"] = &AggBlockApplyWrapper;
         Functions["AggBlockApplyState"] = &AggBlockApplyWrapper;
-        Functions["WinOnRows"] = &WinOnWrapper;
-        Functions["WinOnGroups"] = &WinOnWrapper;
-        Functions["WinOnRange"] = &WinOnWrapper;
+        ExtFunctions["WinOnRows"] = &WinOnWrapper;
+        ExtFunctions["WinOnGroups"] = &WinOnWrapper;
+        ExtFunctions["WinOnRange"] = &WinOnWrapper;
         ExtFunctions["WindowTraits"] = &WindowTraitsWrapper;
         Functions["ToWindowTraits"] = &ToWindowTraitsWrapper;
         Functions["CalcOverWindow"] = &CalcOverWindowWrapper;
@@ -14043,7 +14155,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AggrCountInit"] = &AggrCountInitWrapper;
         Functions["AggrCountUpdate"] = &AggrCountUpdateWrapper;
         ExtFunctions["QueueCreate"] = &QueueCreateWrapper;
-        Functions["QueuePop"] = &QueuePopWrapper;
+        ExtFunctions["QueuePop"] = &QueuePopWrapper;
         Functions["DependsOn"] = &DependsOnWrapper;
         ExtFunctions["InnerDependsOn"] = &InnerDependsOnWrapper;
         Functions["Seq"] = &SeqWrapper;
@@ -14290,6 +14402,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["QueuePeek"] = &QueuePeekWrapper; ///< Ext for ParseTypeWrapper compatibility
         ExtFunctions["QueueRange"] = &QueueRangeWrapper; ///< Ext for ParseTypeWrapper compatibility
         ExtFunctions["PreserveStream"] = &PreserveStreamWrapper;
+
+        Functions["WinFramesCollector"] = &WinFramesCollectorWrapper;
+        ExtFunctions["WinFrame"] = &WinFrameWrapper;
+
         ExtFunctions["FilePath"] = &FilePathWrapper;
         ExtFunctions["FileContent"] = &FileContentWrapper;
         ExtFunctions["FolderPath"] = &FolderPathWrapper;

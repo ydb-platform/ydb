@@ -183,6 +183,8 @@ private:
 
     WrappedWriteSessionPtr GetWriteSession(ui64 partitionId);
 
+    bool CheckSessionClosed(ui64 partitionId);
+
     WrappedWriteSessionPtr CreateWriteSession(ui64 partitionId);
 
     using TSessionsIndexIterator = std::unordered_map<ui64, WrappedWriteSessionPtr>::iterator;
@@ -194,8 +196,6 @@ private:
 
     std::optional<TContinuationToken> GetContinuationToken(ui64 partitionId);
 
-    // void ProcessEventsUntilReadyToAccept(ui64 partitionId);
-
     void TransferEventsToGlobalQueue();
 
     void AddReadyFuture(ui64 index);
@@ -203,6 +203,8 @@ private:
     void ConsumeEvents(WrappedWriteSessionPtr wrappedSession);
 
     void AddEventToPartitionQueue(ui64 partitionId, TWriteSessionEvent::TEvent& event);
+
+    void AddReadyToAcceptEvent();
     
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -223,7 +225,7 @@ public:
 
     TWriterCounters::TPtr GetCounters() override;
 
-    ~TKeyedWriteSession() = default;
+    ~TKeyedWriteSession();
 
 private:
     std::thread MessageSenderWorker;
@@ -244,7 +246,6 @@ private:
     TKeyedWriteSessionSettings Settings;
     std::unordered_map<ui64, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
     std::list<TWriteSessionEvent::TEvent> EventsGlobalQueue;
-    std::unordered_set<ui64> PartitionsWithEvents;
     std::list<TMessageInfo> PendingMessages;
     std::list<TMessageInfo> InFlightMessages;
 
@@ -305,6 +306,15 @@ private:
 // TSimpleBlockingKeyedWriteSession
 
 class TSimpleBlockingKeyedWriteSession : public ISimpleBlockingKeyedWriteSession {
+private:
+    std::optional<TContinuationToken> GetContinuationToken(const TDuration& timeout);
+
+    void HandleAcksEvent(const TWriteSessionEvent::TAcksEvent& acksEvent);
+
+    bool WaitForAck(ui64 seqNo, const TDuration& timeout);
+
+    void RecreateGotEventsPromise();
+
 public:
     TSimpleBlockingKeyedWriteSession(
             const TKeyedWriteSessionSettings& settings,
@@ -322,7 +332,15 @@ public:
 
 protected:
     std::shared_ptr<TKeyedWriteSession> Writer;
+    std::unordered_set<ui64> AckedSeqNos;
+    std::queue<TContinuationToken> ContinuationTokensQueue;
 
+    NThreading::TPromise<void> GotEventsPromise;
+    NThreading::TFuture<void> GotEventsFuture;
+    NThreading::TPromise<void> ClosePromise;
+    NThreading::TFuture<void> CloseFuture;
+
+    std::mutex Lock;
     std::atomic_bool Closed = false;
 };
 

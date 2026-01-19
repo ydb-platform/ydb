@@ -589,9 +589,9 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
         const auto& leftBorder = from.IsAll() ? NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeLeftInf() :
                                                 NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeLeft(from.GetSortableBatchPosition(), from.IsInclude());
         const auto& rightBorder = to.IsAll() ? NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeRightInf() :
-                                               NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeLeft(to.GetSortableBatchPosition(), to.IsInclude());
+                                               NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeRight(to.GetSortableBatchPosition(), to.IsInclude());
 
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!VLAD TColumnEngineForLogs::Select filter")
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD TColumnEngineForLogs::Select filter")
             ("from", from.DebugString())("to", to.DebugString());
 
         // if (from.IsAll() || to.IsAll()) {

@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/simple_blocking_helpers.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
+#include <util/digest/murmur.h>
 
 #include <library/cpp/threading/future/wait/wait.h>
 
@@ -102,13 +103,14 @@ TKeyedWriteSession::TKeyedWriteSession(
 
     if (partitionChooserStrategy == TKeyedWriteSessionSettings::EPartitionChooserStrategy::Auto) {
         partitionChooserStrategy = AutoPartitioningEnabled(topicConfig.GetTopicDescription()) ?
-            TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound :
+            TKeyedWriteSessionSettings::EPartitionChooserStrategy::BoundWithHash :
             TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash;
     }
 
     ui64 idx = 0;
-
     switch (partitionChooserStrategy) {
+    case TKeyedWriteSessionSettings::EPartitionChooserStrategy::BoundWithHash:
+        Hasher = settings.Hasher_;
     case TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound:
         for (const auto& partition : partitions) {
             Partitions.push_back(
@@ -123,7 +125,7 @@ TKeyedWriteSession::TKeyedWriteSession(
         }
         AddPartitionsBounds();
         PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
-        break;
+        break;        
     case TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash:
         for (const auto& partition : partitions) {
             Partitions.push_back(

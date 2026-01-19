@@ -68,8 +68,7 @@ class TKeyedWriteSession : public IKeyedWriteSession,
 private:
     static constexpr auto MAX_CLEANED_SESSIONS_COUNT = 100;
     static constexpr auto MAX_MESSAGES_IN_MEMORY = 100000;
-    // static constexpr auto MESSAGES_NOT_EMPTY_FUTURE_INDEX = 0;
-    // static constexpr auto CLOSE_FUTURE_INDEX = 1;
+    static constexpr auto MAX_IN_FLIGHT_MESSAGES = 1000;
 
     using WriteSessionPtr = std::shared_ptr<IWriteSession>;
 
@@ -179,6 +178,8 @@ private:
             != EAutoPartitioningStrategy::Disabled;
     }
 
+    void AddPartitionsBounds();
+
     void CleanExpiredSessions();
 
     WrappedWriteSessionPtr GetWriteSession(ui64 partitionId);
@@ -196,15 +197,23 @@ private:
 
     std::optional<TContinuationToken> GetContinuationToken(ui64 partitionId);
 
-    void TransferEventsToGlobalQueue();
+    void TransferEventsToOutputQueue();
 
     void AddReadyFuture(ui64 index);
 
     void ConsumeEvents(WrappedWriteSessionPtr wrappedSession);
 
-    void AddEventToPartitionQueue(ui64 partitionId, TWriteSessionEvent::TEvent& event);
+    void HandleAcksEvent(ui64 partitionId, TWriteSessionEvent::TEvent& event);
 
     void AddReadyToAcceptEvent();
+
+    void AddSessionClosedEvent(EStatus status);
+
+    void NonBlockingClose();
+
+    void HandleSessionClosedEvent(EStatus status);
+
+    void HandleReadyToAcceptEvent(ui64 partitionId, TWriteSessionEvent::TReadyToAcceptEvent& event);
     
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -245,7 +254,7 @@ private:
 
     TKeyedWriteSessionSettings Settings;
     std::unordered_map<ui64, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
-    std::list<TWriteSessionEvent::TEvent> EventsGlobalQueue;
+    std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
     std::list<TMessageInfo> PendingMessages;
     std::list<TMessageInfo> InFlightMessages;
 
@@ -258,6 +267,7 @@ private:
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;
     TDuration CloseTimeout = TDuration::Zero();
+    EStatus CloseStatus = EStatus::SUCCESS;
 
     // IMPORTANT: must not be protected by GlobalLock, because callbacks from Future::Subscribe()
     // can be executed inline, and taking GlobalLock there can deadlock the session thread.

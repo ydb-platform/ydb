@@ -163,7 +163,7 @@ public:
                 << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
                 << ", message: " << issues.ToOneLineString());
 
-            const auto& [_, partInfo] = *it;
+            const auto [_, partInfo] = *it;
             AbortBuffer(partInfo->BufferId);
             ForgetExecuterAndBuffer(partInfo);
             ForgetPartition(partInfo);
@@ -585,7 +585,7 @@ private:
         }
 
         PE_LOG_I("Sending abort to " << ExecuterToPartition.size() << " executers");
-        for (const auto& [exId, partInfo] : ExecuterToPartition) {
+        for (auto [exId, partInfo] : ExecuterToPartition) {
             AbortExecuter(exId, ReturnIssues.ToOneLineString());
         }
     }

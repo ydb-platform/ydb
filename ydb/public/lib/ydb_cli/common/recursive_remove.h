@@ -61,7 +61,7 @@ namespace NInternal {
         TIterator begin,
         TIterator end,
         TRemover& remover,
-        std::optional<TProgressBar> progressBar
+        TProgressBar* progressBar
     ) {
         TVector<const NScheme::TSchemeEntry*> entriesToRemoveInSecondPass;
         for (const NScheme::TSchemeEntry& entry : std::ranges::subrange(begin, end)) {
@@ -107,11 +107,11 @@ TStatus RemovePathsRecursive(
     if (!remover) {
         remover = NInternal::CreateDefaultRemover(schemeClient, tableClient, topicClient, queryClient, coordinationClient, settings);
     }
-    std::optional<TProgressBar> progressBar;
+    std::unique_ptr<TProgressBar> progressBar;
     if (settings.CreateProgressBar_) {
-        progressBar = std::make_optional<TProgressBar>(end - begin);
+        progressBar = std::make_unique<TProgressBar>(end - begin);
     }
-    return NInternal::RemovePathsRecursive(begin, end, remover, progressBar);
+    return NInternal::RemovePathsRecursive(begin, end, remover, progressBar.get());
 }
 
 }

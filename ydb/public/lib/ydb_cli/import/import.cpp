@@ -713,13 +713,29 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
     size_t filePathsSize = filePaths.size();
     std::mutex progressWriteLock;
     std::atomic<ui64> globalProgress{0};
+    std::atomic<ui64> processedBytes{0};  // Bytes processed so far (updated in real-time)
 
-    TProgressBar progressBar(100);
+    // Calculate total size of all files for progress tracking
+    ui64 totalFilesSize = 0;
+    for (const auto& filePath : filePaths) {
+        if (!filePath.empty()) {
+            try {
+                TFile file(filePath, OpenExisting | RdOnly);
+                i64 fileLength = file.GetLength();
+                if (fileLength > 0) {
+                    totalFilesSize += static_cast<ui64>(fileLength);
+                }
+            } catch (...) {
+                // Ignore errors, will use unknown total
+            }
+        }
+    }
+
+    TBytesProgressBar progressBar(totalFilesSize);
 
     auto writeProgress = [&]() {
-        ui64 globalProgressValue = globalProgress.load();
         std::lock_guard<std::mutex> lock(progressWriteLock);
-        progressBar.SetProgress(globalProgressValue / filePathsSize);
+        progressBar.SetProgress(processedBytes.load());
     };
 
     auto start = TInstant::Now();
@@ -794,13 +810,12 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
             ProgressCallbackFunc progressCallback;
 
             if (isStdoutInteractive) {
-                ui64 oldProgress = 0;
-                progressCallback = [&, oldProgress](ui64 current, ui64 total) mutable {
-                    ui64 progress = static_cast<ui64>((static_cast<double>(current) / total) * 100.0);
-                    ui64 progressDiff = progress - oldProgress;
-                    if (progressDiff > 0) {
-                        globalProgress.fetch_add(progressDiff);
-                        oldProgress = progress;
+                ui64 lastReportedBytes = 0;
+                progressCallback = [&, lastReportedBytes](ui64 current, ui64 /*total*/) mutable {
+                    ui64 bytesDiff = current - lastReportedBytes;
+                    if (bytesDiff > 0) {
+                        processedBytes.fetch_add(bytesDiff);
+                        lastReportedBytes = current;
                         writeProgress();
                     }
                 };
@@ -887,7 +902,13 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
 
     auto finish = TInstant::Now();
     auto duration = finish - start;
-    progressBar.SetProgress(100);
+    // Final progress update with actual bytes read
+    if (totalFilesSize > 0) {
+        progressBar.SetProgress(totalFilesSize);  // Mark as 100%
+    } else {
+        progressBar.SetProgress(TotalBytesRead.load());
+    }
+    std::cerr << std::endl;
     if (duration.SecondsFloat() > 0) {
         std::cerr << "Elapsed: " << std::setprecision(3) << duration.SecondsFloat() << " sec. Total read size: "
             << PrettifyBytes(TotalBytesRead) << ". Average processing speed: "
@@ -1266,6 +1287,12 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     if (!buffer.empty() && countInput.Counter() > 0 && !Failed) {
         jobInflightManager->AcquireJob();
         upsertCsvFunc(std::move(buffer), row, createStatus(row + batchRows));
+    }
+
+    // Final progress update - file is fully read (before waiting for jobs to complete)
+    // Use inputSizeHint as current value since line.size() doesn't include newline chars
+    if (inputSizeHint && progressCallback) {
+        progressCallback(*inputSizeHint, *inputSizeHint);
     }
 
     jobInflightManager->WaitForAllJobs();

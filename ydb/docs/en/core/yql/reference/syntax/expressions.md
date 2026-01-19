@@ -395,7 +395,6 @@ An attempt to reference an anonymous named expression results in an error:
 ```yql
 $_ = 1;
 select $_; --- error: Unable to reference anonymous name $_
-export $_; --- An error: Can not export anonymous name $_
 ```
 
 {% if feature_mapreduce %}

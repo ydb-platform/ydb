@@ -603,7 +603,6 @@ private:
     const IYPathServicePtr UnderlyingService_;
     const IInvokerPtr Invoker_;
 
-
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {
         Invoker_->Invoke(BIND([=, this, this_ = MakeStrong(this)] {

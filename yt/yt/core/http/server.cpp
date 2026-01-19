@@ -41,7 +41,7 @@ void TCallbackHandler::HandleRequest(const IRequestPtr& req, const IResponseWrit
 ////////////////////////////////////////////////////////////////////////////////
 
 void IServer::AddHandler(
-    const TString& pattern,
+    const std::string& pattern,
     TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler)
 {
     AddHandler(pattern, New<TCallbackHandler>(handler));
@@ -75,7 +75,7 @@ public:
         , RequestPathMatcher_(std::move(requestPathMatcher))
     { }
 
-    void AddHandler(const TString& path, const IHttpHandlerPtr& handler) override
+    void AddHandler(const std::string& path, const IHttpHandlerPtr& handler) override
     {
         YT_VERIFY(!Started_);
         RequestPathMatcher_->Add(path, handler);
@@ -198,7 +198,7 @@ private:
                 TRequestProfilingKey profilingKey{httpRequest->GetUrl().Path};
                 return RequestProfilingMap_.FindOrInsert(profilingKey, [&] {
                     return New<TRequestProfiling>(Profiler_
-                        .WithTag("path", std::string(std::get<0>(profilingKey))));
+                        .WithTag("path", std::get<0>(profilingKey)));
                 }).first->Get();
             } else {
                 return RequestProfilingMap_.FindOrInsert(TRequestProfilingKey{}, [&] {
@@ -624,13 +624,13 @@ IServerPtr CreateServer(
  *  - trailing-slash redirection: matching "/path/" implies "/path"
  *  - end of path wildcard: "/path/{$}" matches only "/path/" and "/path"
  */
-void TRequestPathMatcher::Add(const TString& pattern, const IHttpHandlerPtr& handler)
+void TRequestPathMatcher::Add(const std::string& pattern, const IHttpHandlerPtr& handler)
 {
     if (pattern.empty()) {
         THROW_ERROR_EXCEPTION("Empty pattern is invalid");
     }
 
-    if (pattern.EndsWith("/{$}")) {
+    if (pattern.ends_with("/{$}")) {
         auto withoutWildcard = pattern.substr(0, pattern.size() - 3);
 
         Exact_[withoutWildcard] = handler;
@@ -647,7 +647,7 @@ void TRequestPathMatcher::Add(const TString& pattern, const IHttpHandlerPtr& han
     }
 }
 
-void TRequestPathMatcher::Add(const TString& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler)
+void TRequestPathMatcher::Add(const std::string& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler)
 {
     Add(pattern, New<TCallbackHandler>(handler));
 }

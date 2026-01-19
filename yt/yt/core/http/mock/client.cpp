@@ -65,52 +65,52 @@ private:
 
 } // namespace
 
-TFuture<IResponsePtr> TMockClient::Get(const TString& url, const THeadersPtr& headers)
+TFuture<IResponsePtr> TMockClient::Get(const std::string& url, const THeadersPtr& headers)
 {
     auto mockResponse = Get(url, DumpHeadersSafe(headers));
     return MakeFuture<IResponsePtr>(New<TMockResponseStream>(mockResponse));
 }
 
-TFuture<IResponsePtr> TMockClient::Post(const TString& url, const TSharedRef& body, const THeadersPtr& headers)
+TFuture<IResponsePtr> TMockClient::Post(const std::string& url, const TSharedRef& body, const THeadersPtr& headers)
 {
     auto mockResponse = Post(url, ToString(body), DumpHeadersSafe(headers));
     return MakeFuture<IResponsePtr>(New<TMockResponseStream>(mockResponse));
 }
 
-TFuture<IResponsePtr> TMockClient::Patch(const TString& url, const TSharedRef& body, const THeadersPtr& headers)
+TFuture<IResponsePtr> TMockClient::Patch(const std::string& url, const TSharedRef& body, const THeadersPtr& headers)
 {
     auto mockResponse = Patch(url, ToString(body), DumpHeadersSafe(headers));
     return MakeFuture<IResponsePtr>(New<TMockResponseStream>(mockResponse));
 }
 
-TFuture<IResponsePtr> TMockClient::Put(const TString& url, const TSharedRef& body, const THeadersPtr& headers)
+TFuture<IResponsePtr> TMockClient::Put(const std::string& url, const TSharedRef& body, const THeadersPtr& headers)
 {
     auto mockResponse = Put(url, ToString(body), DumpHeadersSafe(headers));
     return MakeFuture<IResponsePtr>(New<TMockResponseStream>(mockResponse));
 }
 
-TFuture<IResponsePtr> TMockClient::Delete(const TString& url, const THeadersPtr& headers)
+TFuture<IResponsePtr> TMockClient::Delete(const std::string& url, const THeadersPtr& headers)
 {
     auto mockRsp = Delete(url, DumpHeadersSafe(headers));
     return MakeFuture<IResponsePtr>(New<TMockResponseStream>(mockRsp));
 }
 
-TFuture<IActiveRequestPtr> TMockClient::StartPost(const TString& /*url*/, const THeadersPtr& /*headers*/)
+TFuture<IActiveRequestPtr> TMockClient::StartPost(const std::string& /*url*/, const THeadersPtr& /*headers*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-TFuture<IActiveRequestPtr> TMockClient::StartPatch(const TString& /*url*/, const THeadersPtr& /*headers*/)
+TFuture<IActiveRequestPtr> TMockClient::StartPatch(const std::string& /*url*/, const THeadersPtr& /*headers*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-TFuture<IActiveRequestPtr> TMockClient::StartPut(const TString& /*url*/, const THeadersPtr& /*headers*/)
+TFuture<IActiveRequestPtr> TMockClient::StartPut(const std::string& /*url*/, const THeadersPtr& /*headers*/)
 {
     YT_UNIMPLEMENTED();
 }
 
-TFuture<IResponsePtr> TMockClient::Request(EMethod method, const TString& url, const std::optional<TSharedRef>& body, const THeadersPtr& headers)
+TFuture<IResponsePtr> TMockClient::Request(EMethod method, const std::string& url, const std::optional<TSharedRef>& body, const THeadersPtr& headers)
 {
     auto mockResponse = Request(method, url, ToString(body), DumpHeadersSafe(headers));
     return MakeFuture<IResponsePtr>(New<TMockResponseStream>(mockResponse));

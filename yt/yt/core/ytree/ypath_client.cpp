@@ -376,6 +376,8 @@ TFuture<TSharedRefArray> ExecuteVerb(
     NLogging::TLogger logger,
     NLogging::ELogLevel logLevel)
 {
+    NTracing::TChildTraceContextGuard traceContextGuard("YPathClient.ExecuteVerb");
+
     IYPathServicePtr suffixService;
     TYPath suffixPath;
     try {

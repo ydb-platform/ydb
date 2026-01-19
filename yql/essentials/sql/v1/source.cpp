@@ -745,7 +745,7 @@ TNodePtr BuildFrameNode(const TFrameBound& frame, EFrameType frameType) {
     return node;
 }
 
-TNodePtr ISource::BuildWindowFrame(const TFrameSpecification& spec, bool isCompact) {
+TNodePtr ISource::BuildWindowFrame(TContext& ctx, const TFrameSpecification& spec, bool isCompact, TNodePtr sortSpec) {
     YQL_ENSURE(spec.FrameExclusion == FrameExclNone);
     YQL_ENSURE(spec.FrameBegin);
     YQL_ENSURE(spec.FrameEnd);
@@ -755,8 +755,12 @@ TNodePtr ISource::BuildWindowFrame(const TFrameSpecification& spec, bool isCompa
 
     auto begin = Q(Y(Q("begin"), frameBeginNode));
     auto end = Q(Y(Q("end"), frameEndNode));
-
-    return isCompact ? Q(Y(begin, end, Q(Y(Q("compact"))))) : Q(Y(begin, end));
+    auto sortSpecNode = Q(Y(Q("sortSpec"), sortSpec));
+    if (ctx.WindowNewPipeline) {
+        return isCompact ? Q(Y(begin, end, Q(Y(Q("compact"))), sortSpecNode)) : Q(Y(begin, end, sortSpecNode));
+    } else {
+        return isCompact ? Q(Y(begin, end, Q(Y(Q("compact"))))) : Q(Y(begin, end));
+    }
 }
 
 class TSessionWindowTraits final: public TCallNode {
@@ -836,7 +840,9 @@ TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label) {
                 break;
         }
         YQL_ENSURE(frameType);
-        auto callOnFrame = Y(frameType, BuildWindowFrame(*spec->Frame, spec->IsCompact));
+        auto sortSpec = spec->OrderBy.empty() ? Y("Void") : BuildSortSpec(spec->OrderBy, useLabel, true, false);
+
+        auto callOnFrame = Y(frameType, BuildWindowFrame(ctx, *spec->Frame, spec->IsCompact, sortSpec));
         for (auto& agg : aggs) {
             auto winTraits = agg->WindowTraits(listType, ctx);
             callOnFrame = L(callOnFrame, winTraits);
@@ -854,7 +860,6 @@ TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label) {
             }
         }
 
-        auto sortSpec = spec->OrderBy.empty() ? Y("Void") : BuildSortSpec(spec->OrderBy, useLabel, true, false);
         if (spec->Session) {
             TString label = spec->Session->GetLabel();
             YQL_ENSURE(label);

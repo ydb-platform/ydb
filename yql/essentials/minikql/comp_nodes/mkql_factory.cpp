@@ -275,6 +275,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"QueueRange", &WrapQueueRange},
         {"Seq", &WrapSeq},
         {"PreserveStream", &WrapPreserveStream},
+        {"WinFramesCollector", &WrapWinFramesCollector},
+        {"WinFrame", &WrapWinFrame},
         {"FromYsonSimpleType", &WrapFromYsonSimpleType},
         {"TryWeakMemberFromDict", &WrapTryWeakMemberFromDict},
         {"TimezoneId", &WrapTimezoneId},

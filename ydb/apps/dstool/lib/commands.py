@@ -81,7 +81,6 @@ def make_command_map_by_structure(subparsers, modules=modules, structure=default
     already_added = set()
 
     def add_commands_by_structue(struct, subparsers, prefix=''):
-        nonlocal command_map
         for el in struct:
             if isinstance(el, tuple):
                 def namespace_barrier():

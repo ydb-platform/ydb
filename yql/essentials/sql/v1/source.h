@@ -126,7 +126,7 @@ protected:
     TVector<TNodePtr>& Expressions(EExprSeat exprSeat);
     TNodePtr AliasOrColumn(const TNodePtr& node, bool withSource);
 
-    TNodePtr BuildWindowFrame(const TFrameSpecification& spec, bool isCompact);
+    TNodePtr BuildWindowFrame(TContext& ctx, const TFrameSpecification& spec, bool isCompact, TNodePtr sortSpec);
 
     THashSet<TString> ExprAliases_;
     THashSet<TString> FlattenByAliases_;

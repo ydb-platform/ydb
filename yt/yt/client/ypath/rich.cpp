@@ -718,7 +718,7 @@ std::variant<bool, NYTree::IAttributeDictionaryPtr> TRichYPath::GetCreate() cons
         case ENodeType::Map:
             return NYTree::IAttributeDictionary::FromMap(node->AsMap());
         default:
-            THROW_ERROR_EXCEPTION("Create of type %qv is not supported", node->GetType());
+            THROW_ERROR_EXCEPTION("Attribute \"create\" cannot be of type %Qlv", node->GetType());
     }
 }
 

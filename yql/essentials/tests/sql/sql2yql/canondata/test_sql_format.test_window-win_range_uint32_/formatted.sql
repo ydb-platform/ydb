@@ -1,0 +1,39 @@
+PRAGMA WindowNewPipeline;
+PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
+
+$data = [
+    <|a: uint32('1000'), b: 1, sum: uint32('1000'), count: 1|>,
+    <|a: uint32('2000'), b: 1, sum: uint32('3000'), count: 2|>,
+    <|a: uint32('2500'), b: 1, sum: uint32('4500'), count: 2|>,
+    <|a: uint32('3000'), b: 1, sum: uint32('7500'), count: 3|>,
+    <|a: uint32('5000'), b: 1, sum: uint32('5000'), count: 1|>,
+];
+
+$win_result = (
+    SELECT
+        SUM(a) OVER w1 AS actual_sum,
+        COUNT(*) OVER w1 AS actual_count,
+        sum,
+        count,
+    FROM
+        AS_TABLE($data)
+    WINDOW
+        w1 AS (
+            PARTITION COMPACT BY
+                b
+            ORDER BY
+                a ASC
+            RANGE BETWEEN uint32('1000') PRECEDING AND CURRENT ROW
+        )
+);
+
+$str = ($x) -> {
+    RETURN CAST($x AS String) ?? 'null';
+};
+
+SELECT
+    Ensure(sum, sum IS NOT DISTINCT FROM actual_sum, $str(actual_sum)),
+    Ensure(count, count IS NOT DISTINCT FROM actual_count, $str(actual_count))
+FROM
+    $win_result
+;

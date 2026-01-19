@@ -3102,8 +3102,6 @@ TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& frames, TExprContext& c
 
         TWindowFrameSettings frameSettings = TWindowFrameSettings::Parse(*winOn, ctx);
         if (frameSettings.GetFrameType() == EFrameType::FrameByRange) {
-            YQL_ENSURE(IsUnbounded(frameSettings.GetFirst()));
-            YQL_ENSURE(IsCurrentRow(frameSettings.GetLast()));
             continue;
         }
 

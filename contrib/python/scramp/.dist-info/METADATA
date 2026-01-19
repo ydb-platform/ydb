@@ -1,8 +1,8 @@
 Metadata-Version: 2.4
 Name: scramp
-Version: 1.4.6
+Version: 1.4.7
 Summary: An implementation of the SCRAM protocol.
-Project-URL: Homepage, https://github.com/tlocke/scramp
+Project-URL: Homepage, https://codeberg.org/tlocke/scramp
 Author: The Contributors
 License: MIT No Attribution
 License-File: LICENSE
@@ -13,14 +13,9 @@ Classifier: License :: OSI Approved :: MIT No Attribution License (MIT-0)
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
-Classifier: Programming Language :: Python :: 3.9
-Classifier: Programming Language :: Python :: 3.10
-Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: Implementation
 Classifier: Programming Language :: Python :: Implementation :: CPython
-Classifier: Programming Language :: Python :: Implementation :: PyPy
-Requires-Python: >=3.8
+Requires-Python: >=3.10
 Requires-Dist: asn1crypto>=1.5.1
 Description-Content-Type: text/markdown
 
@@ -199,65 +194,6 @@ v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=
 ```
 
 
-### Server only with passlib
-
-Here's an example using just the server and using the [passlib hashing library](
-https://passlib.readthedocs.io/en/stable/index.html). The server nonce and salt is
-specified in order to give a reproducible example, but in production you'd omit the
-`s_nonce` and `salt` parameters and let Scramp generate them:
-
-```python
->>> from scramp import ScramMechanism
->>> from passlib.hash import scram
->>>
->>> USERNAME = 'user'
->>> PASSWORD = 'pencil'
->>> S_NONCE = '%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0'
->>> SALT = b'[m\x99h\x9d\x125\x8e\xec\xa0K\x14\x126\xfa\x81'
->>> ITERATION_COUNT = 4096
->>>
->>> db = {}
->>> hash = scram.using(salt=SALT, rounds=ITERATION_COUNT).hash(PASSWORD)
->>>
->>> salt, iteration_count, digest = scram.extract_digest_info(hash, 'sha-256')
->>> 
->>> stored_key, server_key = m.make_stored_server_keys(digest)
->>>
->>> db[USERNAME] = salt, stored_key, server_key, iteration_count
->>>
->>> # Define your own function for getting a password given a username
->>> def auth_fn(username):
-...     return db[username]
->>>
->>> # Normally the s_nonce parameter would be omitted, in which case the
->>> # server will generate the nonce itself.
->>>
->>> m = ScramMechanism()
->>> s = m.make_server(auth_fn, s_nonce=S_NONCE)
->>>
->>> # Set the first message from the client
->>> s.set_client_first('n,,n=user,r=rOprNGfwEbeRWgbNEkqO')
->>>
->>> # Get the first server message, and send it to the client
->>> sfirst = s.get_server_first()
->>> print(sfirst)
-r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096
->>>
->>> # Set the final message from the client
->>> s.set_client_final(
-...     'c=biws,r=rOprNGfwEbeRWgbNEkqO%hvYDpWUa2RaTCAfuxFIlj)hNlF$k0,'
-...     'p=dHzbZapWIk4jUhN+Ute9ytag9zjfMHgsqmmiz7AndVQ=')
->>>
->>> # Get the final server message and send it to the client
->>> sfinal = s.get_server_final()
->>> print(sfinal)
-v=6rriTRBi23WpRR/wtup+mMhUZUn/dB5nLTJRsjl95G4=
->>>
->>> # If it all runs through without raising an exception, the authentication
->>> # has succeeded
-```
-
-
 ### Server Error
 
 Here's an example of when setting a message from the client causes an error. The server
@@ -359,9 +295,8 @@ The `ScramMechanism` object has the following methods and properties:
   - `salt` - It's sometimes useful to set this binary parameter when testing / debugging, but in production this should be omitted, in which case a salt will be generated.
 - `make_server(auth_fn, channel_binding=None, s_nonce=None)` - returns a `ScramServer` object. It takes the following parameters:
   - `auth_fn` This is a function provided by the programmer that has one parameter, a username of type `str` and returns returns the tuple `(salt, stored_key, server_key, iteration_count)`. Where `salt`, `stored_key` and `server_key` are of a binary type, and `iteration_count` is an `int`.
-  - `channel_binding` - Providing a value for this parameter allows channel binding to be used (ie.  it lets you use mechanisms ending in `-PLUS`). The value for `channel_binding` is a tuple consisting of the channel binding name and the channel binding data. For example, if the channel binding name is 'tls-unique', the `channel_binding` parameter would be `('tls-unique', data)`, where `data` is obtained by calling [SSLSocket.get\_channel\_binding()](https://docs.python.org/3/library/ssl.html#ssl.SSLSocket.get_channel_binding>). The convenience function `scramp.make_channel_binding()` can be used to create a channel binding tuple. If `channel_binding` is provided and the mechanism isn't a `-PLUS` variant, then the server will negotiate with the client to use the `-PLUS` variant if the client supports it, or otherwise to use the mechanism without channel binding.
+  - `channel_binding` - Providing a value for this parameter allows channel binding to be used (ie. it lets you use mechanisms ending in `-PLUS`). The value for `channel_binding` is a tuple consisting of the channel binding name and the channel binding data. For example, if the channel binding name is 'tls-unique', the `channel_binding` parameter would be `('tls-unique', data)`, where `data` is obtained by calling [SSLSocket.get\_channel\_binding()](https://docs.python.org/3/library/ssl.html#ssl.SSLSocket.get_channel_binding>). The convenience function `scramp.make_channel_binding()` can be used to create a channel binding tuple. If `channel_binding` is provided and the mechanism isn't a `-PLUS` variant, then the server will negotiate with the client to use the `-PLUS` variant if the client supports it, or otherwise to use the mechanism without channel binding.
   - `s_nonce` - The server nonce as a `str`. It's sometimes useful to set this when testing / debugging, but in production this should be omitted, in which case `ScramServer` will generate a server nonce.
-- `make_stored_server_keys(salted_password)` - Returns `(stored_key, server_key)` tuple of `bytes` objects given a salted password. This is useful if you want to use a separate hashing implementation from the one provided by Scramp. It takes the following parameter:
   - `salted_password` - A binary object representing the hashed password.
 - `iteration_count` - The minimum iteration count recommended for this mechanism.
 
@@ -394,7 +329,7 @@ A helper function that makes a `channel_binding` tuple when given a channel bind
 
 It might be worth running the [OpenSSF Scorecard](https://securityscorecards.dev/):
 
-`sudo docker run -e GITHUB_AUTH_TOKEN=<auth_token> gcr.io/openssf/scorecard:stable --repo=github.com/tlocke/scramp`
+`podman run -e GITHUB_AUTH_TOKEN=<auth_token> gcr.io/openssf/scorecard:stable --repo=github.com/tlocke/scramp`
 
 
 ## Doing A Release Of Scramp
@@ -408,6 +343,18 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 
 
 ## Release Notes
+
+### Version 1.4.7, 2026-01-04
+
+- The main change in this release is that we now use
+  [`hashlib.pbkdf2_hmac()`](https://docs.python.org/3/library/hashlib.html#hashlib.pbkdf2_hmac)
+  from the standard library, rather than our own Python implementation.
+  Since this is fast, we no longer need to provide a way of using a custom
+  key derivation function, and so `make_stored_server_keys()` has been removed.
+* To avoid timing attacks we now use
+  [`hmac.compare_digest()`](https://docs.python.org/3/library/hmac.html#hmac.compare_digest)
+  for digest comparisons.
+
 
 ### Version 1.4.6, 2025-07-05
 

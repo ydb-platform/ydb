@@ -43,7 +43,7 @@ struct IServer
      *  See https://golang.org/pkg/net/http/#ServeMux
      */
     virtual void AddHandler(
-        const TString& pattern,
+        const std::string& pattern,
         const IHttpHandlerPtr& handler) = 0;
 
     //! Returns the address this server listens at.
@@ -73,7 +73,7 @@ struct IServer
 
     // Extension methods
     void AddHandler(
-        const TString& pattern,
+        const std::string& pattern,
         TCallback<void(const IRequestPtr& req, const IResponseWriterPtr& rsp)> handler);
 };
 
@@ -114,8 +114,8 @@ IServerPtr CreateServer(
 struct IRequestPathMatcher
     : public virtual TRefCounted
 {
-    virtual void Add(const TString& pattern, const IHttpHandlerPtr& handler) = 0;
-    virtual void Add(const TString& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler) = 0;
+    virtual void Add(const std::string& pattern, const IHttpHandlerPtr& handler) = 0;
+    virtual void Add(const std::string& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler) = 0;
     virtual IHttpHandlerPtr Match(TStringBuf path) = 0;
     virtual bool IsEmpty() const = 0;
 };
@@ -128,14 +128,14 @@ class TRequestPathMatcher
     : public IRequestPathMatcher
 {
 public:
-    void Add(const TString& pattern, const IHttpHandlerPtr& handler) override;
-    void Add(const TString& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler) override;
+    void Add(const std::string& pattern, const IHttpHandlerPtr& handler) override;
+    void Add(const std::string& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler) override;
     IHttpHandlerPtr Match(TStringBuf path) override;
     bool IsEmpty() const override;
 
 private:
-    THashMap<TString, IHttpHandlerPtr> Exact_;
-    THashMap<TString, IHttpHandlerPtr> Subtrees_;
+    THashMap<std::string, IHttpHandlerPtr, THash<std::string>, TEqualTo<>> Exact_;
+    THashMap<std::string, IHttpHandlerPtr, THash<std::string>, TEqualTo<>> Subtrees_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

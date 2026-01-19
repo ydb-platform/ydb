@@ -461,11 +461,6 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            if (existingOk && tr.Service == YtProviderName) {
-                Error() << "CREATE TABLE IF NOT EXISTS is not supported for " << tr.Service << " provider.";
-                return false;
-            }
-
             TCreateTableParameters params{.TableType = tableType, .Temporary = temporary};
             if (!CreateTableEntry(rule.GetRule_create_table_entry7(), params, isCreateTableAs)) {
                 return false;
@@ -3725,6 +3720,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     TABLE_ELEM("UseTablePrefixForEach", PragmaUseTablePrefixForEach, true),
     PAIRED_TABLE_ELEM("SimpleColumns", SimpleColumns),
     PAIRED_TABLE_ELEM("DebugPositions", DebugPositions),
+    PAIRED_TABLE_ELEM("WindowNewPipeline", WindowNewPipeline),
     PAIRED_TABLE_ELEM("CoalesceJoinKeysOnQualifiedAll", CoalesceJoinKeysOnQualifiedAll),
     PAIRED_TABLE_ELEM("PullUpFlatMapOverJoin", PragmaPullUpFlatMapOverJoin),
     PAIRED_TABLE_ELEM("FilterPushdownOverJoinOptionalSide", FilterPushdownOverJoinOptionalSide),

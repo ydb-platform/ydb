@@ -77,6 +77,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike},
     {"DebugPositions", &TContext::DebugPositions},
     {"ExceptIntersectBefore202503", &TContext::ExceptIntersectBefore202503},
+    {"WindowNewPipeline", &TContext::WindowNewPipeline},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;

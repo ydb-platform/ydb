@@ -137,7 +137,7 @@ EMethod THttpParser::GetMethod() const
     return EMethod(Parser_.method);
 }
 
-TString THttpParser::GetFirstLine()
+std::string THttpParser::GetFirstLine()
 {
     return FirstLine_.Flush();
 }
@@ -368,7 +368,7 @@ void THttpInput::Reset()
     HeadersReceived_ = false;
     Headers_.Reset();
     Parser_.Reset();
-    RawUrl_ = {};
+    RawUrl_.clear();
     Url_ = {};
     SafeToReuse_ = false;
     LastProgressLogTime_ = TInstant::Now();
@@ -577,13 +577,12 @@ bool THttpInput::IsRedirectCode(EStatusCode code) const
         code == EStatusCode::PermanentRedirect;
 }
 
-std::optional<TString> THttpInput::TryGetRedirectUrl()
+std::optional<std::string> THttpInput::TryGetRedirectUrl()
 {
     EnsureHeadersReceived();
     if (IsRedirectCode(GetStatusCode())) {
         if (auto url = Headers_->Find("Location")) {
-            // TODO(babenko): switch to std::string
-            return TString(*url);
+            return *url;
         }
     }
     return std::nullopt;
@@ -627,7 +626,7 @@ void THttpOutput::SetHost(TStringBuf host, TStringBuf port)
     if (!port.empty()) {
         HostHeader_ = Format("%v:%v", host, port);
     } else {
-        HostHeader_ = TString(host);
+        HostHeader_ = std::string(host);
     }
 }
 
@@ -688,7 +687,7 @@ void THttpOutput::SetRequestId(TRequestId requestId)
     RequestId_ = requestId;
 }
 
-void THttpOutput::WriteRequest(EMethod method, const TString& path)
+void THttpOutput::WriteRequest(EMethod method, const std::string& path)
 {
     YT_VERIFY(MessageType_ == EMessageType::Request);
 

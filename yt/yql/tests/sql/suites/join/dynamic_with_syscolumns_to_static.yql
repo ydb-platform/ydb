@@ -1,0 +1,6 @@
+/* yt can not */
+use plato;
+PRAGMA yt.ConvertDynamicTablesToStatic = "all";
+
+select TableRecordIndex()
+from Input;

@@ -379,12 +379,28 @@ private:
     std::shared_ptr<TAtomicCounter> TotalExecutionDurationUs = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> TotalRawBytes = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> AccessorsForConstructionGuard = std::make_shared<TAtomicCounter>();
-
+    THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
+    THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
 public:
     using TStepName = TString;
     NColumnShard::TThreadSafeValue<THashMap<TStepName, TPerStepCounters>> StepExecutionDurations;
     TScanAggregations Aggregations;
 
+    void OnSkipGraphNode(const ui32 nodeId) const {
+        if (SkipNodesCount.size()) {
+            auto it = SkipNodesCount.find(nodeId);
+            AFL_VERIFY(it != SkipNodesCount.end());
+            it->second->Inc();
+        }
+    }
+
+    void OnExecuteGraphNode(const ui32 nodeId) const {
+        if (ExecuteNodesCount.size()) {
+            auto it = ExecuteNodesCount.find(nodeId);
+            AFL_VERIFY(it != ExecuteNodesCount.end());
+            it->second->Inc();
+        }
+    }
     const TPerStepCounters& CountersForStep(const TString& stepName) const {
         auto* counterIfExists = [&]{
             auto lock = StepExecutionDurations.ReadGuard();
@@ -479,13 +495,20 @@ public:
                FilterFetchingGuard->Val() || AbortsGuard->Val() || AccessorsForConstructionGuard->Val();
     }
 
+    const THashMap<ui32, std::shared_ptr<TAtomicCounter>>& GetSkipStats() const {
+        return SkipNodesCount;
+    }
+
+    const THashMap<ui32, std::shared_ptr<TAtomicCounter>>& GetExecutionStats() const {
+        return ExecuteNodesCount;
+    }
 
     void OnBlobsWaitDuration(const TDuration d, const TDuration fullScanDuration) const {
         TBase::OnBlobsWaitDuration(d);
         Aggregations.OnBlobWaitingDuration(d, fullScanDuration);
     }
 
-    TConcreteScanCounters(const TScanCounters& counters);
+    TConcreteScanCounters(const TScanCounters& counters, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program);
 };
 
 }   // namespace NKikimr::NColumnShard

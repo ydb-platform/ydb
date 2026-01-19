@@ -824,6 +824,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
 
     Y_UNIT_TEST(MergeCopyParallelWithChannelsBindings) { //+
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -894,6 +895,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
 
     Y_UNIT_TEST(ForceDropAndCopyInParallelAllPathsAreLocked) { //+
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

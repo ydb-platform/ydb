@@ -163,7 +163,7 @@ private:
                                                                       ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs,
                                                                       ui64 directReadId, ui64 sizeEstimate = 0) const;
 
-    const std::set<NPQ::TPartitionGraph::Node*>& GetParents() const;
+    const std::set<NPQ::TPartitionGraph::Node*>& GetParents(std::shared_ptr<NPQ::TPartitionGraph> partitionGraph) const;
 
 private:
     const TActorId ParentId;

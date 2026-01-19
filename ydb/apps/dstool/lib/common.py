@@ -732,13 +732,16 @@ def create_readonly_request(args, vslot, value):
 def invoke_wipe_request(request):
     return invoke_bsc_request(request)
 
+
 def invoke_nbs_request(request_type, request):
     return invoke_grpc(request_type, request, stub_factory=nbs_grpc_server.NbsServiceStub)
+
 
 def print_nbs_request_result(args, request, response):
     success = response.operation.ready and response.operation.status == StatusIds.SUCCESS
     error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
     print_status_if_verbose(args, success, error_reason)
+
 
 @inmemcache('base_config_and_storage_pools', cache_enable_param='cache')
 def fetch_base_config_and_storage_pools(retrieveDevices=False, virtualGroupsOnly=False, cache=True):

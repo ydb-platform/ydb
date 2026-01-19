@@ -332,10 +332,8 @@ public:
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
                 }
-                if (!watermarkExprSql.empty()) {
-                    if (sharedReading) {
-                        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use watermark expr: " + watermarkExprSql));
-                    }
+                if (sharedReading && !watermarkExprSql.empty()) {
+                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use watermark expr: " + watermarkExprSql));
                 }
                 sourceType = "PqSource";
             }

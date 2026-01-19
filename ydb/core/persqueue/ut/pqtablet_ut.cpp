@@ -3162,32 +3162,24 @@ Y_UNIT_TEST_SUITE(TFixTransactionStatesTests) {
 
 class TFixture : public NUnitTest::TBaseFixture {
 protected:
-    void AddTransaction(ui64 txId, const TVector<ui32>& partitions);
-
     void AddReadRange();
-    void AddPairFromPQ(ui64 txId);
+    void AddPairFromPQ(ui64 txId, const TVector<ui32>& partitions);
     void AddPairFromPartition(ui64 txId, ui32 partitionId);
-    void AddPair(const TString& key, ui64 txId, NKikimrPQ::TTransaction::EState state, TMaybe<ui64> step);
 
-    void InvokeFixTransactionStates();
+    void InvokeCollectTransactions();
 
-    void EnsureTransactionLoaded(ui64 txId);
-    void EnsureTransactionChanged(ui64 txId);
-    void EnsureTransactionNotChanged(ui64 txId);
+    void EnsureTransactionPrepared(ui64 txId);
+    void EnsureTransactionCalculated(ui64 txId);
+    void EnsureTransactionExecuted(ui64 txId);
 
 private:
-    void EnsureTransactionState(ui64 txId, NKikimrPQ::TTransaction::EState state, ui64 step) const;
+    void EnsureTransactionState(ui64 txId, NKikimrPQ::TTransaction::EState state, TMaybe<ui64> step = Nothing()) const;
+    void AddPair(const TString& key, const NKikimrPQ::TTransaction& tx);
 
     TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult> ReadRanges;
-    THashMap<ui64, TDistributedTransaction> Txs;
+    THashMap<ui64, NKikimrPQ::TTransaction> Txs;
+    NKikimrPQ::TTransaction CurrentTx;
 };
-
-void TFixture::AddTransaction(ui64 txId, const TVector<ui32>& partitions)
-{
-    auto& tx = Txs[txId];
-    tx.State = NKikimrPQ::TTransaction::PREPARED;
-    tx.Partitions.insert(partitions.begin(), partitions.end());
-}
 
 void TFixture::AddReadRange()
 {
@@ -3197,18 +3189,67 @@ void TFixture::AddReadRange()
     ReadRanges.emplace_back(std::move(readRange));
 }
 
-void TFixture::AddPair(const TString& key,
-                       ui64 txId,
-                       NKikimrPQ::TTransaction::EState state,
-                       TMaybe<ui64> step)
+void TFixture::AddPairFromPQ(ui64 txId, const TVector<ui32>& partitions)
 {
     NKikimrPQ::TTransaction tx;
+    tx.SetKind(NKikimrPQ::TTransaction::KIND_DATA);
     tx.SetTxId(txId);
-    tx.SetState(state);
-    if (step.Defined()) {
-        tx.SetStep(*step);
+    tx.SetState(NKikimrPQ::TTransaction::PREPARED);
+
+    for (const ui32 partitionId : partitions) {
+        auto* operation = tx.AddOperations();
+        operation->SetPartitionId(partitionId);
     }
 
+    AddPair(GetTxKey(txId), tx);
+
+    CurrentTx = std::move(tx);
+}
+
+void TFixture::AddPairFromPartition(ui64 txId, ui32 partitionId)
+{
+    NKikimrPQ::TTransaction tx = CurrentTx;
+    tx.SetState(NKikimrPQ::TTransaction::EXECUTED);
+    tx.SetStep(1000);
+
+    AddPair(GetTxKey(txId, partitionId), tx);
+}
+
+void TFixture::InvokeCollectTransactions()
+{
+    Txs = CollectTransactions(ReadRanges);
+}
+
+void TFixture::EnsureTransactionPrepared(ui64 txId)
+{
+    EnsureTransactionState(txId, NKikimrPQ::TTransaction::PREPARED);
+}
+
+void TFixture::EnsureTransactionCalculated(ui64 txId)
+{
+    EnsureTransactionState(txId, NKikimrPQ::TTransaction::CALCULATED, 1000);
+}
+
+void TFixture::EnsureTransactionExecuted(ui64 txId)
+{
+    EnsureTransactionState(txId, NKikimrPQ::TTransaction::EXECUTED, 1000);
+}
+
+void TFixture::EnsureTransactionState(ui64 txId, NKikimrPQ::TTransaction::EState state, TMaybe<ui64> step) const
+{
+    UNIT_ASSERT(Txs.contains(txId));
+    const auto& tx = Txs.at(txId);
+    UNIT_ASSERT(tx.HasState());
+    UNIT_ASSERT_EQUAL_C(tx.GetState(), state,
+                        NKikimrPQ::TTransaction_EState_Name(tx.GetState()) << " != " << NKikimrPQ::TTransaction_EState_Name(state));
+    if (step.Defined()) {
+        UNIT_ASSERT(tx.HasStep());
+        UNIT_ASSERT_VALUES_EQUAL(tx.GetStep(), *step);
+    }
+}
+
+void TFixture::AddPair(const TString& key, const NKikimrPQ::TTransaction& tx)
+{
     TString value;
     UNIT_ASSERT(tx.SerializeToString(&value));
 
@@ -3218,333 +3259,159 @@ void TFixture::AddPair(const TString& key,
     pair->SetValue(value);
 }
 
-void TFixture::AddPairFromPQ(ui64 txId)
+Y_UNIT_TEST_F(Single_Transaction_No_Subtransactions, TFixture)
 {
-    AddPair(GetTxKey(txId), txId, NKikimrPQ::TTransaction::PREPARED, Nothing());
+    AddReadRange();
+    AddPairFromPQ(101, {1});
+
+    InvokeCollectTransactions();
+
+    EnsureTransactionPrepared(101);
 }
 
-void TFixture::AddPairFromPartition(ui64 txId, ui32 partitionId)
+Y_UNIT_TEST_F(Single_Transaction_All_Partitions, TFixture)
 {
-    AddPair(GetTxKey(txId, partitionId), txId, NKikimrPQ::TTransaction::EXECUTED, 1000);
+    AddReadRange();
+    AddPairFromPQ(101, {1, 2});
+    AddPairFromPartition(101, 1);
+    AddPairFromPartition(101, 2);
+
+    InvokeCollectTransactions();
+
+    EnsureTransactionExecuted(101);
 }
 
-void TFixture::InvokeFixTransactionStates()
+Y_UNIT_TEST_F(Single_Transaction_Partial_Partitions, TFixture)
 {
-    FixTransactionStates(ReadRanges, Txs);
+    AddReadRange();
+    AddPairFromPQ(101, {1, 2, 3});
+    AddPairFromPartition(101, 1);
+    AddPairFromPartition(101, 2);
+
+    InvokeCollectTransactions();
+
+    EnsureTransactionCalculated(101);
 }
 
-void TFixture::EnsureTransactionState(ui64 txId, NKikimrPQ::TTransaction::EState state, ui64 step) const
+Y_UNIT_TEST_F(Multiple_Transactions_One_Range, TFixture)
 {
-    UNIT_ASSERT(Txs.contains(txId));
-    const auto& tx = Txs.at(txId);
-    UNIT_ASSERT_EQUAL_C(tx.State, state,
-                        NKikimrPQ::TTransaction_EState_Name(tx.State) << " != " << NKikimrPQ::TTransaction_EState_Name(state));
-    UNIT_ASSERT_VALUES_EQUAL(tx.Step, step);
+    AddReadRange();
+    AddPairFromPQ(101, {1});
+    AddPairFromPartition(101, 1);
+    AddPairFromPQ(102, {1});
+    AddPairFromPartition(102, 1);
+    AddPairFromPQ(103, {1, 2});
+    AddPairFromPartition(103, 1);
+
+    InvokeCollectTransactions();
+
+    EnsureTransactionExecuted(101);
+    EnsureTransactionExecuted(102);
+    EnsureTransactionCalculated(103);
 }
 
-void TFixture::EnsureTransactionLoaded(ui64 txId)
+Y_UNIT_TEST_F(Multiple_Transactions_Different_Ranges, TFixture)
 {
-    EnsureTransactionState(txId, NKikimrPQ::TTransaction::PREPARED, Max<ui64>());
+    AddReadRange();
+    AddPairFromPQ(101, {1});
+    AddPairFromPartition(101, 1);
+    
+    AddReadRange();
+    AddPairFromPQ(102, {1, 2});
+    AddPairFromPartition(102, 1);
+
+    InvokeCollectTransactions();
+
+    EnsureTransactionExecuted(101);
+    EnsureTransactionCalculated(102);
 }
 
-void TFixture::EnsureTransactionChanged(ui64 txId)
+Y_UNIT_TEST_F(Transaction_Adjacent_ReadRanges, TFixture)
 {
-    EnsureTransactionState(txId, NKikimrPQ::TTransaction::EXECUTED, 1000);
+    AddReadRange();
+    AddPairFromPQ(101, {1, 2});
+    
+    AddReadRange();
+    AddPairFromPartition(101, 1);
+    AddPairFromPartition(101, 2);
+
+    InvokeCollectTransactions();
+
+    EnsureTransactionExecuted(101);
 }
 
-void TFixture::EnsureTransactionNotChanged(ui64 txId)
+Y_UNIT_TEST_F(Transaction_Multiple_ReadRanges, TFixture)
 {
-    EnsureTransactionLoaded(txId);
+    AddReadRange();
+    AddPairFromPQ(101, {1, 2, 3});
+    
+    AddReadRange();
+    AddPairFromPartition(101, 1);
+    
+    AddReadRange();
+    AddPairFromPartition(101, 2);
+    AddPairFromPartition(101, 3);
+
+    InvokeCollectTransactions();
+
+    EnsureTransactionExecuted(101);
 }
 
-Y_UNIT_TEST_F(Minimal_Transaction_Checking_Full_Transaction_With_1_Partition, TFixture)
+Y_UNIT_TEST_F(Empty_ReadRange_In_Vector, TFixture)
 {
-    AddTransaction(123, {1});
-
-    EnsureTransactionLoaded(123);
-
     AddReadRange();
-    AddPairFromPQ(123);
-    AddPairFromPartition(123, 1);
+    
+    AddReadRange();
+    AddPairFromPQ(101, {1});
 
-    InvokeFixTransactionStates();
+    InvokeCollectTransactions();
 
-    EnsureTransactionChanged(123);
+    EnsureTransactionPrepared(101);
 }
 
-Y_UNIT_TEST_F(Multiple_Partitions_Checking_Full_Transaction_With_3_Partitions, TFixture)
+Y_UNIT_TEST_F(Comprehensive_Test_Set_For_Complete_CollectTransactions_Testing, TFixture)
 {
-    AddTransaction(456, {1, 2, 3});
-
-    EnsureTransactionLoaded(456);
-
+    // Пустой readRange (краевой случай)
     AddReadRange();
-    AddPairFromPQ(456);
-    AddPairFromPartition(456, 1);
-    AddPairFromPartition(456, 2);
-    AddPairFromPartition(456, 3);
-
-    InvokeFixTransactionStates();
-
-    EnsureTransactionChanged(456);
-}
-
-Y_UNIT_TEST_F(Incomplete_Transaction_Checking_State_Doesnt_Change_If_Not_All_Partitions_Were_Written, TFixture)
-{
-    AddTransaction(789, {1, 2, 3});
-
-    EnsureTransactionLoaded(789);
-
+    
+    // Транзакция без субтранзакций
     AddReadRange();
-    AddPairFromPQ(789);
-    AddPairFromPartition(789, 1);
-    AddPairFromPartition(789, 2);
-
-    InvokeFixTransactionStates();
-
-    EnsureTransactionNotChanged(789);
-}
-
-Y_UNIT_TEST_F(Split_Across_2_ReadRange_Checking_Counter_Is_Preserved_Between_ReadRange, TFixture)
-{
-    AddTransaction(333, {1, 2, 3});
-
-    EnsureTransactionLoaded(333);
-
+    AddPairFromPQ(101, {1});             // tx 101: 1 партиция, не записала -> PREPARED
+    
+    // Транзакция tx 102 полная в одном readRange
     AddReadRange();
-    AddPairFromPQ(333);
-    AddPairFromPartition(333, 1);
-
+    AddPairFromPQ(102, {1, 2, 3});       // tx 102: 3 партиции
+    AddPairFromPartition(102, 1);        // tx 102: партиция 1 записала
+    AddPairFromPartition(102, 2);        // tx 102: партиция 2 записала
+    AddPairFromPartition(102, 3);        // tx 102: партиция 3 записала -> все 3/3 -> EXECUTED
+    
+    // Основная транзакция tx 103
     AddReadRange();
-    AddPairFromPartition(333, 2);
-    AddPairFromPartition(333, 3);
-
-    InvokeFixTransactionStates();
-
-    EnsureTransactionChanged(333);
-}
-
-Y_UNIT_TEST_F(Incomplete_Split_Across_2_ReadRange_Checking_Incomplete_Transaction_Is_Not_Fixed_When_Split, TFixture)
-{
-    AddTransaction(555, {1, 2, 3});
-
-    EnsureTransactionLoaded(555);
-
+    AddPairFromPQ(103, {1, 2});          // tx 103: 2 партиции в другом readRange
+    
+    // Субтранзакции tx 103 + транзакция tx 104 (частичная)
     AddReadRange();
-    AddPairFromPQ(555);
-    AddPairFromPartition(555, 1);
-
+    AddPairFromPartition(103, 1);        // tx 103: партиция 1 записала -> 1/2 -> CALCULATED
+    AddPairFromPQ(104, {1, 2, 3, 4, 5}); // tx 104: много партиций
+    AddPairFromPartition(104, 1);        // tx 104: партиция 1 записала
+    AddPairFromPartition(104, 5);        // tx 104: партиция 5 записала (крайняя)
+    
+    // Транзакции tx 105 (полная) и tx 106 (частичная)
     AddReadRange();
-    AddPairFromPartition(555, 2);
+    AddPairFromPQ(105, {1, 2});          // tx 105: 2 партиции
+    AddPairFromPartition(105, 1);        // tx 105: партиция 1
+    AddPairFromPartition(105, 2);        // tx 105: партиция 2 -> все 2/2 -> EXECUTED
+    AddPairFromPQ(106, {1, 2, 3});       // tx 106: 3 партиции
+    AddPairFromPartition(106, 2);        // tx 106: только партиция 2 записала -> 1/3 -> CALCULATED
 
-    InvokeFixTransactionStates();
+    InvokeCollectTransactions();
 
-    EnsureTransactionNotChanged(555);
-}
-
-Y_UNIT_TEST_F(Split_Across_3_ReadRange_Checking_Extreme_Splitting_Of_Full_Transaction, TFixture)
-{
-    AddTransaction(999, {1, 2, 3, 4, 5});
-
-    EnsureTransactionLoaded(999);
-
-    AddReadRange();
-    AddPairFromPQ(999);
-
-    AddReadRange();
-    AddPairFromPartition(999, 1);
-    AddPairFromPartition(999, 2);
-
-    AddReadRange();
-    AddPairFromPartition(999, 3);
-    AddPairFromPartition(999, 4);
-
-    AddReadRange();
-    AddPairFromPartition(999, 5);
-
-    InvokeFixTransactionStates();
-
-    EnsureTransactionChanged(999);
-}
-
-Y_UNIT_TEST_F(Incomplete_Split_Across_3_ReadRange_Checking_Incomplete_Transaction_Is_Not_Fixed_With_Multiple_Splitting, TFixture)
-{
-    AddTransaction(888, {1, 2, 3, 4, 5});
-
-    EnsureTransactionLoaded(888);
-
-    AddReadRange();
-    AddPairFromPQ(888);
-
-    AddReadRange();
-    AddPairFromPartition(888, 1);
-    AddPairFromPartition(888, 2);
-
-    AddReadRange();
-    AddPairFromPartition(888, 3);
-
-    InvokeFixTransactionStates();
-
-    EnsureTransactionNotChanged(888);
-}
-
-Y_UNIT_TEST_F(Multiple_Transactions_In_One_ReadRange_Checking_Correctness_When_Mixing_Transactions, TFixture)
-{
-    AddTransaction(111, {1});
-    AddTransaction(222, {1, 2});
-
-    EnsureTransactionLoaded(111);
-    EnsureTransactionLoaded(222);
-
-    AddReadRange();
-    AddPairFromPQ(111);
-    AddPairFromPartition(111, 1);
-    AddPairFromPQ(222);
-    AddPairFromPartition(222, 1);
-    AddPairFromPartition(222, 2);
-
-    InvokeFixTransactionStates();
-
-    EnsureTransactionChanged(111);
-    EnsureTransactionChanged(222);
-}
-
-Y_UNIT_TEST_F(Mixed_Complete_And_Incomplete_Transactions_Checking_Complete_Ones_Are_Fixed_Incomplete_Are_Not, TFixture)
-{
-    AddTransaction(111, {1, 2});
-    AddTransaction(222, {1, 2});
-
-    EnsureTransactionLoaded(111);
-    EnsureTransactionLoaded(222);
-
-    AddReadRange();
-    AddPairFromPQ(111);
-    AddPairFromPartition(111, 1);
-
-    AddReadRange();
-    AddPairFromPartition(111, 2);
-    AddPairFromPQ(222);
-    AddPairFromPartition(222, 1);
-
-    InvokeFixTransactionStates();
-
-    EnsureTransactionChanged(111);
-    EnsureTransactionNotChanged(222);
-}
-
-Y_UNIT_TEST_F(Three_Complete_Split_Transactions_Checking_Parallel_Processing_Of_Multiple_Complete_Transactions, TFixture)
-{
-    AddTransaction(111, {1, 2});
-    AddTransaction(222, {1, 2});
-    AddTransaction(333, {1, 2});
-
-    EnsureTransactionLoaded(111);
-    EnsureTransactionLoaded(222);
-    EnsureTransactionLoaded(333);
-
-    AddReadRange();
-    AddPairFromPQ(111);
-    AddPairFromPartition(111, 1);
-
-    AddReadRange();
-    AddPairFromPartition(111, 2);
-    AddPairFromPQ(222);
-    AddPairFromPartition(222, 1);
-
-    AddReadRange();
-    AddPairFromPartition(222, 2);
-    AddPairFromPQ(333);
-    AddPairFromPartition(333, 1);
-    AddPairFromPartition(333, 2);
-
-    InvokeFixTransactionStates();
-
-    EnsureTransactionChanged(111);
-    EnsureTransactionChanged(222);
-    EnsureTransactionChanged(333);
-}
-
-Y_UNIT_TEST_F(Two_Complete_And_One_Incomplete_Checking_Mixing_Of_Different_Completion_Types, TFixture)
-{
-    AddTransaction(111, {1, 2});
-    AddTransaction(222, {1, 2, 3});
-    AddTransaction(333, {1, 2, 3});
-
-    EnsureTransactionLoaded(111);
-    EnsureTransactionLoaded(222);
-    EnsureTransactionLoaded(333);
-
-    AddReadRange();
-    AddPairFromPQ(111);
-    AddPairFromPartition(111, 1);
-
-    AddReadRange();
-    AddPairFromPartition(111, 2);
-    AddPairFromPQ(222);
-    AddPairFromPartition(222, 1);
-    AddPairFromPartition(222, 2);
-
-    AddReadRange();
-    AddPairFromPartition(222, 3);
-    AddPairFromPQ(333);
-    AddPairFromPartition(333, 1);
-    AddPairFromPartition(333, 2);
-
-    InvokeFixTransactionStates();
-
-    EnsureTransactionChanged(111);
-    EnsureTransactionChanged(222);
-    EnsureTransactionNotChanged(333);
-}
-
-Y_UNIT_TEST_F(Extreme_Splitting_Checking_Stability_With_Large_Number_Of_ReadRange, TFixture)
-{
-    AddTransaction(111, {1, 2});
-    AddTransaction(222, {1, 2, 3});
-    AddTransaction(333, {1, 2, 3});
-
-    EnsureTransactionLoaded(111);
-    EnsureTransactionLoaded(222);
-    EnsureTransactionLoaded(333);
-
-    AddReadRange();
-    AddPairFromPQ(111);
-
-    AddReadRange();
-    AddPairFromPartition(111, 1);
-
-    AddReadRange();
-    AddPairFromPartition(111, 2);
-
-    AddReadRange();
-    AddPairFromPQ(222);
-
-    AddReadRange();
-    AddPairFromPartition(222, 1);
-
-    AddReadRange();
-    AddPairFromPartition(222, 2);
-
-    AddReadRange();
-    AddPairFromPartition(222, 3);
-
-    AddReadRange();
-    AddPairFromPQ(333);
-
-    AddReadRange();
-    AddPairFromPartition(333, 1);
-
-    AddReadRange();
-    AddPairFromPartition(333, 2);
-
-    AddReadRange();
-    AddPairFromPartition(333, 3);
-
-    InvokeFixTransactionStates();
-
-    EnsureTransactionChanged(111);
-    EnsureTransactionChanged(222);
-    EnsureTransactionChanged(333);
+    EnsureTransactionPrepared(101);      // tx 101: без субтранзакций -> PREPARED
+    EnsureTransactionExecuted(102);      // tx 102: все 3/3 партиций записали -> EXECUTED
+    EnsureTransactionCalculated(103);    // tx 103: 1/2 партиций записали -> CALCULATED
+    EnsureTransactionCalculated(104);    // tx 104: 2/5 партиций записали -> CALCULATED
+    EnsureTransactionExecuted(105);      // tx 105: все 2/2 партиций записали -> EXECUTED
+    EnsureTransactionCalculated(106);    // tx 106: 1/3 партиций записали -> CALCULATED
 }
 
 }

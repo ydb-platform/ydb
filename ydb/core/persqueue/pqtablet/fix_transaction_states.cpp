@@ -18,7 +18,7 @@ ui32 GetPartitionsCount(const NKikimrPQ::TTransaction& tx)
     case NKikimrPQ::TTransaction::KIND_DATA:
         return tx.OperationsSize();
     case NKikimrPQ::TTransaction::KIND_CONFIG:
-        return tx.GetPartitions().PartitionSize();
+        return tx.GetTabletConfig().PartitionsSize();
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
         AFL_ENSURE(false);
     }

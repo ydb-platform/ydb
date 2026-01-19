@@ -84,6 +84,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationForAggregation;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
+    NCommon::TConfSetting<bool, Static> OptDisallowFuseJoins;
 
     // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
     NCommon::TConfSetting<TString, Static> CostBasedOptimization;
@@ -180,22 +181,11 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     }
 
     void ApplyServiceConfig(const TTableServiceConfig& serviceConfig) {
-        if (serviceConfig.HasSqlVersion()) {
-            _KqpYqlSyntaxVersion = serviceConfig.GetSqlVersion();
-        }
         if (serviceConfig.GetQueryLimits().HasResultRowsLimit()) {
             _ResultRowsLimit = serviceConfig.GetQueryLimits().GetResultRowsLimit();
         }
 
         CopyFrom(serviceConfig);
-
-        EnableOlapSink = serviceConfig.GetEnableOlapSink();
-        EnableOltpSink = serviceConfig.GetEnableOltpSink();
-        EnableStreamWrite = serviceConfig.GetEnableStreamWrite();
-        SetDefaultEnabledSpillingNodes(serviceConfig.GetEnableSpillingNodes());
-        EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
-        EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();
-        EnableIndexStreamWrite = serviceConfig.GetEnableIndexStreamWrite();
 
         if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
             _KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
@@ -206,19 +196,10 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
-    bool EnableOlapSink = false;
-    bool EnableOltpSink = false;
-    bool EnableStreamWrite = false;
-    bool EnableSpilling = true;
-    ui64 DefaultEnableSpillingNodes = 0;
-    bool EnableSnapshotIsolationRW = false;
-    bool EnableIndexStreamWrite = false;
-
     NYql::EBackportCompatibleFeaturesMode GetYqlBackportMode() const;
     NSQLTranslation::EBindingsMode GetYqlBindingsMode() const;
     NDq::EHashShuffleFuncType GetDqDefaultHashShuffleFuncType() const;
 
-    void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;
     bool GetEnableOlapPushdownProjections() const;
     bool GetEnableParallelUnionAllConnectionsForExtend() const;

@@ -1491,6 +1491,44 @@ public:
     using TBase::TBase;
 };
 
+bool ParseCompressionSettings(
+    const TExprList& alterColumnList,
+    Ydb::Table::ColumnMeta* alter_columns,
+    TExprContext& ctx) {
+
+    auto compression = alter_columns->mutable_compression();
+    const auto settings = alterColumnList.Item(1).Cast<TExprList>();
+    for (const auto setting : settings) {
+        const auto sKV = setting.Cast<TExprList>();
+        const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
+        const auto& settingVal = sKV.Item(1).Ref();
+        if (key == "algorithm" && settingVal.IsCallable("String")) {
+            const auto algoVal = settingVal.Child(0)->Content();
+            if (algoVal == "lz4") {
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_LZ4);
+            } else if (algoVal == "zstd") {
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_ZSTD);
+            } else if (algoVal == "off") {
+                compression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_OFF);
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(settingVal.Pos()), TStringBuilder()
+                    << "Unknown compression algorithm: " << algoVal));
+                return false;
+            }
+        } else if (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))) {
+            compression->set_compression_level(FromString<i64>(settingVal.Child(0)->Content()));
+        } else {
+            ctx.AddError(TIssue(ctx.GetPosition(sKV.Pos()), TStringBuilder()
+                << " Column: \"" << alter_columns->name()
+                << "\". Setting: \"" << key
+                << "\". Only algorithm and level settings supported for column COMPRESSION"));
+            return false;
+        }
+    }
+
+    return true;
+}
+
 class TKiSinkCallableExecutionTransformer : public TAsyncCallbackTransformer<TKiSinkCallableExecutionTransformer> {
 public:
     TKiSinkCallableExecutionTransformer(
@@ -1916,9 +1954,13 @@ public:
                                     << "Unknown operation in changeColumnConstraints"));
                                 return SyncError();
                             }
+                        } else if (alterColumnAction == "changeCompression") {
+                            if (!ParseCompressionSettings(alterColumnList, alter_columns, ctx)) {
+                                return SyncError();
+                            }
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
-                                    TStringBuilder() << "Unsupported action to alter column"));
+                                    TStringBuilder() << "Unsupported action to alter column: " << alterColumnAction));
                             return SyncError();
                         }
                     }

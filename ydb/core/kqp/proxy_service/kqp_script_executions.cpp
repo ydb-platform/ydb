@@ -185,24 +185,24 @@ class TScriptExecutionsTablesCreator : public NTableCreator::TMultiTableCreator 
     using TBase = NTableCreator::TMultiTableCreator;
 
 public:
-    explicit TScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags, ui64 generation)
+    explicit TScriptExecutionsTablesCreator(bool enableSecureScriptExecutions, ui64 generation)
         : TBase({
-            GetScriptExecutionsCreator(featureFlags),
-            GetScriptExecutionLeasesCreator(featureFlags),
-            GetScriptResultSetsCreator(featureFlags)
+            GetScriptExecutionsCreator(enableSecureScriptExecutions),
+            GetScriptExecutionLeasesCreator(enableSecureScriptExecutions),
+            GetScriptResultSetsCreator(enableSecureScriptExecutions)
         })
         , Generation(generation)
     {}
 
 private:
-    static TMaybe<NACLib::TDiffACL> GetTableACL(const NKikimrConfig::TFeatureFlags& featureFlags) {
+    static TMaybe<NACLib::TDiffACL> GetTableACL(bool enableSecureScriptExecutions) {
         NACLib::TDiffACL acl;
         acl.ClearAccess();
-        acl.SetInterruptInheritance(featureFlags.GetEnableSecureScriptExecutions());
+        acl.SetInterruptInheritance(enableSecureScriptExecutions);
         return acl;
     }
 
-    static IActor* GetScriptExecutionsCreator(const NKikimrConfig::TFeatureFlags& featureFlags) {
+    static IActor* GetScriptExecutionsCreator(bool enableSecureScriptExecutions) {
         return CreateTableCreator(
             { ".metadata", "script_executions" },
             {
@@ -244,13 +244,13 @@ private:
             NKikimrServices::KQP_PROXY,
             TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL),
             {},
-            /* isSystemUser */ featureFlags.GetEnableSecureScriptExecutions(),
+            /* isSystemUser */ enableSecureScriptExecutions,
             Nothing(),
-            GetTableACL(featureFlags)
+            GetTableACL(enableSecureScriptExecutions)
         );
     }
 
-    static IActor* GetScriptExecutionLeasesCreator(const NKikimrConfig::TFeatureFlags& featureFlags) {
+    static IActor* GetScriptExecutionLeasesCreator(bool enableSecureScriptExecutions) {
         return CreateTableCreator(
             { ".metadata", "script_execution_leases" },
             {
@@ -265,13 +265,13 @@ private:
             NKikimrServices::KQP_PROXY,
             TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL),
             {},
-            /* isSystemUser */ featureFlags.GetEnableSecureScriptExecutions(),
+            /* isSystemUser */ enableSecureScriptExecutions,
             Nothing(),
-            GetTableACL(featureFlags)
+            GetTableACL(enableSecureScriptExecutions)
         );
     }
 
-    static IActor* GetScriptResultSetsCreator(const NKikimrConfig::TFeatureFlags& featureFlags) {
+    static IActor* GetScriptResultSetsCreator(bool enableSecureScriptExecutions) {
         return CreateTableCreator(
             { ".metadata", "result_sets" },
             {
@@ -287,9 +287,9 @@ private:
             NKikimrServices::KQP_PROXY,
             TtlCol("expire_at", DEADLINE_OFFSET, BRO_RUN_INTERVAL),
             {},
-            /* isSystemUser */ featureFlags.GetEnableSecureScriptExecutions(),
+            /* isSystemUser */ enableSecureScriptExecutions,
             Nothing(),
-            GetTableACL(featureFlags)
+            GetTableACL(enableSecureScriptExecutions)
         );
     }
 
@@ -5034,8 +5034,8 @@ IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, c
     return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, counters, maxRunTime, leaseDuration);
 }
 
-IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags, ui64 generation) {
-    return new TScriptExecutionsTablesCreator(featureFlags, generation);
+IActor* CreateScriptExecutionsTablesCreator(bool enableSecureScriptExecutions, ui64 generation) {
+    return new TScriptExecutionsTablesCreator(enableSecureScriptExecutions, generation);
 }
 
 IActor* CreateForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {

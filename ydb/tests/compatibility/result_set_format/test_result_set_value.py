@@ -38,7 +38,7 @@ class TestResultSetValue(RestartToAnotherVersionFixture):
         if min(self.versions) < (25, 3, 2):
             pytest.skip("Result set formats are not supported in <= 25.3.1")
 
-        if min(self.versions) < (26, 1):
+        if min(self.versions) < (26, 2):
             types_not_supported_yet_in_columnshard.add("Bool")
 
         supported_pk_types = pk_types if store_type == "ROW" else {k: v for k, v in pk_types.items() if k not in types_not_supported_yet_in_columnshard}

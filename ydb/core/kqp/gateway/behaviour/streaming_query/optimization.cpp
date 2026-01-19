@@ -44,16 +44,11 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
             return true;
         }
 
-        if (IsIn({NYql::S3ProviderName, NYql::GenericProviderName}, dataSourceCategory)) {
+        if (IsIn({NYql::S3ProviderName, NYql::GenericProviderName, NYql::KikimrProviderName}, dataSourceCategory)) {
             return true;
         }
 
-        if (dataSourceCategory == NYql::KikimrProviderName) {
-            res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), "Reading from YDB tables is not supported now for streaming queries"));
-        } else {
-            res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), TStringBuilder() << "Reading from data source " << dataSourceCategory << " is not supported now for streaming queries"));
-        }
-
+        res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), TStringBuilder() << "Reading from data source " << dataSourceCategory << " is not supported now for streaming queries"));
         return false;
     }
 

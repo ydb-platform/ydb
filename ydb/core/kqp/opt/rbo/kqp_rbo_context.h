@@ -25,7 +25,7 @@ public:
         , CBOCtx(TKqpProviderContext(kqpCtx, kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->GetDefaultCostBasedOptimizationLevel()))) {
     }
 
-   TKqpOptimizeContext& KqpCtx;
+    TKqpOptimizeContext& KqpCtx;
     NYql::TExprContext& ExprCtx;
     NYql::TTypeAnnotationContext& TypeCtx;
     TAutoPtr<NYql::IGraphTransformer> TypeAnnTransformer;

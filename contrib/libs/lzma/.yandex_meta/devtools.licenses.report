@@ -88,19 +88,6 @@ BELONGS ya.make
     Files with this license:
         COPYING [54:54]
 
-SKIP     LGPL-2.1-only        23c2a5e0106b99d75238986559bb5fc6
-BELONGS ya.make
-FILE_INCLUDE COPYING found in files: COPYING.LGPLv2.1 at line 116
-    # According to COPYING, COPYING.LGPLv2.1 applies to getopt_long code which we do not use
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LGPL-2.1-only
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
-    Files with this license:
-        COPYING.LGPLv2.1 [1:502]
-
 SKIP     GPL-2.0-only         3220ce24cf5698918173f671259bb375
 BELONGS ya.make
 FILE_INCLUDE COPYING.GPLv2 found in files: README at line 80
@@ -158,20 +145,6 @@ BELONGS ya.make
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
         COPYING [28:28]
-
-SKIP     GPL-2.0-only         39bba7d2cf0ba1036f2a6e2be52fe3f0
-BELONGS ya.make
-FILE_INCLUDE COPYING found in files: COPYING.GPLv2 at line 60
-    # This applies to the scripts to grep, diff, and view compressed files
-    # We do not have them.
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: GPL-2.0-only
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
-    Files with this license:
-        COPYING.GPLv2 [1:339]
 
 KEEP     0BSD                 41345058e55a3eff5c3a269f9e74bccf
 BELONGS ya.make
@@ -282,6 +255,19 @@ BELONGS ya.make
     Files with this license:
         COPYING [65:65]
 
+SKIP     LGPL-2.1-only        7838f60cd3ff6b477bc58e57da365252
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: COPYING.LGPLv2.1 at line 116
+	# Only covers getopt_long code which we do not use
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LGPL-2.1-only
+        Score           : 99.00
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
+    Files with this license:
+        COPYING.LGPLv2.1 [1:498]
+
 KEEP     0BSD                 79430bd4c5e1b494780b3fb35b24fd7d
 BELONGS ya.make
     License text:
@@ -313,6 +299,19 @@ BELONGS ya.make
         Links           : http://landley.net/toybox/license.html, https://spdx.org/licenses/0BSD
     Files with this license:
         COPYING [25:25]
+
+SKIP     GPL-2.0-only         9e7997fcb3ca1892479c156fe720975d
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: COPYING.GPLv2 at line 60
+	# Only covers GNU autotools code
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 98.84
+        Match type      : TEXT
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        COPYING.GPLv2 [1:338]
 
 KEEP     BSD-3-Clause AND 0BSD a675dbcfcecb36b880f01b1c31049149
 BELONGS ya.make

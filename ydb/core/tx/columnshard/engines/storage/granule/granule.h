@@ -125,7 +125,6 @@ private:
     THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
-    void RebuildHardMetrics() const;
     void RebuildAdditiveMetrics() const;
 
     mutable bool AllowInsertionFlag = false;

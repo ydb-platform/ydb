@@ -12,6 +12,20 @@ Similar system views exist for what happens inside a specific database; they are
 
 {% endnote %}
 
+## Access control
+
+The ability to flexibly configure the access rights to system views allows for precise separation of access to service information and user data.
+
+### Typical access control scenarios
+
+- **Access only to system views:**
+  If your infrastructure has users or services that need to monitor the state of the cluster or database — for example, database administrators — but do not require access to user data, it is recommended to grant these users read-only permissions for the `.sys` directory.
+
+- **Access only to data:**
+  When you need to hide information about service and system objects from individual users or groups (for example, analysts who do not need access to internal diagnostics), it is sufficient to grant read-only permissions for the corresponding directory containing user data. In this case, there is no need to grant permissions for the `.sys` directory or the database root — this ensures that users will not see and will not be able to query system views.
+
+You can also assign different permissions to individual system views — both for specific users and for groups. This approach enables flexible implementation of the principle of least privilege and control over different levels of access to service information for various roles and tasks.
+
 ## Distributed Storage
 
 Information about the distributed storage operation is contained in several interconnected views, each responsible for describing its own entity:

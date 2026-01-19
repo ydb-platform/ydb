@@ -208,6 +208,7 @@ TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::CreateWriteSessio
     alteredSettings.PartitionId(partitionId);  
     alteredSettings.ProducerId(producerId);
     alteredSettings.MessageGroupId(producerId);
+    alteredSettings.MaxMemoryUsage(std::numeric_limits<ui64>::max());
     auto writeSession = std::make_shared<WriteSessionWrapper>(WriteSessionWrapper{
         .Session = Client->CreateWriteSession(alteredSettings),
         .PartitionId = partitionId,

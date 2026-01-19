@@ -62,9 +62,8 @@ bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig, bool isLocalDC) {
 }
 
 bool DetailedMetricsAreEnabled(const NKikimrPQ::TPQTabletConfig& config) {
-    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (config.HasMetricsLevel() && config.GetMetricsLevel() == METRICS_LEVEL_DETAILED);
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && config.HasMetricsLevel() && config.GetMetricsLevel() == METRICS_LEVEL_DETAILED;
 }
-
 
 }
 

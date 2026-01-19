@@ -178,21 +178,6 @@ TKeyedWriteSession::TKeyedWriteSession(
     }
 }
 
-using THashKeyRange = std::pair<NYql::NDecimal::TUint128, NYql::NDecimal::TUint128>;
-
-THashKeyRange RangeFromShardNumber(ui32 shardNumber, ui32 shardCount) {
-    NYql::NDecimal::TUint128 max = -1;
-    if (shardCount == 1) {
-        return {0, max};
-    }
-    NYql::NDecimal::TUint128 slice = max / shardCount;
-    NYql::NDecimal::TUint128 left = NYql::NDecimal::TUint128(shardNumber) * slice;
-    NYql::NDecimal::TUint128 right =
-            shardNumber + 1 == shardCount ? max : NYql::NDecimal::TUint128(shardNumber + 1) * slice -
-                                                  NYql::NDecimal::TUint128(1);
-    return {left, right};
-}
-
 void TKeyedWriteSession::AddPartitionsBounds() {
     Y_ABORT_UNLESS(Partitions.size() > 0, "Partitions should be initialized");
     if (Partitions[0].Bounded_ || Partitions.size() == 1) {

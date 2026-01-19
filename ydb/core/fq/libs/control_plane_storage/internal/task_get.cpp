@@ -419,7 +419,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                              responseTasks=responseTasks,
                              tenantInfo=ev->Get()->TenantInfo,
                              owner, hostName, tenantName, tasksBatchSize, requestNodeId,
-                             numTasksProportion, Config=Config,
+                             numTasksProportion, config=Config,
                              tablePathPrefix=YdbConnection->TablePathPrefix
                         ](const std::vector<TResultSet>& resultSets) mutable {
         TVector<TTaskInternal> tasks;
@@ -457,7 +457,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             if (!previousOwner.empty()) { // task lease timeout case only, other cases are updated at ping time
                 CPS_LOG_AS_T(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
                     << " LastSeenAt: " << lastSeenAt);
-                taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(lastSeenAt, Config->TaskLeaseRetryPolicy, now);
+                taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(lastSeenAt, config->TaskLeaseRetryPolicy, now);
             }
             task.RetryCount = taskInternal.RetryLimiter.RetryCount;
 
@@ -471,8 +471,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
         for (size_t i = 0; i < numTasks; ++i) {
             auto tupleParams = MakeGetTaskUpdateQuery(tasks[i],
-                responseTasks, now, now + Config->TaskLeaseTtl, Config->Proto.GetDisableCurrentIam(),
-                Config->AutomaticQueriesTtl, Config->ResultSetsTtl, tenantInfo, commonCounters, requestNodeId); // using for win32 build
+                responseTasks, now, now + config->TaskLeaseTtl, config->Proto.GetDisableCurrentIam(),
+                config->AutomaticQueriesTtl, config->ResultSetsTtl, tenantInfo, commonCounters, requestNodeId); // using for win32 build
             auto readQuery = std::get<0>(tupleParams);
             auto readParams = std::get<1>(tupleParams);
             auto prepareParams = std::get<2>(tupleParams);
@@ -485,7 +485,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     auto [readStatus, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo, TTxSettings::StaleRO());
     auto result = readStatus.Apply(
         [dbPool=DbPool,
-        prepareParams, Config=Config, response, owner,
+        prepareParams, config=Config, response, owner,
         resultSets=resultSets,
         requestCounters=requestCounters,
         debugInfo=debugInfo,
@@ -505,7 +505,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         }
 
         auto debugInfos = std::make_shared<TVector<TDebugInfoPtr>>(pickTaskParams.size());
-        if (Config->Proto.GetEnableDebugMode()) {
+        if (config->Proto.GetEnableDebugMode()) {
             for (size_t i = 0; i < pickTaskParams.size(); i++) {
                 (*debugInfos)[i] = std::make_shared<TDebugInfo>();
             }

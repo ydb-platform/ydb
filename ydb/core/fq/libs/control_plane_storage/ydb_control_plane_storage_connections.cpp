@@ -503,7 +503,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     );
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
-    auto prepareParams = [Config=Config, commonCounters=requestCounters.Common, response, user, request, scope, connectionId, idempotencyKey, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [config=Config, commonCounters=requestCounters.Common, response, user, request, scope, connectionId, idempotencyKey, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
             ythrow NKikimr::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -567,7 +567,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         writeQueryBuilder.AddInt64("revision", meta.revision());
         writeQueryBuilder.AddString("internal", connectionInternal.SerializeAsString());
         writeQueryBuilder.AddString("connection", connection.SerializeAsString());
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config->IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + config->IdempotencyKeyTtl);
         writeQueryBuilder.AddText(
             "UPDATE `" CONNECTIONS_TABLE_NAME "` SET `" VISIBILITY_COLUMN_NAME "` = $visibility, `" NAME_COLUMN_NAME "` = $name, `" REVISION_COLUMN_NAME "` = $revision, `" INTERNAL_COLUMN_NAME "` = $internal, `" CONNECTION_COLUMN_NAME "` = $connection\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"

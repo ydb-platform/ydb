@@ -240,28 +240,39 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         CreateTable(kikimr, session, tableName, partitionCount);
         FillTable(kikimr, session, tableName, partitionCount, rowsPerPartition);
 
-        std::optional<TActorId> executerActorId;
+        std::optional<TActorId> partitionedId;
+        std::set<TActorId> executerIds;
         bool abortSent = false;
 
         // Get id of the PartitionedExecuterActor
-        using TEvCapture = TEvTxUserProxy::TEvProposeKqpTransaction;
-        const auto captureObserver = runtime.AddObserver<TEvCapture>([&](TEvCapture::TPtr& ev) {
-            if (!executerActorId.has_value()) {
-                executerActorId = ev->Sender;
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
             }
         });
 
-        using TTestEvent = NEvents::TDataEvents::TEvWriteResult;
-        const auto writeObserver = runtime.AddObserver<TTestEvent>([&](TTestEvent::TPtr& ev) {
-            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_BUFFER_WRITE_ACTOR") {
-                if (!abortSent) {
-                    abortSent = true;
-                    UNIT_ASSERT_C(executerActorId.has_value(), "executerActorId is not set");
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
 
-                    // Send abort to the PartitionedExecuterActor while all the ExecuterActors are not finished
+        using TEvCaptureExecution = TEvKqpExecuter::TEvTxRequest;
+        const auto captureObserver = runtime.AddObserver<TEvCaptureExecution>([&](TEvCaptureExecution::TPtr& ev) {
+            if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
+                UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
+
+                // Send abort to the PartitionedExecuterActor while the executer actors are not finished yet
+                if (!abortSent) {
                     auto abort = TEvKqp::TEvAbortExecution::Aborted("Test abort before any response");
-                    runtime.Send(new IEventHandle(*executerActorId, ev->Recipient, abort.Release()));
+                    runtime.Send(new IEventHandle(*partitionedId, ev->Recipient, abort.Release()));
+                    abortSent = true;
                 }
+
+                // Events are dropped to freeze the execution
                 ev.Reset();
             }
         });
@@ -292,34 +303,50 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         CreateTable(kikimr, session, tableName, partitionCount);
         FillTable(kikimr, session, tableName, partitionCount, rowsPerPartition);
 
-        std::optional<TActorId> executerActorId;
+        std::optional<TActorId> partitionedId;
+        std::set<TActorId> executerIds;
+        std::set<TActorId> skippedExecuterIds;
         bool abortSent = false;
-        size_t writeResultsCount = 0;
 
         // Get id of the PartitionedExecuterActor
-        using TEvCapture = TEvTxUserProxy::TEvProposeKqpTransaction;
-        const auto captureObserver = runtime.AddObserver<TEvCapture>([&](TEvCapture::TPtr& ev) {
-            if (!executerActorId.has_value()) {
-                executerActorId = ev->Sender;
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
             }
         });
 
-        using TTestEvent = NEvents::TDataEvents::TEvWriteResult;
-        const auto writeObserver = runtime.AddObserver<TTestEvent>([&](TTestEvent::TPtr& ev) {
-            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_BUFFER_WRITE_ACTOR") {
-                if (++writeResultsCount <= partitionCount / 2) {
-                    // Allow first half to complete
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
+
+        using TEvCaptureExecution = TEvKqpExecuter::TEvTxRequest;
+        const auto captureObserver = runtime.AddObserver<TEvCaptureExecution>([&](TEvCaptureExecution::TPtr& ev) {
+            if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
+                UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
+
+                if (skippedExecuterIds.find(ev->Recipient) != skippedExecuterIds.end()) {
                     return;
                 }
 
-                if (!abortSent) {
-                    UNIT_ASSERT_C(executerActorId.has_value(), "executerActorId is not set");
+                // Allow first half to complete
+                if (skippedExecuterIds.size() < partitionCount / 2) {
+                    skippedExecuterIds.insert(ev->Recipient);
+                    return;
+                }
 
-                    // Send abort to the PartitionedExecuterActor while half of the ExecuterActors are not finished
+                // Send abort to the PartitionedExecuterActor while half of the ExecuterActors are not finished
+                if (!abortSent) {
                     auto abort = TEvKqp::TEvAbortExecution::Aborted("Test abort after partial completion");
-                    runtime.Send(new IEventHandle(*executerActorId, ev->Recipient, abort.Release()));
+                    runtime.Send(new IEventHandle(*partitionedId, ev->Recipient, abort.Release()));
                     abortSent = true;
                 }
+
+                // Events are dropped to freeze the execution
                 ev.Reset();
             }
         });
@@ -334,7 +361,6 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Test abort after partial completion", result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(writeResultsCount, partitionCount, "Expected " << partitionCount << " write results, got " << writeResultsCount);
     }
 
     Y_UNIT_TEST(ExecuteState_ChildExecuterAbort) {
@@ -351,39 +377,50 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         CreateTable(kikimr, session, tableName, partitionCount);
         FillTable(kikimr, session, tableName, partitionCount, rowsPerPartition);
 
-        bool executerStarted = false;
-        std::optional<TActorId> executerActorId;
-        size_t writeResultsCount = 0;
+        std::optional<TActorId> partitionedId;
+        std::set<TActorId> executerIds;
+        std::set<TActorId> capturedExecuterIds;
 
         // Get id of the PartitionedExecuterActor
-        using TTestCapture = TEvTxUserProxy::TEvProposeKqpTransaction;
-        const auto captureObserver = runtime.AddObserver<TTestCapture>([&](TTestCapture::TPtr& ev) {
-            if (!executerStarted) {
-                executerActorId = ev->Sender;
-                executerStarted = true;
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
             }
         });
 
-        using TTestWrite = NEvents::TDataEvents::TEvWriteResult;
-        const auto writeObserver = runtime.AddObserver<TTestWrite>([&](TTestWrite::TPtr& ev) {
-            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_BUFFER_WRITE_ACTOR") {
-                if (executerStarted && ++writeResultsCount != partitionCount) {
-                    // Skip all the write results except the last one
-                    // It is needed to get exactly one response from the ExecuterActor to send abort
-                    ev.Reset();
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
+
+        using TEvCaptureExecution = TEvKqpExecuter::TEvTxRequest;
+        const auto captureObserver = runtime.AddObserver<TEvCaptureExecution>([&](TEvCaptureExecution::TPtr& ev) {
+            if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
+                UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
+
+                if (capturedExecuterIds.find(ev->Recipient) != capturedExecuterIds.end()) {
+                    return;
                 }
-            }
-        });
 
-        using TTestResponse = TEvKqpExecuter::TEvTxResponse;
-        const auto responseObserver = runtime.AddObserver<TTestResponse>([&](TTestResponse::TPtr& ev) {
-            if (writeResultsCount == partitionCount && executerActorId.has_value()) {
-                // Simulate child executer sending abort instead of success response
-                // It is possible because ExecuterActor can send TEvAbortExecution to the PartitionedExecuterActor from compute actors
-                auto abort = TEvKqp::TEvAbortExecution::Aborted("Test child executer abort");
-                runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, abort.Release()));
+                if (capturedExecuterIds.size() != partitionCount - 1) {
+                    // Capture all executer actors except the last one
+                    capturedExecuterIds.insert(ev->Recipient);
+                } else {
+                    // Send abort to the last executer from some actor (important: not parent),
+                    // it must forward the event to the PartitionedExecuterActor
+                    //
+                    // There are two ways to get abort with timeout:
+                    // 1. From PartitionedExecuterActor or SessionActor (parents, do not forward the event)
+                    // 2. From some compute actors (the event forwards to the parent)
+                    auto abort = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Test child executer abort", NYql::TIssues{});
+                    runtime.Send(new IEventHandle(ev->Recipient, MakeSchemeCacheID(), abort.Release()));
+                }
 
-                executerActorId.reset();
+                // Events are dropped to freeze the execution
                 ev.Reset();
             }
         });
@@ -396,9 +433,8 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
             return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
         });
 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::TIMEOUT, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Test child executer abort", result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(writeResultsCount, partitionCount, "Expected " << partitionCount << " write results, got " << writeResultsCount);
     }
 }
 

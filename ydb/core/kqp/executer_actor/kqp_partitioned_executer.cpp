@@ -156,23 +156,10 @@ public:
         const auto& msg = ev->Get()->Record;
         auto issues = ev->Get()->GetIssues();
 
-        const auto it = ExecuterToPartition.find(ev->Sender);
-
-        if (it != ExecuterToPartition.end()) {
-            PE_LOG_W("Got TEvAbortExecution from ExecuterActor with actorId = " << ev->Sender
-                << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-                << ", message: " << issues.ToOneLineString());
-
-            const auto [_, partInfo] = *it;
-            AbortBuffer(partInfo->BufferId);
-            ForgetExecuterAndBuffer(partInfo);
-            ForgetPartition(partInfo);
-        } else {
-            PE_LOG_W("Got TEvAbortExecution from unknown actor with actorId = " << ev->Sender
-                << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-                << ", message: " << issues.ToOneLineString()
-                << ", isSessionActor: " << (ev->Sender == SessionActorId));
-        }
+        PE_LOG_W("Got TEvAbortExecution from actor with actorId = " << ev->Sender
+            << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
+            << ", message: " << issues.ToOneLineString()
+            << ", isSessionActor: " << (ev->Sender == SessionActorId));
 
         AbortWithError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), std::move(issues));
     }

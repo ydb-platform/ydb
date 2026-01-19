@@ -187,7 +187,7 @@ message TPDiskInfo {
     optional string DecommitStatus = 18;
     optional string State = 19;
     optional uint32 SlotSizeInUnits = 20; // either inferred or user-defined
-    optional uint64 InferPDiskSlotCountFromUnitSize = 21;
+    reserved 21;
     // metrics ?
     // physical location ?
     // config ?

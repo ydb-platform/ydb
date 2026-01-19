@@ -29,18 +29,20 @@ private:
 public:
     using TBase::TBase;
 
-    static TEvTxProcessing::TEvReadSetAck* MakeBrokenFlagAck(ui64 step, ui64 txId, ui64 tabletSource, ui64 tabletDest) {
-        return new TEvTxProcessing::TEvReadSetAck(step, txId, tabletSource, tabletDest, tabletSource, 0);
+    static std::unique_ptr<TEvTxProcessing::TEvReadSetAck> MakeBrokenFlagAck(ui64 step, ui64 txId, ui64 tabletSource, ui64 tabletDest) {
+        return std::make_unique<TEvTxProcessing::TEvReadSetAck>(step, txId, tabletSource, tabletDest, tabletSource, 0);
     }
 
-    static bool SendBrokenFlagAck(TColumnShard& owner, TEvTxProcessing::TEvReadSetAck* event) {
-        return SendPersistent(owner, event, event->Record.GetTabletDest(), event->Record.GetTxId());
+    static bool SendBrokenFlagAck(TColumnShard& owner, std::unique_ptr<TEvTxProcessing::TEvReadSetAck> event) {
+        const ui64 tabletDest = event->Record.GetTabletDest();
+        const ui64 txId = event->Record.GetTxId();
+        return SendPersistent(owner, std::move(event), tabletDest, txId);
     }
 
-    static bool SendPersistent(TColumnShard& owner, IEventBase* event, ui64 tabletDest, ui64 cookie) {
+    static bool SendPersistent(TColumnShard& owner, std::unique_ptr<IEventBase> event, ui64 tabletDest, ui64 cookie) {
         return owner.Send(
             MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
-            new TEvPipeCache::TEvForward(event, tabletDest, true),
+            new TEvPipeCache::TEvForward(event.release(), tabletDest, true),
             IEventHandle::FlagTrackDelivery, cookie
         );
     }

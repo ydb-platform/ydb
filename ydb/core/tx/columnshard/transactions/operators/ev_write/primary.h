@@ -81,7 +81,7 @@ private:
         const ui64 Step;
         const ui64 TabletId;
         const bool BrokenFlag;
-        TEvTxProcessing::TEvReadSetAck* BrokenFlagAck = nullptr;
+        std::unique_ptr<TEvTxProcessing::TEvReadSetAck> BrokenFlagAck;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
@@ -108,7 +108,7 @@ private:
 
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
             if (BrokenFlagAck != nullptr) {
-                TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, BrokenFlagAck);
+                TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*Self, std::move(BrokenFlagAck));
             }
         }
 
@@ -191,8 +191,8 @@ private:
         readSetData.SetDecision(*TxBroken ? NKikimrTx::TReadSetData::DECISION_ABORT : NKikimrTx::TReadSetData::DECISION_COMMIT);
         for (auto&& tabletDest : ReceivingShards) {
             if (WaitShardsResultAck.contains(tabletDest)) {
-                auto* event = new TEvTxProcessing::TEvReadSet(TxInfo.PlanStep, GetTxId(), owner.TabletID(), tabletDest, owner.TabletID(), readSetData.SerializeAsString());
-                TEvWriteCommitSyncTransactionOperator::SendPersistent(owner, event, tabletDest, GetTxId());
+                auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(TxInfo.PlanStep, GetTxId(), owner.TabletID(), tabletDest, owner.TabletID(), readSetData.SerializeAsString());
+                TEvWriteCommitSyncTransactionOperator::SendPersistent(owner, std::move(event), tabletDest, GetTxId());
             }
         }
     }

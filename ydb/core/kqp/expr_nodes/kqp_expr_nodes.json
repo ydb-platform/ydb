@@ -865,7 +865,8 @@
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "MapElements", "Type": "TKqpOpElementList"},
-                {"Index": 2, "Name": "Project", "Type": "TCoAtom", "Optional" : true}
+                {"Index": 2, "Name": "Project", "Type": "TCoAtom", "Optional" : true},
+                {"Index": 3, "Name": "Ordered", "Type": "TCoAtom", "Optional" : true}
             ]
         },
         {

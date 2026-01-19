@@ -511,7 +511,7 @@ private:
 
 class TOpMap : public IUnaryOperator {
   public:
-    TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project);
+    TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
@@ -520,15 +520,18 @@ class TOpMap : public IUnaryOperator {
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
     virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
 
-    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                   const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
 
-    virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
-    virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     virtual TString ToString(TExprContext& ctx) override;
+    bool IsOrdered() const { return Ordered; }
 
     TVector<TMapElement> MapElements;
     bool Project = true;
+    bool Ordered = false;
 };
 
 class TOpProject : public IUnaryOperator {

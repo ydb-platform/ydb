@@ -1362,6 +1362,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                 .Project()
                     .Value("true")
                 .Build()
+                .Ordered()
+                    .Value("True")
+                .Build()
             .Done().Ptr();
             // clang-format on
         }

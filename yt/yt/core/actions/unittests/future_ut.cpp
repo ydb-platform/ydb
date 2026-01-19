@@ -2153,6 +2153,24 @@ TEST_W(TFutureTest, WaitForUniqueFast)
     EXPECT_EQ(*result.Value(), 123);
 }
 
+TEST_F(TFutureTest, TrySetDoesNotMoveValueOnFailure)
+{
+    auto promise = NewPromise<std::vector<int>>();
+    auto v = std::vector{1, 2, 3};
+    promise.Set(v);
+    EXPECT_FALSE(promise.TrySet(std::move(v)));
+    EXPECT_EQ(std::ssize(v), 3);
+}
+
+TEST_F(TFutureTest, TrySetDoesNotMoveErrorOnFailure)
+{
+    auto promise = NewPromise<std::vector<int>>();
+    auto err = TError("oops");
+    promise.Set(err);
+    EXPECT_FALSE(promise.TrySet(std::move(err)));
+    EXPECT_FALSE(err.IsOK());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

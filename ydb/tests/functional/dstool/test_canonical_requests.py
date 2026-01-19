@@ -267,7 +267,7 @@ class Test(TestBase):
             'SlotSizeInUnits',
         ]
 
-        trace1 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns),
+        trace1 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
 
         del full_config["config"]["blob_storage_config"]["infer_pdisk_slot_count_settings"]
         full_config["metadata"]["version"] = 1
@@ -279,6 +279,6 @@ class Test(TestBase):
                 assert pdisk.PDiskMetrics.SlotSizeInUnits == 0
         retry_assertions(check_pdisk_metrics_updated)
 
-        trace2 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns),
+        trace2 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
 
         return [trace1, trace2]

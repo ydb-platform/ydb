@@ -39,18 +39,17 @@ THashMap<ui64, NKikimrPQ::TTransaction> CollectTransactions(const TVector<NKikim
             AFL_ENSURE(tx.ParseFromString(pair.GetValue()));
             AFL_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN);
 
-            if (!IsMainContextOfTransaction(pair.GetKey())) {
+            if (IsMainContextOfTransaction(pair.GetKey())) {
+                txId = tx.GetTxId();
+                current = 0;
+                expected = GetPartitionsCount(tx);
+            } else {
+                // не может быть бесхозных субтранзакций
                 AFL_ENSURE(txId.Defined() && (*txId == tx.GetTxId()));
                 ++current;
                 AFL_ENSURE(current <= expected);
                 tx.SetState((current == expected) ? NKikimrPQ::TTransaction::EXECUTED : NKikimrPQ::TTransaction::CALCULATED);
-                txs.insert_or_assign(*txId, std::move(tx));
-                continue;
             }
-
-            txId = tx.GetTxId();
-            current = 0;
-            expected = GetPartitionsCount(tx);
 
             txs.insert_or_assign(*txId, std::move(tx));
         }

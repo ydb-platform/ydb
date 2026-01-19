@@ -26,19 +26,19 @@ config:
     - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
       type: SSD
   hosts:
-  - host: static-node-andrei-1.ydb-cluster.com
+  - host: ydb-node-zone-a.local
     host_config_id: 1
     location:
       body: 1
       data_center: 'zone-a'
       rack: '1'
-  - host: static-node-andrei-2.ydb-cluster.com
+  - host: ydb-node-zone-b.local
     host_config_id: 1
     location:
       body: 2
       data_center: 'zone-b'
       rack: '2'
-  - host: static-node-andrei-3.ydb-cluster.com
+  - host: ydb-node-zone-c.local
     host_config_id: 1
     location:
       body: 3

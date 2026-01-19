@@ -952,6 +952,26 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 YQL_ENSURE(1 <= navigate.ResultSet.size() && navigate.ResultSet.size() <= 2);
                 auto& entry = InferEntry(navigate.ResultSet);
 
+                // VERSION_TRACK logging for scheme cache response
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_GATEWAY,
+                    "VERSION_TRACK LoadTableMetadataCache SchemeCache response"
+                    << " table# " << table
+                    << " tableId# [" << entry.TableId.PathId.OwnerId << ":" << entry.TableId.PathId.LocalPathId << "]"
+                    << " schemaVersion# " << entry.TableId.SchemaVersion
+                    << " status# " << entry.Status
+                    << " kind# " << static_cast<ui32>(entry.Kind)
+                    << " indexCount# " << entry.Indexes.size());
+                for (size_t i = 0; i < entry.Indexes.size(); ++i) {
+                    const auto& idx = entry.Indexes[i];
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_GATEWAY,
+                        "VERSION_TRACK LoadTableMetadataCache SchemeCache index[" << i << "]"
+                        << " table# " << table
+                        << " indexName# " << idx.GetName()
+                        << " indexPathId# [" << idx.GetPathOwnerId() << ":" << idx.GetLocalPathId() << "]"
+                        << " indexSchemaVersion# " << idx.GetSchemaVersion()
+                        << " indexState# " << static_cast<ui32>(idx.GetState()));
+                }
+
                 if (entry.Status != EStatus::Ok) {
                     promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, table));
                     return;

@@ -319,6 +319,13 @@ public:
         Y_ABORT_UNLESS(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
 
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "VERSION_TRACK TCreateTable TPropose::HandleReply"
+            << " pathId# " << pathId
+            << " setAlterVersion# " << table->AlterVersion
+            << " parentPathId# " << path->ParentPathId
+            << " parentIsIndex# " << (context.SS->PathsById.at(path->ParentPathId)->IsTableIndex() ? "true" : "false"));
+
         if (table->IsTTLEnabled() && !context.SS->TTLEnabledTables.contains(pathId)) {
             context.SS->TTLEnabledTables[pathId] = table;
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);

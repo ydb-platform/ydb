@@ -642,11 +642,18 @@ public:
             // because of that, we are forcing to run schema version check
             QueryState->CompileResult->IncUsage();
             if (QueryState->NeedCheckTableVersions()) {
+                STLOG_I("VERSION_TRACK KQP session cache hit - sending version check to SchemeCache",
+                    (session_id, SessionId),
+                    (query_uid, QueryState->CompileResult->Uid),
+                    (table_count, QueryState->TableVersions.size()));
                 auto ev = QueryState->BuildNavigateKeySet();
                 Send(MakeSchemeCacheID(), ev.release());
                 return;
             }
 
+            STLOG_I("VERSION_TRACK KQP session cache hit - no version check needed",
+                (session_id, SessionId),
+                (query_uid, QueryState->CompileResult->Uid));
             OnSuccessCompileRequest();
             return;
         }
@@ -689,6 +696,10 @@ public:
 
         // table versions are not the same. need the query recompilation.
         if (!QueryState->EnsureTableVersions(*response)) {
+            STLOG_I("VERSION_TRACK KQP session version check FAILED - cached versions stale, triggering recompile",
+                (session_id, SessionId),
+                (query_uid, QueryState->CompileResult ? QueryState->CompileResult->Uid : TString()));
+
             if (QueryState->QueryPhysicalGraph) {
                 // Query recompilation is not allowed with restore physical graph request
                 ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED, "Restore query state failed, table versions are not the same");
@@ -701,6 +712,9 @@ public:
             return;
         }
 
+        STLOG_I("VERSION_TRACK KQP session version check PASSED - cached versions still valid",
+            (session_id, SessionId),
+            (query_uid, QueryState->CompileResult ? QueryState->CompileResult->Uid : TString()));
         OnSuccessCompileRequest();
     }
 
@@ -767,11 +781,18 @@ public:
             // in terms of current schema version of the table if response of compilation is from the cache.
             // because of that, we are forcing to run schema version check
             if (QueryState->NeedCheckTableVersions()) {
+                STLOG_I("VERSION_TRACK KQP CompileStatement cache hit - sending version check to SchemeCache",
+                    (session_id, SessionId),
+                    (query_uid, QueryState->CompileResult->Uid),
+                    (table_count, QueryState->TableVersions.size()));
                 auto ev = QueryState->BuildNavigateKeySet();
                 Send(MakeSchemeCacheID(), ev.release());
                 return;
             }
 
+            STLOG_I("VERSION_TRACK KQP CompileStatement cache hit - no version check needed",
+                (session_id, SessionId),
+                (query_uid, QueryState->CompileResult->Uid));
             OnSuccessCompileRequest();
             return;
         }

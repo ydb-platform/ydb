@@ -356,6 +356,8 @@ message TTableDescription {
     // Skip automatic index/impl table copying - indexes will be handled separately
     optional bool OmitIndexes = 47 [default = false];
     optional TDropCdcStream DropSrcCdcStream = 48;
+    // Pre-calculated version for backup coordination (used in copy table for indexes)
+    optional uint64 CoordinatedSchemaVersion = 49;
 }
 
 message TDictionaryEncodingSettings {
@@ -1071,6 +1073,7 @@ message TCreateCdcStream {
     // Topic autopartitioning settings
     optional bool TopicAutoPartitioning = 5 [default = false]; // we always can split and merge of topic partitions
     optional uint32 MaxPartitionCount = 6;
+    optional uint64 CoordinatedSchemaVersion = 7; // Pre-calculated version for backup coordination
 }
 
 message TAlterCdcStream {
@@ -1088,17 +1091,21 @@ message TAlterCdcStream {
         TDisable Disable = 3;
         TGetReady GetReady = 4;
     }
+
+    optional uint64 CoordinatedSchemaVersion = 5; // Pre-calculated version for backup coordination
 }
 
 message TDropCdcStream {
     optional string TableName = 1;
     repeated string StreamName = 2;
+    optional uint64 CoordinatedSchemaVersion = 3; // Pre-calculated version for backup coordination
 }
 
 message TRotateCdcStream {
     optional string TableName = 1;
     optional string OldStreamName = 2;
     optional TCreateCdcStream NewStream = 3;
+    optional uint64 CoordinatedSchemaVersion = 4; // Pre-calculated version for backup coordination
 }
 
 message TContinuousBackupDescription {
@@ -1152,6 +1159,8 @@ message TIncrementalRestoreFinalize {
     optional uint64 BackupCollectionPathId = 2;
     repeated string TargetTablePaths = 3;
     repeated string BackupTablePaths = 4;
+    // Per-table coordinated versions: PathId.LocalPathId -> version
+    map<uint64, uint64> TableCoordinatedVersions = 6;
 }
 
 message TIncrementalRestoreOperationId {
@@ -1233,11 +1242,17 @@ message TGenericTxInFlyExtraData {
     message TTxCopyTableExtraData {
         optional NKikimrProto.TPathID CdcPathId = 1;
         optional NKikimrSchemeOp.EPathState TargetPathTargetState = 2;
+        optional uint64 CoordinatedSchemaVersion = 3;
+    }
+
+    message TTxCdcStreamExtraData {
+        optional uint64 CoordinatedSchemaVersion = 1;
     }
 
     // we do not use oneof here as far as we want to combine some subops rarely
     // and it can be used in this case
     optional TTxCopyTableExtraData TxCopyTableExtraData = 1;
+    optional TTxCdcStreamExtraData TxCdcStreamExtraData = 2;
 }
 
 message TIndexAlteringConfig {
@@ -1302,6 +1317,7 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     // additionally dropes cdc stream on src table consistently with taking snapshot
     optional TDropCdcStream DropSrcCdcStream = 10;
     map<string, TDropCdcStream> IndexImplTableDropCdcStreams = 11;
+    optional uint64 CoordinatedSchemaVersion = 12; // Pre-calculated version for backup coordination
 }
 
 message TConsistentTableCopyingConfig {

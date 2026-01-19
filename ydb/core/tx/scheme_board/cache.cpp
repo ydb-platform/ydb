@@ -47,6 +47,7 @@ namespace NSchemeBoard {
 
 #define SBC_LOG_T(stream) SB_LOG_T(TX_PROXY_SCHEME_CACHE, stream)
 #define SBC_LOG_D(stream) SB_LOG_D(TX_PROXY_SCHEME_CACHE, stream)
+#define SBC_LOG_I(stream) SB_LOG_I(TX_PROXY_SCHEME_CACHE, stream)
 #define SBC_LOG_N(stream) SB_LOG_N(TX_PROXY_SCHEME_CACHE, stream)
 #define SBC_LOG_W(stream) SB_LOG_W(TX_PROXY_SCHEME_CACHE, stream)
 
@@ -261,6 +262,7 @@ namespace {
             keyDesc.SecurityObject.Drop();
         }
 
+    protected:
         void SendResult() {
             SBC_LOG_D("Send result"
                 << ": self# " << this->SelfId()
@@ -334,7 +336,7 @@ namespace {
 
         using TBase = TAccessChecker<TContextPtr, TEvResult, TDerived>;
 
-    private:
+    protected:
         TContextPtr Context;
         const TPathId RootSchemeShard;
 
@@ -343,6 +345,48 @@ namespace {
     class TAccessCheckerNavigate: public TAccessChecker<TNavigateContextPtr, TEvNavigateResult, TAccessCheckerNavigate> {
     public:
         using TBase::TBase;
+
+        void SendResult() {
+            // VERSION_TRACK: Log outgoing navigate response details for debugging schema version sync issues
+            auto& resultSet = this->Context->Request->ResultSet;
+            for (size_t i = 0; i < resultSet.size(); ++i) {
+                const auto& entry = resultSet[i];
+                TString pathStr;
+                if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
+                    pathStr = CanonizePath(entry.Path);
+                } else {
+                    pathStr = TStringBuilder() << entry.TableId.PathId;
+                }
+
+                ui64 schemaVersion = 0;
+                if (entry.Self) {
+                    const auto& selfInfo = entry.Self->Info;
+                    if (selfInfo.HasVersion()) {
+                        schemaVersion = selfInfo.GetVersion().GetTableSchemaVersion();
+                    }
+                }
+
+                SBC_LOG_I("VERSION_TRACK TEvNavigateKeySetResult outgoing response"
+                    << ", entryIndex# " << i
+                    << ", path# " << pathStr
+                    << ", status# " << static_cast<ui32>(entry.Status)
+                    << ", schemaVersion# " << schemaVersion
+                    << ", indexesCount# " << entry.Indexes.size());
+
+                // Log each index's schema version for table entries
+                for (size_t j = 0; j < entry.Indexes.size(); ++j) {
+                    const auto& index = entry.Indexes[j];
+                    SBC_LOG_I("VERSION_TRACK TEvNavigateKeySetResult index info"
+                        << ", path# " << pathStr
+                        << ", indexNum# " << j
+                        << ", indexName# " << index.GetName()
+                        << ", indexSchemaVersion# " << index.GetSchemaVersion()
+                        << ", indexPathId# " << index.GetPathOwnerId() << ":" << index.GetLocalPathId());
+                }
+            }
+
+            TBase::SendResult();
+        }
     };
 
     class TAccessCheckerResolve: public TAccessChecker<TResolveContextPtr, TEvResolveResult, TAccessCheckerResolve> {
@@ -789,6 +833,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
             const auto& tableDesc = pathDesc.GetTable();
 
+            SBC_LOG_D("VERSION_TRACK FillTableInfo processing table description"
+                << ", path# " << (pathDesc.HasSelf() ? pathDesc.GetSelf().GetName() : "unknown")
+                << ", tableIndexesSize# " << tableDesc.TableIndexesSize());
+
             for (const auto& columnDesc : tableDesc.GetColumns()) {
                 auto& column = Columns[columnDesc.GetId()];
                 column.Id = columnDesc.GetId();
@@ -823,6 +871,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             Indexes.reserve(tableDesc.TableIndexesSize());
             for (const auto& index : tableDesc.GetTableIndexes()) {
+                SBC_LOG_D("VERSION_TRACK FillTableInfo adding index to cache"
+                    << ", indexName# " << index.GetName()
+                    << ", indexSchemaVersion# " << index.GetSchemaVersion()
+                    << ", indexPathId# " << index.GetPathOwnerId() << ":" << index.GetLocalPathId());
                 Indexes.push_back(index);
             }
 
@@ -1103,7 +1155,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         void SendSyncRequest() const {
             Y_ABORT_UNLESS(Subscriber, "it hangs if no subscriber");
-            Owner->Send(Subscriber.Subscriber, new NInternalEvents::TEvSyncRequest(), 0, ++Subscriber.SyncCookie);
+            ++Subscriber.SyncCookie;
+            SBC_LOG_D("VERSION_TRACK SendSyncRequest"
+                << ", pathId# " << PathId
+                << ", subscriber# " << Subscriber.Subscriber
+                << ", syncCookie# " << Subscriber.SyncCookie
+                << ", isFilled# " << Filled);
+            Owner->Send(Subscriber.Subscriber, new NInternalEvents::TEvSyncRequest(), 0, Subscriber.SyncCookie);
         }
 
         void ResendSyncRequests(THashMap<TVariantContextPtr, TVector<TRequest>>& inFlight) const {
@@ -1406,6 +1464,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return;
             }
 
+            SBC_LOG_D("VERSION_TRACK AddInFlight"
+                << ", pathId# " << PathId
+                << ", entryIndex# " << entryIndex
+                << ", isSync# " << isSync
+                << ", isFilled# " << Filled
+                << ", hasSubscriber# " << static_cast<bool>(Subscriber)
+                << ", subscriberType# " << static_cast<ui32>(Subscriber.Type));
+
             if (isSync) {
                 SendSyncRequest();
             }
@@ -1443,6 +1509,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         TVector<TVariantContextPtr> ProcessInFlight(const TResponseProps& response) const {
+            SBC_LOG_D("VERSION_TRACK ProcessInFlight"
+                << ", pathId# " << PathId
+                << ", isFilled# " << Filled
+                << ", responseIsSync# " << response.IsSync
+                << ", responseCookie# " << response.Cookie
+                << ", inFlightSize# " << InFlight.size()
+                << ", schemaVersion# " << SchemaVersion);
+
             TVector<TVariantContextPtr> processed(Reserve(InFlight.size()));
 
             EraseNodesIf(InFlight, [this, &processed, response](auto& kv) {
@@ -1496,6 +1570,19 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void Fill(TSchemeBoardEvents::TEvNotifyUpdate& notify) {
+            ui64 incomingVersion = 0;
+            if (notify.DescribeSchemeResult.HasPathDescription() &&
+                notify.DescribeSchemeResult.GetPathDescription().HasSelf() &&
+                notify.DescribeSchemeResult.GetPathDescription().GetSelf().HasVersion()) {
+                incomingVersion = notify.DescribeSchemeResult.GetPathDescription().GetSelf().GetVersion().GetGeneralVersion();
+            }
+            SBC_LOG_D("VERSION_TRACK Fill TEvNotifyUpdate"
+                << ", pathId# " << notify.PathId
+                << ", path# " << notify.Path
+                << ", incomingVersion# " << incomingVersion
+                << ", oldSchemaVersion# " << SchemaVersion
+                << ", subscriberActorId# " << Subscriber.Subscriber);
+
             Clear();
             Filled = true;
 
@@ -1561,6 +1648,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 TableKind = PathSubTypeToTableKind(entryDesc.GetPathSubType());
                 IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType());
                 if (Created) {
+                    SBC_LOG_D("VERSION_TRACK Fill processing table entry"
+                        << ", path# " << Path
+                        << ", pathId# " << PathId
+                        << ", tableSchemaVersion# " << tableSchemaVersion(entryDesc)
+                        << ", tableIndexesSize# " << pathDesc.GetTable().TableIndexesSize());
                     FillTableInfo(pathDesc);
                     SchemaVersion = tableSchemaVersion(entryDesc);
                 }
@@ -1782,6 +1874,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void Fill(TSchemeBoardEvents::TEvNotifyDelete& notify) {
+            SBC_LOG_D("VERSION_TRACK Fill TEvNotifyDelete"
+                << ", pathId# " << notify.PathId
+                << ", path# " << notify.Path
+                << ", strong# " << notify.Strong
+                << ", oldSchemaVersion# " << SchemaVersion
+                << ", subscriberActorId# " << Subscriber.Subscriber);
+
             Clear();
             Filled = true;
 
@@ -1820,6 +1919,18 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         const TSet<ui64>& GetAbandonedSchemeShardIds() const {
             return AbandonedSchemeShardsIds;
+        }
+
+        ui64 GetSchemaVersion() const {
+            return SchemaVersion;
+        }
+
+        bool HasActiveSubscription() const {
+            return bool(Subscriber);
+        }
+
+        const TVector<NKikimrSchemeOp::TIndexDescription>& GetIndexes() const {
+            return Indexes;
         }
 
         void FillSystemViewEntry(TNavigateContext* context, TNavigate::TEntry& entry,
@@ -1891,6 +2002,15 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 << ", entry# " << entry.ToString()
                 << ", props# " << props.ToString());
 
+
+            SBC_LOG_D("VERSION_TRACK SchemeCache::FillEntry for TNavigate"
+                << ", pathId# " << PathId
+                << ", path# " << Path
+                << ", schemaVersion# " << SchemaVersion
+                << ", isFilled# " << Filled
+                << ", hasActiveSubscription# " << bool(Subscriber)
+                << ", isSync# " << props.IsSync
+                << ", isPartial# " << props.Partial);
             if (props.IsSync && props.Partial) {
                 return SetError(context, entry, TNavigate::EStatus::LookupError);
             }
@@ -1987,6 +2107,17 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.Self = Self;
             entry.Columns = Columns;
             entry.NotNullColumns = NotNullColumns;
+            if (!Indexes.empty()) {
+                SBC_LOG_D("VERSION_TRACK FillEntry copying indexes to navigate entry"
+                    << ", path# " << Path
+                    << ", indexesCount# " << Indexes.size());
+                for (const auto& index : Indexes) {
+                    SBC_LOG_D("VERSION_TRACK FillEntry index in navigate entry"
+                        << ", path# " << Path
+                        << ", indexName# " << index.GetName()
+                        << ", indexSchemaVersion# " << index.GetSchemaVersion());
+                }
+            }
             entry.Indexes = Indexes;
             entry.CdcStreams = CdcStreams;
             entry.Sequences = Sequences;
@@ -2119,6 +2250,15 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 << ", props# " << props.ToString());
 
             TKeyDesc& keyDesc = *entry.KeyDescription;
+
+            SBC_LOG_D("VERSION_TRACK SchemeCache::FillEntry for TResolve"
+                << ", pathId# " << PathId
+                << ", path# " << Path
+                << ", schemaVersion# " << SchemaVersion
+                << ", isFilled# " << Filled
+                << ", hasActiveSubscription# " << bool(Subscriber)
+                << ", isSync# " << props.IsSync
+                << ", isPartial# " << props.Partial);
 
             if (props.IsSync && props.Partial) {
                 return SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists);
@@ -2383,9 +2523,18 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             << ", path# " << path
             << ", domainOwnerId# " << domainOwnerId);
 
-        return TSubscriber(
+        auto subscriber = TSubscriber(
             Register(CreateSchemeBoardSubscriber(SelfId(), path, domainOwnerId)), domainOwnerId, path
         );
+
+        SBC_LOG_D("VERSION_TRACK CreateSubscriber"
+            << ": self# " << SelfId()
+            << ", path# " << path
+            << ", domainOwnerId# " << domainOwnerId
+            << ", subscriberActorId# " << subscriber.Subscriber
+            << ", subscriberType# " << static_cast<ui32>(subscriber.Type));
+
+        return subscriber;
     }
 
     template <typename TContextPtr, typename TEntry, typename TPathExtractor, typename TTabletIdExtractor>
@@ -2447,14 +2596,28 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         Cache.Promote(path);
 
         if (cacheItem->IsFilled() && !entry.SyncVersion) {
+            SBC_LOG_D("VERSION_TRACK SchemeCache::HandleEntry serving from cache"
+                << ", pathId# " << cacheItem->GetPathId()
+                << ", schemaVersion# " << cacheItem->GetSchemaVersion()
+                << ", isFilled# " << cacheItem->IsFilled()
+                << ", hasActiveSubscription# " << cacheItem->HasActiveSubscription()
+                << ", entrySyncVersion# " << entry.SyncVersion);
             cacheItem->FillEntry(context.Get(), entry);
         }
 
         if (entry.SyncVersion) {
+            SBC_LOG_D("VERSION_TRACK SchemeCache::HandleEntry sync requested, adding to in-flight"
+                << ", pathId# " << cacheItem->GetPathId()
+                << ", schemaVersion# " << cacheItem->GetSchemaVersion()
+                << ", isFilled# " << cacheItem->IsFilled()
+                << ", hasActiveSubscription# " << cacheItem->HasActiveSubscription());
             cacheItem->AddInFlight(context, index, true);
         }
 
         if (!cacheItem->IsFilled()) {
+            SBC_LOG_D("VERSION_TRACK SchemeCache::HandleEntry not filled, adding to in-flight"
+                << ", pathId# " << cacheItem->GetPathId()
+                << ", hasActiveSubscription# " << cacheItem->HasActiveSubscription());
             cacheItem->AddInFlight(context, index, false);
         }
     }
@@ -2650,6 +2813,26 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             << ": self# " << SelfId()
             << ", notify# " << notify.ToString());
 
+        // VERSION_TRACK logging for debugging scheme cache notification handling
+        if (auto* updateNotify = ev->template CastAsLocal<TSchemeBoardEvents::TEvNotifyUpdate>()) {
+            ui64 pathVersion = 0;
+            if (updateNotify->DescribeSchemeResult.HasPathDescription() &&
+                updateNotify->DescribeSchemeResult.GetPathDescription().HasSelf() &&
+                updateNotify->DescribeSchemeResult.GetPathDescription().GetSelf().HasVersion()) {
+                pathVersion = updateNotify->DescribeSchemeResult.GetPathDescription().GetSelf().GetVersion().GetGeneralVersion();
+            }
+            SBC_LOG_D("VERSION_TRACK HandleNotify TEvNotifyUpdate"
+                << ", path# " << updateNotify->Path
+                << ", pathId# " << updateNotify->PathId
+                << ", pathVersion# " << pathVersion
+                << ", isDeletion# " << false);
+        } else if (auto* deleteNotify = ev->template CastAsLocal<TSchemeBoardEvents::TEvNotifyDelete>()) {
+            SBC_LOG_D("VERSION_TRACK HandleNotify TEvNotifyDelete"
+                << ", path# " << deleteNotify->Path
+                << ", pathId# " << deleteNotify->PathId
+                << ", isDeletion# " << true);
+        }
+
         if (notify.Path && notify.PathId) {
             Y_ABORT_UNLESS(!response.IsSync);
         }
@@ -2665,7 +2848,77 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return;
         }
 
+        // VERSION_TRACK: Log old cache entry state before Fill() replaces it
+        if (auto* updateNotify = ev->template CastAsLocal<TSchemeBoardEvents::TEvNotifyUpdate>()) {
+            const auto& oldIndexes = cacheItem->GetIndexes();
+            TStringBuilder oldIndexesInfo;
+            for (const auto& idx : oldIndexes) {
+                oldIndexesInfo << "{name=" << idx.GetName()
+                    << ",pathId=" << idx.GetPathOwnerId() << ":" << idx.GetLocalPathId()
+                    << ",version=" << idx.GetSchemaVersion() << "} ";
+            }
+
+            // Extract new version info from incoming notify
+            ui64 newSchemaVersion = 0;
+            if (updateNotify->DescribeSchemeResult.HasPathDescription()) {
+                const auto& pathDesc = updateNotify->DescribeSchemeResult.GetPathDescription();
+                if (pathDesc.HasSelf() && pathDesc.GetSelf().HasVersion()) {
+                    newSchemaVersion = pathDesc.GetSelf().GetVersion().GetTableSchemaVersion();
+                }
+                // Count incoming indexes
+                ui64 newIndexCount = 0;
+                TStringBuilder newIndexesInfo;
+                if (pathDesc.HasTable()) {
+                    newIndexCount = pathDesc.GetTable().TableIndexesSize();
+                    for (const auto& idx : pathDesc.GetTable().GetTableIndexes()) {
+                        newIndexesInfo << "{name=" << idx.GetName()
+                            << ",pathId=" << idx.GetPathOwnerId() << ":" << idx.GetLocalPathId()
+                            << ",version=" << idx.GetSchemaVersion() << "} ";
+                    }
+                }
+                SBC_LOG_I("VERSION_TRACK SchemeCache entry update"
+                    << ", path# " << updateNotify->Path
+                    << ", pathId# " << updateNotify->PathId
+                    << ", oldPathId# " << cacheItem->GetPathId()
+                    << ", oldSchemaVersion# " << cacheItem->GetSchemaVersion()
+                    << ", newSchemaVersion# " << newSchemaVersion
+                    << ", oldIndexCount# " << oldIndexes.size()
+                    << ", newIndexCount# " << newIndexCount
+                    << ", oldIndexes# [" << oldIndexesInfo << "]"
+                    << ", newIndexes# [" << newIndexesInfo << "]"
+                    << ", isFilled# " << cacheItem->IsFilled());
+            } else {
+                SBC_LOG_I("VERSION_TRACK SchemeCache entry update (no path description)"
+                    << ", path# " << updateNotify->Path
+                    << ", pathId# " << updateNotify->PathId
+                    << ", oldPathId# " << cacheItem->GetPathId()
+                    << ", oldSchemaVersion# " << cacheItem->GetSchemaVersion()
+                    << ", oldIndexCount# " << oldIndexes.size()
+                    << ", oldIndexes# [" << oldIndexesInfo << "]"
+                    << ", isFilled# " << cacheItem->IsFilled());
+            }
+        }
+
         cacheItem->Fill(notify);
+
+        // VERSION_TRACK: Log the state after Fill() to confirm the update
+        if (ev->template CastAsLocal<TSchemeBoardEvents::TEvNotifyUpdate>()) {
+            const auto& resultIndexes = cacheItem->GetIndexes();
+            TStringBuilder resultIndexesInfo;
+            for (const auto& idx : resultIndexes) {
+                resultIndexesInfo << "{name=" << idx.GetName()
+                    << ",pathId=" << idx.GetPathOwnerId() << ":" << idx.GetLocalPathId()
+                    << ",version=" << idx.GetSchemaVersion() << "} ";
+            }
+            SBC_LOG_I("VERSION_TRACK SchemeCache entry after Fill"
+                << ", path# " << notify.Path
+                << ", pathId# " << notify.PathId
+                << ", resultPathId# " << cacheItem->GetPathId()
+                << ", resultSchemaVersion# " << cacheItem->GetSchemaVersion()
+                << ", resultIndexCount# " << resultIndexes.size()
+                << ", resultIndexes# [" << resultIndexesInfo << "]"
+                << ", isFilled# " << cacheItem->IsFilled());
+        }
 
         if (!response.IsSync && notify.PathId) {
             Y_VERIFY_S(cacheItem->GetPathId() == notify.PathId, "Inconsistent path ids"
@@ -2809,6 +3062,25 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             << ": self# " << SelfId()
             << ", request# " << ev->Get()->Request->ToString(*AppData()->TypeRegistry));
 
+
+        // VERSION_TRACK: Log incoming navigate request details for debugging schema version sync issues
+        {
+            const auto& request = ev->Get()->Request;
+            for (size_t i = 0; i < request->ResultSet.size(); ++i) {
+                const auto& entry = request->ResultSet[i];
+                TString pathStr;
+                if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
+                    pathStr = CanonizePath(entry.Path);
+                } else {
+                    pathStr = TStringBuilder() << entry.TableId.PathId;
+                }
+                SBC_LOG_I("VERSION_TRACK TEvNavigateKeySet incoming request"
+                    << ", entryIndex# " << i
+                    << ", path# " << pathStr
+                    << ", syncVersion# " << (entry.SyncVersion ? "true" : "false")
+                    << ", requestType# " << (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath ? "ByPath" : "ByTableId"));
+            }
+        }
         if (MaybeRunDbResolver(ev)) {
             return;
         }

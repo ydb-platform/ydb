@@ -694,6 +694,11 @@ private:
             << ", sender: " << ev->Sender
             << ", queryUid: " << request.Uid);
 
+        LOG_INFO_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE,
+            "VERSION_TRACK CompileCache explicit invalidation request"
+            << ", queryUid: " << request.Uid
+            << ", sender: " << ev->Sender);
+
         auto dbCounters = request.DbCounters;
         Counters->ReportCompileRequestInvalidate(dbCounters);
 
@@ -713,6 +718,9 @@ private:
 
     void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution) {
         if (QueryCache->FindByUid(compileResult->Uid, false)) {
+            LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE,
+                "VERSION_TRACK CompileCache::UpdateQueryCache replacing existing entry"
+                << ", queryUid: " << compileResult->Uid);
             QueryCache->Replace(compileResult);
         } else if (keepInCache) {
             if (compileResult->Query) {
@@ -721,6 +729,27 @@ private:
                     LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Trying to insert query into compile cache when it is already there");
                 }
             }
+
+            // Log table versions being cached for VERSION_TRACK debugging
+            if (compileResult->PreparedQuery) {
+                LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE,
+                    "VERSION_TRACK CompileCache INSERT new compiled query"
+                    << ", queryUid: " << compileResult->Uid
+                    << ", compiledAt: " << compileResult->CompiledAt);
+                for (const auto& tx : compileResult->PreparedQuery->GetPhysicalQuery().GetTransactions()) {
+                    for (const auto& stage : tx.GetStages()) {
+                        for (const auto& tableOp : stage.GetTableOps()) {
+                            const auto& table = tableOp.GetTable();
+                            LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE,
+                                "VERSION_TRACK CompileCache INSERT table version"
+                                << ", tableId: " << table.GetOwnerId() << ":" << table.GetTableId()
+                                << ", path: " << table.GetPath()
+                                << ", version: " << table.GetVersion());
+                        }
+                    }
+                }
+            }
+
             if (QueryCache->Insert(compileResult, TableServiceConfig.GetEnableAstCache(), isPerStatementExecution)) {
                 Counters->CompileQueryCacheEvicted->Inc();
             }
@@ -1205,6 +1234,12 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     *counters->CompileQueryCacheSize = SizeImpl();
     *counters->CompileQueryCacheBytes = BytesImpl();
 
+    LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE,
+        "VERSION_TRACK CompileCache::Find called"
+        << ", cacheSize: " << SizeImpl()
+        << ", uid: " << (uid ? *uid : "<none>")
+        << ", hasQuery: " << (query.Defined() ? "yes" : "no"));
+
     if (uid) {
         counters->ReportCompileRequestGet(dbCounters);
 
@@ -1222,6 +1257,26 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
                     << ", sender: " << sender
                     << ", queryUid: " << *uid);
 
+                // Log table versions from cached compiled query for VERSION_TRACK debugging
+                if (compileResult->PreparedQuery) {
+                    LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE,
+                        "VERSION_TRACK CompileCache HIT by uid"
+                        << ", queryUid: " << *uid
+                        << ", compiledAt: " << compileResult->CompiledAt);
+                    for (const auto& tx : compileResult->PreparedQuery->GetPhysicalQuery().GetTransactions()) {
+                        for (const auto& stage : tx.GetStages()) {
+                            for (const auto& tableOp : stage.GetTableOps()) {
+                                const auto& table = tableOp.GetTable();
+                                LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE,
+                                    "VERSION_TRACK CompileCache cached table"
+                                    << ", tableId: " << table.GetOwnerId() << ":" << table.GetTableId()
+                                    << ", path: " << table.GetPath()
+                                    << ", cachedVersion: " << table.GetVersion());
+                            }
+                        }
+                    }
+                }
+
                 return compileResult;
             } else {
                 LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Non-matching user sid for query"
@@ -1232,6 +1287,9 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
             }
         }
 
+        LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE,
+            "VERSION_TRACK CompileCache MISS by uid"
+            << ", queryUid: " << *uid);
         return nullptr;
     }
 
@@ -1256,8 +1314,32 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
             << ", sender: " << sender
             << ", queryUid: " << compileResult->Uid);
 
+        // Log table versions from cached compiled query for VERSION_TRACK debugging
+        if (compileResult->PreparedQuery) {
+            LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE,
+                "VERSION_TRACK CompileCache HIT by query"
+                << ", queryUid: " << compileResult->Uid
+                << ", compiledAt: " << compileResult->CompiledAt);
+            for (const auto& tx : compileResult->PreparedQuery->GetPhysicalQuery().GetTransactions()) {
+                for (const auto& stage : tx.GetStages()) {
+                    for (const auto& tableOp : stage.GetTableOps()) {
+                        const auto& table = tableOp.GetTable();
+                        LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE,
+                            "VERSION_TRACK CompileCache cached table"
+                            << ", tableId: " << table.GetOwnerId() << ":" << table.GetTableId()
+                            << ", path: " << table.GetPath()
+                            << ", cachedVersion: " << table.GetVersion());
+                    }
+                }
+            }
+        }
+
         return compileResult;
     }
+
+    LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE,
+        "VERSION_TRACK CompileCache MISS by query"
+        << ", database: " << query->Database);
 
     // note, we don't report cache miss, because it's up to caller to decide what to do:
     // in particular, session actor will go to the compile service, which will actually report the miss.

@@ -1905,7 +1905,8 @@ void TSchemeShard::PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId)
 
     TTableIndexInfo::TPtr alterData = index->AlterData;
     Y_ABORT_UNLESS(alterData);
-    Y_ABORT_UNLESS(index->AlterVersion < alterData->AlterVersion);
+    // Relaxed to <= to allow convergence when multiple operations use CoordinatedSchemaVersion
+    Y_ABORT_UNLESS(index->AlterVersion <= alterData->AlterVersion);
 
     db.Table<Schema::TableIndex>().Key(element->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(alterData->AlterVersion),
@@ -1961,6 +1962,10 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
 }
 
 void TSchemeShard::PersistTableIndexAlterVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableIndexInfo::TPtr indexInfo) {
+    LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "VERSION_TRACK PersistTableIndexAlterVersion"
+        << " indexPathId# " << pathId
+        << " newVersion# " << indexInfo->AlterVersion);
     db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(indexInfo->AlterVersion)
     );
@@ -2636,6 +2641,9 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         if (txState.TargetPathTargetState) {
             proto.MutableTxCopyTableExtraData()->SetTargetPathTargetState(*txState.TargetPathTargetState);
         }
+        if (txState.CoordinatedSchemaVersion) {
+            proto.MutableTxCopyTableExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
+        }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     } else if (txState.TxType == TTxState::TxChangePathState) {
@@ -2648,6 +2656,9 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
     }  else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
+        if (txState.CoordinatedSchemaVersion) {
+            proto.MutableTxCdcStreamExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
+        }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable ||
@@ -2658,6 +2669,9 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
                txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
         NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
+        if (txState.CoordinatedSchemaVersion) {
+            proto.MutableTxCdcStreamExtraData()->SetCoordinatedSchemaVersion(*txState.CoordinatedSchemaVersion);
+        }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
     }
@@ -2921,6 +2935,10 @@ void TSchemeShard::PersistPersQueueGroupStats(NIceDb::TNiceDb &db, const TPathId
 }
 
 void TSchemeShard::PersistTableAlterVersion(NIceDb::TNiceDb& db, const TPathId pathId, const TTableInfo::TPtr tableInfo) {
+    LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "VERSION_TRACK PersistTableAlterVersion"
+        << " tablePathId# " << pathId
+        << " newVersion# " << tableInfo->AlterVersion);
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::Tables>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::Tables::AlterVersion>(tableInfo->AlterVersion));
@@ -7559,6 +7577,12 @@ void TSchemeShard::FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64
 {
     Y_VERIFY_S(Tables.contains(tableId), "Unknown table id " << tableId);
     const TTableInfo::TPtr tinfo = Tables.at(tableId);
+
+    LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "VERSION_TRACK FillTableDescription (sent to datashard)"
+        << " tablePathId# " << tableId
+        << " partitionIdx# " << partitionIdx
+        << " schemaVersion# " << schemaVersion);
 
     TString rangeBegin = (partitionIdx != 0)
         ? tinfo->GetPartitions()[partitionIdx-1].EndOfRange

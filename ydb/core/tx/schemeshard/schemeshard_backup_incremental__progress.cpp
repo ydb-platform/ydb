@@ -44,6 +44,45 @@ public:
         const auto& tablePath = Self->PathsById.at(streamPath->ParentPathId);
         const auto& workingDir = Self->PathToString(Self->PathsById.at(tablePath->ParentPathId));
 
+        // Get the next version for the DROP operation
+        // The cleaner runs as a separate transaction (allocates its own TxId),
+        // so we must increment the version - datashards expect proposed == current + 1
+        // IMPORTANT: For index impl tables, we must also consider the parent index version
+        // to avoid version mismatches (the index and impl table must stay in sync)
+        TMaybe<ui64> coordinatedVersion;
+        TPathId tablePathId = streamPath->ParentPathId;
+        if (Self->Tables.contains(tablePathId)) {
+            ui64 tableVersion = Self->Tables.at(tablePathId)->AlterVersion;
+            ui64 maxVersion = tableVersion;
+            ui64 indexVersion = 0;
+            TPathId parentIndexPathId;
+
+            // Check if this is an index impl table and include parent index version
+            if (Self->PathsById.contains(tablePathId)) {
+                auto tablePathInfo = Self->PathsById.at(tablePathId);
+                if (tablePathInfo->ParentPathId && Self->PathsById.contains(tablePathInfo->ParentPathId)) {
+                    auto parentPath = Self->PathsById.at(tablePathInfo->ParentPathId);
+                    if (parentPath->IsTableIndex() && Self->Indexes.contains(tablePathInfo->ParentPathId)) {
+                        parentIndexPathId = tablePathInfo->ParentPathId;
+                        auto index = Self->Indexes.at(tablePathInfo->ParentPathId);
+                        indexVersion = index->AlterVersion;
+                        maxVersion = Max(maxVersion, indexVersion);
+                    }
+                }
+            }
+
+            coordinatedVersion = maxVersion + 1;
+
+            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "VERSION_TRACK TryStartCleaner calculating coordinatedVersion"
+                << " tablePathId# " << tablePathId
+                << " tableVersion# " << tableVersion
+                << " parentIndexPathId# " << parentIndexPathId
+                << " indexVersion# " << indexVersion
+                << " maxVersion# " << maxVersion
+                << " coordinatedVersion# " << *coordinatedVersion);
+        }
+
         NewCleaners.emplace_back(
             CreateContinuousBackupCleaner(
                 Self->TxAllocatorClient,
@@ -52,7 +91,8 @@ public:
                 item.PathId,
                 workingDir,
                 tablePath->Name,
-                streamPath->Name
+                streamPath->Name,
+                coordinatedVersion
         ));
     }
 

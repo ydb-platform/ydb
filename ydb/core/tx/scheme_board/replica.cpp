@@ -19,6 +19,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/util/memory_track.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
@@ -197,6 +198,16 @@ public:
                 subscribers.push_back(&subscriber);
             }
 
+            // VERSION_TRACK logging for notification dispatch
+            SBR_LOG_I("VERSION_TRACK SchemeBoard::Notify dispatching"
+                << " pathId# " << PathId
+                << " path# " << Path
+                << " version# " << GetVersion()
+                << " subscriberCount# " << subscribers.size()
+                << " isDeletion# " << (notify->Record.GetIsDeletion() ? "true" : "false")
+                << " isStrong# " << (notify->Record.GetStrong() ? "true" : "false")
+                << " timestamp# " << TInstant::Now().MicroSeconds());
+
             MultiSend(subscribers, Owner->SelfId(), std::move(notify));
         }
 
@@ -210,6 +221,10 @@ public:
             NActors::NMemory::TLabel<MemoryLabelDescribeResult>::Sub(
                 PathDescription.DescribeSchemeResultSerialized.size()
             );
+        }
+
+        TActorId SelfId() const {
+            return Owner->SelfId();
         }
 
         void Move(TDescription&& other) {
@@ -227,10 +242,6 @@ public:
 
             TrackMemory();
             other.TrackMemory();
-        }
-
-        auto SelfId() const {
-            return Owner->SelfId();
         }
 
     public:
@@ -316,6 +327,15 @@ public:
             SBR_LOG_T("Merge descriptions"
                 << ": self# " << ToLogString()
                 << ", other# " << other.ToLogString());
+
+            // VERSION_TRACK logging for merge operation (potential race condition point)
+            SBR_LOG_I("VERSION_TRACK SchemeBoard::Merge"
+                << " pathId# " << PathId
+                << " path# " << Path
+                << " selfVersion# " << GetVersion()
+                << " otherVersion# " << other.GetVersion()
+                << " selfIsNewer# " << (*this > other ? "true" : "false")
+                << " timestamp# " << TInstant::Now().MicroSeconds());
 
             UntrackMemory();
             other.UntrackMemory();
@@ -542,21 +562,43 @@ private:
 
     // upsert description only by pathId
     TDescription& UpsertDescriptionByPathId(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription) {
+        // VERSION_TRACK logging for description upsert
+        TDescription* existingDesc = Descriptions.FindPtr(pathId);
+        const ui64 oldVersion = existingDesc ? existingDesc->GetVersion() : 0;
+
         SBR_LOG_I("Upsert description"
             << ": pathId# " << pathId
             << ", pathDescription# " << pathDescription.ToString()
         );
+
+        SBR_LOG_I("VERSION_TRACK SchemeBoard::UpsertDescriptionByPathId"
+            << " pathId# " << pathId
+            << " path# " << path
+            << " oldVersion# " << oldVersion
+            << " newVersion# " << pathDescription.PathVersion
+            << " timestamp# " << TInstant::Now().MicroSeconds());
 
         return Descriptions.Upsert(pathId, TDescription(this, path, pathId, std::move(pathDescription)));
     }
 
     // upsert description by path AND pathId both
     TDescription& UpsertDescription(const TString& path, const TPathId& pathId, TOpaquePathDescription&& pathDescription) {
+        // VERSION_TRACK logging for description upsert
+        TDescription* existingDesc = Descriptions.FindPtr(pathId);
+        const ui64 oldVersion = existingDesc ? existingDesc->GetVersion() : 0;
+
         SBR_LOG_I("Upsert description"
             << ": path# " << path
             << ", pathId# " << pathId
             << ", pathDescription# " << pathDescription.ToString()
         );
+
+        SBR_LOG_I("VERSION_TRACK SchemeBoard::UpsertDescription"
+            << " pathId# " << pathId
+            << " path# " << path
+            << " oldVersion# " << oldVersion
+            << " newVersion# " << pathDescription.PathVersion
+            << " timestamp# " << TInstant::Now().MicroSeconds());
 
         return Descriptions.Upsert(path, pathId, TDescription(this, path, pathId, std::move(pathDescription)));
     }
@@ -792,6 +834,26 @@ private:
 
         const TString& path = ev->Get()->GetPath();
         const TPathId& pathId = ev->Get()->GetPathId();
+
+        // VERSION_TRACK logging for race condition detection
+        {
+            const auto& record = ev->Get()->GetRecord();
+            const ui64 owner = record.GetOwner();
+            const ui64 generation = record.GetGeneration();
+            const bool isDeletion = record.GetIsDeletion();
+            const ui64 version = record.HasPathDirEntryPathVersion() ? record.GetPathDirEntryPathVersion() : 0;
+
+            SBR_LOG_I("VERSION_TRACK SchemeBoard::TEvUpdate received"
+                << " pathId# " << pathId
+                << " path# " << path
+                << " version# " << version
+                << " owner# " << owner
+                << " generation# " << generation
+                << " isDeletion# " << (isDeletion ? "true" : "false")
+                << " sender# " << ev->Sender
+                << " cookie# " << ev->Cookie
+                << " timestamp# " << TInstant::Now().MicroSeconds());
+        }
 
        {
             auto& record = *ev->Get()->MutableRecord();

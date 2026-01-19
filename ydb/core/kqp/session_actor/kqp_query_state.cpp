@@ -44,6 +44,9 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
     Y_ENSURE(response.Request);
     const auto& navigate = *response.Request;
 
+    LOG_T("VERSION_TRACK EnsureTableVersions checking " << navigate.ResultSet.size() << " tables"
+        << ", cached table versions count: " << TableVersions.size());
+
     for (const auto& entry : navigate.ResultSet) {
         switch (entry.Status) {
             case TSchemeCacheNavigate::EStatus::Ok: {
@@ -54,16 +57,23 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
                     continue;
                 }
 
+                LOG_T("VERSION_TRACK EnsureTableVersions"
+                    << ", pathId: " << entry.TableId.PathId
+                    << ", cached version: " << *expectedVersion
+                    << ", current version: " << entry.TableId.SchemaVersion);
+
                 if (!*expectedVersion) {
                     // Do not check tables with zero version.
+                    LOG_T("VERSION_TRACK EnsureTableVersions skipping zero version table"
+                        << ", pathId: " << entry.TableId.PathId);
                     continue;
                 }
 
                 if (entry.TableId.SchemaVersion && entry.TableId.SchemaVersion != *expectedVersion) {
-                    LOG_I("Scheme version mismatch"
+                    LOG_I("VERSION_TRACK EnsureTableVersions MISMATCH - triggering recompile"
                         << ", pathId: " << entry.TableId.PathId
-                        << ", expected version: " << *expectedVersion
-                        << ", actual version: " << entry.TableId.SchemaVersion);
+                        << ", cached version: " << *expectedVersion
+                        << ", current version: " << entry.TableId.SchemaVersion);
                     return false;
                 }
 
@@ -265,10 +275,33 @@ bool TKqpQueryState::TryGetFromCache(
     if (compileResult) {
         if (SaveAndCheckCompileResult(compileResult)) {
             CompileStats.FromCache = true;
+
+            // Log cached table versions for VERSION_TRACK debugging
+            LOG_I("VERSION_TRACK KQP TryGetFromCache HIT - using cached compiled query"
+                << ", queryUid: " << compileResult->Uid
+                << ", compiledAt: " << compileResult->CompiledAt);
+
+            // Log table versions from the cached prepared query
+            if (PreparedQuery) {
+                for (const auto& tx : PreparedQuery->GetPhysicalQuery().GetTransactions()) {
+                    for (const auto& stage : tx.GetStages()) {
+                        for (const auto& tableOp : stage.GetTableOps()) {
+                            const auto& table = tableOp.GetTable();
+                            LOG_T("VERSION_TRACK KQP cached table version"
+                                << ", tableId: " << table.GetOwnerId() << ":" << table.GetTableId()
+                                << ", cachedVersion: " << table.GetVersion());
+                        }
+                    }
+                }
+            }
+
             return true;
         }
     }
 
+    LOG_T("VERSION_TRACK KQP TryGetFromCache MISS - need compilation"
+        << (uid ? TStringBuilder() << ", uid: " << *uid : TString())
+        << (query ? TStringBuilder() << ", database: " << query->Database : TString()));
     return false;
 }
 

@@ -143,8 +143,13 @@ public:
                 if (hasDrop) {
                     auto& dropNotice = *combined.MutableDropCdcStreamNotice();
                     txState->SourcePathId.ToProto(dropNotice.MutablePathId());
-                    dropNotice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion + 1);
-                    
+                    // Use coordinated schema version if available, otherwise increment
+                    if (txState->CoordinatedSchemaVersion) {
+                        dropNotice.SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
+                    } else {
+                        dropNotice.SetTableSchemaVersion(context.SS->Tables.at(txState->SourcePathId)->AlterVersion + 1);
+                    }
+
                     for (const auto& id : streamsToDrop) {
                         id.ToProto(dropNotice.AddStreamPathId());
                     }
@@ -152,6 +157,10 @@ public:
 
                 if (hasCreate) {
                     NCdcStreamAtTable::FillNotice(txState->CdcPathId, context, *combined.MutableCreateCdcStreamNotice());
+                    // Override table schema version if coordinated version is set
+                    if (txState->CoordinatedSchemaVersion) {
+                        combined.MutableCreateCdcStreamNotice()->SetTableSchemaVersion(*txState->CoordinatedSchemaVersion);
+                    }
                 }
 
             } else {
@@ -222,6 +231,26 @@ public:
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
         context.SS->PersistTableCreated(db, pathId);
 
+        // Sync destination's parent index if this is an index impl table
+        // This ensures index version stays in sync with impl table version from creation
+        if (path->ParentPathId && context.SS->PathsById.contains(path->ParentPathId)) {
+            auto dstParentPath = context.SS->PathsById.at(path->ParentPathId);
+            if (dstParentPath->IsTableIndex() && context.SS->Indexes.contains(path->ParentPathId)) {
+                auto dstIndex = context.SS->Indexes.at(path->ParentPathId);
+                if (dstIndex->AlterVersion < table->AlterVersion) {
+                    dstIndex->AlterVersion = table->AlterVersion;
+                    // If there's ongoing alter operation, also bump alterData version to maintain invariant
+                    if (dstIndex->AlterData && dstIndex->AlterData->AlterVersion < table->AlterVersion) {
+                        dstIndex->AlterData->AlterVersion = table->AlterVersion;
+                        context.SS->PersistTableIndexAlterData(db, path->ParentPathId);
+                    }
+                    context.SS->PersistTableIndexAlterVersion(db, path->ParentPathId, dstIndex);
+                    context.SS->ClearDescribePathCaches(dstParentPath);
+                    context.OnComplete.PublishToSchemeBoard(OperationId, path->ParentPathId);
+                }
+            }
+        }
+
         context.SS->TabletCounters->Simple()[COUNTER_TABLE_COUNT].Add(1);
 
         if (table->IsTTLEnabled() && !context.SS->TTLEnabledTables.contains(pathId)) {
@@ -252,15 +281,15 @@ public:
             srcPath->LastTxId = InvalidTxId;
             context.SS->PersistPath(db, srcPathId);
             context.SS->ClearDescribePathCaches(srcPath);
-            context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
+            // Determine hasCdcChanges BEFORE publishing so we can update version first
             bool hasCdcChanges = (txState->CdcPathId != InvalidPathId);
 
             if (!hasCdcChanges) {
                 for (const auto& [name, id] : srcPath->GetChildren()) {
                     if (context.SS->CdcStreams.contains(id)) {
                         auto streamPath = context.SS->PathsById.at(id);
-                        if (streamPath->IsCdcStream() && 
+                        if (streamPath->IsCdcStream() &&
                             streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                             streamPath->DropTxId == OperationId.GetTxId()) {
                             hasCdcChanges = true;
@@ -270,13 +299,73 @@ public:
                 }
             }
 
+            // Update version BEFORE publishing if there are CDC changes
             if (hasCdcChanges && context.SS->Tables.contains(srcPathId)) {
                 auto srcTable = context.SS->Tables.at(srcPathId);
-                srcTable->AlterVersion += 1;
+                ui64 oldVersion = srcTable->AlterVersion;
+
+                // Use coordinated version if available (from backup operations)
+                if (txState->CoordinatedSchemaVersion) {
+                    srcTable->AlterVersion = *txState->CoordinatedSchemaVersion;
+                } else {
+                    srcTable->AlterVersion += 1;
+                }
+
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "VERSION_TRACK TCopyTable TPropose version update"
+                    << " srcPathId# " << srcPathId
+                    << " oldVersion# " << oldVersion
+                    << " newVersion# " << srcTable->AlterVersion
+                    << " coordinatedVersion# " << (txState->CoordinatedSchemaVersion ? ToString(*txState->CoordinatedSchemaVersion) : "none"));
+
                 context.SS->PersistTableAlterVersion(db, srcPathId, srcTable);
 
-                NCdcStreamState::SyncChildIndexes(srcPath, srcTable->AlterVersion, OperationId, context, db);
+                // Update parent index entity version if srcPath is an index impl table
+                // This ensures index version stays in sync with impl table version
+                TPathId parentPathId = srcPath->ParentPathId;
+                if (parentPathId && context.SS->PathsById.contains(parentPathId)) {
+                    auto parentPath = context.SS->PathsById.at(parentPathId);
+                    if (parentPath->IsTableIndex() && context.SS->Indexes.contains(parentPathId)) {
+                        auto index = context.SS->Indexes.at(parentPathId);
+                        if (index->AlterVersion < srcTable->AlterVersion) {
+                            index->AlterVersion = srcTable->AlterVersion;
+                            // If there's ongoing alter operation, also bump alterData version to maintain invariant
+                            if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
+                                index->AlterData->AlterVersion = srcTable->AlterVersion;
+                                context.SS->PersistTableIndexAlterData(db, parentPathId);
+                            }
+                            context.SS->PersistTableIndexAlterVersion(db, parentPathId, index);
+                            context.SS->ClearDescribePathCaches(parentPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, parentPathId);
+                        }
+                    }
+                }
+
+                // Update child index entity versions to match
+                for (const auto& [childName, childPathId] : srcPath->GetChildren()) {
+                    auto childPath = context.SS->PathsById.at(childPathId);
+                    if (!childPath->IsTableIndex() || childPath->Dropped()) {
+                        continue;
+                    }
+                    if (context.SS->Indexes.contains(childPathId)) {
+                        auto index = context.SS->Indexes.at(childPathId);
+                        if (index->AlterVersion < srcTable->AlterVersion) {
+                            index->AlterVersion = srcTable->AlterVersion;
+                            // If there's ongoing alter operation, also bump alterData version to maintain invariant
+                            if (index->AlterData && index->AlterData->AlterVersion < srcTable->AlterVersion) {
+                                index->AlterData->AlterVersion = srcTable->AlterVersion;
+                                context.SS->PersistTableIndexAlterData(db, childPathId);
+                            }
+                            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+                            context.SS->ClearDescribePathCaches(childPath);
+                            context.OnComplete.PublishToSchemeBoard(OperationId, childPathId);
+                        }
+                    }
+                }
             }
+
+            // Publish srcPath after any version updates (so we publish with correct version)
+            context.OnComplete.PublishToSchemeBoard(OperationId, srcPathId);
 
             if (txState->CdcPathId != InvalidPathId && context.SS->CdcStreams.contains(txState->CdcPathId)) {
                 context.MemChanges.GrabCdcStream(context.SS, txState->CdcPathId);
@@ -747,6 +836,10 @@ public:
         }
         if (Transaction.GetCreateTable().HasPathState()) {
             txState.TargetPathTargetState = Transaction.GetCreateTable().GetPathState();
+        }
+        // Store coordinated schema version if available (from backup operations)
+        if (Transaction.GetCreateTable().HasCoordinatedSchemaVersion()) {
+            txState.CoordinatedSchemaVersion = Transaction.GetCreateTable().GetCoordinatedSchemaVersion();
         }
 
         TShardInfo datashardInfo = TShardInfo::DataShardInfo(OperationId.GetTxId(), newTable->PathId);

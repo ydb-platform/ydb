@@ -3658,6 +3658,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         if (proto.GetTxCopyTableExtraData().HasTargetPathTargetState()) {
                             txState.TargetPathTargetState = proto.GetTxCopyTableExtraData().GetTargetPathTargetState();
                         }
+                        if (proto.GetTxCopyTableExtraData().HasCoordinatedSchemaVersion()) {
+                            txState.CoordinatedSchemaVersion = proto.GetTxCopyTableExtraData().GetCoordinatedSchemaVersion();
+                        }
                     }
                 } else if (txState.TxType == TTxState::TxChangePathState) {
                     if (!extraData.empty()) {
@@ -3674,6 +3677,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
                         Y_ABORT_UNLESS(deserializeRes);
                         txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                        if (proto.HasTxCdcStreamExtraData() && proto.GetTxCdcStreamExtraData().HasCoordinatedSchemaVersion()) {
+                            txState.CoordinatedSchemaVersion = proto.GetTxCdcStreamExtraData().GetCoordinatedSchemaVersion();
+                        }
                     }
                 } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable ||
                            txState.TxType == TTxState::TxCreateCdcStreamAtTableWithInitialScan ||
@@ -3686,6 +3692,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
                         Y_ABORT_UNLESS(deserializeRes);
                         txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                        if (proto.HasTxCdcStreamExtraData() && proto.GetTxCdcStreamExtraData().HasCoordinatedSchemaVersion()) {
+                            txState.CoordinatedSchemaVersion = proto.GetTxCdcStreamExtraData().GetCoordinatedSchemaVersion();
+                        }
                     }
                 }
 

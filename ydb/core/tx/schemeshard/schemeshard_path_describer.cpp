@@ -1430,6 +1430,12 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
 {
     Y_ABORT_UNLESS(indexInfo, "Empty index info");
 
+    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "VERSION_TRACK DescribeTableIndex"
+        << " indexPathId# " << pathId
+        << " indexName# " << name
+        << " indexAlterVersion# " << indexInfo->AlterVersion);
+
     entry.SetName(name);
     entry.SetLocalPathId(pathId.LocalPathId);
     entry.SetPathOwnerId(pathId.OwnerId);

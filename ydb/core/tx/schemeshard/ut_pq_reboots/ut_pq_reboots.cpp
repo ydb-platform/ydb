@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST(AlterWithProfileChange) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
         ui64 txId = 100;
         TPathVersion pqVer;
 
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST(CreateDrop) {
         TTestWithReboots t;
-
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
             t.Runtime->SetScheduledLimit(400);
 
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST(CreateDropAbort) {
         TTestWithReboots t;
-
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
             t.Runtime->SetScheduledLimit(400);
 

@@ -1,6 +1,10 @@
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.mirror3of4
+ydb/core/blobstorage/ut_blobstorage/ut_osiris unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
@@ -9,6 +13,7 @@ ydb/core/blobstorage/ut_vdisk TBsLocalRecovery.WriteRestartReadHugeDecreased
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
+ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.WrongJson
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
@@ -30,12 +35,15 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
-ydb/core/tx/datashard/ut_upload_rows TTxDataShardUploadRows.RetryUploadRowsToShard
+ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.UniqueIndexValidationFailsBetweenShards
+ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase[PipeResets]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket0]
+ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[PipeResetsBucket0]
+ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[PipeResetsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket2]
@@ -45,6 +53,7 @@ ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboot
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.test_topic_data
+ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/library/actors/core/ut_fat HeavyActorBenchmark.SendActivateReceiveCSV_10Pairs_LONG
 ydb/library/actors/core/ut_fat unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut_fat InterconnectUnstableConnection.InterconnectTestWithProxyTlsReestablishWithXdc
@@ -89,6 +98,7 @@ ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
+ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_basic
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
@@ -96,6 +106,7 @@ ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/large_serializable test_serializable.py.Test.test
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor[tables_format_v0]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--true]
 ydb/tests/olap py3test.[*/*] chunk

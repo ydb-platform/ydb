@@ -19,9 +19,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         me.ToLine().Apply(*TAlter()
                 .AddTable("me_1", table1)
-                .AddColumn(table1, "key",    1, ETypes::Uint64, false)
-                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
-                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
                 .AddColumnToKey(table1, 1));
         me.ToLine().WriteVer({1, 11}).PutN(table1, 1_u64, 11_u64, 12_u64);
         me.ToLine().Commit();
@@ -75,9 +75,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         me.ToLine().Apply(*TAlter()
                 .AddTable("me_1", table1)
-                .AddColumn(table1, "key",    1, ETypes::Uint64, false)
-                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
-                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
                 .AddColumnToKey(table1, 1));
         me.ToLine().WriteVer({1, 11}).PutN(table1, 1_u64, 11_u64, 12_u64);
         me.ToLine().Commit();
@@ -123,9 +123,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         me.ToLine().Apply(*TAlter()
                 .AddTable("me_1", table1)
-                .AddColumn(table1, "key",    1, ETypes::Uint64, false)
-                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
-                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
                 .AddColumnToKey(table1, 1));
         me.ToLine().WriteVer({1, 11}).PutN(table1, 1_u64, 11_u64, 12_u64);
         me.ToLine().Commit();
@@ -181,9 +181,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         me.ToLine().Apply(*TAlter()
                 .AddTable("me_1", table1)
-                .AddColumn(table1, "key",    1, ETypes::Uint64, false)
-                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
-                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
                 .AddColumnToKey(table1, 1));
         me.ToLine().WriteVer({1, 11}).PutN(table1, 1_u64, 11_u64, 12_u64);
         me.ToLine().Commit();
@@ -229,9 +229,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         me.ToLine().Apply(*TAlter()
                 .AddTable("me_1", table1)
-                .AddColumn(table1, "key",    1, ETypes::Uint64, false)
-                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
-                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
                 .AddColumnToKey(table1, 1));
         me.ToLine().WriteVer({1, 11}).PutN(table1, 1_u64, 11_u64, 12_u64);
         me.ToLine().Commit();
@@ -293,9 +293,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         me.ToLine().Apply(*TAlter()
                 .AddTable("me_1", table1)
-                .AddColumn(table1, "key",    1, ETypes::Uint64, false)
-                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
-                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
                 .AddColumnToKey(table1, 1));
         me.ToLine().WriteVer({1, 11}).PutN(table1, 1_u64, 11_u64, 12_u64);
         me.ToLine().Commit();
@@ -321,9 +321,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         me.ToLine().Apply(*TAlter()
                 .AddTable("me_1", table1)
-                .AddColumn(table1, "key",    1, ETypes::Uint64, false)
-                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
-                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
                 .AddColumnToKey(table1, 1));
         me.ToLine().Commit();
 
@@ -402,9 +402,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         me.ToLine().Apply(*TAlter()
                 .AddTable("me_1", table1)
-                .AddColumn(table1, "key",    1, ETypes::Uint64, false)
-                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
-                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
                 .AddColumnToKey(table1, 1));
         me.ToLine().WriteVer({1, 11}).PutN(table1, 1_u64, 11_u64, 12_u64);
         me.ToLine().WriteVer({1, 12}).PutN(table1, 5_u64, 13_u64, 14_u64);
@@ -500,9 +500,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         me.ToLine().Apply(*TAlter()
                 .AddTable("me_1", table1)
-                .AddColumn(table1, "key",    1, ETypes::Uint64, false)
-                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
-                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
                 .AddColumnToKey(table1, 1));
         me.ToLine().WriteVer({1, 11}).PutN(table1, 1_u64, 11_u64, 12_u64);
         me.ToLine().Commit();
@@ -544,9 +544,9 @@ Y_UNIT_TEST_SUITE(DBRowLocks) {
         me.ToLine().Begin();
         me.ToLine().Apply(*TAlter()
                 .AddTable("me_1", table1)
-                .AddColumn(table1, "key",    1, ETypes::Uint64, false)
-                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
-                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumn(table1, "arg2",   5, ETypes::Uint64, false, false, Cimple(10005_u64))
                 .AddColumnToKey(table1, 1));
         me.ToLine().Commit();
 

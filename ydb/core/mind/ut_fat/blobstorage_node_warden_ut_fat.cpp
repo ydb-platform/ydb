@@ -133,7 +133,7 @@ void SetupServices(TTestActorRuntime &runtime) {
         TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back();
         for (ui32 channelIdx = 0; channelIdx < 3; ++channelIdx) {
             profile.Channels.push_back(
-                TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureMirror3, 0, NKikimrBlobStorage::TVDiskKind::Default));
+                TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::Erasure4Plus2Block, 0, NKikimrBlobStorage::TVDiskKind::Default));
         }
         app.SetChannels(std::move(channelProfiles));
     }
@@ -230,7 +230,7 @@ void SetupServices(TTestActorRuntime &runtime) {
     }
 
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(),
-        TTabletTypes::BSController, TBlobStorageGroupType::ErasureMirror3, groupId),
+        TTabletTypes::BSController, TBlobStorageGroupType::Erasure4Plus2Block, groupId),
         &CreateFlatBsController);
 }
 

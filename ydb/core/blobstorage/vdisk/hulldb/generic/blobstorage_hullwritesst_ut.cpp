@@ -157,7 +157,7 @@ namespace NKikimr {
 
         template <>
         void TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob>::Test(ui32 maxStep, const TString &data) {
-            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, EBlobHeaderMode::OLD_HEADER);
+            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::Erasure4Plus2Block, EBlobHeaderMode::OLD_HEADER);
 
             for (ui32 step = 0; step < maxStep; step++) {
                 TLogoBlobID id(1, 1, step, 0, 0, 0);
@@ -201,7 +201,7 @@ namespace NKikimr {
 
         template <>
         void TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob>::TestOutbound(ui32 maxStep) {
-            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, EBlobHeaderMode::OLD_HEADER);
+            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::Erasure4Plus2Block, EBlobHeaderMode::OLD_HEADER);
 
             for (ui32 step = 0; step < maxStep; step++) {
                 TLogoBlobID id(1, 1, step, 0, 0, 0);
@@ -250,7 +250,7 @@ namespace NKikimr {
 
         template <>
         void TTest<TKeyBlock, TMemRecBlock, TWriterBlock>::Test(ui32 maxGen) {
-            TBlockCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, EBlobHeaderMode::OLD_HEADER);
+            TBlockCompactRecordMerger merger(TBlobStorageGroupType::Erasure4Plus2Block, EBlobHeaderMode::OLD_HEADER);
 
             for (ui32 gen = 0; gen < maxGen; gen++) {
                 TKeyBlock key(34 + gen);

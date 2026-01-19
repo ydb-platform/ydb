@@ -16,7 +16,7 @@ namespace NKikimr {
         class TWriter {
         public:
             TWriter()
-                : Info(TBlobStorageGroupType::ErasureMirror3, 1, 4)
+                : Info(TBlobStorageGroupType::Erasure4Plus2Block, 1, 4)
             {
                 TVDiskID vdisk0(0, 1, 0, 0 /*domain*/, 0 /*vdisk*/);
                 TVDiskID vdisk1(0, 1, 0, 1 /*domain*/, 0 /*vdisk*/);
@@ -55,7 +55,7 @@ namespace NKikimr {
         };
 
         Y_UNIT_TEST(Tree) {
-            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3, 1, 4);
+            TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 1, 4);
             TVDiskID vdisk0(0, 1, 0, 0 /*domain*/, 0 /*vdisk*/);
             TIngressCachePtr cache0 = TIngressCache::Create(info.PickTopology(), vdisk0);
             NBarriers::TTree tree(cache0, VDiskLogPrefix);

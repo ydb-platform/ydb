@@ -146,10 +146,6 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         MakePatchingTest("mirror-3-dc");
     }
 
-    Y_UNIT_TEST(Mirror3) {
-        MakePatchingTest("mirror-3");
-    }
-
     Y_UNIT_TEST(Block42) {
         MakePatchingTest("block-4-2");
     }
@@ -165,10 +161,6 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
 
     Y_UNIT_TEST(StressMirror3dc) {
         MakeStressPatchingTest("mirror-3-dc");
-    }
-
-    Y_UNIT_TEST(StressMirror3) {
-        MakeStressPatchingTest("mirror-3");
     }
 
     Y_UNIT_TEST(StressBlock42) {

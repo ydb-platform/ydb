@@ -178,7 +178,7 @@ struct TConfiguration {
                    ui32 domainsNum = 4u,
                    ui32 disksInDomain = 2u,
                    NKikimr::TErasureType::EErasureSpecies erasure =
-                       NKikimr::TBlobStorageGroupType::ErasureMirror3);
+                       NKikimr::TBlobStorageGroupType::ErasureMirror3dc);
     ~TConfiguration();
 
     void SignalDoneEvent() {

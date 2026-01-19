@@ -43,7 +43,7 @@ namespace NKikimr {
 
 
         Y_UNIT_TEST(Mirror3) {
-            TBlobStorageGroupInfo info(TErasureType::ErasureMirror3, 1, 4);
+            TBlobStorageGroupInfo info(TErasureType::Erasure4Plus2Block, 1, 4);
             TBlobsStatusMngr mngr(&info.GetTopology());
 
             TVector<TLogoBlobID> candidates = {

@@ -250,7 +250,6 @@ struct TErasureType {
 
     enum EErasureSpecies {
         ErasureNone = 0,
-        ErasureMirror3 = 1,
 
         Erasure4Plus2Block = 4,
 

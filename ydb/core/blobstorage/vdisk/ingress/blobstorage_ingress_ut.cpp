@@ -13,7 +13,7 @@ namespace NKikimr {
     Y_UNIT_TEST_SUITE(TBlobStorageIngress) {
 
         Y_UNIT_TEST(Ingress) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
             using TGroupId = TGroupId;
             TVDiskID vdisk01 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 1);
             TVDiskID vdisk10 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 0);
@@ -56,7 +56,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(IngressPartsWeMustHaveLocally) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
             TLogoBlobID lb1(78364, 2, 763, 0, 0, 0);
             STR << "INFO: " << TIngress::PrintVDisksForLogoBlob(&groupInfo, lb1) << "\n";
             using TGroupId = TGroupId;
@@ -100,7 +100,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(IngressLocalParts) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
             TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
@@ -194,7 +194,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(IngressGetMainReplica) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
             TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
@@ -215,7 +215,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(IngressHandoffPartsDelete) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
             TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
@@ -287,7 +287,7 @@ namespace NKikimr {
 
 
         Y_UNIT_TEST(IngressCacheMirror3) {
-            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
             TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
             TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
 
@@ -316,7 +316,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(BarrierIngressQuorumBasicMirror3_4_2) {
-            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
             TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
             TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
 
@@ -398,7 +398,7 @@ namespace NKikimr {
 
 
         Y_UNIT_TEST(BarrierIngressQuorumMirror3) {
-            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
             using TGroupId = TGroupId;
             TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
             TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
@@ -453,7 +453,7 @@ namespace NKikimr {
 
 
         Y_UNIT_TEST(IngressPrintDistribution) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
 
             for (ui32 i = 0; i < 3000; i++) {
                 TLogoBlobID lb(0, 1, i, 0, 0, 0);

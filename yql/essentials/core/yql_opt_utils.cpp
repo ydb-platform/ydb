@@ -2870,4 +2870,10 @@ bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* type
     return !IsOptimizerDisabled<OptName>(*types);
 }
 
+bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char OptName[] = "EmitPruneKeys";
+    return IsOptimizerEnabled<OptName>(*types) && !IsOptimizerDisabled<OptName>(*types);
+}
+
 }

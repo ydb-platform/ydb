@@ -61,6 +61,10 @@ public:
         return Impl_.GetWatermarkDiscrepancy();
     }
 
+    void Out(IOutputStream& str) const {
+        Impl_.Out(str);
+    }
+
 private:
     TInstant ToDiscreteTime(TInstant time) const {
         return TInstant::MicroSeconds(time.MicroSeconds() - time.MicroSeconds() % Granularity_.MicroSeconds());
@@ -79,4 +83,4 @@ private:
     TDqWatermarkTrackerImpl<TPartitionKey> Impl_;
 };
 
-}
+} // namespace NYql::NDq

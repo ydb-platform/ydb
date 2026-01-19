@@ -40,7 +40,8 @@ public:
             TString databaseName,
             std::optional<ui64> retentionMs,
             std::optional<ui64> retentionBytes,
-            std::optional<ECleanupPolicy> cleanupPolicy)
+            std::optional<ECleanupPolicy> cleanupPolicy,
+            std::optional<TString> timestampType)
         : TAlterTopicActor<TAlterConfigsActor, TKafkaAlterConfigsRequest>(
             requester,
             userToken,
@@ -49,6 +50,7 @@ public:
         , RetentionMs(retentionMs)
         , RetentionBytes(retentionBytes)
         , CleanupPolicy(cleanupPolicy)
+        , TimestampType(timestampType)
     {
         KAFKA_LOG_D("Alter configs actor. DatabaseName: " << databaseName << ". TopicPath: " << TopicPath);
     };
@@ -71,6 +73,9 @@ public:
 
         if (RetentionBytes.has_value()) {
             partitionConfig->SetStorageLimitBytes(RetentionBytes.value());
+        }
+        if (TimestampType.has_value()) {
+            groupConfig.MutablePQTabletConfig()->SetTimestampType(TimestampType.value());
         }
         if (CleanupPolicy.has_value()) {
             groupConfig.MutablePQTabletConfig()->SetEnableCompactification(CleanupPolicy.value() == ECleanupPolicy::COMPACT);
@@ -98,6 +103,7 @@ private:
     std::optional<ui64> RetentionMs;
     std::optional<ui64> RetentionBytes;
     std::optional<ECleanupPolicy> CleanupPolicy;
+    std::optional<TString> TimestampType;
 };
 
 NActors::IActor* CreateKafkaAlterConfigsActor(
@@ -138,6 +144,7 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
         std::optional<TString> retentionMs;
         std::optional<TString> retentionBytes;
         std::optional<ECleanupPolicy> cleanupPolicy;
+        std::optional<TString> messageTimestampType;
 
         std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> unsupportedConfigResponse;
 
@@ -153,6 +160,8 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
                 retentionBytes = config.Value;
             }  else if (config.Name.value() == CLEANUP_POLICY) {
                 unsupportedConfigResponse = ConvertCleanupPolicy(config.Value, cleanupPolicy);
+            } else if (config.Name.value() == MESSAGE_TIMESTAMP_TYPE) {
+                unsupportedConfigResponse = ConvertTimestampType(config.Value, messageTimestampType);
             }
         }
 
@@ -175,7 +184,8 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
             Context->DatabasePath,
             convertedRetentions.Ms,
             convertedRetentions.Bytes,
-            cleanupPolicy
+            cleanupPolicy,
+            messageTimestampType
         ));
 
         InflyTopics++;

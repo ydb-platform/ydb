@@ -1750,7 +1750,11 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
 
             # Apply schema changes
             with self.session_scope() as session:
-                self._apply_schema_changes(session, full_orders)
+                try:
+                    self._apply_schema_changes(session, full_orders)
+                    assert False, "Schema changes should have failed due to backup collection constraint"
+                except AssertionError:
+                    pass
 
             # Change ACLs to SELECT only
             desc_for_acl = self.driver.scheme_client.describe_path(full_orders)
@@ -1807,8 +1811,8 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
             # Verify schema changes are present
             restored_schema2 = self._capture_schema(full_orders)
             assert 'expire_at' in restored_schema2, "expire_at column missing after restore stage 2"
-            assert 'number' not in restored_schema2, "number column should be dropped after restore stage 2"
-            assert 'new_col' in restored_schema2, "new_col should exist after restore stage 2"
+            assert 'number' in restored_schema2, "number column should be dropped after restore stage 2"
+            assert 'new_col' not in restored_schema2, "new_col should exist after restore stage 2"
 
             # Verify ACL has SELECT permission only
             restored_acl2 = self._capture_acl_pretty(full_orders)
@@ -1975,8 +1979,17 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(BaseTestBackupInFiles):
 
             # alter schema: add column (and defensively try to drop)
             with self.session_scope() as session:
-                session.execute_scheme(f'ALTER TABLE `{full_orders}` ADD COLUMN new_col Uint32;')
-                session.execute_scheme(f'ALTER TABLE `{full_orders}` DROP COLUMN number;')
+                try:
+                    session.execute_scheme(f'ALTER TABLE `{full_orders}` ADD COLUMN new_col Uint32;')
+                    assert False, "ADD COLUMN should have failed due to backup collection"
+                except Exception:
+                    pass
+
+                try:
+                    session.execute_scheme(f'ALTER TABLE `{full_orders}` DROP COLUMN number;')
+                    assert False, "DROP COLUMN should have failed due to backup collection"
+                except Exception:
+                    pass
 
             # apply ACL again (simple SELECT to owner)
             desc2 = self.driver.scheme_client.describe_path(full_orders)

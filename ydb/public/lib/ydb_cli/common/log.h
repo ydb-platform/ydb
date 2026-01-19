@@ -1,13 +1,21 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/colors.h>
-#include <ydb/public/lib/ydb_cli/common/command.h>
 
 #include <library/cpp/logger/log.h>
+#include <library/cpp/logger/priority.h>
+
+#include <util/string/builder.h>
 
 namespace NYdb::NConsoleClient {
 
-class TInteractiveLogger {
+// Converts verbosity level (number of -v flags) to log priority
+// Normal: 0->WARNING, 1->NOTICE, 2->INFO, 3+->DEBUG
+ELogPriority VerbosityLevelToELogPriority(ui32 verbosityLevel);
+// Chatty: 0->INFO, 1+->DEBUG
+ELogPriority VerbosityLevelToELogPriorityChatty(ui32 verbosityLevel);
+
+class TLogger {
     inline static const NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
     class TEntry : public TStringBuilder {
@@ -24,9 +32,9 @@ class TInteractiveLogger {
     };
 
 public:
-    TInteractiveLogger();
+    TLogger();
 
-    void Setup(const TClientCommand::TConfig& config);
+    void Setup(ui32 verbosityLevel);
 
     TEntry Critical() const;
     TEntry Error() const;
@@ -44,4 +52,14 @@ private:
     std::shared_ptr<TLog> Log;
 };
 
+// Global logger instance
+TLogger& GetGlobalLogger();
+void SetupGlobalLogger(ui32 verbosityLevel);
+
 } // namespace NYdb::NConsoleClient
+
+// Logging macro for convenience
+#define YDB_CLI_LOG(level, stream)                                                       \
+    if (auto entry = NYdb::NConsoleClient::GetGlobalLogger().level(); entry.LogEnabled()) { \
+        entry << stream;                                                                  \
+    }

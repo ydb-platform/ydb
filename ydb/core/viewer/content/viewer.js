@@ -185,9 +185,6 @@ function getErasureInfo(erasure) {
     case 4:
     case 'block-4-2':
         return {Name: "Block 4+2", Min: 6, Total: 8};
-    case 5:
-    case 'block-3-2':
-        return {Name: "Block 3+2", Min: 5, Total: 7};
     case 9:
     case 'mirror-3-dc':
         return {Name: "Mirror 3 DC", Min: 3, Total: 5};

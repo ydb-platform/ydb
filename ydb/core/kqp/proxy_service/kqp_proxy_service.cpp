@@ -1606,7 +1606,7 @@ private:
 
     void StartScriptExecutionsTablesCreation() {
         ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
-        Register(CreateScriptExecutionsTablesCreator(FeatureFlags, ScriptExecutionsTalesGeneration), TMailboxType::HTSwap, AppData()->SystemPoolId);
+        Register(CreateScriptExecutionsTablesCreator(FeatureFlags.GetEnableSecureScriptExecutions(), ScriptExecutionsTalesGeneration), TMailboxType::HTSwap, AppData()->SystemPoolId);
     }
 
     template<typename TEvent>

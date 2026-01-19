@@ -15,6 +15,20 @@
 #include <util/string/builder.h>
 
 #include <ydb/library/login/hashes_checker/hashes_checker.h>
+#include <ydb/library/login/sasl/scram.h>
+
+namespace {
+
+bool IsBase64(const std::string_view value) {
+    try {
+        Base64StrictDecode(value);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+}
 
 namespace NLogin {
 
@@ -39,6 +53,8 @@ public:
     static bool VerifyArgonHash(const TString& password, const TString& hash);
     static bool SaslPlainVerifyArgonHash(const TString& hashToVerify, const TString& storedHashValue);
     static bool SaslPlainVerifyScramHash(const TString& serverKeyToVerify, const TString& storedHashValues);
+    static bool SaslScramVerifyHash(const TString& hashName, const TString& clientProof, const TString& authMessage, const TString& storedHashValues);
+    static TString SaslScramComputeServerSignature(const TString& hashName, const TString& authMessage, const TString& storedHashValues);
     bool VerifyHashValues(const TString& password, const TString& hash);
     bool NeedVerifyHash(const TLruCache::TKey& key, TPasswordCheckResult* checkResult);
     void UpdateCache(const TLruCache::TKey& key, const bool isSuccessVerifying);
@@ -542,7 +558,8 @@ bool TLoginProvider::NeedVerifyHash(const TLoginUserRequest& request, TPasswordC
         if (request.HashToValidate.has_value()) {
             const auto& hashToValidate = *request.HashToValidate;
             switch (hashToValidate.AuthMech) {
-            case NLoginProto::ESaslAuthMech::Plain: {
+            case NLoginProto::ESaslAuthMech::Plain:
+            case NLoginProto::ESaslAuthMech::Scram: {
                 auto itHashRecord = sid->HashStorage.find(hashToValidate.HashType);
                 if (itHashRecord == sid->HashStorage.end()) {
                     checkResult->FillInvalidHashType();
@@ -551,11 +568,6 @@ bool TLoginProvider::NeedVerifyHash(const TLoginUserRequest& request, TPasswordC
 
                 *hashValues = itHashRecord->second.HashValues;
                 return true;
-            };
-            case NLoginProto::ESaslAuthMech::Scram: {
-                // will be implemented in next PR
-                checkResult->FillUnsupportedSaslMech();
-                return false;
             }
             default: {
                 checkResult->FillUnsupportedSaslMech();
@@ -601,8 +613,13 @@ void TLoginProvider::VerifyHashValues(const TLoginUserRequest& request, TPasswor
         }
     };
     case NLoginProto::ESaslAuthMech::Scram: {
-        // will be implemented in next PR
-        checkResult->FillUnsupportedSaslMech();
+        const auto& hashTypeDescr = HashesRegistry.HashTypesMap.at(hashToValidate.HashType);
+        if (!TImpl::SaslScramVerifyHash(hashTypeDescr.Name, hashToValidate.Hash, hashToValidate.AuthMessage, hashValues)) {
+            checkResult->FillInvalidPassword();
+            return;
+        }
+
+        checkResult->ServerSignature = TImpl::SaslScramComputeServerSignature(hashTypeDescr.Name, hashToValidate.AuthMessage, hashValues);
         return;
     }
     default: {
@@ -717,6 +734,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
 
     auto encoded_token = token.sign(algorithm);
 
+    response.ServerSignature = checkResult.ServerSignature;
     response.Token = TString(encoded_token);
     response.SanitizedToken = SanitizeJwtToken(response.Token);
     response.Status = TLoginUserResponse::EStatus::SUCCESS;
@@ -994,6 +1012,29 @@ bool TLoginProvider::TImpl::SaslPlainVerifyScramHash(const TString& serverKeyToV
     return serverKeyToVerify == hashValues.ServerKey;
 }
 
+bool TLoginProvider::TImpl::SaslScramVerifyHash(const TString& hashName, const TString& clientProof, const TString& authMessage, const TString& storedHashValues) {
+    const auto hashValues = ParseScramHashValues(storedHashValues);
+    const TString storedKey = Base64StrictDecode(hashValues.StoredKey);
+
+    if (!IsBase64(clientProof)) {
+        return false;
+    }
+    const TString decodedClientProof = Base64StrictDecode(clientProof);
+
+    std::string error;
+    bool res = NSasl::VerifyClientProof(hashName, decodedClientProof, storedKey, authMessage, error);
+    return res;
+}
+
+TString TLoginProvider::TImpl::SaslScramComputeServerSignature(const TString& hashName, const TString& authMessage, const TString& storedHashValues) {
+    const auto hashValues = ParseScramHashValues(storedHashValues);
+    const TString serverKey = Base64StrictDecode(hashValues.ServerKey);
+
+    std::string error;
+    std::string serverSignature;
+    NSasl::ComputeServerSignature(hashName, serverKey, authMessage, serverSignature, error);
+    return Base64Encode(serverSignature);
+}
 
 bool TLoginProvider::TImpl::NeedVerifyHash(const TLruCache::TKey& key, TPasswordCheckResult* checkResult) {
     Y_ENSURE(checkResult);

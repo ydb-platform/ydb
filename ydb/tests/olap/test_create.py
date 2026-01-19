@@ -67,7 +67,7 @@ class TestCreate(object):
             (1, -2, -3, -4, -5, 6, 7, 8, 9);
             """
         )
-        result_sets = self.ydb_client.query(f"SELECT * FROM `{table_path}`")
+        result_sets = self.ydb_client.query(f"SELECT * FROM `{table_path}` ORDER BY id")
 
         rows = []
         for result_set in result_sets:
@@ -230,7 +230,7 @@ class TestCreate(object):
             """
         )
 
-        result_sets = self.ydb_client.query(f"SELECT * FROM `{table_path}`;")
+        result_sets = self.ydb_client.query(f"SELECT * FROM `{table_path}` ORDER BY id;")
         rows = []
         for result_set in result_sets:
             rows.extend(result_set.rows)

@@ -52,7 +52,8 @@ public:
                 ActorName << "# " << ctx.SelfID.ToString() <<
                 ", " << "LDAP authentication failed: "<< response.Error
             );
-            SendError(ConvertLdapStatus(response.Status), response.Error.Message, response.Error.LogMessage);
+            SendError(ConvertLdapStatus(response.Status), response.Error.Message,
+                NLogin::NSasl::EScramServerError::OtherError, response.Error.LogMessage);
             return CleanupAndDie(ctx);
         }
     }
@@ -73,6 +74,7 @@ private:
     }
 
     virtual void SendError(NKikimrIssues::TIssuesIds::EIssueCode issueCode, const std::string& message,
+        [[maybe_unused]] NLogin::NSasl::EScramServerError scramErrorCode = NLogin::NSasl::EScramServerError::OtherError,
         const std::string& reason = "") const override final
     {
         auto response = std::make_unique<TEvSasl::TEvSaslPlainLdapLoginResponse>();

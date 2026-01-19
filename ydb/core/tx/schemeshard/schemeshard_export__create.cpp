@@ -443,9 +443,7 @@ private:
             const auto databaseRoot = CanonizePath(Self->RootPathElements);
 
             NBackup::TMetadata metadata;
-            // to do: enable view checksum validation
-            constexpr bool EnableChecksums = false;
-            metadata.SetVersion(EnableChecksums ? 1 : 0);
+            metadata.SetVersion(exportInfo.EnableChecksums ? 1 : 0);
             metadata.SetEnablePermissions(exportInfo.EnablePermissions);
 
             TMaybe<NBackup::TEncryptionIV> iv;
@@ -455,7 +453,8 @@ private:
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
                 Self->SelfId(), exportInfo.Id, itemIdx, item.SourcePathId,
-                exportSettings, databaseRoot, metadata.Serialize(), exportInfo.EnablePermissions,
+                exportSettings, databaseRoot, metadata.Serialize(),
+                exportInfo.EnablePermissions, exportInfo.EnableChecksums,
                 iv
             ));
             Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);

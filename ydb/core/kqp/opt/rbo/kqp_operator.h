@@ -254,19 +254,19 @@ struct TStageGraph {
         return res;
     }
 
-    bool IsSourceStage(const int id) {
+    bool IsSourceStage(const int id) const {
         return SourceStageRenames.contains(id);
     }
 
-    bool IsSourceStageRowType(const int id) {
+    bool IsSourceStageRowType(const int id) const {
         return IsSourceStageTypeImpl(id, NYql::EStorageType::RowStorage);
     }
 
-    bool IsSourceStageColumnType(const int id) {
+    bool IsSourceStageColumnType(const int id) const {
         return IsSourceStageTypeImpl(id, NYql::EStorageType::ColumnStorage);
     }
 
-    NYql::EStorageType GetStorageType(const int id) {
+    NYql::EStorageType GetStorageType(const int id) const {
         auto it = SourceStageRenames.find(id);
         if (it != SourceStageRenames.end()) {
             return it->second.StorageType;
@@ -306,7 +306,7 @@ struct TStageGraph {
     void TopologicalSort();
 private:
 
-    bool IsSourceStageTypeImpl(const int id, const NYql::EStorageType tableStorageType) {
+    bool IsSourceStageTypeImpl(const int id, const NYql::EStorageType tableStorageType) const {
         auto it = SourceStageRenames.find(id);
         if (it != SourceStageRenames.end()) {
             return it->second.StorageType == tableStorageType;

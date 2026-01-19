@@ -56,7 +56,8 @@ def get_queries(data_folder):
     nf = []
     for f in find_files(data_folder, 'sql'):
         nf.append((f, 'plan'))
-        nf.append((f, 'result_sets'))
+        if 'fulltext' not in f:
+            nf.append((f, 'result_sets'))
 
     for f in find_files(data_folder, 'script'):
         nf.append((f, 'script'))
@@ -114,7 +115,7 @@ class BaseCanonicalTest(object):
                 udfs_path=yatest.common.build_path("yql/udfs"),
                 domain_name='local',
                 use_in_memory_pdisks=True,
-                extra_feature_flags=["enable_resource_pools"]
+                extra_feature_flags=["enable_resource_pools", "enable_fulltext_index"]
             )
         )
         cls.cluster.start()
@@ -482,7 +483,10 @@ class BaseCanonicalTest(object):
         elif kind == 'plan':
             plan = json.loads(self.explain(query))
             if 'Plan' in plan:
-                del plan['Plan']
+                if 'fulltext' in query:
+                    self.remove_optimizer_estimates(plan['Plan'])
+                else:
+                    del plan['Plan']
             if 'SimplifiedPlan' in plan:
                 del plan['SimplifiedPlan']
             canons['plan'] = self.canonical_plan(query_name, self.pretty_json(plan))

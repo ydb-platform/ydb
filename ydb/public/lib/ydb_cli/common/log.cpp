@@ -1,17 +1,40 @@
-#include "interactive_log.h"
+#include "log.h"
 
 namespace NYdb::NConsoleClient {
 
-TInteractiveLogger::TEntry::TEntry(std::shared_ptr<TLog> log, ELogPriority priority)
+ELogPriority VerbosityLevelToELogPriority(ui32 verbosityLevel) {
+    switch (verbosityLevel) {
+        case 0:
+            return ELogPriority::TLOG_WARNING;
+        case 1:
+            return ELogPriority::TLOG_NOTICE;
+        case 2:
+            return ELogPriority::TLOG_INFO;
+        case 3:
+        default:
+            return ELogPriority::TLOG_DEBUG;
+    }
+}
+
+ELogPriority VerbosityLevelToELogPriorityChatty(ui32 verbosityLevel) {
+    switch (verbosityLevel) {
+        case 0:
+            return ELogPriority::TLOG_INFO;
+        default:
+            return ELogPriority::TLOG_DEBUG;
+    }
+}
+
+TLogger::TEntry::TEntry(std::shared_ptr<TLog> log, ELogPriority priority)
     : Priority(std::move(priority))
     , Log(log)
 {}
 
-bool TInteractiveLogger::TEntry::LogEnabled() const {
+bool TLogger::TEntry::LogEnabled() const {
     return Log && Log->IsOpen() && Log->FiltrationLevel() >= Priority;
 }
 
-TInteractiveLogger::TEntry::~TEntry() {
+TLogger::TEntry::~TEntry() {
     try {
         if (LogEnabled()) {
             Log->Write(Priority, *this);
@@ -21,14 +44,14 @@ TInteractiveLogger::TEntry::~TEntry() {
     }
 }
 
-TInteractiveLogger::TInteractiveLogger()
+TLogger::TLogger()
     : Log(std::make_shared<TLog>())
 {}
 
-void TInteractiveLogger::Setup(const TClientCommand::TConfig& config) {
+void TLogger::Setup(ui32 verbosityLevel) {
     Log->ResetBackend(CreateLogBackend(
         "cerr",
-        TClientCommand::TConfig::VerbosityLevelToELogPrioritySilent(config.VerbosityLevel)
+        VerbosityLevelToELogPriority(verbosityLevel)
     ));
 
     Log->SetFormatter([colors = NConsoleClient::AutoColors(Cerr)](ELogPriority priority, TStringBuf message) {
@@ -60,40 +83,51 @@ void TInteractiveLogger::Setup(const TClientCommand::TConfig& config) {
     });
 }
 
-TInteractiveLogger::TEntry TInteractiveLogger::Critical() const {
+TLogger::TEntry TLogger::Critical() const {
     return TEntry(Log, TLOG_CRIT);
 }
 
-TInteractiveLogger::TEntry TInteractiveLogger::Error() const {
+TLogger::TEntry TLogger::Error() const {
     return TEntry(Log, TLOG_ERR);
 }
 
-TInteractiveLogger::TEntry TInteractiveLogger::Warning() const {
+TLogger::TEntry TLogger::Warning() const {
     return TEntry(Log, TLOG_WARNING);
 }
 
-TInteractiveLogger::TEntry TInteractiveLogger::Notice() const {
+TLogger::TEntry TLogger::Notice() const {
     return TEntry(Log, TLOG_NOTICE);
 }
 
-TInteractiveLogger::TEntry TInteractiveLogger::Info() const {
+TLogger::TEntry TLogger::Info() const {
     return TEntry(Log, TLOG_INFO);
 }
 
-TInteractiveLogger::TEntry TInteractiveLogger::Debug() const {
+TLogger::TEntry TLogger::Debug() const {
     return TEntry(Log, TLOG_DEBUG);
 }
 
-bool TInteractiveLogger::IsVerbose() const {
-    return Log->FiltrationLevel() >= TLOG_ERR;
+bool TLogger::IsVerbose() const {
+    return Log->FiltrationLevel() >= TLOG_NOTICE;
 }
 
-TString TInteractiveLogger::EntityName(const TString& name) {
+TString TLogger::EntityName(const TString& name) {
     return TStringBuilder() << Colors.BoldColor() << name << Colors.OldColor();
 }
 
-TString TInteractiveLogger::EntityNameQuoted(const TString& name) {
+TString TLogger::EntityNameQuoted(const TString& name) {
     return TStringBuilder() << '"' << Colors.BoldColor() << name << Colors.OldColor() << '"';
+}
+
+// Global logger instance
+static TLogger GlobalLogger;
+
+TLogger& GetGlobalLogger() {
+    return GlobalLogger;
+}
+
+void SetupGlobalLogger(ui32 verbosityLevel) {
+    GlobalLogger.Setup(verbosityLevel);
 }
 
 } // namespace NYdb::NConsoleClient

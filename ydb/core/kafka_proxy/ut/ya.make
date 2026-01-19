@@ -14,6 +14,8 @@ ENDIF()
 SRCS(
     kafka_test_client.cpp
     kafka_test_client.h
+    test_server.cpp
+    ut_auth.cpp
     ut_kafka_functions.cpp
     ut_protocol.cpp
     ut_serialization.cpp

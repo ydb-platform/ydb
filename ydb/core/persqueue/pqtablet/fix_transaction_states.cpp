@@ -12,6 +12,53 @@ bool IsMainContextOfTransaction(const TString& key)
     return key.size() == TX_KEY_LENGTH;
 }
 
+ui32 GetPartitionsCount(const NKikimrPQ::TTransaction& tx)
+{
+    switch (tx.GetKind()) {
+    case NKikimrPQ::TTransaction::KIND_DATA:
+        return tx.OperationsSize();
+    case NKikimrPQ::TTransaction::KIND_CONFIG:
+        return tx.GetPartitions().PartitionSize();
+    case NKikimrPQ::TTransaction::KIND_UNKNOWN:
+        AFL_ENSURE(false);
+    }
+}
+
+THashMap<ui64, NKikimrPQ::TTransaction> CollectTransactions(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges)
+{
+    THashMap<ui64, NKikimrPQ::TTransaction> txs;
+    TMaybe<ui64> txId;
+    ui32 current = 0;
+    ui32 expected = 0;
+
+    for (const auto& readRange : readRanges) {
+        for (size_t i = 0; i < readRange.PairSize(); ++i) {
+            const auto& pair = readRange.GetPair(i);
+
+            NKikimrPQ::TTransaction tx;
+            AFL_ENSURE(tx.ParseFromString(pair.GetValue()));
+            AFL_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN);
+
+            if (!IsMainContextOfTransaction(pair.GetKey())) {
+                AFL_ENSURE(txId.Defined() && (*txId == tx.GetTxId()));
+                ++current;
+                AFL_ENSURE(current <= expected);
+                tx.SetState((current == expected) ? NKikimrPQ::TTransaction::EXECUTED : NKikimrPQ::TTransaction::CALCULATED);
+                txs.insert_or_assign(*txId, std::move(tx));
+                continue;
+            }
+
+            txId = tx.GetTxId();
+            current = 0;
+            expected = GetPartitionsCount(tx);
+
+            txs.insert_or_assign(*txId, std::move(tx));
+        }
+    }
+
+    return txs;
+}
+
 void FixTransactionStates(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& readRanges,
                           THashMap<ui64, TDistributedTransaction>& txs)
 {

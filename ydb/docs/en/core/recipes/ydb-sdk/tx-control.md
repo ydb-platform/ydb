@@ -82,7 +82,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     }
     defer db.Close(ctx)
     row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.NoTx()),
+      query.WithTxControl(query.ImplicitTxControl()),
     )
     if err != nil {
       fmt.Printf("unexpected error: %v", err)

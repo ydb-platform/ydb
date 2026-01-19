@@ -11,6 +11,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <util/generic/size_literals.h>
+#include <library/cpp/digest/md5/md5.h>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -150,6 +151,7 @@ struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
     enum class EPartitionChooserStrategy {
         Auto,
         Bound,
+        BoundWithHash,
         Hash,
     };
 
@@ -170,6 +172,11 @@ struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
 
     //! Partition chooser strategy.
     FLUENT_SETTING_DEFAULT(EPartitionChooserStrategy, PartitionChooserStrategy, EPartitionChooserStrategy::Auto);
+
+    //! Hasher function.
+    FLUENT_SETTING_DEFAULT(std::function<std::string(const std::string& key)>, Hasher, [](const std::string& key) -> std::string {
+        return MD5::Calc(key);
+    });
 };
 
 //! Contains the message to write and all the options.

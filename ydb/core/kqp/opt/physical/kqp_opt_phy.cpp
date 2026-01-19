@@ -404,7 +404,8 @@ protected:
     TMaybeNode<TExprBase> PushCombineToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqPushCombineToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        const bool createStageForAggregation = KqpCtx.Config->OptCreateStageForAggregation.Get().GetOrElse(false);
+        TExprBase output = DqPushCombineToStage(node, ctx, optCtx, *getParents(), IsGlobal, createStageForAggregation);
         DumpAppliedRule("PushCombineToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

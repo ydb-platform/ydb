@@ -3158,7 +3158,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeInvalid:
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
-            case EPathTypeTestShard:
+            case EPathTypeTestShardSet:
                 break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:
@@ -4387,7 +4387,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EPathTypeBackupCollection:
             case EPathTypeBlobDepot:
             case EPathTypeSysView:
-            case EPathTypeTestShard:
+            case EPathTypeTestShardSet:
                 break; // not applicable
             case EPathTypeRtmrVolume:
             case EPathTypeBlockStoreVolume:

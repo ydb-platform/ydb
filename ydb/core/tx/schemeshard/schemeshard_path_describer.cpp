@@ -1151,21 +1151,21 @@ void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr p
     *entry.MutableProperties() = streamingQueryInfo->Properties;
 }
 
-void TPathDescriber::DescribeTestShard(TPathId pathId, TPathElement::TPtr pathEl) {
-    const auto it = Self->TestShards.FindPtr(pathId);
-    Y_ABORT_UNLESS(it, "TestShard is not found");
-    const auto testShardInfo = *it;
+void TPathDescriber::DescribeTestShardSet(TPathId pathId, TPathElement::TPtr pathEl) {
+    const auto it = Self->TestShardSets.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "TestShardSet is not found");
+    const auto testShardSetInfo = *it;
 
-    auto& entry = *Result->Record.MutablePathDescription()->MutableTestShardDescription();
+    auto& entry = *Result->Record.MutablePathDescription()->MutableTestShardSetDescription();
     entry.SetName(pathEl->Name);
     entry.SetPathId(pathId.LocalPathId);
 
-    for (const auto& [shardIdx, tabletId] : testShardInfo->TestShards) {
+    for (const auto& [shardIdx, tabletId] : testShardSetInfo->TestShards) {
         entry.AddTabletIds(ui64(tabletId));
     }
 
-    if (testShardInfo->TestShards.size() > 0) {
-        auto shardIdx = testShardInfo->TestShards.begin()->first;
+    if (testShardSetInfo->TestShards.size() > 0) {
+        auto shardIdx = testShardSetInfo->TestShards.begin()->first;
         auto shardInfo = Self->ShardInfos.FindPtr(shardIdx);
         Y_ABORT_UNLESS(shardInfo);
         for (const auto& channel : shardInfo->BindedChannels) {
@@ -1345,8 +1345,8 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
         case NKikimrSchemeOp::EPathTypeStreamingQuery:
             DescribeStreamingQuery(base->PathId, base);
             break;
-        case NKikimrSchemeOp::EPathTypeTestShard:
-            DescribeTestShard(base->PathId, base);
+        case NKikimrSchemeOp::EPathTypeTestShardSet:
+            DescribeTestShardSet(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

@@ -272,9 +272,11 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxAlterStreamingQuery = 212  [(CounterOpts) = {Name: "InFlightOps/AlterStreamingQuery"}];
 
     COUNTER_IN_FLIGHT_OPS_TxTruncateTable = 213 [(CounterOpts) = {Name: "InFlightOps/TruncateTable"}];
-    COUNTER_TEST_SHARD_COUNT = 214                     [(CounterOpts) = {Name: "TestShardCount"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateTestShard = 215      [(CounterOpts) = {Name: "InFlightOps/CreateTestShard"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropTestShard = 216        [(CounterOpts) = {Name: "InFlightOps/DropTestShard"}];
+
+    COUNTER_TEST_SHARD_SET_COUNT = 214                     [(CounterOpts) = {Name: "TestShardSetCount"}];
+    COUNTER_TEST_SHARD_COUNT = 215                         [(CounterOpts) = {Name: "TestShardCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateTestShardSet = 216      [(CounterOpts) = {Name: "InFlightOps/CreateTestShardSet"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 217        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
 }
 
 enum ECumulativeCounters {
@@ -447,8 +449,9 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterStreamingQuery = 132  [(CounterOpts) = {Name: "FinishedOps/AlterStreamingQuery"}];
 
     COUNTER_FINISHED_OPS_TxTruncateTable = 133 [(CounterOpts) = {Name: "FinishedOps/TruncateTable"}];
-    COUNTER_FINISHED_OPS_TxCreateTestShard = 134      [(CounterOpts) = {Name: "FinishedOps/CreateTestShard"}];
-    COUNTER_FINISHED_OPS_TxDropTestShard = 135        [(CounterOpts) = {Name: "FinishedOps/DropTestShard"}];
+
+    COUNTER_FINISHED_OPS_TxCreateTestShardSet = 134      [(CounterOpts) = {Name: "FinishedOps/CreateTestShardSet"}];
+    COUNTER_FINISHED_OPS_TxDropTestShardSet = 135        [(CounterOpts) = {Name: "FinishedOps/DropTestShardSet"}];
 }
 
 enum EPercentileCounters {

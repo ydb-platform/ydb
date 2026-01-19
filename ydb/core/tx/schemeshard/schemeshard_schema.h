@@ -2273,21 +2273,13 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
     };
 
-    struct TestShards : Table<130> {
+    struct TestShardSet : Table<130> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct Version : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct TestShards : Column<3, NScheme::NTypeIds::String> { using Type = TString; };
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, Version>;
-    };
-
-    struct TestShardTablets : Table<131> {
-        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct ShardIdx : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
-        struct TabletId : Column<3, NScheme::NTypeIds::Uint64> { using Type = TTabletId; };
-
-        using TKey = TableKey<PathId, ShardIdx>;
-        using TColumns = TableColumns<PathId, ShardIdx, TabletId>;
+        using TColumns = TableColumns<PathId, AlterVersion, TestShards>;
     };
 
     using TTables = SchemaTables<
@@ -2418,8 +2410,7 @@ struct Schema : NIceDb::Schema {
         Secrets,
         SecretsAlterData,
         StreamingQueryState,
-        TestShards,
-        TestShardTablets
+        TestShardSet
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

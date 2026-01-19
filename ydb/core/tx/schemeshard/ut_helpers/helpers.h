@@ -339,9 +339,9 @@ namespace NSchemeShardUT_Private {
     DROP_BY_PATH_ID_HELPERS(DropStreamingQuery);
     void TestCreateStreamingQueryOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults);
 
-    // test shard
-    GENERIC_HELPERS(CreateTestShard);
-    GENERIC_HELPERS(DropTestShard);
+    // test shard set
+    GENERIC_HELPERS(CreateTestShardSet);
+    GENERIC_HELPERS(DropTestShardSet);
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS

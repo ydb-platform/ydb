@@ -1006,7 +1006,7 @@ std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStora
     case TTabletTypes::TestShard:
         return &NKikimr::NTestShard::CreateTestShard;
 
-    default:
+default:
         return nullptr;
     }
 }

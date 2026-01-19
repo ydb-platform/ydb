@@ -761,13 +761,13 @@ ISubOperation::TPtr CreateAlterStreamingQuery(TOperationId id, TTxState::ETxStat
 ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, TTxState::ETxState state);
 
-// TestShard
+// TestShardSet
 // Create
-ISubOperation::TPtr CreateNewTestShard(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateNewTestShard(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateNewTestShardSet(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewTestShardSet(TOperationId id, TTxState::ETxState state);
 // Drop
-ISubOperation::TPtr CreateDropTestShard(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateDropTestShard(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateDropTestShardSet(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropTestShardSet(TOperationId id, TTxState::ETxState state);
 
 inline NKikimrSchemeOp::TModifyScheme TransactionTemplate(const TString& workingDir, NKikimrSchemeOp::EOperationType type) {
     NKikimrSchemeOp::TModifyScheme tx;

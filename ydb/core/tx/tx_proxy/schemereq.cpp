@@ -485,10 +485,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpTruncateTable:
             return *modifyScheme.MutableTruncateTable()->MutableTableName();
 
-        case NKikimrSchemeOp::ESchemeOpCreateTestShard:
-            return *modifyScheme.MutableCreateTestShard()->MutableName();
+        case NKikimrSchemeOp::ESchemeOpCreateTestShardSet:
+            return *modifyScheme.MutableCreateTestShardSet()->MutableName();
 
-        case NKikimrSchemeOp::ESchemeOpDropTestShard:
+        case NKikimrSchemeOp::ESchemeOpDropTestShardSet:
             return *modifyScheme.MutableDrop()->MutableName();
         }
         Y_UNREACHABLE();
@@ -522,7 +522,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSysView:
         case NKikimrSchemeOp::ESchemeOpCreateSecret:
         case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
-        case NKikimrSchemeOp::ESchemeOpCreateTestShard:
+        case NKikimrSchemeOp::ESchemeOpCreateTestShardSet:
             return true;
         default:
             return false;
@@ -907,7 +907,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropBackupCollection:
         case NKikimrSchemeOp::ESchemeOpDropSecret:
         case NKikimrSchemeOp::ESchemeOpDropStreamingQuery:
-        case NKikimrSchemeOp::ESchemeOpDropTestShard:
+        case NKikimrSchemeOp::ESchemeOpDropTestShardSet:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -971,7 +971,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
         case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
-        case NKikimrSchemeOp::ESchemeOpCreateTestShard:
+        case NKikimrSchemeOp::ESchemeOpCreateTestShardSet:
         {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = workingDir;

@@ -19,7 +19,7 @@ public:
     }
 };
 
-class TDropTestShard : public TSubOperation {
+class TDropTestShardSet : public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -46,14 +46,17 @@ class TDropTestShard : public TSubOperation {
         bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
             TStepId step = TStepId(ev->Get()->StepId);
             TTxState* txState = context.SS->FindTx(OperationId);
-            Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTestShard);
+            Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTestShardSet);
 
             TPathId pathId = txState->TargetPathId;
             TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
             NIceDb::TNiceDb db(context.GetDB());
 
-            context.SS->DropNode(path, step, OperationId.GetTxId(), db, context.Ctx);
+            path->SetDropped(step, OperationId.GetTxId());
+            context.SS->PersistDropStep(db, pathId, step, OperationId);
+            context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Sub(1);
+            context.SS->PersistRemoveTestShardSet(db, pathId);
 
             auto parentDir = context.SS->PathsById.at(path->ParentPathId);
             ++parentDir->DirAlterVersion;
@@ -73,7 +76,7 @@ class TDropTestShard : public TSubOperation {
         bool ProgressState(TOperationContext& context) override {
             TTxState* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);
-            Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTestShard);
+            Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropTestShardSet);
 
             context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
             return false;
@@ -81,7 +84,7 @@ class TDropTestShard : public TSubOperation {
 
         TString DebugHint() const override {
             return TStringBuilder()
-                << "TDropTestShard::TPropose"
+                << "TDropTestShardSet::TPropose"
                 << " OperationId# " << OperationId;
         }
     };
@@ -110,7 +113,7 @@ public:
         const TString& name = drop.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropTestShard Propose"
+                     "TDropTestShardSet Propose"
                          << ", path: " << parentPathStr << "/" << name
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId
@@ -128,7 +131,7 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsTestShard()
+                .IsTestShardSet()
                 .NotUnderDeleting()
                 .NotUnderOperation();
 
@@ -151,12 +154,12 @@ public:
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
         context.DbChanges.PersistTxState(OperationId);
 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropTestShard, path.Base()->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropTestShardSet, path.Base()->PathId);
         // Dirty hack: drop step must not be zero because 0 is treated as "hasn't been dropped"
         txState.MinStep = TStepId(1);
         txState.State = TTxState::Propose;
 
-        auto testShard = context.SS->TestShards.at(path.Base()->PathId);
+        auto testShard = context.SS->TestShardSets.at(path.Base()->PathId);
 
         for (auto& part : testShard->TestShards) {
             auto shardIdx = part.first;
@@ -198,7 +201,7 @@ public:
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropTestShard AbortUnsafe"
+                     "TDropTestShardSet AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
                          << ", at schemeshard: " << context.SS->SelfTabletId());
@@ -209,13 +212,13 @@ public:
 
 } // namespace
 
-ISubOperation::TPtr CreateDropTestShard(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TDropTestShard>(id, tx);
+ISubOperation::TPtr CreateDropTestShardSet(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TDropTestShardSet>(id, tx);
 }
 
-ISubOperation::TPtr CreateDropTestShard(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateDropTestShardSet(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TDropTestShard>(id, state);
+    return MakeSubOperation<TDropTestShardSet>(id, state);
 }
 
 } // namespace NKikimr::NSchemeShard

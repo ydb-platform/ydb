@@ -1591,15 +1591,21 @@ message TAlterSolomonVolume {
     optional TKeyValueStorageConfig StorageConfig = 5;
 }
 
-message TTestShardDescription {
+message TTestShardSetDescription {
     optional string Name = 1; // mandatory
     optional uint64 PathId = 2;
     repeated uint64 TabletIds = 3; // do not set
     optional uint64 Version = 4; // do not set
     repeated NKikimrStoragePool.TChannelBind BoundChannels = 5;
+    repeated TTestShardDescription Shards = 6;
 }
 
-message TCreateTestShard {
+message TTestShardDescription {
+    optional uint64 ShardIdx = 1;
+    optional uint64 TabletId = 2;
+}
+
+message TCreateTestShardSet {
     optional string Name = 1; // mandatory
     optional uint32 Count = 2;
     optional TKeyValueStorageConfig StorageConfig = 3;
@@ -1970,7 +1976,7 @@ message TModifyScheme {
     // for example, by resetting all sequences.
     optional TTruncateTable TruncateTable = 92;
 
-    optional TCreateTestShard CreateTestShard = 93;
+    optional TCreateTestShardSet CreateTestShardSet = 93;
 
     // Some entries are grouped by semantics, so are out of order
 }
@@ -2044,7 +2050,7 @@ enum EPathType {
     EPathTypeSysView = 24;
     EPathTypeSecret = 25;
     EPathTypeStreamingQuery = 26;
-    EPathTypeTestShard = 27;
+    EPathTypeTestShardSet = 27;
 }
 
 enum EPathSubType {
@@ -2203,7 +2209,7 @@ message TPathDescription {
     optional TSysViewDescription SysViewDescription = 32;
     optional TSecretDescription SecretDescription = 33;
     optional TStreamingQueryDescription StreamingQueryDescription = 34;
-    optional TTestShardDescription TestShardDescription = 35;
+    optional TTestShardSetDescription TestShardSetDescription = 35;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB

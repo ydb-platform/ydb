@@ -48,7 +48,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret:
         case NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery:
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShard:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
             return EOperationClass::Create;
 
         // Simple operations that drop paths
@@ -84,7 +84,7 @@ EOperationClass GetOperationClass(NKikimrSchemeOp::EOperationType op) {
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret:
         case NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery:
-        case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShard:
+        case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
             return EOperationClass::Drop;
 
         // Simple operations that alter paths

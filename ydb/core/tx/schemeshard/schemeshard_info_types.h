@@ -1353,7 +1353,7 @@ struct TShardInfo {
         return TShardInfo(txId, pathId, ETabletType::BlobDepot);
     }
 
-    static TShardInfo TestShardInfo(TTxId txId, TPathId pathId) {
+    static TShardInfo TestShardSetInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::TestShard);
     }
 };
@@ -3729,25 +3729,25 @@ struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
     NKikimrSchemeOp::TStreamingQueryProperties Properties;
 };
 
-struct TTestShardInfo : public TSimpleRefCount<TTestShardInfo> {
-    using TPtr = TIntrusivePtr<TTestShardInfo>;
+struct TTestShardSetInfo : public TSimpleRefCount<TTestShardSetInfo> {
+    using TPtr = TIntrusivePtr<TTestShardSetInfo>;
 
     THashMap<TShardIdx, TTabletId> TestShards; // ShardIdx -> TabletId
-    ui64 Version = 0;
-    TTestShardInfo::TPtr AlterData;
+    ui64 AlterVersion = 0;
+    TTestShardSetInfo::TPtr AlterData;
 
-    TTestShardInfo(ui64 version)
-        : Version(version)
+    TTestShardSetInfo(ui64 alterVersion)
+        : AlterVersion(alterVersion)
     {}
 
-    TTestShardInfo::TPtr CreateAlter() const {
-        return CreateAlter(Version + 1);
+    TTestShardSetInfo::TPtr CreateAlter() const {
+        return CreateAlter(AlterVersion + 1);
     }
 
-    TTestShardInfo::TPtr CreateAlter(ui64 version) const {
-        Y_ENSURE(Version < version);
-        TTestShardInfo::TPtr alter = new TTestShardInfo(*this);
-        alter->Version = version;
+    TTestShardSetInfo::TPtr CreateAlter(ui64 version) const {
+        Y_ENSURE(AlterVersion < version);
+        TTestShardSetInfo::TPtr alter = new TTestShardSetInfo(*this);
+        alter->AlterVersion = version;
         return alter;
     }
 };

@@ -286,8 +286,8 @@ public:
     THashMap<TPathId, TSysViewInfo::TPtr> SysViews;
     THashMap<TPathId, TSecretInfo::TPtr> Secrets;
     THashMap<TPathId, TStreamingQueryInfo::TPtr> StreamingQueries;
-    THashMap<TPathId, TTestShardInfo::TPtr> TestShards;
     THashSet<TPathId> TableInBackupCollections;
+    THashMap<TPathId, TTestShardSetInfo::TPtr> TestShardSets;
 
     TTempDirsState TempDirsState;
 
@@ -924,9 +924,9 @@ public:
     void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
 
-    // TestShard
-    void PersistTestShard(NIceDb::TNiceDb& db, TPathId pathId);
-    void PersistRemoveTestShard(NIceDb::TNiceDb& db, TPathId pathId);
+    // TestShardSet
+    void PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistRemoveTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
 
     void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
 

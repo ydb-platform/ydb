@@ -4,7 +4,7 @@
 using namespace NSchemeShardUT_Private;
 
 namespace {
-    TString CreateTestShardConfig(const TString& name, ui64 count = 1) {
+    TString CreateTestShardSetConfig(const TString& name, ui64 count = 1) {
         return TStringBuilder() << R"(
                 Name: ")" << name << R"("
                 Count: )" << count << R"(
@@ -18,49 +18,49 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TTestShardTest) {
-    Y_UNIT_TEST(CreateTestShard) {
+    Y_UNIT_TEST(CreateTestShardSet) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
-        TestCreateTestShard(runtime, ++txId, "/MyRoot", CreateTestShardConfig("MyTestShard"), {NKikimrScheme::StatusAccepted});
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("MyTestShardSet"), {NKikimrScheme::StatusAccepted});
 
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/MyTestShard", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/MyTestShardSet", false, NLs::PathExist);
     }
 
-    Y_UNIT_TEST(DropTestShard) {
+    Y_UNIT_TEST(DropTestShardSet) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
-        TestCreateTestShard(runtime, ++txId, "/MyRoot", CreateTestShardConfig("MyTestShard"), {NKikimrScheme::StatusAccepted});
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("MyTestShardSet"), {NKikimrScheme::StatusAccepted});
 
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/MyTestShard", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/MyTestShardSet", false, NLs::PathExist);
 
-        TestDropTestShard(runtime, ++txId, "/MyRoot", "MyTestShard");
+        TestDropTestShardSet(runtime, ++txId, "/MyRoot", "MyTestShardSet");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/MyTestShard", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/MyTestShardSet", false, NLs::PathNotExist);
     }
 
-    Y_UNIT_TEST(DropTestShardTwice) {
+    Y_UNIT_TEST(DropTestShardSetTwice) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
-        TestCreateTestShard(runtime, ++txId, "/MyRoot", CreateTestShardConfig("MyTestShard"), {NKikimrScheme::StatusAccepted});
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("MyTestShardSet"), {NKikimrScheme::StatusAccepted});
 
         env.TestWaitNotification(runtime, txId);
 
-        AsyncDropTestShard(runtime, ++txId, "/MyRoot", "MyTestShard");
-        AsyncDropTestShard(runtime, ++txId, "/MyRoot", "MyTestShard");
+        AsyncDropTestShardSet(runtime, ++txId, "/MyRoot", "MyTestShardSet");
+        AsyncDropTestShardSet(runtime, ++txId, "/MyRoot", "MyTestShardSet");
         TestModificationResult(runtime, txId - 1);
 
         const auto ev = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>();
@@ -72,64 +72,64 @@ Y_UNIT_TEST_SUITE(TTestShardTest) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDropTxId(), txId - 1);
 
         env.TestWaitNotification(runtime, txId - 1);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/MyTestShard"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/MyTestShardSet"), {NLs::PathNotExist});
     }
 
-    Y_UNIT_TEST(DropTestShardFailOnNotExists) {
+    Y_UNIT_TEST(DropTestShardSetFailOnNotExists) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
-        TestDropTestShard(runtime, ++txId, "/MyRoot", "MyTestShard", {{NKikimrScheme::StatusPathDoesNotExist, "error: path hasn't been resolved"}});
+        TestDropTestShardSet(runtime, ++txId, "/MyRoot", "MyTestShardSet", {{NKikimrScheme::StatusPathDoesNotExist, "error: path hasn't been resolved"}});
         env.TestWaitNotification(runtime, txId);
     }
 
-    Y_UNIT_TEST(CreateExistingTestShard) {
+    Y_UNIT_TEST(CreateExistingTestShardSet) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
-        TestCreateTestShard(runtime, ++txId, "/MyRoot", CreateTestShardConfig("MyTestShard"), {NKikimrScheme::StatusAccepted});
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("MyTestShardSet"), {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
-        TestLs(runtime, "/MyRoot/MyTestShard", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/MyTestShardSet", false, NLs::PathExist);
 
-        TestCreateTestShard(runtime, ++txId, "/MyRoot", CreateTestShardConfig("MyTestShard"), {NKikimrScheme::StatusAlreadyExists});
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("MyTestShardSet"), {NKikimrScheme::StatusAlreadyExists});
         env.TestWaitNotification(runtime, txId);
     }
 
-    Y_UNIT_TEST(AsyncCreateDifferentTestShards) {
+    Y_UNIT_TEST(AsyncCreateDifferentTestShardSets) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
-        AsyncCreateTestShard(runtime, ++txId, "/MyRoot", CreateTestShardConfig("TestShard1"));
-        AsyncCreateTestShard(runtime, ++txId, "/MyRoot", CreateTestShardConfig("TestShard2"));
+        AsyncCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("TestShardSet1"));
+        AsyncCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("TestShardSet2"));
 
         TestModificationResult(runtime, txId - 1);
         TestModificationResult(runtime, txId);
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
-        TestLs(runtime, "/MyRoot/TestShard1", false, NLs::PathExist);
-        TestLs(runtime, "/MyRoot/TestShard2", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/TestShardSet1", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/TestShardSet2", false, NLs::PathExist);
     }
 
-    Y_UNIT_TEST(AsyncCreateSameTestShard) {
+    Y_UNIT_TEST(AsyncCreateSameTestShardSet) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
-        AsyncCreateTestShard(runtime, ++txId, "/MyRoot", CreateTestShardConfig("MyTestShard"));
-        AsyncCreateTestShard(runtime, ++txId, "/MyRoot", CreateTestShardConfig("MyTestShard"));
+        AsyncCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("MyTestShardSet"));
+        AsyncCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("MyTestShardSet"));
 
         TestModificationResults(runtime, txId - 1, {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAlreadyExists});
         TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAlreadyExists});
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
-        TestLs(runtime, "/MyRoot/MyTestShard", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/MyTestShardSet", false, NLs::PathExist);
     }
 
     Y_UNIT_TEST(ReadOnlyMode) {
@@ -142,17 +142,17 @@ Y_UNIT_TEST_SUITE(TTestShardTest) {
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
-        TestCreateTestShard(runtime, ++txId, "/MyRoot", CreateTestShardConfig("MyTestShard"), {NKikimrScheme::StatusReadOnly});
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("MyTestShardSet"), {NKikimrScheme::StatusReadOnly});
         env.TestWaitNotification(runtime, txId);
-        TestLs(runtime, "/MyRoot/MyTestShard", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/MyTestShardSet", false, NLs::PathNotExist);
 
         SetSchemeshardReadOnlyMode(runtime, false);
         sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
-        TestCreateTestShard(runtime, ++txId, "/MyRoot", CreateTestShardConfig("MyTestShard"), {NKikimrScheme::StatusAccepted});
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", CreateTestShardSetConfig("MyTestShardSet"), {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
-        TestLs(runtime, "/MyRoot/MyTestShard", false, NLs::PathExist);
+        TestLs(runtime, "/MyRoot/MyTestShardSet", false, NLs::PathExist);
     }
 
     Y_UNIT_TEST(EmptyName) {
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TTestShardTest) {
         runtime.SetLogPriority(NKikimrServices::TEST_SHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
-        TestCreateTestShard(runtime, ++txId, "/MyRoot", R"(
+        TestCreateTestShardSet(runtime, ++txId, "/MyRoot", R"(
                 Name: ""
                 Count: 1
                 StorageConfig {

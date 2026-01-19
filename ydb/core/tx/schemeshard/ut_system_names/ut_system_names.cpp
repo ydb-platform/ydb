@@ -496,7 +496,7 @@ const std::vector<TCreatePathOp> CreatePathOperations({
         }
     },
     {
-        .Type = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShard,
+        .Type = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet,
         .CreateRequest = [](const TString& workingDir, const TString& path) {
             const TString modifyScheme = Sprintf(R"(
                 Name: "%s"
@@ -509,7 +509,7 @@ const std::vector<TCreatePathOp> CreatePathOperations({
             )",
             path.c_str()
             );
-            return CreateTestShardRequest(/* txId */ 0, workingDir, modifyScheme);
+            return CreateTestShardSetRequest(/* txId */ 0, workingDir, modifyScheme);
         }
     }
 

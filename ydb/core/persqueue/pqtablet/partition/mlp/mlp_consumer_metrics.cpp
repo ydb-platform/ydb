@@ -88,7 +88,7 @@ void TDetailedMetrics::UpdateMetrics(const TMetrics& metrics) {
     InflightScheduledToDLQCount->Set(metrics.TotalScheduledToDLQMessageCount);
     CommittedCount->Set(metrics.TotalCommittedMessageCount);
     PurgedCount->Set(metrics.TotalPurgedMessageCount);
-    
+
     SetCounters(MessageLocks, metrics.MessageLocks, MLP_LOCKS_BOUNDS);
     SetCounters(MessageLockingDuration, metrics.MessageLockingDuration, SLOW_LATENCY_BOUNDS);
 

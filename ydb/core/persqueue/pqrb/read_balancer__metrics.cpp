@@ -166,7 +166,8 @@ TCounters InitializeCounters(
             nameBuf.SkipPrefix("PQ/");
             name = nameBuf;
         }
-        result.push_back(name.empty() ? nullptr : group->GetExpiringNamedCounter("name", name, false));
+        bool derivative = name == "topic.committed_messages" || name == "topic.purged_messages";
+        result.push_back(name.empty() ? nullptr : group->GetExpiringNamedCounter("name", name, derivative));
     }
 
     return {
@@ -176,7 +177,7 @@ TCounters InitializeCounters(
 }
 
 NMonitoring::TDynamicCounters::TCounterPtr InitializeDeleteCounter(NMonitoring::TDynamicCounterPtr root, const auto& reason) {
-    return root->GetSubgroup("name", "topic.deleted_messages")->GetExpiringNamedCounter("reason", reason, false);
+    return root->GetSubgroup("name", "topic.deleted_messages")->GetExpiringNamedCounter("reason", reason, true);
 }
 
 void SetCounters(TCounters& counters, const auto& metrics) {

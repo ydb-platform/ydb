@@ -46,18 +46,15 @@ void TConsumerActor::UpdateMetrics() {
 }
 
 TDetailedMetrics::TDetailedMetrics(const NKikimrPQ::TPQTabletConfig::TConsumer& consumerConfig, ::NMonitoring::TDynamicCounterPtr& root) {
-    Y_UNUSED(consumerConfig);
-    Y_UNUSED(root);
-
     auto consumerGroup = root->GetSubgroup("consumer", consumerConfig.GetName());
 
     InflightCommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.committed_messages", false);
     InflightLockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.locked_messages", false);
     InflightDelayedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.delayed_messages", false);
     InflightUnlockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.unlocked_messages", false);
-    InflightScheduledToDLQCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.scheduled_to_dlq_messages", false);
-    CommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.committed_messages", false);
-    PurgedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.purged_messages", false);
+    InflightScheduledToDLQCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.scheduled_to_dlq_messages", true);
+    CommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.committed_messages", true);
+    PurgedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.purged_messages", true);
     
     MessageLocks = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.message_locks", false);
     MessageLockingDuration = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.message_locking_duration_milliseconds", false);

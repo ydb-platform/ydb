@@ -277,6 +277,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(gotMetaProducerId, expectedEncoded);
         UNIT_ASSERT_VALUES_EQUAL(Base64Decode(expectedEncoded), binaryProducerId);
     }
+    
+    Y_UNIT_TEST(CreateTopicWithManyPartitions) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
+        setup.CreateTopic(name, TEST_CONSUMER, 100);
+
+        auto describe = setup.MakeClient().DescribeTopic(name).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 100);
+    }
 
     Y_UNIT_TEST(CreateTopicWithStreamingConsumer) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};

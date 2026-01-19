@@ -250,6 +250,7 @@ public:
 
             ui64 start = range.first;
             ui64 end = range.second;
+            Y_ABORT_UNLESS(start <= end);
             ui64 length = end - start + 1;
 
             if ((i64)start >= fileSize) {
@@ -273,11 +274,10 @@ public:
             Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
 
             auto response = std::make_unique<TEvGetObjectResponse>(key, range, std::move(outcome), std::move(data));
-            TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
+            Send(ev->Sender, response.release());
 
         } catch (const std::exception& ex) {
             FS_LOG_E("GetObject error"
-                "GetObject error"
                 << ": key# " << key
                 << ", error# " << ex.what());
             ReplyError<TEvGetObjectResponse>(ev->Sender, key, TString("File read error: ") + ex.what());
@@ -307,15 +307,14 @@ public:
 
             Aws::Utils::Outcome<Aws::S3::Model::HeadObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvHeadObjectResponse>(key, std::move(outcome));
-            TlsActivationContext->AsActorContext().Send(ev->Sender, response.release());
-
+            Send(ev->Sender, response.release());
         } catch (const TFileError& ex) {
-            FS_LOG_W("HeadObject file not found"
-                << ": key# " << key);
+            FS_LOG_W("HeadObject"
+                << ": key# " << key
+                << ", error# " << "file not found");
             ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TString("File not found: ") + ex.what(), Aws::S3::S3Errors::NO_SUCH_KEY);
         } catch (const std::exception& ex) {
             FS_LOG_E("HeadObject error"
-                "HeadObject error"
                 << ": key# " << key
                 << ", error# " << ex.what());
             ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TString("File head error: ") + ex.what());

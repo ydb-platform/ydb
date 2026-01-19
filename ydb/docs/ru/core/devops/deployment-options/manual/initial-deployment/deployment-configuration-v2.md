@@ -5,6 +5,7 @@
 ## Подготовьте конфигурационные файлы {#config}
 
 Подготовьте конфигурационный файл {{ ydb-short-name }}:
+
 ```yaml
 metadata:
   kind: MainConfig
@@ -151,6 +152,7 @@ sudo chown -R ydb:ydb /opt/ydb/cfg
 ```
 
 Выполнив специальную команду на каждой машине, инициализируйте эту директорию файлом конфигурации.
+
 ```bash
 sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-config /tmp/config.yaml
 ```
@@ -161,7 +163,7 @@ sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-con
 
 {% list tabs group=manual-systemd %}
 
-- Вручную
+* Вручную
 
   Запустите сервис хранения данных {{ ydb-short-name }} на каждом статическом узле кластера:
 
@@ -173,7 +175,7 @@ sudo /opt/ydb/bin/ydb admin node config init --config-dir/opt/ydb/cfg --from-con
       --grpcs-port 2135 --ic-port 19001 --mon-port 8765 --mon-cert /opt/ydb/certs/web.pem --node static
   ```
 
-- С использованием systemd
+* С использованием systemd
 
   Создайте на каждом сервере, где будет размещен статический узел кластера, конфигурационный файл systemd `/etc/systemd/system/ydbd-storage.service` по приведенному ниже образцу. Образец файла также можно [скачать из репозитория](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-storage.service).
 
@@ -282,7 +284,7 @@ echo $?
 
 {% list tabs group=manual-systemd %}
 
-- Вручную
+* Вручную
 
   Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`:
 
@@ -304,7 +306,7 @@ echo $?
 
   В примере команды выше `<ydb-static-node1>` , `<ydb-static-node2>`, `<ydb-static-node3>`  - FQDN трех любых серверов, на которых запущены статические узлы кластера.
 
-- С использованием systemd
+* С использованием systemd
 
   Создайте конфигурационный файл systemd `/etc/systemd/system/ydbd-testdb.service` по приведенному ниже образцу. Образец файла также можно [скачать из репозитория](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/systemd_services/ydbd-testdb.service).
 
@@ -395,14 +397,14 @@ echo $?
 
 {% list tabs %}
 
-- Создание строковой таблицы
+* Создание строковой таблицы
 
     ```bash
     ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
         yql -s 'CREATE TABLE `testdir/test_row_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
     ```
 
-- Создание колоночной таблицы
+* Создание колоночной таблицы
 
     ```bash
     ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
@@ -426,7 +428,6 @@ echo $?
 Обычно для обеспечения доступа ко встроенному web-интерфейсу {{ ydb-short-name }} настраивают отказоустойчивый HTTP-балансировщик на базе программного обеспечения `haproxy`, `nginx` или аналогов. Детали настройки HTTP-балансировщика выходят за рамки стандартной инструкции по установке {{ ydb-short-name }}.
 
 {% endnote %}
-
 
 ## Особенности установки {{ ydb-short-name }} в незащищенном режиме
 

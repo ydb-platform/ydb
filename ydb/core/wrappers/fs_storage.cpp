@@ -209,7 +209,7 @@ public:
             ReplySuccess<TEvPutObjectResponse>(ev->Sender, key);
         } catch (const TSystemError& ex) {
             if (!HandleFileLockError<TEvPutObjectResponse>(ex, ev->Sender, key, "PutObject")) {
-                FS_LOG_E("PutObject: failed to acquire lock"
+                FS_LOG_E("PutObject failed with system error"
                     << ": key# " << key
                     << ", error# " << ex.what()
                     << ", errno# " << ex.Status());
@@ -378,7 +378,7 @@ public:
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
             if (!HandleFileLockError<TEvCreateMultipartUploadResponse>(ex, ev->Sender, key, "CreateMultipartUpload")) {
-                FS_LOG_E("CreateMultipartUpload: failed to acquire lock"
+                FS_LOG_E("CreateMultipartUpload failed with system error"
                     << ": key# " << key
                     << ", error# " << ex.what()
                     << ", errno# " << ex.Status());
@@ -488,7 +488,7 @@ public:
             NFs::Rename(incompleteKey, key);
             session.File.Close();
 
-            FS_LOG_T("CompleteMultipartUpload"
+            FS_LOG_I("CompleteMultipartUpload"
                 << ": uploadId# " << uploadId
                 << ", total size# " << session.TotalSize
                 << ", file mv from# " << incompleteKey << " to# " << key);

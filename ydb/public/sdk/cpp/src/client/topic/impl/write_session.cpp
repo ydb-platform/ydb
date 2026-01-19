@@ -216,19 +216,17 @@ TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::CreateWriteSessio
     });
 
     WrappedWriteSessionPtr resultSession = nullptr;
-    size_t partitionIndex = 0;
     {
         std::unique_lock lock(GlobalLock);
         auto [it, inserted] = SessionsIndex.try_emplace(partitionId, writeSession);
         resultSession = inserted ? writeSession : it->second;
-
-        auto partitionIndexIt = PartitionsPrimaryIndex.find(partitionId);
-        partitionIndex = partitionIndexIt->second;
-
-        Futures[partitionIndex] = resultSession->Session->WaitEvent();
     }
-    
+
+    auto partitionIndexIt = PartitionsPrimaryIndex.find(partitionId);
+    auto partitionIndex = partitionIndexIt->second;
     auto self = weak_from_this();
+
+    Futures[partitionIndex] = resultSession->Session->WaitEvent();
     Futures[partitionIndex].Subscribe([self, partitionId](const NThreading::TFuture<void>&) {
         if (auto s = self.lock()) {
             s->RunEventLoop(partitionId);

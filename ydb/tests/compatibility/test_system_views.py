@@ -59,6 +59,9 @@ class TestSystemViewsRegistry(RestartToAnotherVersionFixture):
             columns_after = dict_after[sysview_name]['columns']
 
             for col_name, col_type in columns_before.items():
+                if min(self.versions) < (25, 4) and sysview_name == 'ds_pdisks' and col_name == 'InferPDiskSlotCountFromUnitSize':
+                    continue
+
                 if col_name not in columns_after:
                     logger.debug(f"column '{col_name}' was deleted from sysview '{sysview_name}'")
                     return False

@@ -258,7 +258,7 @@ struct Schema : NIceDb::Schema {
         struct DecommitStatus                  : Column<17, NScheme::NTypeIds::Utf8> {};
         struct State                           : Column<18, NScheme::NTypeIds::Utf8> {};
         struct SlotSizeInUnits                 : Column<19, NScheme::NTypeIds::Uint32> {};
-        struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
+        // struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -279,8 +279,7 @@ struct Schema : NIceDb::Schema {
             ExpectedSlotCount,
             NumActiveSlots,
             DecommitStatus,
-            SlotSizeInUnits,
-            InferPDiskSlotCountFromUnitSize>;
+            SlotSizeInUnits>;
     };
 
     struct VSlots : Table<5> {

@@ -15,6 +15,11 @@
 
 #include <memory>
 
+#include <ydb/core/grpc_services/local_rpc/local_rpc_bi_streaming.h>
+#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc_operation.h>
+#include <ydb/core/grpc_services/service_coordination.h>
+
 namespace NFq {
 
 using namespace NActors;
@@ -30,7 +35,8 @@ struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvCreateSemaphoreResult = EvBegin,
+        EvCreateNodeResult = EvBegin,
+        EvCreateSemaphoreResult,
         EvCreateSessionResult,
         EvAcquireSemaphoreResult,
         EvDescribeSemaphoreResult,
@@ -43,6 +49,13 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
 
     // Events
+
+    struct  TEvCreateNodeResult :NActors::TEventLocal<TEvCreateNodeResult, EvCreateNodeResult> {
+        NYdb::TStatus Status;
+        explicit TEvCreateNodeResult(NYdb::TStatus status)
+            : Status(std::move(status)) {}
+    };
+
     struct TEvCreateSemaphoreResult : NActors::TEventLocal<TEvCreateSemaphoreResult, EvCreateSemaphoreResult> {
         NYdb::NCoordination::TAsyncResult<void> Result;
         explicit TEvCreateSemaphoreResult(const NYdb::NCoordination::TAsyncResult<void>& future)
@@ -90,6 +103,10 @@ struct TActorSystemPtrMixin {
 };
 
 class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActorSystemPtrMixin {
+
+    // using TRpcIn = Ydb::Topic::StreamReadMessage::FromClient;
+    // using TRpcOut = Ydb::Topic::StreamReadMessage::FromServer;
+    // using TLocalRpcCtx = TLocalRpcBiStreamingCtx<TRpcIn, TRpcOut>;
 
     enum class EState {
         Init,
@@ -140,6 +157,7 @@ public:
     [[maybe_unused]] static constexpr char ActorName[] = "YQ_LEADER_EL";
 
     void Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev);
+    void Handle(TEvPrivate::TEvCreateNodeResult::TPtr& ev);
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev);
     void Handle(TEvPrivate::TEvCreateSemaphoreResult::TPtr& ev);
     void Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev);
@@ -151,6 +169,7 @@ public:
 
     STRICT_STFUNC_EXC(StateFunc,
         hFunc(NFq::TEvents::TEvSchemaCreated, Handle);
+        hFunc(TEvPrivate::TEvCreateNodeResult, Handle);
         hFunc(TEvPrivate::TEvCreateSessionResult, Handle);
         hFunc(TEvPrivate::TEvCreateSemaphoreResult, Handle);
         hFunc(TEvPrivate::TEvAcquireSemaphoreResult, Handle);
@@ -172,6 +191,24 @@ private:
     void ResetState();
     void SetTimeout();
     NYdb::TDriverConfig GetYdbDriverConfig() const;
+
+    template <typename TRpc, typename TSettings>
+    NThreading::TFuture<NKikimr::NRpcService::TLocalRpcOperationResult> DoLocalRpcRequest(typename TRpc::TRequest&& proto, const NYdb::TOperationRequestSettings<TSettings>& settings, NKikimr::NRpcService::TLocalRpcOperationRequestCreator requestCreator) {
+        const auto promise = NThreading::NewPromise<NKikimr::NRpcService::TLocalRpcOperationResult>();
+        auto* actor = new NKikimr::NRpcService::TOperationRequestExecuter<TRpc, TSettings>(std::move(proto), {
+            .ChannelBufferSize = 1000000,// appConfig.GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();,
+            .OperationSettings = settings,
+            .RequestCreator = std::move(requestCreator),
+            .Database = Config.GetDatabase().GetDatabase(),
+            .Token = /*CredentialsProvider ? TMaybe<TString>(CredentialsProvider->GetAuthInfo()) :*/ Nothing(),
+            .Promise = promise,
+            .OperationName = "local_coordination_rpc_operation",
+        });
+        Register(actor, TMailboxType::HTSwap, TActivationContext::ActorSystem()->AppData<NKikimr::TAppData>()->UserPoolId);
+        return promise.GetFuture();
+    }
+
+    void CreateNode(const std::string& path, const NYdb::NCoordination::TCreateNodeSettings& settings = NYdb::NCoordination::TCreateNodeSettings());
 };
 
 TLeaderElection::TLeaderElection(
@@ -192,34 +229,34 @@ TLeaderElection::TLeaderElection(
     , Metrics(counters) {
 }
 
-ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
-    if (status.IsSuccess()) {
-        return ERetryErrorClass::NoRetry;
-    }
+// ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
+//     if (status.IsSuccess()) {
+//         return ERetryErrorClass::NoRetry;
+//     }
 
-    if (status.IsTransportError()) {
-        return ERetryErrorClass::ShortRetry;
-    }
+//     if (status.IsTransportError()) {
+//         return ERetryErrorClass::ShortRetry;
+//     }
 
-    const NYdb::EStatus st = status.GetStatus();
-    if (st == NYdb::EStatus::INTERNAL_ERROR || st == NYdb::EStatus::UNAVAILABLE ||
-        st == NYdb::EStatus::TIMEOUT || st == NYdb::EStatus::BAD_SESSION ||
-        st == NYdb::EStatus::SESSION_EXPIRED ||
-        st == NYdb::EStatus::SESSION_BUSY) {
-        return ERetryErrorClass::ShortRetry;
-    }
+//     const NYdb::EStatus st = status.GetStatus();
+//     if (st == NYdb::EStatus::INTERNAL_ERROR || st == NYdb::EStatus::UNAVAILABLE ||
+//         st == NYdb::EStatus::TIMEOUT || st == NYdb::EStatus::BAD_SESSION ||
+//         st == NYdb::EStatus::SESSION_EXPIRED ||
+//         st == NYdb::EStatus::SESSION_BUSY) {
+//         return ERetryErrorClass::ShortRetry;
+//     }
 
-    if (st == NYdb::EStatus::OVERLOADED) {
-        return ERetryErrorClass::LongRetry;
-    }
+//     if (st == NYdb::EStatus::OVERLOADED) {
+//         return ERetryErrorClass::LongRetry;
+//     }
 
-    return ERetryErrorClass::NoRetry;
-}
+//     return ERetryErrorClass::NoRetry;
+// }
 
-TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
-    static auto policy = TYdbSdkRetryPolicy::GetExponentialBackoffPolicy(RetryFunc, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5));
-    return policy;
-}
+// TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
+//     static auto policy = TYdbSdkRetryPolicy::GetExponentialBackoffPolicy(RetryFunc, TDuration::MilliSeconds(10), TDuration::Seconds(1), TDuration::Seconds(5));
+//     return policy;
+// }
 
 void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
@@ -238,19 +275,26 @@ void TLeaderElection::Bootstrap() {
     Driver = std::make_unique<NYdb::TDriver>(GetYdbDriverConfig());
     YdbConnection = NewYdbConnection(Config.GetDatabase(), CredentialsProviderFactory, *Driver);
     ProcessState();
+
+
+    // const auto& token = /*CredentialsProvider ? std::optional<TString>(CredentialsProvider->GetAuthInfo()) : */std::nullopt;
+    // auto ctx = MakeIntrusive<TLocalRpcCtx>(ActorContext().ActorSystem(), SelfId(), TLocalRpcCtx::TSettings{
+    //     .Database = Config.GetDatabase().GetDatabase(),
+    //     .Token = token,
+    //     .PeerName = "localhost/local_topic_rpc_read",
+    //     .RequestType = /*Settings.RequestType_.empty() ?*/ std::nullopt /*: std::optional<TString>(Settings.RequestType_)*/,
+    //   //  .ParentTraceId = TString(Settings.TraceParent_),
+    //   //  .TraceId = TString(Settings.TraceId_),
+    //     .RpcMethodName = "TopicService.StreamRead",
+    //     });
+
+
 }
 
 void TLeaderElection::ProcessState() {
     switch (State) {
     case EState::Init:
-        if (!CoordinationNodeCreated) {
-            Register(MakeCreateCoordinationNodeActor(
-                SelfId(),
-                NKikimrServices::FQ_ROW_DISPATCHER,
-                YdbConnection,
-                CoordinationNodePath,
-                MakeSchemaRetryPolicy()));
-        }
+        CreateNode(CoordinationNodePath);
         State = EState::WaitNodeCreated;
         [[fallthrough]];
     case EState::WaitNodeCreated:
@@ -486,6 +530,39 @@ NYdb::TDriverConfig TLeaderElection::GetYdbDriverConfig() const {
     cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
     cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
     return cfg;
+}
+
+void TLeaderElection::CreateNode(const std::string& path,  const NYdb::NCoordination::TCreateNodeSettings& settings) {
+    using TCreateNodeRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Coordination::CreateNodeRequest, Ydb::Coordination::CreateNodeResponse>;
+
+    TCreateNodeRequest::TRequest request;
+    request.set_path(path);
+    //request.set_include_stats(settings.IncludeStats_);
+   // request.set_include_location(settings.IncludeLocation_);
+   Cerr << "CreateNode777 " << path << Endl;
+
+    DoLocalRpcRequest<TCreateNodeRequest, NYdb::NCoordination::TCreateNodeSettings>(std::move(request), settings, &NKikimr::NGRpcService::DoCreateCoordinationNode).Subscribe([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NThreading::TFuture<NKikimr::NRpcService::TLocalRpcOperationResult>& f) {
+        const auto [status, response] = f.GetValue();
+        Cerr << "TLocalRpcOperationResult22 " << status << "  - "  << status.IsSuccess() << Endl;
+        // Ydb::Topic::DescribeTopicResult result;
+        // response.UnpackTo(&result);
+            actorSystem->Send(actorId, new TEvPrivate::TEvCreateNodeResult(status));
+
+        //return status;
+    });
+}
+
+void TLeaderElection::Handle(TEvPrivate::TEvCreateNodeResult::TPtr& ev) {
+    const auto& status = ev->Get()->Status;
+    if (!status.IsSuccess()) {
+        LOG_ROW_DISPATCHER_ERROR("Coordination node creation error: " << status.GetIssues());
+        Metrics.Errors->Inc();
+        ResetState();
+        return;
+    }
+    LOG_ROW_DISPATCHER_DEBUG("Coordination node successfully created");
+    CoordinationNodeCreated = true;
+    ProcessState();
 }
 
 } // anonymous namespace

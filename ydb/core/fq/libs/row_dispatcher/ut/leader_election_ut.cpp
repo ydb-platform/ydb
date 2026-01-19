@@ -7,6 +7,8 @@
 #include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/core/testlib/test_client.h>
+
 namespace {
 
 using namespace NKikimr;
@@ -15,32 +17,43 @@ using namespace NFq;
 class TFixture : public NUnitTest::TBaseFixture {
 
 public:
-    TFixture()
-    : Runtime(1, false) {}
+    TFixture() {}
+   // : Runtime(1, false) {}
 
     void SetUp(NUnitTest::TTestContext&) override {
-        TAutoPtr<TAppPrepare> app = new TAppPrepare();
-        Runtime.Initialize(app->Unwrap());
-        Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
-        auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-        YqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        MsgBusPort = PortManager.GetPort(2134);
+        GrpcPort = PortManager.GetPort(2135);
+        NKikimrProto::TAuthConfig authConfig;
+        ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
+        ServerSettings->NodeCount = 1;
+        Server = MakeHolder<Tests::TServer>(*ServerSettings);
+        Client = MakeHolder<Tests::TClient>(*ServerSettings);
+        Server->GetRuntime()->SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NActors::NLog::PRI_DEBUG);
+        Server->EnableGRpc(GrpcPort);
+        Client->InitRootScheme();
+
+        // TAutoPtr<TAppPrepare> app = new TAppPrepare();
+        // Runtime.Initialize(app->Unwrap());
+        // Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
+         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
+         YqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
-        RowDispatcher = Runtime.AllocateEdgeActor();
-        Coordinator1 = Runtime.AllocateEdgeActor();
-        Coordinator2 = Runtime.AllocateEdgeActor();
-        Coordinator3 = Runtime.AllocateEdgeActor();
+         RowDispatcher = Server->GetRuntime()->AllocateEdgeActor();
+         Coordinator1 = Server->GetRuntime()->AllocateEdgeActor();
+         Coordinator2 = Server->GetRuntime()->AllocateEdgeActor();
+         Coordinator3 = Server->GetRuntime()->AllocateEdgeActor();
     }
 
     void Init(bool localMode = false) {
-        NConfig::TRowDispatcherCoordinatorConfig config;
+        NFq::NConfig::TRowDispatcherCoordinatorConfig config;
         config.SetCoordinationNodePath("row_dispatcher");
         config.SetLocalMode(localMode);
         auto& database = *config.MutableDatabase();
         database.SetEndpoint(GetEnv("YDB_ENDPOINT"));
-        database.SetDatabase(GetEnv("YDB_DATABASE"));
+        database.SetDatabase(Server->GetRuntime()->GetAppData().TenantName);
         database.SetToken("");
                 
-        LeaderElection1 = Runtime.Register(NewLeaderElection(
+        LeaderElection1 = Server->GetRuntime()->Register(NewLeaderElection(
             RowDispatcher,
             Coordinator1,
             config,
@@ -50,7 +63,7 @@ public:
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
-        LeaderElection2 = Runtime.Register(NewLeaderElection(
+        LeaderElection2 = Server->GetRuntime()->Register(NewLeaderElection(
             RowDispatcher,
             Coordinator2,
             config,
@@ -60,7 +73,7 @@ public:
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
-        LeaderElection3 = Runtime.Register(NewLeaderElection(
+        LeaderElection3 = Server->GetRuntime()->Register(NewLeaderElection(
             RowDispatcher,
             Coordinator3,
             config,
@@ -70,26 +83,26 @@ public:
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
 
-        Runtime.EnableScheduleForActor(LeaderElection1);
-        Runtime.EnableScheduleForActor(LeaderElection2);
-        Runtime.EnableScheduleForActor(LeaderElection3);
+        // Runtime.EnableScheduleForActor(LeaderElection1);
+        // Runtime.EnableScheduleForActor(LeaderElection2);
+        // Runtime.EnableScheduleForActor(LeaderElection3);
 
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, 3);
-        Runtime.DispatchEvents(options);
+        // TDispatchOptions options;
+        // options.FinalEvents.emplace_back(NActors::TEvents::TSystem::Bootstrap, 3);
+        // Runtime.DispatchEvents(options);
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
     }
 
     NActors::TActorId ExpectCoordinatorChanged() {
-        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(RowDispatcher);
+        auto eventHolder = Server->GetRuntime()->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(RowDispatcher);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         return eventHolder.Get()->Get()->CoordinatorActorId;
     }
 
-    TActorSystemStub actorSystemStub;
-    NActors::TTestActorRuntime Runtime;
+ //   TActorSystemStub actorSystemStub;
+  //  NActors::TTestActorRuntime Runtime;
     NActors::TActorId RowDispatcher;
     NActors::TActorId LeaderElection1;
     NActors::TActorId LeaderElection2;
@@ -99,6 +112,13 @@ public:
     NActors::TActorId Coordinator3;
     NActors::TActorId LeaderDetector;
     TYqSharedResources::TPtr YqSharedResources;
+
+    TPortManager PortManager;
+    ui16 MsgBusPort = 0;
+    ui16 GrpcPort = 0;
+    THolder<Tests::TServerSettings> ServerSettings;
+    THolder<Tests::TServer> Server;
+    THolder<Tests::TClient> Client;
 };
 
 Y_UNIT_TEST_SUITE(LeaderElectionTests) {
@@ -121,7 +141,7 @@ Y_UNIT_TEST_SUITE(LeaderElectionTests) {
             currentLeader = LeaderElection3;
         }
 
-        Runtime.Send(new IEventHandle(currentLeader, RowDispatcher, new NActors::TEvents::TEvPoisonPill()));
+        Server->GetRuntime()->Send(new IEventHandle(currentLeader, RowDispatcher, new NActors::TEvents::TEvPoisonPill()));
         auto coordinatorId4 = ExpectCoordinatorChanged();
         auto coordinatorId5 = ExpectCoordinatorChanged();
         UNIT_ASSERT(coordinatorId4 == coordinatorId5);
@@ -135,7 +155,7 @@ Y_UNIT_TEST_SUITE(LeaderElectionTests) {
             currentLeader = LeaderElection3;
         }
 
-        Runtime.Send(new IEventHandle(currentLeader, RowDispatcher, new NActors::TEvents::TEvPoisonPill()));
+        Server->GetRuntime()->Send(new IEventHandle(currentLeader, RowDispatcher, new NActors::TEvents::TEvPoisonPill()));
         auto coordinatorId6 = ExpectCoordinatorChanged();
         UNIT_ASSERT(coordinatorId6 != coordinatorId4);
     }

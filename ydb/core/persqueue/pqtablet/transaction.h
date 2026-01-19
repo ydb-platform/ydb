@@ -84,6 +84,8 @@ struct TDistributedTransaction {
 
     static void SetDecision(NKikimrTx::TReadSetData::EDecision& var, NKikimrTx::TReadSetData::EDecision value);
 
+    TString GetKey() const;
+
     void AddCmdWriteDataTx(NKikimrPQ::TTransaction& tx);
     void AddCmdWriteConfigTx(NKikimrPQ::TTransaction& tx);
 
@@ -137,8 +139,6 @@ private:
     NWilson::TSpan WaitRSSpan;
     NWilson::TSpan WaitRSAcksSpan;
     NWilson::TSpan DeleteSpan;
-
-    TString GetKey() const;
 };
 
 }

@@ -1282,4 +1282,31 @@
 
   {% endcut %}
 
+- Js/Ts
+
+  ```typescript
+  import { sql } from '@ydbjs/query';
+
+  // ...
+
+  await sql.begin({ isolation: 'snapshotReadWrite', idempotent: true }, async (tx) => {
+      return await tx`SELECT 1`;
+  });
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::{Query, TransactionOptions};
+
+  let query = Query::new("SELECT 1");
+  let tx_options = TransactionOptions::new()
+      .with_snapshot_read_write();
+  let result = client.query(query, tx_options).await?;
+  ```
+
+- PHP
+
+  Режим Snapshot Read-Write не поддерживается напрямую в PHP SDK.
+
 {% endlist %}

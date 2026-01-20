@@ -99,13 +99,12 @@ int TYdbUpdater::Update(bool forceUpdate) {
                 progressBar.SetTotal(total);
             }
             progressBar.SetProgress(downloaded);
-        },
-        TDuration::Seconds(60),
-        TDuration::Minutes(30)
+        }
     );
 
     if (!downloadResult.Success) {
         Cerr << Endl << "Failed to download from url \"" << downloadUrl << "\". " << downloadResult.ErrorMessage << Endl;
+        Cerr << "If the problem persists, consider reinstalling YDB CLI: https://ydb.tech/docs/en/reference/ydb-cli/install" << Endl;
         tmpPathToBinary.DeleteIfExists();
         return EXIT_FAILURE;
     }
@@ -224,8 +223,7 @@ bool TYdbUpdater::GetLatestVersion() {
         SetConfigValue("last_check", TInstant::Now().Seconds());
         return true;
     }
-    Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl
-        << "You can disable further version checks with 'ydb version --disable-checks' command." << Endl;
+    Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl;
     return false;
 }
 
@@ -236,6 +234,7 @@ void TYdbUpdater::PrintUpdateMessageIfNeeded(bool forceVersionCheck) {
         return;
     }
     if (!GetLatestVersion()) {
+        Cerr << "You can disable further version checks with 'ydb version --disable-checks' command." << Endl;
         return;
     }
     if (MyVersion != LatestVersion) {

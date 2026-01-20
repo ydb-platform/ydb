@@ -26,7 +26,7 @@ TDownloadResult DownloadFile(
     const TString& destinationPath,
     TDownloadProgressCallback progressCallback = {},
     TDuration connectTimeout = TDuration::Seconds(60),
-    TDuration socketTimeout = TDuration::Minutes(10));
+    TDuration socketTimeout = TDuration::Seconds(60));
 
 } // namespace NConsoleClient
 } // namespace NYdb

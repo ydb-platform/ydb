@@ -2819,7 +2819,7 @@ bool IsNormalizedDependsOn(const TExprNode& node) {
 }
 
 bool IsForbidConstantDependsEnabled(const TTypeAnnotationContext& types) {
-    return IsOptimizerEnabled<ForbidConstantDependsOnFuseOptName>(types) && !IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types);
+    return !IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types);
 }
 
 bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types) {

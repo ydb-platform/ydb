@@ -58,11 +58,10 @@ class TestAlterColumnCompression(TestCompressionBase):
     @classmethod
     def setup_class(cls):
         super(TestAlterColumnCompression, cls).setup_class()
-        cls.single_upsert_rows_count: int = 10000
-        cls.upsert_count: int = 10
-        cls.volumes_without_compression: tuple[int, int]
-        cls.test_name: str = "all_supported_compression"
-        cls.test_dir: str = f"{cls.ydb_client.database}/{cls.class_name}/{cls.test_name}"
+        cls.single_upsert_rows_count = 10000
+        cls.upsert_count = 10
+        cls.test_name = "all_supported_compression"
+        cls.test_dir = f"{cls.ydb_client.database}/{cls.class_name}/{cls.test_name}"
 
     COMPRESSION_CASES = [
         ("default",          ''),
@@ -73,8 +72,8 @@ class TestAlterColumnCompression(TestCompressionBase):
         for lvl in range(2, 22, 3)
     ]
 
-    def create_table_without_compression(self, suffix: str):
-        self.table_path: str = f"{self.test_dir}/to_compress_with_{suffix}__{random.randint(1000, 9999)}"
+    def create_table_without_compression(self, suffix):
+        self.table_path = f"{self.test_dir}/to_compress_with_{suffix}__{random.randint(1000, 9999)}"
 
         self.ydb_client.query(
             f"""
@@ -108,7 +107,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         assert table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == expected_raw // 8
 
     def create_table_with_compression(self, suffix, compression_settings):
-        self.table_path = f"{self.test_dir}/to_decompress_from_{suffix}"
+        self.table_path = f"{self.test_dir}/to_decompress_from_{suffix}_{random.randint(1000, 9999)}"
 
         self.ydb_client.query(
             f"""
@@ -136,7 +135,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         assert table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == expected_raw // 8
 
     @pytest.mark.parametrize("suffix, compression_settings", COMPRESSION_CASES)
-    def test_alter_to_compression(self, suffix: str, compression_settings: str):
+    def test_alter_to_compression(self, suffix, compression_settings):
         self.create_table_without_compression(suffix)
 
         self.ydb_client.query(
@@ -172,7 +171,7 @@ class TestAlterColumnCompression(TestCompressionBase):
         assert koef > 1
 
     @pytest.mark.parametrize("suffix, compression_settings", COMPRESSION_CASES)
-    def test_alter_from_compression(self, suffix: str, compression_settings: str):
+    def test_alter_from_compression(self, suffix, compression_settings):
         self.create_table_with_compression(suffix, compression_settings)
 
         self.ydb_client.query(
@@ -238,5 +237,28 @@ class TestAlterColumnCompression(TestCompressionBase):
         koef = volumes[1] / self.volumes_with_compression[1]
         logging.info(
             f"compression in `{table.path}` {volumes[1]} / {self.volumes_with_compression[1]}: {koef}"
+        )
+        assert koef > 1
+
+    def test_alter_zstd_level_from_0_to_19_compression(self):
+        self.create_table_with_compression("zstd_compression",  'algorithm=zstd, level=0')
+
+        self.ydb_client.query(
+            f"""
+                ALTER TABLE `{self.table_path}`
+                    ALTER COLUMN `value` SET COMPRESSION(algorithm=zstd, level=19),
+                    ALTER COLUMN `value1` SET COMPRESSION(algorithm=zstd, level=19);
+            """
+        )
+        logger.info(f"Table {self.table_path} altered")
+        # update items for them to be rewritten
+        self.ydb_client.query(f"UPDATE `{self.table_path}` SET value1 = value1 + 1;")
+
+        table = ColumnTableHelper(self.ydb_client, self.table_path)
+
+        volumes = table.get_volumes_column("value1")
+        koef = self.volumes_with_compression[1] / volumes[1]
+        logging.info(
+            f"compression in `{table.path}` {self.volumes_with_compression[1]} / {volumes[1]}: {koef}"
         )
         assert koef > 1

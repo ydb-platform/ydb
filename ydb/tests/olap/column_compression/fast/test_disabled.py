@@ -45,7 +45,7 @@ class TestWithCompressionDisabled(object):
         return f"{self.test_dir}/table{random.randrange(99999)}"
 
     @pytest.mark.parametrize("suffix, compression_settings", COMPRESSION_CASES)
-    def test_create(self, suffix: str, compression_settings: str):
+    def test_create(self, suffix, compression_settings):
         table_path = self.get_table_path() + "_create_" + suffix
         try:
             self.ydb_client.query(

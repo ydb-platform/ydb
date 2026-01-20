@@ -107,3 +107,26 @@ class TestIncorrectCompression(object):
             assert False, 'Should Fail'
         except Exception as ex:
             assert "Column Compression is not supported in row tables" in ex.message
+
+    def test_tablestore(self):
+        table_path = f"{self.test_dir}/create_tablestore"
+        try:
+            self.ydb_client.query(
+                f"""
+                CREATE TABLESTORE `{table_path}` (
+                    id Uint64 NOT NULL,
+                    val Int64 FAMILY fam1,
+                    PRIMARY KEY(id),
+                    Family default (
+                        COMPRESSION = "lz4"
+                    ),
+                    Family fam1 (
+                        COMPRESSION = "zstd"
+                    ),
+                )
+                WITH (STORE = COLUMN);
+                """
+            )
+            assert False, "Should Fail"
+        except Exception as ex:
+            assert "TableStore does not support column families" in ex.message

@@ -8,6 +8,7 @@ SIZE(SMALL)
 TEST_SRCS(
     test_disabled.py
     test_incorrect.py
+    test_mixed.py
     test_obsolete.py
 )
 

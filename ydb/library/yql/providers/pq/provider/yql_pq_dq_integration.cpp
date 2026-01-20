@@ -427,7 +427,7 @@ private:
                     return Nothing();
                 }
             }
-            if (member.Name() != "_yql_sys_tsp_write_time") {
+            if (!IsIn({"_yql_sys_tsp_write_time", "_yql_sys_write_time"}, member.Name())) {
                 return Nothing();
             }
         }

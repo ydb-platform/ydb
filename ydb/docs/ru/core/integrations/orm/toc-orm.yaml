@@ -11,7 +11,5 @@ items:
   href: sqlalchemy.md
 - name: Django
   href: django.md
-- name: Entity Framework
-  href: entity-framework.md
 - name: Linq To Db
   href: linq2db.md

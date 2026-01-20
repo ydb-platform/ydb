@@ -8,12 +8,12 @@ CREATE TABLE FullTextTable (
 
 -- Fulltext index for Contains tests
 ALTER TABLE FullTextTable ADD INDEX fulltext_idx
-    GLOBAL USING fulltext
+    GLOBAL USING fulltext_plain
     ON (Text) COVER (Data)
-    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true);
+    WITH (tokenizer=standard, use_filter_lowercase=true);
 
 -- Fulltext relevance index for Relevance tests
 ALTER TABLE FullTextTable ADD INDEX fulltext_relevance_idx
-    GLOBAL USING fulltext
+    GLOBAL USING fulltext_relevance
     ON (Text) COVER (Data)
-    WITH (layout=flat_relevance, tokenizer=standard, use_filter_lowercase=true);
+    WITH (tokenizer=standard, use_filter_lowercase=true);

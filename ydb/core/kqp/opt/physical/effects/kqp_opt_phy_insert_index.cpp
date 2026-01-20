@@ -110,7 +110,8 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
         || !abortOnError
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
             return index.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
-                || index.second->Type == TIndexDescription::EType::GlobalFulltext;
+                || index.second->Type == TIndexDescription::EType::GlobalFulltextPlain
+                || index.second->Type == TIndexDescription::EType::GlobalFulltextRelevance;
         });
 
     TVector<TStringBuf> insertColumns;
@@ -227,7 +228,8 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
                 break;
             }
-            case TIndexDescription::EType::GlobalFulltext: {
+            case TIndexDescription::EType::GlobalFulltextPlain:
+            case TIndexDescription::EType::GlobalFulltextRelevance: {
                 // For fulltext indexes, we need to tokenize the text and create inserted rows
                 auto insertPrecompute = ReadInputToPrecompute(*insertRows, insert.Pos(), ctx);
                 upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertPrecompute, inputColumnsSet, indexTableColumns,

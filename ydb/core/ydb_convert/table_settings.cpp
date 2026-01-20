@@ -476,9 +476,15 @@ bool FillIndexTablePartitioning(
         }
         break;
     }
-    
-    case Ydb::Table::TableIndex::kGlobalFulltextIndex:
-        if (!fillIndexPartitioning(index.global_fulltext_index().settings(), indexImplTableDescriptions)) {
+
+    case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+        if (!fillIndexPartitioning(index.global_fulltext_plain_index().settings(), indexImplTableDescriptions)) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().settings(), indexImplTableDescriptions)) {
             return false;
         }
         break;

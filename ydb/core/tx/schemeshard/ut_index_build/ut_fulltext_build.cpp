@@ -58,12 +58,12 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         index.set_name("fulltext_idx");
         index.add_index_columns("text");
         index.add_data_columns("data");
-        auto& fulltext = *index.mutable_global_fulltext_index()->mutable_fulltext_settings();
+        auto& fulltext = *index.mutable_global_fulltext_plain_index()->mutable_fulltext_settings();
         fulltext.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
         auto& analyzers = *fulltext.add_columns()->mutable_analyzers();
         fulltext.mutable_columns()->at(0).set_column("text");
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
-        
+
         const ui64 buildIndexTx = ++txId;
         TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
         env.TestWaitNotification(runtime, buildIndexTx);
@@ -130,8 +130,8 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         index.set_name("fulltext_idx");
         index.add_index_columns("text");
         index.add_data_columns("data");
-        auto& fulltext = *index.mutable_global_fulltext_index()->mutable_fulltext_settings();
-        fulltext.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
+        auto& fulltext = *index.mutable_global_fulltext_relevance_index()->mutable_fulltext_settings();
+        fulltext.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);  // Layout is required for internal processing
         auto& analyzers = *fulltext.add_columns()->mutable_analyzers();
         fulltext.mutable_columns()->at(0).set_column("text");
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         Ydb::Table::TableIndex index;
         index.set_name("fulltext_idx");
         index.add_index_columns("text");
-        auto& fulltext = *index.mutable_global_fulltext_index()->mutable_fulltext_settings();
+        auto& fulltext = *index.mutable_global_fulltext_relevance_index()->mutable_fulltext_settings();
         fulltext.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
         auto& analyzers = *fulltext.add_columns()->mutable_analyzers();
         fulltext.mutable_columns()->at(0).set_column("text");

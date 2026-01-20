@@ -125,7 +125,7 @@ public:
             for (const auto& [name, id] : srcPath.Base()->GetChildren()) {
                 if (context.SS->PathsById.contains(id)) {
                     auto childPath = context.SS->PathsById.at(id);
-                    if (childPath->IsCdcStream() && 
+                    if (childPath->IsCdcStream() &&
                         childPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                         childPath->DropTxId == OperationId.GetTxId()) {
                         streamsToDrop.push_back(id);
@@ -377,10 +377,10 @@ public:
                 if (context.SS->CdcStreams.contains(id)) {
                     auto streamPath = context.SS->PathsById.at(id);
 
-                    if (streamPath->IsCdcStream() && 
+                    if (streamPath->IsCdcStream() &&
                         streamPath->PathState == TPathElement::EPathState::EPathStateDrop &&
                         streamPath->DropTxId == OperationId.GetTxId()) {
-                        
+
                         context.MemChanges.GrabCdcStream(context.SS, id);
 
                         context.SS->PersistRemoveCdcStream(db, id);
@@ -390,10 +390,10 @@ public:
                         streamPath->SetDropped(step, OperationId.GetTxId());
                         context.SS->PersistDropStep(db, id, step, OperationId);
 
-                        auto parent = srcPath; 
-                        
+                        auto parent = srcPath;
+
                         context.SS->ResolveDomainInfo(id)->DecPathsInside(context.SS);
-                        
+
                         DecAliveChildrenDirect(OperationId, parent, context);
 
                         context.SS->ClearDescribePathCaches(streamPath);
@@ -576,7 +576,7 @@ public:
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
-                    checks.IsInsideTableIndexPath(); 
+                    checks.IsInsideTableIndexPath();
                 } else {
                     if (!srcPath.ShouldSkipCommonPathCheckForIndexImplTable()) {
                         checks.IsCommonSensePath();
@@ -688,10 +688,10 @@ public:
             const auto& dropOp = Transaction.GetCreateTable().GetDropSrcCdcStream();
             for (const auto& streamName : dropOp.GetStreamName()) {
                 TPath oldStreamPath = srcPath.Child(streamName);
-                
+
                 auto checks = oldStreamPath.Check();
                 checks.NotEmpty().IsResolved().NotDeleted().IsCdcStream();
-                
+
                 if (!checks) {
                     result->SetError(checks.GetStatus(), checks.GetError());
                     return result;
@@ -699,12 +699,12 @@ public:
 
                 if (oldStreamPath.Base()->LastTxId != InvalidTxId && oldStreamPath.Base()->LastTxId != OperationId.GetTxId()) {
                     LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TCopyTable Propose: Stream " << streamName 
-                        << " was busy by txId " << oldStreamPath.Base()->LastTxId 
+                        "TCopyTable Propose: Stream " << streamName
+                        << " was busy by txId " << oldStreamPath.Base()->LastTxId
                         << ", overriding with current opId " << OperationId.GetTxId()
                         << " because CopyTable owns the parent table.");
                 }
-                
+
                 context.MemChanges.GrabPath(context.SS, oldStreamPath.Base()->PathId);
                 context.MemChanges.GrabCdcStream(context.SS, oldStreamPath.Base()->PathId);
 
@@ -824,7 +824,7 @@ public:
         srcPath.Base()->LastTxId = OperationId.GetTxId();
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCopyTable, newTable->PathId, srcPath.Base()->PathId);
-        
+
         txState.State = TTxState::CreateParts;
         if (Transaction.HasCreateCdcStream()) {
             txState.CdcPathId = srcPath.Base()->PathId;
@@ -1059,7 +1059,8 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                     *operation->MutableVectorIndexKmeansTreeDescription() =
                         std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
                     break;
-                case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                     *operation->MutableFulltextIndexDescription() =
                         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
                     break;

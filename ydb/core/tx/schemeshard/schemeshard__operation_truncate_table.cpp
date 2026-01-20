@@ -392,7 +392,12 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
                                 result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with vector indexes")};
                                 return false;
                             }
-                            case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+                                // This condition should be removed in the near future
+                                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with fulltext indexes")};
+                                return false;
+                            }
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
                                 // This condition should be removed in the near future
                                 result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with fulltext indexes")};
                                 return false;

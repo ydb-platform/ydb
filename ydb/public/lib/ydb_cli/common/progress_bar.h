@@ -7,9 +7,13 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <string>
 
 namespace NYdb {
 namespace NConsoleClient {
+
+// Default update interval for non-interactive progress bars (in milliseconds)
+constexpr size_t DefaultProgressUpdateIntervalMs = 10000;
 
 // Base progress bar renderer interface
 class IProgressBarRenderer {
@@ -32,12 +36,12 @@ public:
 // Creates appropriate renderer based on terminal capabilities
 // If stderr is a terminal - returns ftxui-based renderer
 // Otherwise - returns text-based renderer that prints periodically
-std::unique_ptr<IProgressBarRenderer> CreateProgressBarRenderer(size_t updateIntervalMs = 10000);
+std::unique_ptr<IProgressBarRenderer> CreateProgressBarRenderer(size_t updateIntervalMs = DefaultProgressUpdateIntervalMs);
 
 // Text renderer that prints progress periodically (for non-interactive mode)
 class TTextProgressBarRenderer : public IProgressBarRenderer {
 public:
-    explicit TTextProgressBarRenderer(size_t updateIntervalMs = 10000);
+    explicit TTextProgressBarRenderer(size_t updateIntervalMs);
     ~TTextProgressBarRenderer() override;
 
     void Render(double percent, const TString& leftText, const TString& rightText) override;
@@ -67,8 +71,12 @@ private:
     double Percent = 0;
     TString LeftText;
     TString RightText;
+    TString CachedRightText;  // Cached text for display (updated less frequently)
     TInstant LastRenderTime;
+    TInstant LastTextUpdateTime;
     bool Finished = false;
+
+    static constexpr size_t TextUpdateIntervalMs = 500;  // Update text ~2 times per second
 };
 
 // Simple progress bar: shows current/total with percentage
@@ -120,10 +128,111 @@ private:
     bool Finished = false;
 };
 
-// Helper functions for formatting
-TString FormatBytes(ui64 bytes);
-TString FormatSpeed(ui64 bytesPerSecond);
-TString FormatEta(TDuration duration);
+// ============================================================================
+// Dual progress bar for import operations
+// Shows two progress indicators:
+// - Primary (green): confirmed/committed progress (e.g., successfully imported bytes)
+// - Secondary (grey): buffered/read progress (e.g., bytes read from file)
+// ============================================================================
+
+// Renderer interface for dual progress bar
+class IDualProgressBarRenderer {
+public:
+    virtual ~IDualProgressBarRenderer() = default;
+
+    // Render dual progress bar
+    // primaryPercent: confirmed progress (0-100), shown in green
+    // secondaryPercent: buffered progress (0-100), shown in grey
+    // leftText: text to show on the left (e.g., "45%")
+    // rightText: text to show on the right (e.g., speed, ETA, etc.)
+    virtual void Render(double primaryPercent, double secondaryPercent,
+                        const TString& leftText, const TString& rightText) = 0;
+
+    virtual void Finish() = 0;
+    virtual void Clear() = 0;
+};
+
+// Factory function for dual renderer
+std::unique_ptr<IDualProgressBarRenderer> CreateDualProgressBarRenderer(size_t updateIntervalMs = DefaultProgressUpdateIntervalMs);
+
+// Text renderer for dual progress (non-interactive)
+class TTextDualProgressBarRenderer : public IDualProgressBarRenderer {
+public:
+    explicit TTextDualProgressBarRenderer(size_t updateIntervalMs);
+    ~TTextDualProgressBarRenderer() override;
+
+    void Render(double primaryPercent, double secondaryPercent,
+                const TString& leftText, const TString& rightText) override;
+    void Finish() override;
+    void Clear() override;
+
+private:
+    size_t UpdateIntervalMs;
+    TInstant LastRenderTime;
+    bool Finished = false;
+    bool RenderedFinal = false;
+};
+
+// Interactive renderer for dual progress using ftxui
+class TFancyDualProgressBarRenderer : public IDualProgressBarRenderer {
+public:
+    TFancyDualProgressBarRenderer();
+    ~TFancyDualProgressBarRenderer() override;
+
+    void Render(double primaryPercent, double secondaryPercent,
+                const TString& leftText, const TString& rightText) override;
+    void Finish() override;
+    void Clear() override;
+
+private:
+    void DoRender();
+
+    double PrimaryPercent = 0;
+    double SecondaryPercent = 0;
+    TString LeftText;
+    TString RightText;
+    TString CachedRightText;  // Cached text for display (updated less frequently)
+    TInstant LastRenderTime;
+    TInstant LastTextUpdateTime;
+    bool Finished = false;
+
+    static constexpr size_t TextUpdateIntervalMs = 500;  // Update text ~2 times per second
+
+    // Labels for progress bar sections (initialized once per object)
+    const std::string CompletedLabel = "completed";
+    const std::string InProgressLabel = "in progress";
+};
+
+// Dual progress bar for import operations with byte tracking
+// Shows confirmed (imported) vs buffered (read) progress
+class TDualBytesProgressBar {
+public:
+    // totalBytes: total size in bytes (0 if unknown)
+    explicit TDualBytesProgressBar(ui64 totalBytes = 0);
+    ~TDualBytesProgressBar();
+
+    // Update buffered (read from file) progress - shown in grey
+    void SetBufferedProgress(ui64 bufferedBytes);
+
+    // Update confirmed (imported) progress - shown in green
+    // This is the "real" progress that determines the percentage shown
+    void SetConfirmedProgress(ui64 confirmedBytes);
+
+    // Update total if it wasn't known at construction time
+    void SetTotal(ui64 totalBytes);
+
+    YDB_READONLY(ui64, TotalBytes, 0);
+    YDB_READONLY(ui64, BufferedBytes, 0);
+    YDB_READONLY(ui64, ConfirmedBytes, 0);
+
+private:
+    void Render();
+
+    std::unique_ptr<IDualProgressBarRenderer> Renderer;
+    TInstant StartTime;
+    TInstant LastRenderTime;
+    bool Finished = false;
+};
 
 } // namespace NConsoleClient
 } // namespace NYdb

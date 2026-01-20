@@ -18,7 +18,6 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/csv_parser.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
-#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/progress_bar.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
@@ -163,7 +162,16 @@ TStatus WaitForQueue(const size_t maxQueueSize, std::vector<TAsyncStatus>& inFli
 }
 
 TString PrettifyBytes(double bytes) {
-    return ToString(HumanReadableSize(bytes, SF_BYTES));
+    TString result = ToString(HumanReadableSize(bytes, SF_BYTES));
+    // Insert space before unit suffix (KiB, MiB, GiB, TiB, or B)
+    for (size_t i = 0; i < result.size(); ++i) {
+        char c = result[i];
+        if (c == 'K' || c == 'M' || c == 'G' || c == 'T' || c == 'B') {
+            result.insert(i, " ");
+            break;
+        }
+    }
+    return result;
 }
 
 void InitCsvParser(TCsvParser& parser,
@@ -568,6 +576,7 @@ private:
 
 struct TImportBatchStatus {
     ui64 LastRow; // Highest row number in batch
+    ui64 BytesInBatch; // Number of bytes in this batch (for progress tracking)
     bool Completed; // Sets upon receiving confirmation from server
 };
 
@@ -581,12 +590,14 @@ public:
 
 private:
     using ProgressCallbackFunc = std::function<void (ui64, ui64)>;
+    using ConfirmProgressCallbackFunc = std::function<void (ui64)>;
 
     TStatus UpsertCsv(IInputStream& input,
                       const TString& dbPath,
                       const TString& filePath,
                       std::optional<ui64> inputSizeHint,
                       ProgressCallbackFunc & progressCallback,
+                      ConfirmProgressCallbackFunc & confirmProgressCallback,
                       std::shared_ptr<TJobInFlightManager> jobInflightManager,
                       std::shared_ptr<TProgressFile> progressFile);
 
@@ -709,11 +720,11 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
         .OperationTimeout(Settings.OperationTimeout_)
         .ClientTimeout(Settings.ClientTimeout_);
 
-    bool isStdoutInteractive = IsStdoutInteractive();
     size_t filePathsSize = filePaths.size();
     std::mutex progressWriteLock;
     std::atomic<ui64> globalProgress{0};
-    std::atomic<ui64> processedBytes{0};  // Bytes processed so far (updated in real-time)
+    std::atomic<ui64> bufferedBytes{0};   // Bytes read from files (buffered/in-progress)
+    std::atomic<ui64> confirmedBytes{0};  // Bytes confirmed as imported (server acknowledged)
 
     // Calculate total size of all files for progress tracking
     ui64 totalFilesSize = 0;
@@ -731,11 +742,12 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
         }
     }
 
-    TBytesProgressBar progressBar(totalFilesSize);
+    TDualBytesProgressBar progressBar(totalFilesSize);
 
     auto writeProgress = [&]() {
         std::lock_guard<std::mutex> lock(progressWriteLock);
-        progressBar.SetProgress(processedBytes.load());
+        progressBar.SetBufferedProgress(bufferedBytes.load());
+        progressBar.SetConfirmedProgress(confirmedBytes.load());
     };
 
     auto start = TInstant::Now();
@@ -808,18 +820,21 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
             IInputStream& input = noBomStream ? *noBomStream : *inputStream;
 
             ProgressCallbackFunc progressCallback;
+            ConfirmProgressCallbackFunc confirmProgressCallback;
 
-            if (isStdoutInteractive) {
-                ui64 lastReportedBytes = 0;
-                progressCallback = [&, lastReportedBytes](ui64 current, ui64 /*total*/) mutable {
-                    ui64 bytesDiff = current - lastReportedBytes;
-                    if (bytesDiff > 0) {
-                        processedBytes.fetch_add(bytesDiff);
-                        lastReportedBytes = current;
-                        writeProgress();
-                    }
-                };
-            }
+            ui64 lastReportedBytes = 0;
+            progressCallback = [&, lastReportedBytes](ui64 current, ui64 /*total*/) mutable {
+                ui64 bytesDiff = current - lastReportedBytes;
+                if (bytesDiff > 0) {
+                    bufferedBytes.fetch_add(bytesDiff);
+                    lastReportedBytes = current;
+                    writeProgress();
+                }
+            };
+            confirmProgressCallback = [&](ui64 bytes) {
+                confirmedBytes.fetch_add(bytes);
+                writeProgress();
+            };
 
             try {
                 switch (Settings.Format_) {
@@ -830,7 +845,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
                             return UpsertCsvByBlocks(filePath, dbPath, progressFile);
                         } else {
                             auto status = UpsertCsv(input, dbPath, filePath, fileSizeHint, progressCallback,
-                                inflightManagers.at(fileOrderNumber), progressFile);
+                                confirmProgressCallback, inflightManagers.at(fileOrderNumber), progressFile);
                             std::lock_guard<std::mutex> lock(inflightManagersLock);
                             inflightManagers[fileOrderNumber]->Finish();
                             size_t informedManagers = 0;
@@ -902,16 +917,17 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
 
     auto finish = TInstant::Now();
     auto duration = finish - start;
-    // Final progress update with actual bytes read
+    // Final progress update - mark both buffered and confirmed as complete
     if (totalFilesSize > 0) {
-        progressBar.SetProgress(totalFilesSize);  // Mark as 100%
+        progressBar.SetBufferedProgress(totalFilesSize);
+        progressBar.SetConfirmedProgress(totalFilesSize);
     } else {
-        progressBar.SetProgress(TotalBytesRead.load());
+        progressBar.SetBufferedProgress(TotalBytesRead.load());
+        progressBar.SetConfirmedProgress(TotalBytesRead.load());
     }
-    std::cerr << std::endl;
     if (duration.SecondsFloat() > 0) {
-        std::cerr << "Elapsed: " << std::setprecision(3) << duration.SecondsFloat() << " sec. Total read size: "
-            << PrettifyBytes(TotalBytesRead) << ". Average processing speed: "
+        std::cerr << "Elapsed: " << FormatDuration(duration) << ". Total read size: "
+            << PrettifyBytes(TotalBytesRead) << ". Average speed: "
             << PrettifyBytes((double)TotalBytesRead / duration.SecondsFloat())  << "/s." << std::endl;
     }
 
@@ -1063,6 +1079,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                                      const TString& filePath,
                                      std::optional<ui64> inputSizeHint,
                                      ProgressCallbackFunc & progressCallback,
+                                     ConfirmProgressCallbackFunc & confirmProgressCallback,
                                      std::shared_ptr<TJobInFlightManager> jobInflightManager,
                                      std::shared_ptr<TProgressFile> progressFile) {
     TCountingInput countInput(&input);
@@ -1091,8 +1108,8 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     std::vector<TString> buffer;
     std::list<std::shared_ptr<TImportBatchStatus>> batchStatuses;
 
-    auto createStatus = [&, progressFile](ui64 lastRowInBatch) {
-        auto batchStatus = std::make_shared<TImportBatchStatus>(lastRowInBatch, false);
+    auto createStatus = [&, progressFile](ui64 lastRowInBatch, ui64 bytesInBatch) {
+        auto batchStatus = std::make_shared<TImportBatchStatus>(TImportBatchStatus{lastRowInBatch, bytesInBatch, false});
         if (!FileProgressPool->AddFunc([&batchStatuses, batchStatus, progressFile]() {
             if (progressFile->IsFinished()) {
                 return;
@@ -1110,12 +1127,17 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
             return;
         }
         ui64 maxCompletedLine = 0;
+        ui64 completedBytes = 0;
         while (!batchStatuses.empty() && batchStatuses.front()->Completed) {
             maxCompletedLine = batchStatuses.front()->LastRow;
+            completedBytes += batchStatuses.front()->BytesInBatch;
             batchStatuses.pop_front();
         }
         if (maxCompletedLine > 0) {
             progressFile->SetLastImportedLine(maxCompletedLine);
+        }
+        if (completedBytes > 0 && confirmProgressCallback) {
+            confirmProgressCallback(completedBytes);
         }
     };
 
@@ -1225,11 +1247,17 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
 
     for (ui32 i = 0; i < rowsToSkip; ++i) {
         line = splitter.ConsumeLine();
-        skippedBytes += line.size();
+        // +1 for newline character that was stripped by ConsumeLine()
+        skippedBytes += line.size() + 1;
         if (skippedBytes > nextSkipBorder && inputSizeHint.has_value() && progressCallback) {
             progressCallback(skippedBytes, *inputSizeHint); // Update progress even when skipping lines
             nextSkipBorder += VerboseModeStepSize;
         }
+    }
+
+    // Skipped bytes are immediately confirmed (no import needed for header/skipped rows)
+    if (skippedBytes > 0 && confirmProgressCallback) {
+        confirmProgressCallback(skippedBytes);
     }
 
     while (TString line = splitter.ConsumeLine()) {
@@ -1238,7 +1266,8 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
             continue;
         }
         readBytes += line.size();
-        batchBytes += line.size();
+        // +1 for newline character that was stripped by ConsumeLine()
+        batchBytes += line.size() + 1;
 
         if (removeLastDelimiter) {
             if (!line.EndsWith(Settings.Delimiter_)) {
@@ -1263,8 +1292,9 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
             progressCallback(skippedBytes + readBytes, *inputSizeHint);
         }
 
+        ui64 currentBatchBytes = batchBytes;
         auto workerFunc = [&upsertCsvFunc, row, buffer = std::move(buffer),
-                batchStatus = createStatus(row + batchRows)]() mutable {
+                batchStatus = createStatus(row + batchRows, currentBatchBytes)]() mutable {
             upsertCsvFunc(std::move(buffer), row, batchStatus);
         };
         row += batchRows;
@@ -1286,7 +1316,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     // Send the rest if buffer is not empty
     if (!buffer.empty() && countInput.Counter() > 0 && !Failed) {
         jobInflightManager->AcquireJob();
-        upsertCsvFunc(std::move(buffer), row, createStatus(row + batchRows));
+        upsertCsvFunc(std::move(buffer), row, createStatus(row + batchRows, batchBytes));
     }
 
     // Final progress update - file is fully read (before waiting for jobs to complete)

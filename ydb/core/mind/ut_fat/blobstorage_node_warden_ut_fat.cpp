@@ -166,7 +166,7 @@ void SetupServices(TTestActorRuntime &runtime) {
         str << "Groups {" << Endl;
         str << "    GroupID: " << groupId << Endl;
         str << "    GroupGeneration: 1 " << Endl;
-        str << "    ErasureSpecies: 1 " << Endl;// Mirror3
+        str << "    ErasureSpecies: 4 " << Endl;// Block42
         str << "    Rings {" << Endl;
         str << "        FailDomains {" << Endl;
         str << "            VDiskLocations { NodeID: $Node1 PDiskID: 0 VDiskSlotID: 0 PDiskGuid: 1 }" << Endl;

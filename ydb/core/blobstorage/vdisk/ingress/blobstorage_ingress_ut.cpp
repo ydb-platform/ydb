@@ -285,22 +285,6 @@ namespace NKikimr {
             }
         }
 
-
-        Y_UNIT_TEST(IngressCacheMirror3) {
-            TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
-            TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
-            TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
-
-            UNIT_ASSERT(cache->VDiskOrderNum == 2);
-            UNIT_ASSERT(cache->TotalVDisks == 8);
-            UNIT_ASSERT(cache->DomainsNum == 4);
-            UNIT_ASSERT(cache->DisksInDomain == 2);
-            UNIT_ASSERT(cache->Handoff == 1);
-            UNIT_ASSERT(cache->BarrierIngressValueMask == 0xFF);
-            UNIT_ASSERT(cache->BarrierIngressDomainMask == 0x3);
-        }
-
-
         Y_UNIT_TEST(IngressCache4Plus2) {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 2, 8);
             TVDiskID vdisk(TGroupId::Zero(), 1, 0, 3 /*domain*/, 1 /*vdisk*/);
@@ -314,45 +298,6 @@ namespace NKikimr {
             UNIT_ASSERT(cache->BarrierIngressValueMask == 0xFFFF);
             UNIT_ASSERT(cache->BarrierIngressDomainMask == 0x3);
         }
-
-        Y_UNIT_TEST(BarrierIngressQuorumBasicMirror3_4_2) {
-            TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
-            TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
-            TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
-
-            TBarrierIngress i1(2);
-            TBarrierIngress i2(5);
-            TBarrierIngress i3(6);
-
-            TBarrierIngress merged;
-            TBarrierIngress::Merge(merged, i1);
-            TBarrierIngress::Merge(merged, i2);
-            TBarrierIngress::Merge(merged, i3);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress i4(ui8(0));
-            TBarrierIngress::Merge(merged, i4);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress::Merge(merged, i4);
-            TBarrierIngress::Merge(merged, i1);
-            TBarrierIngress::Merge(merged, i2);
-            TBarrierIngress::Merge(merged, i3);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress i5(1);
-            TBarrierIngress::Merge(merged, i5);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress i6(3);
-            TBarrierIngress::Merge(merged, i6);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress i7(7);
-            TBarrierIngress::Merge(merged, i7);
-            UNIT_ASSERT(merged.IsQuorum(cache.Get()));
-        }
-
 
         Y_UNIT_TEST(BarrierIngressQuorumBasic4Plus2_8_1) {
             TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 1, 8);
@@ -395,62 +340,6 @@ namespace NKikimr {
             TBarrierIngress::Merge(merged, i8);
             UNIT_ASSERT(merged.IsQuorum(cache.Get()));
         }
-
-
-        Y_UNIT_TEST(BarrierIngressQuorumMirror3) {
-            TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
-            using TGroupId = TGroupId;
-            TVDiskID vdisk(TGroupId::Zero(), 1, 0, 1 /*domain*/, 0 /*vdisk*/);
-            TIngressCachePtr cache = TIngressCache::Create(info.PickTopology(), vdisk);
-
-            TVDiskID vdisk00 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 0);
-            TVDiskID vdisk01 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 1);
-            TVDiskID vdisk10 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 0);
-            TVDiskID vdisk11 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 1);
-            TVDiskID vdisk20 = TVDiskID(TGroupId::Zero(), 1, 0, 2, 0);
-            TVDiskID vdisk21 = TVDiskID(TGroupId::Zero(), 1, 0, 2, 1);
-            TVDiskID vdisk30 = TVDiskID(TGroupId::Zero(), 1, 0, 3, 0);
-            TVDiskID vdisk31 = TVDiskID(TGroupId::Zero(), 1, 0, 3, 1);
-
-            UNIT_ASSERT(info.GetOrderNumber(vdisk00) == 0);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk01) == 1);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk10) == 2);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk11) == 3);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk20) == 4);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk21) == 5);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk30) == 6);
-            UNIT_ASSERT(info.GetOrderNumber(vdisk31) == 7);
-
-            TBarrierIngress i0(info.GetOrderNumber(vdisk00));
-            TBarrierIngress i1(info.GetOrderNumber(vdisk01));
-            TBarrierIngress i2(info.GetOrderNumber(vdisk10));
-            TBarrierIngress i3(info.GetOrderNumber(vdisk11));
-            TBarrierIngress i4(info.GetOrderNumber(vdisk20));
-            TBarrierIngress i5(info.GetOrderNumber(vdisk21));
-            TBarrierIngress i6(info.GetOrderNumber(vdisk30));
-            TBarrierIngress i7(info.GetOrderNumber(vdisk31));
-
-
-            TBarrierIngress merged;
-            TBarrierIngress::Merge(merged, i1);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i2);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i5);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i6);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-
-            TBarrierIngress::Merge(merged, i7);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i3);
-            UNIT_ASSERT(!merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i0);
-            UNIT_ASSERT(merged.IsQuorum(cache.Get()));
-            TBarrierIngress::Merge(merged, i4);
-            UNIT_ASSERT(merged.IsQuorum(cache.Get()));
-        }
-
 
         Y_UNIT_TEST(IngressPrintDistribution) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);

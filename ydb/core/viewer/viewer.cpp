@@ -196,15 +196,15 @@ public:
                 return true;
             }
         }
-        const auto& allowedSIDs = AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs();
-        if (allowedSIDs.empty()) {
+        const auto& adminAllowedSIDs = AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs();
+        if (adminAllowedSIDs.empty()) {
             return true;
         }
         if (request->UserToken.empty()) {
             return false;
         }
         auto token = std::make_unique<NACLib::TUserToken>(request->UserToken);
-        for (const auto& allowedSID : allowedSIDs) {
+        for (const auto& allowedSID : adminAllowedSIDs) {
             if (token->IsExist(allowedSID)) {
                 return true;
             }

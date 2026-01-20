@@ -1986,7 +1986,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         vslotId->set_vslotid(1);
     }
 
-    Y_UNIT_TEST(VDiskEvictForceRetryPossible) {TPortManager tp;
+    Y_UNIT_TEST(VDiskEvictForceRetryPossible) {
+        TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
         ui16 monPort = tp.GetPort(8765);
@@ -2009,7 +2010,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvControllerConfigResponse: {
-                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
+                    auto* x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
                     ChangeControllerConfigResponse(x);
                     break;
                 }

@@ -1251,7 +1251,7 @@ namespace NKikimr::NHttpProxy {
                 TDuration dur = ctx.Now() - StartTime;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
-                             BuildLabels(Method, HttpContext, "api.sqs.response.duration_milliseconds")
+                            AddCommonLabels({{"name", "api.sqs.response.duration_milliseconds"}})
                         });
             }
 

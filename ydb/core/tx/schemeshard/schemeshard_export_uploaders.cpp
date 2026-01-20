@@ -169,8 +169,12 @@ protected:
 
     void Retry(TFileUpload& upload) {
         Delay = Min(Delay * ++upload.Attempt, MaxDelay);
-        const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
-        this->Schedule(Delay + random, new TEvents::TEvWakeup());
+        ScheduleRetry(Delay);
+    }
+
+    void ScheduleRetry(TDuration delay) {
+        const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % delay.MicroSeconds());
+        this->Schedule(delay + random, new TEvents::TEvWakeup());
     }
 
     STATEFN(UploadStateFunc) {
@@ -236,12 +240,12 @@ class TKesusResourcesUploader : public TExportFilesUploader<TKesusResourcesUploa
 
     void HandleConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            Finish(false, "Failed to connect to coordination node.");
+            Finish(false, "failed to connect to kesus");
         }
     }
 
     void HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        Finish(false, "Connection to coordination node was lost.");
+        Finish(false, "connection to kesus was lost");
     }
 
     void HandleResourcesDescription(NKesus::TEvKesus::TEvDescribeQuoterResourcesResult::TPtr ev) {
@@ -284,7 +288,7 @@ class TKesusResourcesUploader : public TExportFilesUploader<TKesusResourcesUploa
 
             TStringBuilder fileName;
             fileName << resource.GetResourcePath() << '/' << NYdb::NDump::NFiles::CreateRateLimiter().FileName;
-            ResourcesKeys.push_back(fileName);
+            ResourcesKeys.push_back(resource.GetResourcePath());
 
             if (!AddFiles(fileName, scheme)) {
                 return;
@@ -465,7 +469,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
             << ", error: " << record->Error);
 
         if (!record->Success) {
-            Finish(false, record->Error);
+            return RetryResourceUploadOrFail(record->Error);
         }
 
         // Fill metadata with rate limiter resources
@@ -481,12 +485,31 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
             } else {
                 resourceData.ExportPrefix = rateLimiter;
             }
+            metadata.AddRateLimiterResource(resourceData);
         }
 
         Metadata = metadata.Serialize();
 
         // Upload everything else
         StartUploadFiles();
+    }
+
+    void RetryResourceUploadOrFail(const TString& error) {
+        LOG_D("RetryResourceUploadOrFail"
+            << ", self: " << SelfId()
+            << ", attempts " << ResourceUploadAttempts + 1
+            << ", max attempts" << GetSettings().number_of_retries()
+            << ", error " << error);
+
+        if (++ResourceUploadAttempts >= MaxResourceUploadAttempts) {
+            return Finish(false, error);
+        }
+
+        if (auto uploader = std::exchange(KesusResourcesUploader, {})) {
+            Send(uploader, new TEvents::TEvPoisonPill());
+        }
+
+        ScheduleRetry(TDuration::Seconds(2));
     }
 
     void StartUploadFiles() {
@@ -597,6 +620,7 @@ public:
     STATEFN(StateUploadKesusResources) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvExportUploadKesusResourcesResult, HandleResourcesUploaded);
+            sFunc(TEvents::TEvWakeup, GetDescription)
             sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
@@ -621,6 +645,8 @@ private:
     TString Metadata;
 
     TActorId KesusResourcesUploader;
+    ui32 ResourceUploadAttempts = 0;
+    ui32 MaxResourceUploadAttempts = 10;
 }; // TSchemeUploader
 
 class TExportMetadataUploader: public TExportFilesUploader<TExportMetadataUploader> {

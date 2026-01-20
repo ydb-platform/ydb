@@ -1072,6 +1072,16 @@ namespace {
                 TStringBuilder() << "\nExpected:\n\n" << expectedResource << "\n\nActual:\n\n" << resource
             );
 
+            CheckPathWithChecksum("/Kesus/metadata.json");
+
+            const auto metadata = GetS3FileContent("/Kesus/metadata.json");
+            const auto expectedMetadata = R"({"version":1,"rate_limiter_resources":[{"name":"root/child2/child3","prefix":"root/child2/child3"},{"name":"root/child2","prefix":"root/child2"},{"name":"root","prefix":"root"},{"name":"root/child1","prefix":"root/child1"}],"full_backups":[],"permissions":1,"changefeeds":[],"indexes":[]})";
+
+            UNIT_ASSERT_EQUAL_C(
+                metadata, expectedMetadata,
+                TStringBuilder() << "\nExpected:\n\n" << expectedMetadata << "\n\nActual:\n\n" << metadata
+            );
+
             CheckPathWithChecksum("/Kesus/permissions.pb");
             const auto permissions = GetS3FileContent("/Kesus/permissions.pb");
             const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";

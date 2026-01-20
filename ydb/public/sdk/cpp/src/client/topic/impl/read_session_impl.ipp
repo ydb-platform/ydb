@@ -244,10 +244,6 @@ template<bool UseMigrationProtocol>
 TSingleClusterReadSessionImpl<UseMigrationProtocol>::~TSingleClusterReadSessionImpl() {
     std::lock_guard guard(Lock);
 
-    for (auto&& [_, partitionStream] : PartitionStreams) {
-        partitionStream->ClearQueue();
-    }
-
     for (auto& e : DecompressionQueue) {
         e.OnDestroyReadSession();
     }

@@ -17,6 +17,7 @@ from six.moves.queue import Queue
 import yatest
 
 from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.library.common.types import FailDomainType
 from . import daemon
 from . import kikimr_config
 from . import kikimr_node_interface
@@ -896,6 +897,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         cmd.DefineStoragePool.ErasureSpecies = str(erasure)
         cmd.DefineStoragePool.VDiskKind = "Default"
         cmd.DefineStoragePool.NumGroups = num_groups
+
+        if str(erasure) == "mirror-3-dc" and len(self.__configurator.all_node_ids()) == 3:
+            cmd.DefineStoragePool.Geometry.RealmLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.RealmLevelEnd = int(FailDomainType.Room)
+            cmd.DefineStoragePool.Geometry.DomainLevelBegin = int(FailDomainType.DC)
+            cmd.DefineStoragePool.Geometry.DomainLevelEnd = int(FailDomainType.Disk) + 1
 
         pdisk_filter = cmd.DefineStoragePool.PDiskFilter.add()
         pdisk_filter.Property.add().Type = 0

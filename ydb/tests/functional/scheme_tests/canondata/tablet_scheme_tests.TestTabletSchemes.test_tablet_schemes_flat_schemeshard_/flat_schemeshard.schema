@@ -9333,7 +9333,7 @@
             },
             {
                 "ColumnId": 2,
-                "ColumnName": "Version",
+                "ColumnName": "AlterVersion",
                 "ColumnType": "Uint64"
             },
             {

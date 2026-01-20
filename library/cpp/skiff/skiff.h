@@ -11,6 +11,7 @@
 #include <util/stream/output.h>
 #include <util/stream/str.h>
 
+#include <array>
 #include <optional>
 
 namespace NSkiff {

@@ -34,16 +34,17 @@ struct TKqpWarmupConfig {
     bool Enabled = false;
     TDuration Deadline = TDuration::Seconds(30);        // Soft deadline: time for compilation after discovery ready
     TDuration HardDeadline = TDuration::Seconds(90);    // Hard deadline: max time from actor start (must be >= Deadline * 3)
-    ui32 MaxNodesToQuery = 5;
     ui32 MaxConcurrentCompilations = 5;
+    ui32 MaxQueriesToLoad = 1000;
 };
 
 inline TKqpWarmupConfig ImportWarmupConfigFromProto(const NKikimrConfig::TTableServiceConfig::TWarmupConfig& proto) {
     TKqpWarmupConfig config;
     config.Enabled = proto.GetEnabled();
     config.Deadline = TDuration::Seconds(proto.GetDeadlineSeconds());
-    config.MaxNodesToQuery = proto.GetMaxNodesToQuery();
+    config.HardDeadline = TDuration::Seconds(proto.GetHardDeadlineSeconds());
     config.MaxConcurrentCompilations = proto.GetMaxConcurrentCompilations();
+    config.MaxQueriesToLoad = proto.GetMaxQueriesToLoad();
     return config;
 }
 

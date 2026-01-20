@@ -9,6 +9,9 @@ namespace NKafka {
     static const TString RETENTION_BYTES_CONFIG_NAME = "retention.bytes";
     static const TString COMPRESSION_TYPE = "compression.type";
     static const TString CLEANUP_POLICY = "cleanup.policy";
+    static const TString MESSAGE_TIMESTAMP_TYPE = "message.timestamp.type";
+    static const TString MESSAGE_TIMESTAMP_LOG_APPEND = "LogAppendTime";
+    static const TString MESSAGE_TIMESTAMP_CREATE_TIME = "CreateTime";
 
 
     static const ui64 TRANSACTIONAL_ID_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days

@@ -195,48 +195,6 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
     return event;
 }
 
-THolder<TEvPersQueue::TEvUpdateConfig> MakeEvUpdateConfig(
-        TTxId txId,
-        const TTopicInfo& pqGroup,
-        const TTopicTabletInfo& pqShard,
-        const TString& topicName,
-        const TString& topicPath,
-        const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
-        const TString& cloudId,
-        const TString& folderId,
-        const TString& databaseId,
-        const TString& databasePath,
-        const TString& monitoringProjectId,
-        TTxState::ETxType txType,
-        const TOperationContext& context
-    )
-{
-    auto event = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
-    event->Record.SetTxId(ui64(txId));
-
-    MakePQTabletConfig(context,
-                       *event->Record.MutableTabletConfig(),
-                       pqGroup,
-                       pqShard,
-                       topicName,
-                       topicPath,
-                       cloudId,
-                       folderId,
-                       databaseId,
-                       databasePath,
-                       monitoringProjectId);
-    if (bootstrapConfig) {
-        Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
-        event->PreSerializedData += bootstrapConfig->GetPreSerializedUpdateConfig();
-    }
-
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Propose configure PersQueue" <<
-                ", message: " << event->Record.ShortUtf8DebugString());
-
-    return event;
-}
-
 }  // anonymous namespace
 
 
@@ -492,9 +450,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                             << ", Partitions size: " << pqShard->Partitions.size()
                             << ", at schemeshard: " << ssId);
 
-            THolder<NActors::IEventBase> event;
-            if (context.SS->EnablePQConfigTransactionsAtSchemeShard) {
-                event = MakeEvProposeTransaction(OperationId.GetTxId(),
+            THolder<NActors::IEventBase> event = MakeEvProposeTransaction(OperationId.GetTxId(),
                                                     *pqGroup,
                                                     *pqShard,
                                                     topicName,
@@ -507,21 +463,6 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                                                     monitoringProjectId,
                                                     txState->TxType,
                                                     context);
-            } else {
-                event = MakeEvUpdateConfig(OperationId.GetTxId(),
-                                            *pqGroup,
-                                            *pqShard,
-                                            topicName,
-                                            topicPath.PathString(),
-                                            bootstrapConfig,
-                                            cloudId,
-                                            folderId,
-                                            databaseId,
-                                            databasePath,
-                                            monitoringProjectId,
-                                            txState->TxType,
-                                            context);
-            }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Propose configure PersQueue"

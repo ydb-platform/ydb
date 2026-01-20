@@ -1,0 +1,220 @@
+static_erasure: none
+hosts:
+- node_id: 1
+  host: localhost
+  port: 29501
+  interconnect_host: localhost
+  location:
+    data_center: '1'
+    rack: '1'
+domains_config:
+  disable_builtin_security: true
+  domain:
+  - name: Root
+    scheme_root: 72075186232723360
+    storage_pool_types:
+    - kind: ssd
+      pool_config:
+        box_id: 1
+        erasure_species: none
+        kind: ssd
+        pdisk_filter:
+        - property:
+          - type: SSD
+        vdisk_kind: Default
+    - kind: rot
+      pool_config:
+        box_id: 1
+        erasure_species: none
+        kind: rot
+        pdisk_filter:
+        - property:
+          - type: ROT
+        vdisk_kind: Default
+  state_storage:
+  - ssid: 1
+    ring:
+      nto_select: 1
+      node:
+      - 1
+  hive_config:
+  - hive_uid: 1
+    hive: 72057594037968897
+grpc_config:
+  start_grpc_proxy: true
+  host: '[::]'
+  port: 8011
+  grpc_memory_quota_bytes: 1073741824
+  streaming_config:
+    enable_output_streams: true
+  keep_alive_enable: true
+  keep_alive_idle_timeout_trigger_sec: 90
+  keep_alive_max_probe_count: 3
+  keep_alive_probe_interval_sec: 10
+interconnect_config:
+  start_tcp: true
+kqpconfig:
+  enable: true
+log_config:
+  default_level: 3
+  sys_log: false
+nameservice_config:
+  cluster_uuid: local
+  accept_uuid:
+  - local
+pqconfig:
+  enabled: false
+actor_system_config:
+  executor:
+  - name: System
+    threads: 9
+    spin_threshold: 1
+    type: BASIC
+  - name: User
+    threads: 16
+    spin_threshold: 1
+    type: BASIC
+  - name: Batch
+    threads: 7
+    spin_threshold: 1
+    type: BASIC
+  - name: IO
+    threads: 1
+    type: IO
+  - name: IC
+    threads: 3
+    spin_threshold: 10
+    time_per_mailbox_micro_secs: 100
+    type: BASIC
+  scheduler:
+    resolution: 64
+    spin_threshold: 0
+    progress_threshold: 10000
+  sys_executor: 0
+  user_executor: 1
+  io_executor: 3
+  batch_executor: 2
+  service_executor:
+  - service_name: Interconnect
+    executor_id: 4
+dynamic_nameservice_config:
+  max_static_node_id: 1000
+system_tablets:
+  flat_hive:
+  - info:
+      tablet_id: 72057594037968897
+    node:
+    - 1
+  flat_bs_controller:
+  - info:
+      tablet_id: 72057594037932033
+    node:
+    - 1
+  flat_schemeshard:
+  - info:
+      tablet_id: 72075186232723360
+    node:
+    - 1
+  flat_tx_coordinator:
+  - info:
+      tablet_id: 72075186232360961
+    node:
+    - 1
+  tx_mediator:
+  - info:
+      tablet_id: 72075186232426497
+    node:
+    - 1
+  tx_allocator:
+  - info:
+      tablet_id: 72075186232492033
+    node:
+    - 1
+  cms:
+  - info:
+      tablet_id: 72057594037936128
+    node:
+    - 1
+  node_broker:
+  - info:
+      tablet_id: 72057594037936129
+    node:
+    - 1
+  tenant_slot_broker:
+  - info:
+      tablet_id: 72057594037936130
+    node:
+    - 1
+  console:
+  - info:
+      tablet_id: 72057594037936131
+    node:
+    - 1
+blob_storage_config:
+  service_set:
+    pdisks:
+    - node_id: 1
+      pdisk_id: 1
+      path: data/pdisk-ssd-1.data
+      pdisk_guid: 16684173266925138728
+      pdisk_category: 1
+    vdisks:
+    - vdisk_id:
+        group_id: 0
+        group_generation: 1
+        ring: 0
+        domain: 0
+        vdisk: 0
+      vdisk_location:
+        node_id: 1
+        pdisk_id: 1
+        vdisk_slot_id: 0
+        pdisk_guid: 16684173266925138728
+      vdisk_kind: Default
+    groups:
+    - group_id: 0
+      group_generation: 1
+      erasure_species: none
+      rings:
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: 1
+            pdisk_id: 1
+            vdisk_slot_id: 0
+            pdisk_guid: 16684173266925138728
+    availability_domains: 1
+channel_profile_config:
+  profile:
+  - profile_id: 0
+    channel:
+    - erasure_species: none
+      pdisk_category: 1
+      vdisk_category: Default
+      storage_pool_kind: ssd
+    - erasure_species: none
+      pdisk_category: 1
+      vdisk_category: Default
+      storage_pool_kind: ssd
+    - erasure_species: none
+      pdisk_category: 1
+      vdisk_category: Default
+      storage_pool_kind: ssd
+vdisk_config:
+  vdisk_kinds:
+  - kind: Log
+    base_kind: Default
+    config:
+      fresh_use_dreg: true
+      allow_keep_flags: false
+  - kind: LocalMode
+    base_kind: Default
+    config:
+      hull_comp_level0_max_ssts_at_once: 2
+      hull_comp_sorted_parts_num: 1
+bootstrap_config: {}
+storage_config_generation: 0
+# tracing_config:
+#   backend:
+#     opentelemetry:
+#       collector_url: grpc://localhost:4316
+#       service_name: your_cluster_name

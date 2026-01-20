@@ -1313,7 +1313,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
         auto sort = GetSetting(setItem->Tail(), "sort");
         if (sort) {
             auto sortDependencies = GetSortDependencies(sort, groupByKeysExpressionsMap, pgSyntax);
-            for (auto iu : sortDependencies) {
+            for (const auto& iu : sortDependencies) {
                 if (std::find(finalProjection.begin(), finalProjection.end(), iu.GetFullName()) == finalProjection.end()) {
                     // clang-format off
                     resultElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
@@ -1343,12 +1343,12 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
 
             TVector<TExprNode::TPtr> projectElements;
 
-            for (auto c : finalProjection) {
+            for (const auto& column : finalProjection) {
                 // clang-format off
                 projectElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
                     .Input(setItemPtr)
-                    .Variable().Value(c).Build()
-                    .From().Value(c).Build()
+                    .Variable().Value(column).Build()
+                    .From().Value(column).Build()
                 .Done().Ptr());
                 // clang-format on
             }
@@ -1361,6 +1361,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                 .Build()
                 .Project()
                     .Value("true")
+                .Build()
+                .Ordered()
+                    .Value("True")
                 .Build()
             .Done().Ptr();
             // clang-format on

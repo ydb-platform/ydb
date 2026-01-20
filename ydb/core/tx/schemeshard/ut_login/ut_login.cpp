@@ -162,6 +162,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
                 "eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc=");
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
         }
+
+        {
+            // Test SCRAM-SHA256 authentication
+            // Using pre-computed values from scram_ut.cpp for password "password1"
+            TString authMessage = "n=user,r=clientnonce,r=clientservernonce,s=s0QSrrFVkMTh3k2TTk860A==,i=4096,c=biws,r=clientservernonce";
+            auto resultLogin = Login(runtime, "user1", NLoginProto::ESaslAuthMech::Scram, NLoginProto::EHashType::ScramSha256,
+                "AJgthTHWf0jz/bMHwrWDOHk9SQPpPpvGx937mEzFnCQ=", authMessage);
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+            UNIT_ASSERT_VALUES_EQUAL(resultLogin.serversignature(), "RBEDP7XfP9zTpxx+++HZSiw7kB7MDtfZ5mlBcMSxRQY=");
+        }
     }
 
     Y_UNIT_TEST_FLAG(RemoveUser, StrictAclCheck) {
@@ -1255,14 +1265,16 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     void AuditLogLoginTest(TTestBasicRuntime& runtime, bool isUserAdmin) {
         std::vector<std::string> lines;
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
 
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+        size_t expectedLines = lines.size();
 
         ui64 txId = 100;
 
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
+        // User creation adds 1 audit log entry
+        expectedLines += 1;
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
 
         // test body
         const auto target = runtime.Register(CreateWebLoginService());
@@ -1280,7 +1292,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             NHttp::TCookies cookies(headers["Set-Cookie"]);
             UNIT_ASSERT(!cookies["ydb_session_id"].empty());
         }
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);  // +user login
+        // After login, we should have 1 additional audit log entry
+        expectedLines += 1;
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -1325,14 +1339,16 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
 
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+        size_t expectedLines = lines.size();
 
         ui64 txId = 100;
 
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);   // +user creation
+        // User creation adds 1 audit log entry
+        expectedLines += 1;
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
 
         // test body
         const auto target = runtime.Register(CreateWebLoginService());
@@ -1350,7 +1366,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             NJson::TJsonValue body(responseEv->Response->Body);
             UNIT_ASSERT_STRINGS_EQUAL(body.GetStringRobust(), "{\"error\":\"Invalid password\"}");
         }
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);  // +user login
+        // After failed login, we should have 1 additional audit log entry
+        expectedLines += 1;
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -1369,7 +1387,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1426,7 +1444,8 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         };
         LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("user1", "password1"));
 
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+        // Get initial audit log size after environment setup and use single counter
+        size_t expectedLines = lines.size();
 
         // test body
         const auto target = runtime.Register(CreateWebLoginService());
@@ -1444,7 +1463,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             NHttp::TCookies cookies(headers["Set-Cookie"]);
             UNIT_ASSERT(!cookies["ydb_session_id"].empty());
         }
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user login
+        // After LDAP login, we should have 1 additional audit log entry
+        expectedLines += 1;
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -1465,7 +1486,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1522,7 +1543,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         };
         LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("user1", "bad_password"));
 
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+        size_t expectedLines = lines.size();
 
         // test body
         const auto target = runtime.Register(CreateWebLoginService());
@@ -1540,7 +1561,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             NHttp::TCookies cookies(headers["Set-Cookie"]);
             UNIT_ASSERT(cookies["ydb_session_id"].empty());
         }
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user login
+        // After failed LDAP login, we should have 1 additional audit log entry
+        expectedLines += 1;
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -1557,10 +1580,10 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
     Y_UNIT_TEST(AuditLogLdapLoginBadUser) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
-        runtime.AuditLogBackends =CreateTestAuditLogBackends(lines);
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1617,7 +1640,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         };
         LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("bad_user", "password1"));
 
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+        size_t expectedLines = lines.size();
 
         // test body
         const auto target = runtime.Register(CreateWebLoginService());
@@ -1635,7 +1658,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             NHttp::TCookies cookies(headers["Set-Cookie"]);
             UNIT_ASSERT(cookies["ydb_session_id"].empty());
         }
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user login
+        // After failed LDAP login, we should have 1 additional audit log entry
+        expectedLines += 1;
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -1656,7 +1681,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
         // Enable and configure ldap auth
         runtime.SetLogPriority(NKikimrServices::LDAP_AUTH_PROVIDER, NActors::NLog::PRI_DEBUG);
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
 
         // configure ldap auth
         auto ldapPort = runtime.GetPortManager().GetPort();  // randomized port
@@ -1713,7 +1738,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         };
         LdapMock::TLdapSimpleServer ldapServer(ldapPort, ldapResponses("user1", "password1"));
 
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);   // alter root subdomain
+        size_t expectedLines = lines.size();
 
         // test body
         const auto target = runtime.Register(CreateWebLoginService());
@@ -1731,7 +1756,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             NHttp::TCookies cookies(headers["Set-Cookie"]);
             UNIT_ASSERT(cookies["ydb_session_id"].empty());
         }
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user login
+        // After failed LDAP login, we should have 1 additional audit log entry
+        expectedLines += 1;
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
 
         auto last = FindAuditLine(lines, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "component=grpc-login");
@@ -1749,7 +1776,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
 
         // Add ticket parser to the mix
         {
@@ -1762,12 +1789,14 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             runtime.RegisterService(NKikimr::MakeTicketParserID(), ticketParserId);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);  // alter root subdomain
+        size_t expectedLines = lines.size();
 
         ui64 txId = 100;
 
         CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);  // +user creation
+        // User creation adds 1 audit log entry
+        expectedLines += 1;
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
 
         // test body
         const auto target = runtime.Register(CreateWebLoginService());
@@ -1786,7 +1815,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             NHttp::TCookies cookies(headers["Set-Cookie"]);
             ydbSessionId = cookies["ydb_session_id"];
         }
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);  // +user login
+        // After login, we should have 1 additional audit log entry
+        expectedLines += 1;
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
 
         // New security keys are created in the subdomain as a consequence of a login.
         // In real system they are transferred to the ticket parser by the grpc-proxy
@@ -1810,7 +1841,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "401");
 
             // no audit record for actions without auth
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
         }
         {  // bad cookie
             runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
@@ -1822,7 +1853,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             UNIT_ASSERT_STRINGS_EQUAL(responseEv->Response->Status, "403");
 
             // no audit record for actions without auth
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
         }
         {  // good cookie
             runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(
@@ -1837,7 +1868,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
                 UNIT_ASSERT_STRINGS_EQUAL(headers["Set-Cookie"], "ydb_session_id=; Max-Age=0");
             }
 
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);  // +user web logout
+            // After logout, we should have 1 additional audit log entry
+            expectedLines += 1;
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
 
             auto last = FindAuditLine(lines, "operation=LOGOUT");
             UNIT_ASSERT_STRING_CONTAINS(last, "component=web-login");
@@ -1854,8 +1887,9 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
         runtime.AuditLogBackends = CreateTestAuditLogBackends(lines);
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+        TTestEnv env(runtime);
+
+        size_t expectedLines = lines.size();
         ui64 txId = 100;
 
         TString database = "/MyRoot";
@@ -1895,31 +1929,36 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
         CreateAlterLoginCreateUser(runtime, ++txId, database, user, password);
         {
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
+            expectedLines += 1;
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
             check("CREATE USER");
         }
 
         ChangePasswordUser(runtime, ++txId, database, user, newPassword);
         {
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 3);
+            expectedLines += 1;
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
             check("MODIFY USER", {"password"});
         }
 
         ChangeIsEnabledUser(runtime, ++txId, database, user, false);
         {
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 4);
+            expectedLines += 1;
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
             check("MODIFY USER", {"blocking"});
         }
 
         ChangeIsEnabledUser(runtime, ++txId, database, user, true);
         {
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 5);
+            expectedLines += 1;
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
             check("MODIFY USER", {"unblocking"});
         }
 
         ChangePasswordHashUser(runtime, ++txId, database, user, hash);
         {
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 6);
+            expectedLines += 1;
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
             check("MODIFY USER", {"password"});
         }
 
@@ -1929,7 +1968,8 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
             alterUser->SetPassword(std::move(password));
         });
         {
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 7);
+            expectedLines += 1;
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), expectedLines);
             check("MODIFY USER", {"password", "blocking"});
         }
     }

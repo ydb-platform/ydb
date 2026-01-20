@@ -3438,7 +3438,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     }
 
     MonitoringProjectId = Config.GetMonitoringProjectId();
-    if (DetailedMetricsAreEnabled()) {
+    if (DetailedMetricsAreEnabled(Config)) {
         SetupDetailedMetrics();
     } else {
         ResetDetailedMetrics();
@@ -4571,7 +4571,7 @@ IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const
 }
 
 void TPartition::SetupDetailedMetrics() {
-    if (!DetailedMetricsAreEnabled()) {
+    if (!DetailedMetricsAreEnabled(Config)) {
         return;
     }
     if (WriteTimeLagMsByLastWritePerPartition) {

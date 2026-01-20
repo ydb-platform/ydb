@@ -11,6 +11,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         public:
             // returns previous snapshot
             TSnapshotPtr SetSnapshot(const TSnapshotPtr& snapshot) {
+                TGuard lock(mutex);
                 ui8 oldSnapshotIdx = SnapshotIdx;
                 ui8 newSnapshotIdx = 1 - SnapshotIdx;
                 Snapshots.at(newSnapshotIdx) = snapshot;
@@ -19,12 +20,14 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
             }
 
             TSnapshotPtr GetSnapshot() const {
+                TGuard lock(mutex);
                 return Snapshots.at(SnapshotIdx);
             }
 
         private:
-            std::array<TSnapshotPtr, 2> Snapshots;
-            std::atomic<ui8> SnapshotIdx = 0;
+            TAdaptiveLock mutex;
+            std::array<TSnapshotPtr, 2> Snapshots; // protected by mutex
+            std::atomic<ui8> SnapshotIdx = 0;      // protected by mutex
     };
 
     struct TTreeElement : public virtual NHdrf::TTreeElementBase<ETreeType::DYNAMIC> {

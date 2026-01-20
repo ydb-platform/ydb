@@ -233,7 +233,7 @@ private:
         YT_LOG_EVENT(
             GrpcInternalLogger,
             level,
-            "%v (File: %qv, Line: %v)",
+            "%v (File: %v, Line: %v)",
             args->message,
             args->file,
             args->line);

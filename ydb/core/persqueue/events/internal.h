@@ -1527,15 +1527,7 @@ struct TEvPQ {
     struct TEvMLPChangeMessageDeadlineRequest : TEventPB<TEvMLPChangeMessageDeadlineRequest, NKikimrPQ::TEvMLPChangeMessageDeadlineRequest, EvMLPChangeMessageDeadlineRequest> {
         TEvMLPChangeMessageDeadlineRequest() = default;
 
-        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::vector<ui64>& offsets, TInstant deadlineTimestamp) {
-            Record.SetTopic(topic);
-            Record.SetConsumer(consumer);
-            Record.SetPartitionId(partitionId);
-            Record.SetDeadlineTimestampSeconds(deadlineTimestamp.Seconds());
-            for (auto offset : offsets) {
-                Record.AddOffset(offset);
-            }
-        }
+        TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::span<const ui64> offsets, const std::span<const TInstant> deadlineTimestamps);
 
         const TString& GetTopic() const {
             return Record.GetTopic();
@@ -1547,10 +1539,6 @@ struct TEvPQ {
 
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();
-        }
-
-        TInstant GetDeadlineTimestamp() const {
-            return TInstant::Seconds(Record.GetDeadlineTimestampSeconds());
         }
     };
 
@@ -1602,16 +1590,22 @@ struct TEvPQ {
     struct TEvMLPConsumerUpdateConfig : TEventLocal<TEvMLPConsumerUpdateConfig, EvMLPConsumerUpdateConfig> {
 
         TEvMLPConsumerUpdateConfig(
+            const NKikimrPQ::TPQTabletConfig& topicConfig,
             const NKikimrPQ::TPQTabletConfig::TConsumer& config,
-            std::optional<TDuration> retentionPeriod
+            std::optional<TDuration> retentionPeriod,
+            NMonitoring::TDynamicCounterPtr detailedMetricsRoot
         )
-            : Config(config)
+            : TopicConfig(topicConfig)
+            , Config(config)
             , RetentionPeriod(retentionPeriod)
+            , DetailedMetricsRoot(std::move(detailedMetricsRoot))
         {
         }
 
+        NKikimrPQ::TPQTabletConfig TopicConfig;
         NKikimrPQ::TPQTabletConfig::TConsumer Config;
         std::optional<TDuration> RetentionPeriod;
+        NMonitoring::TDynamicCounterPtr DetailedMetricsRoot;
     };
 
     struct TEvMLPDLQMoverResponse : TEventLocal<TEvMLPDLQMoverResponse, EvMLPDLQMoverResponse> {

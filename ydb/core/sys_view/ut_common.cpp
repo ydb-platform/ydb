@@ -98,7 +98,6 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableBackgroundCompaction(false);
     featureFlags.SetEnableResourcePools(true);
     featureFlags.SetEnableFollowerStats(true);
-    featureFlags.SetEnableVectorIndex(true);
     featureFlags.SetEnableTieringInColumnShard(true);
     featureFlags.SetEnableExternalDataSources(true);
     featureFlags.SetEnableSparsedColumns(settings.EnableSparsedColumns);

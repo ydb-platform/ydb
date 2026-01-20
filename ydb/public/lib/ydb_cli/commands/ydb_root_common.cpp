@@ -18,6 +18,7 @@
 #include "ydb_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 
 #if !defined(_win32_)
 #include <ydb/core/base/backtrace.h>
@@ -522,6 +523,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 void TClientCommandRootCommon::Parse(TConfig& config) {
     TClientCommandRootBase::Parse(config);
     config.VerbosityLevel = VerbosityLevel;
+    SetupGlobalLogger(VerbosityLevel);
 }
 
 void TClientCommandRootCommon::ExtractParams(TConfig& config) {

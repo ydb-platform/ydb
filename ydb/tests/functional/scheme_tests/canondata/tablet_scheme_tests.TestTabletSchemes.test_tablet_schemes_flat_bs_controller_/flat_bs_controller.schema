@@ -738,6 +738,11 @@
                 "ColumnId": 27,
                 "ColumnName": "BridgeMode",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 28,
+                "ColumnName": "DDisk",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -770,7 +775,8 @@
                     24,
                     25,
                     26,
-                    27
+                    27,
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,

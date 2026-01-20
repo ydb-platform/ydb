@@ -292,7 +292,21 @@ void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const T
     }
 }
 
+void TSchemeShard::AddImport(const TImportInfo::TPtr& importInfo) {
+    Imports[importInfo->Id] = importInfo;
+    ImportsByTime.emplace(importInfo->StartTime, importInfo->Id);
+    if (importInfo->Uid) {
+        ImportsByUid[importInfo->Uid] = importInfo;
+    }
+}
+
 void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+    if (importInfo.Uid) {
+        ImportsByUid.erase(importInfo.Uid);
+    }
+    ImportsByTime.erase(std::make_pair(importInfo.StartTime, importInfo.Id));
+    Imports.erase(importInfo.Id);
+
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
     }

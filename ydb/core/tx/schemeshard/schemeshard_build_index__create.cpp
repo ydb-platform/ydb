@@ -207,13 +207,7 @@ public:
         buildInfo->State = TIndexBuildInfo::EState::Locking;
 
         Self->PersistBuildIndexState(db, *buildInfo);
-
-        auto [it, emplaced] = Self->IndexBuilds.emplace(BuildId, buildInfo);
-        Y_ASSERT(emplaced);
-        if (uid) {
-            std::tie(std::ignore, emplaced) = Self->IndexBuildsByUid.emplace(uid, buildInfo);
-            Y_ASSERT(emplaced);
-        }
+        Self->AddIndexBuild(buildInfo);
 
         Progress(BuildId);
 
@@ -249,10 +243,6 @@ private:
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
-            if (!Self->EnableVectorIndex) {
-                explain = "Vector index support is disabled";
-                return false;
-            }
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;

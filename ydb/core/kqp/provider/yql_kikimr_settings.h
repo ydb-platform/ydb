@@ -84,6 +84,8 @@ public:
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationForAggregation;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
+    NCommon::TConfSetting<bool, Static> OptDisallowFuseJoins;
+    NCommon::TConfSetting<bool, Static> OptCreateStageForAggregation;
 
     // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
     NCommon::TConfSetting<TString, Static> CostBasedOptimization;
@@ -180,9 +182,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     }
 
     void ApplyServiceConfig(const TTableServiceConfig& serviceConfig) {
-        if (serviceConfig.HasSqlVersion()) {
-            _KqpYqlSyntaxVersion = serviceConfig.GetSqlVersion();
-        }
         if (serviceConfig.GetQueryLimits().HasResultRowsLimit()) {
             _ResultRowsLimit = serviceConfig.GetQueryLimits().GetResultRowsLimit();
         }

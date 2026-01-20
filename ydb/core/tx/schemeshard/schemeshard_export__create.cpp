@@ -43,6 +43,7 @@ bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& ite
     case NKikimrSchemeOp::EPathTypeReplication:
     case NKikimrSchemeOp::EPathTypeTransfer:
     case NKikimrSchemeOp::EPathTypeExternalDataSource:
+    case NKikimrSchemeOp::EPathTypeExternalTable:
         return true;
     default:
         return false;
@@ -208,11 +209,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         exportInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistExportState(db, *exportInfo);
 
-        Self->Exports[id] = exportInfo;
-        if (uid) {
-            Self->ExportsByUid[uid] = exportInfo;
-        }
-
+        Self->AddExport(exportInfo);
         Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *exportInfo);
 
         Progress = true;
@@ -446,9 +443,7 @@ private:
             const auto databaseRoot = CanonizePath(Self->RootPathElements);
 
             NBackup::TMetadata metadata;
-            // to do: enable view checksum validation
-            constexpr bool EnableChecksums = false;
-            metadata.SetVersion(EnableChecksums ? 1 : 0);
+            metadata.SetVersion(exportInfo.EnableChecksums ? 1 : 0);
             metadata.SetEnablePermissions(exportInfo.EnablePermissions);
 
             TMaybe<NBackup::TEncryptionIV> iv;
@@ -458,7 +453,8 @@ private:
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
                 Self->SelfId(), exportInfo.Id, itemIdx, item.SourcePathId,
-                exportSettings, databaseRoot, metadata.Serialize(), exportInfo.EnablePermissions,
+                exportSettings, databaseRoot, metadata.Serialize(),
+                exportInfo.EnablePermissions, exportInfo.EnableChecksums,
                 iv
             ));
             Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
@@ -1496,11 +1492,6 @@ private:
                     return EndExport(exportInfo, EState::Done, db);
                 }
 
-                if (exportInfo->Uid) {
-                    Self->ExportsByUid.erase(exportInfo->Uid);
-                }
-
-                Self->Exports.erase(exportInfo->Id);
                 Self->PersistRemoveExport(db, *exportInfo);
             }
             return;

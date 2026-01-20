@@ -13,6 +13,7 @@ namespace NKikimr::NPQ::NMLP {
 
 class TBatch;
 class TStorage;
+class TDetailedMetrics;
 
 using namespace NActors;
 
@@ -22,8 +23,8 @@ class TConsumerActor : public TBaseTabletActor<TConsumerActor>
 
 public:
     TConsumerActor(const TString& database, ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
-        const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config,
-        std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset);
+        const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig& topicConfig, const NKikimrPQ::TPQTabletConfig::TConsumer& config,
+        std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset, NMonitoring::TDynamicCounterPtr& detailedMetricsRoot);
 
     void Bootstrap();
     void PassAway() override;
@@ -79,6 +80,7 @@ private:
 
     void CommitIfNeeded();
     void UpdateStorageConfig();
+    void InitializeDetailedMetrics();
 
     size_t RequiredToFetchMessageCount() const;
     void SendToPQTablet(std::unique_ptr<IEventBase> ev);
@@ -89,6 +91,7 @@ private:
     const TString Database;
     const ui32 PartitionId;
     const TActorId PartitionActorId;
+    NKikimrPQ::TPQTabletConfig TopicConfig;
     NKikimrPQ::TPQTabletConfig::TConsumer Config;
     std::optional<TDuration> RetentionPeriod;
     ui64 PartitionEndOffset;
@@ -117,6 +120,32 @@ private:
     bool FirstPipeCacheRequest = true;
 
     ui64 CPUUsageMetric = 0;
+    NMonitoring::TDynamicCounterPtr DetailedMetricsRoot;
+    std::unique_ptr<TDetailedMetrics> DetailedMetrics;
+};
+
+class TDetailedMetrics {
+public:
+    TDetailedMetrics(const NKikimrPQ::TPQTabletConfig::TConsumer& consumerConfig, ::NMonitoring::TDynamicCounterPtr& root);
+    ~TDetailedMetrics();
+
+    void UpdateMetrics(const TMetrics& metrics);
+
+private:
+    NMonitoring::TDynamicCounters::TCounterPtr InflightCommittedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr InflightLockedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr InflightDelayedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr InflightUnlockedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr InflightScheduledToDLQCount;
+    NMonitoring::TDynamicCounters::TCounterPtr CommittedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr PurgedCount;
+
+    NMonitoring::THistogramPtr MessageLocks;
+    NMonitoring::THistogramPtr MessageLockingDuration;
+
+    NMonitoring::TDynamicCounters::TCounterPtr DeletedByRetentionPolicy;
+    NMonitoring::TDynamicCounters::TCounterPtr DeletedByDeadlinePolicy;
+    NMonitoring::TDynamicCounters::TCounterPtr DeletedByMovedToDLQ;
 };
 
 }

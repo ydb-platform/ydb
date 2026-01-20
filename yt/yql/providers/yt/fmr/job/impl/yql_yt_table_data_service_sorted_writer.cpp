@@ -24,30 +24,35 @@ void TFmrTableDataServiceSortedWriter::PutRows() {
     if (TableContent_.Size() == 0) {
         return;
     }
-    std::unordered_map<TString, TString> splittedYsonByColumnGroups;
     auto currentYsonContent = TString(TableContent_.Data(), TableContent_.Size());
+
+    const auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
 
     auto parserKeyIndexes = TParserFragmentListIndex(currentYsonContent, KeyColumns_.Columns);
     parserKeyIndexes.Parse();
     const auto& chunkIndexes = parserKeyIndexes.GetRows();
 
     CheckIsSorted(currentYsonContent, chunkIndexes);
-
-    TSortedRowMetadata metadata{chunkIndexes, KeyColumns_.Columns};
-    TStringStream metadataStream;
-    metadata.Save(&metadataStream);
-
-    auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
-    auto tableDataServiceMetaChunkId = GetTableDataServiceMetaChunkId(ChunkCount_);
-
-    auto tdsService = this->TableDataService_;
-
-    PutYsonByColumnGroups(currentYsonContent).Subscribe([tdsService, &tableDataServiceGroup, &tableDataServiceMetaChunkId, &metadataStream](const NThreading::TFuture<void>& future) {
-        future.GetValue();
-        return tdsService->Put(tableDataServiceGroup, tableDataServiceMetaChunkId,metadataStream.Str());
-    });
     auto sortedChunkStats = GetSortedChunkStats(currentYsonContent, chunkIndexes);
-    PartIdChunkStats_.emplace_back(TChunkStats{.Rows = CurrentChunkRows_, .DataWeight = TableContent_.Size(), .SortedChunkStats = sortedChunkStats});
+
+    PutYsonByColumnGroups(currentYsonContent).GetValueSync();
+
+    if (ColumnGroupSpec_.IsEmpty()) {
+        TSortedRowMetadata metadata{chunkIndexes, KeyColumns_.Columns};
+        TStringStream metadataStream;
+        metadata.Save(&metadataStream);
+        TableDataService_->Put(
+            tableDataServiceGroup,
+            GetTableDataServiceMetaChunkId(ChunkCount_),
+            metadataStream.Str()
+        ).GetValueSync();
+    }
+
+    PartIdChunkStats_.emplace_back(TChunkStats{
+        .Rows = CurrentChunkRows_,
+        .DataWeight = TableContent_.Size(),
+        .SortedChunkStats = sortedChunkStats,
+    });
     ClearTableData();
 }
 

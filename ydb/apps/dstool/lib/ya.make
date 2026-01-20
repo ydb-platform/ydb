@@ -52,6 +52,9 @@ PY_SRCS(
     dstool_cmd_cluster_set.py
     dstool_cmd_cluster_workload_run.py
     dstool_cmd_cluster_list.py
+
+    dstool_cmd_nbs_partition_create.py
+    dstool_cmd_nbs_partition_delete.py
 )
 
 PEERDIR(

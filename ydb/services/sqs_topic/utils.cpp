@@ -8,6 +8,7 @@
 #include <library/cpp/digest/md5/md5.h>
 
 #include <util/system/hostname.h>
+#include <util/system/unaligned_mem.h>
 
 #include <format>
 
@@ -129,4 +130,11 @@ namespace NKikimr::NSqsTopic {
         );
     }
 
+
+    ui64 SampleIdFromRequestId(const TStringBuf requestId) {
+        if (sizeof(ui64) <= requestId.size()) [[likely]] {
+            return ReadUnaligned<ui64>(requestId.data());
+        }
+        return 0;
+    }
 } // namespace NKikimr::NSqsTopic

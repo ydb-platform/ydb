@@ -690,7 +690,7 @@ public:
                 }
 
                 NKikimrBlobStorage::TGroupInfo proto;
-                SerializeGroupInfo(&proto, *groupInfo, info.Name, scopeId);
+                SerializeGroupInfo(&proto, *groupInfo, info, scopeId);
                 const bool success = proto.SerializeToString(kvp->MutableValue());
                 Y_DEBUG_ABORT_UNLESS(success);
             }

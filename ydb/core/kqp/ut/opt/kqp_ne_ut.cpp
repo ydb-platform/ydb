@@ -50,11 +50,9 @@ public:
 Y_UNIT_TEST_SUITE(KqpNewEngine) {
     Y_UNIT_TEST(StreamLookupWithView) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false).SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableViews(true);
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
 
         auto kikimr = TKikimrRunner{settings};
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

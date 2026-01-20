@@ -1305,6 +1305,24 @@ struct TFullTextApplyParseResult {
                 .Value(BFactor)
                 .Done());
         }
+
+        if (QueryMode) {
+            settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name<TCoAtom>()
+                    .Value(TKqpReadTableFullTextIndexSettings::QueryModeSettingName)
+                    .Build()
+                .Value(QueryMode)
+                .Done());
+        }
+
+        if (MinimumShouldMatch) {
+            settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name<TCoAtom>()
+                    .Value(TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName)
+                    .Build()
+                .Value(MinimumShouldMatch)
+                .Done());
+        }
         if (K1Factor) {
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
                 .Name<TCoAtom>()

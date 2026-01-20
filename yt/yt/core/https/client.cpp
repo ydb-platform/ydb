@@ -31,14 +31,14 @@ public:
     { }
 
     TFuture<IResponsePtr> Get(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return Underlying_->Get(url, headers);
     }
 
     TFuture<IResponsePtr> Post(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -46,7 +46,7 @@ public:
     }
 
     TFuture<IResponsePtr> Patch(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -54,7 +54,7 @@ public:
     }
 
     TFuture<IResponsePtr> Put(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -62,28 +62,28 @@ public:
     }
 
     TFuture<IResponsePtr> Delete(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return Underlying_->Delete(url, headers);
     }
 
     TFuture<IActiveRequestPtr> StartPost(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return Underlying_->StartPost(url, headers);
     }
 
     TFuture<IActiveRequestPtr> StartPatch(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return Underlying_->StartPatch(url, headers);
     }
 
     TFuture<IActiveRequestPtr> StartPut(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return Underlying_->StartPut(url, headers);
@@ -91,7 +91,7 @@ public:
 
     TFuture<IResponsePtr> Request(
         EMethod method,
-        const TString& url,
+        const std::string& url,
         const std::optional<TSharedRef>& body,
         const THeadersPtr& headers) override
     {

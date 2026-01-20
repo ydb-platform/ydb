@@ -63,6 +63,7 @@ message TAlterRecord {
     optional NKikimrProto.TTypeInfo ColumnTypeInfo = 25;
     optional bytes Default = 10;    // Serialized default value for cell
     optional bool NotNull = 24 [default = false];
+    optional bool IsSensitive = 28 [default = false];
 
     optional uint64 ExecutorCacheSize = 100;
     optional NKikimrCompaction.TCompactionPolicy CompactionPolicy = 101;

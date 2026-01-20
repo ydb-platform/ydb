@@ -156,7 +156,7 @@ void TCommandWithInput::AddInputFramingFormats(TClientCommand::TConfig &config,
 void TCommandWithInput::AddInputBinaryStringEncodingFormats(TClientCommand::TConfig& config,
         const TVector<EBinaryStringEncodingFormat>& allowedFormats, EBinaryStringEncodingFormat defaultFormat) {
     TStringStream description;
-    description << "Input binary strings encoding format. Sets how binary strings in the input should be interterpreted. Available options: ";
+    description << "Input binary strings encoding format. Sets how binary strings in the input should be interpreted. Available options: ";
     NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
         "Couldn't find default binary string format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());

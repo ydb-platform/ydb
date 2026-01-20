@@ -338,7 +338,7 @@ namespace NKikimr::NStorage {
         }
         THashSet<TGroupId> groupsAdded;
         for (const auto& [key, value] : LocalVDisks) {
-            if (const auto& r = value.RuntimeData; r && !r->DonorMode) {
+            if (const auto& r = value.RuntimeData; r && !r->DonorMode && !r->DDisk) {
                 if (const auto& groupId = r->GroupInfo->GroupID; groupsAdded.insert(groupId).second) {
                     record.AddStartedGroupIds(groupId.GetRawId());
                 }

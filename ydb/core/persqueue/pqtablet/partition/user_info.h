@@ -239,7 +239,6 @@ public:
     ::NMonitoring::TDynamicCounterPtr GetPartitionCounterSubgroup(const TActorContext& ctx) const;
     void SetupDetailedMetrics(const TActorContext& ctx);
     void ResetDetailedMetrics();
-    bool DetailedMetricsAreEnabled() const;
 
     void SetImportant(TUserInfo& userInfo, bool important, TDuration availabilityPeriod);
 

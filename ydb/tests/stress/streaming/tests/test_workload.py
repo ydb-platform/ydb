@@ -38,7 +38,7 @@ class TestYdbWorkload(StressFixture):
             yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
             "--endpoint",  f"localhost:{self.cluster.nodes[1].port}",
             "--database", self.database,
-            "--duration", "60",
+            "--duration", self.base_duration,
             "--partitions-count", "10",
             "--prefix", "streaming_stress"
         ]

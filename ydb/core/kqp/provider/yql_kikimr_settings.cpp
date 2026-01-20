@@ -294,7 +294,7 @@ bool TKikimrConfiguration::GetUseDqHashAggregate() const {
 }
 
 bool TKikimrConfiguration::GetDqHashCombineUsesBlocks() const {
-    return DqHashCombineUsesBlocks.Get().GetOrElse(true);
+    return DqHashCombineUsesBlocks.Get().GetOrElse(false);
 }
 
 }

@@ -1,6 +1,6 @@
 # CREATE TRANSFER
 
-{% include notitle [warning_nodecimalsupport.md](./_includes/warning_nodecimalsupport.md) %}
+{% include notitle [warning_nodecimalsupport.md](../_includes/warning_nodecimalsupport.md) %}
 
 Создает [трансфер](../../../concepts/transfer.md) из [топика](../../../concepts/datamodel/topic.md) в [таблицу](../../../concepts/datamodel/table.md).
 

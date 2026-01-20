@@ -6,11 +6,67 @@
 #include <util/stream/file.h>
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
+#include <util/system/shellcommand.h>
+
+#include <cstdlib>
 
 namespace NYdb {
 namespace NConsoleClient {
 
 namespace {
+
+// Check if HTTP/HTTPS proxy is configured via environment variables
+bool HasProxyConfigured() {
+    const char* proxyVars[] = {
+        "HTTP_PROXY", "http_proxy",
+        "HTTPS_PROXY", "https_proxy"
+    };
+    for (const char* var : proxyVars) {
+        const char* value = std::getenv(var);
+        if (value && value[0] != '\0') {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Download file using curl (supports proxy via environment variables)
+TDownloadResult DownloadFileWithCurl(
+    const TString& url,
+    const TString& destinationPath,
+    TDuration connectTimeout)
+{
+    TDownloadResult result;
+
+    TShellCommandOptions options;
+    options.SetAsync(false);
+    options.SetErrorStream(&Cerr);
+
+    // curl options:
+    // -L: follow redirects
+    // -f: fail on HTTP errors
+    // -o: output file
+    // --connect-timeout: connection timeout
+    // Note: no --max-time or speed limits - download can take as long as needed
+    // curl automatically uses HTTP_PROXY/HTTPS_PROXY environment variables
+    TString command = TStringBuilder()
+        << "curl -L -f"
+        << " --connect-timeout " << connectTimeout.Seconds()
+        << " -o " << destinationPath.Quote()
+        << " " << url.Quote();
+
+    TShellCommand shell(command, options);
+    shell.Run().Wait();
+
+    if (shell.GetExitCode() == 0) {
+        result.Success = true;
+    } else {
+        result.ErrorMessage = TStringBuilder()
+            << "curl failed with exit code " << shell.GetExitCode().GetRef();
+    }
+
+    return result;
+}
 
 // Stream wrapper that tracks write progress and calls callback
 class TProgressOutputStream : public IOutputStream {
@@ -71,6 +127,12 @@ TDownloadResult DownloadFile(
     TDuration connectTimeout,
     TDuration socketTimeout)
 {
+    // If proxy is configured, use curl which handles proxy automatically
+    // TKeepAliveHttpClient doesn't support HTTP/HTTPS proxies
+    if (HasProxyConfigured()) {
+        return DownloadFileWithCurl(url, destinationPath, connectTimeout);
+    }
+
     TDownloadResult result;
 
     try {

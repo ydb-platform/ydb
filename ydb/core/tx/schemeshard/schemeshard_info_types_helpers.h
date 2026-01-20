@@ -47,3 +47,4 @@ TString SerializeSettings(const TSettingsPB& settings) {
 }
 
 } // namespace NKikimr::NSchemeShard
+

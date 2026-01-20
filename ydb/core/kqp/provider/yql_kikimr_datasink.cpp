@@ -359,7 +359,8 @@ private:
                     mode == "insert_abort" ||
                     mode == "delete_on" ||
                     mode == "update_on" ||
-                    mode == "fill_table")
+                    mode == "fill_table" ||
+                    mode == "upsert_increment")
                 {
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;

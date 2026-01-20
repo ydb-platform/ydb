@@ -810,6 +810,7 @@ message TKqpTableSinkSettings {
         MODE_UPDATE = 4;
         MODE_FILL = 5;
         MODE_UPDATE_CONDITIONAL = 6; // UPDATE WHERE
+        MODE_UPSERT_INCREMENT = 7;
     }
 
     optional NKqpProto.TKqpPhyTableId Table = 3;

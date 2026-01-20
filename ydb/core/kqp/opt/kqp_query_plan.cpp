@@ -969,6 +969,9 @@ private:
             } else if (settings.Mode().StringValue() == "fill_table") {
                 op.Properties["Name"] = "FillTable";
                 writeInfo.Type = EPlanTableWriteType::MultiReplace;
+            } else if (settings.Mode().StringValue() == "upsert_increment") {
+                op.Properties["Name"] = "UpsertIncrement";
+                writeInfo.Type = EPlanTableWriteType::MultiUpsertIncrement;
             } else {
                 YQL_ENSURE(false, "Unsupported sink mode");
             }

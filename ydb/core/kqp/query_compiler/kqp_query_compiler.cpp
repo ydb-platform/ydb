@@ -1596,6 +1596,8 @@ private:
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL);
             } else if (settings.Mode().Cast().StringValue() == "fill_table") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+            } else if (settings.Mode().Cast().StringValue() == "upsert_increment") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT);
             } else {
                 YQL_ENSURE(false, "Unsupported sink mode");
             }

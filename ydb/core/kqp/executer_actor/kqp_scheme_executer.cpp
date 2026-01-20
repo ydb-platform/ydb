@@ -626,7 +626,7 @@ public:
             }
 
             case NKqpProto::TKqpSchemeOperation::kCreateSecret: {
-                const auto& modifyScheme = schemeOp.GetCreateSecret();
+                const auto& modifyScheme = schemeOp.GetCreateSecret(); 
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }
@@ -639,6 +639,12 @@ public:
 
             case NKqpProto::TKqpSchemeOperation::kDropSecret: {
                 const auto& modifyScheme = schemeOp.GetDropSecret();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kTruncateTable: {
+                const auto& modifyScheme = schemeOp.GetTruncateTable();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

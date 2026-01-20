@@ -608,6 +608,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateSecret = 59;
         NKikimrSchemeOp.TModifyScheme AlterSecret = 60;
         NKikimrSchemeOp.TModifyScheme DropSecret = 61;
+        NKikimrSchemeOp.TModifyScheme TruncateTable = 62;
     }
 }
 

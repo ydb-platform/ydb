@@ -765,22 +765,56 @@ public:
         }
     }
 
+    TGenericResult PrepareTruncateTable(const TTruncateTableSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& cluster) {
+        TString workingDir;
+        TString tableName;
+        {
+            auto metadata = SessionCtx->Tables().GetTable(cluster, settings.TablePath).Metadata;
+
+            std::pair<TString, TString> pathPair;
+            TString error;
+            if (!NSchemeHelpers::SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, false)) {
+                return ResultFromError<TGenericResult>(error);
+            }
+
+            workingDir = pathPair.first;
+            tableName = pathPair.second;
+        }
+
+        modifyScheme.SetWorkingDir(workingDir);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable);
+        modifyScheme.MutableTruncateTable()->SetTableName(tableName);
+
+        TGenericResult result;
+        result.SetSuccess();
+        return result;
+    }
+
     TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) override {
         CHECK_PREPARED_DDL(TruncateTable);
 
-        Y_UNUSED(settings);
-        if (cluster != SessionCtx->GetCluster()) {
-            return InvalidCluster<TGenericResult>(cluster);
-        }
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
 
-        auto tablePromise = NewPromise<TGenericResult>();
-        auto code = Ydb::StatusIds::BAD_REQUEST;
-        auto error = TStringBuilder() << "Truncate table not supported yet";
-        IKqpGateway::TGenericResult errResult;
-        errResult.AddIssue(NYql::TIssue(error));
-        errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
-        tablePromise.SetValue(errResult);
-        return tablePromise.GetFuture();
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            auto preparation = PrepareTruncateTable(settings, modifyScheme, cluster);
+            if (!preparation.Success()) {
+                return MakeFuture<TGenericResult>(preparation);
+            }
+
+            if (IsPrepare()) {
+                auto& phyTx = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableTruncateTable()->Swap(&modifyScheme);
+                return MakeFuture<TGenericResult>(preparation);
+            }
+
+            return Gateway->ModifyScheme(std::move(modifyScheme));
+        } catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
     }
 
     TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {

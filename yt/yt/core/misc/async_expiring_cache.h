@@ -75,8 +75,6 @@ public:
     int GetSize() const;
 
 protected:
-    const NLogging::TLogger Logger_;
-
     TAsyncExpiringCacheConfigPtr GetConfig() const;
 
     virtual TFuture<TValue> DoGet(
@@ -104,6 +102,7 @@ protected:
     void Ping(const TKey& key);
 
 private:
+    const NLogging::TLogger Logger_;
     const NConcurrency::TPeriodicExecutorPtr ExpirationExecutor_;
     const NConcurrency::TPeriodicExecutorPtr RefreshExecutor_;
     const int ShardCount_ = 1;

@@ -67,10 +67,17 @@ namespace NKikimr::NSqsTopic {
         const TString& method,
         TVector<std::pair<TString, TString>>&& labels
     ) {
+        TString adjustedTopicPath;
+        if (topicPath.StartsWith(databasePath)) {
+            adjustedTopicPath = topicPath.substr(databasePath.size());
+        } else {
+            adjustedTopicPath = topicPath;
+        }
+
         TVector<std::pair<TString, TString>> common{
             {"database", databasePath},
             {"method", method},
-            {"topic", topicPath},
+            {"topic", adjustedTopicPath},
             {"consumer", consumerName},
         };
         std::move(labels.begin(), labels.end(), std::back_inserter(common));

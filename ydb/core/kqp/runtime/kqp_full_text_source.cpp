@@ -1094,7 +1094,7 @@ private:
         }
     }
 
-    void ExtractAndTokenizeExpression() {
+    bool ExtractAndTokenizeExpression() {
         YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
 
         // Get the first expression (assuming single expression for now)
@@ -1120,6 +1120,8 @@ private:
         if (Words.empty()) {
             NotifyCA();
         }
+
+        return !Words.empty();
     }
 
     void InvokeReads(TTableReader* reader, EReadKind readKind, ui64 cookie) {
@@ -1488,11 +1490,13 @@ public:
             DictTableReader->SetPartitionInfo(resultSet[2].KeyDescription);
             DocsTableReader->SetPartitionInfo(resultSet[3].KeyDescription);
             StatsTableReader->SetPartitionInfo(resultSet[4].KeyDescription);
-            ExtractAndTokenizeExpression();
-            ReadTotalStats();
+            if (ExtractAndTokenizeExpression()) {
+                ReadTotalStats();
+            }
         } else {
-            ExtractAndTokenizeExpression();
-            StartWordReads();
+            if (ExtractAndTokenizeExpression()) {
+                StartWordReads();
+            }
         }
     }
 

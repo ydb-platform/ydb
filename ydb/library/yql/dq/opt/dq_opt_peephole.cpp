@@ -1080,29 +1080,6 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
 
     bool inputIsBlocks = false;
 
-    if (!simpleReplace) {
-        while (input->IsCallable()) {
-            auto callableName = input->Content();
-            if (!(callableName == "ToFlow"sv || callableName == "FromFlow"sv
-                || callableName == "WideFromBlocks"sv || callableName == "WideToBlocks"sv))
-            {
-                break;
-            }
-            auto next = input->ChildPtr(0);
-            auto nextKind = detectIsFlow(next->GetTypeAnn());
-            if (!nextKind.has_value()) {
-                break;
-            }
-            inputIsFlow = *nextKind;
-            if (callableName == "WideFromBlocks"sv) {
-                inputIsBlocks = true;
-            } else if (callableName == "WideToBlocks"sv) {
-                inputIsBlocks = false;
-            }
-            input = next;
-        }
-    }
-
     if (simpleReplace) {
         return Build<TDqPhyHashCombine>(ctx, node.Pos())
             .Input(wideCombiner.Input())
@@ -1112,6 +1089,27 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
             .UpdateHandler(copyLambda(wideCombiner.UpdateHandler()))
             .FinishHandler(copyLambda(wideCombiner.FinishHandler()))
         .Done();
+    }
+
+    while (input->IsCallable()) {
+        auto callableName = input->Content();
+        if (!(callableName == "ToFlow"sv || callableName == "FromFlow"sv
+            || callableName == "WideFromBlocks"sv || callableName == "WideToBlocks"sv))
+        {
+            break;
+        }
+        auto next = input->ChildPtr(0);
+        auto nextKind = detectIsFlow(next->GetTypeAnn());
+        if (!nextKind.has_value()) {
+            break;
+        }
+        inputIsFlow = *nextKind;
+        if (callableName == "WideFromBlocks"sv) {
+            inputIsBlocks = true;
+        } else if (callableName == "WideToBlocks"sv) {
+            inputIsBlocks = false;
+        }
+        input = next;
     }
 
     auto wrappedInput = NNodes::TExprBase(input);

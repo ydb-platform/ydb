@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
             PRAGMA TablePathPrefix = "/Root";
             PRAGMA ydb.UseDqHashCombine = "true";
             PRAGMA ydb.UseDqHashAggregate = "true";
-            PRAGMA ydb.DqHashCombineUsesBlocks = "true";
+            PRAGMA ydb.DqHashOperatorsUseBlocks = "true";
             PRAGMA ydb.OptUseFinalizeByKey = "true";
             PRAGMA ydb.OptEnableOlapPushdown = "false"; -- need this to force intermediate/final combiner pair over the sample table
         )";

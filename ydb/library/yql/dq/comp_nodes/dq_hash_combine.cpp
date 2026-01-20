@@ -1337,7 +1337,6 @@ public:
         */
         GenericAggregation->ExtractState(statePtr, outputPtrs);
 
-        ++OutputRows;
         OutputRowCounter.Inc();
 
         if (HasGenericAggregation) {
@@ -1351,7 +1350,6 @@ public:
     }
 
 private:
-    size_t OutputRows = 0;
     size_t InputRows = 0;
     NYql::NUdf::TCounter OutputRowCounter;
     TInstant StartMoment;
@@ -1518,8 +1516,6 @@ public:
         return TryDrainInternal(DrainBufferPointers.data());
     }
 
-    size_t OutputRows = 0;
-
     bool TryDrainInternal(NUdf::TUnboxedValue* const* output) {
         MKQL_ENSURE(IsDraining(), "Cannot call TryDrain() unless IsDraining()");
 
@@ -1547,8 +1543,6 @@ public:
             if (!tuple) {
                 break;
             }
-
-            ++OutputRows;
 
             const auto key = static_cast<TUnboxedValuePod*>(tuple);
 
@@ -1679,13 +1673,14 @@ public:
                 }
             }
 
-            std::vector<TUnboxedValue*> outputPtrs;
-            outputPtrs.resize(width, nullptr);
-            std::transform(output, output + width, outputPtrs.begin(), [&](TUnboxedValue& val) {
-                return &val;
-            });
+            if (width && (width != OutputPtrs.size() || output != OutputPtrs.front())) {
+                OutputPtrs.resize(width, nullptr);
+                std::transform(output, output + width, OutputPtrs.begin(), [&](TUnboxedValue& val) {
+                    return &val;
+                });
+            }
 
-            if (state.TryDrain(outputPtrs.data())) {
+            if (state.TryDrain(OutputPtrs.data())) {
                 return NUdf::EFetchStatus::Ok;
             } else if (state.IsSourceEmpty()) {
                 break;
@@ -1699,6 +1694,7 @@ private:
     TUnboxedValue BoxedState;
     TUnboxedValue InputStream;
     TBaseAggregationState& UnboxedState;
+    std::vector<TUnboxedValue*> OutputPtrs;
 };
 
 class TDqHashCombineFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TDqHashCombineFlowWrapper>

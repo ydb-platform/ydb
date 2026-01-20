@@ -36,6 +36,18 @@ class QuerySnapshotReadOnly(BaseQueryTxMode):
         return ydb_query_pb2.SnapshotModeSettings()
 
 
+class QuerySnapshotReadWrite(BaseQueryTxMode):
+    def __init__(self):
+        self._name = "snapshot_read_write"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def to_proto(self) -> ydb_query_pb2.SnapshotRWModeSettings:
+        return ydb_query_pb2.SnapshotRWModeSettings()
+
+
 class QuerySerializableReadWrite(BaseQueryTxMode):
     """This mode guarantees that the result of successful parallel transactions is equivalent
     to their serial execution, and there are no read anomalies for successful transactions.

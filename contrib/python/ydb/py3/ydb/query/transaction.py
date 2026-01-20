@@ -201,7 +201,8 @@ class BaseQueryTxContext(base.CallbackHandler):
          1) QuerySerializableReadWrite() which is default mode;
          2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
          3) QuerySnapshotReadOnly();
-         4) QueryStaleReadOnly().
+         4) QuerySnapshotReadWrite();
+         5) QueryStaleReadOnly().
         """
 
         self._driver = driver
@@ -357,7 +358,8 @@ class QueryTxContext(BaseQueryTxContext):
          1) QuerySerializableReadWrite() which is default mode;
          2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
          3) QuerySnapshotReadOnly();
-         4) QueryStaleReadOnly().
+         4) QuerySnapshotReadWrite();
+         5) QueryStaleReadOnly().
         """
 
         super().__init__(driver, session_state, session, tx_mode)

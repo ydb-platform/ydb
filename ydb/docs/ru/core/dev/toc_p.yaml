@@ -30,6 +30,8 @@ items:
   href: batch-upload.md
 - name: Постраничный вывод
   href: paging.md
+- name: Потоковые запросы
+  href: streaming-query-load.md  
 - name: Таймауты
   href: timeouts.md
 - name: Системные представления
@@ -42,3 +44,7 @@ items:
   href: custom-attributes.md
 - name: Управление потреблением ресурсов
   href: resource-consumption-management.md
+- name: Форматы данных потоковых запросов
+  href: streaming-query-formats.md
+- name: Чекпоинты
+  href: checkpoints.md 

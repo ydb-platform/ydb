@@ -50,6 +50,4 @@ items:
     path: federated_query/toc_p.yaml
     mode: link
 - name: Потоковые запросы
-  include:
-    path: streaming_query/toc_p.yaml
-    mode: link
+  href: streaming-query.md

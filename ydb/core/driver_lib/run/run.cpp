@@ -276,7 +276,7 @@ public:
         if (!WarmupReceived) {
             WarmupReceived = true;
             auto* msg = ev->Get();
-            Cerr << "[GRpcServersManager] Warmup completed (success: " << msg->Success 
+            Cerr << "[GRpcServersManager] Warmup completed (success: " << msg->Success
                  << ", loaded: " << msg->EntriesLoaded << "), starting gRPC servers" << Endl;
             Start();
         }

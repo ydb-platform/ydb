@@ -109,6 +109,81 @@ namespace {
         return entries;
     }
 
+    THashSet<TString> GetLocalCacheUserSids(
+        TTestActorRuntime& runtime,
+        ui32 nodeIndex,
+        const TString& tenantName)
+    {
+        auto edgeActor = runtime.AllocateEdgeActor(nodeIndex);
+        auto compileServiceId = MakeKqpCompileServiceID(runtime.GetNodeId(nodeIndex));
+
+        auto* request = new TEvKqp::TEvListQueryCacheQueriesRequest();
+        request->Record.SetTenantName(tenantName);
+        request->Record.SetFreeSpace(1024 * 1024);
+
+        runtime.Send(new IEventHandle(compileServiceId, edgeActor, request), nodeIndex);
+
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvListQueryCacheQueriesResponse>(
+            edgeActor, TDuration::Seconds(5));
+        UNIT_ASSERT_C(response, "Failed to get local cache entries from node " << nodeIndex);
+
+        THashSet<TString> userSids;
+        for (const auto& query : response->Get()->Record.GetCacheCacheQueries()) {
+            userSids.insert(query.GetUserSID());
+        }
+        return userSids;
+    }
+
+    void VerifyLocalCacheContainsUsers(
+        TTestActorRuntime& runtime,
+        ui32 nodeIndex,
+        const TString& tenantName,
+        const TVector<TString>& expectedUserSids)
+    {
+        auto foundUserSids = GetLocalCacheUserSids(runtime, nodeIndex, tenantName);
+
+        for (const auto& userSid : expectedUserSids) {
+            TString fullUserSid = userSid + "@builtin";
+            UNIT_ASSERT_C(foundUserSids.contains(fullUserSid),
+                "Cache should contain entry for user " << fullUserSid
+                << ". Found users: " << JoinSeq(", ", foundUserSids));
+        }
+    }
+
+    void VerifyQueriesServedFromCache(TKikimrRunner& kikimr, const TVector<TString>& userSids) {
+        ui32 key = 0;
+        for (const auto& userSid : userSids) {
+            TString query = TStringBuilder()
+                << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = " << key++ << ";";
+
+            auto result = kikimr.RunCall([&] {
+                TDriverConfig driverConfig;
+                driverConfig
+                    .SetEndpoint(kikimr.GetEndpoint())
+                    .SetDatabase("/Root")
+                    .SetAuthToken(userSid + "@builtin");
+
+                auto driver = NYdb::TDriver(driverConfig);
+                auto db = NYdb::NTable::TTableClient(driver);
+
+                auto session = db.CreateSession().GetValueSync().GetSession();
+                
+                TExecDataQuerySettings settings;
+                settings.KeepInQueryCache(true);
+                settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+                
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            });
+            
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, 
+                "Query failed for user " << userSid << ": " << result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_C(stats.compilation().from_cache(),
+                "Query for user " << userSid << " should be served from cache, but was recompiled");
+        }
+    }
+
     } // namespace
 
     Y_UNIT_TEST_SUITE(KqpWarmup) {
@@ -162,6 +237,11 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, cacheEntries.size(),
                 "All entries should be loaded. Loaded: " << warmupComplete->Get()->EntriesLoaded
                 << ", expected: " << cacheEntries.size());
+
+            VerifyLocalCacheContainsUsers(runtime, nodeId, "/Root", userSids);
+
+            // Verify that queries are actually served from cache (not recompiled)
+            VerifyQueriesServedFromCache(kikimr, userSids);
         }
     }
 

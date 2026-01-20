@@ -484,6 +484,7 @@ message TTableServiceConfig {
         optional uint32 DeadlineSeconds = 2 [default = 30];
         optional uint32 MaxNodesToQuery = 3 [default = 5];
         optional uint32 MaxConcurrentCompilations = 4 [default = 5];
+        optional uint32 HardDeadlineSeconds = 5 [default = 90];       // Hard deadline: max time from actor start
     }
 
     optional TWarmupConfig WarmupConfig = 121 [(InvalidateCompileCache) = false];

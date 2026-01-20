@@ -190,7 +190,7 @@ private:
             req->Record.SetFreeSpace(FreeSpace);
 
             LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Send request to node, node_id="  << nodeId << ", request: " << req->Record.ShortDebugString());
+                "[CompileCacheScan] Send request to node_id=" << nodeId << ", request: " << req->Record.ShortDebugString());
 
             Send(kqpProxyId, req.release(), 0, nodeId);
             PendingRequest = true;
@@ -204,6 +204,10 @@ private:
             std::sort(proxies.begin(), proxies.end());
             PendingNodes = std::deque<ui32>(proxies.begin(), proxies.end());
             PendingNodesInitialized = true;
+
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+                "[CompileCacheScan] Received proxy nodes list, count=" << PendingNodes.size() 
+                << ", nodes=[" << JoinSeq(", ", PendingNodes) << "]");
         }
         StartScan();
     }
@@ -215,6 +219,13 @@ private:
 
     void Handle(NKqp::TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+            "[CompileCacheScan] Received response from node_id=" << record.GetNodeId()
+            << ", queries_count=" << record.GetCacheCacheQueries().size()
+            << ", finished=" << record.GetFinished()
+            << ", has_continuation=" << !record.GetContinuationToken().empty());
+
         LastResponse = std::move(record);
         ProcessRows();
     }
@@ -223,7 +234,9 @@ private:
         if (ev->Get()->SourceType == NKqp::TKqpEvents::EvListCompileCacheQueriesRequest) {
             ui32 nodeId = ev->Cookie;
             LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Received undelivered response for node_id: " << nodeId);
+                "[CompileCacheScan] Undelivered response for node_id=" << nodeId);
+            PendingRequest = false;
+            PendingNodes.pop_front();
             StartScan();
         }
     }
@@ -233,13 +246,20 @@ private:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         ui32 nodeId = ev->Get()->NodeId;
-        Y_UNUSED(nodeId);
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+            "[CompileCacheScan] Node disconnected, node_id=" << nodeId);
         ProcessRows();
     }
 
     void ProcessRows() {
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
+
+        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+            "[CompileCacheScan] Processing rows from node_id=" << nodeId 
+            << ", rows_count=" << LastResponse.GetCacheCacheQueries().size()
+            << ", pending_nodes_remaining=" << PendingNodes.size());
+
         for(int idx = 0; idx < LastResponse.GetCacheCacheQueries().size(); ++idx) {
             TVector<TCell> cells;
             for (auto extractor : ColumnsExtractors) {
@@ -256,10 +276,13 @@ private:
             ContinuationToken = TString();
             if (PendingNodes.empty()) {
                 batch->Finished = true;
+                LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+                    "[CompileCacheScan] Scan completed, final batch rows=" << batch->Rows.size());
             }
-
         } else {
             ContinuationToken = LastResponse.GetContinuationToken();
+            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+                "[CompileCacheScan] Node " << nodeId << " has more data, continuation_token=" << ContinuationToken);
         }
 
         PendingRequest = false;

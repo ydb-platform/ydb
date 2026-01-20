@@ -76,11 +76,11 @@ private:
         FLUENT_SETTING(std::optional<std::string>, Value);
 
         bool operator<(const TPartitionBound& other) const {
-            return !Value_.has_value() || !other.Value_.has_value() || *Value_ < *other.Value_;
+            return !Value_.has_value() || (other.Value_.has_value() && *Value_ < *other.Value_);
         }
 
         bool operator<(const std::string& key) const {
-            return !Value_.has_value() || *Value_ < key;
+            return Value_.has_value() && *Value_ < key;
         }
 
         bool operator>(const std::string& key) const {  
@@ -116,7 +116,6 @@ private:
         FLUENT_SETTING(TPartitionBound, FromBound);
         FLUENT_SETTING(TPartitionBound, ToBound);
         FLUENT_SETTING(ui64, PartitionId);
-        FLUENT_SETTING(bool, Bounded);
     };
 
     struct TMessageInfo {
@@ -171,18 +170,13 @@ private:
         TKeyedWriteSession* Session;
     };
 
-    bool AutoPartitioningEnabled(const TTopicDescription& topicDescription) {
-        return topicDescription.GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy()
-            != EAutoPartitioningStrategy::Disabled;
-    }
-
-    void AddPartitionsBounds();
+    void AddPartitionsBoundsIfNeeded();
 
     void CleanExpiredSessions();
 
     WrappedWriteSessionPtr GetWriteSession(ui64 partitionId);
 
-    bool RunEventLoop(ui64 partitionId);
+    void RunEventLoop(ui64 partitionId);
 
     WrappedWriteSessionPtr CreateWriteSession(ui64 partitionId);
 
@@ -197,7 +191,7 @@ private:
 
     void TransferEventsToOutputQueue();
 
-    void AddReadyFuture(ui64 index);
+    void SubscribeToPartition(ui64 partitionId);
 
     void AddReadyToAcceptEvent();
 
@@ -205,11 +199,17 @@ private:
 
     void NonBlockingClose();
 
-    void HandleAcksEvent(ui64 partitionId, TWriteSessionEvent::TEvent& event);
+    void HandleAcksEvent(ui64 partitionId, TWriteSessionEvent::TEvent&& event);
 
     void HandleSessionClosedEvent(TSessionClosedEvent&& event);
 
-    void HandleReadyToAcceptEvent(ui64 partitionId, TWriteSessionEvent::TReadyToAcceptEvent& event);
+    void HandleReadyToAcceptEvent(ui64 partitionId, TWriteSessionEvent::TReadyToAcceptEvent&& event);
+
+    bool IsMemoryUsageOK() const;
+
+    void SetCloseTimeout(const TDuration& closeTimeout);
+
+    TDuration GetCloseTimeout();
     
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -230,6 +230,8 @@ public:
 
     TWriterCounters::TPtr GetCounters() override;
 
+    const std::vector<TPartitionInfo>& GetPartitions() const;
+
     ~TKeyedWriteSession();
 
 private:
@@ -241,6 +243,7 @@ private:
 
     std::vector<TPartitionInfo> Partitions;
     std::vector<NThreading::TFuture<void>> Futures;
+    std::vector<size_t> ReadyFutures;
     std::unique_ptr<IPartitionChooser> PartitionChooser;
 
     std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
@@ -264,11 +267,6 @@ private:
     std::atomic_bool Closed = false;
     TDuration CloseTimeout = TDuration::Zero();
     std::optional<TSessionClosedEvent> CloseEvent;
-
-    // IMPORTANT: must not be protected by GlobalLock, because callbacks from Future::Subscribe()
-    // can be executed inline, and taking GlobalLock there can deadlock the session thread.
-    std::mutex ReadyFuturesLock;
-    std::vector<ui64> ReadyFutures;
 
     size_t MessagesNotEmptyFutureIndex;
     size_t CloseFutureIndex;

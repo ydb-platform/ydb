@@ -1,7 +1,6 @@
 #include "auto_config_initializer.h"
 #include "config_helpers.h"
 #include "config.h"
-#include "grpc_servers_manager.h"
 #include "kikimr_services_initializers.h"
 #include "service_initializer.h"
 
@@ -50,8 +49,9 @@
 #include <ydb/core/cms/http.h>
 
 #include <ydb/core/control/immediate_control_board_actor.h>
-
+#include <ydb/core/driver_lib/run/grpc_servers_manager.h>
 #include <ydb/core/driver_lib/version/version.h>
+
 #include <ydb/core/discovery/discovery.h>
 
 #include <ydb/core/grpc_services/grpc_mon.h>

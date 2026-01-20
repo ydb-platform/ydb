@@ -1,9 +1,10 @@
 #include "kqp_warmup_compile_actor.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/core/driver_lib/run/grpc_servers_manager.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/services/services.pb.h>
@@ -23,6 +24,9 @@ struct TEvPrivate {
     enum EEv {
         EvFetchCacheResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvDelayedComplete,
+        EvRetryFetch,
+        EvHardDeadline,
+        EvSoftDeadline,
     };
 
     struct TQueryToCompile {
@@ -42,6 +46,9 @@ struct TEvPrivate {
     };
 
     struct TEvDelayedComplete : public NActors::TEventLocal<TEvDelayedComplete, EvDelayedComplete> {};
+    struct TEvRetryFetch : public NActors::TEventLocal<TEvRetryFetch, EvRetryFetch> {};
+    struct TEvHardDeadline : public NActors::TEventLocal<TEvHardDeadline, EvHardDeadline> {};
+    struct TEvSoftDeadline : public NActors::TEventLocal<TEvSoftDeadline, EvSoftDeadline> {};
 };
 
 class TFetchCacheActor : public TQueryBase {
@@ -68,10 +75,10 @@ public:
             auto queryText = parser.ColumnParser("Query").GetOptionalUtf8();
             auto userSID = parser.ColumnParser("UserSID").GetOptionalUtf8();
 
-            if (queryText && !queryText->empty() && userSID && !userSID->empty()) {
+            if (queryText && !queryText->empty()) {
                 TEvPrivate::TQueryToCompile query;
                 query.QueryText = TString(*queryText);
-                query.UserSID = TString(*userSID);
+                query.UserSID = userSID ? TString(*userSID) : TString();
                 Result->Queries.push_back(std::move(query));
             }
         }
@@ -102,6 +109,9 @@ public:
         return NKikimrServices::TActivity::KQP_COMPILE_SERVICE;
     }
 
+    static constexpr ui32 MaxFetchRetries = 5;
+    static constexpr TDuration FetchRetryDelay = TDuration::Seconds(1);
+
     TKqpCompileCacheWarmup(const TKqpWarmupConfig& config, const TString& database,
                            const TString& cluster, NActors::TActorId notifyActorId)
         : Config(config)
@@ -111,11 +121,18 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_I("Starting warmup, database: " << Database 
-              << ", deadline: " << Config.Deadline
-              << ", maxConcurrent: " << Config.MaxConcurrentCompilations);
+        Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
+        const auto softDeadline = Config.Deadline;
+        const auto hardDeadline = Max(Config.HardDeadline, softDeadline);
 
-        Schedule(Config.Deadline, new NActors::TEvents::TEvWakeup());
+        LOG_I("Warmup actor started, database: " << Database 
+              << ", softDeadline: " << softDeadline
+              << ", hardDeadline: " << hardDeadline
+              << (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")
+              << ", maxConcurrent: " << Config.MaxConcurrentCompilations
+              << ", waiting for TEvStartWarmup from KqpProxy");
+
+        Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
 
         if (Database.empty()) {
             LOG_I("Database is empty, skipping warmup");
@@ -124,14 +141,7 @@ public:
             return;
         }
 
-        if (Database == "/Root" || Database == "Root") {
-            LOG_I("Root domain detected, skipping warmup");
-            SkipReason = "Skipped: root domain";
-            ScheduleComplete();
-            return;
-        }
-
-        StartFetch();
+        Become(&TThis::StateWaitingStart);
     }
 
     void ScheduleComplete() {
@@ -144,7 +154,8 @@ private:
     STFUNC(StateWaitingComplete) {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvPrivate::EvDelayedComplete, HandleDelayedComplete);
-            hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
+            cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
+            cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
             LOG_W("StateWaitingComplete: unexpected event " << ev->GetTypeRewrite());
@@ -152,10 +163,23 @@ private:
         }
     }
 
+    STFUNC(StateWaitingStart) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStartWarmup, HandleStartWarmup);
+            cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
+            cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
+        default:
+            LOG_W("StateWaitingStart: unexpected event " << ev->GetTypeRewrite());
+            break;
+        }
+    }
+
     STFUNC(StateFetching) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvFetchCacheResult, HandleFetchResult);
-            hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
+            cFunc(TEvPrivate::EvRetryFetch, HandleRetryFetch);
+            cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
+            cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
             LOG_W("StateFetching: unexpected event " << ev->GetTypeRewrite());
@@ -166,7 +190,8 @@ private:
     STFUNC(StateCompiling) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqp::TEvQueryResponse, HandleQueryResponse);
-            hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
+            cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
+            cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
         default:
             LOG_W("StateCompiling: unexpected event " << ev->GetTypeRewrite());
@@ -183,6 +208,13 @@ private:
         Complete(true, SkipReason);
     }
 
+    void HandleStartWarmup(TEvStartWarmup::TPtr& ev) {
+        LOG_I("Received TEvStartWarmup, discovered nodes: " << ev->Get()->DiscoveredNodesCount
+              << ", scheduling soft deadline: " << Config.Deadline);
+        Schedule(Config.Deadline, new TEvPrivate::TEvSoftDeadline());
+        StartFetch();
+    }
+
     void StartFetch() {
         LOG_I("Spawning fetch cache actor");
         Register(new TFetchCacheActor(Database, SelfId().NodeId()));
@@ -193,21 +225,44 @@ private:
         auto* result = ev->Get();
         
         if (!result->Success) {
-            LOG_I("Skipping warmup, fetch failed (possibly first startup): " << result->Error);
-            Complete(true, "Skipped: fetch failed");
+            if (FetchRetryCount < MaxFetchRetries) {
+                FetchRetryCount++;
+                LOG_I("Fetch failed, scheduling retry " << FetchRetryCount << "/" << MaxFetchRetries 
+                      << " in " << FetchRetryDelay << ": " << result->Error);
+                Schedule(FetchRetryDelay, new TEvPrivate::TEvRetryFetch());
+                return;
+            }
+            LOG_I("Fetch failed after " << MaxFetchRetries << " retries, skipping warmup: " << result->Error);
+            Complete(true, "Skipped: fetch failed after retries");
             return;
         }
 
         QueriesToCompile = std::move(result->Queries);
         LOG_I("Fetched " << QueriesToCompile.size() << " queries from compile cache");
 
+        if (Counters) {
+            Counters->WarmupQueriesFetched->Add(QueriesToCompile.size());
+        }
+
         if (QueriesToCompile.empty()) {
-            Complete(true, "No queries to warm up");
+            if (FetchRetryCount < MaxFetchRetries) {
+                FetchRetryCount++;
+                LOG_I("Fetched 0 queries, retrying " << FetchRetryCount << "/" << MaxFetchRetries 
+                      << " in case more nodes discovered");
+                Schedule(FetchRetryDelay, new TEvPrivate::TEvRetryFetch());
+                return;
+            }
+            Complete(true, "No queries to warm up after retries");
             return;
         }
 
         Become(&TThis::StateCompiling);
         StartCompilations();
+    }
+
+    void HandleRetryFetch() {
+        LOG_I("Retrying fetch (attempt " << FetchRetryCount << "/" << MaxFetchRetries << ")");
+        StartFetch();
     }
 
     void HandleQueryResponse(TEvKqp::TEvQueryResponse::TPtr& ev) {
@@ -218,6 +273,9 @@ private:
         
         if (success) {
             EntriesLoaded++;
+            if (Counters) {
+                Counters->WarmupQueriesCompiled->Inc();
+            }
             LOG_D("Query compiled, total: " << EntriesLoaded 
                   << ", pending: " << PendingCompilations
                   << ", remaining: " << QueriesToCompile.size());
@@ -278,8 +336,15 @@ private:
         }
     }
 
-    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {
-        LOG_I("Warmup deadline reached, compiled: " << EntriesLoaded
+    void HandleHardDeadline() {
+        LOG_I("Hard deadline reached (waited too long for discovery), compiled: " << EntriesLoaded
+              << ", failed: " << EntriesFailed
+              << ", pending: " << PendingCompilations);
+        Complete(false, "Hard deadline exceeded (discovery not ready in time)");
+    }
+
+    void HandleSoftDeadline() {
+        LOG_I("Soft deadline reached, compiled: " << EntriesLoaded
               << ", failed: " << EntriesFailed
               << ", pending: " << PendingCompilations);
         Complete(false, "Warmup deadline exceeded");
@@ -298,6 +363,10 @@ private:
 
         LOG_I("Warmup " << (success ? "completed" : "finished") << ": " << message);
 
+        if (Counters) {
+            Counters->WarmupFinished->Inc();
+        }
+
         if (NotifyActorId) {
             Send(NotifyActorId, new TEvKqpWarmupComplete(success, message, EntriesLoaded));
         }
@@ -313,10 +382,13 @@ private:
 
     const NActors::TActorId NotifyActorId;
 
+    TIntrusivePtr<TKqpCounters> Counters;
+
     std::deque<TEvPrivate::TQueryToCompile> QueriesToCompile;
     ui32 PendingCompilations = 0;
     ui32 EntriesLoaded = 0;
     ui32 EntriesFailed = 0;
+    ui32 FetchRetryCount = 0;
     bool Completed = false;
     TString SkipReason;
 };

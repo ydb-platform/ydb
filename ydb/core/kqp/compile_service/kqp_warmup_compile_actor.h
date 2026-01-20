@@ -9,7 +9,7 @@
 #include <util/datetime/base.h>
 
 namespace NKikimr::NKqp {
-
+    
 struct TEvKqpWarmupComplete : public NActors::TEventLocal<TEvKqpWarmupComplete, TKqpEvents::EvWarmupComplete> {
     bool Success;
     TString Message;
@@ -22,9 +22,18 @@ struct TEvKqpWarmupComplete : public NActors::TEventLocal<TEvKqpWarmupComplete, 
     {}
 };
 
+struct TEvStartWarmup : public NActors::TEventLocal<TEvStartWarmup, TKqpEvents::EvStartWarmup> {
+    ui32 DiscoveredNodesCount;
+
+    explicit TEvStartWarmup(ui32 nodesCount)
+        : DiscoveredNodesCount(nodesCount)
+    {}
+};
+
 struct TKqpWarmupConfig {
     bool Enabled = false;
-    TDuration Deadline = TDuration::Seconds(30);
+    TDuration Deadline = TDuration::Seconds(30);        // Soft deadline: time for compilation after discovery ready
+    TDuration HardDeadline = TDuration::Seconds(90);    // Hard deadline: max time from actor start (must be >= Deadline * 3)
     ui32 MaxNodesToQuery = 5;
     ui32 MaxConcurrentCompilations = 5;
 };

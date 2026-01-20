@@ -42,6 +42,9 @@ import ydb.apps.dstool.lib.dstool_cmd_cluster_get as cluster_get
 import ydb.apps.dstool.lib.dstool_cmd_cluster_set as cluster_set
 import ydb.apps.dstool.lib.dstool_cmd_cluster_workload_run as cluster_workload_run
 
+import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_create as nbs_partition_create
+import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_delete as nbs_partition_delete
+
 import sys
 import ydb.apps.dstool.lib.common as common
 
@@ -56,6 +59,7 @@ modules = [
     group_state, group_take_snapshot, group_add, group_list, group_virtual_create, group_virtual_cancel, group_virtual_reconfigure,
     pdisk_add_by_serial, pdisk_remove_by_serial, pdisk_set, pdisk_list, pdisk_stop, pdisk_restart, pdisk_readonly, pdisk_move,
     vdisk_evict, vdisk_list, vdisk_set_read_only, vdisk_remove_donor, vdisk_wipe, vdisk_compact, device_list,
+    nbs_partition_create, nbs_partition_delete,
 ]
 
 default_structure = [
@@ -67,6 +71,7 @@ default_structure = [
     ('box', ['list']),
     ('node', ['list']),
     ('cluster', ['balance', 'get', 'set', ('workload', ['run']), 'list']),
+    ('nbs', [('partition', ['create', 'delete'])]),
 ]
 
 

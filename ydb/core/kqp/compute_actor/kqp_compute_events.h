@@ -19,7 +19,7 @@ struct TLocksInfo {
 struct TPerStepScanStats {
     TDuration ExecutionDuration;
     TDuration WaitDuration;
-    ui64 BytesReadFromBS;
+    ui64 RawBytesRead;
 };
 
 namespace NInternalImplementation {

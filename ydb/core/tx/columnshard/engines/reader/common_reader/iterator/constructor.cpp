@@ -50,7 +50,7 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
     if (signals) {
         signals->AddBytes(blobsData.GetTotalBlobsSize());
         const auto& counters = Source->GetContext()->GetCommonContext()->GetCounters();
-        counters.CountersForStep(this->Cursor.GetName()).BytesReadFromBS->Add(blobsData.GetTotalBlobsSize());
+        counters.CountersForStep(this->Cursor.GetName()).RawBytesRead->Add(blobsData.GetTotalBlobsSize());
         counters.AddRawBytes(blobsData.GetTotalBlobsSize());
     }
     for (auto&& [_, i] : DataFetchers) {

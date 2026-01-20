@@ -418,11 +418,8 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
         for(auto& kv: lock.Value) {
             NKqp::TPerStepScanStats stats;
             stats.ExecutionDuration = TDuration::MicroSeconds(kv.second.ExecutionDurationMicroSeconds->Val());
-            *kv.second.ExecutionDurationMicroSeconds = TAtomicCounter{0};
             stats.WaitDuration = TDuration::MicroSeconds(kv.second.WaitDurationMicroSeconds->Val());
-            *kv.second.WaitDurationMicroSeconds = TAtomicCounter{0};
-            stats.BytesReadFromBS = kv.second.BytesReadFromBS->Val();
-            *kv.second.BytesReadFromBS = TAtomicCounter{};
+            stats.RawBytesRead = kv.second.RawBytesRead->Val();
             timesPerStep.emplace(kv.first, stats);
         }
         return timesPerStep;

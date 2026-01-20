@@ -29,7 +29,9 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         if (StepEndIfStepIsAsync.has_value()) {
             // previous operation was async 
             auto waitDuration = TMonotonic::Now() - *StepEndIfStepIsAsync;
-            AFL_VERIFY(CurrentStepIdx >= 1);
+            if (CurrentStepIdx == 0 ) {
+                return TConclusionStatus::Fail("internal error: 0'th step has predecessor?");
+            }
             counters.CountersForStep(Script->GetStep(CurrentStepIdx - 1)->GetName()).WaitDurationMicroSeconds->Add(waitDuration.MicroSeconds());
         }
         auto step = Script->GetStep(CurrentStepIdx);

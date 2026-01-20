@@ -1,5 +1,5 @@
 #pragma once
-#include <absl/synchronization/mutex.h>
+#include <util/system/rwlock.h>
 namespace NKikimr::NColumnShard {
 
 
@@ -8,24 +8,24 @@ namespace NKikimr::NColumnShard {
 template<typename TValue>
 class TThreadSafeValue {
     struct State{
-        mutable absl::Mutex ValueMutex_;
-        mutable TValue Value_;
+        TRWMutex ValueMutex_;
+        TValue Value_;
     };
     std::shared_ptr<State> State_;
 public:
-    struct TReadGuard {
-        absl::ReaderMutexLock _;
+    struct TValueReadGuard {
+        ::TReadGuard _;
         const TValue& Value;
     };
     auto ReadGuard() const {
-        return TReadGuard{absl::ReaderMutexLock{&State_->ValueMutex_}, State_->Value_};
+        return TValueReadGuard{::TReadGuard{&State_->ValueMutex_}, State_->Value_};
     }
-    struct TWriteGuard {
-        absl::WriterMutexLock _;
+    struct TValueWriteGuard {
+        ::TWriteGuard _;
         TValue& Value;
     };
     auto WriteGuard() const {
-        return TWriteGuard{absl::WriterMutexLock{&State_->ValueMutex_}, State_->Value_};
+        return TValueWriteGuard{::TWriteGuard{&State_->ValueMutex_}, State_->Value_};
     }
 };
 

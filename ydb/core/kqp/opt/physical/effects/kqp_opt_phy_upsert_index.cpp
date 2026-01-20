@@ -219,11 +219,14 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
         } else {
             if (mode != TKqpPhyUpsertIndexMode::UpdateOn) {
                 auto columnType = table.GetColumnType(TString(column));
+                const auto* optionalColumnType = columnType->IsOptionalOrNull()
+                    ? columnType
+                    : ctx.MakeType<TOptionalExprType>(columnType);
                 absentKeyRow.emplace_back(
                     Build<TCoNameValueTuple>(ctx, pos)
                         .Name(columnAtom)
                         .Value<TCoNothing>()
-                            .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
+                            .OptionalType(NCommon::BuildTypeExpr(pos, *optionalColumnType, ctx))
                             .Build()
                         .Done()
                 );
@@ -377,6 +380,24 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
                     .Build()
                 .Done();
         };
+        auto getterFromValueAsOptional = [&ctx, &pos] (const TStringBuf& x, const TCoArgument& arg, bool makeOptional) -> TExprBase {
+            auto member = Build<TCoMember>(ctx, pos)
+                .Struct(arg)
+                .Name().Build(x)
+                .Done();
+
+            TExprBase value = member;
+            if (makeOptional) {
+                value = Build<TCoJust>(ctx, pos)
+                    .Input(member)
+                    .Done();
+            }
+
+            return Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(x)
+                .Value(value)
+                .Done();
+        };
 
         for (const auto& x : inputColumns) {
             bool hasDefaultToCheck = checkDefaults.contains(x);
@@ -392,13 +413,16 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         for (const auto& x : missedKeyInput) {
             auto columnType = table.GetColumnType(TString(x));
             YQL_ENSURE(columnType);
+            const auto* optionalColumnType = columnType->IsOptionalOrNull()
+                ? columnType
+                : ctx.MakeType<TOptionalExprType>(columnType);
 
-            existingRow.emplace_back(getterFromValue(x, lookupRowArgument));
+            existingRow.emplace_back(getterFromValueAsOptional(x, lookupRowArgument, optionalColumnType != columnType));
             nonExistingRow.emplace_back(
                 Build<TCoNameValueTuple>(ctx, pos)
                     .Name().Build(x)
                     .Value<TCoNothing>()
-                        .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
+                        .OptionalType(NCommon::BuildTypeExpr(pos, *optionalColumnType, ctx))
                         .Build()
                     .Done());
         }

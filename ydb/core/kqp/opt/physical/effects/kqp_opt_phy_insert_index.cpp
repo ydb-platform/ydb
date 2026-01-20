@@ -36,11 +36,14 @@ TExprBase MakeInsertIndexRows(const NYql::NNodes::TExprBase& inputRows, const TK
             rowTuples.emplace_back(tuple);
         } else {
             auto columnType = table.GetColumnType(TString(column));
+            const auto* optionalColumnType = columnType->IsOptionalOrNull()
+                ? columnType
+                : ctx.MakeType<TOptionalExprType>(columnType);
 
             auto tuple = Build<TCoNameValueTuple>(ctx, pos)
                 .Name(columnAtom)
                 .Value<TCoNothing>()
-                    .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
+                    .OptionalType(NCommon::BuildTypeExpr(pos, *optionalColumnType, ctx))
                     .Build()
                 .Done();
 

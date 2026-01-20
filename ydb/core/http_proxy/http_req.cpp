@@ -1209,15 +1209,16 @@ namespace NKikimr::NHttpProxy {
                                  {"code", ToString(httpStatusCode)},
                                  {"name", "api.sqs.response.count"},
                              })});
-                ReplyToHttpContext(ctx);
+                ReplyToHttpContext(ctx, errorText.size());
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
                 TBase::Die(ctx);
             }
 
-            void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
+            void ReplyToHttpContext(const TActorContext& ctx, size_t messageSize = 0, std::optional<size_t> issueCode = std::nullopt) {
                 ReportLatencyCounters(ctx);
+                ReportResponseSizeCounters(TStringBuilder() << HttpContext.ResponseData.YmqHttpCode, messageSize, ctx);
                 LogHttpRequestResponse(ctx);
 
                 if (issueCode.has_value()) {
@@ -1255,6 +1256,16 @@ namespace NKikimr::NHttpProxy {
                         });
             }
 
+            void ReportResponseSizeCounters(const TString& code, size_t value, const TActorContext& ctx) {
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvCounter{static_cast<i64>(value), true, true,
+                            AddCommonLabels({
+                                {"code", code},
+                                {"name", "api.sqs.response.bytes"}
+                            })
+                        });
+            }
+
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
                                     const TActorContext& ctx) {
                 if (ev->Get()->Status->IsSuccess()) {
@@ -1268,7 +1279,7 @@ namespace NKikimr::NHttpProxy {
                                  AddCommonLabels({
                                      {"code", "200"},
                                      {"name", "api.sqs.response.count"}})});
-                    ReplyToHttpContext(ctx);
+                    ReplyToHttpContext(ctx, ev->Get()->Message->ByteSizeLong());
                 } else {
                     auto retryClass =
                         NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());

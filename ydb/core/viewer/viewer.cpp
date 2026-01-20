@@ -196,11 +196,15 @@ public:
                 return true;
             }
         }
+        const auto& adminAllowedSIDs = AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs();
+        if (adminAllowedSIDs.empty()) {
+            return true;
+        }
         if (request->UserToken.empty()) {
             return false;
         }
         auto token = std::make_unique<NACLib::TUserToken>(request->UserToken);
-        for (const auto& allowedSID : KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetAdministrationAllowedSIDs()) {
+        for (const auto& allowedSID : adminAllowedSIDs) {
             if (token->IsExist(allowedSID)) {
                 return true;
             }

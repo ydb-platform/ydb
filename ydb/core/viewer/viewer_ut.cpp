@@ -1964,4 +1964,90 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_EQUAL_C(rows.size(), ROWS_LIMIT, response);
     }
 
+    void ChangeControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev) {
+        auto& pbRecord = (*ev)->Get()->Record;
+        auto* response = pbRecord.MutableResponse();
+        response->SetSuccess(false);
+        response->AddGroupsGetDegraded(1);
+        response->SetErrorDescription("bad");
+        auto* status = response->AddStatus();
+        status->add_groupid(1);
+        auto* baseConfig = status->mutable_baseconfig();
+        auto* group = baseConfig->AddGroup();
+        group->SetGroupId(1);
+        group->SetGroupGeneration(1);
+        group->SetErasureSpecies("block-4-2");
+        group->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::DEGRADED);
+        group->SetBoxId(1);
+        group->SetStoragePoolId(1);
+        auto* vslotId = group->AddVSlotId();
+        vslotId->set_nodeid(1);
+        vslotId->set_pdiskid(1);
+        vslotId->set_vslotid(1);
+    }
+
+    Y_UNIT_TEST(VDiskEvictForceRetryPossible) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+        auto settings = TServerSettings(port)
+            .SetNodeCount(1)
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetUseSectorMap(true)
+            .SetMonitoringPortOffset(monPort, true)
+            .InitKikimrRunConfig();
+        auto& securityConfig = *settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        securityConfig.SetEnforceUserTokenRequirement(true);
+        securityConfig.SetEnforceUserTokenCheckRequirement(true);
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvControllerConfigResponse: {
+                    auto* x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
+                    ChangeControllerConfigResponse(x);
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        THttpRequest httpReq(HTTP_METHOD_POST);
+        httpReq.CgiParameters.emplace("group_id", "1");
+        httpReq.CgiParameters.emplace("group_generation_id", "1");
+        httpReq.CgiParameters.emplace("fail_realm_idx", "0");
+        httpReq.CgiParameters.emplace("fail_domain_idx", "0");
+        httpReq.CgiParameters.emplace("vdisk_idx", "0");
+        httpReq.CgiParameters.emplace("timeout", "10000");
+        httpReq.HttpHeaders.AddOrReplaceHeader("Authorization", "Bearer test_ydb_token");
+        auto page = MakeHolder<TMonPage>("vdisk", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/evict", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
+
+        size_t pos = result->Answer.find('{');
+        UNIT_ASSERT(pos != TString::npos);
+
+        TString jsonResult = result->Answer.substr(pos);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(jsonResult, &json, true);
+
+        UNIT_ASSERT(json.GetMap().contains("error"));
+        UNIT_ASSERT(json.GetMap().contains("forceRetryPossible"));
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("forceRetryPossible").GetBoolean(), true);
+        UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("result").GetBoolean(), false);
+    }
+
 }

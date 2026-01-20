@@ -522,6 +522,8 @@ public:
     //! Atomically invokes |Set|, if not already set or canceled.
     //! Returns |true| if succeeded, |false| is the promise was already set or canceled.
     bool TrySet(const TErrorOr<T>& value) const;
+    //! Same as above but takes #value by r-value reference.
+    //! If the promise is already set and |false| is returned, then #value is not affected.
     bool TrySet(TErrorOr<T>&& value) const;
 
     //! Similar to #SetFrom but calls #TrySet instead of #Set.

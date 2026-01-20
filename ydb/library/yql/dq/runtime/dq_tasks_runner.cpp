@@ -1136,6 +1136,7 @@ private:
                         NDqProto::TWatermark watermarkRequest;
                         watermarkRequest.SetTimestampUs(watermark->MicroSeconds());
                         AllocatedHolder->Output->Consume(std::move(watermarkRequest));
+                        dataConsumed = true;
                     }
                     if (LangVer >= MakeLangVersion(2025, 4)) {
                         AllocatedHolder->CheckForNotConsumedLinear();

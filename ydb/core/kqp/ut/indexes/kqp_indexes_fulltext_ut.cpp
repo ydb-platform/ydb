@@ -16,15 +16,15 @@ TKikimrRunner Kikimr() {
     return TKikimrRunner(settings);
 }
 
-void CreateTexts(NQuery::TQueryClient& db) {
-    TString query = R"sql(
+void CreateTexts(NQuery::TQueryClient& db, const bool utf8 = false) {
+    TString query = std::format(R"sql(
         CREATE TABLE `/Root/Texts` (
             Key Uint64,
-            Text String,
-            Data String,
+            Text {0},
+            Data {0},
             PRIMARY KEY (Key)
         );
-    )sql";
+    )sql", utf8 ? "Utf8" : "String");
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -4183,95 +4183,66 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
     }
 }
 
-Y_UNIT_TEST(SelectWithFulltextFlatRelevanceAndNgramShortQuery) {
+Y_UNIT_TEST_QUAD(SelectWithFulltextContainsShorterThanMinNgram, RELEVANCE, UTF8) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
 
     NYdb::NQuery::TExecuteQuerySettings querySettings;
     querySettings.ClientTimeout(TDuration::Minutes(1));
 
-    CreateTexts(db);
+    CreateTexts(db, UTF8);
     UpsertTexts(db);
 
     {
-        const TString query = R"sql(
+        const TString query = std::format(R"sql(
             ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
                 GLOBAL USING fulltext
                 ON (Text)
                 WITH (
-                    layout=flat_relevance,
-                    tokenizer=whitespace,
-                    use_filter_lowercase=true,
-                    use_filter_ngram=true,
-                    filter_ngram_min_length=3,
-                    filter_ngram_max_length=3
-                );
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    }
-
-    {
-        const TString query = R"sql(
-            SELECT *
-            FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::Contains(`Text`, "at")
-            LIMIT 100;
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-    }
-
-    {
-        const TString query = R"sql(
-            SELECT *
-            FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::Contains(`Text`, "*at*")
-            LIMIT 100;
-        )sql";
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-    }
-}
-
-Y_UNIT_TEST(SelectWithFulltextContains_FlatRelevance_Ngram_EmptyQuery) {
-    auto kikimr = Kikimr();
-    auto db = kikimr.GetQueryClient();
-
-    CreateTexts(db);
-    UpsertTexts(db);
-
-    {
-        const TString query = R"sql(
-            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
-                GLOBAL USING fulltext
-                ON (Text)
-                WITH (
-                    layout=flat_relevance,
+                    layout={0},
                     tokenizer=standard,
                     use_filter_lowercase=true,
                     use_filter_ngram=true,
                     filter_ngram_min_length=3,
                     filter_ngram_max_length=3
                 );
-        )sql";
+        )sql", RELEVANCE ? "flat_relevance" : "flat");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     {
-        const TString query = R"sql(
+        const TString query = std::format(R"sql(
             SELECT *
             FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FullText::Contains(`Text`, "at")
-            LIMIT 100;
-        )sql";
+            WHERE FullText::Contains{0}(`Text`, "at");
+
+            SELECT *
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains{0}(`Text`, "*at*");
+        )sql", UTF8 ? "Utf8" : "");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+    }
 
+    {
+        const TString query = std::format(R"sql(
+            SELECT *
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains{0}(`Text`, "at")
+            LIMIT 100;
+
+            SELECT *
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains{0}(`Text`, "*at*")
+            LIMIT 100;
+        )sql", UTF8 ? "Utf8" : "");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
     }
 }
 

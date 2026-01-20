@@ -531,14 +531,18 @@ protected:
                         return;
                     }
                 } else {
+                    bool finished = true;
                     for (auto& [channelId, info] : InputChannelsMap) {
                         if (!info.HasPeer) {
                             return;
                         }
-                        if (!info.Channel->IsFinished()) {
+                        finished &= info.Channel->IsFinished();
+                    }
+                    if (!finished) {
+                        for (auto& [channelId, info] : InputChannelsMap) {
                             info.Channel->Finish();
-                            // TBD: wait for confirmation?
                         }
+                        return;
                     }
                 }
                 if ((!Channels || Channels->CheckInFlight("Tasks execution finished")) && AllAsyncOutputsFinished()) {

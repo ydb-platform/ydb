@@ -417,7 +417,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto deadline = TInstant::Now() + TDuration::Seconds(10);
         bool earlyFinished = false;
         while (TInstant::Now() <= deadline) {
-            if (senderBuffer->IsEarlyFinished()) {
+            if (senderBuffer->IsFinished()) {
                 earlyFinished = true;
                 break;
             }

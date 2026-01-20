@@ -115,9 +115,9 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
 
             auto astOpt = explainResult.GetStats()->GetAst();
             UNIT_ASSERT(astOpt.has_value());
-            Cerr << TString(*astOpt) << Endl;
+            Cout << TString(*astOpt) << Endl;
             TString ast = TString(*astOpt);
-            Cerr << "AST (HashCombine=" << (UseDqHashCombine ? "true" : "false") << ", HashAggregate=" << (UseDqHashAggregate ? "true" : "false") << "): " << ast << Endl;
+            Cout << "AST (HashCombine=" << (UseDqHashCombine ? "true" : "false") << ", HashAggregate=" << (UseDqHashAggregate ? "true" : "false") << "): " << ast << Endl;
 
             int hashCombinesExpected = (UseDqHashCombine ? 1 : 0) + (UseDqHashAggregate ? 1 : 0);
             UNIT_ASSERT_C(hashCombinesExpected == CountDqCombines(ast),
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
         UNIT_ASSERT(astOpt.has_value());
 
         TString ast = TString(*astOpt);
-        Cerr << "AST: " << ast << Endl;
+        Cout << "AST: " << ast << Endl;
 
         UNIT_ASSERT(CountDqCombines(ast) == 2);
 

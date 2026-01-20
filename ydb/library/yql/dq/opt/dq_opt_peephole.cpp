@@ -1053,78 +1053,65 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
         return ctx.DeepCopyLambda(prev.Ref());
     };
 
-    struct InputKind {
-        bool UnknownKind = true;
-        bool IsBlock = false;
-        bool IsFlow = false;
-    };
+    bool inputIsFlow = false;
+    bool outputIsFlow = false;
 
-    auto detectTypeKind = [&](const TTypeAnnotationNode* inputType) -> InputKind {
-        const TTypeAnnotationNode* multiType = nullptr;
-        bool sourceIsBlock = false;
-        bool sourceIsFlow = false;
-
+    auto detectIsFlow = [&](const TTypeAnnotationNode* inputType) -> std::optional<bool> {
         if (inputType->GetKind() == ETypeAnnotationKind::Stream) {
-            auto streamType = inputType->Cast<TStreamExprType>();
-            multiType = streamType->GetItemType();
+            return false;
         } else if (inputType->GetKind() == ETypeAnnotationKind::Flow) {
-            sourceIsFlow = true;
-            auto flowType = inputType->Cast<TFlowExprType>();
-            multiType = flowType->GetItemType();
+            return true;
         } else {
-            return InputKind{};
+            return {};
         }
-
-        if (multiType && multiType->GetKind() == ETypeAnnotationKind::Multi) {
-            auto itemTypes = multiType->Cast<TMultiExprType>()->GetItems();
-            if (!itemTypes.empty() && (itemTypes[0]->GetKind() == ETypeAnnotationKind::Block || itemTypes[0]->GetKind() == ETypeAnnotationKind::Scalar)) {
-                sourceIsBlock = true;
-            }
-        }
-
-        return InputKind{
-            .UnknownKind = false,
-            .IsBlock = sourceIsBlock,
-            .IsFlow = sourceIsFlow
-        };
     };
+
+    bool simpleReplace = !useBlocks;
 
     auto input = wideCombiner.Input().Ptr();
-
-    for (;;) {
-        if (input->IsCallable()) {
-            auto callableName = input->Content();
-            if (callableName == "ToFlow"sv || callableName == "FromFlow"sv
-                || callableName == "WideFromBlocks"sv || callableName == "WideToBlocks"sv)
-            {
-                input = input->ChildPtr(0);
-                continue;
-            }
-        }
-        break;
+    auto inputKind = detectIsFlow(input->GetTypeAnn());
+    auto outputKind = detectIsFlow(node.Ptr()->GetTypeAnn());
+    if (!inputKind.has_value() || !outputKind.has_value()) {
+        simpleReplace = true;
+    } else {
+        inputIsFlow = *inputKind;
+        outputIsFlow = *outputKind;
     }
 
-    auto inputTypeKind = detectTypeKind(input->GetTypeAnn());
-    auto outputTypeKind = detectTypeKind(node.Ptr()->GetTypeAnn());
+    bool inputIsBlocks = false;
 
-    if (!useBlocks || inputTypeKind.UnknownKind || outputTypeKind.UnknownKind) {
-        auto inputFromFlow = NNodes::TExprBase(ctx.Builder(node.Pos()).Callable("FromFlow").Add(0, wideCombiner.Input().Ptr()).Seal().Build());
-        auto dqPhyCombine = Build<TDqPhyHashCombine>(ctx, node.Pos())
-            .Input(inputFromFlow)
+    if (!simpleReplace) {
+        while (input->IsCallable()) {
+            auto callableName = input->Content();
+            if (!(callableName == "ToFlow"sv || callableName == "FromFlow"sv
+                || callableName == "WideFromBlocks"sv || callableName == "WideToBlocks"sv))
+            {
+                break;
+            }
+            auto next = input->ChildPtr(0);
+            auto nextKind = detectIsFlow(next->GetTypeAnn());
+            if (!nextKind.has_value()) {
+                break;
+            }
+            inputIsFlow = *nextKind;
+            if (callableName == "WideFromBlocks"sv) {
+                inputIsBlocks = true;
+            } else if (callableName == "WideToBlocks"sv) {
+                inputIsBlocks = false;
+            }
+            input = next;
+        }
+    }
+
+    if (simpleReplace) {
+        return Build<TDqPhyHashCombine>(ctx, node.Pos())
+            .Input(wideCombiner.Input())
             .MemLimit(wideCombiner.MemLimit())
             .KeyExtractor(copyLambda(wideCombiner.KeyExtractor()))
             .InitHandler(copyLambda(wideCombiner.InitHandler()))
             .UpdateHandler(copyLambda(wideCombiner.UpdateHandler()))
             .FinishHandler(copyLambda(wideCombiner.FinishHandler()))
         .Done();
-
-        return NNodes::TExprBase(
-            ctx.Builder(node.Pos())
-                .Callable("ToFlow")
-                    .Add(0, dqPhyCombine.Ptr())
-                .Seal()
-                .Build()
-        );
     }
 
     auto wrappedInput = NNodes::TExprBase(input);
@@ -1140,8 +1127,8 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
 
     auto dqPhyCombinePtr = dqPhyCombine.Ptr();
 
-    if (inputTypeKind.IsBlock && !outputTypeKind.IsBlock) {
-        if (inputTypeKind.IsFlow) {
+    if (inputIsBlocks) {
+        if (inputIsFlow) {
             dqPhyCombinePtr = ctx.Builder(node.Pos())
                 .Callable("WideFromBlocks")
                     .Callable(0, "FromFlow")
@@ -1149,7 +1136,7 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
                     .Seal()
                 .Seal()
                 .Build();
-            inputTypeKind.IsFlow = false;
+            inputIsFlow = false;
         } else {
             dqPhyCombinePtr = ctx.Builder(node.Pos())
                 .Callable("WideFromBlocks")
@@ -1159,13 +1146,13 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
         }
     }
 
-    if (inputTypeKind.IsFlow && !outputTypeKind.IsFlow) {
+    if (inputIsFlow && !outputIsFlow) {
         dqPhyCombinePtr = ctx.Builder(node.Pos())
          .Callable("FromFlow")
          .Add(0, dqPhyCombinePtr)
          .Seal()
          .Build();
-    } else if (!inputTypeKind.IsFlow && outputTypeKind.IsFlow) {
+    } else if (!inputIsFlow && outputIsFlow) {
         dqPhyCombinePtr = ctx.Builder(node.Pos())
          .Callable("ToFlow")
          .Add(0, dqPhyCombinePtr)

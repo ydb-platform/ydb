@@ -1,5 +1,5 @@
 * Added download progress bar to the `ydb update` command.
-* Improved progress bars: consistent MiB/GiB units, stable speed display, dual progress bar for `ydb import file` showing both in-progress and confirmed bytes.
+* Improved progress bars: consistent MiB/GiB units, stable speed display, dual progress bar for the `ydb import file` command showing both in-progress and confirmed bytes.
 * Interactive mode enhancements:
   * Introduced `/help` for interactive command guidance.
   * Introduced the `/config` command, providing an interactive dialog to view and customize CLI settings, including:

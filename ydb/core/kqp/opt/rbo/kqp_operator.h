@@ -110,11 +110,6 @@ struct TOrderEnforcer {
 };
 
 /**
- * Build key selector for sort and merge operations from the enforcer
- */
-std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> BuildSortKeySelector(const TVector<TSortElement>& sortElements, TExprContext &ctx, TPositionHandle pos);
-
-/**
  * Per-operator physical plan properties
  * TODO: Make this more generic and extendable
  */

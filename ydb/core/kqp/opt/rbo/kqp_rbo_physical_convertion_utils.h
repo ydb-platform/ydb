@@ -8,8 +8,17 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 namespace NKikimr::NKqp::NPhysicalConvertionUtils {
+
 TString GetFullName(const TString& name);
 TString GetFullName(const TInfoUnit& name);
+
+TExprNode::TPtr BuildMultiConsumerHandler(TExprNode::TPtr input, const ui32 numConsumers, TExprContext& ctx, TPositionHandle pos);
+bool IsMultiConsumerHandlerNeeded(const std::shared_ptr<IOperator>& op);
+
+TCoAtomList BuildAtomList(TStringBuf value, TPositionHandle pos, TExprContext& ctx);
+
+TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx, bool removeAliases = false);
+TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector<TInfoUnit> members);
 
 template <typename T>
 TExprNode::TPtr BuildExpandMapForNarrowInput(TExprNode::TPtr input, const TVector<T>& inputs, TExprContext& ctx) {

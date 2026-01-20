@@ -2,6 +2,7 @@
 #include "kqp_rbo_physical_convertion_utils.h"
 #include "kqp_rbo_physical_sort_builder.h"
 #include "kqp_rbo_physical_aggregation_builder.h"
+#include "kqp_rbo_physical_join_builder.h"
 
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -15,135 +16,6 @@ using namespace NYql::NNodes;
 namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
-
-TString GetValidJoinKind(const TString& joinKind) {
-    const auto joinKindLowered = to_lower(joinKind);
-    if (joinKindLowered == "left") {
-        return "Left";
-    } else if (joinKindLowered == "inner") {
-        return "Inner";
-    } else if (joinKindLowered == "cross") {
-        return "Cross";
-    }
-    return joinKind;
-}
-
-TExprNode::TPtr BuildMultiConsumerHandler(TExprNode::TPtr input, const ui32 numConsumers, TExprContext& ctx, TPositionHandle pos) {
-    TVector<TExprBase> branches;
-    auto inputIndex = NDq::BuildAtomList("0", pos, ctx);
-    for (ui32 i = 0; i < numConsumers; ++i) {
-        branches.emplace_back(inputIndex);
-        // Just an empty lambda.
-        // clang-format off
-        auto lambda = Build<TCoLambda>(ctx, pos)
-            .Args({"arg"})
-            .Body("arg")
-        .Done();
-        // clang-format on
-        branches.push_back(lambda);
-    }
-
-    // clang-format off
-    return Build<TCoSwitch>(ctx, pos)
-        .Input(input)
-        .BufferBytes()
-            .Value(ToString(128_MB))
-        .Build()
-        .FreeArgs()
-            .Add(branches)
-        .Build()
-     .Done().Ptr();
-     // clang-format on
-}
-
-TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx, bool removeAliases = false) {
-    // FIXME: This is not always correct, for example:
-    // lambda($arg) { $val = expr($arg); return member($val `name)}
-    // will replace only member arg but leave expr with free arg.
-    if (input->IsCallable("Member")) {
-        auto member = TCoMember(input);
-        auto memberName = member.Name();
-        if (removeAliases) {
-            auto strippedName = memberName.StringValue();
-            if (auto idx = strippedName.find_last_of('.'); idx != TString::npos) {
-                strippedName = strippedName.substr(idx + 1);
-            }
-            // clang-format off
-            memberName = Build<TCoAtom>(ctx, input->Pos()).Value(strippedName).Done();
-            // clang-format on
-        }
-        // clang-format off
-            return Build<TCoMember>(ctx, input->Pos())
-                .Struct(arg)
-                .Name(memberName)
-            .Done().Ptr();
-        // clang-format on
-    } else if (input->IsCallable()) {
-        TVector<TExprNode::TPtr> newChildren;
-        for (auto c : input->Children()) {
-            newChildren.push_back(ReplaceArg(c, arg, ctx, removeAliases));
-        }
-        // clang-format off
-            return ctx.Builder(input->Pos())
-                .Callable(input->Content())
-                    .Add(std::move(newChildren))
-                    .Seal()
-                .Build();
-        // clang-format on
-    } else if (input->IsList()) {
-        TVector<TExprNode::TPtr> newChildren;
-        for (auto c : input->Children()) {
-            newChildren.push_back(ReplaceArg(c, arg, ctx, removeAliases));
-        }
-        // clang-format off
-            return ctx.Builder(input->Pos())
-                .List()
-                    .Add(std::move(newChildren))
-                    .Seal()
-                .Build();
-        // clang-format on
-    } else {
-        return input;
-    }
-}
-
-[[maybe_unused]]
-TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector<TInfoUnit> members) {
-    TVector<TExprBase> items;
-    // clang-format off
-    auto arg = Build<TCoArgument>(ctx, input->Pos())
-        .Name("arg")
-    .Done().Ptr();
-    // clang-format on
-
-    for (const auto& iu : members) {
-        auto name = iu.GetFullName();
-        // clang-format off
-            auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
-                .Name().Build(name)
-                .Value<TCoMember>()
-                    .Struct(arg)
-                    .Name().Build(name)
-                .Build()
-            .Done();
-        // clang-format on
-        items.push_back(tuple);
-    }
-
-    // clang-format off
-    return Build<TCoFlatMap>(ctx, input->Pos())
-        .Input(input)
-        .Lambda<TCoLambda>()
-            .Args({arg})
-            .Body<TCoJust>()
-                .Input<TCoAsStruct>()
-                    .Add(items)
-                .Build()
-            .Build()
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-}
 
 bool CanApplyPeepHole(TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) {
     auto blackList = [&](const TExprNode::TPtr& node) -> bool {
@@ -237,268 +109,6 @@ TExprNode::TPtr BuildDqPhyStage(const TVector<TExprNode::TPtr>& inputs, const TV
         .Build()
         .Settings().Build()
     .Done().Ptr();
-    // clang-format on
-}
-
-bool IsMultiConsumerHandlerNeeded(const std::shared_ptr<IOperator>& op) {
-    return op->Props.NumOfConsumers.has_value() && op->Props.NumOfConsumers.value() > 1;
-}
-
-TExprNode::TPtr BuildCrossJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TExprContext &ctx,
-                               TPositionHandle pos) {
-
-    TCoArgument leftArg{ctx.NewArgument(pos, "_kqp_left")};
-    TCoArgument rightArg{ctx.NewArgument(pos, "_kqp_right")};
-
-    TVector<TExprNode::TPtr> keys;
-    for (const auto& iu : join.GetLeftInput()->GetOutputIUs()) {
-        YQL_CLOG(TRACE, CoreDq) << "Converting Cross Join, left key: " << iu.GetFullName();
-
-        // clang-format off
-        auto keyPtr = Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(iu.GetFullName())
-            .Value<TCoMember>()
-                .Struct(leftArg)
-                .Name().Build(iu.GetFullName())
-            .Build()
-            .Done().Ptr();
-        // clang-format on
-        keys.push_back(keyPtr);
-    }
-
-    for (const auto& iu : join.GetRightInput()->GetOutputIUs()) {
-        YQL_CLOG(TRACE, CoreDq) << "Converting Cross Join, right key: " << iu.GetFullName();
-
-        // clang-format off
-        auto keyPtr = Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(iu.GetFullName())
-            .Value<TCoMember>()
-                .Struct(rightArg)
-                .Name().Build(iu.GetFullName())
-            .Build()
-            .Done().Ptr();
-        // clang-format on
-        keys.push_back(keyPtr);
-    }
-
-    // clang-format off
-    // We have to `Condense` right input as single-element stream of lists (single list of all elements from the right),
-    // because stream supports single iteration only
-    auto itemArg = Build<TCoArgument>(ctx, pos).Name("item").Done();
-    auto rightAsStreamOfLists = Build<TCoCondense1>(ctx, pos)
-        .Input<TCoToFlow>()
-            .Input(rightInput)
-            .Build()
-        .InitHandler()
-            .Args({itemArg})
-            .Body<TCoAsList>()
-                .Add(itemArg)
-                .Build()
-            .Build()
-        .SwitchHandler()
-            .Args({"item", "state"})
-            .Body<TCoBool>()
-                .Literal().Build("false")
-                .Build()
-            .Build()
-        .UpdateHandler()
-            .Args({"item", "state"})
-            .Body<TCoAppend>()
-                .List("state")
-                .Item("item")
-            .Build()
-        .Build()
-    .Done();
-
-    auto flatMap = Build<TCoFlatMap>(ctx, pos)
-        .Input(rightAsStreamOfLists)
-        .Lambda()
-            .Args({"rightAsList"})
-            .Body<TCoFlatMap>()
-                .Input(leftInput)
-                .Lambda()
-                    .Args({leftArg})
-                    .Body<TCoMap>()
-                        // here we have `List`, so we can iterate over it many times (for every `leftArg`)
-                        .Input("rightAsList")
-                        .Lambda()
-                            .Args({rightArg})
-                            .Body<TCoAsStruct>()
-                                .Add(keys)
-                            .Build()
-                        .Build()
-                    .Build()
-                .Build()
-            .Build()
-        .Build()
-    .Done().Ptr();
-
-    return Build<TCoFromFlow>(ctx, pos)
-        .Input(flatMap)
-    .Done().Ptr();
-    // clang-format on
-}
-
-TExprNode::TPtr BuildGraceJoinCore(TOpJoin &join, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TExprContext &ctx,
-                                   TPositionHandle pos) {
-    TVector<TCoAtom> leftColumnIdxs;
-    TVector<TCoAtom> rightColumnIdxs;
-    TVector<TCoAtom> leftRenames, rightRenames;
-    TVector<TCoAtom> leftKeyColumnNames;
-    TVector<TCoAtom> rightKeyColumnNames;
-
-    auto leftIUs = join.GetLeftInput()->GetOutputIUs();
-    auto rightIUs = join.GetRightInput()->GetOutputIUs();
-    const bool leftSideOnly = (join.JoinKind == "LeftSemi" || join.JoinKind == "LeftOnly");
-
-    if (leftSideOnly) {
-        rightIUs.clear();
-        for (const auto &[left, right] : join.JoinKeys) {
-            rightIUs.push_back(right);
-        }
-    }
-
-    const auto leftTupleSize = leftIUs.size();
-    for (size_t i = 0; i < leftIUs.size(); i++) {
-        leftRenames.push_back(Build<TCoAtom>(ctx, pos).Value(i).Done());
-        leftRenames.push_back(Build<TCoAtom>(ctx, pos).Value(i).Done());
-    }
-
-    for (size_t i = 0; i < rightIUs.size(); i++) {
-        rightRenames.push_back(Build<TCoAtom>(ctx, pos).Value(i).Done());
-        rightRenames.push_back(Build<TCoAtom>(ctx, pos).Value(i + leftTupleSize).Done());
-    }
-
-    for (const auto& k : join.JoinKeys) {
-        auto leftIdx = std::distance(leftIUs.begin(), std::find(leftIUs.begin(), leftIUs.end(), k.first));
-        auto rightIdx = std::distance(rightIUs.begin(), std::find(rightIUs.begin(), rightIUs.end(), k.second));
-
-        leftColumnIdxs.push_back(Build<TCoAtom>(ctx, pos).Value(leftIdx).Done());
-        rightColumnIdxs.push_back(Build<TCoAtom>(ctx, pos).Value(rightIdx).Done());
-
-        leftKeyColumnNames.push_back(Build<TCoAtom>(ctx, pos).Value(k.first.GetFullName()).Done());
-        rightKeyColumnNames.push_back(Build<TCoAtom>(ctx, pos).Value(k.second.GetFullName()).Done());
-    }
-
-    // Convert to wide flow
-    // clang-format off
-    leftInput = Build<TCoToFlow>(ctx, pos)
-        .Input(leftInput)
-    .Done().Ptr();
-    // clang-forat on
-
-    leftInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(leftInput, join.GetLeftInput()->GetOutputIUs(), ctx);
-
-    // clang-format off
-    rightInput = Build<TCoToFlow>(ctx, pos)
-        .Input(rightInput)
-    .Done().Ptr();
-    // clang-format on
-
-    rightInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(rightInput, rightIUs, ctx);
-
-    // clang-format off
-    auto graceJoin = Build<TCoGraceJoinCore>(ctx, pos)
-        .LeftInput(leftInput)
-        .RightInput(rightInput)
-        .JoinKind<TCoAtom>()
-            .Value(GetValidJoinKind(join.JoinKind))
-        .Build()
-        .LeftKeysColumns<TCoAtomList>()
-            .Add(leftColumnIdxs)
-        .Build()
-        .RightKeysColumns<TCoAtomList>()
-            .Add(rightColumnIdxs)
-        .Build()
-        .LeftRenames()
-            .Add(leftRenames)
-        .Build()
-        .RightRenames()
-            .Add(rightRenames)
-        .Build()
-        .LeftKeysColumnNames<TCoAtomList>()
-            .Add(leftKeyColumnNames)
-        .Build()
-        .RightKeysColumnNames<TCoAtomList>()
-            .Add(rightKeyColumnNames)
-        .Build()
-        .Flags().Build()
-    .Done().Ptr();
-
-    // Convert back to narrow stream
-    return Build<TCoFromFlow>(ctx, pos)
-        .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(graceJoin, join.GetOutputIUs(), ctx))
-    .Done().Ptr();
-    // clang-format on
-}
-
-[[maybe_unused]]
-TExprNode::TPtr BuildDqGraceJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TExprContext &ctx,
-                                 TPositionHandle pos) {
-    TVector<TDqJoinKeyTuple> joinKeys;
-    TVector<TCoAtom> leftKeyColumnNames;
-    TVector<TCoAtom> rightKeyColumnNames;
-
-    for (const auto &p : join.JoinKeys) {
-        TString leftFullName = p.first.GetFullName();
-        TString rightFullName = p.second.GetFullName();
-
-        // clang-format off
-        joinKeys.push_back(Build<TDqJoinKeyTuple>(ctx, pos)
-            .LeftLabel().Value(p.first.GetAlias()).Build()
-            .LeftColumn().Value(p.first.GetColumnName()).Build()
-            .RightLabel().Value(p.second.GetAlias()).Build()
-            .RightColumn().Value(p.second.GetColumnName()).Build()
-        .Done());
-
-        leftKeyColumnNames.push_back(Build<TCoAtom>(ctx, pos).Value(leftFullName).Done());
-        rightKeyColumnNames.push_back(Build<TCoAtom>(ctx, pos).Value(rightFullName).Done());
-        // clang-format on
-    }
-
-    // clang-format off
-    return Build<TDqPhyGraceJoin>(ctx, pos)
-        .LeftInput(leftInput)
-        .LeftLabel<TCoVoid>().Build()
-        .RightInput(rightInput)
-        .RightLabel<TCoVoid>().Build()
-        .JoinType<TCoAtom>()
-            .Value("Inner")
-        .Build()
-        .JoinKeys<TDqJoinKeyTupleList>()
-            .Add(joinKeys)
-        .Build()
-        .LeftJoinKeyNames<TCoAtomList>()
-            .Add(leftKeyColumnNames)
-        .Build()
-        .RightJoinKeyNames<TCoAtomList>()
-            .Add(rightKeyColumnNames)
-        .Build()
-    .Done().Ptr();
-     // clang-format on
-}
-
-[[maybe_unused]]
-TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer& enforcer, TExprContext &ctx, TPositionHandle pos) {
-    if (enforcer.Action != EOrderEnforcerAction::REQUIRE) {
-        return input;
-    }
-
-    auto [selector, dirs] = BuildSortKeySelector(enforcer.SortElements, ctx, pos);
-
-    TExprNode::TPtr dirList;
-    if (dirs.size() == 1) {
-        dirList = dirs[0];
-    } else {
-        dirList = Build<TExprList>(ctx, pos).Add(dirs).Done().Ptr();
-    }
-
-    // clang-format off
-    return Build<TCoSort>(ctx, pos)
-        .Input(input)
-        .SortDirections(dirList)
-        .KeySelectorLambda(selector)
-        .Done().Ptr();
     // clang-format on
 }
 
@@ -749,8 +359,9 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                     .Done().Ptr();
                     // clang-format on
 
-                    if (IsMultiConsumerHandlerNeeded(op)) {
-                        currentStageBody = BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);
+                    if (NPhysicalConvertionUtils::IsMultiConsumerHandlerNeeded(op)) {
+                        currentStageBody =
+                            NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);
                     }
                     break;
                 }
@@ -847,7 +458,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                     .Done();
                     // clang-format on
 
-                    tuple = TCoNameValueTuple(ReplaceArg(tuple.Ptr(), arg, ctx));
+                    tuple = TCoNameValueTuple(NPhysicalConvertionUtils::ReplaceArg(tuple.Ptr(), arg, ctx));
                     items.push_back(tuple);
                 }
             }
@@ -891,8 +502,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
             currentStageBody = isOrdered ? BuildMap<TCoOrderedMap>(currentStageBody, arg, std::move(items), ctx, op->Pos)
                                          : BuildMap<TCoMap>(currentStageBody, arg, std::move(items), ctx, op->Pos);
 
-            if (IsMultiConsumerHandlerNeeded(op)) {
-                currentStageBody = BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);
+            if (NPhysicalConvertionUtils::IsMultiConsumerHandlerNeeded(op)) {
+                currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);
             }
 
             stages[opStageId] = currentStageBody;
@@ -935,19 +546,11 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
 
             auto [leftArg, leftInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *join->GetLeftInput()->Props.StageId);
             stageArgs[opStageId].push_back(leftArg);
-            auto [rightArg, rightInput] =
-                graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *join->GetRightInput()->Props.StageId);
+            auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *join->GetRightInput()->Props.StageId);
             stageArgs[opStageId].push_back(rightArg);
-            if (join->JoinKind == "Cross") {
-                currentStageBody = BuildCrossJoin(*join, leftInput, rightInput, ctx, op->Pos);
-            } else if (const auto joinKind = to_lower(join->JoinKind); (joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi")) {
-                currentStageBody = BuildGraceJoinCore(*join, leftInput, rightInput, ctx, op->Pos);
-            } else {
-                TStringBuilder builder;
-                builder << "Unsupported join kind " << join->JoinKind;
-                Y_ENSURE(false, builder.c_str());
-            }
 
+            TPhysicalJoinBuilder joinBuilder(join, ctx, op->Pos);
+            currentStageBody = joinBuilder.BuildPhysicalJoin(leftInput, rightInput);
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Join " << opStageId;
@@ -984,12 +587,12 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
         } else if (op->Kind == EOperator::Aggregate) {
             auto aggregate = CastOperator<TOpAggregate>(op);
 
-            auto [stageArg, stageInput] =
-                graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *aggregate->GetInput()->Props.StageId);
+            auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *aggregate->GetInput()->Props.StageId);
             stageArgs[opStageId].push_back(stageArg);
 
             TPhysicalAggregationBuilder aggregationBuilder(aggregate, ctx, op->Pos);
-            stages[opStageId] = aggregationBuilder.BuildPhysicalAggregation(stageInput);
+            currentStageBody = aggregationBuilder.BuildPhysicalAggregation(stageInput);
+            stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
         } else {
             Y_ENSURE(false, "Could not generate physical plan");

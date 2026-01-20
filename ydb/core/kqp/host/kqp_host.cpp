@@ -1028,10 +1028,6 @@ private:
             }
         }
 
-        if (!SessionCtx->Config().FeatureFlags.GetEnableImplicitScanQueryInScripts()) {
-            return false;
-        }
-
         bool hasIndexReads = false;
         bool hasJoins = false;
         VisitExpr(queryBlock.Results().Ptr(), [&hasIndexReads, &hasJoins] (const TExprNode::TPtr& exprNode) {

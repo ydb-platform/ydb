@@ -254,12 +254,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST_FLAG(CreateDrop, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
-<<<<<<< HEAD
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
-
-=======
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
->>>>>>> 99c32ecdcb8 (Fix large SchemeShard tests failed due to sys views creation (#32348))
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard)
+                             .EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
             t.Runtime->SetScheduledLimit(400);
 
@@ -296,12 +292,8 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
 
     Y_UNIT_TEST_FLAG(CreateDropAbort, PQConfigTransactionsAtSchemeShard) {
         TTestWithReboots t;
-<<<<<<< HEAD
-        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard);
-
-=======
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
->>>>>>> 99c32ecdcb8 (Fix large SchemeShard tests failed due to sys views creation (#32348))
+        t.GetTestEnvOptions().EnablePQConfigTransactionsAtSchemeShard(PQConfigTransactionsAtSchemeShard)
+                             .EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& /*activeZone*/) {
             t.Runtime->SetScheduledLimit(400);
 

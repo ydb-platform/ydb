@@ -137,6 +137,7 @@ enum ESimpleCounters : int;
     item(TxCreateTestShardSet, 120) \
     item(TxDropTestShardSet, 121) \
 
+
 // TX_STATE_TYPE_ENUM
 
 #define TX_STATE_DECLARE_ENUM(n, v, ...) n = v,

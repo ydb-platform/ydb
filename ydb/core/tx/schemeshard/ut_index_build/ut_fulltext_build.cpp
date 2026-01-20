@@ -194,4 +194,39 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    Y_UNIT_TEST(DropTableWithFlatRelevance) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::Table::TableIndex index;
+        index.set_name("fulltext_idx");
+        index.add_index_columns("text");
+        auto& fulltext = *index.mutable_global_fulltext_index()->mutable_fulltext_settings();
+        fulltext.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
+        auto& analyzers = *fulltext.add_columns()->mutable_analyzers();
+        fulltext.mutable_columns()->at(0).set_column("text");
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        // Check that the table with index is successfully dropped
+        TestDropTable(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot", "texts");
+        env.TestWaitNotification(runtime, txId);
+    }
+
 }

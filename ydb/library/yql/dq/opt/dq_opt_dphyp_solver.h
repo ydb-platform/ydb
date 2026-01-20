@@ -40,6 +40,7 @@ struct TBestJoin {
  * TDerived is a class which is derived from TDPHypSolverBase. This class contains DPTable and
  * saving the lowest cost plan logic (EmitCsgCmp method).
  *
+ * TODO: this is not true, update docs
  * Also, it has a bool ProcessCycles template parameter, which makes algorithm consider all edges
  * between csg-cmp. It makes dphyp slower, but without it we can miss a condition in case of cycles
  */
@@ -1060,7 +1061,7 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
     // new plan to what's in the dpTable, if it there
 
     Y_ENSURE(DpTable_.contains(s1), "DP Table does not contain S1");
-    Y_ENSURE(DpTable_.contains(s2), "DP Table does not conaint S2");
+    Y_ENSURE(DpTable_.contains(s2), "DP Table does not contain S2");
 
     const auto* leftNodes =  &DpTable_[s1];
     const auto* rightNodes = &DpTable_[s2];

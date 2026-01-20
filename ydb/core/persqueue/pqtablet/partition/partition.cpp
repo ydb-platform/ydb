@@ -2861,6 +2861,8 @@ bool TPartition::HasPendingCommitsOrPendingWrites() const
 
 void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
 {
+    Y_ENSURE(!IsSupportive());
+
     if (!tx.SerializedTx.Defined()) {
         return;
     }
@@ -2873,7 +2875,7 @@ void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
     PQ_ENSURE(tx.SerializedTx->SerializeToString(&value));
 
     auto command = PersistRequest->Record.AddCmdWrite();
-    command->SetKey(GetTxKey(*txId));
+    command->SetKey(GetTxKey(*txId, Partition.OriginalPartitionId));
     command->SetValue(value);
     command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 

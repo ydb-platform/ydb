@@ -582,6 +582,11 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
     };
 
     auto& intervals = spg->GetPortionsIntervals();
+    if (pkRangesFilter.IsEmpty()) {
+        intervals.EachIntersection(NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeLeftInf(),
+                                   NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeRightInf(), collector);
+    }
+
     for (auto& filter : pkRangesFilter) {
         const auto& from = filter.GetPredicateFrom();
         const auto& to = filter.GetPredicateTo();
@@ -606,7 +611,9 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
     bool allOk = true;
     if (out.size() != out2.size()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "!!VLAD TColumnEngineForLogs::Select portions count are not equal")
-            ("out.size()", out.size())("out2.size()", out2.size());
+            ("out.size()", out.size())("out2.size()", out2.size())
+            ("intervals.Size()", intervals.Size())
+            ("spg->GetPortions().size()", spg->GetPortions().size());
         allOk = false;
     }
 

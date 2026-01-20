@@ -67,9 +67,10 @@ namespace NKikimr::NSqsTopic {
         const TString& method,
         TVector<std::pair<TString, TString>>&& labels
     ) {
+        TString fullDatabasePath = databasePath + "/";
         TString adjustedTopicPath;
-        if (topicPath.StartsWith(databasePath)) {
-            adjustedTopicPath = topicPath.substr(databasePath.size());
+        if (topicPath.StartsWith(fullDatabasePath)) {
+            adjustedTopicPath = topicPath.substr(fullDatabasePath.size());
         } else {
             adjustedTopicPath = topicPath;
         }

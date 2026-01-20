@@ -161,18 +161,6 @@ TStatus WaitForQueue(const size_t maxQueueSize, std::vector<TAsyncStatus>& inFli
     return MakeStatus();
 }
 
-TString PrettifyBytes(double bytes) {
-    TString result = ToString(HumanReadableSize(bytes, SF_BYTES));
-    // Insert space before unit suffix (KiB, MiB, GiB, TiB, or B)
-    for (size_t i = 0; i < result.size(); ++i) {
-        char c = result[i];
-        if (c == 'K' || c == 'M' || c == 'G' || c == 'T' || c == 'B') {
-            result.insert(i, " ");
-            break;
-        }
-    }
-    return result;
-}
 
 void InitCsvParser(TCsvParser& parser,
                    bool& removeLastDelimiter,
@@ -822,6 +810,8 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
             ProgressCallbackFunc progressCallback;
             ConfirmProgressCallbackFunc confirmProgressCallback;
 
+            // Per-file counter, captured by value and modified in lambda (mutable).
+            // Safe because UpsertCsv is called synchronously within the same worker thread.
             ui64 lastReportedBytes = 0;
             progressCallback = [&, lastReportedBytes](ui64 current, ui64 /*total*/) mutable {
                 ui64 bytesDiff = current - lastReportedBytes;
@@ -927,8 +917,8 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
     }
     if (duration.SecondsFloat() > 0) {
         std::cerr << "Elapsed: " << FormatDuration(duration) << ". Total read size: "
-            << PrettifyBytes(TotalBytesRead) << ". Average speed: "
-            << PrettifyBytes((double)TotalBytesRead / duration.SecondsFloat())  << "/s." << std::endl;
+            << FormatBytes(TotalBytesRead) << ". Average speed: "
+            << FormatSpeed((double)TotalBytesRead / duration.SecondsFloat()) << "." << std::endl;
     }
 
     // Removing all progress files that were a part of this import
@@ -1262,12 +1252,12 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
 
     while (TString line = splitter.ConsumeLine()) {
         ++batchRows;
+        // +1 for newline character that was stripped by ConsumeLine()
+        batchBytes += line.size() + 1;
+        readBytes += line.size() + 1;
         if (line.empty()) {
             continue;
         }
-        readBytes += line.size();
-        // +1 for newline character that was stripped by ConsumeLine()
-        batchBytes += line.size() + 1;
 
         if (removeLastDelimiter) {
             if (!line.EndsWith(Settings.Delimiter_)) {
@@ -1281,7 +1271,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
 
         if (readBytes >= nextReadBorder && Settings.Verbose_) {
             nextReadBorder += VerboseModeStepSize;
-            Cerr << (TStringBuilder() << "Processed " << PrettifyBytes(readBytes) << " and " << row + batchRows << " records" << Endl);
+            Cerr << (TStringBuilder() << "Processed " << FormatBytes(readBytes) << " and " << row + batchRows << " records" << Endl);
         }
 
         if (batchBytes < Settings.BytesPerRequest_) {
@@ -1332,10 +1322,10 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     if (Settings.Verbose_) {
         std::stringstream str;
         double fileProcessingTimeSeconds = (TInstant::Now() - fileStartTime).SecondsFloat();
-        str << std::endl << "File " << filePath << " of " << PrettifyBytes(readBytes)
+        str << std::endl << "File " << filePath << " of " << FormatBytes(readBytes)
             << (Failed ? " failed in " : " processed in ") << std::setprecision(3) << fileProcessingTimeSeconds << " sec";
         if (fileProcessingTimeSeconds > 0) {
-            str << ", " << PrettifyBytes((double)readBytes / fileProcessingTimeSeconds)  << "/s" << std::endl;
+            str << ", " << FormatSpeed((double)readBytes / fileProcessingTimeSeconds) << std::endl;
         }
         std::cerr << str.str();
     }
@@ -1413,11 +1403,12 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
             TString line;
             TCsvFileReader::TFileChunk& chunk = splitter.GetChunk(threadId);
             while (chunk.ConsumeLine(line)) {
+                // +1 for newline character that was stripped by ConsumeLine()
+                readBytes += line.size() + 1;
+                batchBytes += line.size() + 1;
                 if (line.empty()) {
                     continue;
                 }
-                readBytes += line.size();
-                batchBytes += line.size();
                 if (removeLastDelimiter) {
                     if (!line.EndsWith(Settings.Delimiter_)) {
                         if (!Failed.exchange(true)) {
@@ -1432,7 +1423,7 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
                 ++idx;
                 if (readBytes >= nextBorder && Settings.Verbose_) {
                     nextBorder += VerboseModeStepSize;
-                    Cerr << (TStringBuilder() << "Processed " << PrettifyBytes(readBytes) << " and "
+                    Cerr << (TStringBuilder() << "Processed " << FormatBytes(readBytes) << " and "
                         << idx << " records" << Endl);
                 }
                 if (batchBytes >= Settings.BytesPerRequest_) {
@@ -1460,11 +1451,11 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
             if (Settings.Verbose_) {
                 std::stringstream str;
                 double threadProcessingTimeSeconds = (TInstant::Now() - threadStartTime).SecondsFloat();
-                str << std::endl << "File " << filePath << ", thread " << threadId << " processed " << PrettifyBytes(readBytes) << " and "
+                str << std::endl << "File " << filePath << ", thread " << threadId << " processed " << FormatBytes(readBytes) << " and "
                     << (Failed ? "failed in " : "successfully finished in ") << std::setprecision(3)
                     << threadProcessingTimeSeconds << " sec";
                 if (threadProcessingTimeSeconds > 0) {
-                    str << ", " << PrettifyBytes((double)readBytes / threadProcessingTimeSeconds)  << "/s" << std::endl;
+                    str << ", " << FormatSpeed((double)readBytes / threadProcessingTimeSeconds) << std::endl;
                 }
                 std::cerr << str.str();
             }
@@ -1514,8 +1505,9 @@ TStatus TImportFileClient::TImpl::UpsertJson(IInputStream& input, const TString&
 
     while (size_t size = input.ReadLine(line)) {
         batchLines.push_back(line);
-        batchBytes += size;
-        readBytes += size;
+        // +1 for newline character that was stripped by ReadLine()
+        batchBytes += size + 1;
+        readBytes += size + 1;
 
         if (inputSizeHint && progressCallback) {
             progressCallback(readBytes, *inputSizeHint);

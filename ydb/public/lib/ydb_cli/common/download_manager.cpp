@@ -157,11 +157,7 @@ TDownloadResult DownloadFile(
         // Build host string with scheme for TKeepAliveHttpClient
         TString hostWithScheme = TStringBuilder() << scheme << host;
 
-        TKeepAliveHttpClient client(hostWithScheme, port, socketTimeout, connectTimeout, false);
-        if (isHttps) {
-            // Disable verification for simplicity, as we're downloading from trusted storage
-            client.DisableVerificationForHttps();
-        }
+        TKeepAliveHttpClient client(hostWithScheme, port, socketTimeout, connectTimeout);
 
         // First, do a HEAD request to get Content-Length
         THttpHeaders responseHeaders;

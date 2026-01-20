@@ -22,7 +22,7 @@ inline IOutputStream& operator<<(IOutputStream& out, ESortOrder order) {
     }
 }
 
-inline bool TryFromString(TStringBuf str, ESortOrder& order) {
+inline bool TryParseSortOrderFromString(TStringBuf str, ESortOrder& order) {
     if (str == "Asc") {
         order = ESortOrder::Asc;
         return true;
@@ -37,8 +37,3 @@ inline bool TryFromString(TStringBuf str, ESortOrder& order) {
 }
 
 } // namespace NYql
-
-template <>
-inline bool TryFromStringImpl<NYql::ESortOrder>(const char* data, size_t len, NYql::ESortOrder& result) {
-    return NYql::TryFromString(TStringBuf(data, len), result);
-}

@@ -1144,26 +1144,35 @@ protected:
 
     void ReleaseAggregationsFromArena()
     {
-        if (Map) {
-            if (Map->GetSize() > 0) {
-                if (!Draining) {
-                    DrainArenaIterator = Store->Iterator();
+        if (Map && Map->GetSize() > 0) {
+            // Either not yet spilling or already draining
+            const ui32 keyWidth = KeyTypes.size();
+            if (!Draining) {
+                DrainArenaIterator = Store->Iterator();
+            }
+            while (void* tuple = DrainArenaIterator.Next()) {
+                char* statePtr = static_cast<char*>(tuple) + StatesOffset;
+                for (auto& agg : Aggs) {
+                    agg->ForgetState(statePtr);
+                    statePtr += agg->GetStateSize();
                 }
-                while (void* tuple = DrainArenaIterator.Next()) {
-                    const TUnboxedValuePod* key = static_cast<TUnboxedValuePod*>(tuple);
-                    char* statePtr = static_cast<char*>(tuple) + StatesOffset;
-                    for (auto& agg : Aggs) {
-                        agg->ForgetState(statePtr);
-                        statePtr += agg->GetStateSize();
-                    }
-                    if (HasGenericAggregation) {
-                        auto keyIter = key;
-                        for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
-                            (keyIter++)->UnRef();
-                        }
-                    }
+                TUnboxedValue* key = static_cast<TUnboxedValue*>(tuple);
+                for (ui32 i = 0; i < keyWidth; ++i, ++key) {
+                    key->UnRef();
                 }
             }
+        } else if (!SpillingStack.empty()) {
+            // Release input tuples not yet flushed to disk
+            DrainArenaIterator = Store->Iterator();
+            while (void* tuple = DrainArenaIterator.Next()) {
+                TUnboxedValue* uv = static_cast<TUnboxedValue*>(tuple);
+                for (size_t i = 0; i < InputUnpackedWidth; ++i, ++uv) {
+                    uv->UnRef();
+                }
+            }
+        }
+
+        if (Map) {
             Map = nullptr;
         }
         Store->Clear();
@@ -1313,6 +1322,7 @@ public:
                 PrepareForNewBatch();
             } else {
                 Map.Reset();
+                Store->Clear();
             }
             Draining = false;
             return false;
@@ -1595,6 +1605,7 @@ public:
                 PrepareForNewBatch();
             } else {
                 Map.Reset();
+                Store->Clear();
             }
             return currentBlockSize > 0;
         }

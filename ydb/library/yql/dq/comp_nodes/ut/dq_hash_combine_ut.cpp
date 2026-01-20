@@ -168,20 +168,18 @@ protected:
 
 class TBlockKVStream : public TWideStream {
 public:
-    using TCallback = std::function<void()>;
+    using TCallback = std::function<void(const size_t rowNum)>;
 
-    TBlockKVStream(const TComputationContext& ctx, size_t numKeys, size_t iterations, size_t blockSize, const std::vector<TType*>& types, TRefMap& reference,
-        size_t callbackAfter = std::numeric_limits<size_t>::max(), TCallback callback = {})
+    TBlockKVStream(const TComputationContext& ctx, size_t numKeys, size_t iterations, size_t blockSize, const std::vector<TType*>& types,
+        TRefMap& reference, TCallback callback = {})
         : TWideStream(ctx, numKeys, iterations, types, reference)
         , BlockSize(blockSize)
-        , CallbackAfter(callbackAfter)
         , Callback(callback)
     {
     }
 
 private:
     size_t BlockSize;
-    size_t CallbackAfter;
     TCallback Callback;
 
     size_t ItemCount = 0;
@@ -225,8 +223,8 @@ public:
 
             AddRowToMap(Reference, strKey, refValues);
             ++ItemCount;
-            if (Callback && ItemCount >= CallbackAfter) {
-                Callback();
+            if (Callback) {
+                Callback(ItemCount);
             }
         }
 
@@ -245,12 +243,11 @@ public:
 
 class TWideKVStream : public TWideStream {
 public:
-    using TCallback = std::function<void()>;
+    using TCallback = std::function<void(const size_t rowCount, bool& yield)>;
 
     TWideKVStream(const TComputationContext& ctx, size_t numKeys, size_t iterations, const std::vector<TType*>& types,
-        TRefMap& reference, size_t callbackAfter = std::numeric_limits<size_t>::max(), TCallback callback = {})
+        TRefMap& reference, TCallback callback = {})
         : TWideStream(ctx, numKeys, iterations, types, reference)
-        , CallbackAfter(callbackAfter)
         , Callback(callback)
     {
     }
@@ -265,10 +262,15 @@ public:
             return NUdf::EFetchStatus::Finish;
         }
 
-        if (FetchCount >= CallbackAfter && Callback) {
-            Callback();
+        if (InsertYield) {
+            InsertYield = false;
+            return NUdf::EFetchStatus::Yield;
         }
+
         ++FetchCount;
+        if (Callback) {
+            Callback(FetchCount, InsertYield);
+        }
 
         ui64 nextKey = NextSample();
 
@@ -292,7 +294,8 @@ public:
         return NUdf::EFetchStatus::Ok;
     }
 
-    size_t CallbackAfter;
+private:
+    bool InsertYield = false;
     TCallback Callback;
 
     size_t FetchCount = 0;
@@ -371,7 +374,10 @@ THolder<IComputationGraph> BuildBlockGraph(TDqSetup<UseLLVM, Spilling>& setup, b
 }
 
 template<bool LLVM, bool Spilling = false>
-THolder<IComputationGraph> BuildWideGraph(TDqSetup<LLVM, Spilling>& setup, const bool useFlow, const bool isAggregator, const size_t memLimit, std::vector<TType*>& columnTypes) {
+THolder<IComputationGraph> BuildWideGraph(
+    TDqSetup<LLVM, Spilling>& setup, const bool useFlow, const bool isAggregator,
+    const size_t memLimit, std::vector<TType*>& columnTypes, const bool doCollect = true)
+{
     auto& pb = setup.GetDqProgramBuilder();
 
     auto keyBaseType = pb.NewDataType(NUdf::TDataType<char*>::Id);
@@ -384,45 +390,41 @@ THolder<IComputationGraph> BuildWideGraph(TDqSetup<LLVM, Spilling>& setup, const
 
     columnTypes = {keyBaseType, valueBaseType};
 
-    TRuntimeNode rootNode;
+    TRuntimeNode input = TRuntimeNode(streamCallable, false);
     if (useFlow) {
+        input = pb.ToFlow(input);
+    }
+
+    TRuntimeNode opNode = GetOperatorNode(
+        pb,
+        isAggregator,
+        Spilling,
+        memLimit,
+        input,
+        [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },
+        [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+            return {pb.AggrAdd(state.front(), items.back())};
+        },
+        [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
+            return {keys.front(), state.front()};
+        }
+    );
+
+    TRuntimeNode rootNode;
+    if (doCollect) {
+        if (!useFlow) {
+            opNode = pb.ToFlow(opNode);
+        }
         rootNode = pb.Collect(pb.NarrowMap(
-            GetOperatorNode(
-                pb,
-                isAggregator,
-                Spilling,
-                memLimit,
-                pb.ToFlow(TRuntimeNode(streamCallable, false)),
-                [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
-                [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },
-                [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
-                    return {pb.AggrAdd(state.front(), items.back())};
-                },
-                [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
-                    return {keys.front(), state.front()};
-                }
-            ),
+            opNode,
             [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
         ));
     } else {
-        rootNode = pb.Collect(pb.NarrowMap(pb.ToFlow(
-            GetOperatorNode(
-                pb,
-                isAggregator,
-                Spilling,
-                memLimit,
-                TRuntimeNode(streamCallable, false),
-                [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
-                [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },
-                [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
-                    return {pb.AggrAdd(state.front(), items.back())};
-                },
-                [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList {
-                    return {keys.front(), state.front()};
-                }
-            )),
-            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
-        ));
+        if (useFlow) {
+            opNode = pb.FromFlow(opNode);
+        }
+        rootNode = opNode;
     }
 
     return setup.BuildGraph(rootNode, {streamCallable});
@@ -553,6 +555,40 @@ void RunDqCombineWideTest(const bool useFlow, StreamCreator streamCreator)
     }
 
     AssertMapsEqual(refResult, graphResult);
+}
+
+template<bool UseLLVM, bool Spilling, typename StreamCreator, typename StreamChecker>
+void RunDqAggregateEarlyStopTest(TDqSetup<UseLLVM, Spilling>& setup, const bool useFlow,
+    StreamCreator streamCreator, StreamChecker streamChecker)
+{
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+
+    std::vector<TType*> columnTypes;
+
+    auto graph = BuildWideGraph(setup, useFlow, true, 0, columnTypes, false);
+
+    if (Spilling) {
+        graph->GetContext().SpillerFactory = std::make_shared<NKikimr::NMiniKQL::TPreallocatedSpillerFactory>(100_MB);
+    }
+
+    std::unordered_map<std::string, std::vector<ui64>> refResult;
+
+    auto stream = NUdf::TUnboxedValuePod(streamCreator(graph->GetContext(), columnTypes, refResult));
+    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(stream));
+
+    size_t width = columnTypes.size();
+    std::vector<NUdf::TUnboxedValue> resultValues;
+    resultValues.resize(width);
+
+    auto resultStream = graph->GetValue();
+    Y_ENSURE(resultStream.IsBoxed());
+
+    NUdf::EFetchStatus fetchStatus;
+    while ((fetchStatus = resultStream.WideFetch(resultValues.data(), width)) != NUdf::EFetchStatus::Finish) {
+        if (!streamChecker(fetchStatus)) {
+            break;
+        }
+    }
 }
 
 template<bool UseLLVM, bool Spilling, typename StreamCreator>
@@ -748,8 +784,10 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
     Y_UNIT_TEST_QUAD(TestWideModeAggregationWithSpilling, UseLLVM, UseFlow) {
         TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
         RunDqAggregateWideTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
-            return new TWideKVStream(ctx, 100000, 10, columnTypes, refMap, 100000, [&](){
-                setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            return new TWideKVStream(ctx, 100000, 10, columnTypes, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
+                if (rowNum == 100000) {
+                    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                }
             });
         });
     }
@@ -764,8 +802,10 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
     Y_UNIT_TEST_QUAD(TestBlockModeAggregationWithSpilling, UseLLVM, UseFlow) {
         TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
         RunDqAggregateBlockTest(setup, UseFlow, [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
-            return new TBlockKVStream(ctx, 100000, 5, 8192, columnTypes, refMap, 100000, [&](){
-                setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+            return new TBlockKVStream(ctx, 100000, 5, 8192, columnTypes, refMap, [&](const size_t rowNum) {
+                if (rowNum == 100000) {
+                    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                }
             });
         });
     }
@@ -776,8 +816,69 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
             return new TBlockKVStream(ctx, 10000, 5, 8192, columnTypes, refMap);
         });
     }
-} // Y_UNIT_TEST_SUITE
 
+    Y_UNIT_TEST_QUAD(TestEarlyStop, UseLLVM, UseFlow) {
+        TDqSetup<UseLLVM, false> setup(GetDqNodeFactory());
+        size_t lineCount = 0;
+        RunDqAggregateEarlyStopTest(
+            setup,
+            UseFlow,
+            [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
+                return new TWideKVStream(ctx, 100, 1, columnTypes, refMap);
+            },
+            [&lineCount](NUdf::EFetchStatus fetchStatus) -> bool {
+                if (fetchStatus == NUdf::EFetchStatus::Ok) {
+                    ++lineCount;
+                }
+                return lineCount < 90;
+            }
+        );
+    }
+
+    Y_UNIT_TEST_QUAD(TestEarlyStopInSpilling, UseLLVM, UseFlow) {
+        TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
+        bool stopping = false;
+        RunDqAggregateEarlyStopTest(
+            setup,
+            UseFlow,
+            [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
+                return new TWideKVStream(ctx, 1000, 1, columnTypes, refMap, [&](const size_t rowNum, bool& yield) {
+                    if (rowNum == 100) {
+                        setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                    } else if (rowNum == 200) {
+                        stopping = true;
+                        yield = true;
+                    }
+                });
+            },
+            [&stopping](NUdf::EFetchStatus fetchStatus) -> bool {
+                return !(fetchStatus == NUdf::EFetchStatus::Yield && stopping);
+            }
+        );
+    }
+
+    Y_UNIT_TEST_QUAD(TestEarlyStopAfterSpilling, UseLLVM, UseFlow) {
+        TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
+        size_t lineCount = 0;
+        RunDqAggregateEarlyStopTest(
+            setup,
+            UseFlow,
+            [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, auto& refMap) {
+                return new TWideKVStream(ctx, 100000, 1, columnTypes, refMap, [&](const size_t rowNum, [[maybe_unused]] bool& yield) {
+                    if (rowNum == 100) {
+                        setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                    }
+                });
+            },
+            [&lineCount](NUdf::EFetchStatus fetchStatus) -> bool {
+                if (fetchStatus == NUdf::EFetchStatus::Ok) {
+                    ++lineCount;
+                }
+                return lineCount < 90;
+            }
+        );
+    }
+} // Y_UNIT_TEST_SUITE
 
 }
 }

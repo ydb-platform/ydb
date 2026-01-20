@@ -345,6 +345,20 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
         auto passwordParser = [this](const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly) -> bool {
             Y_UNUSED(isFileName);
+            
+            // Check if username from profile matches the current username
+            // Only use password from profile if:
+            // 1. No username is set (both will come from profile), OR
+            // 2. Username from profile matches the current username
+            TString profileUser;
+            if (authData["user"]) {
+                profileUser = authData["user"].as<TString>();
+            }
+            if (!UserName.empty() && !profileUser.empty() && UserName != profileUser) {
+                // Username mismatch: don't use password from profile
+                return false;
+            }
+            
             std::optional<TString> password;
             bool hasPasswordOption = false;
             if (authData["password"]) {

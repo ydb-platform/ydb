@@ -855,11 +855,22 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         },
         profile);
 
-        // --user option + password from active profile
-        ExpectUserAndPassword("user-from-explicit-option", "password-from-active-profile");
+        // --user option does NOT use password from active profile if username doesn't match
+        // This should fail because no password is provided for the different user
+        ExpectFail();
         RunCli({
             "-v",
             "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+        
+        // --user option matching active profile user DOES use password from active profile
+        ExpectUserAndPassword("user-from-active-profile", "password-from-active-profile");
+        RunCli({
+            "-v",
+            "--user", "user-from-active-profile",
             "scheme", "ls",
         },
         {},
@@ -879,14 +890,26 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         },
         profile);
 
-        // user from environment + password from active profile
-        ExpectUserAndPassword("user-from-env", "password-from-active-profile");
+        // user from environment does NOT use password from active profile if username doesn't match
+        // This should fail because no password is provided for the different user
+        ExpectFail();
         RunCli({
             "-v",
             "scheme", "ls",
         },
         {
             {"YDB_USER", "user-from-env"},
+        },
+        profile);
+        
+        // user from environment matching active profile user DOES use password from active profile
+        ExpectUserAndPassword("user-from-active-profile", "password-from-active-profile");
+        RunCli({
+            "-v",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_USER", "user-from-active-profile"},
         },
         profile);
 
@@ -914,12 +937,24 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         {},
         profile);
 
-        // --user option + password from explicit profile (user and password from active profile are overridden)
-        ExpectUserAndPassword("user-from-explicit-option", "password-from-explicit-profile");
+        // --user option does NOT use password from explicit profile if username doesn't match
+        // This should fail because no password is provided for the different user
+        ExpectFail();
         RunCli({
             "-v",
             "-p", "test_profile",
             "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+        
+        // --user option matching explicit profile user DOES use password from explicit profile
+        ExpectUserAndPassword("user-from-explicit-profile", "password-from-explicit-profile");
+        RunCli({
+            "-v",
+            "-p", "test_profile",
+            "--user", "user-from-explicit-profile",
             "scheme", "ls",
         },
         {},

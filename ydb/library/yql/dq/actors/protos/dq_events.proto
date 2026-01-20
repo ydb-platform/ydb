@@ -97,6 +97,19 @@ message TEvComputeActorState {
 message TEvComputeStateRequest {
 }
 
+message TEvNodeState {
+    optional uint32 NodeId = 1; // by default == Sender.NodeId()
+
+    optional uint64 MemPhysicalUsage = 2;
+    optional uint64 MemSysAllocated  = 3;
+    optional uint64 MemSysFragmented = 4;
+
+    optional uint64 MemArrowDefault  = 5;
+
+    optional uint64 MemMkqlAllocated = 6;
+    optional uint64 MemMkqlFreeList  = 7;
+}
+
 message TEvComputeChannelData {
     optional TChannelData ChannelData = 1;
     optional uint64 SendTime = 2;

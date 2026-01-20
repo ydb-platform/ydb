@@ -65,21 +65,22 @@ Y_UNIT_TEST_SUITE(FormatEtaTests) {
     }
 
     Y_UNIT_TEST(Seconds) {
-        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(1)), "0m 1s");
-        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(30)), "0m 30s");
-        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(59)), "0m 59s");
+        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(1)), "1s");
+        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(30)), "30s");
+        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(59)), "59s");
     }
 
     Y_UNIT_TEST(Minutes) {
-        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(60)), "1m 0s");
+        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(60)), "1m");
         UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(90)), "1m 30s");
         UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(3599)), "59m 59s");
     }
 
     Y_UNIT_TEST(Hours) {
-        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(3600)), "1h 0m 0s");
-        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(3661)), "1h 1m 1s");
-        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(7200)), "2h 0m 0s");
+        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(3600)), "1h");
+        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(3660)), "1h 1m");
+        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(3661)), "1h 1m");  // seconds ignored when hours present
+        UNIT_ASSERT_STRINGS_EQUAL(FormatEta(TDuration::Seconds(7200)), "2h");
     }
 }
 

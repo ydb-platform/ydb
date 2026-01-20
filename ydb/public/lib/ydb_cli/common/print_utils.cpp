@@ -157,12 +157,18 @@ TString FormatEta(TDuration duration) {
 
     TStringBuilder result;
     if (hours > 0) {
-        result << hours << "h ";
+        result << hours << "h";
+        if (minutes > 0) {
+            result << " " << minutes << "m";
+        }
+    } else if (minutes > 0) {
+        result << minutes << "m";
+        if (seconds > 0) {
+            result << " " << seconds << "s";
+        }
+    } else {
+        result << seconds << "s";
     }
-    if (minutes > 0 || hours > 0) {
-        result << minutes << "m ";
-    }
-    result << seconds << "s";
 
     return result;
 }

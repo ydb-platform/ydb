@@ -261,15 +261,23 @@ std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std:
 }
 
 // Pull up correlated filter inside a subplan
+// We match the parent of the filter, currently we support only Map and Aggregate
 
 bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    if (input->Kind != EOperator::Filter && !input->IsSingleConsumer()) {
+    
+    if (input->Kind != EOperator::Map && input->Kind != EOperator::Aggregate) {
         return false;
     }
 
-    auto filter = CastOperator<TOpFilter>(input);
+    auto unaryOp = CastOperator<IUnaryOperator>(input);
 
-    if (filter->GetInput()->Kind != EOperator::AddDependencies && !filter->GetInput()->IsSingleConsumer()) {
+    if (unaryOp->GetInput()->Kind != EOperator::Filter || !unaryOp->GetInput()->IsSingleConsumer()) {
+        return false;
+    }
+
+    auto filter = CastOperator<TOpFilter>(unaryOp->GetInput());
+
+    if (filter->GetInput()->Kind != EOperator::AddDependencies || !filter->GetInput()->IsSingleConsumer()) {
         return false;
     }
 
@@ -281,41 +289,62 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     }
 
     // Select a subset of join conditions that cover all dependencies
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> covered;
-    TVector<TJoinConditionInfo> subset;
+    TVector<TJoinConditionInfo> dependentSubset;
+    TVector<TJoinConditionInfo> remainderSubset;
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> correlated;
 
     for (auto jc : conjInfo.JoinConditions) {
         if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), jc.LeftIU) != deps->Dependencies.end()) {
-            covered.insert(jc.LeftIU);
-            subset.push_back(jc);
+            dependentSubset.push_back(jc);
+            correlated.insert(jc.RightIU);
         }
-        if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), jc.RightIU) != deps->Dependencies.end()) {
-            covered.insert(jc.RightIU);
-            subset.push_back(jc);
+        else if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), jc.RightIU) != deps->Dependencies.end()) {
+            dependentSubset.push_back(jc);
+            correlated.insert(jc.LeftIU);
+        } else {
+            remainderSubset.push_back(jc);
         }
     }
 
-    if (covered.size() != deps->Dependencies.size()) {
+    // Make sure all dependencies are covered in this filter
+    // FIXME: This is a current limitation
+    if (correlated.size() != deps->Dependencies.size()) {
         return false;
     }
 
-    // Check the parent operator, we have a few choices here:
-    // 1. Map operator
-    // 2. Aggregate
+    // Split the predicate into a remaining and new part with only dependent conditions
+    std::shared_ptr<IOperator> remainingFilter = deps->GetInput();
+    if (!conjInfo.Filters.empty() || !remainderSubset.empty()) {
 
-    auto parentOp = filter->Parents[0].lock();
-    if (!parentOp->IsSingleConsumer()) {
-        return false;
+        TVector<TExprNode::TPtr> args;
+        for (auto f : conjInfo.Filters) {
+            args.push_back(f.FilterBody);
+        }
+        for (auto jc : remainderSubset) {
+            args.push_back(jc.ConjunctExpr);
+        }
+        auto conj = Build<TCoAnd>(ctx.ExprCtx, remainingFilter->Pos)
+            .Add(args)
+            .Done().Ptr();
+
+        auto lambda_arg = Build<TCoArgument>(ctx.ExprCtx, remainingFilter->Pos).Name("arg").Done().Ptr();
+
+        auto lambda = Build<TCoLambda>(ctx.ExprCtx, remainingFilter->Pos)
+            .Args({lambda_arg})
+            .Body(ReplaceArg(conj, lambda_arg, ctx.ExprCtx))
+            .Done().Ptr();
+
+        remainingFilter = std::make_shared<TOpFilter>(deps->GetInput(), remainingFilter->Pos, lambda);
     }
 
-    if (parentOp->Kind == EOperator::Map) {
-        auto map = CastOperator<TOpMap>(parentOp);
+    if (input->Kind == EOperator::Map) {
+        auto map = CastOperator<TOpMap>(input);
 
         // Stop if we compute something from one of the dependent columns, except for Just
         for (auto mapEl : map->MapElements) {
             for (auto iu : mapEl.InputIUs()) {
-                if (covered.contains(iu)) {
-                    if (!mapEl.IsSingleCallable("Just")) {
+                if (correlated.contains(iu)) {
+                    if (!mapEl.IsRename() && !mapEl.IsSingleCallable({"Just"})) {
                         return false;
                     }
                 }
@@ -326,9 +355,9 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 
         // Add all dependend columns to projecting map output
         auto mapOutput = map->GetOutputIUs();
-        for (auto iu : covered) {
+        for (auto iu : correlated) {
             if (std::find(mapOutput.begin(), mapOutput.end(), iu) == mapOutput.end()) {
-                addToMap(iu);
+                addToMap.push_back(iu);
             }
         }
 
@@ -338,10 +367,39 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
             return false;
         }
 
-        
+        // First we add needed columns to the map, if its a projection map
+        if (!addToMap.empty() && map->Project) {
+            for (auto add : addToMap) {
+                map->MapElements.push_back(TMapElement(add, add));
+            }
+        }
 
-    } else if (parentOp->Kind == EOperator::Aggregate) {
+        // Now we move the filter and addDependencies on top of the map, but only in case where map has a parent
+        if (map->Parents.empty()) {
+            return true;
+        }
 
+        map->SetInput(remainingFilter);
+        deps->SetInput(map);
+        input = filter;
+
+        return true;
+
+    } else if (input->Kind == EOperator::Aggregate) {
+        auto aggregate = CastOperator<TOpAggregate>(input);
+
+        // Add all missing dependent columns to the group by list
+        for (auto corr : correlated) {
+            if (std::find(aggregate->KeyColumns.begin(), aggregate->KeyColumns.end(), corr) == aggregate->KeyColumns.end()) {
+                aggregate->KeyColumns.push_back(corr);
+            }
+        }
+
+        aggregate->SetInput(remainingFilter);
+        deps->SetInput(aggregate);
+        input = filter;
+
+        return true;
     } else {
         return false;
     }

@@ -383,6 +383,16 @@ const TTypeAnnotationNode* IOperator::GetIUType(const TInfoUnit& iu) {
     return structType->FindItemType(iu.GetFullName());
 }
 
+void IOperator::ReplaceChild(std::shared_ptr<IOperator> oldChild, std::shared_ptr<IOperator> newChild) {
+    for (size_t i=0; i<Children.size(); i++) {
+        if (Children[i] == oldChild) {
+            Children[i] = newChild;
+            return;
+        }
+    }
+    Y_ENSURE(false, "Did not find a child to replace");
+}
+
 /**
  * EmptySource operator methods
  */
@@ -509,6 +519,30 @@ TInfoUnit TMapElement::GetRename() const {
 
 void TMapElement::SetExpression(TExprNode::TPtr expr) {
     ElementHolder = expr;
+}
+
+bool TMapElement::IsSingleCallable(THashSet<TString> allowedCallables) {
+    if (IsExpression()) {
+        auto expr = GetExpression();
+        Y_ENSURE(expr->IsLambda());
+        auto body = expr->Child(1);
+        if (body->IsCallable(allowedCallables) && body->ChildrenSize() == 1 && body->Child(0)->IsCallable("Member")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TVector<TInfoUnit> TMapElement::InputIUs() {
+    TVector<TInfoUnit> result;
+
+    if (IsRename()) {
+        result.push_back(GetRename());
+    } else {
+        auto expr = GetExpression();
+        GetAllMembers(expr, result);
+    }
+    return result;
 }
 
 /**

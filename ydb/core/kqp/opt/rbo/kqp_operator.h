@@ -399,6 +399,8 @@ class IOperator {
 
     virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) { Y_UNUSED(map); Y_UNUSED(ctx); }
 
+    virtual void ReplaceChild(std::shared_ptr<IOperator> oldChild, std::shared_ptr<IOperator> newChild);
+
     /***
      * Rename information units of this operator using a specified mapping
      */
@@ -502,6 +504,8 @@ public:
     TInfoUnit GetElementName() const;
     bool IsExpression() const;
     bool IsRename() const;
+    bool IsSingleCallable(THashSet<TString> allowedCallables);
+    TVector<TInfoUnit> InputIUs();
     TExprNode::TPtr GetExpression() const;
     TExprNode::TPtr& GetExpression();
     TInfoUnit GetRename() const;

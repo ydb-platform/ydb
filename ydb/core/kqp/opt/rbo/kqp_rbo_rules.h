@@ -41,7 +41,7 @@ class TExtractJoinExpressionsRule : public IRule {
 
  class TPullUpCorrelatedFilterRule : public IRule {
   public:
-    TPullUpCorrelatedFilterRule() : IRule("Pull up correlated filter") {}
+    TPullUpCorrelatedFilterRule() : IRule("Pull up correlated filter", ERuleProperties::RequireParents, true) {}
 
     virtual bool MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
  };

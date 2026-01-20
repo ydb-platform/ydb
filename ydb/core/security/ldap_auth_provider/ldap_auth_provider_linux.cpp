@@ -4,7 +4,6 @@
 #include <ydb/core/security/ticket_parser_log.h>
 #include "ldap_auth_provider.h"
 
-#define LDAP_DEPRECATED 1
 #include <ldap.h>
 
 #include "ldap_compat.h"
@@ -15,32 +14,7 @@ namespace {
 
 char ldapNoAttribute[] = LDAP_NO_ATTRS;
 
-int ConvertOption(const EOption& option) {
-    switch(option) {
-        case EOption::DEBUG: {
-            return LDAP_OPT_DEBUG_LEVEL;
-        }
-        case EOption::TLS_CACERTDIR: {
-            return LDAP_OPT_X_TLS_CACERTDIR;
-        }
-        case EOption::TLS_CACERTFILE: {
-            return LDAP_OPT_X_TLS_CACERTFILE;
-        }
-        case EOption::TLS_CERTFILE: {
-            return LDAP_OPT_X_TLS_CERTFILE;
-        }
-        case EOption::TLS_KEYFILE: {
-            return LDAP_OPT_X_TLS_KEYFILE;
-        }
-        case EOption::TLS_REQUIRE_CERT: {
-            return LDAP_OPT_X_TLS_REQUIRE_CERT;
-        }
-        case EOption::PROTOCOL_VERSION: {
-            return LDAP_OPT_PROTOCOL_VERSION;
-        }
-    }
-}
-
+int ConvertOption(const EOption& option);
 const char* ConvertSaslMechanism(const ESaslMechanism& mechanism);
 
 }
@@ -60,7 +34,7 @@ int Bind(LDAP* ld, const TString& dn, const ESaslMechanism& mechanism, std::vect
 }
 
 int Unbind(LDAP* ld) {
-    return ldap_unbind(ld);
+    return ldap_unbind_ext_s(ld, nullptr, nullptr);
 }
 
 int Init(LDAP** ld, const TString& scheme, const TString& uris, ui32 port) {
@@ -75,7 +49,7 @@ int Search(LDAP* ld,
            char** attrs,
            int attrsonly,
            LDAPMessage** res) {
-    return ldap_search_s(ld, base.c_str(), GetScope(scope), filter.c_str(), attrs, attrsonly, res);
+    return ldap_search_ext_s(ld, base.c_str(), GetScope(scope), filter.c_str(), attrs, attrsonly, nullptr, nullptr, nullptr, 0, res);
 }
 
 TString LdapError(LDAP* ld) {
@@ -216,6 +190,32 @@ int ConvertRequireCert(const NKikimrProto::TLdapAuthentication::TUseTls::TCertRe
 }
 
 namespace {
+
+int ConvertOption(const EOption& option) {
+    switch(option) {
+        case EOption::DEBUG: {
+            return LDAP_OPT_DEBUG_LEVEL;
+        }
+        case EOption::TLS_CACERTDIR: {
+            return LDAP_OPT_X_TLS_CACERTDIR;
+        }
+        case EOption::TLS_CACERTFILE: {
+            return LDAP_OPT_X_TLS_CACERTFILE;
+        }
+        case EOption::TLS_CERTFILE: {
+            return LDAP_OPT_X_TLS_CERTFILE;
+        }
+        case EOption::TLS_KEYFILE: {
+            return LDAP_OPT_X_TLS_KEYFILE;
+        }
+        case EOption::TLS_REQUIRE_CERT: {
+            return LDAP_OPT_X_TLS_REQUIRE_CERT;
+        }
+        case EOption::PROTOCOL_VERSION: {
+            return LDAP_OPT_PROTOCOL_VERSION;
+        }
+    }
+}
 
 const char* ConvertSaslMechanism(const ESaslMechanism& mechanism) {
     switch (mechanism) {

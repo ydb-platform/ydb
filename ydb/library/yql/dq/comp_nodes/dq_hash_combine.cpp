@@ -908,7 +908,7 @@ public:
         const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes,
         const std::vector<TType*>& keyItemTypes,
         const std::vector<TType*>& stateItemTypes,
-        const bool isFlow,
+        const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling
     )
@@ -916,7 +916,7 @@ public:
         , Ctx(ctx)
         , MemoryHelper(memoryHelper)
         , MemoryLimit(memoryLimit)
-        , IsFlow(isFlow)
+        , ForLLVM(forLLVM)
         , IsAggregation(isAggregator)
         , EnableSpilling(enableSpilling && ctx.SpillerFactory)
         , InputUnpackedWidth(inputUnpackedWidth)
@@ -998,7 +998,7 @@ public:
     }
 
     virtual ~TBaseAggregationState() {
-        if (IsFlow && Ctx.ExecuteLLVM) {
+        if (ForLLVM) {
             // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
             for (TUnboxedValue& val : InputBuffer) {
                 static_cast<TUnboxedValuePod&>(val) = TUnboxedValuePod{};
@@ -1174,7 +1174,7 @@ protected:
     const TMemoryEstimationHelper& MemoryHelper;
 
     size_t MemoryLimit;
-    const bool IsFlow;
+    const bool ForLLVM;
     const bool IsAggregation;
     const bool EnableSpilling;
 
@@ -1228,13 +1228,13 @@ public:
         const std::vector<TType*>& inputItemTypes,
         const std::vector<TType*>& keyItemTypes,
         const std::vector<TType*>& stateItemTypes,
-        const bool isFlow,
+        const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling
     )
         : TBaseAggregationState(
             memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
-            keyItemTypes, stateItemTypes, isFlow, isAggregator, enableSpilling
+            keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling
         )
         , OutputRowCounter(outputRowCounter)
         , StartMoment(TInstant::Now()) // Temporary. Helps correlate debug outputs with SVGs
@@ -1390,13 +1390,13 @@ public:
         const std::vector<TType*>& keyItemTypes,
         const std::vector<TType*>& stateItemTypes,
         const size_t maxOutputBlockLen,
-        const bool isFlow,
+        const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling
     )
         : TBaseAggregationState(
             memInfo, ctx, memoryHelper, memoryLimit, inputTypes.size() - 1, nodes, wideFieldsIndex,
-            keyTypes, keyItemTypes, stateItemTypes, isFlow, isAggregator, enableSpilling
+            keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling
         )
         , OutputRowCounter(outputRowCounter)
         , InputTypes(inputTypes)
@@ -1828,7 +1828,7 @@ public:
         BranchInst::Create(makeState, main, IsInvalid(statePtr, block, context), block);
         block = makeState;
 
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TDqHashCombineFlowWrapper::MakeState>());
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TDqHashCombineFlowWrapper::MakeStateForLLVM>());
         const auto makeFuncType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeFuncType), "function", block);
         CallInst::Create(makeFuncType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -2009,7 +2009,11 @@ public:
 #endif // MKQL_DISABLE_CODEGEN
 
 private:
-    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+    void MakeStateForLLVM(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+        MakeState(ctx, state, true);
+    }
+
+    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state, const bool forLLVM = false) const {
         NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
         NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("DqHashCombine");
         UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
@@ -2024,11 +2028,11 @@ private:
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(
                 ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
-                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, true, IsAggregator, EnableSpilling);
+                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, forLLVM, IsAggregator, EnableSpilling);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
                 ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
-                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, true, IsAggregator, EnableSpilling);
+                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, forLLVM, IsAggregator, EnableSpilling);
         }
     }
 

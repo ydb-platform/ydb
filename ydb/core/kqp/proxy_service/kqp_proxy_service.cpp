@@ -947,9 +947,16 @@ public:
 
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
-            const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
-            ui64 millis = sbs.GetBoardLookupIntervalMs();
-            TDuration d = TDuration::MilliSeconds(millis + (RandomProvider->GenRand() % millis));
+            TDuration d;
+            if (!WarmupStarted && TableServiceConfig.HasWarmupConfig() && 
+                TableServiceConfig.GetWarmupConfig().GetEnabled()) {
+                // Short polling interval until warmup starts
+                d = TDuration::Seconds(2);
+            } else {
+                const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
+                ui64 millis = sbs.GetBoardLookupIntervalMs();
+                d = TDuration::MilliSeconds(millis + (RandomProvider->GenRand() % millis));
+            }
             Schedule(d, new TEvPrivate::TEvCollectPeerProxyData());
         }
 

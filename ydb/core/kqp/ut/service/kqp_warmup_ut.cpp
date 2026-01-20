@@ -10,6 +10,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -189,7 +190,7 @@ namespace {
     Y_UNIT_TEST_SUITE(KqpWarmup) {
 
         Y_UNIT_TEST(WarmupActorBasic) {
-            ui32 nodeCount = 2;
+            ui32 nodeCount = 3;
 
             NKikimrConfig::TFeatureFlags featureFlags;
             featureFlags.SetEnableCompileCacheView(true);
@@ -211,36 +212,44 @@ namespace {
             UNIT_ASSERT_C(!cacheEntries.empty(),
                 "Compile cache should have entries after executing queries");
             
-            Cerr << "=== Cache entries before warmup: " << cacheEntries.size() << Endl;
+            THashSet<std::pair<TString, TString>> uniqueQueryUserPairs;
+            for (const auto& entry : cacheEntries) {
+                uniqueQueryUserPairs.insert({entry.Query, entry.UserSID});
+            }
+            size_t expectedUniqueCount = uniqueQueryUserPairs.size();
+            
+            Cerr << "=== Cache entries before warmup: " << cacheEntries.size() 
+                 << ", unique (Query, UserSID) pairs: " << expectedUniqueCount << Endl;
             for (size_t i = 0; i < std::min((size_t)5, cacheEntries.size()); ++i) {
                 Cerr << "QueryId: " << cacheEntries[i].QueryId
                     << ", UserSID: " << cacheEntries[i].UserSID
                     << ", Query size: " << cacheEntries[i].Query.size() << Endl;
             }
 
-            auto deadline = TDuration::Seconds(30);
             TKqpWarmupConfig warmupActorConfig;
             warmupActorConfig.Enabled = true;
-            warmupActorConfig.Deadline = deadline;
-            warmupActorConfig.MaxConcurrentCompilations = 3;
 
             ui32 const nodeId = 0;
             auto warmupEdge = runtime.AllocateEdgeActor(nodeId);
             auto* warmupActor = CreateKqpWarmupActor(warmupActorConfig, "/Root", "", warmupEdge);
-            runtime.Register(warmupActor, nodeId);
+            auto warmupActorId = runtime.Register(warmupActor, nodeId);
 
-            auto warmupComplete = runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(warmupEdge, deadline + TDuration::Seconds(1));
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+            runtime.DispatchEvents(opts, TDuration::Seconds(1));
+
+            runtime.Send(new IEventHandle(warmupActorId, warmupEdge, new TEvStartWarmup(nodeCount)), nodeId);
+
+            auto warmupComplete = runtime.GrabEdgeEvent<TEvKqpWarmupComplete>(warmupEdge, warmupActorConfig.HardDeadline);
 
             UNIT_ASSERT_C(warmupComplete, "Warmup actor did not complete within timeout");
             UNIT_ASSERT_C(warmupComplete->Get()->Success,
                 "Warmup should complete successfully: " << warmupComplete->Get()->Message);
-            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, cacheEntries.size(),
-                "All entries should be loaded. Loaded: " << warmupComplete->Get()->EntriesLoaded
-                << ", expected: " << cacheEntries.size());
-
+            
+            UNIT_ASSERT_VALUES_EQUAL_C(warmupComplete->Get()->EntriesLoaded, expectedUniqueCount,
+                "Should load deduplicated entries. Loaded: " << warmupComplete->Get()->EntriesLoaded
+                << ", expected unique: " << expectedUniqueCount);
             VerifyLocalCacheContainsUsers(runtime, nodeId, "/Root", userSids);
-
-            // Verify that queries are actually served from cache (not recompiled)
             VerifyQueriesServedFromCache(kikimr, userSids);
         }
     }

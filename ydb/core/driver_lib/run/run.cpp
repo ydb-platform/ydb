@@ -230,6 +230,8 @@ public:
         {}
     };
 
+    struct TEvWarmupTimeout : TEventLocal<TEvWarmupTimeout, EvWarmupTimeout> {};
+
 public:
     TGRpcServersManager(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper,
             TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> processMemoryInfoProvider,
@@ -246,7 +248,7 @@ public:
         if (!WarmupTimeout) {
             Start();
         } else {
-            Schedule(WarmupTimeout, new TEvents::TEvWakeup(EvWarmupTimeout));
+            Schedule(WarmupTimeout, new TEvWarmupTimeout());
             Cerr << "[GRpcServersManager] Waiting for warmup to complete (timeout: "
                  << WarmupTimeout.Seconds() << "s) before starting gRPC servers" << Endl;
         }
@@ -254,13 +256,13 @@ public:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (const auto& bridgeInfo = ev->Get()->BridgeInfo) {
-            if (NBridge::PileStateTraits(bridgeInfo->SelfNodePile->State).RequiresConfigQuorum) {
-                Start();
-            } else if (!StopScheduled) {
-                StopScheduled = true;
-                CheckAndExecuteStop();
+                if (NBridge::PileStateTraits(bridgeInfo->SelfNodePile->State).RequiresConfigQuorum) {
+                    Start();
+                } else if (!StopScheduled) {
+                    StopScheduled = true;
+                    CheckAndExecuteStop();
+                }
             }
-        }
     }
 
     void HandleDisconnectRequestStarted() {
@@ -276,7 +278,7 @@ public:
         if (!WarmupReceived) {
             WarmupReceived = true;
             auto* msg = ev->Get();
-            Cerr << "[GRpcServersManager] Warmup completed (success: " << msg->Success
+            Cerr << "[GRpcServersManager] Warmup completed (success: " << msg->Success 
                  << ", loaded: " << msg->EntriesLoaded << "), starting gRPC servers" << Endl;
             Start();
         }

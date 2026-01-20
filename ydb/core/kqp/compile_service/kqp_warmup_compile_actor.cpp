@@ -24,7 +24,6 @@ struct TEvPrivate {
     enum EEv {
         EvFetchCacheResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvDelayedComplete,
-        EvRetryFetch,
         EvHardDeadline,
         EvSoftDeadline,
     };
@@ -46,25 +45,27 @@ struct TEvPrivate {
     };
 
     struct TEvDelayedComplete : public NActors::TEventLocal<TEvDelayedComplete, EvDelayedComplete> {};
-    struct TEvRetryFetch : public NActors::TEventLocal<TEvRetryFetch, EvRetryFetch> {};
     struct TEvHardDeadline : public NActors::TEventLocal<TEvHardDeadline, EvHardDeadline> {};
     struct TEvSoftDeadline : public NActors::TEventLocal<TEvSoftDeadline, EvSoftDeadline> {};
 };
 
 class TFetchCacheActor : public TQueryBase {
 public:
-    TFetchCacheActor(const TString& database, ui32 selfNodeId)
+    TFetchCacheActor(const TString& database, ui32 selfNodeId, ui32 maxQueriesToLoad)
         : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
         , SelfNodeId(selfNodeId)
+        , MaxQueriesToLoad(maxQueriesToLoad)
     {}
 
     void OnRunQuery() override {
         // fetch all the queries as the system user
+        const auto limit = std::max<ui32>(1u, MaxQueriesToLoad);
         TString sql = TStringBuilder()
-            << "SELECT Query, UserSID, AccessCount"
+            << "SELECT Query, UserSID, SUM(AccessCount) AS AccessCount"
             << " FROM `" << Database << "/.sys/compile_cache_queries` "
+            << "GROUP BY Query, UserSID "
             << "ORDER BY AccessCount DESC "
-            << "LIMIT 1000";
+            << "LIMIT " << limit;
 
         RunStreamQuery(sql);
     }
@@ -99,20 +100,18 @@ public:
 
 private:
     [[maybe_unused]] ui32 SelfNodeId;
+    ui32 MaxQueriesToLoad;
     std::unique_ptr<TEvPrivate::TEvFetchCacheResult> Result = std::make_unique<TEvPrivate::TEvFetchCacheResult>(false);
 };
 
 
-class TKqpCompileCacheWarmup : public NActors::TActorBootstrapped<TKqpCompileCacheWarmup> {
+class TKqpCompileCacheWarmupActor : public NActors::TActorBootstrapped<TKqpCompileCacheWarmupActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_COMPILE_SERVICE;
     }
 
-    static constexpr ui32 MaxFetchRetries = 5;
-    static constexpr TDuration FetchRetryDelay = TDuration::Seconds(1);
-
-    TKqpCompileCacheWarmup(const TKqpWarmupConfig& config, const TString& database,
+    TKqpCompileCacheWarmupActor(const TKqpWarmupConfig& config, const TString& database,
                            const TString& cluster, NActors::TActorId notifyActorId)
         : Config(config)
         , Database(database)
@@ -123,13 +122,15 @@ public:
     void Bootstrap() {
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
         const auto softDeadline = Config.Deadline;
-        const auto hardDeadline = Max(Config.HardDeadline, softDeadline);
+        const auto hardDeadline = std::max(Config.HardDeadline, softDeadline);
+        MaxConcurrentCompilations = std::max<ui32>(1u, Config.MaxConcurrentCompilations);
 
         LOG_I("Warmup actor started, database: " << Database 
               << ", softDeadline: " << softDeadline
               << ", hardDeadline: " << hardDeadline
               << (Config.HardDeadline < softDeadline ? " (adjusted from " + ToString(Config.HardDeadline) + ")" : "")
-              << ", maxConcurrent: " << Config.MaxConcurrentCompilations
+              << ", maxConcurrent: " << MaxConcurrentCompilations
+              << (Config.MaxConcurrentCompilations == 0 ? " (adjusted from 0)" : "")
               << ", waiting for TEvStartWarmup from KqpProxy");
 
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
@@ -177,7 +178,6 @@ private:
     STFUNC(StateFetching) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvFetchCacheResult, HandleFetchResult);
-            cFunc(TEvPrivate::EvRetryFetch, HandleRetryFetch);
             cFunc(TEvPrivate::EvHardDeadline, HandleHardDeadline);
             cFunc(TEvPrivate::EvSoftDeadline, HandleSoftDeadline);
             cFunc(NActors::TEvents::TEvPoison::EventType, HandlePoison);
@@ -209,7 +209,14 @@ private:
     }
 
     void HandleStartWarmup(TEvStartWarmup::TPtr& ev) {
-        LOG_I("Received TEvStartWarmup, discovered nodes: " << ev->Get()->DiscoveredNodesCount
+        const auto discoveredNodes = ev->Get()->DiscoveredNodesCount;
+        if (discoveredNodes <= 1) {
+            LOG_I("Received TEvStartWarmup with single node, skipping warmup");
+            Complete(true, "Skipped: single node");
+            return;
+        }
+
+        LOG_I("Received TEvStartWarmup, discovered nodes: " << discoveredNodes
               << ", scheduling soft deadline: " << Config.Deadline);
         Schedule(Config.Deadline, new TEvPrivate::TEvSoftDeadline());
         StartFetch();
@@ -217,7 +224,7 @@ private:
 
     void StartFetch() {
         LOG_I("Spawning fetch cache actor");
-        Register(new TFetchCacheActor(Database, SelfId().NodeId()));
+        Register(new TFetchCacheActor(Database, SelfId().NodeId(), Config.MaxQueriesToLoad));
         Become(&TThis::StateFetching);
     }
 
@@ -225,15 +232,8 @@ private:
         auto* result = ev->Get();
         
         if (!result->Success) {
-            if (FetchRetryCount < MaxFetchRetries) {
-                FetchRetryCount++;
-                LOG_I("Fetch failed, scheduling retry " << FetchRetryCount << "/" << MaxFetchRetries 
-                      << " in " << FetchRetryDelay << ": " << result->Error);
-                Schedule(FetchRetryDelay, new TEvPrivate::TEvRetryFetch());
-                return;
-            }
-            LOG_I("Fetch failed after " << MaxFetchRetries << " retries, skipping warmup: " << result->Error);
-            Complete(true, "Skipped: fetch failed after retries");
+            LOG_I("Fetch failed, skipping warmup: " << result->Error);
+            Complete(true, "Skipped: fetch failed");
             return;
         }
 
@@ -245,24 +245,12 @@ private:
         }
 
         if (QueriesToCompile.empty()) {
-            if (FetchRetryCount < MaxFetchRetries) {
-                FetchRetryCount++;
-                LOG_I("Fetched 0 queries, retrying " << FetchRetryCount << "/" << MaxFetchRetries 
-                      << " in case more nodes discovered");
-                Schedule(FetchRetryDelay, new TEvPrivate::TEvRetryFetch());
-                return;
-            }
-            Complete(true, "No queries to warm up after retries");
+            Complete(true, "No queries to warm up");
             return;
         }
 
         Become(&TThis::StateCompiling);
         StartCompilations();
-    }
-
-    void HandleRetryFetch() {
-        LOG_I("Retrying fetch (attempt " << FetchRetryCount << "/" << MaxFetchRetries << ")");
-        StartFetch();
     }
 
     void HandleQueryResponse(TEvKqp::TEvQueryResponse::TPtr& ev) {
@@ -283,7 +271,7 @@ private:
             EntriesFailed++;
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-            LOG_D("Query compile failed: " << issues.ToString()
+            LOG_D("Query" <<  "compile failed: " << issues.ToString()
                   << ", failed total: " << EntriesFailed);
         }
 
@@ -322,7 +310,7 @@ private:
     }
 
     void StartCompilations() {
-        while (PendingCompilations < Config.MaxConcurrentCompilations && !QueriesToCompile.empty()) {
+        while (PendingCompilations < MaxConcurrentCompilations && !QueriesToCompile.empty()) {
             auto query = std::move(QueriesToCompile.front());
             QueriesToCompile.pop_front();
 
@@ -388,7 +376,7 @@ private:
     ui32 PendingCompilations = 0;
     ui32 EntriesLoaded = 0;
     ui32 EntriesFailed = 0;
-    ui32 FetchRetryCount = 0;
+    ui32 MaxConcurrentCompilations = 1;
     bool Completed = false;
     TString SkipReason;
 };
@@ -399,7 +387,7 @@ NActors::IActor* CreateKqpWarmupActor(
     const TString& cluster,
     NActors::TActorId notifyActorId)
 {
-    return new TKqpCompileCacheWarmup(config, database, cluster, notifyActorId);
+    return new TKqpCompileCacheWarmupActor(config, database, cluster, notifyActorId);
 }
 
 } // namespace NKikimr::NKqp

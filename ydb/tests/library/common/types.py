@@ -81,8 +81,7 @@ class Erasure(Enum):
     @staticmethod
     def common_used():
         return (
-            Erasure.NONE, Erasure.BLOCK_4_2, Erasure.MIRROR_3_DC,
-            Erasure.MIRROR_3
+            Erasure.NONE, Erasure.BLOCK_4_2, Erasure.MIRROR_3_DC
         )
 
 

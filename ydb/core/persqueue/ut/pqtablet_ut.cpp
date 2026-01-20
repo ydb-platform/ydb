@@ -3169,7 +3169,7 @@ protected:
     void InvokeCollectTransactions();
 
     void EnsureTransactionPrepared(ui64 txId);
-    void EnsureTransactionCalculated(ui64 txId);
+    void EnsureTransactionPlanned(ui64 txId);
     void EnsureTransactionExecuted(ui64 txId);
 
 private:
@@ -3225,9 +3225,9 @@ void TFixture::EnsureTransactionPrepared(ui64 txId)
     EnsureTransactionState(txId, NKikimrPQ::TTransaction::PREPARED);
 }
 
-void TFixture::EnsureTransactionCalculated(ui64 txId)
+void TFixture::EnsureTransactionPlanned(ui64 txId)
 {
-    EnsureTransactionState(txId, NKikimrPQ::TTransaction::CALCULATED, 1000);
+    EnsureTransactionState(txId, NKikimrPQ::TTransaction::PLANNED, 1000);
 }
 
 void TFixture::EnsureTransactionExecuted(ui64 txId)
@@ -3290,7 +3290,7 @@ Y_UNIT_TEST_F(Single_Transaction_Partial_Partitions, TFixture)
 
     InvokeCollectTransactions();
 
-    EnsureTransactionCalculated(101);
+    EnsureTransactionPlanned(101);
 }
 
 Y_UNIT_TEST_F(Multiple_Transactions_One_Range, TFixture)
@@ -3307,7 +3307,7 @@ Y_UNIT_TEST_F(Multiple_Transactions_One_Range, TFixture)
 
     EnsureTransactionExecuted(101);
     EnsureTransactionExecuted(102);
-    EnsureTransactionCalculated(103);
+    EnsureTransactionPlanned(103);
 }
 
 Y_UNIT_TEST_F(Multiple_Transactions_Different_Ranges, TFixture)
@@ -3323,7 +3323,7 @@ Y_UNIT_TEST_F(Multiple_Transactions_Different_Ranges, TFixture)
     InvokeCollectTransactions();
 
     EnsureTransactionExecuted(101);
-    EnsureTransactionCalculated(102);
+    EnsureTransactionPlanned(102);
 }
 
 Y_UNIT_TEST_F(Transaction_Adjacent_ReadRanges, TFixture)
@@ -3391,7 +3391,7 @@ Y_UNIT_TEST_F(Comprehensive_Test_Set_For_Complete_CollectTransactions_Testing, T
     
     // Субтранзакции tx 103 + транзакция tx 104 (частичная)
     AddReadRange();
-    AddPairFromPartition(103, 1);        // tx 103: партиция 1 записала -> 1/2 -> CALCULATED
+    AddPairFromPartition(103, 1);        // tx 103: партиция 1 записала -> 1/2 -> PLANNED
     AddPairFromPQ(104, {1, 2, 3, 4, 5}); // tx 104: много партиций
     AddPairFromPartition(104, 1);        // tx 104: партиция 1 записала
     AddPairFromPartition(104, 5);        // tx 104: партиция 5 записала (крайняя)
@@ -3402,16 +3402,16 @@ Y_UNIT_TEST_F(Comprehensive_Test_Set_For_Complete_CollectTransactions_Testing, T
     AddPairFromPartition(105, 1);        // tx 105: партиция 1
     AddPairFromPartition(105, 2);        // tx 105: партиция 2 -> все 2/2 -> EXECUTED
     AddPairFromPQ(106, {1, 2, 3});       // tx 106: 3 партиции
-    AddPairFromPartition(106, 2);        // tx 106: только партиция 2 записала -> 1/3 -> CALCULATED
+    AddPairFromPartition(106, 2);        // tx 106: только партиция 2 записала -> 1/3 -> PLANNED
 
     InvokeCollectTransactions();
 
     EnsureTransactionPrepared(101);      // tx 101: без субтранзакций -> PREPARED
     EnsureTransactionExecuted(102);      // tx 102: все 3/3 партиций записали -> EXECUTED
-    EnsureTransactionCalculated(103);    // tx 103: 1/2 партиций записали -> CALCULATED
-    EnsureTransactionCalculated(104);    // tx 104: 2/5 партиций записали -> CALCULATED
+    EnsureTransactionPlanned(103);    // tx 103: 1/2 партиций записали -> PLANNED
+    EnsureTransactionPlanned(104);    // tx 104: 2/5 партиций записали -> PLANNED
     EnsureTransactionExecuted(105);      // tx 105: все 2/2 партиций записали -> EXECUTED
-    EnsureTransactionCalculated(106);    // tx 106: 1/3 партиций записали -> CALCULATED
+    EnsureTransactionPlanned(106);    // tx 106: 1/3 партиций записали -> PLANNED
 }
 
 }

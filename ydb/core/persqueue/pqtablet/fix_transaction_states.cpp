@@ -48,7 +48,7 @@ THashMap<ui64, NKikimrPQ::TTransaction> CollectTransactions(const TVector<NKikim
                 AFL_ENSURE(txId.Defined() && (*txId == tx.GetTxId()));
                 ++current;
                 AFL_ENSURE(current <= expected);
-                tx.SetState((current == expected) ? NKikimrPQ::TTransaction::EXECUTED : NKikimrPQ::TTransaction::CALCULATED);
+                tx.SetState((current == expected) ? NKikimrPQ::TTransaction::EXECUTED : NKikimrPQ::TTransaction::PLANNED);
             }
 
             txs.insert_or_assign(*txId, std::move(tx));

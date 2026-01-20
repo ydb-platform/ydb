@@ -1,6 +1,6 @@
 # Чтение/запись локальных топиков
 
-Эта статья поможет быстро начать работу с [потоковыми запросами](../../concepts/streaming_query/index.md) в {{ ydb-short-name }} на простейшем модельном примере. Мы будем считать количество ошибок по каждому серверу в интервале 10m. Для этого будем читать из входного [топика](../../concepts/datamodel/topic.md) сообщения в формате JSON, фильтровать их, агрегировать и результат записывать в выходной [топик](../../concepts/datamodel/topic.md).
+Эта статья поможет быстро начать работу с [потоковыми запросами](../../concepts/streaming-query.md) в {{ ydb-short-name }} на простейшем модельном примере. Мы будем считать количество ошибок по каждому серверу в интервале 10m. Для этого будем читать из входного [топика](../../concepts/datamodel/topic.md) сообщения в формате JSON, фильтровать их, агрегировать и результат записывать в выходной [топик](../../concepts/datamodel/topic.md).
 
 В статье рассматриваются следующие шаги работы:
 
@@ -63,7 +63,7 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 
 ## Шаг 3. Создание потокового запроса {#step3}
 
-Далее необходимо запустить [потоковый запрос](../../concepts/streaming_query/index.md). Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-streaming-query.md):
+Далее необходимо запустить [потоковый запрос](../../concepts/streaming-query.md). Это можно сделать с помощью [SQL-запроса](../../yql/reference/syntax/create-streaming-query.md):
 
 ```yql
 CREATE STREAMING QUERY query_example AS
@@ -99,7 +99,7 @@ FROM
 END DO
 ```
 
-Подробнее про агрегацию `GROUP BY HOP` можно прочитать в статье [{#T}](../../../yql/reference/syntax/select/group-by#group-by-hop). Подробнее про запись данных в топик можно прочитать в статье [{#T}](../../concepts/streaming_query/formats.md#write_formats).
+Подробнее про агрегацию `GROUP BY HOP` можно прочитать в статье [{#T}](../../../yql/reference/syntax/select/group-by#group-by-hop). Подробнее про запись данных в топик можно прочитать в статье [{#T}](../../dev/streaming-query-formats.md#write_formats).
 
 ## Шаг 4. Просмотр состояния запроса {#step4}
 
@@ -156,5 +156,5 @@ DROP STREAMING QUERY query_example
 
 ## См. также
 
-* [{#T}](../../concepts/streaming_query/index.md)
-* [{#T}](../../concepts/streaming_query/formats.md)
+* [{#T}](../../concepts/streaming-query.md)
+* [{#T}](../../dev/streaming-query-formats.md)

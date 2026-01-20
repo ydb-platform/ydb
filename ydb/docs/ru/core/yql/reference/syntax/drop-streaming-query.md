@@ -1,6 +1,6 @@
 # DROP STREAMING QUERY
 
-`DROP STREAMING QUERY` удаляет [потоковый запрос](../../../concepts/streaming_query/index.md).
+`DROP STREAMING QUERY` удаляет [потоковый запрос](../../../concepts/streaming-query.md).
 
 ## Синтаксис
 
@@ -31,6 +31,6 @@ DROP STREAMING QUERY my_streaming_query
 
 ## См. также
 
-* [{#T}](../../../concepts/streaming_query/index.md)
+* [{#T}](../../../concepts/streaming-query.md)
 * [{#T}](create-streaming-query.md)
 * [{#T}](alter-streaming-query.md)

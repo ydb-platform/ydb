@@ -20,7 +20,7 @@
 {% if feature_async_replication %}- [Асинхронная репликация](async-replication.md){% endif %}
 - [Оптимизатор запросов](optimizer.md)
 - [Федеративные запросы](federated_query/index.md)
-- [Потоковые запросы](streaming_query/index.md)
+- [Потоковые запросы](streaming-query.md)
 
 ## См. также {#see-also}
 

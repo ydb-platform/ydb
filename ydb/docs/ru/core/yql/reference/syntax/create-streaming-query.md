@@ -1,6 +1,6 @@
 # CREATE STREAMING QUERY
 
-`CREATE STREAMING QUERY` создает [потоковый запрос](../../../concepts/streaming_query/index.md).
+`CREATE STREAMING QUERY` создает [потоковый запрос](../../../concepts/streaming-query.md).
 
 ## Синтаксис
 
@@ -23,7 +23,7 @@ END DO
 * `IF NOT EXISTS` — не выводить ошибку, если потоковый запрос с таким именем уже существует, в этом случае существующий запрос останется неизменённым.
 * `query_name` — имя потокового запроса, который нужно создать.
 * `WITH (<key> = <value>)` — список настроек нового потокового запроса, опционально.
-* `AS DO BEGIN ... END DO` — текст нового потокового запроса, ограничения для текста запроса приведены в [{#T}](../../../concepts/streaming_query/index.md#limitations), примеры текста [см. ниже](#examples).
+* `AS DO BEGIN ... END DO` — текст нового потокового запроса, ограничения для текста запроса приведены в [{#T}](../../../concepts/streaming-query.md#limitations), примеры текста [см. ниже](#examples).
 
 Настройки `OR REPLACE` и `IF NOT EXISTS` нельзя использовать одновременно.
 
@@ -79,10 +79,10 @@ FROM
 END DO
 ```
 
-Примеры обработки данных в других форматах приведены в статье [{#T}](../../../concepts/streaming_query/formats.md). Подробнее о возможностях и ограничениях потоковых запросов [см. в документации](../../../concepts/streaming_query/index.md).
+Примеры обработки данных в других форматах приведены в статье [{#T}](../../../dev/streaming-query-formats.md). Подробнее о возможностях и ограничениях потоковых запросов [см. в документации](../../../concepts/streaming-query.md).
 
 ## См. также
 
-* [{#T}](../../../concepts/streaming_query/index.md)
+* [{#T}](../../../concepts/streaming-query.md)
 * [{#T}](alter-streaming-query.md)
 * [{#T}](drop-streaming-query.md)

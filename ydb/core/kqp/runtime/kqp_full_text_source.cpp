@@ -1095,9 +1095,6 @@ private:
     }
 
     bool ExtractAndTokenizeExpression() {
-        TStringBuilder log;
-        Y_DEFER { Cerr << log << Endl; };
-
         YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
 
         // Get the first expression (assuming single expression for now)
@@ -1118,11 +1115,6 @@ private:
                     GeneratePostfilterMatchers(analyzer.analyzers(), expr);
                 }
             }
-        }
-
-        log << "SearchWords:" << Endl;
-        for (const auto& word : Words) {
-            log << "\t" << "WordIndex=" << word.WordIndex << ";Word=" << word.Word << Endl;
         }
 
         if (Words.empty()) {

@@ -138,6 +138,23 @@ namespace NKikimr::NSqsTopic {
         );
     }
 
+    TVector<std::pair<TString, TString>> GetRequestSizeMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    ) {
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            {
+                {"name", "api.sqs.request.bytes"}
+            }
+        );
+    }
+
 
     ui64 SampleIdFromRequestId(const TStringBuf requestId) {
         if (sizeof(ui64) <= requestId.size()) [[likely]] {

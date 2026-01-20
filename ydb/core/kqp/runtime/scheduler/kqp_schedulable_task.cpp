@@ -27,17 +27,16 @@ void TSchedulableTask::Resume() {
     NActors::TActivationContext::Send(ActorId, GetResumeEvent());
 }
 
-// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
+// TODO: referring to the pool's usage - to support all-equal fair-share query mode.
 bool TSchedulableTask::TryIncreaseUsage() {
     bool increased = false;
     ui64 fairShare = 0;
     NHdrf::NDynamic::TTreeElement* poolOrQuery = nullptr;
 
     if (const auto snapshot = Query->GetSnapshot()) {
-        fairShare = snapshot->GetParent()->FairShare;
+        fairShare = snapshot->FairShare;
         poolOrQuery = Query->GetParent();
-    } else {
-        // TODO: check directly for the pool snapshot - even if there is no query snapshot yet.
+    } else { // TODO: check directly for the pool snapshot - even if there is no query snapshot yet.
         fairShare = Query->AllowMinFairShare;
         poolOrQuery = Query.get();
     }
@@ -61,14 +60,12 @@ bool TSchedulableTask::TryIncreaseUsage() {
     return true;
 }
 
-// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
 void TSchedulableTask::IncreaseUsage() {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         ++parent->Usage;
     }
 }
 
-// TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
 void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, bool forcedResume) {
     for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
         --parent->Usage;
@@ -82,9 +79,8 @@ void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, bool forcedRes
 
 size_t TSchedulableTask::GetSpareUsage() const {
     if (const auto snapshot = Query->GetSnapshot()) {
-        // TODO: check this code when the pool removal will be implemented, since the `parent` may be gone.
         auto usage = Query->GetParent()->Usage.load(std::memory_order_relaxed);
-        auto fairShare = snapshot->GetParent()->FairShare;
+        auto fairShare = snapshot->FairShare;
         return fairShare >= usage ? (fairShare - usage) : 0;
     }
 

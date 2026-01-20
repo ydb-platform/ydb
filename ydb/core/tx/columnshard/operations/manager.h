@@ -143,17 +143,9 @@ public:
         return Aborted;
     }
 
-    void SetTxId(const ui64 txId) {
-        AFL_VERIFY(!TxId || TxId == txId)("tx_id", txId)("lock_id", GetLockId())("tx_id_assigned", TxId);
-        TxId = txId;
-    }
-    bool IsTxIdAssigned() const {
-        return TxId != 0;
-    }
-    ui64 GetTxId() const {
-        AFL_VERIFY(IsTxIdAssigned())("lock_id", GetLockId());
-        return TxId;
-    }
+    void SetTxId(const ui64 txId);
+    bool IsTxIdAssigned() const; 
+    ui64 GetTxId() const;
 
     bool IsCommitted(const ui64 lockId) const {
         return Committed.contains(lockId);

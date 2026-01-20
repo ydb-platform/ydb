@@ -4,6 +4,18 @@
 
 namespace NKikimr::NColumnShard {
 
+void TLockFeatures::SetTxId(const ui64 txId) {
+    AFL_VERIFY(!TxId || TxId == txId)("tx_id", txId)("lock_id", GetLockId())("tx_id_assigned", TxId);
+    TxId = txId;
+}
+bool TLockFeatures::IsTxIdAssigned() const {
+    return TxId != 0;
+}
+ui64 TLockFeatures::GetTxId() const {
+    AFL_VERIFY(IsTxIdAssigned())("lock_id", GetLockId());
+    return TxId;
+}
+
 bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     {

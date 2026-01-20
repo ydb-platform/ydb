@@ -123,6 +123,9 @@ public:
         Finished = true;
     }
 
+    void Flush() override {
+    }
+
     ui64 Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, ui64 bytes) override {
         batch.clear();
         ui64 valuesCount = 0;

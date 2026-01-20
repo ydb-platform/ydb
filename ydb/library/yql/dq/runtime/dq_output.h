@@ -103,6 +103,7 @@ public:
     // Push checkpoint. Checkpoints may be pushed to channel even after it is finished.
     virtual void Push(NDqProto::TCheckpoint&& checkpoint) = 0;
     virtual void Finish() = 0;
+    virtual void Flush() = 0;
 
     // <| consumer methods
     [[nodiscard]]

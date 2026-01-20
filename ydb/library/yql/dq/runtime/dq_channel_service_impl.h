@@ -777,6 +777,10 @@ public:
         Serializer->Flush(true);
     }
 
+    void Flush() override {
+        Serializer->Flush(false);
+    }
+
     bool IsFinished() const override {
         bool finishCheckResult = Serializer->Buffer->IsFinished();
         Serializer->Buffer->PopStats.FinishCheckTime = TInstant::Now();

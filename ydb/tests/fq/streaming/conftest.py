@@ -22,15 +22,7 @@ def kikimr(request):
             },
             query_service_config={
                 "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
-                "enable_match_recognize": True,
-                "streaming_queries": {
-                    "external_storage": {
-                        "database_connection": {
-                            "endpoint": os.getenv("YDB_ENDPOINT"),
-                            "database": os.getenv("YDB_DATABASE"),
-                        },
-                    },
-                },
+                "enable_match_recognize": True
             },
             table_service_config={
                 "enable_watermarks": enable_watermarks,
@@ -41,6 +33,7 @@ def kikimr(request):
         )
 
         config.yaml_config["log_config"]["default_level"] = 8
+        config.yaml_config["domains_config"]["security_config"]["enforce_user_token_requirement"] = True
 
         return config
 

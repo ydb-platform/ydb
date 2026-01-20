@@ -30,6 +30,8 @@ namespace {
 constexpr TDuration RestartDuration = TDuration::Seconds(3); // Delay before next restart after fatal error
 //constexpr TDuration CoordinationSessionTimeout = TDuration::Seconds(30);
 constexpr char SemaphoreName[] = "RowDispatcher";
+constexpr char DefaultCoordinationNodePath[] = ".metadata/streaming/coordination_node";
+
 
 using TRpcIn = Ydb::Coordination::SessionRequest;
 using TRpcOut = Ydb::Coordination::SessionResponse;
@@ -75,9 +77,9 @@ struct TEvPrivate {
     struct TEvOnChangedResult : NActors::TEventLocal<TEvOnChangedResult, EvOnChangedResult> {};
 
     struct TEvDescribeSemaphoreResult : NActors::TEventLocal<TEvDescribeSemaphoreResult, EvDescribeSemaphoreResult> {
-        NYdb::NCoordination::TAsyncDescribeSemaphoreResult Result;
-        explicit TEvDescribeSemaphoreResult(NYdb::NCoordination::TAsyncDescribeSemaphoreResult future)
-            : Result(std::move(future)) {}
+        NYdb::NCoordination::TDescribeSemaphoreResult Result;
+        explicit TEvDescribeSemaphoreResult(NYdb::NCoordination::TDescribeSemaphoreResult result)
+            : Result(std::move(result)) {}
     };
 
     struct TEvAcquireSemaphoreResult : NActors::TEventLocal<TEvAcquireSemaphoreResult, EvAcquireSemaphoreResult> {
@@ -212,7 +214,7 @@ private:
     void SetTimeout();
     NYdb::TDriverConfig GetYdbDriverConfig() const;
 
-    void SendInitMessage();
+    void SendStartSession();
     void AddSessionEvent(TRpcIn&& message);
     void SendSessionEvents();
     void SendSessionEvent(TRpcIn&& message, bool success = true);
@@ -254,6 +256,9 @@ TLeaderElection::TLeaderElection(
     , ParentId(parentId)
     , CoordinatorId(coordinatorId)
     , Metrics(counters) {
+    if (!config.GetCoordinationNodePath()) {
+        CoordinationNodePath = JoinPath(NKikimr::AppData()->TenantName, DefaultCoordinationNodePath);
+    }
 }
 
 // ERetryErrorClass RetryFunc(const NYdb::TStatus& status) {
@@ -478,7 +483,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
         ResetState();
         return;
     }
-    LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully acquired");
+    LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully acquired " << result.GetResult());
 }
 
 void TLeaderElection::PassAway() {
@@ -514,19 +519,28 @@ void TLeaderElection::DescribeSemaphore() {
     }
     LOG_ROW_DISPATCHER_DEBUG("Describe semaphore");
     PendingDescribe = true;
-    Session->DescribeSemaphore(
-        SemaphoreName,
-        NYdb::NCoordination::TDescribeSemaphoreSettings()
-            .WatchData()
-            .WatchOwners()
-            .IncludeOwners()
-            .OnChanged([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](bool /* isChanged */) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvOnChangedResult());
-            }))
-        .Subscribe(
-            [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncDescribeSemaphoreResult& future) {
-                actorSystem->Send(actorId, new TEvPrivate::TEvDescribeSemaphoreResult(future));
-            });
+    // Session->DescribeSemaphore(
+    //     SemaphoreName,
+    //     NYdb::NCoordination::TDescribeSemaphoreSettings()
+    //         .WatchData()
+    //         .WatchOwners()
+    //         .IncludeOwners()
+    //         .OnChanged([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](bool /* isChanged */) {
+    //             actorSystem->Send(actorId, new TEvPrivate::TEvOnChangedResult());
+    //         }))
+    //     .Subscribe(
+    //         [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncDescribeSemaphoreResult& future) {
+    //             actorSystem->Send(actorId, new TEvPrivate::TEvDescribeSemaphoreResult(future));
+    //         });
+
+    TRpcIn message;
+    auto& inner = *message.mutable_describe_semaphore();
+    inner.set_req_id(NextReqId++);
+    inner.set_name(SemaphoreName);
+    inner.set_include_owners(true);
+    inner.set_watch_data(true);
+    inner.set_watch_owners(true);
+    AddSessionEvent(std::move(message));
 }
 
 void TLeaderElection::Handle(TEvPrivate::TEvOnChangedResult::TPtr& /*ev*/) {
@@ -537,7 +551,7 @@ void TLeaderElection::Handle(TEvPrivate::TEvOnChangedResult::TPtr& /*ev*/) {
 
 void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     PendingDescribe = false;
-    auto result = ev->Get()->Result.GetValue();
+    auto result = ev->Get()->Result;
     if (!result.IsSuccess()) {
         LOG_ROW_DISPATCHER_ERROR("Semaphore describe fail, " << result.GetIssues());
         Metrics.Errors->Inc();
@@ -622,7 +636,7 @@ void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvActorAttached::TPtr& e
     RpcActor = ev->Get()->RpcActor;
 
     LOG_ROW_DISPATCHER_DEBUG("RpcActor attached: " << RpcActor);
-    SendInitMessage();
+    SendStartSession();
 }
 void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvReadRequest::TPtr&) {
     PendingRpcResponses++;
@@ -666,33 +680,27 @@ void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPtr& ev
     switch (messageCase) {
         case TRpcOut::kPing:
             LOG_ROW_DISPATCHER_DEBUG("kPing");
-            //ComputeSessionMessage(message.init_response());
             {
                 const auto& source = message.ping();
                 TRpcIn message;
                 message.mutable_pong()->set_opaque(source.opaque());;
                 AddSessionEvent(std::move(message));
-                
             }
             break;
         case TRpcOut::kPong:
             LOG_ROW_DISPATCHER_DEBUG("kPong");
-            //ComputeSessionMessage(message.init_response());
             break;
         case TRpcOut::kFailure:
             LOG_ROW_DISPATCHER_DEBUG("kFailure");
             {
                 auto failure = message.failure();
-
                 const auto status = failure.status();
                 if (status != Ydb::StatusIds::SUCCESS) {
                     NYql::TIssues issues;
                     IssuesFromMessage(failure.issues(), issues);
                     LOG_ROW_DISPATCHER_DEBUG("Rpc write request, got error " << status << ", reason: " << issues.ToOneLineString());
-                    //return CloseSession(status, issues);
                 }
             }
-            //ComputeSessionMessage(message.init_response());
             break;
         case TRpcOut::kSessionStarted:
             LOG_ROW_DISPATCHER_DEBUG("kSessionStarted");
@@ -700,63 +708,58 @@ void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPtr& ev
             const auto& source = message.session_started();
             SessionId = source.session_id();
             Send(SelfId(), new TEvPrivate::TEvCreateSessionResult());
-            }//ComputeSessionMessage(message.init_response());
+            }
             break;
         case TRpcOut::kSessionStopped:
             LOG_ROW_DISPATCHER_DEBUG("kSessionStopped");
-            //ComputeSessionMessage(message.init_response());
             break;
         case TRpcOut::kAcquireSemaphorePending:
             LOG_ROW_DISPATCHER_DEBUG("kAcquireSemaphorePending");
-            //ComputeSessionMessage(message.init_response());
             break;
         case TRpcOut::kAcquireSemaphoreResult:
             LOG_ROW_DISPATCHER_DEBUG("kAcquireSemaphoreResult");
             {
             const auto& source = message.acquire_semaphore_result();
-             NYdb::NIssue::TIssues issues;
+            NYdb::NIssue::TIssues issues;
             NYdb::NIssue::IssuesFromMessage(source.issues(), issues);
             auto status = NYdb::TStatus(static_cast<NYdb::EStatus>(source.status()), std::move(issues));
-          //  TResult<bool>(MakeStatus(std::move(plain)), source.acquired()
-
             Send(SelfId(), new TEvPrivate::TEvAcquireSemaphoreResult(NYdb::NCoordination::TResult<bool>(status, source.acquired())));
             }
-            //ComputeSessionMessage(message.init_response());
             break;
         case TRpcOut::kReleaseSemaphoreResult:
             LOG_ROW_DISPATCHER_DEBUG("ReleaseSemaphoreResult");
-            //ComputeSessionMessage(message.init_response());
             break;
         case TRpcOut::kDescribeSemaphoreResult:
             LOG_ROW_DISPATCHER_DEBUG("DescribeSemaphoreResult");
-            //ComputeSessionMessage(message.init_response());
+{
+            const auto& source = message.describe_semaphore_result();
+            NYdb::NIssue::TIssues issues;
+            NYdb::NIssue::IssuesFromMessage(source.issues(), issues);
+            auto status = NYdb::TStatus(static_cast<NYdb::EStatus>(source.status()), std::move(issues));
+            
+            Send(SelfId(), new TEvPrivate::TEvDescribeSemaphoreResult(NYdb::NCoordination::TDescribeSemaphoreResult(status, source.semaphore_description())));
+}
             break;
         case TRpcOut::kDescribeSemaphoreChanged:
             LOG_ROW_DISPATCHER_DEBUG("DescribeSemaphoreChanged");
-            //ComputeSessionMessage(message.init_response());
+            Send(SelfId(), new TEvPrivate::TEvOnChangedResult());
             break;
         case TRpcOut::kCreateSemaphoreResult:
             LOG_ROW_DISPATCHER_DEBUG("CreateSemaphoreResult");
-             {
+            {
             const auto& source = message.create_semaphore_result();
-          //  const uint64_t reqId = source.req_id();
-           // auto plain = MakePlainStatus(source.status(), source.issues());
-
             NYdb::NIssue::TIssues issues;
             NYdb::NIssue::IssuesFromMessage(source.issues(), issues);
             auto status = NYdb::TStatus(static_cast<NYdb::EStatus>(source.status()), std::move(issues));
 
             Send(SelfId(), new TEvPrivate::TEvCreateSemaphoreResult(NYdb::NCoordination::TResult<void>(status)));
              }
-             //ComputeSessionMessage(message.init_response());
             break;
         case TRpcOut::kUpdateSemaphoreResult:
             LOG_ROW_DISPATCHER_DEBUG("UpdateSemaphoreResult");
-            //ComputeSessionMessage(message.init_response());
             break;
         case TRpcOut::kDeleteSemaphoreResult:
             LOG_ROW_DISPATCHER_DEBUG("DeleteSemaphoreResult");
-            //ComputeSessionMessage(message.init_response());
             break;
         default:
             LOG_ROW_DISPATCHER_DEBUG("Unknown message case");
@@ -766,7 +769,7 @@ void TLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvFinishRequest::TPtr&) 
     LOG_ROW_DISPATCHER_DEBUG("TEvFinishRequest");
 }
 
-void TLeaderElection::SendInitMessage() {
+void TLeaderElection::SendStartSession() {
     // TRequest req;
     // auto* start = req.mutable_session_start();
     // start->set_seq_no(seqNo);
@@ -778,7 +781,7 @@ void TLeaderElection::SendInitMessage() {
     // start->set_protection_key(TStringType{ProtectionKey_});
     // processor->Write(std::move(req));
 
-    LOG_ROW_DISPATCHER_DEBUG("Sending init message");
+    LOG_ROW_DISPATCHER_DEBUG("Sending start message");
 
     TRpcIn message;
 

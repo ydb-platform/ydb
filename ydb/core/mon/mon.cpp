@@ -1500,7 +1500,7 @@ public:
             }
         }
 
-        Register(new THttpMonAuthorizedPageRequest(std::move(ev), IndexMonPage.Get(), AllowedSIDs, Authorizer, NeedMonLegacyAudit));
+        Register(new THttpMonAuthorizedPageRequest(std::move(ev), IndexMonPage.Get(), AllowedSIDs, {}, NeedMonLegacyAudit));
     }
 
     void Handle(TEvMon::TEvRegisterHandler::TPtr& ev) {

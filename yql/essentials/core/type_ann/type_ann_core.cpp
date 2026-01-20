@@ -3578,6 +3578,60 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    template<bool IsScore>
+    IGraphTransformer::TStatus FullTextBuiltinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        YQL_ENSURE(output);
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 05), ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << input->Content() << " function is not available before version 2025.05"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TExprNode::TPtr positionalArguments = input;
+        if (input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+            if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            positionalArguments = input->ChildPtr(0);
+        }
+
+        if (positionalArguments->ChildrenSize() > 2) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(positionalArguments->Pos()), TStringBuilder() << "Expected at most 2 positional argument(s) for fulltext builtin, but got " <<
+                positionalArguments->ChildrenSize() << " arguments. Use named arguments for additional arguments instead."));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        {
+            const TTypeAnnotationNode* type = positionalArguments->Head().GetTypeAnn();
+            YQL_ENSURE(type);
+            if (type->GetKind() == ETypeAnnotationKind::Optional) {
+                type = type->Cast<TOptionalExprType>()->GetItemType();
+                YQL_ENSURE(type);
+            }
+
+            if (!EnsureStringOrUtf8Type(positionalArguments->Head().Pos(), *type, ctx.Expr)) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(positionalArguments->Head().Pos()), TStringBuilder() << "Expected String or Utf8, but got: " << *positionalArguments->Head().GetTypeAnn()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureStringOrUtf8Type(positionalArguments->ChildRef(1)->Pos(), *positionalArguments->ChildRef(1)->GetTypeAnn(), ctx.Expr)) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(positionalArguments->ChildRef(1)->Pos()), TStringBuilder() << "Search string must be String or Utf8"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        if (IsScore) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Double));
+        } else {
+            input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool));
+        }
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus SqlConcatWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 04), ctx.Types.BackportMode)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Concat function is not available before version 2025.04"));
@@ -14130,6 +14184,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WithWorld"] = &WithWorldWrapper;
         Functions["Concat"] = &ConcatWrapper;
         Functions["AggrConcat"] = &AggrConcatWrapper;
+        ExtFunctions["FulltextContains"] = &FullTextBuiltinWrapper<false>;
+        ExtFunctions["FulltextScore"] = &FullTextBuiltinWrapper<true>;
         ExtFunctions["SqlConcat"] = &SqlConcatWrapper;
         ExtFunctions["Substring"] = &SubstringWrapper;
         ExtFunctions["Find"] = &FindWrapper;

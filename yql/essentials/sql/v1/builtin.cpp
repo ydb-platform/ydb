@@ -4149,6 +4149,12 @@ TNodeResult BuildBuiltinFunc(
                 *mustUseNamed = false;
             }
             return TNonNull(TNodePtr(new TUdfNode(pos, args)));
+        } else if (normalizedName == "fulltextcontains" || normalizedName == "fulltextscore") {
+            if (mustUseNamed && *mustUseNamed) {
+                *mustUseNamed = false;
+            }
+            auto fulltextBuiltinName = normalizedName == "fulltextcontains" ? "FulltextContains" : "FulltextScore";
+            return TNonNull(TNodePtr(new TCallNodeImpl(pos, fulltextBuiltinName, args)));
         } else if (normalizedName == "asstruct" || normalizedName == "structtype") {
             if (args.empty()) {
                 return TNonNull(TNodePtr(new TCallNodeImpl(pos, normalizedName == "asstruct" ? "AsStruct" : "StructType", 0, 0, args)));

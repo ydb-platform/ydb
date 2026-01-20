@@ -4,18 +4,15 @@
 
 #if !defined(_win_)
 
-#include <errno.h>
+#include <cerrno>
 #include <fcntl.h>
-#include <signal.h>
-#include <string.h>
-
+#include <csignal>
 #include <unistd.h>
 
 #if defined(_linux_)
 #include <dlfcn.h>
 #endif
 
-#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/defaults.h>
 #include <util/system/event.h>
 #include <util/system/rwlock.h>
@@ -23,6 +20,9 @@
 #include <util/system/thread.h>
 #include <util/system/yassert.h>
 #include <util/generic/hash.h>
+
+#include <atomic>
+#include <utility>
 
 namespace {
     volatile int SIGNAL_PIPE_WRITE_FD = 0; // will be initialized in ctor
@@ -51,14 +51,13 @@ namespace {
     // Async signals -- SIGHUP, SIGUSR1 (used to cause configuration files reread for example)
     // Sync signals -- fatal errors like SIGSEGV, SIGBUS...
     class TAsyncSignalsHandler {
-    private:
         TThread Thread;
         int SignalPipeReadFd;
         typedef THolder<TEventHandler> TEventHandlerPtr;
         THashMap<int, TEventHandlerPtr> Handlers;
         TRWMutex HandlersLock;
 
-        TAtomic ShouldDie;
+        std::atomic<bool> ShouldDie = false;
         TSystemEvent DieEvent;
 
         static void* ThreadFunc(void* data) {
@@ -67,14 +66,14 @@ namespace {
             return nullptr;
         }
 
-        inline void RealThreadFunc() {
+        void RealThreadFunc() {
             for (;;) {
                 ui8 signum;
                 const ssize_t bytesRead = read(SignalPipeReadFd, &signum, 1);
 
                 Y_ABORT_UNLESS(bytesRead >= 0 || (bytesRead == -1 && errno == EINTR), "read failed: %s (errno = %d)", strerror(errno), errno);
 
-                if (AtomicAdd(ShouldDie, 0) != 0) {
+                if (ShouldDie.load()) {
                     DieEvent.Signal();
 
                     break;
@@ -100,7 +99,6 @@ namespace {
         TAsyncSignalsHandler()
             : Thread(TThread::TParams(ThreadFunc, this).SetName("sighandler"))
             , SignalPipeReadFd(0)
-            , ShouldDie(0)
         {
             int filedes[2] = {-1};
 
@@ -147,7 +145,7 @@ namespace {
         }
 
         ~TAsyncSignalsHandler() {
-            AtomicSwap(&ShouldDie, TAtomic(1));
+            ShouldDie.store(true);
             ui8 fakeSignal = 0;
             WriteAllOrDie(SIGNAL_PIPE_WRITE_FD, &fakeSignal, 1);
 
@@ -233,7 +231,7 @@ namespace {
     public:
         TFunctionEventHandler(TFunc func) {
             if (func)
-                Func = func;
+                Func = std::move(func);
         }
 
         int Handle(int signum) override {
@@ -252,5 +250,5 @@ void SetAsyncSignalHandler(int signum, void (*handler)(int)) {
 
 void SetAsyncSignalFunction(int signum, std::function<void(int)> func) {
     typedef std::function<void(int)> TFunc;
-    SetAsyncSignalHandler(signum, MakeHolder<TFunctionEventHandler<TFunc>>(func));
+    SetAsyncSignalHandler(signum, MakeHolder<TFunctionEventHandler<TFunc>>(std::move(func)));
 }

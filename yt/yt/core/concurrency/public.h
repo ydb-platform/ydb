@@ -1,7 +1,5 @@
 #pragma once
 
-#include <yt/yt/core/actions/public.h>
-
 #include <yt/yt/core/misc/public.h>
 #include <yt/yt/core/misc/configurable_singleton_decl.h>
 
@@ -132,12 +130,6 @@ DECLARE_REFCOUNTED_STRUCT(ICallbackProvider)
 class TPropagatingStorage;
 
 YT_DECLARE_RECONFIGURABLE_SINGLETON(TFiberManagerConfig, TFiberManagerDynamicConfig);
-
-using TPooledInvokerProvider = std::function<IInvokerPtr(
-    const std::string& pool,
-    const TFairShareThreadPoolTag&)>;
-
-inline const TFairShareThreadPoolTag DefaultExecutionTag = "default";
 
 ////////////////////////////////////////////////////////////////////////////////
 

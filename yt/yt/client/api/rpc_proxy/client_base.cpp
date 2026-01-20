@@ -937,12 +937,6 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
 
     YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
 
-    auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
-    YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
-        ext->set_execution_tag(ToString(traceContext->GetTraceId()));
-    }
-
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspLookupRowsPtr& rsp) {
         auto rowset = DeserializeRowset<TUnversionedRow>(
             rsp->rowset_descriptor(),
@@ -989,13 +983,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
         THROW_ERROR_EXCEPTION("Versioned lookup does not support versioned read mode %Qlv",
             options.VersionedReadOptions.ReadMode);
     }
-
     YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
-    auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
-    YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
-        ext->set_execution_tag(ToString(traceContext->GetTraceId()));
-    }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspVersionedLookupRowsPtr& rsp) {
         auto rowset = DeserializeRowset<TVersionedRow>(
@@ -1073,14 +1061,6 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
     req->set_retention_timestamp(options.RetentionTimestamp);
     req->set_multiplexing_band(static_cast<NProto::EMultiplexingBand>(options.MultiplexingBand));
     ToProto(req->mutable_tablet_read_options(), options);
-
-    YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
-
-    auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
-    YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
-        ext->set_execution_tag(ToString(traceContext->GetTraceId()));
-    }
 
     return req->Invoke().Apply(BIND([subrequestCount = std::ssize(subrequests)] (const TApiServiceProxy::TRspMultiLookupPtr& rsp) {
         YT_VERIFY(subrequestCount == rsp->subresponses_size());
@@ -1166,12 +1146,6 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_allow_join_without_index(options.AllowJoinWithoutIndex);
 
     YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
-    auto* ext = req->Header().MutableExtension(NProto::TReqFairSharePoolExt::req_fair_share_pool_ext);
-    YT_OPTIONAL_TO_PROTO(ext, execution_pool, options.ExecutionPool);
-    if (auto* traceContext = NTracing::TryGetCurrentTraceContext()) {
-        ext->set_execution_tag(ToString(traceContext->GetTraceId()));
-    }
-
     if (options.PlaceholderValues) {
         req->set_placeholder_values(ToProto(options.PlaceholderValues));
     }

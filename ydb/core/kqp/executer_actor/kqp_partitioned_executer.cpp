@@ -104,7 +104,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandlePrepare);
-                hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
             default:
                 AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
                     << "KqpPartitionedExecuterActor got an unknown message from actorId = " << ev->Sender
@@ -152,7 +152,7 @@ public:
         CreateExecutersWithBuffers();
     }
 
-    void HandlePrepare(TEvKqp::TEvAbortExecution::TPtr& ev) {
+    void HandleAbort(TEvKqp::TEvAbortExecution::TPtr& ev) {
         const auto& msg = ev->Get()->Record;
         auto issues = ev->Get()->GetIssues();
 
@@ -161,7 +161,7 @@ public:
             << ", message: " << issues.ToOneLineString()
             << ", isSessionActor: " << (ev->Sender == SessionActorId));
 
-        AbortWithError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), std::move(issues));
+        AbortWithError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
     }
 
     STFUNC(ExecuteState) {
@@ -169,7 +169,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvTxDelayedExecution, HandleExecute)
-                hFunc(TEvKqp::TEvAbortExecution, HandlePrepare);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleExecute);
             default:
                 AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
@@ -222,9 +222,11 @@ public:
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(response->GetIssues(), issues);
+
         PE_LOG_W("Partition " << partInfo->PartitionIndex << " failed with status = " << response->GetStatus()
             << ", message: " << issues.ToOneLineString());
-        AbortWithError(response->GetStatus(), std::move(issues));
+
+        AbortWithError(response->GetStatus(), issues);
     }
 
     void HandleExecute(TEvKqpExecuter::TEvTxDelayedExecution::TPtr& ev) {
@@ -305,35 +307,6 @@ public:
         PE_LOG_D("Got TEvTxResponse in AbortState from actorId = " << ev->Sender
             << ", partitionIndex = " << partInfo->PartitionIndex
             << ", status = " << response->GetStatus() << ", finishing partition");
-
-        AbortBuffer(partInfo->BufferId);
-        ForgetExecuterAndBuffer(partInfo);
-        ForgetPartition(partInfo);
-
-        if (CheckExecutersAreFinished()) {
-            PE_LOG_N("All executers have been finished, replying with error: " << Ydb::StatusIds_StatusCode_Name(ReturnStatus));
-            ReplyErrorAndDie(ReturnStatus, ReturnIssues);
-        }
-    }
-
-    void HandleAbort(TEvKqp::TEvAbortExecution::TPtr& ev) {
-        auto& msg = ev->Get()->Record;
-        auto issues = ev->Get()->GetIssues();
-
-        auto it = ExecuterToPartition.find(ev->Sender);
-        if (it == ExecuterToPartition.end()) {
-            PE_LOG_D("Got TEvAbortExecution in AbortState from unknown actor with actorId = " << ev->Sender
-                << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-                << ", message: " << issues.ToOneLineString() << ", ignore");
-            return;
-        }
-
-        auto [_, partInfo] = *it;
-
-        PE_LOG_D("Got TEvAbortExecution in AbortState from actorId = " << ev->Sender
-            << ", partitionIndex = " << partInfo->PartitionIndex
-            << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-            << ", issues: " << issues.ToOneLineString() << ", finishing partition");
 
         AbortBuffer(partInfo->BufferId);
         ForgetExecuterAndBuffer(partInfo);
@@ -428,7 +401,7 @@ private:
                 OperationType = TKeyDesc::ERowOperation::Erase;
                 break;
             default:
-                YQL_ENSURE(false);
+                YQL_ENSURE(false, "Unknown operation type for BATCH operation");
                 break;
         }
 
@@ -665,14 +638,14 @@ private:
             auto issues = NYql::TIssues({
                 NYql::TIssue(TStringBuilder() << "Cannot retry query execution because the maximum retry delay has been reached"),
             });
-            AbortWithError(Ydb::StatusIds::UNAVAILABLE, std::move(issues));
+            AbortWithError(Ydb::StatusIds::UNAVAILABLE, issues);
             return;
         }
 
-        auto decJitterDelay = RandomProvider->Uniform(Settings.StartRetryDelayMs, partInfo->RetryDelayMs * 3ul);
-        auto newDelay = std::min(Settings.MaxRetryDelayMs, decJitterDelay);
-        auto oldLimit = partInfo->LimitSize;
-        auto oldDelay = partInfo->RetryDelayMs;
+        const auto decJitterDelay = RandomProvider->Uniform(Settings.StartRetryDelayMs, partInfo->RetryDelayMs * 3ul);
+        const auto newDelay = std::min(Settings.MaxRetryDelayMs, decJitterDelay);
+        const auto oldLimit = partInfo->LimitSize;
+        const auto oldDelay = partInfo->RetryDelayMs;
 
         partInfo->RetryDelayMs = newDelay;
         partInfo->LimitSize = std::max(partInfo->LimitSize / 2, Settings.MinBatchSize);
@@ -764,9 +737,12 @@ private:
         PE_LOG_E("First error occurred: " << Ydb::StatusIds_StatusCode_Name(code)
             << ", issues: " << issues.ToOneLineString());
 
+        const std::string_view operationName = OperationType == TKeyDesc::ERowOperation::Update ? "UPDATE" : "DELETE";
+
         ReturnStatus = code;
         ReturnIssues.AddIssues(issues);
-        ReturnIssues.AddIssue(TStringBuilder() << "while executing BATCH UPDATE/DELETE by KqpPartitionedExecuterActor");
+        ReturnIssues.AddIssue(TStringBuilder() << "while executing BATCH " << operationName);
+
         Abort();
     }
 
@@ -780,7 +756,6 @@ private:
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
         auto& response = *ResponseEv->Record.MutableResponse();
-
         response.SetStatus(status);
         response.MutableIssues()->Swap(issues);
 

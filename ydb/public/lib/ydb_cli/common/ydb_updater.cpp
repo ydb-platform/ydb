@@ -1,6 +1,5 @@
 #include "ydb_updater.h"
 #include "download_manager.h"
-#include "print_utils.h"
 #include "progress_bar.h"
 
 #include <library/cpp/json/writer/json.h>
@@ -110,11 +109,7 @@ int TYdbUpdater::Update(bool forceUpdate) {
         tmpPathToBinary.DeleteIfExists();
         return EXIT_FAILURE;
     }
-    Cout << "Downloaded to " << tmpPathToBinary.GetPath() << " (" << FormatBytes(downloadResult.BytesDownloaded) << ")" << Endl;
-
-    if (true) {
-        return EXIT_SUCCESS;
-    }
+    Cout << "Downloaded to " << tmpPathToBinary.GetPath() << Endl;
 
 #ifndef _win32_
     int chmodResult = Chmod(tmpPathToBinary.GetPath().data(), MODE0777);

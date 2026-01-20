@@ -2,7 +2,9 @@ PY3TEST()
 
 STYLE_PYTHON()
 
-DEPENDS(library/python/runtime_py3/test/traceback)
+DEPENDS(
+    library/python/runtime_py3/test/traceback
+)
 
 PEERDIR(
     contrib/python/parameterized
@@ -29,6 +31,7 @@ RESOURCE_FILES(
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
     resources/foo.txt
+    resources/data/my_data
     resources/submodule/bar.txt
 )
 

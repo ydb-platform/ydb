@@ -51,8 +51,8 @@ namespace {
     // Async signals -- SIGHUP, SIGUSR1 (used to cause configuration files reread for example)
     // Sync signals -- fatal errors like SIGSEGV, SIGBUS...
     class TAsyncSignalsHandler {
-        TThread Thread;
-        int SignalPipeReadFd;
+        TThread Thread = TThread::TParams(ThreadFunc, this).SetName("sighandler");
+        int SignalPipeReadFd = 0;
         typedef THolder<TEventHandler> TEventHandlerPtr;
         THashMap<int, TEventHandlerPtr> Handlers;
         TRWMutex HandlersLock;
@@ -96,10 +96,7 @@ namespace {
         }
 
     public:
-        TAsyncSignalsHandler()
-            : Thread(TThread::TParams(ThreadFunc, this).SetName("sighandler"))
-            , SignalPipeReadFd(0)
-        {
+        TAsyncSignalsHandler() {
             int filedes[2] = {-1};
 
 #ifdef _linux_

@@ -626,7 +626,7 @@ public:
             }
 
             case NKqpProto::TKqpSchemeOperation::kCreateSecret: {
-                const auto& modifyScheme = schemeOp.GetCreateSecret(); 
+                const auto& modifyScheme = schemeOp.GetCreateSecret();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
             }

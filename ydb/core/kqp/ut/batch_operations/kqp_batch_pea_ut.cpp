@@ -515,6 +515,320 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Test abort before delayed responses", result.GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(ExecuteState_ChildExecuterRetryLimitExceeded) {
+        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        const std::string_view tableName = "SampleTable";
+        const size_t partitionCount = 4;
+        const size_t rowsPerPartition = 5;
+
+        CreateTable(kikimr, session, tableName, partitionCount);
+        FillTable(kikimr, session, tableName, partitionCount, rowsPerPartition);
+
+        std::optional<TActorId> partitionedId;
+        std::set<TActorId> executerIds;
+        std::set<TActorId> capturedExecuterIds;
+        bool enableCapture = true;
+
+        // Get id of the PartitionedExecuterActor
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
+            }
+        });
+
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
+
+        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
+            if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
+                UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
+
+                if (capturedExecuterIds.find(ev->Recipient) != capturedExecuterIds.end()) {
+                    return;
+                }
+
+                if (capturedExecuterIds.size() != partitionCount - 1) {
+                    // Capture all executer actors except the last one
+                    capturedExecuterIds.insert(ev->Recipient);
+                    // Events are dropped to freeze the execution
+                    ev.Reset();
+                }
+            }
+        });
+
+        // Change status of TEvTxResponse to set retriable error status
+        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
+            if (enableCapture && partitionedId.has_value() && ev->Recipient == *partitionedId) {
+                UNIT_ASSERT_C(executerIds.find(ev->Sender) != executerIds.end(), "Executer actor is not found");
+
+                if (ev->Get()->Record.GetResponse().GetStatus() != Ydb::StatusIds::ABORTED) {
+                    // Set retriable error status to trigger retry
+                    ev->Get()->Record.MutableResponse()->SetStatus(Ydb::StatusIds::OVERLOADED);
+                } else {
+                    enableCapture = false;
+                }
+            }
+        });
+
+        const std::string batchQuery = std::format(R"(
+            BATCH UPDATE `{}` SET Value = "Updated";
+        )", tableName);
+
+        const auto result = kikimr.RunCall([&]{
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+            "Cannot retry query execution because the maximum retry delay has been reached", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteState_AbortDuringRetry) {
+        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        const std::string_view tableName = "SampleTable";
+        const size_t partitionCount = 4;
+        const size_t rowsPerPartition = 5;
+
+        CreateTable(kikimr, session, tableName, partitionCount);
+        FillTable(kikimr, session, tableName, partitionCount, rowsPerPartition);
+
+        std::optional<TActorId> partitionedId;
+        std::set<TActorId> executerIds;
+        TVector<TAutoPtr<IEventHandle>> delayedEvents;
+        bool enableCapture = true;
+
+        // Get id of the PartitionedExecuterActor
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
+            }
+        });
+
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
+
+        // Change status of TEvTxResponse to set retriable error status
+        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
+            if (enableCapture && partitionedId.has_value() && ev->Recipient == *partitionedId) {
+                UNIT_ASSERT_C(executerIds.find(ev->Sender) != executerIds.end(), "Executer actor is not found");
+                // Set retriable error status to trigger retry
+                ev->Get()->Record.MutableResponse()->SetStatus(Ydb::StatusIds::OVERLOADED);
+            }
+        });
+
+        // Capture TEvTxDelayedExecution to freeze the execution
+        using TEvTestCapture = TEvKqpExecuter::TEvTxDelayedExecution;
+        const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
+            if (enableCapture && partitionedId.has_value() && ev->Recipient == *partitionedId) {
+                // Capture and drop the response to send them later
+                delayedEvents.emplace_back(ev.Release());
+            }
+        });
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&delayedEvents](IEventHandle&) {
+            // Wait until all 4 delayed events are captured (one per partition)
+            return delayedEvents.size() >= partitionCount;
+        });
+
+        const std::string batchQuery = std::format(R"(
+            BATCH UPDATE `{}` SET Value = "Updated";
+        )", tableName);
+
+        auto queryFuture = kikimr.RunInThreadPool([&] {
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+        });
+
+        // Wait for all delayed events to be captured
+        runtime.DispatchEvents(opts);
+        UNIT_ASSERT_VALUES_EQUAL_C(delayedEvents.size(), partitionCount, "All delayed events should be captured");
+
+        // Send abort to partitioned executer while delayed events are captured
+        auto abort = TEvKqp::TEvAbortExecution::Aborted("Test abort during retry");
+        runtime.Send(new IEventHandle(*partitionedId, MakeSchemeCacheID(), abort.Release()));
+
+        // Disable capture and send delayed events
+        enableCapture = false;
+        for (const auto& ev : delayedEvents) {
+            runtime.Send(ev);
+        }
+
+        const auto result = runtime.WaitFuture(queryFuture);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Test abort during retry", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteState_ChildExecuterInternalError) {
+        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        const std::string_view tableName = "SampleTable";
+        const size_t partitionCount = 4;
+        const size_t rowsPerPartition = 5;
+
+        CreateTable(kikimr, session, tableName, partitionCount);
+        FillTable(kikimr, session, tableName, partitionCount, rowsPerPartition);
+
+        std::optional<TActorId> partitionedId;
+        std::set<TActorId> executerIds;
+        std::set<TActorId> capturedExecuterIds;
+
+        // Get id of the PartitionedExecuterActor
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
+            }
+        });
+
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
+
+        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
+            if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
+                UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
+
+                if (capturedExecuterIds.find(ev->Recipient) != capturedExecuterIds.end()) {
+                    return;
+                }
+
+                if (capturedExecuterIds.size() != partitionCount - 1) {
+                    // Capture all executer actors except the last one
+                    capturedExecuterIds.insert(ev->Recipient);
+                    // Events are dropped to freeze the execution
+                    ev.Reset();
+                }
+            }
+        });
+
+        // Change status of TEvTxResponse to set non-retriable error status
+        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Recipient == *partitionedId) {
+                UNIT_ASSERT_C(executerIds.find(ev->Sender) != executerIds.end(), "Executer actor is not found");
+
+                if (ev->Get()->Record.GetResponse().GetStatus() == Ydb::StatusIds::SUCCESS) {
+                    // Set non-retriable error status to trigger immediate abort
+                    ev->Get()->Record.MutableResponse()->SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
+                    auto* issue = ev->Get()->Record.MutableResponse()->AddIssues();
+                    issue->set_message("Test internal error from child executer");
+                }
+            }
+        });
+
+        const std::string batchQuery = std::format(R"(
+            BATCH UPDATE `{}` SET Value = "Updated";
+        )", tableName);
+
+        const auto result = kikimr.RunCall([&]{
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Test internal error from child executer", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExecuteState_UnknownEvent) {
+        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        const std::string_view tableName = "SampleTable";
+        const size_t partitionCount = 4;
+        const size_t rowsPerPartition = 5;
+
+        CreateTable(kikimr, session, tableName, partitionCount);
+        FillTable(kikimr, session, tableName, partitionCount, rowsPerPartition);
+
+        std::optional<TActorId> partitionedId;
+        std::set<TActorId> executerIds;
+        bool eventSent = false;
+
+        // Get id of the PartitionedExecuterActor
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
+            }
+        });
+
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
+
+        // Capture TEvTxRequest to send unknown event during ExecuteState
+        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
+            if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
+                UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
+
+                // Send unknown event to the PartitionedExecuterActor
+                if (!eventSent) {
+                    runtime.Send(new IEventHandle(*partitionedId, ev->Sender, new TEvents::TEvWakeup()));
+                    eventSent = true;
+                }
+
+                // Drop the event to stay in the ExecuteState and get the unknown event
+                ev.Reset();
+            }
+        });
+
+        const std::string batchQuery = std::format(R"(
+            BATCH UPDATE `{}` SET Value = "Updated";
+        )", tableName);
+
+        const auto result = kikimr.RunCall([&]{
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+        });
+
+        // An error is expected because the actor is in the ExecuteState and does not know what to do with the unknown event
+        // It is needed to check that new events are not ignored and the actor is aborted
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "got an unknown message", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "state = ExecuteState", result.GetIssues().ToString());
+    }
 }
 
 }  // namespace NKikimr::NKqp

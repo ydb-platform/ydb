@@ -137,14 +137,10 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   {% cut "dbapi" %}
 
   ```python
-  import ydb_dbapi
+  import ydb_dbapi as dbapi
 
-  with ydb_dbapi.connect(host="localhost", port="2136", database="/local") as connection:
-      # Auto-commit mode
-      connection.set_autocommit(True)
-      with connection.cursor() as cursor:
-          cursor.execute("SELECT 1")
-          row = cursor.fetchone()
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.AUTOCOMMIT)
   ```
 
   {% endcut %}
@@ -153,14 +149,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   import ydb
 
   def execute_query(pool: ydb.QuerySessionPool):
-      # ImplicitTx - query without explicit transaction
-      def callee(session: ydb.QuerySession):
-          with session.execute(
-              "SELECT 1",
-          ) as result_sets:
-              pass  # work with result_sets
-
-      pool.retry_operation_sync(callee)
+      pool.execute_with_retries("SELECT 1")
   ```
 
 - C++
@@ -324,13 +313,13 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
     db := sql.OpenDB(connector)
     defer db.Close()
 
-    err = retry.DoTx(ctx, db, 
+    err = retry.DoTx(ctx, db,
       func(ctx context.Context, tx *sql.Tx) error {
         row := tx.QueryRowContext(ctx, "SELECT 1")
         var result int
         return row.Scan(&result)
-      }, 
-      retry.WithIdempotent(true), 
+      },
+      retry.WithIdempotent(true),
       // The Serializable Read-Write mode is used by default for transactions.
       // Or it can be set explicitly as shown below
       retry.WithTxOptions(&sql.TxOptions{
@@ -431,13 +420,10 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   {% cut "dbapi" %}
 
   ```python
-  import ydb_dbapi
+  import ydb_dbapi as dbapi
 
-  with ydb_dbapi.connect(host="localhost", port="2136", database="/local") as connection:
-      # Serializable mode is used by default
-      with connection.cursor() as cursor:
-          cursor.execute("SELECT 1")
-          row = cursor.fetchone()
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.SERIALIZABLE)
   ```
 
   {% endcut %}
@@ -470,7 +456,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - C# (.NET)
 
   {% cut "ADO.NET" %}
-  
+
   ```csharp
   using Ydb.Sdk.Ado;
   using Ydb.Sdk.Services.Query;
@@ -650,6 +636,17 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Python
 
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb_dbapi as dbapi
+
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.ONLINE_READONLY)
+  ```
+
+  {% endcut %}
+
   ```python
   import ydb
 
@@ -789,6 +786,17 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
 - Python
+
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb_dbapi as dbapi
+
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.STALE_READONLY)
+  ```
+
+  {% endcut %}
 
   ```python
   import ydb
@@ -1009,6 +1017,17 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Python
 
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb_dbapi as dbapi
+
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.SNAPSHOT_READONLY)
+  ```
+
+  {% endcut %}
+
   ```python
   import ydb
 
@@ -1213,6 +1232,17 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
 - Python
+
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb_dbapi as dbapi
+
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.SNAPSHOT_READWRITE)
+  ```
+
+  {% endcut %}
 
   ```python
   import ydb

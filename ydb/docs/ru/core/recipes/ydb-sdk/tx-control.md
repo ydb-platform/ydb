@@ -137,14 +137,10 @@
   {% cut "dbapi" %}
 
   ```python
-  import ydb_dbapi
+  import ydb_dbapi as dbapi
 
-  with ydb_dbapi.connect(host="localhost", port="2136", database="/local") as connection:
-      # Режим авто-коммита
-      connection.set_autocommit(True)
-      with connection.cursor() as cursor:
-          cursor.execute("SELECT 1")
-          row = cursor.fetchone()
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.AUTOCOMMIT)
   ```
 
   {% endcut %}
@@ -153,14 +149,7 @@
   import ydb
 
   def execute_query(pool: ydb.QuerySessionPool):
-      # ImplicitTx - запрос без явной транзакции
-      def callee(session: ydb.QuerySession):
-          with session.execute(
-              "SELECT 1",
-          ) as result_sets:
-              pass  # работа с result_sets
-
-      pool.retry_operation_sync(callee)
+      pool.execute_with_retries("SELECT 1")
   ```
 
 - C++
@@ -362,13 +351,13 @@
     db := sql.OpenDB(connector)
     defer db.Close()
 
-    err = retry.DoTx(ctx, db, 
+    err = retry.DoTx(ctx, db,
       func(ctx context.Context, tx *sql.Tx) error {
         row := tx.QueryRowContext(ctx, "SELECT 1")
         var result int
         return row.Scan(&result)
-      }, 
-      retry.WithIdempotent(true), 
+      },
+      retry.WithIdempotent(true),
       // Режим Serializable Read-Write используется по умолчанию для транзакций
       // Либо его можно установить явно как приведено ниже
       retry.WithTxOptions(&sql.TxOptions{
@@ -434,38 +423,30 @@
 
 - Python
 
-  {% cut "ydb-python-sdk" %}
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb_dbapi as dbapi
+
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.SERIALIZABLE)
+  ```
+
+  {% endcut %}
 
   ```python
   import ydb
 
   def execute_query(pool: ydb.QuerySessionPool):
-      # Режим Serializable Read-Write используется по умолчанию
       def callee(session: ydb.QuerySession):
           with session.transaction(ydb.QuerySerializableReadWrite()).execute(
               "SELECT 1",
               commit_tx=True,
           ) as result_sets:
-              pass  # работа с result_sets
+              pass
 
       pool.retry_operation_sync(callee)
   ```
-
-  {% endcut %}
-
-  {% cut "dbapi" %}
-
-  ```python
-  import ydb_dbapi
-
-  with ydb_dbapi.connect(host="localhost", port="2136", database="/local") as connection:
-      # Serializable режим используется по умолчанию
-      with connection.cursor() as cursor:
-          cursor.execute("SELECT 1")
-          row = cursor.fetchone()
-  ```
-
-  {% endcut %}
 
 - C++
 
@@ -664,6 +645,17 @@
 
 - Python
 
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb_dbapi as dbapi
+
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.ONLINE_READONLY)
+  ```
+
+  {% endcut %}
+
   ```python
   import ydb
 
@@ -673,7 +665,7 @@
               "SELECT 1",
               commit_tx=True,
           ) as result_sets:
-              pass  # работа с result_sets
+              pass
 
       pool.retry_operation_sync(callee)
   ```
@@ -804,6 +796,17 @@
 
 - Python
 
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb_dbapi as dbapi
+
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.STALE_READONLY)
+  ```
+
+  {% endcut %}
+
   ```python
   import ydb
 
@@ -813,7 +816,7 @@
               "SELECT 1",
               commit_tx=True,
           ) as result_sets:
-              pass  # работа с result_sets
+              pass
 
       pool.retry_operation_sync(callee)
   ```
@@ -1031,6 +1034,17 @@
 
 - Python
 
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb_dbapi as dbapi
+
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.SNAPSHOT_READONLY)
+  ```
+
+  {% endcut %}
+
   ```python
   import ydb
 
@@ -1040,7 +1054,7 @@
               "SELECT 1",
               commit_tx=True,
           ) as result_sets:
-              pass  # работа с result_sets
+              pass
 
       pool.retry_operation_sync(callee)
   ```
@@ -1229,6 +1243,17 @@
 
 - Python
 
+  {% cut "dbapi" %}
+
+  ```python
+  import ydb_dbapi as dbapi
+
+  with dbapi.connect(host="localhost", port="2136", database="/local") as connection:
+      connection.set_isolation_level(dbapi.IsolationLevel.SNAPSHOT_READWRITE)
+  ```
+
+  {% endcut %}
+
   ```python
   import ydb
 
@@ -1238,7 +1263,7 @@
               "SELECT 1",
               commit_tx=True,
           ) as result_sets:
-              pass  # работа с result_sets
+              pass
 
       pool.retry_operation_sync(callee)
   ```

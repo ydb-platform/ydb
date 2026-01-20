@@ -98,8 +98,8 @@ struct TSegmentedArena
         ui32 AllocSize;
 
         void* Next() {
-            if (!Valid) [[unlikely]] {
-                return nullptr;
+            if (!Valid) {
+                [[unlikely]] return nullptr;
             }
             while (Page != PageEnd) {
                 if (Index >= Page->Used) {
@@ -483,8 +483,6 @@ protected:
         return pow2Capacity;
     }
 
-    virtual void OpenDrain() = 0;
-
     void LoadItem(TUnboxedValue* const* input)
     {
         for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
@@ -550,7 +548,7 @@ protected:
 
         for (size_t i = 0; i < NumBuckets; ++i) {
             currentSpilling.Spillage[i].SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, KeysAndStatesType, SpillingIoBuffer);
-            currentSpilling.Spillage[i].SpilledInput = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, InputItemsType, SpillingIoBuffer);
+            currentSpilling.Spillage[i].SpilledInput = std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, InputUnpackedItemsType, SpillingIoBuffer);
         }
 
         [[maybe_unused]] size_t totalWritten = 0;
@@ -584,7 +582,7 @@ protected:
         }
 
         Map->Clear();
-        Store->Format(NumBuckets, sizeof(TUnboxedValuePod) * InputWidth);
+        Store->Format(NumBuckets, sizeof(TUnboxedValuePod) * InputUnpackedWidth);
     }
 
     void FlushSpillingInput()
@@ -604,8 +602,8 @@ protected:
             TSegmentedArena::TPageEntry* page = Store->PagesByTag[i];
             while (page != nullptr) {
                 TUnboxedValuePod* item = static_cast<TUnboxedValuePod*>(page->Page);
-                for (ui32 writtenFromPage = 0; writtenFromPage < page->Used; ++writtenFromPage, item += InputWidth) {
-                    TArrayRef<TUnboxedValuePod> pageItems(item, InputWidth);
+                for (ui32 writtenFromPage = 0; writtenFromPage < page->Used; ++writtenFromPage, item += InputUnpackedWidth) {
+                    TArrayRef<TUnboxedValuePod> pageItems(item, InputUnpackedWidth);
                     ++totalWritten;
                     auto pageFuture = spiller.WriteWideItem(pageItems);
                     for (auto& uv : pageItems) {
@@ -626,7 +624,7 @@ protected:
             }
         }
 
-        Store->Format(NumBuckets, sizeof(TUnboxedValuePod) * InputWidth);
+        Store->Format(NumBuckets, sizeof(TUnboxedValuePod) * InputUnpackedWidth);
     }
 
     bool HasPendindSpillingBuckets()
@@ -687,7 +685,7 @@ protected:
             // Read the saved input
             TWideUnboxedValuesSpillerAdapter& inputSpiller = *currentSpill.Spillage[bucket].SpilledInput;
             std::vector<TUnboxedValue> input;
-            input.resize(InputWidth);
+            input.resize(InputUnpackedWidth);
             TArrayRef<TUnboxedValue> inputArr(input);
             std::vector<TUnboxedValue*> inputPtrs;
             for (auto& uv : input) {
@@ -748,7 +746,7 @@ protected:
                 }
 
                 if (isNew) {
-                    CheckAutoGrowMap();
+                    CheckAutoGrowMap(true);
                     if (Map->GetSize() > MaxRowCount) {
                         throw TMemoryLimitExceededException();
                     }
@@ -759,18 +757,22 @@ protected:
         ++currentSpill.CurrentBucket;
     }
 
-    void CheckAutoGrowMap()
+    void CheckAutoGrowMap(const bool hasMemoryForProcessing)
     {
         if (MapAutoGrowEnabled && !MapAutoGrowLimitReached && Map->GetSize() >= MaxRowCount) {
-            try {
-                Map->CheckGrow();
-                MaxRowCount = Map->GetCapacity() / 2;
+            if (hasMemoryForProcessing) {
+                try {
+                    Map->CheckGrow();
+                    MaxRowCount = Map->GetCapacity() / 2;
+                    return;
+                }
+                catch(const TMemoryLimitExceededException& e) {
+                }
             }
-            catch(const TMemoryLimitExceededException& e) {
-                MapAutoGrowLimitReached = true;
-                // Slow, but still better than spilling or crashing
-                MaxRowCount = Map->GetCapacity() / 1.3;
-            }
+
+            MapAutoGrowLimitReached = true;
+            // Slow, but still better than spilling or crashing
+            MaxRowCount = Map->GetCapacity() / 1.3;
         }
     }
 
@@ -799,7 +801,7 @@ protected:
 
         if (!SpillingStack.empty()) {
             auto rowBuffer = static_cast<TUnboxedValuePod*>(Store->Alloc(bucketId));
-            for (size_t i = 0; i < InputWidth; ++i) {
+            for (size_t i = 0; i < InputUnpackedWidth; ++i) {
                 rowBuffer[i] = *input[i];
                 rowBuffer[i].Ref();
             }
@@ -857,7 +859,8 @@ protected:
 
         auto canFitMoreKeys = [&]() -> bool {
             if (isNew) {
-                CheckAutoGrowMap();
+                const bool hasMemoryForProcessing = HasMemoryForProcessing();
+                CheckAutoGrowMap(hasMemoryForProcessing);
                 if (Map->GetSize() >= MaxRowCount) {
                     return false;
                 }
@@ -866,7 +869,7 @@ protected:
                     // So we don't check for yellow zone in this case.
                     return true;
                 }
-                if (!HasMemoryForProcessing() && Map->GetSize() >= LowerFixedRowCount) {
+                if (!hasMemoryForProcessing && Map->GetSize() >= LowerFixedRowCount) {
                     return false;
                 }
             }
@@ -901,11 +904,11 @@ public:
     bool PassthroughKeys = false;
 
     TBaseAggregationState(
-        TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t memoryLimit, size_t inputWidth,
+        TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t memoryLimit, size_t inputUnpackedWidth,
         const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes,
-        const std::vector<TType*>& inputItemTypes,
         const std::vector<TType*>& keyItemTypes,
         const std::vector<TType*>& stateItemTypes,
+        const bool isFlow,
         const bool isAggregator,
         const bool enableSpilling
     )
@@ -913,9 +916,10 @@ public:
         , Ctx(ctx)
         , MemoryHelper(memoryHelper)
         , MemoryLimit(memoryLimit)
+        , IsFlow(isFlow)
         , IsAggregation(isAggregator)
         , EnableSpilling(enableSpilling && ctx.SpillerFactory)
-        , InputWidth(inputWidth)
+        , InputUnpackedWidth(inputUnpackedWidth)
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , KeyTypes(keyTypes)
@@ -939,8 +943,6 @@ public:
         }
 
         MaxRowCount = TryAllocMapForRowCount(MaxRowCount);
-
-        InputItemsType = TMultiType::Create(inputItemTypes.size(), inputItemTypes.data(), ctx.TypeEnv);
 
         std::vector<TType*> keyAndStateTypesVec = keyItemTypes;
 
@@ -985,17 +987,31 @@ public:
         }
     }
 
+    bool IsDraining() {
+        // Update isDrainingMethodAddr in the LLVM IR if virtualized
+        return Draining;
+    }
+
+    bool IsSourceEmpty() {
+        // Update isSourceEmptyMethodAddr in the LLVM IR if virtualized
+        return SourceEmpty;
+    }
+
     virtual ~TBaseAggregationState() {
+        if (IsFlow && Ctx.ExecuteLLVM) {
+            // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
+            for (TUnboxedValue& val : InputBuffer) {
+                static_cast<TUnboxedValuePod&>(val) = TUnboxedValuePod{};
+            }
+        }
+        ReleaseAggregationsFromArena();
+        CleanupCurrentContext();
     }
 
     virtual bool TryDrain(TUnboxedValue* const* output) = 0;
-
     virtual TUnboxedValue* const* GetInputBuffer() = 0;
     virtual TUnboxedValueVector& GetDenseInputBuffer() = 0;
     virtual EFillState ProcessInput(EFillState sourceState) = 0;
-
-    virtual bool IsDraining() = 0;
-    virtual bool IsSourceEmpty() = 0;
 
 protected:
     size_t TryAllocMapForRowCount(size_t rowCount)
@@ -1097,50 +1113,7 @@ protected:
         Store->Format(EnableSpilling ? NumBuckets : 1, sizeof(TUnboxedValuePod) * KeysAndStatesWidth);
     }
 
-    TComputationContext& Ctx;
-
-    const TMemoryEstimationHelper& MemoryHelper;
-
-    size_t MemoryLimit;
-    const bool IsAggregation;
-    const bool EnableSpilling;
-
-    bool IsEstimating = false;
-    size_t EstimateBatchSize = 0;
-    size_t MaxRowCount = 0;
-    size_t InitialMapCapacity = 0;
-    bool MapAutoGrowEnabled = false;
-    bool MapAutoGrowLimitReached = false;
-
-    size_t InputWidth;
-    TUnboxedValueVector InputBuffer;
-    const NDqHashOperatorCommon::TCombinerNodes& Nodes;
-    const ui32 WideFieldsIndex;
-    std::vector<std::unique_ptr<IAggregation>> Aggs;
-    TGenericAggregation* GenericAggregation = nullptr;
-    const TKeyTypes& KeyTypes;
-    ui64 CachedHash = 0;
-    TMultiType* InputItemsType;
-    ui32 KeysAndStatesWidth;
-    TMultiType* KeysAndStatesType;
-    THashFunc const Hasher;
-    TEqualsFunc const Equals;
-    constexpr static const bool HasGenericAggregation = true;
-    size_t KeyAndStatesByteSize = 0;
-
-    using TStore = TSegmentedArena;
-    std::unique_ptr<TStore> Store;
-    THolder<TMap> Map;
-    std::vector<TUnboxedValuePod> TempKeyBuffer;
-    size_t StatesOffset;
-    bool Draining;
-    bool SourceEmpty;
-};
-
-class TWideAggregationState: public TBaseAggregationState
-{
-private:
-    void OpenDrain() override {
+    void OpenDrain() {
         if (!SourceEmpty && IsEstimating && Map->GetSize() > 0) {
             UpdateRowLimitFromSample();
         }
@@ -1151,6 +1124,95 @@ private:
         }
     }
 
+
+    bool CheckRefillFromPendingBuckets()
+    {
+        if (DrainArenaIterator.Valid) {
+            return true;
+        } else if (SpillingStack.empty()) {
+            return false;
+        }
+
+        while (HasPendindSpillingBuckets()) {
+            ReadBackNextSpillingBucket();
+            DrainArenaIterator = Store->Iterator();
+            return true;
+        }
+
+        return false;
+    }
+
+    void ReleaseAggregationsFromArena()
+    {
+        if (Map) {
+            if (Map->GetSize() > 0) {
+                if (!Draining) {
+                    DrainArenaIterator = Store->Iterator();
+                }
+                while (void* tuple = DrainArenaIterator.Next()) {
+                    const TUnboxedValuePod* key = static_cast<TUnboxedValuePod*>(tuple);
+                    char* statePtr = static_cast<char*>(tuple) + StatesOffset;
+                    for (auto& agg : Aggs) {
+                        agg->ForgetState(statePtr);
+                        statePtr += agg->GetStateSize();
+                    }
+                    if (HasGenericAggregation) {
+                        auto keyIter = key;
+                        for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
+                            (keyIter++)->UnRef();
+                        }
+                    }
+                }
+            }
+            Map = nullptr;
+        }
+        Store->Clear();
+    }
+
+    TComputationContext& Ctx;
+
+    const TMemoryEstimationHelper& MemoryHelper;
+
+    size_t MemoryLimit;
+    const bool IsFlow;
+    const bool IsAggregation;
+    const bool EnableSpilling;
+
+    bool IsEstimating = false;
+    size_t EstimateBatchSize = 0;
+    size_t MaxRowCount = 0;
+    size_t InitialMapCapacity = 0;
+    bool MapAutoGrowEnabled = false;
+    bool MapAutoGrowLimitReached = false;
+
+    size_t InputUnpackedWidth;
+    const NDqHashOperatorCommon::TCombinerNodes& Nodes;
+    const ui32 WideFieldsIndex;
+    std::vector<std::unique_ptr<IAggregation>> Aggs;
+    TGenericAggregation* GenericAggregation = nullptr;
+    const TKeyTypes& KeyTypes;
+    ui64 CachedHash = 0;
+    TMultiType* InputUnpackedItemsType;
+    ui32 KeysAndStatesWidth;
+    TMultiType* KeysAndStatesType;
+    THashFunc const Hasher;
+    TEqualsFunc const Equals;
+    constexpr static const bool HasGenericAggregation = true;
+    size_t KeyAndStatesByteSize = 0;
+
+    using TStore = TSegmentedArena;
+    std::unique_ptr<TStore> Store;
+    TSegmentedArena::TIterator DrainArenaIterator;
+    THolder<TMap> Map;
+    std::vector<TUnboxedValuePod> TempKeyBuffer;
+    TUnboxedValueVector InputBuffer;
+    size_t StatesOffset;
+    bool Draining;
+    bool SourceEmpty;
+};
+
+class TWideAggregationState: public TBaseAggregationState
+{
 public:
     TWideAggregationState(
         TMemoryUsageInfo* memInfo,
@@ -1166,44 +1228,30 @@ public:
         const std::vector<TType*>& inputItemTypes,
         const std::vector<TType*>& keyItemTypes,
         const std::vector<TType*>& stateItemTypes,
+        const bool isFlow,
         const bool isAggregator,
         const bool enableSpilling
     )
         : TBaseAggregationState(
             memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
-            inputItemTypes, keyItemTypes, stateItemTypes, isAggregator, enableSpilling
+            keyItemTypes, stateItemTypes, isFlow, isAggregator, enableSpilling
         )
         , OutputRowCounter(outputRowCounter)
         , StartMoment(TInstant::Now()) // Temporary. Helps correlate debug outputs with SVGs
         , OutputWidth(outputWidth)
     {
         InputBuffer.resize(inputWidth, TUnboxedValuePod());
+        std::transform(InputBuffer.begin(), InputBuffer.end(), Ctx.WideFields.data() + WideFieldsIndex, [&](TUnboxedValue& val) {
+            return &val;
+        });
+
         OutputBuffer.resize(outputWidth, TUnboxedValuePod());
         OutputPtrs.resize(outputWidth, nullptr);
         std::transform(OutputBuffer.begin(), OutputBuffer.end(), OutputPtrs.begin(), [&](TUnboxedValue& val) {
             return &val;
         });
 
-        std::transform(InputBuffer.begin(), InputBuffer.end(), Ctx.WideFields.data() + WideFieldsIndex, [&](TUnboxedValue& val) {
-            return &val;
-        });
-    }
-
-    bool IsDraining() override {
-        return IsDrainingDirect();
-    }
-
-    // Non-virtual method variants
-    bool IsDrainingDirect() {
-        return Draining;
-    }
-
-    bool IsSourceEmpty() override {
-        return IsSourceEmptyDirect();
-    }
-
-    bool IsSourceEmptyDirect() {
-        return SourceEmpty;
+        InputUnpackedItemsType = TMultiType::Create(inputItemTypes.size(), inputItemTypes.data(), ctx.TypeEnv);
     }
 
     TUnboxedValue* const* GetInputBuffer() override {
@@ -1247,23 +1295,6 @@ public:
     // Drain from the internal buffer
     bool TryDrainDirect() {
         return TryDrainInternal(OutputPtrs.data());
-    }
-
-    bool CheckRefillFromPendingBuckets()
-    {
-        if (DrainArenaIterator.Valid) {
-            return true;
-        } else if (SpillingStack.empty()) {
-            return false;
-        }
-
-        while (HasPendindSpillingBuckets()) {
-            ReadBackNextSpillingBucket();
-            DrainArenaIterator = Store->Iterator();
-            return true;
-        }
-
-        return false;
     }
 
     bool TryDrainInternal(NUdf::TUnboxedValue* const* outputPtrs) {
@@ -1319,61 +1350,19 @@ public:
         return true;
     }
 
-    ~TWideAggregationState() {
-        if (Ctx.ExecuteLLVM) {
-            // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
-            for (TUnboxedValue& val : InputBuffer) {
-                static_cast<TUnboxedValuePod&>(val) = TUnboxedValuePod{};
-            }
-        }
-
-        if (Map) {
-            if (Map->GetSize() > 0) {
-                if (!Draining) {
-                    DrainArenaIterator = Store->Iterator();
-                }
-                while (void* tuple = DrainArenaIterator.Next()) {
-                    const TUnboxedValuePod* key = static_cast<TUnboxedValuePod*>(tuple);
-                    char* statePtr = static_cast<char*>(tuple) + StatesOffset;
-                    for (auto& agg : Aggs) {
-                        agg->ForgetState(statePtr);
-                        statePtr += agg->GetStateSize();
-                    }
-                    if (HasGenericAggregation) {
-                        auto keyIter = key;
-                        for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
-                            (keyIter++)->UnRef();
-                        }
-                    }
-                }
-            }
-            Map = nullptr;
-        }
-
-        Store->Clear();
-        // TODO: CleanupCurrentContext for the allocator?
-    }
-
 private:
     size_t OutputRows = 0;
     size_t InputRows = 0;
     NYql::NUdf::TCounter OutputRowCounter;
     TInstant StartMoment;
-    TUnboxedValueVector InputBuffer;
     [[maybe_unused]] size_t OutputWidth;
     TUnboxedValueVector OutputBuffer;
     TVector<TUnboxedValue*> OutputPtrs;
-    TSegmentedArena::TIterator DrainArenaIterator;
 };
 
 class TBlockAggregationState: public TBaseAggregationState
 {
 private:
-    void OpenDrain() override {
-        Draining = true;
-        DrainMapIterator = Map->Begin();
-    }
-
     bool OpenBlock() {
         const auto batchLength = TArrowBlock::From(InputBuffer.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
         if (!batchLength) {
@@ -1397,20 +1386,19 @@ public:
         size_t memoryLimit,
         const std::vector<TType*>& inputTypes,
         const std::vector<TType*>& outputTypes,
-        size_t inputWidth,
         const NDqHashOperatorCommon::TCombinerNodes& nodes,
         ui32 wideFieldsIndex,
         const TKeyTypes& keyTypes,
-        const std::vector<TType*>& inputItemTypes,
         const std::vector<TType*>& keyItemTypes,
         const std::vector<TType*>& stateItemTypes,
         const size_t maxOutputBlockLen,
+        const bool isFlow,
         const bool isAggregator,
         const bool enableSpilling
     )
         : TBaseAggregationState(
-            memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex,
-            keyTypes, inputItemTypes, keyItemTypes, stateItemTypes, isAggregator, enableSpilling
+            memInfo, ctx, memoryHelper, memoryLimit, inputTypes.size() - 1, nodes, wideFieldsIndex,
+            keyTypes, keyItemTypes, stateItemTypes, isFlow, isAggregator, enableSpilling
         )
         , OutputRowCounter(outputRowCounter)
         , InputTypes(inputTypes)
@@ -1418,7 +1406,6 @@ public:
         , InputColumns(inputTypes.size() - 1)
         , OutputColumns(outputTypes.size() - 1)
         , MaxOutputBlockLen(maxOutputBlockLen)
-        , DrainMapIterator(nullptr)
     {
         InputBuffer.resize(InputColumns + 1, TUnboxedValuePod());
         std::transform(InputBuffer.begin(), InputBuffer.end(), Ctx.WideFields.data() + WideFieldsIndex, [&](TUnboxedValue& val) {
@@ -1452,26 +1439,14 @@ public:
         for (auto type : OutputTypes) {
             OutputItemConverters.push_back(MakeBlockItemConverter(typeInfoHelper, type, pgBuilder));
         }
-    }
 
-    bool IsDraining() override {
-        return IsDrainingDirect();
-    }
-
-    // Non-virtual method variants
-    bool IsDrainingDirect() {
-        return Draining;
-    }
-
-    bool IsSourceEmpty() override {
-        return IsSourceEmptyDirect();
-    }
-
-    bool IsSourceEmptyDirect() {
-        return SourceEmpty;
+        InputUnpackedItemsType = TMultiType::Create(InputTypes.size() - 1, InputTypes.data(), ctx.TypeEnv);
     }
 
     TUnboxedValue* const* GetInputBuffer() override {
+        if (CurrentInputBatchPtr < CurrentInputBatchSize) {
+            return nullptr;
+        }
         return Ctx.WideFields.data() + WideFieldsIndex;
     }
 
@@ -1502,9 +1477,8 @@ public:
             if (fetchResult == EFillState::Yield) {
                 return fetchResult;
             } else if (fetchResult == EFillState::SourceEmpty) {
-                Draining = true;
                 SourceEmpty = true;
-                DrainMapIterator = Map->Begin();
+                OpenDrain();
                 return fetchResult;
             }
 
@@ -1544,8 +1518,10 @@ public:
         return TryDrainInternal(DrainBufferPointers.data());
     }
 
+    size_t OutputRows = 0;
+
     bool TryDrainInternal(NUdf::TUnboxedValue* const* output) {
-        MKQL_ENSURE(DrainMapIterator != nullptr, "Cannot call TryDrain when DrainMapIterator is null");
+        MKQL_ENSURE(IsDraining(), "Cannot call TryDrain() unless IsDraining()");
 
         TTypeInfoHelper helper;
 
@@ -1555,12 +1531,27 @@ public:
         }
 
         size_t currentBlockSize = 0;
-        for (; DrainMapIterator != Map->End() && currentBlockSize < MaxOutputBlockLen; Map->Advance(DrainMapIterator)) {
-            if (!Map->IsValid(DrainMapIterator)) {
-                continue;
+        void* tuple = nullptr;
+
+        while (currentBlockSize < MaxOutputBlockLen) {
+            tuple = DrainArenaIterator.Next();
+            if (!tuple) {
+                while (CheckRefillFromPendingBuckets()) {
+                    tuple = DrainArenaIterator.Next();
+                    if (tuple) {
+                        break;
+                    }
+                }
             }
 
-            const auto key = Map->GetKeyValue(DrainMapIterator);
+            if (!tuple) {
+                break;
+            }
+
+            ++OutputRows;
+
+            const auto key = static_cast<TUnboxedValuePod*>(tuple);
+
             if (HasGenericAggregation) {
                 auto keyIter = key;
                 for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
@@ -1569,11 +1560,14 @@ public:
                 }
             }
 
-            char* statePtr = static_cast<char *>(static_cast<void *>(key)) + StatesOffset;
+            char* statePtr = static_cast<char *>(tuple) + StatesOffset;
+            /*
             for (auto& agg : Aggs) {
                 agg->ExtractState(statePtr, OutputBufferPointers.data());
                 statePtr += agg->GetStateSize();
             }
+            */
+            GenericAggregation->ExtractState(statePtr, OutputBufferPointers.data());
 
             for (size_t i = 0; i < OutputColumns; ++i) {
                 auto blockItem = OutputItemConverters[i]->MakeItem(OutputBuffer[i]);
@@ -1584,20 +1578,11 @@ public:
             if (HasGenericAggregation) {
                 auto keyIter = key;
                 for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
-                    Nodes.FinishKeyNodes[i]->RefValue(Ctx) = TUnboxedValue();
-                    (keyIter)->UnRef();
-                    keyIter++;
+                    (keyIter++)->UnRef();
                 }
             }
 
             ++currentBlockSize;
-        }
-
-        while (DrainMapIterator != Map->End()) {
-            if (Map->IsValid(DrainMapIterator)) {
-                break;
-            }
-            Map->Advance(DrainMapIterator);
         }
 
         if (currentBlockSize) {
@@ -1610,23 +1595,17 @@ public:
             OutputRowCounter.Inc();
         }
 
-        if (DrainMapIterator == Map->End()) {
+        if (!tuple) {
             Draining = false;
-            DrainMapIterator = nullptr;
-            PrepareForNewBatch();
+            if (!IsAggregation) {
+                PrepareForNewBatch();
+            } else {
+                Map.Reset();
+            }
             return currentBlockSize > 0;
         }
-        return true;
-    }
 
-    ~TBlockAggregationState() {
-        if (Ctx.ExecuteLLVM) {
-            // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
-            for (TUnboxedValue& val : InputBuffer) {
-                static_cast<TUnboxedValuePod&>(val) = TUnboxedValuePod{};
-            }
-        }
-        // TODO: clean up drainage like in TWideAggregationState
+        return true;
     }
 
 private:
@@ -1647,7 +1626,6 @@ private:
 
     std::vector<std::unique_ptr<IBlockItemConverter>> OutputItemConverters;
 
-    TUnboxedValueVector InputBuffer;
     TUnboxedValueVector RowBuffer;
     std::vector<TUnboxedValue*> RowBufferPointers;
 
@@ -1659,8 +1637,6 @@ private:
 
     size_t CurrentInputBatchSize = 0;
     size_t CurrentInputBatchPtr = 0;
-
-    const char* DrainMapIterator;
 };
 
 class TDqHashCombine;
@@ -1884,10 +1860,8 @@ public:
         const auto statusToStatusMethodType = FunctionType::get(statusType, {boxedStatePtr->getType(), statusType}, false);
 
         // Non-virtual state methods
-        auto isDrainingMethodAddr = ConstantInt::get(Type::getInt64Ty(context),
-            BlockMode ? GetMethodPtr<&TBlockAggregationState::IsDrainingDirect>() : GetMethodPtr<&TWideAggregationState::IsDrainingDirect>());
-        auto isSourceEmptyMethodAddr = ConstantInt::get(Type::getInt64Ty(context),
-            BlockMode ? GetMethodPtr<&TBlockAggregationState::IsSourceEmptyDirect>() : GetMethodPtr<&TWideAggregationState::IsSourceEmptyDirect>());
+        auto isDrainingMethodAddr = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TBaseAggregationState::IsDraining>());
+        auto isSourceEmptyMethodAddr = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TBaseAggregationState::IsSourceEmpty>());
         auto getInputBufferMethodAddr = ConstantInt::get(Type::getInt64Ty(context),
             BlockMode ? GetMethodPtr<&TBlockAggregationState::GetDenseInputBufferDirect>() : GetMethodPtr<&TWideAggregationState::GetDenseInputBufferDirect>());
         auto getOutputBufferMethodAddr = ConstantInt::get(Type::getInt64Ty(context),
@@ -2052,11 +2026,13 @@ private:
         }
 
         if (!BlockMode) {
-            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, IsAggregator, EnableSpilling);
+            state = ctx.HolderFactory.Create<TWideAggregationState>(
+                ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
+                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, true, IsAggregator, EnableSpilling);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex,
-                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, IsAggregator, EnableSpilling);
+                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
+                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, true, IsAggregator, EnableSpilling);
         }
     }
 
@@ -2134,11 +2110,13 @@ private:
         }
 
         if (!BlockMode) {
-            state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, IsAggregator, EnableSpilling);
+            state = ctx.HolderFactory.Create<TWideAggregationState>(
+                ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
+                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, false, IsAggregator, EnableSpilling);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex,
-                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, IsAggregator, EnableSpilling);
+                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
+                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, false, IsAggregator, EnableSpilling);
         }
     }
 

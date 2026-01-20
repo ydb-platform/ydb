@@ -52,6 +52,17 @@ namespace {
         }
     }
 
+    int CountDqCombines(std::string_view ast) {
+        int hashCombines = 0;
+        size_t pos = 0;
+        const std::string_view combinerName {"DqPhyHashCombine"};
+        while ((pos = ast.find(combinerName, pos)) != std::string::npos) {
+            ++hashCombines;
+            ++pos;
+        }
+        return hashCombines;
+    }
+
     void CheckGroupByResultSet(TResultSet& resultSet)
     {
         // Check the result of sum(data) as data_sum group by group_key
@@ -64,7 +75,6 @@ namespace {
         }
     }
 }
-
 
 Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
     Y_UNIT_TEST_QUAD(DqHashCombineTest, UseDqHashCombine, UseDqHashAggregate) {
@@ -92,9 +102,7 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
             TString groupQuery = TStringBuilder() << hints << dqHashCombinePragma << dqHashAggregatePragma << select;
 
             auto status = queryClient.ExecuteQuery(groupQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-
             auto resultSet = status.GetResultSets()[0];
             CheckGroupByResultSet(resultSet);
 
@@ -109,26 +117,11 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
             UNIT_ASSERT(astOpt.has_value());
             Cerr << TString(*astOpt) << Endl;
             TString ast = TString(*astOpt);
-            Cout << "AST (HashCombine=" << (UseDqHashCombine ? "true" : "false") << ", HashAggregate=" << (UseDqHashAggregate ? "true" : "false") << "): " << ast << Endl;
-
-            int hashCombines = 0;
-            size_t pos = 0;
-            const std::string_view combinerName {"DqPhyHashCombine"};
-            while ((pos = ast.find(combinerName, pos)) != std::string::npos) {
-                ++hashCombines;
-                ++pos;
-            }
+            Cerr << "AST (HashCombine=" << (UseDqHashCombine ? "true" : "false") << ", HashAggregate=" << (UseDqHashAggregate ? "true" : "false") << "): " << ast << Endl;
 
             int hashCombinesExpected = (UseDqHashCombine ? 1 : 0) + (UseDqHashAggregate ? 1 : 0);
-            UNIT_ASSERT_C(hashCombinesExpected == hashCombines,
+            UNIT_ASSERT_C(hashCombinesExpected == CountDqCombines(ast),
                 TStringBuilder() << "AST should contain " << hashCombinesExpected << " DqPhyHashCombine instances; actual AST: " << groupQuery << Endl << ast);
-
-            auto status = queryClient.ExecuteQuery(groupQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-
-            auto resultSet = status.GetResultSets()[0];
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 2);
         }
     }
 
@@ -169,12 +162,12 @@ Y_UNIT_TEST_SUITE(KqpHashCombineReplacement) {
         UNIT_ASSERT(astOpt.has_value());
 
         TString ast = TString(*astOpt);
-        Cout << "AST: " << ast << Endl;
+        Cerr << "AST: " << ast << Endl;
+
+        UNIT_ASSERT(CountDqCombines(ast) == 2);
 
         UNIT_ASSERT_C(ast.Contains("(return (DqPhyHashCombine"),
             TStringBuilder() << "AST should return the result of DqPhyHashCombine directly: " << groupQuery << Endl << ast);
-        UNIT_ASSERT_C(ast.Contains("(WideCombiner (ToFlow (WideFromBlocks"),
-            TStringBuilder() << "WideCombiner input should be a block stream: " << groupQuery << Endl << ast);
     }
 }
 

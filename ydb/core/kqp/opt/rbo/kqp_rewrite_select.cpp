@@ -894,17 +894,19 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr &node, TExprContext &ctx, co
                 types.push_back(ExpandType(node->Pos(), *item->GetItemType(), ctx));
             }
 
-            // clang-format off
-            filterExpr = Build<TKqpInfuseDependents>(ctx, node->Pos())
-                .Input(filterExpr)
-                .Columns()
-                    .Add(columns)
-                .Build()
-                .Types()
-                    .Add(types)
-                .Build()
-                .Done().Ptr();
-            // clang-format on
+            if (!columns.empty()) {
+                // clang-format off
+                filterExpr = Build<TKqpInfuseDependents>(ctx, node->Pos())
+                    .Input(filterExpr)
+                    .Columns()
+                        .Add(columns)
+                    .Build()
+                    .Types()
+                        .Add(types)
+                    .Build()
+                    .Done().Ptr();
+                // clang-format on
+            }
         }
 
         auto where = GetSetting(setItem->Tail(), "where");

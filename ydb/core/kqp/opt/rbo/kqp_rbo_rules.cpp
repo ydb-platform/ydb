@@ -361,22 +361,11 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
             }
         }
 
-        // If the map has no parent, we don't pull up the filter any longer
-        // If we're also not adding anything to the map, stop
-        if (map->Parents.empty() && addToMap.empty()) {
-            return false;
-        }
-
         // First we add needed columns to the map, if its a projection map
         if (!addToMap.empty() && map->Project) {
             for (auto add : addToMap) {
                 map->MapElements.push_back(TMapElement(add, add));
             }
-        }
-
-        // Now we move the filter and addDependencies on top of the map, but only in case where map has a parent
-        if (map->Parents.empty()) {
-            return true;
         }
 
         map->SetInput(remainingFilter);
@@ -526,7 +515,10 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     return false;
 }
 
-// Rewrite a single scalar subplan into a cross-join
+// Rewrite a single scalar subplan into a cross-join for uncorrelated queries
+// or into a left join for correlated (assuming at most one tuple in the output of each subquery)
+// FIXME: Need to do correct general case decorellation in the future
+
 bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     auto subplanIUs = input->GetSubplanIUs(props);
     TVector<TInfoUnit> scalarIUs;
@@ -552,36 +544,68 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
 
     auto child = unaryOp->GetInput();
 
-    auto emptySource = std::make_shared<TOpEmptySource>(subplan->Pos);
+    // Check whether this is a correlated subplan with filter pushed up
+    // FIXME: if the filter got stuck we will crash later in the optimizer
+    if (subplan->Kind == EOperator::Filter && CastOperator<TOpFilter>(subplan)->GetInput()->Kind == EOperator::AddDependencies) {
+        auto filter = CastOperator<TOpFilter>(subplan);
+        auto addDeps = CastOperator<TOpAddDependencies>(filter->GetInput());
+        auto uncorrSubplan = addDeps->GetInput();
 
-    // FIXME: This works only for postgres types, because they are null-compatible
-    // For YQL types we will need to handle optionality
-    auto nullExpr = ctx.ExprCtx.NewCallable(subplan->Pos, "Nothing", {ExpandType(subplan->Pos, *subplanResType, ctx.ExprCtx)});
+        auto conjInfo = filter->GetConjunctInfo(props);
+        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
-    // clang-format off
-    auto mapLambda = Build<TCoLambda>(ctx.ExprCtx, subplan->Pos)
-        .Args({"arg"})
-        .Body(nullExpr)
-    .Done().Ptr();
-    // clang-format on
+        for (auto cj : conjInfo.JoinConditions) {
+            if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.LeftIU) != addDeps->Dependencies.end()) {
+                joinKeys.push_back(std::make_pair(cj.LeftIU, cj.RightIU));
+            } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.RightIU) != addDeps->Dependencies.end()) {
+                joinKeys.push_back(std::make_pair(cj.RightIU, cj.LeftIU));
+            } else {
+                Y_ENSURE(false, "Correlated filter missing join condition");
+            }   
+        }
 
-    TVector<TMapElement> mapElements;
-    mapElements.emplace_back(scalarIU, mapLambda);
-    auto map = std::make_shared<TOpMap>(emptySource, subplan->Pos, mapElements, true);
+        auto leftJoin = std::make_shared<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys);
 
-    TVector<TMapElement> renameElements;
-    renameElements.emplace_back(scalarIU, subplanResIU);
-    auto rename = std::make_shared<TOpMap>(subplan, subplan->Pos, renameElements, true);
-    rename->Props.EnsureAtMostOne = true;
+        TVector<TMapElement> renameElements;
+        renameElements.emplace_back(scalarIU, subplanResIU);
+        auto rename = std::make_shared<TOpMap>(leftJoin, subplan->Pos, renameElements, false);
+        unaryOp->SetInput(rename);
+    }
 
-    auto unionAll = std::make_shared<TOpUnionAll>(rename, map, subplan->Pos, true);
+    // Otherwise we assume an uncorrelated supbplan
+    // Here we don't assume at most one tuple from the subplan
+    else {
+        auto emptySource = std::make_shared<TOpEmptySource>(subplan->Pos);
 
-    auto limitExpr = ctx.ExprCtx.NewCallable(subplan->Pos, "Uint64", {ctx.ExprCtx.NewAtom(subplan->Pos, "1")});
-    auto limit = std::make_shared<TOpLimit>(unionAll, subplan->Pos, limitExpr);
+        // FIXME: This works only for postgres types, because they are null-compatible
+        // For YQL types we will need to handle optionality
+        auto nullExpr = ctx.ExprCtx.NewCallable(subplan->Pos, "Nothing", {ExpandType(subplan->Pos, *subplanResType, ctx.ExprCtx)});
 
-    TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-    auto cross = std::make_shared<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
-    unaryOp->SetInput(cross);
+        // clang-format off
+        auto mapLambda = Build<TCoLambda>(ctx.ExprCtx, subplan->Pos)
+            .Args({"arg"})
+            .Body(nullExpr)
+        .Done().Ptr();
+        // clang-format on
+
+        TVector<TMapElement> mapElements;
+        mapElements.emplace_back(scalarIU, mapLambda);
+        auto map = std::make_shared<TOpMap>(emptySource, subplan->Pos, mapElements, true);
+
+        TVector<TMapElement> renameElements;
+        renameElements.emplace_back(scalarIU, subplanResIU);
+        auto rename = std::make_shared<TOpMap>(subplan, subplan->Pos, renameElements, true);
+        rename->Props.EnsureAtMostOne = true;
+
+        auto unionAll = std::make_shared<TOpUnionAll>(rename, map, subplan->Pos, true);
+
+        auto limitExpr = ctx.ExprCtx.NewCallable(subplan->Pos, "Uint64", {ctx.ExprCtx.NewAtom(subplan->Pos, "1")});
+        auto limit = std::make_shared<TOpLimit>(unionAll, subplan->Pos, limitExpr);
+    
+        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        auto cross = std::make_shared<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
+        unaryOp->SetInput(cross);
+    }
 
     props.Subplans.Remove(scalarIU);
 
@@ -614,7 +638,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     // Find the first conjunct that is a simple in or exists subplan
     bool negated = false;
     TInfoUnit iu;
-    TSubplanEntry subplan;
+    TSubplanEntry subplanEntry;
     size_t conjunctIdx;
 
     for (conjunctIdx = 0; conjunctIdx < conjuncts.size(); conjunctIdx++) {
@@ -628,8 +652,8 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
             auto name = TString(maybeSubplan->Child(1)->Content());
             iu = TInfoUnit(name);
             if (props.Subplans.PlanMap.contains(iu)) {
-                subplan = props.Subplans.PlanMap.at(iu);
-                if (subplan.Type == ESubplanType::IN_SUBPLAN || subplan.Type == ESubplanType::EXISTS) {
+                subplanEntry = props.Subplans.PlanMap.at(iu);
+                if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || subplanEntry.Type == ESubplanType::EXISTS) {
                     break;
                 }
             }
@@ -641,31 +665,50 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
 
     std::shared_ptr<IOperator> join;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> extraJoinKeys;
+    std::shared_ptr<IOperator> uncorrSubplan = subplanEntry.Plan;
+
+    if (subplanEntry.Plan->Kind == EOperator::Filter && CastOperator<TOpFilter>(subplanEntry.Plan)->GetInput()->Kind == EOperator::AddDependencies) {
+        auto filter = CastOperator<TOpFilter>(subplanEntry.Plan);
+        auto addDeps = CastOperator<TOpAddDependencies>(filter->GetInput());
+        uncorrSubplan = addDeps->GetInput();
+
+        auto conjInfo = filter->GetConjunctInfo(props);
+
+        for (auto cj : conjInfo.JoinConditions) {
+            if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.LeftIU) != addDeps->Dependencies.end()) {
+                extraJoinKeys.push_back(std::make_pair(cj.LeftIU, cj.RightIU));
+            } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.RightIU) != addDeps->Dependencies.end()) {
+                extraJoinKeys.push_back(std::make_pair(cj.RightIU, cj.LeftIU));
+            } else {
+                Y_ENSURE(false, "Correlated filter missing join condition");
+            }   
+        }
+    }
 
     // We build a semi-join or a left-only join when processing IN subplan
-    if (subplan.Type == ESubplanType::IN_SUBPLAN) {
+    if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || !extraJoinKeys.empty()) {
         auto leftJoinInput = filter->GetInput();
         auto joinKind = negated ? "LeftOnly" : "LeftSemi";
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
-        auto planIUs = subplan.Plan->GetOutputIUs();
-        YQL_CLOG(TRACE, CoreDq) << "In tuple size: " << subplan.Tuple.size() << ", subplan tuple size: " << planIUs.size();
+        auto planIUs = uncorrSubplan->GetOutputIUs();
 
-        Y_ENSURE(subplan.Tuple.size() == planIUs.size());
-
-        for (size_t i = 0; i < planIUs.size(); i++) {
-            joinKeys.push_back(std::make_pair(subplan.Tuple[i], planIUs[i]));
+        for (size_t i = 0; i < subplanEntry.Tuple.size(); i++) {
+            joinKeys.push_back(std::make_pair(subplanEntry.Tuple[i], planIUs[i]));
         }
 
-        join = std::make_shared<TOpJoin>(leftJoinInput, subplan.Plan, input->Pos, joinKind, joinKeys);
+        joinKeys.insert(joinKeys.begin(), extraJoinKeys.begin(), extraJoinKeys.end());
+
+        join = std::make_shared<TOpJoin>(leftJoinInput, uncorrSubplan, input->Pos, joinKind, joinKeys);
         conjuncts.erase(conjuncts.begin() + conjunctIdx);
     }
     // EXISTS and NOT EXISTS
     else {
         auto one = ctx.ExprCtx.NewCallable(filter->Pos, "Uint64", {ctx.ExprCtx.NewAtom(filter->Pos, "1")});
         auto zero = ctx.ExprCtx.NewCallable(filter->Pos, "Uint64", {ctx.ExprCtx.NewAtom(filter->Pos, "0")});
-        auto limit = std::make_shared<TOpLimit>(subplan.Plan, filter->Pos, one);
+        auto limit = std::make_shared<TOpLimit>(uncorrSubplan, filter->Pos, one);
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
         TVector<TMapElement> countMapElements;
 

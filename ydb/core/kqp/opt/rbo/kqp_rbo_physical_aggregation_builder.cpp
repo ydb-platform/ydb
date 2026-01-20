@@ -544,6 +544,13 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildKeyExtractorLambda(const TVect
     TVector<TExprNode::TPtr> lambdaResults;
     for (ui32 i = 0; i < keyFields.size(); ++i) {
         auto it = lambdaArgsMap.find(keyFields[i]);
+        if (it == lambdaArgsMap.end()) {
+            TStringBuilder list;
+            for (auto [k,v] : lambdaArgsMap) {
+                list << k << ",";
+            }
+            YQL_CLOG(TRACE, CoreDq) << "Did not find key " << keyFields[i] << " in list : [" << list << "]";
+        }
         Y_ENSURE(it != lambdaArgsMap.end());
         lambdaResults.push_back(lambdaArgs[it->second]);
     }

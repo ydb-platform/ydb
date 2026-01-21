@@ -53,7 +53,12 @@ namespace NKikimr::NDDisk {
             , FromPersistentBuffer(pb.GetFromPersistentBuffer())
         {}
 
-        void Serialize(NKikimrBlobStorage::NDDisk::TQueryCredentials *pb) const {
+        TQueryCredentials(ui64 tabletId, ui32 generation)
+            : TabletId(tabletId)
+            , Generation(generation)
+        {}
+
+        void Serialize(NKikimrBlobStorage::TDDiskQueryCredentials *pb) const {
             pb->SetTabletId(TabletId);
             pb->SetGeneration(Generation);
             if (DDiskInstanceGuid) {

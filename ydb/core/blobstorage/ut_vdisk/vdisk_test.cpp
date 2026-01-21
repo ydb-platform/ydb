@@ -29,9 +29,9 @@ void TestRun(TTest *test,
              const TDuration &timeout,
              ui32 chunkSize = DefChunkSize,
              ui64 diskSize = DefDiskSize,
-             ui32 domainsNum = DefDomainsNum,
-             ui32 disksInDomain = DefDisksInDomain,
-             NKikimr::TErasureType::EErasureSpecies erasure = DefErasure)
+             ui32 domainsNum = 1,
+             ui32 disksInDomain = 1,
+             NKikimr::TErasureType::EErasureSpecies erasure = NKikimr::TBlobStorageGroupType::ErasureNone)
 {
     TConfiguration Conf(TAllPDisksConfiguration::MkOneTmp(chunkSize, diskSize, "ROT"),
                         domainsNum,
@@ -439,7 +439,7 @@ Y_UNIT_TEST_SUITE(TBsHuge) {
 Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
     Y_UNIT_TEST(StartStopNotEmptyDB) {
         const ui32 numIterations = NValgrind::PlainOrUnderValgrind(10, 2);
-        TConfiguration Conf;
+        TConfiguration Conf = CreateErasureNone();
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
 
@@ -694,11 +694,11 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
 
     Y_UNIT_TEST(ReplEraseDiskRestore) {
         TSmallCommonDataSet dataSet;
-        ui32 domainsNum = 4u;
+        ui32 domainsNum = 8u;
         ui32 disksInDomain = 2u;
         ui32 pDisksNum = domainsNum * disksInDomain;
         TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(pDisksNum, 512u << 10u, 16ull << 30ull, "ROT"),
-                            domainsNum, disksInDomain);
+                            domainsNum, disksInDomain, NKikimr::TBlobStorageGroupType::Erasure4Plus2Block);
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
         TTestReplDataWriteAndSync testLoad(&dataSet);

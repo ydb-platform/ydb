@@ -1485,7 +1485,7 @@ public:
             return false;
         }
 
-        // Ensure that transactions before last one is precomputes
+        // Ensure that the transactions before the last one are precomputes
 
         for (size_t i = 0; i + 1 < txCount; ++i) {
             const auto tx = QueryState->PreparedQuery->GetPhyTx(i);

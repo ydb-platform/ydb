@@ -3013,6 +3013,16 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         void AddError(const TString& err);
     };
 
+    // Erases encryption key and syncronize it with SettingsSerialized
+    // Returns true if settings changed
+    bool EraseEncryptionKey() {
+        if (Settings.encryption_settings().has_symmetric_key()) {
+            Settings.mutable_encryption_settings()->clear_symmetric_key();
+            return true;
+        }
+        return false;
+    }
+
     // Fills items from schema mapping:
     // - if user specified no items, fills all from schema mapping;
     // - if user specified explicit filtering, takes from schema mapping only those allowed by filter.

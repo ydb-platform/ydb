@@ -179,6 +179,12 @@ void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& im
     );
 }
 
+void TSchemeShard::PersistImportSettings(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+    db.Table<Schema::Imports>().Key(importInfo.Id).Update(
+        NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.Settings.SerializeAsString())
+    );
+}
+
 void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemIdx) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     const auto& item = importInfo.Items.at(itemIdx);

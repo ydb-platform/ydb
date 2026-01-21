@@ -3,6 +3,7 @@
 
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/vdisk/vdisk_actor.h>
+#include <ydb/core/blobstorage/ddisk/ddisk.h>
 
 #include <util/string/split.h>
 
@@ -93,7 +94,8 @@ namespace NKikimr::NStorage {
         const NPDisk::EDeviceType deviceType = TPDiskCategory(pdisk.Record.GetPDiskCategory()).Type();
 
         const TActorId pdiskServiceId = MakeBlobStoragePDiskID(vslotId.NodeId, vslotId.PDiskId);
-        const TActorId vdiskServiceId = MakeBlobStorageVDiskID(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId);
+        TActorId vdiskServiceId = MakeBlobStorageVDiskID(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId);
+        bool ddisk = false;
 
         // generate correct VDiskId (based on relevant generation of containing group) and groupInfo pointer
         Y_ABORT_UNLESS(!vdisk.RuntimeData);
@@ -123,6 +125,11 @@ namespace NKikimr::NStorage {
             } else {
                 TStringStream err;
                 groupInfo = TBlobStorageGroupInfo::Parse(*group.Group, nullptr, nullptr);
+            }
+
+            ddisk = groupInfo->Group && groupInfo->Group->GetDDisk();
+            if (ddisk) {
+                vdiskServiceId = MakeBlobStorageDDiskID(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId);
             }
 
             // check that VDisk belongs to active VDisks of the group
@@ -179,115 +186,122 @@ namespace NKikimr::NStorage {
             vslotId.VDiskSlotId, kind, NextLocalPDiskInitOwnerRound(), groupInfo->GetStoragePoolName(), donorMode,
             donorDiskIds, scrubCookie, whiteboardInstanceGuid, readOnly);
 
-        baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
-        baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;
-        baseInfo.ReplNodeRequestQuoter = ReplNodeRequestQuoter;
-        baseInfo.ReplNodeResponseQuoter = ReplNodeResponseQuoter;
-        baseInfo.YardInitDelay = VDiskCooldownTimeout;
+        std::unique_ptr<IActor> actor;
 
-        TIntrusivePtr<TVDiskConfig> vdiskConfig = Cfg->AllVDiskKinds->MakeVDiskConfig(baseInfo);
-        vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
-        vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
-        if (Cfg->ReplMaxQuantumBytes) {
-            vdiskConfig->ReplMaxQuantumBytes = *Cfg->ReplMaxQuantumBytes;
-        }
-        if (Cfg->ReplMaxDonorNotReadyCount) {
-            vdiskConfig->ReplMaxDonorNotReadyCount = *Cfg->ReplMaxDonorNotReadyCount;
-        }
-        vdiskConfig->EnableVPatch = EnableVPatch;
-        vdiskConfig->DefaultHugeGarbagePerMille = DefaultHugeGarbagePerMille;
-        vdiskConfig->HugeDefragFreeSpaceBorderPerMille = HugeDefragFreeSpaceBorderPerMille;
-        vdiskConfig->MaxChunksToDefragInflight = MaxChunksToDefragInflight;
-        vdiskConfig->FreshCompMaxInFlightWrites = FreshCompMaxInFlightWrites;
-        vdiskConfig->FreshCompMaxInFlightReads = FreshCompMaxInFlightReads;
-        vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;
-        vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
-        vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
-        vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
-        vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
-        vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
-        vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
-
-        if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
-            vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionHDD;
-            vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightHDD;
+        if (ddisk) {
+            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, AppData()->Counters));
         } else {
-            vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionSSD;
-            vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
-        }
+            baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
+            baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;
+            baseInfo.ReplNodeRequestQuoter = ReplNodeRequestQuoter;
+            baseInfo.ReplNodeResponseQuoter = ReplNodeResponseQuoter;
+            baseInfo.YardInitDelay = VDiskCooldownTimeout;
 
-        vdiskConfig->ThrottlingDryRun = ThrottlingDryRun;
-        vdiskConfig->ThrottlingMinLevel0SstCount = ThrottlingMinLevel0SstCount;
-        vdiskConfig->ThrottlingMaxLevel0SstCount = ThrottlingMaxLevel0SstCount;
-        vdiskConfig->ThrottlingMinInplacedSizeHDD = ThrottlingMinInplacedSizeHDD;
-        vdiskConfig->ThrottlingMaxInplacedSizeHDD = ThrottlingMaxInplacedSizeHDD;
-        vdiskConfig->ThrottlingMinInplacedSizeSSD = ThrottlingMinInplacedSizeSSD;
-        vdiskConfig->ThrottlingMaxInplacedSizeSSD = ThrottlingMaxInplacedSizeSSD;
-        vdiskConfig->ThrottlingMinOccupancyPerMille = ThrottlingMinOccupancyPerMille;
-        vdiskConfig->ThrottlingMaxOccupancyPerMille = ThrottlingMaxOccupancyPerMille;
-        vdiskConfig->ThrottlingMinLogChunkCount = ThrottlingMinLogChunkCount;
-        vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
+            TIntrusivePtr<TVDiskConfig> vdiskConfig = Cfg->AllVDiskKinds->MakeVDiskConfig(baseInfo);
+            vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
+            vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
+            if (Cfg->ReplMaxQuantumBytes) {
+                vdiskConfig->ReplMaxQuantumBytes = *Cfg->ReplMaxQuantumBytes;
+            }
+            if (Cfg->ReplMaxDonorNotReadyCount) {
+                vdiskConfig->ReplMaxDonorNotReadyCount = *Cfg->ReplMaxDonorNotReadyCount;
+            }
+            vdiskConfig->EnableVPatch = EnableVPatch;
+            vdiskConfig->DefaultHugeGarbagePerMille = DefaultHugeGarbagePerMille;
+            vdiskConfig->HugeDefragFreeSpaceBorderPerMille = HugeDefragFreeSpaceBorderPerMille;
+            vdiskConfig->MaxChunksToDefragInflight = MaxChunksToDefragInflight;
+            vdiskConfig->FreshCompMaxInFlightWrites = FreshCompMaxInFlightWrites;
+            vdiskConfig->FreshCompMaxInFlightReads = FreshCompMaxInFlightReads;
+            vdiskConfig->HullCompMaxInFlightWrites = HullCompMaxInFlightWrites;
+            vdiskConfig->HullCompMaxInFlightReads = HullCompMaxInFlightReads;
+            vdiskConfig->HullCompFullCompPeriodSec = HullCompFullCompPeriodSec;
+            vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
+            vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
+            vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
+            vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
 
-        vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
-        vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
-        vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
+            if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
+                vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionHDD;
+                vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightHDD;
+            } else {
+                vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionSSD;
+                vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
+            }
 
-        vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
+            vdiskConfig->ThrottlingDryRun = ThrottlingDryRun;
+            vdiskConfig->ThrottlingMinLevel0SstCount = ThrottlingMinLevel0SstCount;
+            vdiskConfig->ThrottlingMaxLevel0SstCount = ThrottlingMaxLevel0SstCount;
+            vdiskConfig->ThrottlingMinInplacedSizeHDD = ThrottlingMinInplacedSizeHDD;
+            vdiskConfig->ThrottlingMaxInplacedSizeHDD = ThrottlingMaxInplacedSizeHDD;
+            vdiskConfig->ThrottlingMinInplacedSizeSSD = ThrottlingMinInplacedSizeSSD;
+            vdiskConfig->ThrottlingMaxInplacedSizeSSD = ThrottlingMaxInplacedSizeSSD;
+            vdiskConfig->ThrottlingMinOccupancyPerMille = ThrottlingMinOccupancyPerMille;
+            vdiskConfig->ThrottlingMaxOccupancyPerMille = ThrottlingMaxOccupancyPerMille;
+            vdiskConfig->ThrottlingMinLogChunkCount = ThrottlingMinLogChunkCount;
+            vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
 
-        vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
+            vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
+            vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
+            vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
 
-        if (Cfg->BlobStorageConfig.HasVDiskPerformanceSettings()) {
-            for (auto &type : Cfg->BlobStorageConfig.GetVDiskPerformanceSettings().GetVDiskTypes()) {
-                if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
-                    if (type.HasMinHugeBlobSizeInBytes()) {
-                        vdiskConfig->MinHugeBlobInBytes = type.GetMinHugeBlobSizeInBytes();
+            vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
+
+            vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
+
+            if (Cfg->BlobStorageConfig.HasVDiskPerformanceSettings()) {
+                for (auto &type : Cfg->BlobStorageConfig.GetVDiskPerformanceSettings().GetVDiskTypes()) {
+                    if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
+                        if (type.HasMinHugeBlobSizeInBytes()) {
+                            vdiskConfig->MinHugeBlobInBytes = type.GetMinHugeBlobSizeInBytes();
+                        }
                     }
                 }
             }
+
+            vdiskConfig->BalancingEnableSend = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEnableSend();
+            vdiskConfig->BalancingEnableDelete = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEnableDelete();
+            vdiskConfig->BalancingBalanceOnlyHugeBlobs = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetBalanceOnlyHugeBlobs();
+            vdiskConfig->BalancingJobGranularity = TDuration::MicroSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetJobGranularityUs());
+            vdiskConfig->BalancingBatchSize = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetBatchSize();
+            vdiskConfig->BalancingMaxToSendPerEpoch = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetMaxToSendPerEpoch();
+            vdiskConfig->BalancingMaxToDeletePerEpoch = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetMaxToDeletePerEpoch();
+            vdiskConfig->BalancingReadBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetReadBatchTimeoutMs());
+            vdiskConfig->BalancingSendBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSendBatchTimeoutMs());
+            vdiskConfig->BalancingRequestBlobsOnMainTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetRequestBlobsOnMainTimeoutMs());
+            vdiskConfig->BalancingDeleteBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetDeleteBatchTimeoutMs());
+            vdiskConfig->BalancingEpochTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEpochTimeoutMs());
+            vdiskConfig->BalancingTimeToSleepIfNothingToDo = TDuration::Seconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSecondsToSleepIfNothingToDo());
+
+            vdiskConfig->GroupSizeInUnits = groupInfo->GroupSizeInUnits;
+
+            vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
+
+            // debug options
+            if (Cfg->TinySyncLog) {
+                vdiskConfig->SyncLogMaxDiskAmount = 1;
+                vdiskConfig->SyncLogMaxMemAmount = 1;
+            }
+
+            // issue initial report to whiteboard before creating actor to avoid races
+            Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
+                vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors), vdiskConfig->GroupSizeInUnits));
+            vdisk.WhiteboardVDiskId.emplace(vdiskId);
+            vdisk.WhiteboardInstanceGuid = whiteboardInstanceGuid;
+
+            // create an actor
+            actor.reset(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters));
         }
 
-        vdiskConfig->BalancingEnableSend = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEnableSend();
-        vdiskConfig->BalancingEnableDelete = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEnableDelete();
-        vdiskConfig->BalancingBalanceOnlyHugeBlobs = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetBalanceOnlyHugeBlobs();
-        vdiskConfig->BalancingJobGranularity = TDuration::MicroSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetJobGranularityUs());
-        vdiskConfig->BalancingBatchSize = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetBatchSize();
-        vdiskConfig->BalancingMaxToSendPerEpoch = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetMaxToSendPerEpoch();
-        vdiskConfig->BalancingMaxToDeletePerEpoch = Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetMaxToDeletePerEpoch();
-        vdiskConfig->BalancingReadBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetReadBatchTimeoutMs());
-        vdiskConfig->BalancingSendBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSendBatchTimeoutMs());
-        vdiskConfig->BalancingRequestBlobsOnMainTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetRequestBlobsOnMainTimeoutMs());
-        vdiskConfig->BalancingDeleteBatchTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetDeleteBatchTimeoutMs());
-        vdiskConfig->BalancingEpochTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEpochTimeoutMs());
-        vdiskConfig->BalancingTimeToSleepIfNothingToDo = TDuration::Seconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSecondsToSleepIfNothingToDo());
-
-        vdiskConfig->GroupSizeInUnits = groupInfo->GroupSizeInUnits;
-
-        vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
-
-        // debug options
-        if (Cfg->TinySyncLog) {
-            vdiskConfig->SyncLogMaxDiskAmount = 1;
-            vdiskConfig->SyncLogMaxMemAmount = 1;
-        }
-
-        // issue initial report to whiteboard before creating actor to avoid races
-        Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
-            vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors), vdiskConfig->GroupSizeInUnits));
-        vdisk.WhiteboardVDiskId.emplace(vdiskId);
-        vdisk.WhiteboardInstanceGuid = whiteboardInstanceGuid;
-
-        // create an actor
         auto *as = TActivationContext::ActorSystem();
-        TActorId actorId = as->Register(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters),
-            TMailboxType::Revolving, AppData()->SystemPoolId);
+        const TActorId actorId = as->Register(actor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);
 
         STLOG(PRI_DEBUG, BS_NODE, NW24, "StartLocalVDiskActor done", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
-            (PDiskGuid, pdiskGuid));
+            (PDiskGuid, pdiskGuid), (DDisk, ddisk), (VDiskServiceId, vdiskServiceId));
 
         // for dynamic groups -- start state aggregator
-        if (TGroupID(groupInfo->GroupID).ConfigurationType() == EGroupConfigurationType::Dynamic) {
+        if (!ddisk && TGroupID(groupInfo->GroupID).ConfigurationType() == EGroupConfigurationType::Dynamic) {
             StartAggregator(vdiskServiceId, groupInfo->GroupID.GetRawId());
         }
 
@@ -300,12 +314,15 @@ namespace NKikimr::NStorage {
             .OrderNumber = groupInfo->GetOrderNumber(TVDiskIdShort(vdiskId)),
             .DonorMode = donorMode,
             .ReadOnly = readOnly,
+            .DDisk = ddisk,
         });
 
-        vdisk.Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
-        vdisk.ReportedVDiskStatus.reset();
-        vdisk.ScrubCookie = scrubCookie;
-        VDiskStatusChanged = true;
+        if (!ddisk) {
+            vdisk.Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+            vdisk.ReportedVDiskStatus.reset();
+            vdisk.ScrubCookie = scrubCookie;
+            VDiskStatusChanged = true;
+        }
     }
 
     void TNodeWarden::HandleGone(STATEFN_SIG) {

@@ -493,9 +493,7 @@ IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGr
     switch (gtype.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::ErasureMirror3:
-        case TBlobStorageGroupType::Erasure3Plus1Block:
         case TBlobStorageGroupType::Erasure4Plus2Block:
-        case TBlobStorageGroupType::Erasure3Plus2Block:
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure3Plus3Block:
         case TBlobStorageGroupType::ErasureMirror3of4:
@@ -515,9 +513,7 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
     switch (topology->GType.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::ErasureMirror3:
-        case TBlobStorageGroupType::Erasure3Plus1Block:
         case TBlobStorageGroupType::Erasure4Plus2Block:
-        case TBlobStorageGroupType::Erasure3Plus2Block:
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure3Plus3Block:
             return new TQuorumCheckerOrdinary(topology);
@@ -541,8 +537,6 @@ TBlobStorageGroupInfo::TTopology::CreateDataIntegrityChecker(const TTopology* to
     switch (topology->GType.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::ErasureMirror3:
-        case TBlobStorageGroupType::Erasure3Plus1Block:
-        case TBlobStorageGroupType::Erasure3Plus2Block:
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure3Plus3Block:
             return new TDataIntegrityCheckerTrivial(topology);
@@ -695,7 +689,9 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
             bsDomain.VDisks.resize(domain.VDiskLocationsSize());
             for (ui32 vdiskIdx = 0; vdiskIdx < domain.VDiskLocationsSize(); ++vdiskIdx) {
                 const auto& id = domain.GetVDiskLocations(vdiskIdx);
-                TActorId vdiskActorId = MakeBlobStorageVDiskID(id.GetNodeID(), id.GetPDiskID(), id.GetVDiskSlotID());
+                TActorId vdiskActorId = group.GetDDisk()
+                    ? MakeBlobStorageDDiskID(id.GetNodeID(), id.GetPDiskID(), id.GetVDiskSlotID())
+                    : MakeBlobStorageVDiskID(id.GetNodeID(), id.GetPDiskID(), id.GetVDiskSlotID());
                 dyn.PushBackActorId(vdiskActorId);
             }
         }

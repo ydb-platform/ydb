@@ -112,6 +112,7 @@ private:
     }
 
     virtual void SendError(NKikimrIssues::TIssuesIds::EIssueCode issueCode, const std::string& message,
+        [[maybe_unused]] NLogin::NSasl::EScramServerError scramErrorCode = NLogin::NSasl::EScramServerError::OtherError,
         [[maybe_unused]] const std::string& reason = "") const override final
     {
         auto response = std::make_unique<TEvSasl::TEvSaslPlainLoginResponse>();
@@ -189,7 +190,7 @@ private:
                 const auto scramInitParams = ParseScramHashInitParams(itHashesInitParams->second);
                 ui32 iterationsCount;
                 if (!TryFromString(scramInitParams.IterationsCount, iterationsCount)
-                    || !IsBase64(scramInitParams.Salt)) {
+                    || (iterationsCount == 0) || !IsBase64(scramInitParams.Salt)) {
                     LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
                         ActorName << "# " << ctx.SelfID.ToString() <<
                         ", " << "Authentication failed: " <<

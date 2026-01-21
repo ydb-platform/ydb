@@ -243,10 +243,6 @@ private:
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
-            if (!Self->EnableVectorIndex) {
-                explain = "Vector index support is disabled";
-                return false;
-            }
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;

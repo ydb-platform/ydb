@@ -110,11 +110,6 @@ struct TOrderEnforcer {
 };
 
 /**
- * Build key selector for sort and merge operations from the enforcer
- */
-std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> BuildSortKeySelector(const TVector<TSortElement>& sortElements, TExprContext &ctx, TPositionHandle pos);
-
-/**
  * Per-operator physical plan properties
  * TODO: Make this more generic and extendable
  */
@@ -254,19 +249,19 @@ struct TStageGraph {
         return res;
     }
 
-    bool IsSourceStage(const int id) {
+    bool IsSourceStage(const int id) const {
         return SourceStageRenames.contains(id);
     }
 
-    bool IsSourceStageRowType(const int id) {
+    bool IsSourceStageRowType(const int id) const {
         return IsSourceStageTypeImpl(id, NYql::EStorageType::RowStorage);
     }
 
-    bool IsSourceStageColumnType(const int id) {
+    bool IsSourceStageColumnType(const int id) const {
         return IsSourceStageTypeImpl(id, NYql::EStorageType::ColumnStorage);
     }
 
-    NYql::EStorageType GetStorageType(const int id) {
+    NYql::EStorageType GetStorageType(const int id) const {
         auto it = SourceStageRenames.find(id);
         if (it != SourceStageRenames.end()) {
             return it->second.StorageType;
@@ -306,7 +301,7 @@ struct TStageGraph {
     void TopologicalSort();
 private:
 
-    bool IsSourceStageTypeImpl(const int id, const NYql::EStorageType tableStorageType) {
+    bool IsSourceStageTypeImpl(const int id, const NYql::EStorageType tableStorageType) const {
         auto it = SourceStageRenames.find(id);
         if (it != SourceStageRenames.end()) {
             return it->second.StorageType == tableStorageType;
@@ -511,7 +506,7 @@ private:
 
 class TOpMap : public IUnaryOperator {
   public:
-    TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project);
+    TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
@@ -520,15 +515,18 @@ class TOpMap : public IUnaryOperator {
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
     virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
 
-    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                   const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
 
-    virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
-    virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     virtual TString ToString(TExprContext& ctx) override;
+    bool IsOrdered() const { return Ordered; }
 
     TVector<TMapElement> MapElements;
     bool Project = true;
+    bool Ordered = false;
 };
 
 class TOpProject : public IUnaryOperator {

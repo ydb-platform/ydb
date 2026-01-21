@@ -11,6 +11,9 @@ namespace NKikimr::NSasl {
             EvComputedHashes = EventSpaceBegin(TKikimrEvents::ES_SASL_AUTH),
             EvSaslPlainLoginResponse,
             EvSaslPlainLdapLoginResponse,
+            EvSaslScramFirstServerResponse,
+            EvSaslScramFinalClientRequest,
+            EvSaslScramFinalServerResponse,
             EvEnd,
         };
 
@@ -30,6 +33,23 @@ namespace NKikimr::NSasl {
         struct TEvSaslPlainLdapLoginResponse : public TEventLocal<TEvSaslPlainLdapLoginResponse, EvSaslPlainLdapLoginResponse> {
             NYql::TIssue Issue;
             std::string Reason;
+            std::string Token;
+            std::string SanitizedToken;
+            bool IsAdmin;
+        };
+
+        struct TEvSaslScramFirstServerResponse : public TEventLocal<TEvSaslScramFirstServerResponse, EvSaslScramFirstServerResponse> {
+            std::string Msg;
+        };
+
+        struct TEvSaslScramFinalClientRequest : public TEventLocal<TEvSaslScramFinalClientRequest, EvSaslScramFinalClientRequest> {
+            std::string Msg;
+        };
+
+         struct TEvSaslScramFinalServerResponse : public TEventLocal<TEvSaslScramFinalServerResponse, EvSaslScramFinalServerResponse> {
+            std::string Msg;
+            NYql::TIssue Issue;
+            std::string AuthcId;
             std::string Token;
             std::string SanitizedToken;
             bool IsAdmin;

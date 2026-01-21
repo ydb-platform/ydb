@@ -270,11 +270,10 @@ namespace NKikimr::NBsController {
                 } else {
                     Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
                 }
-                const TString storagePoolName = info.Name;
 
                 // push group information to each node that will receive VDisk status update
                 NKikimrBlobStorage::TGroupInfo proto;
-                SerializeGroupInfo(&proto, groupInfo, storagePoolName, scopeId);
+                SerializeGroupInfo(&proto, groupInfo, info, scopeId);
                 for (TNodeId nodeId : nodes) {
                     NKikimrBlobStorage::TNodeWardenServiceSet *service = Services[nodeId].MutableServiceSet();
                     service->AddGroups()->CopyFrom(proto);
@@ -288,7 +287,7 @@ namespace NKikimr::NBsController {
                         dynInfo.PushBackActorId(MakeBlobStorageVDiskID(id.NodeId, id.PDiskId, id.VSlotId));
                     }
                     State.NodeWhiteboardOutbox.emplace_back(new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(
-                        MakeIntrusive<TBlobStorageGroupInfo>(groupInfo.Topology, std::move(dynInfo), storagePoolName,
+                        MakeIntrusive<TBlobStorageGroupInfo>(groupInfo.Topology, std::move(dynInfo), info.Name,
                         scopeId, NPDisk::DEVICE_TYPE_UNKNOWN)));
                 }
 
@@ -1262,10 +1261,10 @@ namespace NKikimr::NBsController {
         }
 
         void TBlobStorageController::SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,
-                const TString& storagePoolName, const TMaybe<TKikimrScopeId>& scopeId) {
+                const TStoragePoolInfo& poolInfo, const TMaybe<TKikimrScopeId>& scopeId) {
             group->SetGroupID(groupInfo.ID.GetRawId());
             group->SetGroupGeneration(groupInfo.Generation);
-            group->SetStoragePoolName(storagePoolName);
+            group->SetStoragePoolName(poolInfo.Name);
 
             group->SetEncryptionMode(groupInfo.EncryptionMode.GetOrElse(0));
             group->SetLifeCyclePhase(groupInfo.LifeCyclePhase.GetOrElse(0));
@@ -1332,6 +1331,10 @@ namespace NKikimr::NBsController {
                 groupInfo.BridgeProxyGroupId->CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
             }
             groupInfo.BridgePileId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+
+            if (poolInfo.DDisk) {
+                group->SetDDisk(true);
+            }
         }
 
         void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {

@@ -7,6 +7,7 @@
 namespace NKikimr::NSasl {
 
 using namespace NLogin;
+using namespace NLogin::NSasl;
 using namespace NSchemeShard;
 
 TAuthActorBase::TAuthActorBase(TActorId sender, const std::string& database, const std::string& peerName
@@ -92,7 +93,7 @@ void TAuthActorBase::HandleLoginResult(TEvSchemeShard::TEvLoginResult::TPtr& ev,
             DerivedActorName << "# " << ctx.SelfID.ToString() <<
             ", " << "Authentication failed: " << loginResult.GetError()
         );
-        SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, loginResult.GetError());
+        SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, loginResult.GetError(), EScramServerError::InvalidProof);
     } else if (!loginResult.HasToken()) { // empty token is still an error
         std::string error = "Failed to produce a token";
         LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,

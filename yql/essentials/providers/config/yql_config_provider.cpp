@@ -759,6 +759,12 @@ private:
                 return false;
             }
             Types_.DiscoveryMode = true;
+        } else if (name == "WindowNewPipeline" || name == "DisableWindowNewPipeline") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.WindowNewPipeline = (name == "WindowNewPipeline");
         } else if (name == "EnableSystemColumns") {
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));

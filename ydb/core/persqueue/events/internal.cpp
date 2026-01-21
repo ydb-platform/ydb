@@ -47,29 +47,15 @@ namespace NKikimr::NPQ {
 
 namespace NKikimr {
 
-    TEvPQ::TEvMLPChangeMessageDeadlineRequest::TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::span<const ui64> offsets, TInstant deadlineTimestamp)
-        : TEvMLPChangeMessageDeadlineRequest(topic, consumer, partitionId, offsets, {&deadlineTimestamp, 1}, true)
-    {
-    }
-
-    TEvPQ::TEvMLPChangeMessageDeadlineRequest::TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::span<const ui64> offsets, const std::span<const TInstant> deadlineTimestamps)
-        : TEvMLPChangeMessageDeadlineRequest(topic, consumer, partitionId, offsets, deadlineTimestamps, false)
-    {
-    }
-
-    TEvPQ::TEvMLPChangeMessageDeadlineRequest::TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::span<const ui64> offsets, const std::span<const TInstant> deadlineTimestamps, bool useCommonDeadline) {
-        if (useCommonDeadline) {
-            Y_ENSURE(deadlineTimestamps.size() == 1);
-        } else {
-            Y_ENSURE(deadlineTimestamps.size() == offsets.size());
-        }
+    TEvPQ::TEvMLPChangeMessageDeadlineRequest::TEvMLPChangeMessageDeadlineRequest(const TString& topic, const TString& consumer, ui32 partitionId, const std::span<const ui64> offsets, const std::span<const TInstant> deadlineTimestamps) {
+        Y_ENSURE(deadlineTimestamps.size() == offsets.size());
         Record.SetTopic(topic);
         Record.SetConsumer(consumer);
         Record.SetPartitionId(partitionId);
         for (size_t i = 0; i < offsets.size(); ++i) {
             auto* message = Record.AddMessage();
             message->SetOffset(offsets[i]);
-            TInstant deadlineTimestamp = deadlineTimestamps[useCommonDeadline ? 0 : i];
+            TInstant deadlineTimestamp = deadlineTimestamps[i];
             message->SetDeadlineTimestampSeconds(deadlineTimestamp.Seconds());
         }
     }

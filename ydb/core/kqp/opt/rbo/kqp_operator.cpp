@@ -514,10 +514,11 @@ void TMapElement::SetExpression(TExprNode::TPtr expr) {
 /**
  * OpMap operator methods
  */
-TOpMap::TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project)
+TOpMap::TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project, bool ordered)
     : IUnaryOperator(EOperator::Map, pos, input)
     , MapElements(mapElements)
-    , Project(project) {
+    , Project(project)
+    , Ordered(ordered) {
 }
 
 TVector<TInfoUnit> TOpMap::GetOutputIUs() {

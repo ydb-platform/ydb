@@ -17,7 +17,7 @@
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/login/login.h>
-#include <ydb/library/login/sasl/scram.h>
+#include <ydb/library/login/sasl/plain.h>
 
 #include <ydb/public/api/protos/ydb_auth.pb.h>
 
@@ -46,10 +46,10 @@ public:
         const Ydb::Auth::LoginRequest* protoRequest = GetProtoRequest();
         if (IsUsernameFromLdapAuthDomain(protoRequest->user(), AppData()->AuthConfig)) {
             const TString ldapUsername = PrepareLdapUsername(protoRequest->user(), AppData()->AuthConfig);
-            const TString saslPlainAuthMsg = NLogin::NSasl::PrepareSaslPlainAuthMsg(ldapUsername, protoRequest->password());
+            const TString saslPlainAuthMsg = NLogin::NSasl::BuildSaslPlainAuthMsg(ldapUsername, protoRequest->password());
             authActor = CreatePlainLdapAuthProxyActor(ctx.SelfID, PathToDatabase, saslPlainAuthMsg, Request->GetPeerName());
         } else {
-            const TString saslPlainAuthMsg = NLogin::NSasl::PrepareSaslPlainAuthMsg(protoRequest->user(), protoRequest->password());
+            const TString saslPlainAuthMsg = NLogin::NSasl::BuildSaslPlainAuthMsg(protoRequest->user(), protoRequest->password());
             authActor = CreatePlainAuthActor(ctx.SelfID, PathToDatabase, saslPlainAuthMsg, Request->GetPeerName());
         }
 

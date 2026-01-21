@@ -143,7 +143,7 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .Messages = { TMessageId(0, 0) },
-            .Deadlines = TInstant::Now() - TDuration::Seconds(1),
+            .Deadlines = {TInstant::Now() - TDuration::Seconds(1), },
         });
 
         auto result = GetChangeResponse(runtime);

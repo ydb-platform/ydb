@@ -1475,8 +1475,8 @@ public:
         }
 
         const auto& txCtx = *QueryState->TxCtx;
-        if (txCtx.HasTableRead || txCtx.TopicOperations.GetSize() != 0) {
-            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table reads and topic operations");
+        if (txCtx.TopicOperations.GetSize()) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for topic operations");
             return false;
         }
 
@@ -1504,11 +1504,6 @@ public:
 
         for (const auto& stage : tx->GetStages()) {
             for (const auto& source : stage.GetSources()) {
-                if (!source.HasExternalSource()) {
-                    ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for queries with non external sources");
-                    return false;
-                }
-
                 // Solomon provider may use runtime listing,
                 // YT provider opens read session during compilation,
                 // so we can't save and restore such queries

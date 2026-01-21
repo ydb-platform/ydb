@@ -8,6 +8,8 @@ SRCS(
     command.cpp
     command_utils.cpp
     common.cpp
+    config.cpp
+    log.cpp
     csv_parser.cpp
     describe.cpp
     duration.cpp
@@ -45,9 +47,11 @@ PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
     contrib/libs/ftxui
     contrib/libs/openssl
+    contrib/libs/yaml-cpp
     contrib/restricted/patched/replxx
     library/cpp/getopt
     library/cpp/json/writer
+    library/cpp/logger
     library/cpp/regex/pcre
     library/cpp/string_utils/csv
     library/cpp/yaml/as

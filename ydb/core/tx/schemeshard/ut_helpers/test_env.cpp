@@ -592,7 +592,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBorrowedSplitCompaction(opts.EnableBorrowedSplitCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
-    app.FeatureFlags.SetEnableVectorIndex(true);
     app.FeatureFlags.SetEnableAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);

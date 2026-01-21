@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/login/sasl/scram.h>
 
 
 namespace NKikimr::NSasl {
@@ -15,6 +16,7 @@ public:
     STATEFN(StateNavigate) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
+            CFunc(TEvents::TEvPoison::EventType, CleanupAndDie);
         }
     }
 
@@ -25,6 +27,7 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDestroyed);
             HFunc(NSchemeShard::TEvSchemeShard::TEvLoginResult, HandleLoginResult);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            CFunc(TEvents::TEvPoison::EventType, CleanupAndDie);
         }
     }
 
@@ -42,6 +45,7 @@ protected:
     virtual NKikimrScheme::TEvLogin CreateLoginRequest() const = 0;
     virtual void SendIssuedToken(const NKikimrScheme::TEvLoginResult& loginResult) const = 0;
     virtual void SendError(NKikimrIssues::TIssuesIds::EIssueCode issueCode, const std::string& message,
+        NLogin::NSasl::EScramServerError scramErrorCode = NLogin::NSasl::EScramServerError::OtherError,
         const std::string& reason = "") const = 0;
     void CleanupAndDie(const TActorContext &ctx);
 

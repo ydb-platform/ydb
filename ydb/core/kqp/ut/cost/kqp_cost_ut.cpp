@@ -311,7 +311,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableVectorIndex(true);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAccessToIndexImplTables(true);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_INFO);
         NSchemeShard::gVectorIndexSeed = 1337;

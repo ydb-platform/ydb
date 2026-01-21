@@ -3,6 +3,7 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/security/login_shared_func.h>
 
 #include "kafka_sasl_handshake_actor.h"
 
@@ -26,6 +27,11 @@ void TKafkaSaslHandshakeActor::Handshake() {
         SendResponse("Does not support the requested SASL mechanism.", EKafkaErrors::UNSUPPORTED_SASL_MECHANISM, EAuthSteps::FAILED);
         return;
     }
+
+    if (HandshakeRequestData->Mechanism->StartsWith("SCRAM") && NKikimr::IsLdapAuthenticationEnabled(NKikimr::AppData()->AuthConfig)) {
+        SendResponse("Does not support Scram mechanisms with LDAP authentication.", EKafkaErrors::UNSUPPORTED_SASL_MECHANISM, EAuthSteps::FAILED);
+    }
+
     SendResponse("", EKafkaErrors::NONE_ERROR, EAuthSteps::WAIT_AUTH, TStringBuilder() << HandshakeRequestData->Mechanism);
 }
 

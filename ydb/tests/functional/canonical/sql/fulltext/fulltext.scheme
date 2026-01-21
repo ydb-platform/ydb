@@ -1,0 +1,19 @@
+-- Single table for all fulltext tests
+CREATE TABLE FullTextTable (
+    Key Uint64,
+    Text String,
+    Data String,
+    PRIMARY KEY (Key)
+);
+
+-- Fulltext index for Contains tests
+ALTER TABLE FullTextTable ADD INDEX fulltext_idx
+    GLOBAL USING fulltext
+    ON (Text) COVER (Data)
+    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true);
+
+-- Fulltext relevance index for Relevance tests
+ALTER TABLE FullTextTable ADD INDEX fulltext_relevance_idx
+    GLOBAL USING fulltext
+    ON (Text) COVER (Data)
+    WITH (layout=flat_relevance, tokenizer=standard, use_filter_lowercase=true);

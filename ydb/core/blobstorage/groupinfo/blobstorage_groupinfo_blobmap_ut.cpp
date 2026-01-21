@@ -208,8 +208,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
 
     Y_UNIT_TEST(BasicChecks) {
         for (auto erasure : {TBlobStorageGroupType::ErasureNone, TBlobStorageGroupType::ErasureMirror3,
-                TBlobStorageGroupType::Erasure3Plus1Block,
-                TBlobStorageGroupType::Erasure4Plus2Block, TBlobStorageGroupType::Erasure3Plus2Block}) {
+                TBlobStorageGroupType::Erasure4Plus2Block}) {
             auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(erasure, 3U, 8U, 1U);
             const ui32 blobSubgroupSize = groupInfo->Type.BlobSubgroupSize();
             TOriginalBlobStorageGroupInfo orig(blobSubgroupSize, *groupInfo);

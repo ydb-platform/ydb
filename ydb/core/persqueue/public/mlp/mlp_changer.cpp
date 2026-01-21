@@ -18,14 +18,7 @@ TEvPQ::TEvMLPUnlockRequest* TChangerActor<TEvPQ::TEvMLPUnlockRequest, TEvPQ::TEv
 
 template<>
 TEvPQ::TEvMLPChangeMessageDeadlineRequest* TChangerActor<TEvPQ::TEvMLPChangeMessageDeadlineRequest, TEvPQ::TEvMLPChangeMessageDeadlineResponse,  TMessageDeadlineChangerSettings>::CreateRequest(ui32 partitionId, const std::vector<ui64>& offsets) {
-    return std::visit(TOverloaded{
-        [&](const TInstant& deadline) {
-            return new TEvPQ::TEvMLPChangeMessageDeadlineRequest(Settings.TopicName, Settings.Consumer, partitionId, offsets, deadline);
-        },
-        [&](const std::vector<TInstant>& deadlines) {
-            return new TEvPQ::TEvMLPChangeMessageDeadlineRequest(Settings.TopicName, Settings.Consumer, partitionId, offsets, deadlines);
-        }
-    }, Settings.Deadlines);
+    return new TEvPQ::TEvMLPChangeMessageDeadlineRequest(Settings.TopicName, Settings.Consumer, partitionId, offsets, Settings.Deadlines);
 }
 
 IActor* CreateCommitter(const NActors::TActorId& parentId, TCommitterSettings&& settings) {

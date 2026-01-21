@@ -1,8 +1,6 @@
 #include "yql_yt_parser_fragment_list_index.h"
 
 #include <library/cpp/yson/zigzag.h>
-
-#include <util/system/yassert.h>
 #include <util/string/builder.h>
 
 namespace NYql::NFmr {

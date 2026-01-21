@@ -244,6 +244,12 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
             return;
         }
 
+        if (EnableChecksums) {
+            if (!AddFile(NBackup::ChecksumKey(FileName), NBackup::ComputeChecksum(Scheme))) {
+                return;
+            }
+        }
+
         if (EnablePermissions) {
             if (!Permissions) {
                 return Finish(false, "cannot infer permissions");
@@ -251,6 +257,12 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
 
             if (!AddFile("permissions.pb", Permissions, MakeIV(NBackup::EBackupFileType::Permissions))) {
                 return;
+            }
+
+            if (EnableChecksums) {
+                if (!AddFile(NBackup::ChecksumKey("permissions.pb"), NBackup::ComputeChecksum(Permissions))) {
+                    return;
+                }
             }
         }
 
@@ -260,6 +272,12 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
 
         if (!AddFile("metadata.json", Metadata, IV)) {
             return;
+        }
+
+        if (EnableChecksums) {
+            if (!AddFile(NBackup::ChecksumKey("metadata.json"), NBackup::ComputeChecksum(Metadata))) {
+                return;
+            }
         }
 
         UploadFiles();
@@ -305,6 +323,7 @@ public:
         const TString& databaseRoot,
         const TString& metadata,
         bool enablePermissions,
+        bool enableChecksums,
         const TMaybe<NBackup::TEncryptionIV>& iv
     )
         : TExportFilesUploader<TSchemeUploader>(settings, GetDestinationPrefix(settings, itemIdx))
@@ -315,6 +334,7 @@ public:
         , IV(iv)
         , DatabaseRoot(databaseRoot)
         , EnablePermissions(enablePermissions)
+        , EnableChecksums(enableChecksums)
         , Metadata(metadata)
     {
     }
@@ -344,7 +364,8 @@ private:
 
     TString DatabaseRoot;
     TString Scheme;
-    bool EnablePermissions = false;
+    const bool EnablePermissions;
+    const bool EnableChecksums;
     TString Permissions;
     TString Metadata;
 }; // TSchemeUploader
@@ -463,10 +484,10 @@ private:
 
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
-    bool enablePermissions, const TMaybe<NBackup::TEncryptionIV>& iv
+    bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
     return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot,
-        metadata, enablePermissions, iv);
+        metadata, enablePermissions, enableChecksums, iv);
 }
 
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,

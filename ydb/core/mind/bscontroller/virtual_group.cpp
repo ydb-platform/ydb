@@ -65,6 +65,9 @@ namespace NKikimr::NBsController {
         }
 
         auto& pool = pools.at(storagePoolId);
+        if (pool.DDisk) {
+            throw TExError() << "can't invoke AllocateVirtualGroup against DDisk pool";
+        }
 
         // create entry in group table
         auto *group = Groups.ConstructInplaceNewEntry(TGroupId::FromValue(groupId.GetRaw()), TGroupId::FromValue(groupId.GetRaw()), 0u, 0u,

@@ -1857,6 +1857,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     bool parseOk = ParseFromStringNoSizeLimit(tableDesc, alterTabletFull);
                     Y_ABORT_UNLESS(parseOk);
 
+                    // Load CoordinatedSchemaVersion from proto (for crash recovery)
+                    if (tableDesc.HasCoordinatedSchemaVersion()) {
+                        tableInfo->AlterData->CoordinatedSchemaVersion = tableDesc.GetCoordinatedSchemaVersion();
+                    }
+
                     if (tableDesc.HasPartitionConfig() &&
                         tableDesc.GetPartitionConfig().ColumnFamiliesSize() > 1)
                     {
@@ -2050,6 +2055,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 backupCollection->AlterVersion = rowset.GetValue<Schema::BackupCollection::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Description.ParseFromString(rowset.GetValue<Schema::BackupCollection::Description>());
                 Self->IncrementPathDbRefCount(pathId);
+                Self->RegisterBackupCollectionTables(backupCollection);
 
                 if (!rowset.Next()) {
                     return false;
@@ -4725,12 +4731,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         }
 
                         buildInfo->TargetName = TPath::Init(buildInfo->TablePathId, Self).PathString();
-                    }
-
-                    // prevent build index from progress
-                    if (buildInfo->IsBuildVectorIndex() && !Self->EnableVectorIndex) {
-                        buildInfo->IsBroken = true;
-                        buildInfo->AddIssue(TStringBuilder() << "Vector index is not enabled");
                     }
 
                     // Note: broken build are also added to IndexBuilds

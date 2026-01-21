@@ -61,9 +61,7 @@ const char *TErasureType::ErasureSpeciesToStr(TErasureType::EErasureSpecies es) 
     switch (es) {
         case ErasureNone:           return "None";
         case ErasureMirror3:        return "Mirror3";
-        case Erasure3Plus1Block:    return "3Plus1Block";
         case Erasure4Plus2Block:    return "4Plus2Block";
-        case Erasure3Plus2Block:    return "3Plus2Block";
         case ErasureMirror3dc:      return "Mirror3dc";
         case Erasure4Plus3Block:    return "4Plus3Block";
         case Erasure3Plus3Block:    return "3Plus3Block";
@@ -83,9 +81,7 @@ const TErasureParameters& GetErasureParameters(TErasureType::EErasureSpecies spe
     static const std::unordered_map<TErasureType::EErasureSpecies, TErasureParameters> erasureSpeciesParameters{{
         {TErasureType::EErasureSpecies::ErasureNone,          {TErasureType::ErasureMirror,       1, 0, 1}}
         ,{TErasureType::EErasureSpecies::ErasureMirror3,      {TErasureType::ErasureMirror,       1, 2, 1}}
-        ,{TErasureType::EErasureSpecies::Erasure3Plus1Block,  {TErasureType::ErasureParityBlock,  3, 1, 3}}
         ,{TErasureType::EErasureSpecies::Erasure4Plus2Block,  {TErasureType::ErasureParityBlock,  4, 2, 5}}
-        ,{TErasureType::EErasureSpecies::Erasure3Plus2Block,  {TErasureType::ErasureParityBlock,  3, 2, 3}}
         ,{TErasureType::EErasureSpecies::ErasureMirror3dc,    {TErasureType::ErasureMirror,       1, 2, 1}}
         ,{TErasureType::EErasureSpecies::Erasure4Plus3Block,  {TErasureType::ErasureParityBlock,  4, 3, 5}}
         ,{TErasureType::EErasureSpecies::Erasure3Plus3Block,  {TErasureType::ErasureParityBlock,  3, 3, 3}}
@@ -1769,7 +1765,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
             TErasureType typeEO(TErasureType::EErasureSpecies::Erasure4Plus2Block);
             EoBlockRestore<isStripe, restoreParts, restoreFullData, restoreParityParts>(crcMode, typeEO, partSet);
         } else if (p.DataParts == 3) {
-            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure3Plus2Block);
+            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure3Plus3Block);
             EoBlockRestore<isStripe, restoreParts, restoreFullData, restoreParityParts>(crcMode, typeEO, partSet);
         }
         return;
@@ -1786,7 +1782,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
             TErasureType typeEO(TErasureType::EErasureSpecies::Erasure4Plus2Block);
             EoBlockRestore<isStripe, restoreParts, restoreFullData, restoreParityParts>(crcMode, typeEO, partSet);
         } else if (p.DataParts == 3) {
-            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure3Plus2Block);
+            TErasureType typeEO(TErasureType::EErasureSpecies::Erasure3Plus3Block);
             EoBlockRestore<isStripe, restoreParts, restoreFullData, restoreParityParts>(crcMode, typeEO, partSet);
         }
         if (restoreParts) {
@@ -1946,12 +1942,10 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
 const std::unordered_map<TErasureType::EErasureSpecies, TString> TErasureType::ErasureNames{{
     {TErasureType::EErasureSpecies::ErasureNone, "none"},
     {TErasureType::EErasureSpecies::ErasureMirror3 ,"mirror-3"},
-    {TErasureType::EErasureSpecies::Erasure3Plus1Block ,"block-3-1"},
     {TErasureType::EErasureSpecies::Erasure4Plus2Block ,"block-4-2"},
-    {TErasureType::EErasureSpecies::Erasure3Plus2Block ,"block-3-2"},
     {TErasureType::EErasureSpecies::ErasureMirror3dc ,"mirror-3-dc"},
     {TErasureType::EErasureSpecies::Erasure4Plus3Block ,"block-4-3"},
-    {TErasureType::EErasureSpecies::Erasure3Plus3Block ,"block-3-3"},
+    // {TErasureType::EErasureSpecies::Erasure3Plus3Block ,"block-3-3"},
     {TErasureType::EErasureSpecies::ErasureMirror3of4 ,"mirror-3of4"},
 }};
 

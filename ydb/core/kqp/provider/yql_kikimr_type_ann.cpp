@@ -1044,10 +1044,6 @@ private:
             } else if (type == "syncGlobalUnique") {
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Vector index support is disabled"));
-                    return TStatus::Error;
-                }
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
             } else if (type == "globalFulltext") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {

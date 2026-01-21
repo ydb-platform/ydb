@@ -64,6 +64,10 @@ SRCS(
     yql_user_data.h
     yql_user_data_storage.cpp
     yql_user_data_storage.h
+    yql_window_features.cpp
+    yql_window_features.h
+    yql_window_frames_collector_params_serializer.cpp
+    yql_window_frames_collector_params_serializer.h
 )
 
 PEERDIR(

@@ -1722,9 +1722,20 @@ Y_UNIT_TEST(CreateTableWithIfNotExists) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
 }
 
-Y_UNIT_TEST(CreateTableWithIfNotExistsYtNotSupported) {
-    ExpectFailWithError("CREATE TABLE IF NOT EXISTS plato.t (a int32);",
-                        "<main>:1:34: Error: CREATE TABLE IF NOT EXISTS is not supported for yt provider.\n");
+Y_UNIT_TEST(CreateTableWithIfNotExistsYt) {
+    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE IF NOT EXISTS t (a int32);");
+    UNIT_ASSERT(res.Root);
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                       line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create_if_not_exists) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))))))__"));
+        }
+    };
+    TWordCountHive elementStat = {{TString("Write!"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
 }
 
 Y_UNIT_TEST(CreateTempTable) {
@@ -9275,6 +9286,30 @@ Y_UNIT_TEST(DropViewIfExists) {
     UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
 }
 
+Y_UNIT_TEST(DropViewIfExistsYt) {
+    constexpr const char* name = "TheView";
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(std::format(R"(
+                USE plato;
+                DROP VIEW IF EXISTS {};
+            )", name), settings);
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, name);
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropObjectIfExists");
+        }
+    };
+
+    TWordCountHive elementStat = {{"Write!"}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+}
+
 Y_UNIT_TEST(CreateViewWithTablePrefix) {
     NYql::TAstParseResult res = SqlToYql(R"(
                 USE ydb;
@@ -12478,6 +12513,25 @@ Y_UNIT_TEST(ErrorOnMissingCluster) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 5);
     ExpectFailWithError("create view foo as do begin select 1; end do", "<main>:1:1: Error: No cluster name given and no default cluster is selected\n", settings);
+}
+
+Y_UNIT_TEST(CreateViewIfNotExists) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings("create view if not exists plato.foo as do begin select 1; end do", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "createObjectIfNotExists");
+        }
+    };
+
+    TWordCountHive elementStat = {{"Write!"}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
 }
 
 } // Y_UNIT_TEST_SUITE(CreateViewNewSyntax)

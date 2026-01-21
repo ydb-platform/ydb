@@ -809,6 +809,7 @@ message TKqpTableSinkSettings {
         MODE_DELETE = 3;
         MODE_UPDATE = 4;
         MODE_FILL = 5;
+        MODE_UPDATE_CONDITIONAL = 6; // UPDATE WHERE
     }
 
     optional NKqpProto.TKqpPhyTableId Table = 3;

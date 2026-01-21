@@ -290,8 +290,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateAndWait) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
         AsyncMkDir(runtime, txId++, "MyRoot", "dir");
         TestCreateSubDomain(runtime, txId++,  "/MyRoot/dir",
                             "StoragePools { "
@@ -305,6 +309,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_0\"");
 
         env.TestWaitNotification(runtime, {100, 101});
+        expectedDomainPaths += 2;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/USER_0"),
                            {NLs::PathExist,
@@ -315,14 +320,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/dir"),
                            {NLs::PathExist,
                             NLs::PathVersionEqual(5),
-                            NLs::PathsInsideDomain(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(LS) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -332,22 +342,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_0\"");
 
         env.TestWaitNotification(runtime, 100);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckSubDomainParamsInCommonCase("USER_0"),
+                           {LsCheckSubDomainParamsInCommonCase("USER_0", subdomainPathId),
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(ConcurrentCreateSubDomainAndDescribe) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         AsyncCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 10 "
@@ -355,9 +371,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Mediators: 3 "
                             "TimeCastBucketsPerMediator: 2 "
                             "Name: \"USER_0\"");
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
@@ -368,7 +385,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         env.TestWaitNotification(runtime, txId - 1);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckSubDomainParamsInMassiveCase("USER_0"),
+                           {LsCheckSubDomainParamsInMassiveCase("USER_0", subdomainPathId),
                             NLs::PathVersionEqual(3)});
     }
 
@@ -586,8 +603,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateSubDomainWithoutTablets) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -595,17 +615,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_0\"");
 
         env.TestWaitNotification(runtime, 100);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathExist, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(0)});
+                           {NLs::PathExist, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(CreateSubDomainWithoutSomeTablets) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -626,13 +650,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestLs(runtime, "/MyRoot/USER_1", false, NLs::PathNotExist);
         TestLs(runtime, "/MyRoot/USER_2", false, NLs::PathNotExist);
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathExist, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
+                           {NLs::PathExist, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenMkDir) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -640,23 +667,28 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_0\"");
 
         env.TestWaitNotification(runtime, 100);
+        expectedDomainPaths += 1;
 
         TestMkDir(runtime, txId++, "/MyRoot/USER_0", "MyDir");
 
         env.TestWaitNotification(runtime, 101);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathExist, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(0)});
+                           {NLs::PathExist, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(0)});
         TestLs(runtime, "/MyRoot/USER_0/MyDir", false, NLs::PathExist);
-
     }
 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenDrop) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -664,24 +696,32 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_0\"");
 
         env.TestWaitNotification(runtime, 100);
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
+        expectedDomainPaths += 1;
+
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
 
         TestDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
 
         env.TestWaitNotification(runtime, 101);
+        expectedDomainPaths -= 1;
 
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathExist, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+                           {NLs::PathExist, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
     }
 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenForceDrop) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -689,24 +729,30 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_0\"");
 
         env.TestWaitNotification(runtime, 100);
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
+        expectedDomainPaths += 1;
+
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
 
         TestForceDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
 
         env.TestWaitNotification(runtime, 101);
+        expectedDomainPaths -= 1;
 
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathExist, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+                           {NLs::PathExist, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
     }
 
     Y_UNIT_TEST(CreateSubDomainsInSeparateDir) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestMkDir(runtime, txId++, "/MyRoot", "SubDomains");
 
@@ -725,6 +771,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_1\"");
 
         env.TestWaitNotification(runtime, {100, 101, 102});
+        expectedDomainPaths += 3;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/SubDomains/USER_0"),
                            {NLs::PathExist,
@@ -738,14 +785,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            {NLs::PathExist,
                             NLs::NotInSubdomain,
                             NLs::PathVersionEqual(7),
-                            NLs::PathsInsideDomain(3),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(SimultaneousCreateDelete) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         AsyncCreateSubDomain(runtime, ++txId,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -762,21 +812,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
                                 NLs::NotInSubdomain,
-                                NLs::PathsInsideDomain(0),
-                                NLs::NoChildren});
+                                NLs::PathsInsideDomain(expectedDomainPaths)});
         } else {
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
                                 NLs::NotInSubdomain,
-                                NLs::PathsInsideDomain(1),
+                                NLs::PathsInsideDomain(expectedDomainPaths + 1),
                                 NLs::ShardsInsideDomain(0)});
         }
     }
 
     Y_UNIT_TEST(SimultaneousCreateForceDrop) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -795,17 +849,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            {NLs::PathExist,
                             NLs::Finished,
                             NLs::NotInSubdomain,
-                            NLs::PathVersionOneOf({6, 7}), // it is 6 if drop simultaneous with create
-                            NLs::PathsInsideDomain(0),
+                            NLs::PathVersionOneOf({13, 14}), // it is 13 if drop simultaneous with create
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomainOneOf({0, 1, 2, 3})});
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
     }
 
     Y_UNIT_TEST(ForceDropTwice) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSubDomain(runtime, ++txId,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -815,29 +872,33 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Name: \"USER_0\"");
 
         env.TestWaitNotification(runtime, txId);
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist});
-
 
         AsyncForceDropSubDomain(runtime, ++txId,  "/MyRoot", "USER_0");
         AsyncForceDropSubDomain(runtime, ++txId,  "/MyRoot", "USER_0");
 
         SkipModificationReply(runtime, 2);
         env.TestWaitNotification(runtime, {txId-1, txId});
+        expectedDomainPaths -= 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathNotExist});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::NoChildren,
-                            NLs::PathsInsideDomain(0),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(SimultaneousCreateForceDropTwice) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         AsyncCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -855,8 +916,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            {NLs::PathNotExist});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::NoChildren,
-                            NLs::PathsInsideDomain(0),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomainOneOf({0, 1, 2, 3, 4, 5, 6})});
     }
 
@@ -926,8 +986,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(ConsistentCopyRejects) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -958,6 +1021,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                         );
 
         env.TestWaitNotification(runtime, {100, 101, 102, 103});
+        expectedDomainPaths += 2;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
@@ -986,7 +1050,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
                             NLs::NotInSubdomain,
-                            NLs::PathsInsideDomain(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         TestConsistentCopyTables(runtime, txId++, "/", R"(
@@ -1036,11 +1100,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::ShardsInsideDomain(4)});
     }
 
-
     Y_UNIT_TEST(SimultaneousCreateTableForceDrop) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                              "PlanResolution: 10 "
@@ -1049,6 +1117,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                              "TimeCastBucketsPerMediator: 2 "
                              "Name: \"USER_0\"");
         env.TestWaitNotification(runtime, 100);
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::PathVersionEqual(3)});
@@ -1061,6 +1131,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                         );
         TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0");
         env.TestWaitNotification(runtime, {101, 102});
+        expectedDomainPaths -= 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/table_0"),
@@ -1068,17 +1140,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(0),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomainOneOf({0, 1, 2, 3, 4, 5, 6})});
 
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
     }
 
     Y_UNIT_TEST(SimultaneousCreateTenantTableForceDrop) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                              "PlanResolution: 10 "
@@ -1102,18 +1179,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathVersionOneOf({6, 7}), // version 6 if deletion is simultaneous with creation
-                            NLs::PathsInsideDomain(0),
+                            NLs::PathVersionOneOf({13, 14}), // version 13 if deletion is simultaneous with creation
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
     }
 
     Y_UNIT_TEST(SimultaneousCreateTenantTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         AsyncCreateSubDomain(runtime, txId++,  "/MyRoot",
                              "PlanResolution: 10 "
@@ -1131,8 +1210,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         env.TestWaitNotification(runtime, {100, 101});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckSubDomainParamsInMassiveCase("USER_0"),
-                            NLs::PathVersionEqual(5),
+                           {LsCheckSubDomainParamsInMassiveCase("USER_0", subdomainPathId),
+                            NLs::PathVersionEqual(4),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(7)});
 
@@ -1170,8 +1249,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SimultaneousDefineAndCreateTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                              "Name: \"USER_0\"");
@@ -1195,7 +1276,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         env.TestWaitNotification(runtime, {txId - 2, txId - 1});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckSubDomainParamsAfterAlter("USER_0"),
+                           {LsCheckSubDomainParamsAfterAlter("USER_0", 2, subdomainPathId),
                             NLs::PathVersionEqual(6),
                             NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(4)});
@@ -1206,8 +1287,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SimultaneousCreateTenantDirTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         AsyncCreateSubDomain(runtime, txId++,  "/MyRoot",
                              "PlanResolution: 10 "
@@ -1227,8 +1313,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         env.TestWaitNotification(runtime, {100, 101, 102});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckSubDomainParamsInMassiveCase("USER_0"),
-                            NLs::PathVersionEqual(6),
+                           {LsCheckSubDomainParamsInMassiveCase("USER_0", subdomainPathId),
+                            NLs::PathVersionEqual(5),
                             NLs::PathsInsideDomain(2),
                             NLs::ShardsInsideDomain(7)});
 
@@ -1241,8 +1327,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::NoChildren,
-                            NLs::PathsInsideDomain(0),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
@@ -1277,8 +1362,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateDropSolomon) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot", "PlanResolution: 50 "
                                                          "Coordinators: 1 "
@@ -1286,13 +1373,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                                          "TimeCastBucketsPerMediator: 2 "
                                                          "Name: \"USER_0\" ");
 
+        TLocalPathId solomonPathId = GetNextLocalPathId(runtime, txId);
+
         TestCreateSolomon(runtime, txId++, "/MyRoot/USER_0", "Name: \"Solomon\" "
                                                              "PartitionCount: 40 ");
         env.TestWaitNotification(runtime, {txId-2, txId-1});
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SolomonVolumes", "PathId", 3));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", solomonPathId));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SolomonVolumes", "PathId", solomonPathId));
 
         TestLs(runtime, "/MyRoot", false);
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::InSubdomain);
@@ -1305,13 +1394,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDropSolomon(runtime, txId++, "/MyRoot/USER_0", "Solomon");
         env.TestWaitNotification(runtime, txId-1);
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SolomonVolumes", "PathId", 3));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SolomonVolumes", "PathId", solomonPathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", solomonPathId));
 
         TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0");
         env.TestWaitNotification(runtime, txId-1);
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
 
         TestLs(runtime, "/MyRoot/USER_0/Solomon", false, NLs::PathNotExist);
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
@@ -1319,8 +1408,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(CreateDropNbs) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -1337,6 +1428,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "  Kind: \"storage-pool-number-2\""
                             "}");
 
+        TLocalPathId bsVolumePathId = GetNextLocalPathId(runtime, txId);
+
         TestCreateBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0",
                                    "Name: \"BSVolume\" "
                                    "VolumeConfig: { "
@@ -1347,10 +1440,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                    " BlockSize: 4096 Partitions { BlockCount: 16 } } ");
 
         env.TestWaitNotification(runtime, {txId-2, txId-1});
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "BlockStoreVolumes", "PathId", 3));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", bsVolumePathId));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "BlockStoreVolumes", "PathId", bsVolumePathId));
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::SubdomainWithNoEmptyStoragePools});
@@ -1360,10 +1453,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0");
         env.TestWaitNotification(runtime, txId-1);
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "BlockStoreVolumes", "PathId", 3));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "BlockStoreVolumes", "PathId", bsVolumePathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", bsVolumePathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subdomainPathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subdomainPathId));
 
         TestLs(runtime, "/MyRoot/USER_0/BSVolume", false, NLs::PathNotExist);
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
@@ -1505,8 +1598,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(Restart) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -1515,6 +1611,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "TimeCastBucketsPerMediator: 2 "
                             "Name: \"USER_0\"");
         env.TestWaitNotification(runtime, 100);
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::PathVersionEqual(3),
@@ -1523,7 +1621,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -1537,14 +1635,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(RestartAtInFly) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -1557,6 +1658,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         env.TestWaitNotification(runtime, 100);
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::PathVersionEqual(3),
@@ -1565,14 +1668,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(Delete) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -1580,34 +1686,37 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Mediators: 2 "
                             "TimeCastBucketsPerMediator: 2 "
                             "Name: \"USER_0\"");
-
         env.TestWaitNotification(runtime, txId - 1);
+        expectedDomainPaths += 1;
 
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathExist);
 
         TestDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
-
         env.TestWaitNotification(runtime, txId - 1);
+        expectedDomainPaths -= 1;
+
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(0),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomainOneOf({0, 1, 2, 3})});
 
         env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(0),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
-
     }
 
     Y_UNIT_TEST(DeleteAdd) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -1616,11 +1725,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "TimeCastBucketsPerMediator: 2 "
                             "Name: \"USER_0\"");
         env.TestWaitNotification(runtime, 100);
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist});
 
         TestDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
         env.TestWaitNotification(runtime, 101);
+        expectedDomainPaths -= 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathNotExist});
 
@@ -1631,6 +1744,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "TimeCastBucketsPerMediator: 2 "
                             "Name: \"USER_0\"");
         env.TestWaitNotification(runtime, 102);
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
                             NLs::PathVersionEqual(3),
@@ -1638,14 +1753,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::ShardsInsideDomain(6)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(DeleteAndRestart) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -1653,8 +1771,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "Mediators: 2 "
                             "TimeCastBucketsPerMediator: 2 "
                             "Name: \"USER_0\"");
-
         env.TestWaitNotification(runtime, 100);
+        expectedDomainPaths += 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist,
@@ -1662,7 +1780,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::ShardsInsideDomain(4)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         TestDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
@@ -1673,6 +1791,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         }
 
         env.TestWaitNotification(runtime, 101);
+        expectedDomainPaths -= 1;
+
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
 
         {
@@ -1683,7 +1803,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestLs(runtime, "/MyRoot/USER_0", false, NLs::PathNotExist);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(0),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
@@ -1980,12 +2100,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(Redefine) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "Name: \"USER_0\"");
         env.TestWaitNotification(runtime, 100);
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::IsSubDomain("USER_0"),
                             NLs::PathVersionEqual(3),
@@ -1993,7 +2120,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::ShardsInsideDomain(0)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         TestAlterSubDomain(runtime, txId++,  "/MyRoot",
@@ -2004,13 +2131,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            "Name: \"USER_0\"");
         env.TestWaitNotification(runtime, 101);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
-                           {LsCheckSubDomainParamsAfterAlter("USER_0", 2),
+                           {LsCheckSubDomainParamsAfterAlter("USER_0", 2, subdomainPathId),
                             NLs::PathVersionEqual(4),
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(3)});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         TestAlterSubDomain(runtime, txId++,  "/MyRoot",
@@ -2038,7 +2165,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(3)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         TestAlterSubDomain(runtime, txId++,  "/MyRoot",
@@ -2070,33 +2197,32 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(3)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(1),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         TestDropSubDomain(runtime, txId++,  "/MyRoot", "USER_0");
         env.TestWaitNotification(runtime, 104);
+        expectedDomainPaths -= 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathsInsideDomain(0),
+                           {NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
     Y_UNIT_TEST(SetSchemeLimits) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TSchemeLimits lowLimits;
         lowLimits.MaxPaths = 3;
         lowLimits.MaxShards = 3;
         lowLimits.MaxPQPartitions = 300;
-
-        SetSchemeshardSchemaLimits(runtime, lowLimits);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathExist
-                            , NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards)});
 
         TestCreateSubDomain(runtime, txId++,  "/MyRoot",
                             "PlanResolution: 50 "
@@ -2108,6 +2234,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "    data_stream_shards_quota: 3"
                             "}");
         env.TestWaitNotification(runtime, 100);
+        expectedDomainPaths += 1;
+
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                            {NLs::PathExist
@@ -2120,15 +2249,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist
                             , NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions)
-                            , NLs::PathsInsideDomain(1)
+                            , NLs::PathsInsideDomain(expectedDomainPaths)
                             , NLs::ShardsInsideDomain(0)
                             , NLs::DatabaseQuotas(0)});
     }
 
     Y_UNIT_TEST(SchemeLimitsRejects) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TSchemeLimits lowLimits;
         lowLimits.MaxDepth = 4;
@@ -2143,12 +2275,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         lowLimits.MaxPQPartitions = 20;
 
 
-        //lowLimits.ExtraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
-        SetSchemeshardSchemaLimits(runtime, lowLimits);
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathExist,
-                            NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards, lowLimits.MaxPQPartitions)});
-
         //create subdomain
         {
             TestCreateSubDomain(runtime, txId++,  "/MyRoot",
@@ -2161,8 +2287,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 "    data_stream_shards_quota: 2"
                                 "    data_stream_reserved_storage_quota: 200000"
                                 "}");
-
             env.TestWaitNotification(runtime, txId - 1);
+            expectedDomainPaths += 1;
+
+            SetSchemeshardSchemaLimits(runtime, lowLimits);
+
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
                                 NLs::PathVersionEqual(3),
@@ -2173,7 +2302,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
-                                NLs::PathsInsideDomain(1),
+                                NLs::PathsInsideDomain(expectedDomainPaths),
                                 NLs::ShardsInsideDomain(0)});
         }
 
@@ -2487,7 +2616,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 NLs::ShardsInsideDomain(2)});
         }
 
-
         //databaseQuotas limits
         {
             // Stream shards(partitions) limit is 2. Trying to create 3.
@@ -2579,33 +2707,37 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         }
 
-
         //clear subdomain
         {
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
-                                NLs::PathsInsideDomain(1),
+                                NLs::PathsInsideDomain(expectedDomainPaths),
                                 NLs::ShardsInsideDomain(0)});
             TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0");
             env.TestWaitNotification(runtime, txId - 1);
+            expectedDomainPaths -= 1;
+
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
-                                NLs::PathsInsideDomain(0),
+                                NLs::PathsInsideDomain(expectedDomainPaths),
                                 NLs::ShardsInsideDomain(0)});
         }
     }
 
     Y_UNIT_TEST(ColumnSchemeLimitsRejects) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 currentDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TSchemeLimits lowLimits;
         lowLimits.MaxDepth = 4;
-        lowLimits.MaxPaths = 3;
-        lowLimits.MaxChildrenInDir = 3;
+        lowLimits.MaxPaths = currentDomainPaths + 3; // current paths + original limit
+        lowLimits.MaxChildrenInDir = 4;
         lowLimits.MaxAclBytesSize = 25;
         lowLimits.MaxTableColumns = 3;
         lowLimits.MaxColumnTableColumns = 3;
@@ -2616,7 +2748,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         lowLimits.MaxPQPartitions = 20;
 
 
-        //lowLimits.ExtraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
         SetSchemeshardSchemaLimits(runtime, lowLimits);
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
@@ -2633,6 +2764,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 "    data_stream_shards_quota: 2"
                                 "    data_stream_reserved_storage_quota: 200000"
                                 "}");
+
+            SetSchemeshardSchemaLimits(runtime, lowLimits);
         }
 
         //create column tables, column limits
@@ -2744,8 +2877,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SchemeLimitsRejectsWithIndexedTables) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TSchemeLimits lowLimits;
         lowLimits.MaxDepth = 4;
@@ -2755,11 +2891,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         lowLimits.MaxShards = 7;
         lowLimits.MaxShardsInPath = 4;
         lowLimits.ExtraPathSymbolsAllowed = "_.-";
-        SetSchemeshardSchemaLimits(runtime, lowLimits);
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::PathExist,
-                            NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards)});
 
         //create subdomain
         {
@@ -2770,6 +2901,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 "TimeCastBucketsPerMediator: 2 "
                                 "Name: \"USER_0\"");
             env.TestWaitNotification(runtime, txId - 1);
+            expectedDomainPaths += 1;
+
+            SetSchemeshardSchemaLimits(runtime, lowLimits);
+
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
                                 NLs::PathVersionEqual(3),
@@ -2779,7 +2914,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
                                 NLs::DomainLimitsIs(lowLimits.MaxPaths, lowLimits.MaxShards),
-                                NLs::PathsInsideDomain(1),
+                                NLs::PathsInsideDomain(expectedDomainPaths),
                                 NLs::ShardsInsideDomain(0)});
         }
 
@@ -2803,11 +2938,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                   KeyColumnNames: ["value1"]
                 }
                 IndexDescription {
-                  Name: "UserDefinedIndexByValues"
+                  Name: "UserDefinedIndexByValue2"
                   KeyColumnNames: ["value2"]
                 }
                 IndexDescription {
-                  Name: "UserDefinedIndexByValue0"
+                  Name: "UserDefinedIndexByValues"
                   KeyColumnNames: ["value0", "value1"]
                 }
             )", {NKikimrScheme::StatusResourceExhausted});
@@ -2941,12 +3076,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SchemeLimitsCreatePq) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 currentPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TSchemeLimits lowLimits;
         lowLimits.MaxDepth = 4;
-        lowLimits.MaxPaths = 5;
+        lowLimits.MaxPaths = currentPaths + 5; // current paths + original limit
         lowLimits.MaxChildrenInDir = 3;
         lowLimits.MaxTableIndices = 4;
         lowLimits.MaxShards = 7;
@@ -3811,8 +3949,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(SchemeDatabaseQuotaRejects) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist});
@@ -3829,8 +3970,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 "    data_stream_shards_quota: 2"
                                 "    data_stream_reserved_storage_quota: 200000"
                                 "}");
-
             env.TestWaitNotification(runtime, txId - 1);
+            expectedDomainPaths += 1;
+
             TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                                {NLs::PathExist,
                                 NLs::PathVersionEqual(3),
@@ -3839,10 +3981,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                                 NLs::DatabaseQuotas(2)});
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
-                                NLs::PathsInsideDomain(1),
+                                NLs::PathsInsideDomain(expectedDomainPaths),
                                 NLs::ShardsInsideDomain(0)});
         }
-
 
         {
             // Stream shards(partitions) limit is 2. Trying to create 3.
@@ -3928,13 +4069,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         {
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
-                                NLs::PathsInsideDomain(1),
+                                NLs::PathsInsideDomain(expectedDomainPaths),
                                 NLs::ShardsInsideDomain(0)});
             TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0");
             env.TestWaitNotification(runtime, txId - 1);
+            expectedDomainPaths -= 1;
+
             TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                {NLs::PathExist,
-                                NLs::PathsInsideDomain(0),
+                                NLs::PathsInsideDomain(expectedDomainPaths),
                                 NLs::ShardsInsideDomain(0)});
         }
     }

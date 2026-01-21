@@ -3532,9 +3532,7 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestPutGetMany);
 
         PROXY_UNIT_TEST(TestPutGetStatusErasureMirror3);
-        PROXY_UNIT_TEST(TestPutGetStatusErasure3Plus1Block);
         PROXY_UNIT_TEST(TestPutGetStatusErasure4Plus2Block);
-        PROXY_UNIT_TEST(TestPutGetStatusErasure3Plus2Block);
 
         PROXY_UNIT_TEST(TestVPutVCollectVGetRace);
 
@@ -3545,7 +3543,6 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestProxyLongTailDiscover);
         PROXY_UNIT_TEST(TestProxyLongTailDiscoverMaxi);
         PROXY_UNIT_TEST(TestProxyLongTailDiscoverSingleFailure);
-        PROXY_UNIT_TEST(TestProxyRestoreOnDiscoverBlock);
         PROXY_UNIT_TEST(TestProxyRestoreOnGetBlock);
         PROXY_UNIT_TEST(TestProxyRestoreOnGetMirror);
         PROXY_UNIT_TEST(TestVBlockVPutVGet);
@@ -3566,28 +3563,28 @@ public:
 
     void TestGetFail() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyGetFail>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestVPutVGet() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus3Block;
         TestBlobStorage<TTestBlobStorageProxyVPutVGet<1>>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestVPutVGetLimit() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyVPutVGetLimit<1>>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestVPutVGetPersistence() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus3Block;
         ui64 partId = 1;
         ui64 vDiskIdx = 1;
         TTestArgs args{0, erasureSpecies};
@@ -3600,21 +3597,21 @@ public:
 
     void TestVGetNoData() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyVGetFail<1>>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestEmptyRange() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestEmptyRange>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
     void TestProxyGetSingleTimeout() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyGet>(2, erasureSpecies, tempDir().c_str(), 0, false);
         SectorMapByPath.clear();
@@ -3629,28 +3626,28 @@ public:
     }
 
     void TestProxyPutSingleTimeout() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyPut>(2, erasureSpecies, nullptr, 0, false);
         SectorMapByPath.clear();
     }
 
     void TestProxyPutInvalidSize() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyPutInvalidSize>(0, erasureSpecies, tempDir().c_str());
         SectorMapByPath.clear();
     }
 
 
     void TestProxyPutDoubleTimeout() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyPutFail>(6, erasureSpecies, nullptr, 0, false);
         SectorMapByPath.clear();
     }
 
     void TestProxyDiscoverSingleTimeout() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyDiscover>(2, erasureSpecies, tempDir().c_str(), 0, false);
         SectorMapByPath.clear();
@@ -3673,7 +3670,7 @@ public:
 
     void TestProxyDiscoverDoubleTimeout() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyDiscoverFail>(6, erasureSpecies, tempDir().c_str(), 0, false);
         SectorMapByPath.clear();
@@ -3692,7 +3689,7 @@ public:
 
     void TestProxyLongTailDiscoverDoubleFailure() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyLongTailDiscoverPut>(0, erasureSpecies, tempDir().c_str());
         TestBlobStorage<TTestBlobStorageProxyLongTailDiscover>(0, erasureSpecies, tempDir().c_str());
         for (int i = 0; i < 4; ++i) {
@@ -3806,26 +3803,26 @@ public:
     }
 
     void TestHugeCollectGarbage() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyGarbageCollectHuge>(0, erasureSpecies, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestCollectGarbage() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyGarbageCollectComplex>(0, erasureSpecies, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestCollectGarbageAfterLargeData() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         TestBlobStorage<TTestBlobStorageProxyGarbageCollectAfterLargeData>(0, erasureSpecies, nullptr);
         SectorMapByPath.clear();
     }
 
     void TestCollectGarbagePersistence() {
         TTempDir tempDir;
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
+        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure4Plus2Block;
         VERBOSE_COUT("Phase 0");
         TestBlobStorage<TTestBlobStorageProxyPut>(0, erasureSpecies, tempDir().c_str());
         VERBOSE_COUT("Phase 1");
@@ -3890,28 +3887,8 @@ public:
         SectorMapByPath.clear();
     }
 
-    void TestProxyRestoreOnDiscoverBlock() {
-        TBlobStorageGroupType::EErasureSpecies erasureSpecies = TBlobStorageGroupType::Erasure3Plus1Block;
-        TTempDir tempDir;
-        const ui32 vDiskIdx = 2;
-        const ui32 handoffVDiskIdx = 1;
-        ui32 badDiskMask = 1 << handoffVDiskIdx;
-        TestBlobStorage<TTestBlobStorageProxyPut>(badDiskMask, erasureSpecies, tempDir().c_str());
-        TestBlobStorage<TTestBlobStorageProxyBlockSet>(0, erasureSpecies, tempDir().c_str());
-        badDiskMask = 1 << vDiskIdx;
-        TestBlobStorage<TTestBlobStorageProxyVGetFail<handoffVDiskIdx>>(badDiskMask, erasureSpecies,
-            tempDir().c_str());
-        TestBlobStorage<TTestBlobStorageProxyDiscover>(badDiskMask, erasureSpecies, tempDir().c_str());
-        static bool isNoData = false;
-        TestBlobStorage<TTestBlobStorageProxyVGet<handoffVDiskIdx, 1, isNoData>>(badDiskMask, erasureSpecies,
-            tempDir().c_str());
-        UNIT_ASSERT(!isNoData);
-        TestBlobStorage<TTestBlobStorageProxyBlockCheck>(badDiskMask, erasureSpecies, tempDir().c_str());
-        SectorMapByPath.clear();
-    }
-
     void TestProxyRestoreOnGetBlock() {
-        TestProxyRestoreOnGet<2, 1>(TBlobStorageGroupType::Erasure3Plus1Block);
+        TestProxyRestoreOnGet<2, 1>(TBlobStorageGroupType::Erasure4Plus2Block);
     }
 
     void TestProxyRestoreOnGetMirror() {
@@ -3919,7 +3896,7 @@ public:
     }
 
     void TestPartialGetBlock() {
-        TestBlobStorage<TTestBlobStorageProxyPartialGet>(0, TBlobStorageGroupType::Erasure3Plus1Block,
+        TestBlobStorage<TTestBlobStorageProxyPartialGet>(0, TBlobStorageGroupType::Erasure4Plus2Block,
             nullptr);
         SectorMapByPath.clear();
     }
@@ -3989,21 +3966,21 @@ public:
 
     void TestGetMultipart() {
         TTempDir tempDir;
-        TestBlobStorage<TTestBlobStorageProxyPut>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
-        TestBlobStorage<TTestGetMultipart>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
+        TestBlobStorage<TTestBlobStorageProxyPut>(0, TBlobStorageGroupType::Erasure4Plus2Block, tempDir().data());
+        TestBlobStorage<TTestGetMultipart>(0, TBlobStorageGroupType::Erasure4Plus2Block, tempDir().data());
         SectorMapByPath.clear();
     }
 
     void TestCompactedGetMultipart() {
         return;  // TODO KIKIMR-2244
         TTempDir tempDir;
-        TestBlobStorage<TTestBlobStorageProxyPut>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
-        TestBlobStorage<TTestVDiskCompacted<0>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
-        TestBlobStorage<TTestVDiskCompacted<1>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
-        TestBlobStorage<TTestVDiskCompacted<2>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
-        TestBlobStorage<TTestVDiskCompacted<3>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
-        TestBlobStorage<TTestVDiskCompacted<4>>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
-        TestBlobStorage<TTestGetMultipart>(0, TBlobStorageGroupType::Erasure3Plus1Block, tempDir().data());
+        TestBlobStorage<TTestBlobStorageProxyPut>(0, TBlobStorageGroupType::Erasure4Plus2Block, tempDir().data());
+        TestBlobStorage<TTestVDiskCompacted<0>>(0, TBlobStorageGroupType::Erasure4Plus2Block, tempDir().data());
+        TestBlobStorage<TTestVDiskCompacted<1>>(0, TBlobStorageGroupType::Erasure4Plus2Block, tempDir().data());
+        TestBlobStorage<TTestVDiskCompacted<2>>(0, TBlobStorageGroupType::Erasure4Plus2Block, tempDir().data());
+        TestBlobStorage<TTestVDiskCompacted<3>>(0, TBlobStorageGroupType::Erasure4Plus2Block, tempDir().data());
+        TestBlobStorage<TTestVDiskCompacted<4>>(0, TBlobStorageGroupType::Erasure4Plus2Block, tempDir().data());
+        TestBlobStorage<TTestGetMultipart>(0, TBlobStorageGroupType::Erasure4Plus2Block, tempDir().data());
         SectorMapByPath.clear();
     }
 
@@ -4022,18 +3999,8 @@ public:
         SectorMapByPath.clear();
     }
 
-    void TestPutGetStatusErasure3Plus1Block() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure3Plus1Block, nullptr);
-        SectorMapByPath.clear();
-    }
-
     void TestPutGetStatusErasure4Plus2Block() {
         TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure4Plus2Block, nullptr);
-        SectorMapByPath.clear();
-    }
-
-    void TestPutGetStatusErasure3Plus2Block() {
-        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure3Plus2Block, nullptr);
         SectorMapByPath.clear();
     }
 

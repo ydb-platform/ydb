@@ -1069,22 +1069,15 @@ std::vector<ui32> GetIndexes(
 }
 
 bool IsEqual(
-        TConstArrayRef<TCell> firstCells,
-        TConstArrayRef<TCell> secondCells,
+        TConstArrayRef<TCell> cells,
         const std::vector<ui32>& newIndexes,
         const std::vector<ui32>& oldIndexes,
         TConstArrayRef<NScheme::TTypeInfo> types) {
     AFL_ENSURE(newIndexes.size() == types.size());
     AFL_ENSURE(oldIndexes.size() == types.size());
-    auto getCell = [&](const size_t index) {
-        if (index < firstCells.size()) {
-            return firstCells[index];
-        }
-        AFL_ENSURE(secondCells.size() + firstCells.size() > index);
-        return secondCells[index - firstCells.size()];
-    };
     for (size_t index = 0; index < types.size(); ++index) {
-        if (0 != CompareTypedCells(getCell(newIndexes[index]), getCell(oldIndexes[index]), types[index])) {
+        AFL_ENSURE(newIndexes[index] < cells.size() && oldIndexes[index] < cells.size());
+        if (0 != CompareTypedCells(cells[newIndexes[index]], cells[oldIndexes[index]], types[index])) {
             return false;
         }
     }

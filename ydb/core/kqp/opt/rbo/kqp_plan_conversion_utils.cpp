@@ -110,6 +110,11 @@ bool GetForceOptional(const TKqpOpMapElementLambda& mapElement) {
     return maybeForceOptional && maybeForceOptional.Cast().StringValue() == "True";
 }
 
+bool GetOrdered(const TKqpOpMap& map) {
+    auto maybeOrdered = map.Ordered();
+    return maybeOrdered && maybeOrdered.Cast().StringValue() == "True";
+}
+
 TExprNode::TPtr GetMapElementLambda(TExprNode::TPtr lambdaPtr, const bool forceOptional, TExprContext& ctx) {
     auto lambda = TCoLambda(lambdaPtr);
     auto body = lambda.Body().Ptr();
@@ -139,6 +144,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
     auto opMap = TKqpOpMap(node);
     auto input = ExprNodeToOperator(opMap.Input().Ptr());
     auto project = opMap.Project().IsValid();
+    const auto ordered = GetOrdered(opMap);
     TVector<TMapElement> mapElements;
 
     for (const auto& mapElement : opMap.MapElements()) {
@@ -162,7 +168,7 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
             }
         }
     }
-    return std::make_shared<TOpMap>(input, node->Pos(), mapElements, project);
+    return std::make_shared<TOpMap>(input, node->Pos(), mapElements, project, ordered);
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node) {

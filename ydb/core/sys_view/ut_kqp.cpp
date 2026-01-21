@@ -2293,6 +2293,84 @@ R"(CREATE TABLE `test_show_create` (
         );
     }
 
+    Y_UNIT_TEST(ShowCreateTableSystemTableWithEmptyKeyColumnIds) {
+        // This test reproduces the crash from issue #30332
+        // When trying to SHOW CREATE TABLE on a system table that has empty key column IDs,
+        // the formatter crashes at line 347 with: Y_ENSURE(!tableDesc.GetKeyColumnIds().empty())
+        //
+        // The issue specifically mentions `.sys/tables` as causing the crash.
+        // This test verifies that SHOW CREATE TABLE on system tables either succeeds
+        // or returns a proper error status, but does not crash the server.
+
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        NQuery::TQueryClient queryClient(env.GetDriver());
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+        // The issue specifically mentions .sys/tables as the problematic table
+        // We test this and a few other system tables to ensure robustness
+        TVector<TString> systemTablesToTest = {
+            "/Root/.sys/tables",  // The specific table mentioned in issue #30332
+            "/Root/.sys/partition_stats",
+            "/Root/.sys/nodes"
+        };
+
+        for (const auto& systemTable : systemTablesToTest) {
+            Cerr << "Testing SHOW CREATE TABLE on " << systemTable << Endl;
+
+            // Try to execute SHOW CREATE TABLE on the system table
+            // Before the fix, this would crash with Y_ENSURE at line 347
+            // After the fix, this should either succeed or return a proper error status
+            auto result = session.ExecuteQuery(
+                TStringBuilder() << "SHOW CREATE TABLE `" << systemTable << "`;",
+                NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+
+            if (!result.IsSuccess()) {
+                // If it fails, verify it's a proper error status, not an internal error from a crash
+                // The formatter should handle empty key column IDs gracefully and return UNSUPPORTED
+                // or SCHEME_ERROR, not crash with an internal error
+                UNIT_ASSERT_C(
+                    result.GetStatus() == EStatus::SCHEME_ERROR ||
+                    result.GetStatus() == EStatus::BAD_REQUEST,
+                    "SHOW CREATE TABLE on " << systemTable
+                    << " should return a proper error status (SCHEME_ERROR or BAD_REQUEST), "
+                    << "not an internal error from a crash. Got status: " << result.GetStatus()
+                    << ", issues: " << result.GetIssues().ToString()
+                );
+
+                // Verify the error message is meaningful
+                UNIT_ASSERT_C(
+                    !result.GetIssues().ToString().empty(),
+                    "Error message should not be empty for " << systemTable
+                );
+
+                Cerr << "SHOW CREATE TABLE on " << systemTable << " returned expected error: "
+                     << result.GetStatus() << " - " << result.GetIssues().ToString() << Endl;
+            } else {
+                // If it succeeds, verify we got a valid result with the expected structure
+                UNIT_ASSERT_C(
+                    result.GetResultSets().size() > 0,
+                    "SHOW CREATE TABLE on " << systemTable << " should return at least one result set"
+                );
+
+                auto resultSet = result.GetResultSet(0);
+                auto columnsMeta = resultSet.GetColumnsMeta();
+                UNIT_ASSERT_C(
+                    columnsMeta.size() == 3,
+                    "SHOW CREATE TABLE result should have 3 columns (Path, PathType, CreateQuery), got: "
+                    << columnsMeta.size()
+                );
+
+                Cerr << "SHOW CREATE TABLE on " << systemTable << " succeeded" << Endl;
+            }
+        }
+    }
+
     Y_UNIT_TEST(Nodes) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);
@@ -2994,7 +3072,6 @@ R"(CREATE TABLE `test_show_create` (
                     DecommitStatus,
                     ExpectedSlotCount,
                     Guid,
-                    InferPDiskSlotCountFromUnitSize,
                     Kind,
                     NodeId,
                     NumActiveSlots,
@@ -3024,14 +3101,13 @@ R"(CREATE TABLE `test_show_create` (
             }
         }
 
-        TYsonFieldChecker check(ysonString, 19);
+        TYsonFieldChecker check(ysonString, 18);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
         check.String("DECOMMIT_NONE"); // DecommitStatus
         check.Uint64(16); // ExpectedSlotCount
         check.Uint64(123u); // Guid
-        check.Uint64(0); // InferPDiskSlotCountFromUnitSize
         check.Uint64(0u); // Kind
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(2); // NumActiveSlots

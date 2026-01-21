@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NKikimr::NKqp {
 
@@ -15,15 +16,15 @@ TKikimrRunner Kikimr() {
     return TKikimrRunner(settings);
 }
 
-void CreateTexts(NQuery::TQueryClient& db) {
-    TString query = R"sql(
+void CreateTexts(NQuery::TQueryClient& db, const bool utf8 = false) {
+    TString query = std::format(R"sql(
         CREATE TABLE `/Root/Texts` (
             Key Uint64,
-            Text String,
-            Data String,
+            Text {0},
+            Data {0},
             PRIMARY KEY (Key)
         );
-    )sql";
+    )sql", utf8 ? "Utf8" : "String");
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -4181,6 +4182,181 @@ Y_UNIT_TEST(SelectWithFulltextContainsAndNgramWildcardVariableSize) {
         ])", NYdb::FormatResultSetYson(result.GetResultSet(3)));
     }
 }
+
+Y_UNIT_TEST_QUAD(SelectWithFulltextContainsShorterThanMinNgram, RELEVANCE, UTF8) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    NYdb::NQuery::TExecuteQuerySettings querySettings;
+    querySettings.ClientTimeout(TDuration::Minutes(1));
+
+    CreateTexts(db, UTF8);
+    UpsertTexts(db);
+
+    {
+        const TString query = std::format(R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext
+                ON (Text)
+                WITH (
+                    layout={0},
+                    tokenizer=standard,
+                    use_filter_lowercase=true,
+                    use_filter_ngram=true,
+                    filter_ngram_min_length=3,
+                    filter_ngram_max_length=3
+                );
+        )sql", RELEVANCE ? "flat_relevance" : "flat");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = std::format(R"sql(
+            SELECT *
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains{0}(`Text`, "at");
+
+            SELECT *
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains{0}(`Text`, "*at*");
+        )sql", UTF8 ? "Utf8" : "");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    {
+        const TString query = std::format(R"sql(
+            SELECT *
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains{0}(`Text`, "at")
+            LIMIT 100;
+
+            SELECT *
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FullText::Contains{0}(`Text`, "*at*")
+            LIMIT 100;
+        )sql", UTF8 ? "Utf8" : "");
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+    }
+}
+
+Y_UNIT_TEST(ExplainFulltextIndexContains) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db);
+
+    auto tableClient = kikimr.GetTableClient();
+    auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+    TString query = R"sql(
+        SELECT Key, Text
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FullText::Contains(Text, "cats")
+    )sql";
+    auto result = session.ExplainDataQuery(query).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    Cerr << result.GetPlan() << Endl;
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+    UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+    // Verify ReadFullTextIndex operator is present
+    auto readFullTextIndex = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+    UNIT_ASSERT(readFullTextIndex.IsDefined());
+
+    // Verify operator properties
+    const auto& opProps = readFullTextIndex.GetMapSafe();
+    UNIT_ASSERT(opProps.contains("Table"));
+    UNIT_ASSERT(opProps.contains("Index"));
+    UNIT_ASSERT(opProps.contains("Columns"));
+    UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
+}
+
+Y_UNIT_TEST(ExplainFulltextIndexRelevance) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, "flat_relevance");
+
+    auto tableClient = kikimr.GetTableClient();
+    auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+    TString query = R"sql(
+        SELECT Key, Text, FullText::Relevance(Text, "cats") as Relevance
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        ORDER BY Relevance DESC
+    )sql";
+    auto result = session.ExplainDataQuery(query).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    Cerr << result.GetPlan() << Endl;
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+    UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+    // Verify ReadFullTextIndex operator is present
+    auto readFullTextIndex = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+    UNIT_ASSERT(readFullTextIndex.IsDefined());
+
+    // Verify operator properties
+    const auto& opProps = readFullTextIndex.GetMapSafe();
+    UNIT_ASSERT(opProps.contains("Table"));
+    UNIT_ASSERT(opProps.contains("Index"));
+    UNIT_ASSERT(opProps.contains("Columns"));
+    UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
+}
+
+Y_UNIT_TEST(ExplainFulltextIndexScanQuery) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db);
+
+    auto tableClient = kikimr.GetTableClient();
+    TStreamExecScanQuerySettings querySettings;
+    querySettings.Explain(true);
+
+    TString query = R"sql(
+        SELECT Key, Text
+        FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FullText::Contains(Text, "cats")
+    )sql";
+    auto it = tableClient.StreamExecuteScanQuery(query, querySettings).GetValueSync();
+    auto res = CollectStreamResult(it);
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    UNIT_ASSERT(res.PlanJson);
+
+    Cerr << *res.PlanJson << Endl;
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+    UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+    // Verify ReadFullTextIndex operator is present
+    auto readFullTextIndex = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+    UNIT_ASSERT(readFullTextIndex.IsDefined());
+
+    // Verify operator properties
+    const auto& opProps = readFullTextIndex.GetMapSafe();
+    UNIT_ASSERT(opProps.contains("Table"));
+    UNIT_ASSERT(opProps.contains("Index"));
+    UNIT_ASSERT(opProps.contains("Columns"));
+    UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
+}
+
 
 }
 

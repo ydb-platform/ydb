@@ -73,9 +73,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
-            if (!context.SS->EnableVectorIndex) {
-                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
-            }
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {

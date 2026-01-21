@@ -67,6 +67,10 @@ private:
         THolder<TEvSchemeShard::TEvLoginResult> result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
         switch (response.Status) {
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
+            if (response.ServerSignature.has_value()) {
+                result->Record.SetServerSignature(*response.ServerSignature);
+            }
+
             result->Record.SetToken(response.Token);
             result->Record.SetSanitizedToken(response.SanitizedToken);
             result->Record.SetIsAdmin(IsAdmin(LoginFinalizeEventPtr->Get()->Request.User));

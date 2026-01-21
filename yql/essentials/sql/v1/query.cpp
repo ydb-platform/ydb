@@ -3496,6 +3496,11 @@ public:
                                             BuildQuotedAtom(Pos_, "DebugPositions"))));
                 }
 
+                if (ctx.WindowNewPipeline) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                                            BuildQuotedAtom(Pos_, "WindowNewPipeline"))));
+                }
+
                 if (ctx.DirectRowDependsOn.Defined()) {
                     const TString pragmaName = *ctx.DirectRowDependsOn ? "DirectRowDependsOn" : "DisableDirectRowDependsOn";
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, BuildQuotedAtom(Pos_, pragmaName))));

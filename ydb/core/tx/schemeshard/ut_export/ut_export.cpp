@@ -694,6 +694,11 @@ namespace {
             }
         }
 
+        void CheckPathWithChecksum(const TString& path) {
+            UNIT_ASSERT(HasS3File(path));
+            UNIT_ASSERT(HasS3File(path + ".sha256"));
+        }
+
         void TestReplication(const TString& scheme, const TString& expected) {
             auto options = TTestEnvOptions()
                 .InitYdbDriver(true);
@@ -719,13 +724,13 @@ namespace {
 
             TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-            UNIT_ASSERT(HasS3File("/Replication/create_async_replication.sql"));
+            CheckPathWithChecksum("/Replication/create_async_replication.sql");
             const auto content = GetS3FileContent("/Replication/create_async_replication.sql");
             UNIT_ASSERT_EQUAL_C(
                 content, expected,
                 TStringBuilder() << "\nExpected:\n\n" << expected << "\n\nActual:\n\n" << content);
 
-            UNIT_ASSERT(HasS3File("/Replication/permissions.pb"));
+            CheckPathWithChecksum("/Replication/permissions.pb");
             const auto permissions = GetS3FileContent("/Replication/permissions.pb");
             const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
             UNIT_ASSERT_EQUAL_C(
@@ -771,13 +776,13 @@ namespace {
 
             TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-            UNIT_ASSERT(HasS3File("/Transfer/create_transfer.sql"));
+            CheckPathWithChecksum("/Transfer/create_transfer.sql");
             const auto content = GetS3FileContent("/Transfer/create_transfer.sql");
             UNIT_ASSERT_EQUAL_C(
                 content, expected,
                 TStringBuilder() << "\nExpected:\n\n" << expected << "\n\nActual:\n\n" << content);
 
-            UNIT_ASSERT(HasS3File("/Transfer/permissions.pb"));
+            CheckPathWithChecksum("/Transfer/permissions.pb");
             const auto permissions = GetS3FileContent("/Transfer/permissions.pb");
             const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
             UNIT_ASSERT_EQUAL_C(
@@ -812,7 +817,7 @@ namespace {
 
             TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-            UNIT_ASSERT(HasS3File("/DataSource/create_external_data_source.sql"));
+            CheckPathWithChecksum("/DataSource/create_external_data_source.sql");
             const auto content = GetS3FileContent("/DataSource/create_external_data_source.sql");
 
             TString expectedHeader = "-- database: \"/MyRoot\"\n"
@@ -835,7 +840,7 @@ namespace {
                 static_cast<long>(expectedProperties.size()) - 1,
                 "Properties count mismatch");
 
-            UNIT_ASSERT(HasS3File("/DataSource/permissions.pb"));
+            CheckPathWithChecksum("/DataSource/permissions.pb");
             const auto permissions = GetS3FileContent("/DataSource/permissions.pb");
             const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
             UNIT_ASSERT_EQUAL_C(
@@ -2834,6 +2839,10 @@ attributes {
 attributes {
   key: "_message_group_seqno_retention_period_ms"
   value: "1382400000"
+}
+attributes {
+  key: "_timestamp_type"
+  value: "CreateTime"
 }
 )", i));
 

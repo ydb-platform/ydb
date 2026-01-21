@@ -434,6 +434,7 @@ namespace NKikimr::NStorage {
                 ui32 OrderNumber;
                 bool DonorMode;
                 bool ReadOnly;
+                bool DDisk;
             };
             std::optional<TRuntimeData> RuntimeData;
             bool ShutdownPending = false;

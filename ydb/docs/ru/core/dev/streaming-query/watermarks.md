@@ -20,7 +20,7 @@
 
 ### Использование
 
-Сейчас водяной знак вычисляется как время записи события в топик, уменьшенное на 5 секунд. Более тонкая настройка параметров водяного знака может быть произведена в секции [WITH](../../yql/reference/syntax/select/with.md) при чтении из источника.
+Для включения механизма водяных знаков необходимо указать выражение для вычисления водяного знака в секции [WITH](../../yql/reference/syntax/select/with.md). Сейчас поддерживается только время записи в [топик](../datamodel/topic.md) с константной задержкой. Более тонкая настройка параметров водяного знака может быть произведена также в секции [WITH](../../yql/reference/syntax/select/with.md).
 
 При использовании [HoppingWindow](../../yql/reference/syntax/select/group-by.md#hopping_window) необходимо корректно указать первый параметр - **time extractor**. Это выражение должно возвращать такое же время события, поверх которого считается водяной знак. Например, текущее время (`CurrentUtcTimestamp(TableRow())`) может быть корректным **time extractor**.
 
@@ -29,10 +29,10 @@
 Входными данными для примера являются:
 
 ```json
-{"ts": 40, "pass": 1}
-{"ts": 42, "pass": 1}
-{"ts": 50, "pass": 0}
-{"ts": 40, "pass": 1}
+{"ts": 40, "pass": 1, "payload": "a"}
+{"ts": 42, "pass": 1, "payload": "b"}
+{"ts": 50, "pass": 0, "payload": "c"}
+{"ts": 40, "pass": 1, "payload": "d"}
 ```
 
 Тело запроса:
@@ -41,16 +41,19 @@
 CREATE STREAMING QUERY example AS
 DO BEGIN
     SELECT
-        AGGREGATE_LIST(ts) AS result,
+        AGGREGATE_LIST(payload) AS result,
         HOP_END() AS ts
     FROM
         input_topic
     WITH (
         FORMAT = json_each_row,
         SCHEMA = (
-            ts String
+            ts Uint32,
+            pass Int64,
+            payload String
         ),
-        -- WATERMARK_ADJUST_LATE_EVENTS,
+        WATERMARK = SystemMetadata("write_time") - Interval("PT5S")
+        -- , WATERMARK_ADJUST_LATE_EVENTS
     )
     WHERE pass > 0
     GROUP BY
@@ -61,7 +64,7 @@ END DO;
 Результат:
 
 ```json
-{"result": [40, 42], "ts": 45}
+{"result": ["a", "b"], "ts": 45}
 ```
 
 Пояснение:

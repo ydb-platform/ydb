@@ -13,7 +13,7 @@ namespace NKikimr {
     Y_UNIT_TEST_SUITE(TBlobStorageIngress) {
 
         Y_UNIT_TEST(Ingress) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3of4, 2, 8);
             using TGroupId = TGroupId;
             TVDiskID vdisk01 = TVDiskID(TGroupId::Zero(), 1, 0, 0, 1);
             TVDiskID vdisk10 = TVDiskID(TGroupId::Zero(), 1, 0, 1, 0);
@@ -56,7 +56,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(IngressPartsWeMustHaveLocally) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3of4, 2, 8);
             TLogoBlobID lb1(78364, 2, 763, 0, 0, 0);
             STR << "INFO: " << TIngress::PrintVDisksForLogoBlob(&groupInfo, lb1) << "\n";
             using TGroupId = TGroupId;
@@ -100,7 +100,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(IngressLocalParts) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3of4, 2, 8);
             TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;
@@ -215,7 +215,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(IngressHandoffPartsDelete) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3of4, 2, 8);
             TLogoBlobID lb1(0, 1, 0, 0, 0, 0);
             TBlobStorageGroupInfo::TVDiskIds vDisks;
             TBlobStorageGroupInfo::TServiceIds serviceIds;

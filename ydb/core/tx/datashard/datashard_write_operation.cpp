@@ -105,6 +105,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT:
             break;
         default:
             return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " operation is not supported now"};
@@ -202,7 +203,8 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
                                                                             ColumnIds.size() - tableInfo.KeyColumnIds.size()};
     }
 
-    if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT) {
+    if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT ||
+        OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT) {
         for (size_t i = tableInfo.KeyColumnIds.size(); i < ColumnIds.size(); i++) { // only data columns
             auto* col = tableInfo.Columns.FindPtr(ColumnIds[i]);
             if (col->IsKey) {
@@ -221,7 +223,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
                     break;
                 default:
                     return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Only integer types are supported by increment, but column " << ColumnIds[i] << " is not"};
-            }        
+            }
         }
     }
     TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());

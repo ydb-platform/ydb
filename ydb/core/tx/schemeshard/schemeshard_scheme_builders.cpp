@@ -160,7 +160,6 @@ bool BuildExternalTableScheme(
     const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
     TString& scheme,
     const TString& database,
-    const TString& backupRoot,
     TString& error)
 {
     const auto& pathDesc = describeResult.GetPathDescription();
@@ -177,7 +176,7 @@ bool BuildExternalTableScheme(
         return false;
     }
 
-    scheme = NYdb::NDump::BuildCreateExternalTableQuery(database, backupRoot, externalTableDescResult);
+    scheme = NYdb::NDump::BuildCreateExternalTableQuery(database, database, externalTableDescResult);
 
     return true;
 }
@@ -202,7 +201,7 @@ bool BuildScheme(
         case NKikimrSchemeOp::EPathTypeExternalDataSource:
             return BuildExternalDataSourceScheme(describeResult, scheme, databaseRoot, error);
         case NKikimrSchemeOp::EPathTypeExternalTable:
-            return BuildExternalTableScheme(describeResult, scheme, databaseRoot, databaseRoot, error);
+            return BuildExternalTableScheme(describeResult, scheme, databaseRoot, error);
         default:
             error = TStringBuilder() << "unsupported path type: " << pathType;
             return false;

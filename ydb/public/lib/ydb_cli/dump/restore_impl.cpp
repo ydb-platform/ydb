@@ -419,7 +419,7 @@ TRestoreResult TDelayedRestoreManager::Restore(const TDelayedRestoreCall& call) 
         }
         case ESchemeEntryType::ExternalTable: {
             const auto& [dbPath, dbRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
-            return Client->RestoreExternalTable(call.FsPath, dbPath, dbRestoreRoot, call.Settings);
+            return Client->RestoreExternalTable(call.FsPath, dbRestoreRoot, dbPath, call.Settings);
         }
         case ESchemeEntryType::Replication: {
             const auto& [dbRestoreRoot, dbPathRelativeToRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
@@ -1196,7 +1196,7 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
                 DelayedRestoreManager.Add(ESchemeEntryType::ExternalTable, fsPath, dbPath, dbRestoreRoot, settings);
                 return Result<TRestoreResult>();
             }
-            return RestoreExternalTable(fsPath, dbPath, dbRestoreRoot, settings);
+            return RestoreExternalTable(fsPath, dbRestoreRoot, dbPath, settings);
         case ESchemeEntryType::ExternalDataSource:
             return RestoreExternalDataSource(fsPath, dbRestoreRoot, dbPath, settings);
         case ESchemeEntryType::SysView:
@@ -1266,7 +1266,7 @@ TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEn
     }
     for (const auto& [dbPath, i] : externalTables) {
         const auto& fsPath = backupEntries[i].FsPath;
-        auto result = RestoreExternalTable(fsPath, dbPath, dbRestoreRoot, settings);
+        auto result = RestoreExternalTable(fsPath, dbRestoreRoot, dbPath, settings);
         if (!result.IsSuccess()) {
             return result;
         }
@@ -1779,8 +1779,8 @@ TRestoreResult TRestoreClient::RestoreExternalDataSource(
 
 TRestoreResult TRestoreClient::RestoreExternalTable(
     const TFsPath& fsPath,
-    const TString& dbPath,
     const TString& dbRestoreRoot,
+    const TString& dbPath,
     const TRestoreSettings& settings)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());

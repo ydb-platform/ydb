@@ -123,7 +123,6 @@ bool ShouldDelayQueryExecutionOnError(
             return IsIn({
                 NKikimrScheme::StatusPathDoesNotExist,
                 NKikimrScheme::StatusSchemeError,
-                NKikimrScheme::StatusMultipleModifications,
             }, status);
         default:
             return false;
@@ -1506,6 +1505,9 @@ private:
             )) {
                 if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
+                } else if (item.State == EState::CreateSchemeObject) {
+                    // In case dependency object is being created
+                    return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
                 } else if (item.State == EState::Transferring) {
                     txId = GetActiveRestoreTxId(*importInfo, itemIdx);
                 } else if (item.State == EState::CreateChangefeed) {
@@ -1514,7 +1516,6 @@ private:
                     } else {
                         txId = GetActiveCreateConsumerTxId(*importInfo, itemIdx);
                     }
-
                 }
             }
 

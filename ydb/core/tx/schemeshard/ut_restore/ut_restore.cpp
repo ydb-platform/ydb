@@ -7944,4 +7944,60 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
         );
     }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleExternalTable) {
+        const auto settings = R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "ExternalTable"
+                    destination_path: "/MyRoot/ExternalTable"
+                }
+                items {
+                    source_prefix: "DataSource"
+                    destination_path: "/MyRoot/DataSource"
+                }
+            }
+        )";
+
+        ShouldSucceed({
+            {
+                "/ExternalTable",
+                {
+                    EPathTypeExternalTable,
+                    R"(
+                        -- database: "/MyRoot"
+                        -- backup root: "/MyRoot"
+                        CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
+                            key Uint64 NOT NULL,
+                            value1 Uint64?,
+                            value2 Utf8 NOT NULL
+                        ) WITH (
+                            DATA_SOURCE = '/MyRoot/DataSource',
+                            LOCATION = 'bucket'
+                        )
+                    )"
+                }
+            },
+            {
+                "/DataSource",
+                {
+                    EPathTypeExternalDataSource,
+                    R"(
+                        -- database: "/MyRoot"
+                        CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
+                        WITH (
+                            SOURCE_TYPE = 'ObjectStorage',
+                            LOCATION = 'https://s3.cloud.net/bucket',
+                            AUTH_METHOD = 'AWS',
+                            AWS_ACCESS_KEY_ID_SECRET_NAME = 'id_secret',
+                            AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'access_secret',
+                            AWS_REGION = 'ru-central-1'
+                        );
+                    )"
+                }
+            },
+        }, settings);
+    }
 }

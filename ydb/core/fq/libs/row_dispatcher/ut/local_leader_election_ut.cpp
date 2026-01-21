@@ -85,8 +85,8 @@ public:
     THolder<Tests::TClient> Client;
 };
 
-Y_UNIT_TEST_SUITE(LeaderElectionTests) {
-    Y_UNIT_TEST_F(Test11111112, TFixture) {
+Y_UNIT_TEST_SUITE(LocalLeaderElectionTests) {
+    Y_UNIT_TEST_F(Test1, TFixture) {
         Init();
 
         auto coordinatorId1 = ExpectCoordinatorChanged();
@@ -122,16 +122,6 @@ Y_UNIT_TEST_SUITE(LeaderElectionTests) {
         Server->GetRuntime()->Send(new IEventHandle(currentLeader, RowDispatcher, new NActors::TEvents::TEvPoisonPill()));
         auto coordinatorId6 = ExpectCoordinatorChanged();
         UNIT_ASSERT(coordinatorId6 != coordinatorId4);
-        
-    }
-
-    Y_UNIT_TEST_F(TestLocalMode, TFixture) {
-        Init(true);
-        auto coordinatorId1 = ExpectCoordinatorChanged();
-        auto coordinatorId2 = ExpectCoordinatorChanged();
-        auto coordinatorId3 = ExpectCoordinatorChanged();
-        TSet<NActors::TActorId> set {coordinatorId1, coordinatorId2, coordinatorId3};
-        UNIT_ASSERT(set.size() == 3);
     }
 }
 

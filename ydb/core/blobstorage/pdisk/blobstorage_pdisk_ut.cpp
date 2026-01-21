@@ -666,6 +666,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(AfterObliterateDontReuseOldChunkDataWithoutEncryption) {
+        const TString writeData = PrepareData(4096);
+        const size_t chunkCount = 10;
+        TVector<ui32> firstChunks;
+
         TActorTestContext::TSettings settings{};
         settings.UseSectorMap = true;
         settings.ChunkSize = NPDisk::SmallDiskMaximumChunkSize;
@@ -683,62 +687,86 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         cfg->ReadOnly = false;
         testCtx.UpdateConfigRecreatePDisk(cfg, true);
 
-        TVDiskMock vdisk(&testCtx);
-        vdisk.InitFull();
-
-        // write unencrypted data
-
-        vdisk.ReserveChunk();
-        vdisk.CommitReservedChunks();
-        UNIT_ASSERT_VALUES_EQUAL(vdisk.Chunks[EChunkState::COMMITTED].size(), 1);
-        const ui32 firstChunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
-        vdisk.SendEvLogSync();
-
-        const TString writeData = PrepareData(4096);
-        testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
-                new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
-                    firstChunk, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
-                NKikimrProto::OK);
-
         {
-            const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
-                new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
-                    firstChunk, 0, writeData.size(), 0, nullptr),
-                std::nullopt);
+            TVDiskMock vdisk(&testCtx);
+            vdisk.InitFull();
 
-            if (readRes->Status == NKikimrProto::OK) {
-                UNIT_ASSERT(readRes->Data.IsReadable(0, writeData.size()));
-                UNIT_ASSERT_VALUES_EQUAL(writeData, readRes->Data.ToString());
+            // here we write unencrypted data
+
+            for (ui32 i = 0; i < chunkCount; ++i) {
+                vdisk.ReserveChunk();
+            }
+            vdisk.CommitReservedChunks();
+            UNIT_ASSERT_VALUES_EQUAL(vdisk.Chunks[EChunkState::COMMITTED].size(), chunkCount);
+            firstChunks.assign(vdisk.Chunks[EChunkState::COMMITTED].begin(), vdisk.Chunks[EChunkState::COMMITTED].end());
+            vdisk.SendEvLogSync();
+
+            for (ui32 chunkIdx = 0; chunkIdx < firstChunks.size(); ++chunkIdx) {
+                testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+                        new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                            firstChunks[chunkIdx], 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
+                        NKikimrProto::OK);
+            }
+
+            // sanity check read
+
+            for (ui32 chunkIdx = 0; chunkIdx < firstChunks.size(); ++chunkIdx) {
+                const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                    new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        firstChunks[chunkIdx], 0, writeData.size(), 0, nullptr),
+                    std::nullopt);
+
+                if (readRes->Status == NKikimrProto::OK) {
+                    UNIT_ASSERT(readRes->Data.IsReadable(0, writeData.size()));
+                    UNIT_ASSERT_VALUES_EQUAL(writeData, readRes->Data.ToString());
+                }
             }
         }
 
-        // now, we format PDisk via obliterate
+        {
+            // now, we format PDisk via obliterate
+            const ui64 formatBytes = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
+            const ui64 obliterateSectors = formatBytes /  NPDisk::NSectorMap::SECTOR_SIZE;
+            testCtx.TestCtx.SectorMap->ZeroInit(obliterateSectors);
+            testCtx.RestartPDiskSync();
 
-        cfg = testCtx.GetPDiskConfig();
-        const ui64 formatBytes = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
-        const ui64 obliterateSectors = formatBytes /  NPDisk::NSectorMap::SECTOR_SIZE;
-        testCtx.TestCtx.SectorMap->ZeroInit(obliterateSectors);
-        cfg->SectorMap = testCtx.TestCtx.SectorMap;
-        cfg->EnableSectorEncryption = false;
-        cfg->EnableMetadataEncryption = false;
-        cfg->ReadOnly = false;
-        testCtx.UpdateConfigRecreatePDisk(cfg, false);
+            // reserve chunks (must be empty)
 
-        TVDiskMock vdiskAfter(&testCtx);
-        vdiskAfter.InitFull();
-        vdiskAfter.ReserveChunk();
-        vdiskAfter.CommitReservedChunks();
-        UNIT_ASSERT_VALUES_EQUAL(vdiskAfter.Chunks[EChunkState::COMMITTED].size(), 1);
-        const ui32 newChunk = *vdiskAfter.Chunks[EChunkState::COMMITTED].begin();
-        UNIT_ASSERT_VALUES_EQUAL(newChunk, firstChunk);
+            TVDiskMock vdisk(&testCtx);
+            vdisk.InitFull();
+            for (ui32 i = 0; i < chunkCount; ++i) {
+                vdisk.ReserveChunk();
+            }
+            vdisk.CommitReservedChunks();
+            UNIT_ASSERT_VALUES_EQUAL(vdisk.Chunks[EChunkState::COMMITTED].size(), chunkCount);
+            TVector<ui32> newChunks(vdisk.Chunks[EChunkState::COMMITTED].begin(), vdisk.Chunks[EChunkState::COMMITTED].end());
 
-        const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
-                new NPDisk::TEvChunkRead(vdiskAfter.PDiskParams->Owner, vdiskAfter.PDiskParams->OwnerRound,
-                    firstChunk, 0, writeData.size(), 0, nullptr),
-                std::nullopt);
+            // note, chunk ids in firstChunks and newChunks might differ,
+            // but it is OK to check both
 
-        if (readRes->Status == NKikimrProto::OK) {
-            UNIT_ASSERT(!readRes->Data.IsReadable(0, writeData.size()));
+            // firstChunks
+            for (ui32 chunkIdx = 0; chunkIdx < firstChunks.size(); ++chunkIdx) {
+                const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                        new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                            firstChunks[chunkIdx], 0, writeData.size(), 0, nullptr),
+                        std::nullopt);
+
+                if (readRes->Status == NKikimrProto::OK) {
+                    UNIT_ASSERT(!readRes->Data.IsReadable(0, writeData.size()));
+                }
+            }
+
+            // newChunks
+            for (ui32 chunkIdx = 0; chunkIdx < newChunks.size(); ++chunkIdx) {
+                const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                        new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                            newChunks[chunkIdx], 0, writeData.size(), 0, nullptr),
+                        std::nullopt);
+
+                if (readRes->Status == NKikimrProto::OK) {
+                    UNIT_ASSERT(!readRes->Data.IsReadable(0, writeData.size()));
+                }
+            }
         }
     }
 

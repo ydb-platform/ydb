@@ -471,7 +471,7 @@ message TTableServiceConfig {
 
     optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
 
-    optional bool EnableDqHashAggregateByDefault = 117 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableDqHashAggregateByDefault = 117 [default = false, (InvalidateCompileCache) = true];
 
     optional bool DefaultEnableShuffleEliminationForAggregation = 118 [default = false, (InvalidateCompileCache) = true];
 

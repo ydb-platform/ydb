@@ -740,7 +740,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   
   {% endcut %}
 
- ```csharp
+  ```csharp
   using Ydb.Sdk.Ado;
   using Ydb.Sdk.Services.Query;
 

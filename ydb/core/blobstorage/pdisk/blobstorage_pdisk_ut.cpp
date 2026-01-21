@@ -665,7 +665,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
     }
 
-    Y_UNIT_TEST(AfterObliterateDontReuseOldChunkDataWithoutEncryption) {
+    void AfterObliterateDontReuseOldChunkDataWithoutEncryption(bool plainDataChunks) {
         const TString writeData = PrepareData(4096);
         const size_t chunkCount = 10;
         TVector<ui32> firstChunks;
@@ -676,6 +676,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         settings.ChunkSize = NPDisk::SmallDiskMaximumChunkSize;
         settings.DiskSize = (ui64)settings.ChunkSize * 50;
         settings.SmallDisk = true;
+        settings.PlainDataChunks = plainDataChunks;
 
         TActorTestContext testCtx(settings);
 
@@ -769,6 +770,14 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST(AfterObliterateDontReuseOldChunkDataWithoutEncryption) {
+        AfterObliterateDontReuseOldChunkDataWithoutEncryption(false);
+    }
+
+    Y_UNIT_TEST(AfterObliterateDontReuseOldChunkDataWithoutEncryptionPlainDataChunks) {
+        AfterObliterateDontReuseOldChunkDataWithoutEncryption(true);
     }
 
     Y_UNIT_TEST(PDiskOwnerSlayRace) {

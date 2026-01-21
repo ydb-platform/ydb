@@ -360,9 +360,13 @@ public:
 class TConcreteScanCounters: public TScanCounters {
 public:
     struct TPerStepCounters{
-        std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds;
-        std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds;
-        std::shared_ptr<TAtomicCounter> RawBytesRead; // From BS, S3, previous step
+        std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds = std::make_shared<TAtomicCounter>();
+        std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds = std::make_shared<TAtomicCounter>();
+        std::shared_ptr<TAtomicCounter> RawBytesRead = std::make_shared<TAtomicCounter>(); // From BS, S3, previous step
+    };
+    struct TStepData {
+        TString StepName;
+        TPerStepCounters Counters;
     };
 private:
     using TBase = TScanCounters;
@@ -383,7 +387,7 @@ private:
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
 public:
     using TStepName = TString;
-    NColumnShard::TThreadSafeValue<THashMap<TStepName, TPerStepCounters>> StepExecutionDurations;
+    NColumnShard::TThreadSafeValue<THashMap<TString,TPerStepCounters>> StepExecutionDurations;
     TScanAggregations Aggregations;
 
     void OnSkipGraphNode(const ui32 nodeId) const {
@@ -401,7 +405,7 @@ public:
             it->second->Inc();
         }
     }
-    const TPerStepCounters& CountersForStep(const TString& stepName) const {
+    TPerStepCounters CountersForStep(TStringBuf stepName) const {
         auto* counterIfExists = [&]{
             auto lock = StepExecutionDurations.ReadGuard();
             return lock.Value.FindPtr(stepName);

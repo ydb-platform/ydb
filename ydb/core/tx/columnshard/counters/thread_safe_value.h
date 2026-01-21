@@ -1,5 +1,6 @@
 #pragma once
 #include <util/system/rwlock.h>
+#include <memory>
 namespace NKikimr::NColumnShard {
 
 
@@ -11,7 +12,7 @@ class TThreadSafeValue {
         TRWMutex ValueMutex_;
         TValue Value_;
     };
-    std::shared_ptr<State> State_;
+    std::shared_ptr<State> State_ = std::make_shared<TThreadSafeValue::State>();
 public:
     struct TValueReadGuard {
         ::TReadGuard _;

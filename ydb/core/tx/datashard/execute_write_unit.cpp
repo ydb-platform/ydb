@@ -224,7 +224,12 @@ public:
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.IncrementRow(fullTableId, key, ops);
+                    userDb.IncrementRow(fullTableId, key, ops, false /*insertMissing*/);
+                    break;
+                }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT: {
+                    FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
+                    userDb.IncrementRow(fullTableId, key, ops, true /*insertMissing*/);
                     break;
                 }
                 default:
@@ -240,6 +245,7 @@ public:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE:
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                 DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
                 DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());

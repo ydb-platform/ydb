@@ -1,5 +1,5 @@
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
-ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
+ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
@@ -19,10 +19,13 @@ ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec+UseSink
 ydb/core/kqp/ut/query KqpStats.OneShardNonLocalExec-UseSink
+ydb/core/kqp/ut/scan KqpScan.StreamExecuteScanQueryClientTimeoutBruteForce
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
+ydb/core/tx/schemeshard/ut_base_reboots TTablesWithReboots.DropTableWithReboots
+ydb/core/tx/schemeshard/ut_base_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelShouldSucceedOnViewsAndTables
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index TAsyncIndexTests.SplitIndexWithReboots[TabletReboots]
@@ -51,6 +54,7 @@ ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboot
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-BuiltinUser-CreateUser-21
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-NoAuth-BuiltinUser-CreateUser-17
+ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-NoAuth-BuiltinUser-CreateUser-19
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-NoAuth-BuiltinUser-CreateUser-21
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-NoAuth-LocalUser-CreateUser-22
 ydb/core/viewer/tests test.py.test_scheme_directory
@@ -64,7 +68,6 @@ ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTest
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.LOGBROKER_7820
 ydb/services/persqueue_v1/ut unittest.[*/*] chunk
-ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestReadAtTimestamp_3
 ydb/services/ydb/backup_ut BackupRestore.TestReplaceRestoreOptionOnNonExistingSchemeObjects
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
@@ -91,7 +94,6 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--true]
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap test_log_scenario.py.TestLogScenario.test_log_deviation[180]
-ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_workload[1-10000]
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]

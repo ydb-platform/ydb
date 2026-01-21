@@ -672,6 +672,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         TActorTestContext::TSettings settings{};
         settings.UseSectorMap = true;
+        settings.InitiallyZeroed = true;
         settings.ChunkSize = NPDisk::SmallDiskMaximumChunkSize;
         settings.DiskSize = (ui64)settings.ChunkSize * 50;
         settings.SmallDisk = true;

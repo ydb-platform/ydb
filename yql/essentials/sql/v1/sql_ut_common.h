@@ -10920,7 +10920,10 @@ USE plato;
 -- Some comment
 CREATE STREAMING QUERY MyQuery WITH (
     RUN = TRUE,
-    RESOURCE_POOL = my_pool
+    RESOURCE_POOL = my_pool,
+    STREAMING_DISPOSITION = (
+        FROM_TIME = "2025-05-04T11:30:34.336938Z"
+    )
 ) AS DO )sql" << "\r" << R"sql(BEGIN
 USE plato;
 $source = SELECT * FROM Input;
@@ -10938,7 +10941,9 @@ USE hahn;
         }
 
         if (word == "__query_text") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n") '('"resource_pool" '"my_pool") '('"run" (Bool '"true")))#");
+            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder()
+                                                  << R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n") )#"
+                                                  << R"#('('"resource_pool" '"my_pool") '('"run" (Bool '"true")) '('"streaming_disposition" '('('"from_time" '"2025-05-04T11:30:34.336938Z"))))#");
         }
     };
 
@@ -11113,14 +11118,17 @@ Y_UNIT_TEST(AlterStreamingQuerySetOptions) {
             USE plato;
             ALTER STREAMING QUERY MyQuery SET (
                 WAIT_CHECKPOINT = TRUE,
-                RESOURCE_POOL = other_pool
+                RESOURCE_POOL = other_pool,
+                STREAMING_DISPOSITION = (
+                    TIME_AGO = "PT1H"
+                )
             );
         )sql");
     UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"resource_pool" '"other_pool") '('"wait_checkpoint" (Bool '"true"))))#");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"resource_pool" '"other_pool") '('"streaming_disposition" '('('"time_ago" '"PT1H"))) '('"wait_checkpoint" (Bool '"true"))))#");
             UNIT_ASSERT_STRING_CONTAINS(line, "alterObject");
         }
     };

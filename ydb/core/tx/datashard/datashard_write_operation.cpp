@@ -675,7 +675,7 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
 }
 
 std::optional<TString> TWriteOperation::OnMigration(TDataShard& self, const TActorContext&) {
-    if (!IsImmediate() && HasVolatilePrepareFlag() && !HasCompletedFlag() && !HasResultSentFlag() && !Result()) {
+    if (!IsImmediate() && HasVolatilePrepareFlag() && !HasCompletedFlag() && !HasResultSentFlag() && !GetWriteResult()) {
         self.SendRestartNotification(this);
         return GetTxBody();
     }
@@ -751,7 +751,7 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
     } else if (HasVolatilePrepareFlag()) {
         // Volatile transactions may be aborted at any time unless executed,
         // but we want them to migrate and run to completion when possible.
-        if (!HasCompletedFlag() && !HasResultSentFlag() && !Result()) {
+        if (!HasCompletedFlag() && !HasResultSentFlag() && !GetWriteResult()) {
             // It is possible this transaction already migrated or will migrate soon
             self.SendRestartNotification(this);
             return false;

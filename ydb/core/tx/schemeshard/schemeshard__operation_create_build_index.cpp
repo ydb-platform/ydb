@@ -11,11 +11,11 @@ namespace NKikimr::NSchemeShard {
 
 using namespace NTableIndex;
 
-TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+ISubOperation::TPtr CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
 
     if (!context.SS->EnableAddColumsWithDefaults) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled")};
+        return CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled");
     }
 
     const auto& op = tx.GetInitiateColumnBuild();
@@ -35,11 +35,9 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
             .IsCommonSensePath();
 
         if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
         }
     }
-
-    TVector<ISubOperation::TPtr> result;
 
     // altering version of the table.
     {
@@ -50,10 +48,8 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
         snapshot.SetTableName(tablePath.LeafName());
 
-        result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
+        return CreateInitializeBuildIndexMainTable(opId, outTx);
     }
-
-    return result;
 }
 
 TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {

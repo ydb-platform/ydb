@@ -764,6 +764,144 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Test internal error from child executer", result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(ExecuteState_MinKeyErrorIssues) {
+        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        const std::string_view tableName = "SampleTable";
+        const size_t partitionCount = 4;
+        const size_t rowsPerPartition = 5;
+
+        CreateTable(kikimr, session, tableName, partitionCount);
+        FillTable(kikimr, session, tableName, partitionCount, rowsPerPartition);
+
+        const size_t maxQueryId = 4;
+        size_t queryId = 0;
+
+        std::optional<TActorId> partitionedId;
+        std::optional<TActorId> targetExecuterId;
+        std::set<TActorId> executerIds;
+        bool failureInjected = false;
+
+        // Get id of the PartitionedExecuterActor
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
+            }
+        });
+
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
+
+        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
+            if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
+                UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
+
+                if (targetExecuterId.has_value()) {
+                    // Drop the event to freeze the execution for all executer actors except the first one
+                    ev.Reset();
+                } else {
+                    // Capture the first executer actor to trigger error issues
+                    targetExecuterId = ev->Recipient;
+                }
+            }
+        });
+
+        // Change BatchOperationKeyIds and BatchOperationMaxKeys to trigger error issues
+        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
+            if (!targetExecuterId.has_value() || ev->Sender != *targetExecuterId) {
+                return;
+            }
+
+            if (!partitionedId.has_value() || ev->Recipient != *partitionedId) {
+                return;
+            }
+
+            if (failureInjected) {
+                return;
+            }
+
+            UNIT_ASSERT_C(executerIds.find(ev->Sender) != executerIds.end(), "Executer actor is not found");
+            failureInjected = true;
+
+            auto* event = ev->Get();
+            switch (queryId++) {
+                case 0: {
+                    // Set invalid key ids
+                    event->BatchOperationKeyIds.clear();
+                    event->BatchOperationKeyIds.push_back(999);
+                    break;
+                }
+
+                case 1: {
+                    // Set empty key ids with non-empty key rows
+                    UNIT_ASSERT_GE_C(event->BatchOperationMaxKeys.size(), 1, "KeyIds should be greater than 0");
+                    event->BatchOperationKeyIds.clear();
+                    break;
+                }
+
+                case 2: {
+                    // Add a new invalid key (+inf)
+                    auto cells = TSerializedCellVec(TVector<TCell>{});
+                    event->BatchOperationMaxKeys.push_back(std::move(cells));
+                    break;
+                }
+
+                case 3: {
+                    // Set only one key that does not belong to the partitions
+                    // New value is max because the executer is prepared for the first partition which values are less than the max value
+                    auto newKey = TSerializedCellVec(TVector<TCell>{TCell::Make(std::numeric_limits<uint32_t>::max())});
+
+                    event->BatchOperationMaxKeys.clear();
+                    event->BatchOperationMaxKeys.push_back(std::move(newKey));
+                    break;
+                }
+
+                default: {
+                    UNIT_FAIL("Unexpected queryId: " << queryId);
+                }
+            }
+        });
+
+        const std::string batchQuery = std::format(R"(
+            BATCH UPDATE `{}` SET Value = "Updated";
+        )", tableName);
+
+        for (size_t i = 0; i < maxQueryId; ++i) {
+            const auto result = kikimr.RunCall([&]{
+                return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            });
+
+            if (i + 1 < maxQueryId) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "got an unknown error", result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "state = ExecuteState", result.GetIssues().ToString());
+
+                partitionedId.reset();
+                targetExecuterId.reset();
+                executerIds.clear();
+                failureInjected = false;
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                    "The next key from KqpReadActor does not belong to the partition", result.GetIssues().ToString());
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(queryId, maxQueryId, "Unexpected queryId: " << queryId);
+    }
+
     Y_UNIT_TEST(ExecuteState_UnknownEvent) {
         auto kikimr = TKikimrRunner(GetDefaultSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();

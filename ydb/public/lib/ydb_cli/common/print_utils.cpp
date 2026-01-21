@@ -3,6 +3,7 @@
 #include <google/protobuf/util/json_util.h>
 #include <google/protobuf/port_def.inc>
 
+#include <util/string/builder.h>
 #include <util/string/printf.h>
 #include <util/stream/format.h>
 
@@ -79,9 +80,98 @@ TString FormatTime(TInstant time) {
 };
 
 TString FormatDuration(TDuration duration) {
-    return Sprintf("%.02f seconds",(duration.MilliSeconds() * 0.001));
-};
+    if (duration == TDuration::Zero()) {
+        return "0s";
+    }
 
+    ui64 totalMs = duration.MilliSeconds();
+
+    // For sub-second durations, show milliseconds
+    if (totalMs < 1000) {
+        return TStringBuilder() << totalMs << "ms";
+    }
+
+    ui64 totalSeconds = duration.Seconds();
+    ui64 hours = totalSeconds / 3600;
+    ui64 minutes = (totalSeconds % 3600) / 60;
+    ui64 seconds = totalSeconds % 60;
+
+    TStringBuilder result;
+
+    if (hours > 0) {
+        result << hours << "h";
+        if (minutes > 0) {
+            result << " " << minutes << "m";
+        }
+    } else if (minutes > 0) {
+        result << minutes << "m";
+        if (seconds > 0) {
+            result << " " << seconds << "s";
+        }
+    } else {
+        // Show seconds with one decimal for precision when < 1 minute
+        double secs = duration.SecondsFloat();
+        if (secs < 10) {
+            result << Sprintf("%.1fs", secs);
+        } else {
+            result << seconds << "s";
+        }
+    }
+
+    return result;
+}
+
+namespace {
+
+TString InsertSpaceBeforeUnit(TString result) {
+    // Insert space before unit suffix (KiB, MiB, GiB, TiB, or B)
+    for (size_t i = 0; i < result.size(); ++i) {
+        char c = result[i];
+        if (c == 'K' || c == 'M' || c == 'G' || c == 'T' || c == 'B') {
+            result.insert(i, " ");
+            break;
+        }
+    }
+    return result;
+}
+
+} // namespace
+
+TString FormatBytes(ui64 bytes) {
+    return InsertSpaceBeforeUnit(ToString(HumanReadableSize(bytes, SF_BYTES)));
+}
+
+TString FormatSpeed(double bytesPerSecond) {
+    return InsertSpaceBeforeUnit(ToString(HumanReadableSize(bytesPerSecond, SF_BYTES))) + "/s";
+}
+
+TString FormatEta(TDuration duration) {
+    ui64 totalSeconds = duration.Seconds();
+    if (totalSeconds == 0) {
+        return "<1s";
+    }
+
+    ui64 hours = totalSeconds / 3600;
+    ui64 minutes = (totalSeconds % 3600) / 60;
+    ui64 seconds = totalSeconds % 60;
+
+    TStringBuilder result;
+    if (hours > 0) {
+        result << hours << "h";
+        if (minutes > 0) {
+            result << " " << minutes << "m";
+        }
+    } else if (minutes > 0) {
+        result << minutes << "m";
+        if (seconds > 0) {
+            result << " " << seconds << "s";
+        }
+    } else {
+        result << seconds << "s";
+    }
+
+    return result;
+}
 
 TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
     switch (entry) {

@@ -7,6 +7,7 @@ SRCS(
     duration_ut.cpp
     normalize_path_ut.cpp
     pg_dump_parser_ut.cpp
+    print_utils_ut.cpp
     recursive_remove_ut.cpp
 )
 

@@ -75,7 +75,7 @@ private:
             return NUdf::EFetchStatus::Yield;
         }
 
-        if (Batch.empty()) {
+        while (Batch.empty()) {
             // pass watermark and wait for drain only if watermarks enabled
             if (TrySendWatermark()) {
                 return NUdf::EFetchStatus::Yield;
@@ -92,12 +92,6 @@ private:
                     [[fallthrough]];
                 case NUdf::EFetchStatus::Yield:
                     return status;
-            }
-
-            // pass watermark and wait for drain only if watermarks enabled and batch is still empty
-            if (Batch.empty()) {
-                TrySendWatermark();
-                return NUdf::EFetchStatus::Yield;
             }
         }
 
@@ -122,7 +116,7 @@ private:
             return NUdf::EFetchStatus::Yield;
         }
 
-        if (Batch.empty()) {
+        while (Batch.empty()) {
             // pass watermark and wait for drain only if watermarks enabled
             if (TrySendWatermark()) {
                 return NUdf::EFetchStatus::Yield;
@@ -139,12 +133,6 @@ private:
                     [[fallthrough]];
                 case NUdf::EFetchStatus::Yield:
                     return status;
-            }
-
-            // pass watermark and wait for drain only if watermarks enabled and batch is still empty
-            if (Batch.empty()) {
-                TrySendWatermark();
-                return NUdf::EFetchStatus::Yield;
             }
         }
 

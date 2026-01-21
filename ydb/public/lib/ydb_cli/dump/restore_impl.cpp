@@ -1198,7 +1198,7 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
             }
             return RestoreExternalTable(fsPath, dbPath, settings);
         case ESchemeEntryType::ExternalDataSource:
-            return RestoreExternalDataSource(fsPath, dbPath, dbRestoreRoot, settings);
+            return RestoreExternalDataSource(fsPath, dbRestoreRoot, dbPath, settings);
         case ESchemeEntryType::SysView:
             return RestoreSysView(fsPath, dbPath, settings);
 
@@ -1260,7 +1260,7 @@ TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEn
                 return result;
             }
         }
-        if (auto result = RestoreExternalDataSource(fsPath, dbPath, dbRestoreRoot, settings); !result.IsSuccess()) {
+        if (auto result = RestoreExternalDataSource(fsPath, dbRestoreRoot, dbPath, settings); !result.IsSuccess()) {
             return result;
         }
     }
@@ -1742,8 +1742,8 @@ TRestoreResult TRestoreClient::RestoreCoordinationNode(
 
 TRestoreResult TRestoreClient::RestoreExternalDataSource(
     const TFsPath& fsPath,
-    const TString& dbPath,
     const TString& dbRestoreRoot,
+    const TString& dbPath,
     const TRestoreSettings& settings)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());

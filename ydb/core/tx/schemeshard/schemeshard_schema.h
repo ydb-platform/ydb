@@ -2226,7 +2226,7 @@ struct Schema : NIceDb::Schema {
     struct Secrets : Table<127> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct Description : Column<3, NScheme::NTypeIds::String> {};
+        struct Description : Column<3, NScheme::NTypeIds::String, false, true> {}; // Sensitive column
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, AlterVersion, Description>;
@@ -2235,7 +2235,7 @@ struct Schema : NIceDb::Schema {
     struct SecretsAlterData : Table<128> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct Description : Column<3, NScheme::NTypeIds::String> {};
+        struct Description : Column<3, NScheme::NTypeIds::String, false, true> {}; // Sensitive column
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, AlterVersion, Description>;

@@ -465,7 +465,7 @@ void TUserTable::DoApplyCreate(
         const TUserColumn& column = col.second;
 
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull);
+        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false);
         alter.AddColumnToFamily(tid, columnId, column.Family);
     }
 
@@ -570,7 +570,7 @@ void TUserTable::ApplyAlter(
         if (!oldTable.Columns.contains(colId)) {
             for (ui32 tid : tids) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull);
+                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false);
             }
         }
 

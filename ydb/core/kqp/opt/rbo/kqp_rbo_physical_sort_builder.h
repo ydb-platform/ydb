@@ -27,6 +27,8 @@ public:
 
 private:
     TVector<TExprNode::TPtr> BuildSortKeysForWideSort(const TVector<TInfoUnit>& inputs, const TVector<TSortElement>& sortElements);
+    TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer& enforcer);
+    std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> BuildSortKeySelector(const TVector<TSortElement>& sortElements);
 
     std::shared_ptr<TOpSort> Sort;
     TExprContext& Ctx;

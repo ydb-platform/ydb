@@ -81,6 +81,11 @@ TFancyProgressBarRenderer::~TFancyProgressBarRenderer() {
 }
 
 void TFancyProgressBarRenderer::Render(double percent, const TString& leftText, const TString& rightText) {
+    // Don't render after Finish() was called to avoid duplicate lines
+    if (Finished) {
+        return;
+    }
+
     TInstant now = TInstant::Now();
     TDuration elapsed = now - LastRenderTime;
 
@@ -415,6 +420,11 @@ TFancyDualProgressBarRenderer::~TFancyDualProgressBarRenderer() {
 
 void TFancyDualProgressBarRenderer::Render(double primaryPercent, double secondaryPercent,
                                            const TString& leftText, const TString& rightText) {
+    // Don't render after Finish() was called to avoid duplicate lines
+    if (Finished) {
+        return;
+    }
+
     TInstant now = TInstant::Now();
     TDuration elapsed = now - LastRenderTime;
 

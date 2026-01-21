@@ -418,7 +418,7 @@ TRestoreResult TDelayedRestoreManager::Restore(const TDelayedRestoreCall& call) 
             return Client->RestoreView(call.FsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, call.Settings);
         }
         case ESchemeEntryType::ExternalTable: {
-            const auto& [dbPath, dbRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
+            const auto& [dbRestoreRoot, dbPath] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
             return Client->RestoreExternalTable(call.FsPath, dbRestoreRoot, dbPath, call.Settings);
         }
         case ESchemeEntryType::Replication: {
@@ -1193,7 +1193,7 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
             return RestoreCoordinationNode(fsPath, dbPath, settings);
         case ESchemeEntryType::ExternalTable:
             if (delay) {
-                DelayedRestoreManager.Add(ESchemeEntryType::ExternalTable, fsPath, dbPath, dbRestoreRoot, settings);
+                DelayedRestoreManager.Add(ESchemeEntryType::ExternalTable, fsPath, dbRestoreRoot, dbPath, settings);
                 return Result<TRestoreResult>();
             }
             return RestoreExternalTable(fsPath, dbRestoreRoot, dbPath, settings);

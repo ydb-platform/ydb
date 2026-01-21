@@ -32,6 +32,10 @@ void TConsumerActor::UpdateMetrics() {
         counters.AddMessageLockingDurationValues(metrics.MessageLockingDuration.GetRangeValue(i));
     }
 
+    for (size_t i = 0; i < metrics.WaitingLockingDuration.GetRangeCount(); ++i) {
+        counters.AddWaitingLockingDurationValues(metrics.WaitingLockingDuration.GetRangeValue(i));
+    }
+
     counters.SetDeletedByRetentionPolicy(metrics.TotalDeletedByRetentionMessageCount);
     counters.SetDeletedByDeadlinePolicy(metrics.TotalDeletedByDeadlinePolicyMessageCount);
     counters.SetDeletedByMovedToDLQ(metrics.TotalMovedToDLQMessageCount);
@@ -59,6 +63,7 @@ TDetailedMetrics::TDetailedMetrics(const NKikimrPQ::TPQTabletConfig::TConsumer& 
 
     MessageLocks = consumerGroup->GetExpiringNamedHistogram("name", "topic.partition.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS));
     MessageLockingDuration = consumerGroup->GetExpiringNamedHistogram("name", "topic.partition.message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
+    WaitingLockingDuration = consumerGroup->GetExpiringNamedHistogram("name", "topic.partition.waiting_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
 
     auto deletedMessagesGroup = consumerGroup->GetSubgroup("name", "topic.partition.deleted_messages");
     DeletedByRetentionPolicy = deletedMessagesGroup->GetExpiringNamedCounter("reason", "retention", true);
@@ -91,6 +96,7 @@ void TDetailedMetrics::UpdateMetrics(const TMetrics& metrics) {
 
     SetCounters(MessageLocks, metrics.MessageLocks, MLP_LOCKS_BOUNDS);
     SetCounters(MessageLockingDuration, metrics.MessageLockingDuration, SLOW_LATENCY_BOUNDS);
+    SetCounters(WaitingLockingDuration, metrics.WaitingLockingDuration, SLOW_LATENCY_BOUNDS);
 
     DeletedByRetentionPolicy->Set(metrics.TotalDeletedByRetentionMessageCount);
     DeletedByDeadlinePolicy->Set(metrics.TotalDeletedByDeadlinePolicyMessageCount);

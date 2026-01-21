@@ -53,6 +53,11 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
                                 PROPERTY(metrics.MessageLockingDuration.GetRangeName(i), metrics.MessageLockingDuration.GetRangeValue(i));
                             }
                         }
+                        PROPERTIES("Waiting locking duration") {
+                            for (size_t i = 0; i < metrics.WaitingLockingDuration.GetRangeCount(); ++i) {
+                                PROPERTY(metrics.WaitingLockingDuration.GetRangeName(i), metrics.WaitingLockingDuration.GetRangeValue(i));
+                            }
+                        }
                     }
                 }
             }

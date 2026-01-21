@@ -72,6 +72,7 @@ struct TConsumerMetricCollector {
     TMetricCollector MLPConsumerLabeledCounters = TMetricCollector(CreateProtobufTabletLabeledCounters<EMLPConsumerLabeledCounters_descriptor>());
     THistogramMetricCollector MLPMessageLockAttemptsCounter{MLP_LOCKS_BOUNDS};
     THistogramMetricCollector MLPMessageLockingDurationCounter{SLOW_LATENCY_BOUNDS};
+    THistogramMetricCollector MLPWaitingLockingDurationCounter{SLOW_LATENCY_BOUNDS};
 
     size_t DeletedByRetentionPolicy = 0;
     size_t DeletedByDeadlinePolicy = 0;
@@ -81,6 +82,7 @@ struct TConsumerMetricCollector {
         MLPConsumerLabeledCounters.Collect(metrics.GetCountersValues());
         MLPMessageLockAttemptsCounter.Collect(metrics.GetMessageLocksValues());
         MLPMessageLockingDurationCounter.Collect(metrics.GetMessageLockingDurationValues());
+        MLPWaitingLockingDurationCounter.Collect(metrics.GetWaitingLockingDurationValues());
 
         DeletedByRetentionPolicy += metrics.GetDeletedByRetentionPolicy();
         DeletedByDeadlinePolicy += metrics.GetDeletedByDeadlinePolicy();
@@ -265,6 +267,8 @@ void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTablet
                 "name", "topic.message_lock_attempts", NMonitoring::ExplicitHistogram(MLP_LOCKS_BOUNDS));
             counters.MLPMessageLockingDurationCounter = consumerGroup->GetExpiringNamedHistogram(
                 "name", "topic.message_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
+            counters.MLPWaitingLockingDurationCounter = consumerGroup->GetExpiringNamedHistogram(
+                "name", "topic.waiting_locking_duration_milliseconds", NMonitoring::ExplicitHistogram(SLOW_LATENCY_BOUNDS));
 
             counters.DeletedByRetentionPolicyCounter = InitializeDeleteCounter(consumerGroup, "retention");
             counters.DeletedByDeadlinePolicyCounter = InitializeDeleteCounter(consumerGroup, "delete_policy");
@@ -358,6 +362,7 @@ void TTopicMetricsHandler::UpdateMetrics() {
             SetCounters(consumerCounters.MLPClientLabeledCounters, consumerMetrics.MLPConsumerLabeledCounters);
             SetCounters(consumerCounters.MLPMessageLockAttemptsCounter, consumerMetrics.MLPMessageLockAttemptsCounter, MLP_LOCKS_BOUNDS);
             SetCounters(consumerCounters.MLPMessageLockingDurationCounter, consumerMetrics.MLPMessageLockingDurationCounter, SLOW_LATENCY_BOUNDS);
+            SetCounters(consumerCounters.MLPWaitingLockingDurationCounter, consumerMetrics.MLPWaitingLockingDurationCounter, SLOW_LATENCY_BOUNDS);
 
             consumerCounters.DeletedByRetentionPolicyCounter->Set(consumerMetrics.DeletedByRetentionPolicy);
             consumerCounters.DeletedByDeadlinePolicyCounter->Set(consumerMetrics.DeletedByDeadlinePolicy);

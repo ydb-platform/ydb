@@ -796,6 +796,8 @@ message TAggregatedCounters {
         optional uint64 DeletedByMovedToDLQ = 7;
 
         optional uint64 CPUUsage = 8;
+
+        repeated uint64 WaitingLockingDurationValues = 9;
     }
 }
 

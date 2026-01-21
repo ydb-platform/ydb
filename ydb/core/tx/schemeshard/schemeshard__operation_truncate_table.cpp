@@ -115,11 +115,10 @@ public:
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-       LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint()
-                     << " HandleReply TEvSchemaChanged"
-                     << " at tablet: " << ssId);
- 
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint() << " HandleReply TEvSchemaChanged"
+                                << " at tablet: " << ssId);
+
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
     }
@@ -380,6 +379,10 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
                         auto indexType = context.SS->Indexes.at(srcChildPath.Base()->PathId)->Type;
 
                         switch (indexType) {
+                            case NKikimrSchemeOp::EIndexTypeInvalid: {
+                                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with invalid indexes")};
+                                return false;
+                            }
                             case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
                                 result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with async indexes")};
                                 return false;
@@ -394,17 +397,13 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
                                 result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with fulltext indexes")};
                                 return false;
                             }
-                            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-                            case NKikimrSchemeOp::EIndexTypeGlobal: {
+                            case NKikimrSchemeOp::EIndexTypeGlobal:
+                            case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
                                 if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::ETypeIndex)) {
                                     return false;
                                 }
 
                                 break;
-                            }
-                            default: {
-                                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with unknown indexes")};
-                                return false;
                             }
                         }
 

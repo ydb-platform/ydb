@@ -80,7 +80,8 @@ message TFeatureFlags {
     // Dangerous settings we don't want in the public api unless required
     optional bool EnablePublicApiExternalBlobs = 59 [default = false];
     optional bool EnablePublicApiKeepInMemory = 60 [default = false];
-    optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
+    reserved 61;
+    // optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
     reserved 62; // EnablePredicateExtractForScanQueries
     optional bool AllowVDiskDefrag = 63 [default = true];
     optional bool EnableAsyncHttpMon = 64 [default = true]; // deprecated: always true

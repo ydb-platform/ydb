@@ -4,7 +4,7 @@ from enum import IntEnum, unique
 from functools import wraps
 from hmac import compare_digest
 from operator import attrgetter
-from os import urandom
+from secrets import token_bytes, token_hex
 from stringprep import (
     in_table_a1,
     in_table_b1,
@@ -20,7 +20,6 @@ from stringprep import (
     in_table_d1,
     in_table_d2,
 )
-from uuid import uuid4
 
 from asn1crypto.x509 import Certificate
 
@@ -160,7 +159,7 @@ class ScramMechanism:
 
 def _make_auth_info(hf, password, i, salt=None):
     if salt is None:
-        salt = urandom(16)
+        salt = token_bytes()
 
     salted_password = _make_salted_password(hf, password, salt, i)
     _, stored_key, server_key = _c_key_stored_key_s_key(hf, salted_password)
@@ -352,7 +351,7 @@ class ScramServer:
 
 
 def _make_nonce():
-    return str(uuid4()).replace("-", "")
+    return token_hex()
 
 
 def _make_auth_message(client_first_bare, server_first, client_final_without_proof):

@@ -27,6 +27,12 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
+void TSchemeShard::EraseEncryptionKey(NIceDb::TNiceDb& db, TImportInfo& importInfo) {
+    if (importInfo.EraseEncryptionKey()) {
+        PersistImportSettings(db, importInfo);
+    }
+}
+
 namespace {
 
 using TItem = TImportInfo::TItem;
@@ -821,6 +827,7 @@ private:
 
         Cancel(*importInfo, itemIdx, marker);
         PersistImportState(db, *importInfo);
+        EraseEncryptionKey(db, *importInfo);
 
         SendNotificationsIfFinished(importInfo);
     }
@@ -1412,6 +1419,7 @@ private:
 
                 Cancel(*importInfo, itemIdx, "unhappy propose");
                 Self->PersistImportState(db, *importInfo);
+                Self->EraseEncryptionKey(db, *importInfo);
 
                 return SendNotificationsIfFinished(importInfo);
             }
@@ -1487,6 +1495,7 @@ private:
             if (const auto issue = GetIssues(item.DstPathId, txId)) {
                 item.Issue = *issue;
                 Cancel(*importInfo, itemIdx, "issues during restore");
+                Self->EraseEncryptionKey(db, *importInfo);
             } else {
                 Y_ABORT_UNLESS(item.Table);
                 if (item.NextIndexIdx < item.Table->indexes_size()) {
@@ -1506,6 +1515,7 @@ private:
             if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
                 item.Issue = *issue;
                 Cancel(*importInfo, itemIdx, "issues during index building");
+                Self->EraseEncryptionKey(db, *importInfo);
             } else {
                 Y_ABORT_UNLESS(item.Table);
                 if (++item.NextIndexIdx < item.Table->indexes_size()) {

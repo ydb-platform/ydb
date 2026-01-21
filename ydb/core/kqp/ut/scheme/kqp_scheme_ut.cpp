@@ -64,12 +64,14 @@ void CreateSecret(const TString& secretName, const TString& secretValue, TSessio
     UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, queryResult.GetStatus(), queryResult.GetIssues().ToString());
 }
 
-void TestTruncateTable(const TString& tablePath) {
+void TestTruncateTable(const TString& tablePath, bool useQueryClient = false) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableTruncateTable(true);
     TKikimrRunner kikimr(featureFlags);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
+
+    auto queryClient = kikimr.GetQueryClient();
 
     {
         TString query = Sprintf(R"(
@@ -105,8 +107,13 @@ void TestTruncateTable(const TString& tablePath) {
         )"
         , tablePath.c_str());
 
-        auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        if (useQueryClient) {
+            auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        } else {
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
     }
 
     {
@@ -13426,12 +13433,20 @@ END DO)",
         }
     }
 
-    Y_UNIT_TEST(SimpleTruncateTableFullPath) {
-        TestTruncateTable("`/Root/TestTable`");
+    Y_UNIT_TEST(SimpleTruncateTableFullPathTableClient) {
+        TestTruncateTable("`/Root/TestTable`", false);
     }
 
-    Y_UNIT_TEST(SimpleTruncateTableNameOnly) {
-        TestTruncateTable("TestTable");
+    Y_UNIT_TEST(SimpleTruncateTableNameOnlyTableClient) {
+        TestTruncateTable("TestTable", false);
+    }
+
+    Y_UNIT_TEST(SimpleTruncateTableFullPathQueryClient) {
+        TestTruncateTable("`/Root/TestTable`", true);
+    }
+
+    Y_UNIT_TEST(SimpleTruncateTableNameOnlyQueryClient) {
+        TestTruncateTable("TestTable", true);
     }
 }
 

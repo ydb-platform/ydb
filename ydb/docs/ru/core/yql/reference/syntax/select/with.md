@@ -24,6 +24,7 @@
 * `projection.enabled` - флаг включения [расширенного партиционирования данных](../../../../concepts/federated_query/s3/partition_projection.md). Допустимые значения: `true`, `false`.
 * `projection.<field_name>.type` - тип поля [расширенного партиционирования данных](../../../../concepts/federated_query/s3/partition_projection.md). Допустимые значения: `integer`, `enum`, `date`.
 * `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../../concepts/federated_query/s3/partition_projection.md).
+* `WATERMARK` - выражение для вычисления [водяного знака](../../../../concepts/streaming_query/watermarks.md). Сейчас поддерживается только время записи в [топик](../../../../concepts/datamodel/topic.md) с константной задержкой
 * `WATERMARK LATE EVENTS POLICY` - политика, определяющая реакцию на событие с временем меньшим, чем [водяной знак](../../../../concepts/streaming_query/watermarks.md). Имеет смысл только для [потоковых запросов](../../../../concepts/streaming_query/index.md). Значение по умолчанию - `WATERMARK_ADJUST_LATE_EVENTS`. Выбрать что-то одно:
     * `WATERMARK_ADJUST_LATE_EVENTS` - если у события время меньше, чем [водяной знак](../../../../concepts/streaming_query/watermarks.md), то время этого события исправляется на значение [водяного знака](../../../../concepts/streaming_query/watermarks.md);
     * `WATERMARK_DROP_LATE_EVENTS` - отбросить событие с временем меньшим, чем [водяной знак](../../../../concepts/streaming_query/watermarks.md);
@@ -76,6 +77,7 @@ WITH (
     SCHEMA = (
         ts String
     ),
+    WATERMARK = SystemMetadata("write_time") - Interval("PT5S"),
     WATERMARK_ADJUST_LATE_EVENTS,
     WATERMARK_GRANULARITY = "PT1S",
     WATERMARK_IDLE_TIMEOUT = "PT5S"

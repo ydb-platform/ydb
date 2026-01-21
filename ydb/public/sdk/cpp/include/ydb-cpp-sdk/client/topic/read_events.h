@@ -10,7 +10,7 @@
 namespace NYdb::inline Dev::NTopic {
 
 //! Partition session.
-struct TPartitionSession : public TThrRefBase, public TPrintable<TPartitionSession> {
+struct TPartitionSession: public TThrRefBase, public TPrintable<TPartitionSession> {
     using TPtr = TIntrusivePtr<TPartitionSession>;
 
 public:
@@ -57,7 +57,7 @@ protected:
 template<>
 void TPrintable<TPartitionSession>::DebugString(TStringBuilder& res, bool) const;
 
-struct TPartitionSessionControl : public TPartitionSession {
+struct TPartitionSessionControl: public TPartitionSession {
     //! Commit offsets range.
     //! Can be used from TDataReceivedEvent or TDeferredCommit.
     virtual void Commit(uint64_t startOffset, uint64_t endOffset) = 0;
@@ -88,7 +88,7 @@ struct TReadSessionEvent {
 
     //! Event with new data.
     //! Contains batch of messages from single partition session.
-    struct TDataReceivedEvent : public TPartitionSessionAccessor, public TPrintable<TDataReceivedEvent> {
+    struct TDataReceivedEvent: public TPartitionSessionAccessor, public TPrintable<TDataReceivedEvent> {
         struct TMessageInformation {
             TMessageInformation(uint64_t offset,
                                 std::string producerId,
@@ -110,7 +110,7 @@ struct TReadSessionEvent {
             std::string MessageGroupId;
         };
 
-        class TMessageBase : public TPrintable<TMessageBase> {
+        class TMessageBase: public TPrintable<TMessageBase> {
         public:
             TMessageBase(const std::string& data, TMessageInformation info);
 
@@ -256,8 +256,8 @@ struct TReadSessionEvent {
     };
 
     //! Acknowledgement for commit request.
-    struct TCommitOffsetAcknowledgementEvent : public TPartitionSessionAccessor,
-                                               public TPrintable<TCommitOffsetAcknowledgementEvent> {
+    struct TCommitOffsetAcknowledgementEvent: public TPartitionSessionAccessor,
+                                              public TPrintable<TCommitOffsetAcknowledgementEvent> {
         TCommitOffsetAcknowledgementEvent(TPartitionSession::TPtr partitionSession, uint64_t committedOffset);
 
         //! Committed offset.
@@ -274,8 +274,8 @@ struct TReadSessionEvent {
     };
 
     //! Server command for creating and starting partition session.
-    struct TStartPartitionSessionEvent : public TPartitionSessionAccessor,
-                                         public TPrintable<TStartPartitionSessionEvent> {
+    struct TStartPartitionSessionEvent: public TPartitionSessionAccessor,
+                                        public TPrintable<TStartPartitionSessionEvent> {
         explicit TStartPartitionSessionEvent(TPartitionSession::TPtr, uint64_t committedOffset, uint64_t endOffset);
 
         //! Current committed offset in partition session.
@@ -301,7 +301,7 @@ struct TReadSessionEvent {
     //! Server command for stopping and destroying partition session.
     //! Server can destroy partition session gracefully
     //! for rebalancing among all topic clients.
-    struct TStopPartitionSessionEvent : public TPartitionSessionAccessor, public TPrintable<TStopPartitionSessionEvent> {
+    struct TStopPartitionSessionEvent: public TPartitionSessionAccessor, public TPrintable<TStopPartitionSessionEvent> {
         TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, uint64_t committedOffset);
 
         //! Last offset of the partition session that was committed.
@@ -319,7 +319,7 @@ struct TReadSessionEvent {
 
     //! Server command for ending partition session.
     //! This is a hint that all messages from the partition have been read and will no longer appear, and that the client must commit offsets.
-    struct TEndPartitionSessionEvent : public TPartitionSessionAccessor, public TPrintable<TEndPartitionSessionEvent> {
+    struct TEndPartitionSessionEvent: public TPartitionSessionAccessor, public TPrintable<TEndPartitionSessionEvent> {
         TEndPartitionSessionEvent(TPartitionSession::TPtr partitionSession, std::vector<uint32_t>&& adjacentPartitionIds, std::vector<uint32_t>&& childPartitionIds);
 
         //! A list of the partition IDs that also participated in the partition's merge.
@@ -342,8 +342,8 @@ struct TReadSessionEvent {
     };
 
     //! Status for partition session requested via TPartitionSession::RequestStatus()
-    struct TPartitionSessionStatusEvent : public TPartitionSessionAccessor,
-                                          public TPrintable<TPartitionSessionStatusEvent> {
+    struct TPartitionSessionStatusEvent: public TPartitionSessionAccessor,
+                                         public TPrintable<TPartitionSessionStatusEvent> {
         TPartitionSessionStatusEvent(TPartitionSession::TPtr partitionSession, uint64_t committedOffset, uint64_t readOffset,
                                      uint64_t endOffset, TInstant writeTimeHighWatermark);
 
@@ -379,8 +379,8 @@ struct TReadSessionEvent {
     //! partition session death.
     //! This could be after graceful stop of partition session
     //! or when connection with partition was lost.
-    struct TPartitionSessionClosedEvent : public TPartitionSessionAccessor,
-                                          public TPrintable<TPartitionSessionClosedEvent> {
+    struct TPartitionSessionClosedEvent: public TPartitionSessionAccessor,
+                                         public TPrintable<TPartitionSessionClosedEvent> {
         enum class EReason {
             StopConfirmedByUser,
             Lost,

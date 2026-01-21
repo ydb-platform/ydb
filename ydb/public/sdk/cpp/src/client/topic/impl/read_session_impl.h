@@ -70,7 +70,7 @@ using TASessionClosedEvent = std::conditional_t<UseMigrationProtocol,
     NYdb::NPersQueue::TSessionClosedEvent,
     NYdb::NTopic::TSessionClosedEvent>;
 
-struct TMigrationPartitionStream : public NYdb::NPersQueue::TPartitionStream {
+struct TMigrationPartitionStream: public NYdb::NPersQueue::TPartitionStream {
     virtual void Commit(uint64_t startOffset, uint64_t endOffset) = 0;
     virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) = 0;
     virtual void ConfirmDestroy() = 0;

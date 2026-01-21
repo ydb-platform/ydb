@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
     }
 
     Y_UNIT_TEST(CheckCorrectBehaviourWithHashOverlow) {
-        auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(TErasureType::Erasure4Plus2Block, 1U, 5U, 1U);
+        auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(TErasureType::Erasure4Plus2Block, 1U, 8U, 1U);
         const ui32 blobSubgroupSize = groupInfo->Type.BlobSubgroupSize();
         TOriginalBlobStorageGroupInfo orig(blobSubgroupSize, *groupInfo);
         TLogoBlobID id(4550843067551373890, 2564314201, 2840555155, 59, 0, 2230444);

@@ -356,6 +356,8 @@ message TTableDescription {
     // Skip automatic index/impl table copying - indexes will be handled separately
     optional bool OmitIndexes = 47 [default = false];
     optional TDropCdcStream DropSrcCdcStream = 48;
+    // Coordinated schema version for backup operations - persisted with AlterData
+    optional uint64 CoordinatedSchemaVersion = 49;
 }
 
 message TDictionaryEncodingSettings {
@@ -1167,6 +1169,10 @@ message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
 }
 
+message TTruncateTable {
+    optional string TableName = 1;
+}
+
 enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;
@@ -1941,6 +1947,12 @@ message TModifyScheme {
     optional TSecretSchemaOp AlterSecret = 89;
 
     optional TStreamingQueryDescription CreateStreamingQuery = 90;
+
+    // This field is needed, because the "truncate table" feature is implemented as a schema operation.
+    // As of right now, it does not actually change the schema,
+    // but in the future it may have an indirect impact on the schema,
+    // for example, by resetting all sequences.
+    optional TTruncateTable TruncateTable = 92;
 
     // Some entries are grouped by semantics, so are out of order
 }

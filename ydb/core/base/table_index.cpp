@@ -45,6 +45,9 @@ const TString ImplTables[] = {
     NKMeans::PrefixTable,
     TString{NKMeans::PostingTable} + NKMeans::BuildSuffix0,
     TString{NKMeans::PostingTable} + NKMeans::BuildSuffix1,
+    NFulltext::DocsTable,
+    NFulltext::DictTable,
+    NFulltext::StatsTable,
 };
 
 constexpr std::string_view GlobalSecondaryImplTables[] = {

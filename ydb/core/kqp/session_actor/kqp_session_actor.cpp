@@ -1505,7 +1505,7 @@ public:
             }
         }
 
-        // Ensure that last transactions can be saved
+        // Ensure that the last transaction can be saved
 
         const auto& txCtx = *QueryState->TxCtx;
         if (txCtx.TopicOperations.GetSize()) {

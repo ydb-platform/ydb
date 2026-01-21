@@ -1013,21 +1013,17 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx) {
     const ui64 txId = ev->Get()->Record.GetTxId();
+    const ui64 tabletDest = ev->Get()->Record.GetTabletProducer();
     if (!GetProgressTxController().GetTxOperatorOptional(txId)) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ignored")("proto", ev->Get()->Record.DebugString());
-        Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(
-                new TEvTxProcessing::TEvReadSetAck(ev->Get()->Record.GetStep(), txId, TabletID(), ev->Get()->Record.GetTabletProducer(), TabletID(), 0),
-                ev->Get()->Record.GetTabletProducer(), true),
-            IEventHandle::FlagTrackDelivery, txId);
+        TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*this, ev->Get()->Record.GetStep(), txId, tabletDest);
         return;
     }
     auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(txId);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
     NKikimrTx::TReadSetData data;
     AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
-    auto tx = op->CreateReceiveBrokenFlagTx(
-        *this, ev->Get()->Record.GetTabletProducer(), data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
+    auto tx = op->CreateReceiveBrokenFlagTx(*this, tabletDest, data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
     Execute(tx.release(), ctx);
 }
 

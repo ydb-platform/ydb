@@ -1,6 +1,7 @@
 
 #include "pq_impl.h"
 #include "pq_impl_types.h"
+#include "fix_transaction_states.h"
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
@@ -790,49 +791,44 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     TxWrites.clear();
 
-    for (const auto& readRange : readRanges) {
-        PQ_ENSURE(readRange.HasStatus());
-        if (readRange.GetStatus() != NKikimrProto::OK &&
-            readRange.GetStatus() != NKikimrProto::OVERRUN &&
-            readRange.GetStatus() != NKikimrProto::NODATA) {
-            PQ_LOG_ERROR_AND_DIE("Transactions read error: " << readRange.GetStatus());
-            return;
+    const auto txs = CollectTransactions(readRanges);
+    for (const auto& [txId, tx] : txs) {
+        if (tx.HasStep()) {
+            if (tx.GetStep() > PlanStep) {
+                PlanStep = tx.GetStep();
+                PlanTxId = tx.GetTxId();
+                PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
+            } else if (tx.GetStep() == PlanStep) {
+                if (tx.GetTxId() > PlanTxId) {
+                    PlanTxId = tx.GetTxId();
+                    PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
+                }
+            }
         }
 
-        for (size_t i = 0; i < readRange.PairSize(); ++i) {
-            const auto& pair = readRange.GetPair(i);
+        PQ_LOG_TX_I("Restore Tx. " <<
+                    "TxId: " << tx.GetTxId() <<
+                    ", Step: " << tx.GetStep() <<
+                    ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.GetState()) <<
+                    ", Predicate: " << tx.GetPredicate() << " (" << (tx.HasPredicate() ? "+" : "-") << ")" <<
+                    ", WriteId: " << tx.GetWriteId().ShortDebugString());
 
-            PQ_LOG_D("ReadRange pair." <<
-                     " Key " << (pair.HasKey() ? pair.GetKey() : "unknown") <<
-                     ", Status " << pair.GetStatus());
+        Txs.emplace(tx.GetTxId(), tx);
 
-            NKikimrPQ::TTransaction tx;
-            PQ_ENSURE(tx.ParseFromString(pair.GetValue()));
+        if (tx.HasWriteId()) {
+            PQ_LOG_TX_I("Link TxId " << tx.GetTxId() << " with WriteId " << GetWriteId(tx));
+            TxWrites[GetWriteId(tx)].TxId = tx.GetTxId();
+        }
+    }
 
-            PQ_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN)("Key", pair.GetKey());
+    for (const auto& [txId, tx] : Txs) {
+        PQ_LOG_D("TxId: " << txId <<
+                 ", Step: " << tx.Step <<
+                 ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
+                 ", Decision: " << NKikimrTx::TReadSetData_EDecision_Name(tx.ParticipantsDecision));
 
-            PQ_LOG_TX_I("Restore Tx. " <<
-                     "TxId: " << tx.GetTxId() <<
-                     ", Step: " << tx.GetStep() <<
-                     ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.GetState()) <<
-                     ", WriteId: " << tx.GetWriteId().ShortDebugString());
-
-            if (tx.GetState() == NKikimrPQ::TTransaction::CALCULATED) {
-                PQ_LOG_TX_D("Fix tx state");
-                tx.SetState(NKikimrPQ::TTransaction::PLANNED);
-            }
-
-            Txs.emplace(tx.GetTxId(), tx);
-            SetTxInFlyCounter();
-
-            if (tx.HasStep()) {
-                PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
-            }
-
-            if (tx.HasWriteId()) {
-                PQ_LOG_TX_I("Link TxId " << tx.GetTxId() << " with WriteId " << GetWriteId(tx));
-                TxWrites[GetWriteId(tx)].TxId = tx.GetTxId();
-            }
+        if (tx.Step != Max<ui64>()) {
+            PlannedTxs.emplace_back(tx.Step, txId);
         }
     }
 

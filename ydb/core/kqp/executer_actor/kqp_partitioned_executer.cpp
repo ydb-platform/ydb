@@ -96,7 +96,6 @@ public:
 
     void Bootstrap() {
         Become(&TKqpPartitionedExecuter::PrepareState);
-
         ResolvePartitioning();
     }
 
@@ -286,6 +285,7 @@ public:
             default:
                 PE_LOG_W("KqpPartitionedExecuterActor got an unknown message from actorId = " << ev->Sender
                     << ", type = " << ev->GetTypeRewrite() << ", state = " << CurrentStateFuncName() << ", ignore");
+                return TryFinishExecution();
             }
         } catch (...) {
             AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
@@ -299,7 +299,7 @@ public:
         if (it == ExecuterToPartition.end()) {
             PE_LOG_D("Got TEvTxResponse in AbortState from unknown actor with actorId = " << ev->Sender
                 << ", status = " << response->GetStatus() << ", ignore");
-            return;
+            return TryFinishExecution();
         }
 
         auto [_, partInfo] = *it;
@@ -312,10 +312,7 @@ public:
         ForgetExecuterAndBuffer(partInfo);
         ForgetPartition(partInfo);
 
-        if (CheckExecutersAreFinished()) {
-            PE_LOG_N("All executers have been finished, replying with error: " << Ydb::StatusIds_StatusCode_Name(ReturnStatus));
-            ReplyErrorAndDie(ReturnStatus, ReturnIssues);
-        }
+        TryFinishExecution();
     }
 
     void HandleAbort(TEvKqpBuffer::TEvError::TPtr& ev) {
@@ -339,10 +336,7 @@ public:
         ForgetExecuterAndBuffer(partInfo);
         ForgetPartition(partInfo);
 
-        if (CheckExecutersAreFinished()) {
-            PE_LOG_N("All executers have been finished, replying with error: " << Ydb::StatusIds_StatusCode_Name(ReturnStatus));
-            ReplyErrorAndDie(ReturnStatus, ReturnIssues);
-        }
+        TryFinishExecution();
     }
 
     TString LogPrefix() const {
@@ -539,9 +533,7 @@ private:
         Become(&TKqpPartitionedExecuter::AbortState);
 
         if (CheckExecutersAreFinished()) {
-            PE_LOG_N("All executers have been finished, replying with error immediately");
-            ReplyErrorAndDie(ReturnStatus, ReturnIssues);
-            return;
+            return TryFinishExecution();
         }
 
         PE_LOG_I("Sending abort to " << ExecuterToPartition.size() << " executers");
@@ -593,15 +585,7 @@ private:
             return CreateExecuterWithBuffer(NextPartitionIndex++, /* isRetry */ false);
         }
 
-        if (CheckExecutersAreFinished()) {
-            if (ReturnStatus != Ydb::StatusIds::SUCCESS) {
-                PE_LOG_N("All partitions processed, but have error: " << Ydb::StatusIds_StatusCode_Name(ReturnStatus));
-                ReplyErrorAndDie(ReturnStatus, ReturnIssues);
-            } else {
-                PE_LOG_I("All partitions processed successfully");
-                ReplySuccessAndDie();
-            }
-        }
+        TryFinishExecution();
     }
 
     bool IsKeyInPartition(const TConstArrayRef<TCell>& key, const TBatchPartitionInfo::TPtr& partInfo) {
@@ -624,10 +608,7 @@ private:
         PE_LOG_D("Partition " << partInfo->PartitionIndex << " retry cancelled due to AbortState");
         ForgetPartition(partInfo);
 
-        if (CheckExecutersAreFinished()) {
-            PE_LOG_N("All executers have been finished, replying with error: " << Ydb::StatusIds_StatusCode_Name(ReturnStatus));
-            ReplyErrorAndDie(ReturnStatus, ReturnIssues);
-        }
+        TryFinishExecution();
     }
 
     void ScheduleRetryWithNewLimit(TBatchPartitionInfo::TPtr& partInfo) {
@@ -722,16 +703,25 @@ private:
         return result;
     }
 
+    void TryFinishExecution() {
+        if (CheckExecutersAreFinished()) {
+            if (ReturnStatus != Ydb::StatusIds::SUCCESS) {
+                PE_LOG_N("All partitions processed, but have error: " << Ydb::StatusIds_StatusCode_Name(ReturnStatus));
+                ReplyErrorAndDie(ReturnStatus, ReturnIssues);
+            } else {
+                PE_LOG_I("All partitions processed successfully");
+                ReplySuccessAndDie();
+            }
+        } else {
+            PE_LOG_I("Not all partitions have been processed, waiting for more responses");
+        }
+    }
+
     void AbortWithError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         if (CurrentStateFunc() == &TKqpPartitionedExecuter::AbortState) {
             PE_LOG_N("Ignoring error " << Ydb::StatusIds_StatusCode_Name(code)
                 << " because already in AbortState with error: " << Ydb::StatusIds_StatusCode_Name(ReturnStatus));
-
-            if (CheckExecutersAreFinished()) {
-                PE_LOG_N("All executers have been finished, replying with error immediately");
-                ReplyErrorAndDie(ReturnStatus, ReturnIssues);
-            }
-            return;
+            return TryFinishExecution();
         }
 
         PE_LOG_E("First error occurred: " << Ydb::StatusIds_StatusCode_Name(code)
@@ -765,7 +755,7 @@ private:
 
     void ReplySuccessAndDie() {
         auto& response = *ResponseEv->Record.MutableResponse();
-        response.SetStatus(Ydb::StatusIds::SUCCESS);
+        response.SetStatus(ReturnStatus);
         Send(SessionActorId, ResponseEv.release());
         PassAway();
     }

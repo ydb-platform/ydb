@@ -1490,10 +1490,12 @@ public:
         for (size_t i = 0; i + 1 < txCount; ++i) {
             const auto tx = QueryState->PreparedQuery->GetPhyTx(i);
             bool hasWrites = tx->GetHasEffects();
-            for (const auto& stage : tx->GetStages()) {
-                if (hasWrites || stage.SinksSize()) {
-                    hasWrites = true;
-                    break;
+            if (!hasWrites) {
+                for (const auto& stage : tx->GetStages()) {
+                    if (stage.SinksSize()) {
+                        hasWrites = true;
+                        break;
+                    }
                 }
             }
 

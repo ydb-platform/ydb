@@ -250,6 +250,8 @@ void TReadBlobTableCommand::DoExecute(ICommandContextPtr context)
 void TReadTablePartitionCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("cookie", &TThis::Cookie);
+    registrar.Parameter("control_attributes", &TThis::ControlAttributes)
+        .DefaultNew();
 }
 
 void TReadTablePartitionCommand::DoExecute(ICommandContextPtr context)
@@ -264,6 +266,11 @@ void TReadTablePartitionCommand::DoExecute(ICommandContextPtr context)
     if (!valid) {
         THROW_ERROR_EXCEPTION("Signature validation failed");
     }
+
+    Options.EnableTableIndex = ControlAttributes->EnableTableIndex;
+    Options.EnableRowIndex = ControlAttributes->EnableRowIndex;
+    Options.EnableRangeIndex = ControlAttributes->EnableRangeIndex;
+    Options.EnableTabletIndex = ControlAttributes->EnableTabletIndex;
 
     auto format = NYson::ConvertToYsonString(context->GetOutputFormat());
     auto formatStream = WaitFor(client->CreateFormattedTablePartitionReader(cookie, format, Options))

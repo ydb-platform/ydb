@@ -15,8 +15,12 @@ class TCMSEval : public IColumnStatisticEval {
     ui64 Depth = DEFAULT_DEPTH;
     std::optional<ui32> Seq;
 
+    // current upper limit is 4_MB per columnar statistics
+    static constexpr ui64 MAX_WIDTH = 131072;
     static constexpr ui64 MIN_WIDTH = 4096;
     static constexpr ui64 DEFAULT_DEPTH = 8;
+    static constexpr double NDV_N_RATIO = 0.8;
+    static constexpr double RELATIVE_ERROR = 10;
 
 public:
     TCMSEval(ui64 width) : Width(width) {}
@@ -32,19 +36,21 @@ public:
         const double n = simpleStats.GetCount();
         const double ndv = simpleStats.GetCountDistinct();
 
-        if (ndv >= 0.8 * n) {
+        if (ndv >= NDV_N_RATIO * n) {
             return TPtr{};
         }
 
-        const double c = 10;
-        const double eps = (c - 1) * (1 + std::log10(n / ndv)) / ndv;
-        const ui64 cmsWidth = std::max((ui64)MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
+        const double eps = (RELATIVE_ERROR - 1) * (1 + std::log10(n / ndv)) / ndv;
+        ui64 cmsWidth = std::max(MIN_WIDTH, (ui64)ceil(std::numbers::e_v<double> / eps));
+        if (cmsWidth >= MAX_WIDTH) {
+            cmsWidth = MAX_WIDTH - 1;
+        }
         return std::make_unique<TCMSEval>(cmsWidth);
     }
 
     EStatType GetType() const final { return EStatType::COUNT_MIN_SKETCH; }
 
-    size_t EstimateSize() const final { return Width * Depth * sizeof(ui32); }
+    size_t EstimateSize() const final { return TCountMinSketch::StaticSize(Width, Depth); }
 
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
         Seq = builder.AddUDAFAggregation(columnName, "CMS", Width, Depth);
@@ -78,6 +84,11 @@ class TEWHEval : public IColumnStatisticEval {
     TBorder RangeEnd;
 
     std::optional<ui32> Seq;
+
+    // current upper limit is 4_MB per columnar statistics
+    static constexpr ui32 MAX_BUCKETS = 524288;
+    static constexpr ui32 MIN_BUCKETS = 1;
+    static constexpr double NDV_N_RATIO = 0.8;
 
 public:
     TEWHEval(ui32 numBuckets, TBorder rangeStart, TBorder rangeEnd)
@@ -172,7 +183,7 @@ public:
         const double n = simpleStats.GetCount();
         const double ndv = simpleStats.GetCountDistinct();
 
-        //if (ndv >= 0.8 * n) {
+        //if (ndv >= NDV_N_RATIO * n) {
         //    // Too many distinct values
         //    return TPtr{};
         //}
@@ -184,7 +195,9 @@ public:
             ? numBucketsEstimate
             : std::numeric_limits<ui32>::max());
         if (numBuckets == 0) {
-            numBuckets = 1;
+            numBuckets = MIN_BUCKETS;
+        } else if (numBuckets >= MAX_BUCKETS) {
+            numBuckets = MAX_BUCKETS - 1;
         }
 
         auto domainRange = GetDomainRange(
@@ -198,7 +211,7 @@ public:
 
     EStatType GetType() const final { return EStatType::EQ_WIDTH_HISTOGRAM; }
 
-    size_t EstimateSize() const final { return NumBuckets * sizeof(ui64); }
+    size_t EstimateSize() const final { return TEqWidthHistogram::GetBinarySize(NumBuckets); }
 
     void AddAggregations(const TString& columnName, TSelectBuilder& builder) final {
         Seq = builder.AddUDAFAggregation(columnName, "EWH", NumBuckets, RangeStart, RangeEnd);

@@ -198,14 +198,16 @@ private:
     }
 
     bool TrySendWatermark() {
-        if (!WatermarksEnabled()) {
+        if (!Watermark || !WatermarksEnabled()) {
             return false;
         }
-        if (!Watermark || !WatermarksTracker->NotifyInputWatermarkReceived(InputKey.InputId, InputKey.IsChannel, *Watermark) || !WatermarksTracker->HasPendingWatermark()) {
-            return false;
+        auto hasPendingWatermark = WatermarksTracker->NotifyInputWatermarkReceived(InputKey.InputId, InputKey.IsChannel, *Watermark) && WatermarksTracker->HasPendingWatermark();
+        Watermark.Clear();
+        if (hasPendingWatermark) {
+            WatermarkStorage->WatermarkIn = WatermarksTracker->GetPendingWatermark();
+            return true;
         }
-        WatermarkStorage->WatermarkIn = WatermarksTracker->GetPendingWatermark();
-        return true;
+        return false;
     }
 
 private:

@@ -15,7 +15,7 @@ ISubOperation::TPtr CreateBuildColumn(TOperationId opId, const TTxTransaction& t
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
 
     if (!context.SS->EnableAddColumsWithDefaults) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled")};
+        return CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled");
     }
 
     const auto& op = tx.GetInitiateColumnBuild();
@@ -35,7 +35,7 @@ ISubOperation::TPtr CreateBuildColumn(TOperationId opId, const TTxTransaction& t
             .IsCommonSensePath();
 
         if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
         }
     }
 

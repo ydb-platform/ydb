@@ -129,7 +129,7 @@ namespace NKikimr::NStorage {
 
             ddisk = groupInfo->Group && groupInfo->Group->GetDDisk();
             if (ddisk) {
-                vdiskServiceId = MakeBlobStorageDDiskID(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId);
+                vdiskServiceId = MakeBlobStorageDDiskId(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId);
             }
 
             // check that VDisk belongs to active VDisks of the group

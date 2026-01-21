@@ -147,6 +147,7 @@ struct Schema : NIceDb::Schema {
         struct LastSeenReady : Column<12, NScheme::NTypeIds::Uint64> { using Type = TInstant; static constexpr Type Default = TInstant::Zero(); };
         struct LastGotReplicating : Column<13, NScheme::NTypeIds::Uint64> { using Type = TInstant; static constexpr Type Default = TInstant::Zero(); };
         struct ReplicationTime : Column<14, NScheme::NTypeIds::Uint64> { using Type = TDuration; static constexpr Type Default = TDuration::Zero(); };
+        struct DDiskNumVChunksClaimed : Column<15, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<NodeID, PDiskID, VSlotID>; // order is important
         using TColumns = TableColumns<
@@ -163,7 +164,8 @@ struct Schema : NIceDb::Schema {
             Mood,
             LastSeenReady,
             LastGotReplicating,
-            ReplicationTime>;
+            ReplicationTime,
+            DDiskNumVChunksClaimed>;
     };
 
     struct VDiskMetrics : Table<6> {
@@ -461,6 +463,16 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp, ErrorCount>;
     };
 
+    struct DirectBlockGroupClaims : Table<134> {
+        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {}; // PK
+        struct DirectBlockGroupId : Column<2, NScheme::NTypeIds::Uint64> {}; // PK
+        struct NumVChunksClaimed : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct Allocation : Column<4, NScheme::NTypeIds::String> {}; // protobuf
+
+        using TKey = TableKey<TabletId, DirectBlockGroupId>;
+        using TColumns = TableColumns<TabletId, DirectBlockGroupId, NumVChunksClaimed, Allocation>;
+    };
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -485,7 +497,8 @@ struct Schema : NIceDb::Schema {
         ScrubState,
         DriveSerial,
         BlobDepotDeleteQueue,
-        BridgeSyncState
+        BridgeSyncState,
+        DirectBlockGroupClaims
     >;
 
     using TSettings = SchemaSettings<

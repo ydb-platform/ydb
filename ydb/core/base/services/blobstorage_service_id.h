@@ -62,7 +62,7 @@ inline std::tuple<ui32, ui32, ui32> DecomposeVDiskServiceId(const TActorId& acto
     return {nodeId, pdiskId, vslotId};
 }
 
-inline TActorId MakeBlobStorageDDiskID(ui32 node, ui32 pdiskId, ui32 ddiskSlotId) {
+inline TActorId MakeBlobStorageDDiskId(ui32 node, ui32 pdiskId, ui32 ddiskSlotId) {
     char x[12] = {'D', 'D', 's', 'k'};
     x[4] = pdiskId;
     x[5] = pdiskId >> 8;

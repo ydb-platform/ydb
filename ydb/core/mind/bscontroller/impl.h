@@ -116,6 +116,7 @@ public:
         TInstant LastSeenReady;
         TInstant LastGotReplicating;
         TDuration ReplicationTime;
+        Table::DDiskNumVChunksClaimed::Type DDiskNumVChunksClaimed;
 
         // volatile state
         mutable NKikimrBlobStorage::TVDiskMetrics Metrics;
@@ -225,7 +226,8 @@ public:
                     Table::Mood,
                     Table::LastSeenReady,
                     Table::LastGotReplicating,
-                    Table::ReplicationTime
+                    Table::ReplicationTime,
+                    Table::DDiskNumVChunksClaimed
                 > adapter(
                     &TVSlotInfo::Kind,
                     &TVSlotInfo::GroupId,
@@ -237,7 +239,8 @@ public:
                     &TVSlotInfo::Mood,
                     &TVSlotInfo::LastSeenReady,
                     &TVSlotInfo::LastGotReplicating,
-                    &TVSlotInfo::ReplicationTime
+                    &TVSlotInfo::ReplicationTime,
+                    &TVSlotInfo::DDiskNumVChunksClaimed
                 );
             callback(&adapter);
         }
@@ -248,7 +251,7 @@ public:
                 Table::GroupGeneration::Type groupGeneration, Table::Category::Type kind, Table::RingIdx::Type ringIdx,
                 Table::FailDomainIdx::Type failDomainIdx, Table::VDiskIdx::Type vDiskIdx, Table::Mood::Type mood,
                 TGroupInfo *group, TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady,
-                TDuration replicationTime); // implemented in bsc.cpp
+                TDuration replicationTime, Table::DDiskNumVChunksClaimed::Type ddiskNumVChunksClaimed); // implemented in bsc.cpp
 
         // is the slot being deleted (marked as deleted)
         bool IsBeingDeleted() const {
@@ -621,6 +624,7 @@ public:
         TMaybe<Table::MainKeyVersion::Type> MainKeyVersion; // null on old verstions
         bool PersistedDown = false; // the value stored in the database
         bool SeenOperational = false;
+        bool DDisk = false;
 
         Table::DecommitStatus::Type DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
 
@@ -763,7 +767,8 @@ public:
                    TBoxStoragePoolId storagePoolId,
                    ui32 numFailRealms,
                    ui32 numFailDomainsPerFailRealm,
-                   ui32 numVDisksPerFailDomain)
+                   ui32 numVDisksPerFailDomain,
+                   bool ddisk)
             : ID(id)
             , Generation(generation)
             , Owner(owner)
@@ -778,6 +783,7 @@ public:
             , MainKeyVersion(mainKeyVersion)
             , PersistedDown(down)
             , SeenOperational(seenOperational)
+            , DDisk(ddisk)
             , GroupSizeInUnits(groupSizeInUnits)
             , BridgePileId(bridgePileId)
             , Down(PersistedDown)
@@ -2536,6 +2542,13 @@ public:
     };
 
     std::map<TPDiskId, TStaticPDiskInfo> StaticPDisks;
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // DDISK MANAGING CODE
+
+    class TTxAllocateDDiskBlockGroup;
+
+    void Handle(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::TPtr ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // NODE WARDEN PIPE LIFETIME MANAGEMENT

@@ -9,14 +9,20 @@ namespace NKikimr::NDDisk {
         : BaseInfo(std::move(baseInfo))
         , Info(std::move(info))
         , Counters(std::move(counters))
-    {}
+    {
+        DDiskId = TStringBuilder() << '[' << BaseInfo.PDiskActorID.NodeId() << ':' << BaseInfo.PDiskId
+            << ':' << BaseInfo.VDiskSlotId << ']';
+    }
 
     void TDDiskActor::Bootstrap() {
         Become(&TThis::StateFunc);
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD00, "TDDiskActor::Bootstrap", (PDiskActorId, BaseInfo.PDiskActorID));
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD00, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
     }
 
     STRICT_STFUNC(TDDiskActor::StateFunc,
+        hFunc(TEvDDiskConnect, Handle)
+        hFunc(TEvDDiskWrite, Handle)
+        hFunc(TEvDDiskRead, Handle)
         cFunc(TEvents::TSystem::Poison, PassAway)
     )
 

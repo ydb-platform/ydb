@@ -124,12 +124,16 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                 UNIT_ASSERT(false);
             }
 
-            if (WriteOperation == "insert" && GetFillTables() && GetIsOlap()) { // olap needs to return aborted too?
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            if (WriteOperation == "insert" && GetFillTables()) {
+                // Key (1, "Paul") exists at snapshot time, must be unique constraint violation
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, WriteOperation << ": " << result.GetIssues().ToString());
             } else if (!GetFillTables() && (WriteOperation == "delete" || WriteOperation == "update")) {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, WriteOperation << ": " << result.GetIssues().ToString());
+            } else if (!GetFillTables() && (WriteOperation == "delete_on" || WriteOperation == "update_on") && !GetIsOlap()) {
+                // Datashard cannot distinguish between delete/update and blind delete_on/update_on in SnapshotRW isolation
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, WriteOperation << ": " << result.GetIssues().ToString());
             } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, WriteOperation << ": " << result.GetIssues().ToString());
             }
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -838,7 +842,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                     auto result = runtime.WaitFuture(future);
                     UNIT_ASSERT_VALUES_EQUAL_C(
                         result.GetStatus(),
-                        EStatus::ABORTED, // Must be EStatus::SUCCESS
+                        GetIsOlap() ? EStatus::ABORTED : EStatus::SUCCESS, // Must be EStatus::SUCCESS
                         result.GetIssues().ToString());
                 }
             }
@@ -963,7 +967,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
                     auto result = runtime.WaitFuture(future);
                     UNIT_ASSERT_VALUES_EQUAL_C(
                         result.GetStatus(),
-                        EStatus::ABORTED, // Must be EStatus::SUCCESS
+                        GetIsOlap() ? EStatus::ABORTED : EStatus::SUCCESS, // Must be EStatus::SUCCESS
                         result.GetIssues().ToString());
                 }
             }

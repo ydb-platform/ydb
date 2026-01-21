@@ -13,6 +13,7 @@ SRCS(
     kqp_scan_fetcher_actor.cpp
     kqp_scan_common.cpp
     kqp_scan_events.cpp
+    kqp_compute_events_stats.cpp
 )
 
 PEERDIR(

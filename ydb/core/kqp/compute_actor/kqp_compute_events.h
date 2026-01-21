@@ -6,7 +6,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-
+#include <ydb/core/kqp/compute_actor/kqp_compute_events_stats.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 
 namespace NKikimr::NKqp {
@@ -16,11 +16,6 @@ struct TLocksInfo {
     TVector<NKikimrDataEvents::TLock> BrokenLocks;
 };
 
-struct TPerStepScanStats {
-    TDuration ExecutionDuration;
-    TDuration WaitDuration;
-    ui64 RawBytesRead;
-};
 
 namespace NInternalImplementation {
 struct TEvRemoteScanData: public TEventPB<TEvRemoteScanData, NKikimrKqp::TEvRemoteScanData,
@@ -60,7 +55,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
 
     TOwnedCellVec LastKey;
     NKikimrKqp::TEvKqpScanCursor LastCursorProto;
-    THashMap<TString, TPerStepScanStats> PerStepTimings;
+    THashMap<TString, TPerStepScanCountersSnapshot> ScanSnapshot;
     TDuration CpuTime;
     TDuration WaitTime;
     ui64 RawBytes = 0;

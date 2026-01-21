@@ -24,6 +24,28 @@ TConclusion<bool> TColumnShardScanIterator::ReadNextInterval() {
     return IndexedData->ReadNextInterval();
 }
 
+TString TColumnShardScanIterator::DebugString(const bool verbose) const {
+    TStringBuilder perStepCounters;
+    NKqp::TPerStepScanCountersSnapshot summ;
+    for(auto& [name, counters]:  Context->GetCounters().GetScanCountersSnapshot()){
+        perStepCounters << "[step_name: " << name << "; counters: " << counters.DebugString() << "]\n";
+        summ.ExecutionDuration += counters.ExecutionDuration;
+        summ.WaitDuration += counters.WaitDuration;
+        summ.RawBytesRead += counters.RawBytesRead;
+
+    }
+    perStepCounters.pop_back(); // last '\n'
+    
+    
+    return TStringBuilder()
+        << "ready_results:(" << ReadyResults.DebugString() << ");"
+        << "indexed_data:(" << IndexedData->DebugString(verbose) << ");"
+        << "per_step_counters:(" << perStepCounters << ");"
+        << "counters_summ_across_all_steps:(" << summ.DebugString() << ")"
+        ;
+}
+
+
 void TColumnShardScanIterator::DoOnSentDataFromInterval(const TPartialSourceAddress& address) {
     return IndexedData->OnSentDataFromInterval(address);
 }

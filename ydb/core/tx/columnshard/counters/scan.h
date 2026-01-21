@@ -1,6 +1,7 @@
 #pragma once
 #include "sub_columns.h"
 
+#include <ydb/core/kqp/compute_actor/kqp_compute_events_stats.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/counters/thread_safe_value.h>
@@ -364,10 +365,6 @@ public:
         std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds = std::make_shared<TAtomicCounter>();
         std::shared_ptr<TAtomicCounter> RawBytesRead = std::make_shared<TAtomicCounter>(); // From BS, S3, previous step
     };
-    struct TStepData {
-        TString StepName;
-        TPerStepCounters Counters;
-    };
 private:
     using TBase = TScanCounters;
     std::shared_ptr<TAtomicCounter> FetchAccessorsCount = std::make_shared<TAtomicCounter>();
@@ -405,6 +402,20 @@ public:
             it->second->Inc();
         }
     }
+
+    THashMap<TString, NKqp::TPerStepScanCountersSnapshot> GetScanCountersSnapshot() const {
+        auto lock = StepExecutionDurations.ReadGuard();
+        THashMap<TString, NKqp::TPerStepScanCountersSnapshot> timesPerStep;
+        for(auto& kv: lock.Value) {
+            NKqp::TPerStepScanCountersSnapshot stats;
+            stats.ExecutionDuration = TDuration::MicroSeconds(kv.second.ExecutionDurationMicroSeconds->Val());
+            stats.WaitDuration = TDuration::MicroSeconds(kv.second.WaitDurationMicroSeconds->Val());
+            stats.RawBytesRead = kv.second.RawBytesRead->Val();
+            timesPerStep.emplace(kv.first, stats);
+        }
+        return timesPerStep;
+    }
+
     TPerStepCounters CountersForStep(TStringBuf stepName) const {
         auto* counterIfExists = [&]{
             auto lock = StepExecutionDurations.ReadGuard();

@@ -9,14 +9,14 @@
 namespace NKikimr::NGRpcService {
 
 using TEvCreatePartitionRequest =
-    TGrpcRequestOperationCall<Ydb::Nbs::CreatePartitionRequest,
-        Ydb::Nbs::CreatePartitionResponse>;
+    TGrpcRequestOperationCall<NYdb::NBS::NProto::CreatePartitionRequest,
+        NYdb::NBS::NProto::CreatePartitionResponse>;
 using TEvDeletePartitionRequest =
-    TGrpcRequestOperationCall<Ydb::Nbs::DeletePartitionRequest,
-        Ydb::Nbs::DeletePartitionResponse>;
+    TGrpcRequestOperationCall<NYdb::NBS::NProto::DeletePartitionRequest,
+        NYdb::NBS::NProto::DeletePartitionResponse>;
 using TEvListPartitionsRequest =
-    TGrpcRequestOperationCall<Ydb::Nbs::ListPartitionsRequest,
-        Ydb::Nbs::ListPartitionsResponse>;
+    TGrpcRequestOperationCall<NYdb::NBS::NProto::ListPartitionsRequest,
+        NYdb::NBS::NProto::ListPartitionsResponse>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -32,14 +32,14 @@ public:
         Become(&TThis::StateWork);
 
         // Create partition actor
-        auto partition_actor_id = NCloud::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet(
+        auto partition_actor_id = NYdb::NBS::NStorage::NPartitionDirect::CreatePartitionTablet(
             SelfId());
 
         LOG_INFO(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-            "Grpc service: created partition actor with id: %lu",
-            partition_actor_id);
+            "Grpc service: created partition actor with id: %s",
+            partition_actor_id.ToString().data());
 
-        Ydb::Nbs::CreatePartitionResult result;
+        NYdb::NBS::NProto::CreatePartitionResult result;
         result.SetTabletId(partition_actor_id.ToString());
         ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
     }
@@ -71,6 +71,14 @@ public:
 
         // Send poison pill to partition actor
         ctx.Send(tabletId, new TEvents::TEvPoisonPill);
+
+        LOG_INFO(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
+            "Grpc service: sent poison event to partition actor with id: %s",
+            tabletId.ToString().data());
+
+        NYdb::NBS::NProto::DeletePartitionResult result;
+        result.SetTabletId(tabletIdStr);
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
     }
 
 private:

@@ -273,44 +273,6 @@
 
 - Go
 
-  {% cut "ydb-go-sdk" %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.SerializableReadWriteTxControl(query.CommitTx())),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // работа с row
-    _ = row
-  }
-  ```
-
-  {% endcut %}
-
   {% cut "database/sql" %}
 
   ```go
@@ -368,6 +330,40 @@
   ```
 
   {% endcut %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(query.SerializableReadWriteTxControl(query.CommitTx())),
+    )
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+    // работа с row
+    _ = row
+  }
+  ```
 
 - Java
 
@@ -617,6 +613,61 @@
 
 - Go
 
+  {% cut "database/sql" %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "database/sql"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+    "github.com/ydb-platform/ydb-go-sdk/v3/table"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    nativeDriver, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer nativeDriver.Close(ctx)
+
+    connector, err := ydb.Connector(nativeDriver)
+    if err != nil {
+      panic(err)
+    }
+    defer connector.Close()
+
+    db := sql.OpenDB(connector)
+    defer db.Close()
+
+    err = retry.Do(
+      ydb.WithTxControl(ctx, table.OnlineReadOnlyTxControl(table.WithInconsistentReads())),
+      db,
+      func(ctx context.Context, conn *sql.Conn) error {
+        row := conn.QueryRowContext(ctx, "SELECT 1")
+        var result int
+        return row.Scan(&result)
+      },
+      retry.WithIdempotent(true),
+    )
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+  }
+  ```
+
+  {% endcut %}
+
   ```go
   package main
 
@@ -781,6 +832,61 @@
 
 - Go
 
+  {% cut "database/sql" %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "database/sql"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+    "github.com/ydb-platform/ydb-go-sdk/v3/table"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    nativeDriver, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer nativeDriver.Close(ctx)
+
+    connector, err := ydb.Connector(nativeDriver)
+    if err != nil {
+      panic(err)
+    }
+    defer connector.Close()
+
+    db := sql.OpenDB(connector)
+    defer db.Close()
+
+    err = retry.Do(
+      ydb.WithTxControl(ctx, table.StaleReadOnlyTxControl()),
+      db,
+      func(ctx context.Context, conn *sql.Conn) error {
+        row := conn.QueryRowContext(ctx, "SELECT 1")
+        var result int
+        return row.Scan(&result)
+      },
+      retry.WithIdempotent(true),
+    )
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+  }
+  ```
+
+  {% endcut %}
+
   ```go
   package main
 
@@ -944,44 +1050,6 @@
 
 - Go
 
-  {% cut "ydb-go-sdk" %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.SnapshotReadOnlyTxControl()),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // работа с row
-    _ = row
-  }
-  ```
-
-  {% endcut %}
-
   {% cut "database/sql" %}
 
   ```go
@@ -1034,6 +1102,40 @@
   ```
 
   {% endcut %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(query.SnapshotReadOnlyTxControl()),
+    )
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+    // работа с row
+    _ = row
+  }
+  ```
 
 - Java
 
@@ -1177,44 +1279,6 @@
 
 - Go
 
-  {% cut "ydb-go-sdk" %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.SnapshotReadWriteTxControl(query.CommitTx())),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // работа с row
-    _ = row
-  }
-  ```
-
-  {% endcut %}
-
   {% cut "database/sql" %}
 
   ```go
@@ -1268,6 +1332,40 @@
   ```
 
   {% endcut %}
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/query"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+    row, err := db.Query().QueryRow(ctx, "SELECT 1",
+      query.WithTxControl(query.SnapshotReadWriteTxControl(query.CommitTx())),
+    )
+    if err != nil {
+      fmt.Printf("unexpected error: %v", err)
+    }
+    // работа с row
+    _ = row
+  }
+  ```
 
 - Java
 

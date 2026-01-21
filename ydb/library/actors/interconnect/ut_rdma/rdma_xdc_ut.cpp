@@ -201,7 +201,7 @@ TEvTestSerialization* MakeTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool*
     if (!memPool) {
         TRope tmp(TString(5000, 'X'));
         if (withOffset) {
-            tmp.Insert(tmp.End(), TRope(TString(999, 'Z'))); 
+            tmp.Insert(tmp.End(), TRope(TString(999, 'Z')));
         }
         ev->AddPayload(std::move(tmp));
     } else {
@@ -239,14 +239,14 @@ TEvTestSerialization* MakeTestEvent(ui64 blobId, NInterconnect::NRdma::IMemPool*
             if (withOffset) {
                 TRcBuf rcbuf3 = memPool->AllocRcBuf(999, 0).value();
                 std::fill(rcbuf3.UnsafeGetDataMut(), rcbuf3.UnsafeGetDataMut() + 999, 'Z');
-                tmp.Insert(tmp.End(), TRope(std::move(rcbuf3))); 
+                tmp.Insert(tmp.End(), TRope(std::move(rcbuf3)));
             }
             ev->AddPayload(std::move(tmp));
             UNIT_ASSERT_VALUES_EQUAL(ev->GetPayload().back().size(), withOffset ? 5999u : 5000u);
         }
     }
     bool done = ev->AllowExternalDataChannel();
-    UNIT_ASSERT_VALUES_EQUAL(done, true); 
+    UNIT_ASSERT_VALUES_EQUAL(done, true);
     return ev;
 }
 
@@ -608,6 +608,91 @@ TEST_P(XdcRdmaTestCqMode, SendMixBig) {
     UNIT_ASSERT_VALUES_EQUAL(events.Checks.size(), 0u);
 }
 
+static void DoSendHugePayloadsNum(const ui32 numPayloads, const size_t payloadSz) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+
+     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TTestICCluster::TCheckerFactory(), TDuration::Minutes(1), 50u << 20);
+
+    auto ev = new TEvTestSerialization();
+    ev->Record.SetBlobID(0);
+    ev->Record.SetBuffer(TStringBuilder{} << "hello world ");
+    for (ui32 j = 0; j < numPayloads; ++j) {
+        auto buf = pool->AllocRcBuf(payloadSz, NInterconnect::NRdma::IMemPool::PAGE_ALIGNED).value();
+        ui32* p = reinterpret_cast<ui32*>(buf.GetDataMut());
+        std::fill(p, p + (payloadSz / sizeof(*p)), j);
+        ev->AddPayload(TRope(std::move(buf)));
+    }
+    UNIT_ASSERT(ev->AllowExternalDataChannel());
+
+    auto recieverPtr = new TReceiveActor([numPayloads, payloadSz](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayloadCount(), numPayloads);
+        for (ui32 j = 0; j < numPayloads; ++j) {
+            TRope buf = ev->Get()->GetPayload(j);
+            auto span = buf.GetContiguousSpan();
+            const ui32* p = reinterpret_cast<const ui32*>(span.GetData());
+            UNIT_ASSERT_VALUES_EQUAL(span.GetSize(), payloadSz);
+
+            while (p < reinterpret_cast<const ui32*>(span.GetData() + payloadSz)) {
+                UNIT_ASSERT_VALUES_EQUAL(*p, j);
+                p++;
+            }
+        }
+    });
+    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+
+    Sleep(TDuration::MilliSeconds(100));
+
+    {
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+    }
+
+    UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
+}
+
+TEST_F(XdcRdmaTest, Send1Payload) {
+    DoSendHugePayloadsNum(1, 8192);
+}
+
+TEST_F(XdcRdmaTest, Send2Payloads) {
+    DoSendHugePayloadsNum(2, 8192);
+}
+
+TEST_F(XdcRdmaTest, Send250Payloads) {
+    DoSendHugePayloadsNum(250, 512);
+}
+
+TEST_F(XdcRdmaTest, Send500Payloads) {
+    DoSendHugePayloadsNum(500, 512);
+}
+
+TEST_F(XdcRdmaTest, Send4000Payloads) {
+    DoSendHugePayloadsNum(4000, 512);
+}
+
+TEST_F(XdcRdmaTest, Send16000Payloads) {
+    DoSendHugePayloadsNum(16000, 512);
+}
+
+TEST_F(XdcRdmaTest, Send32000Payloads) {
+    DoSendHugePayloadsNum(32000, 512);
+}
+
+TEST_F(XdcRdmaTest, SendXPayloads) {
+    for (size_t i = 640; i < 650; i++) {
+        DoSendHugePayloadsNum(i, 512);
+    }
+}
+
+TEST_F(XdcRdmaTest, SendXPayloadsWithRandSize) {
+    for (size_t i = 640; i < 650; i++) {
+        DoSendHugePayloadsNum(i, 512 + (RandomNumber<ui16>(4096) * 4));
+    }
+}
 
 INSTANTIATE_TEST_SUITE_P(
     XdcRdmaTest,

@@ -1450,7 +1450,7 @@ public:
     }
 
     bool CheckScriptExecutionState() {
-        if (!QueryState->SaveQueryPhysicalGraph) {
+        if (!QueryState || !QueryState->SaveQueryPhysicalGraph) {
             return true;
         }
 
@@ -1876,7 +1876,10 @@ public:
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
             QueryState->StatementResultSize = GetResultsCount(request);
-            allowSaveState = !isRollback && QueryState->CurrentTx + 1 == QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize();
+
+            if (const auto& preparedQuery = QueryState->PreparedQuery) {
+                allowSaveState = !isRollback && QueryState->CurrentTx + 1 == preparedQuery->GetPhysicalQuery().TransactionsSize();
+            }
         }
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;

@@ -66,6 +66,7 @@ public:
 
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
     NCommon::TConfSetting<bool, Static> UseDqHashAggregate;
+    NCommon::TConfSetting<bool, Static> DqHashOperatorsUseBlocks;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
@@ -207,6 +208,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableOlapPushdownAggregate() const;
     bool GetUseDqHashCombine() const;
     bool GetUseDqHashAggregate() const;
+    bool GetDqHashOperatorsUseBlocks() const;
 };
 
 }

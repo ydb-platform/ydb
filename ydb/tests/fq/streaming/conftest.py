@@ -33,7 +33,6 @@ def kikimr(request):
         )
 
         config.yaml_config["log_config"]["default_level"] = 8
-        config.yaml_config["domains_config"]["security_config"]["enforce_user_token_requirement"] = True
 
         return config
 

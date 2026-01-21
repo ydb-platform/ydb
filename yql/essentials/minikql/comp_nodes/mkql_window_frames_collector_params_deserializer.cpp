@@ -48,7 +48,7 @@ TNumberAndDirection<T> DeserializeNumberAndDirection(const TRuntimeNode& node) {
     auto structLit = AS_VALUE(TStructLiteral, node);
 
     EDirection direction;
-    MKQL_ENSURE(TryFromString(GetString(GetMember(structLit, KeyDirection)), direction), "Unknown direction");
+    MKQL_ENSURE(NYql::NWindow::TryParseDirectionFromString(GetString(GetMember(structLit, KeyDirection)), direction), "Unknown direction");
 
     auto variantLit = AS_VALUE(TVariantLiteral, GetMember(structLit, KeyNumber));
     auto alternatives = AS_TYPE(TStructType, variantLit->GetType()->GetUnderlyingType());
@@ -132,7 +132,7 @@ TDataType* ExtractTypeFromWindowFrame(TType* type) {
 ESortOrder DeserializeSortOrder(const TRuntimeNode& node) {
     auto structLit = AS_VALUE(TStructLiteral, node);
     ESortOrder sortOrder;
-    MKQL_ENSURE(TryFromString(GetString(GetMember(structLit, KeySortOrder)), sortOrder), "Unknown sort order");
+    MKQL_ENSURE(TryParseSortOrderFromString(GetString(GetMember(structLit, KeySortOrder)), sortOrder), "Unknown sort order");
     return sortOrder;
 }
 

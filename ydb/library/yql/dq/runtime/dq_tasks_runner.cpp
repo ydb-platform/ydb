@@ -1092,6 +1092,7 @@ private:
         if (isWide) {
             wideBuffer.resize(AllocatedHolder->OutputWideType->GetElementsCount());
         }
+        bool dataConsumed = false;
         while (AllocatedHolder->Output->GetFillLevel() == NoLimit) {
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus = NUdf::EFetchStatus::Finish;
@@ -1110,6 +1111,7 @@ private:
                     } else {
                         AllocatedHolder->Output->Consume(std::move(value));
                     }
+                    dataConsumed = true;
                     break;
                 }
                 case NUdf::EFetchStatus::Finish: {
@@ -1134,15 +1136,22 @@ private:
                         NDqProto::TWatermark watermarkRequest;
                         watermarkRequest.SetTimestampUs(watermark->MicroSeconds());
                         AllocatedHolder->Output->Consume(std::move(watermarkRequest));
+                        dataConsumed = true;
                     }
                     if (LangVer >= MakeLangVersion(2025, 4)) {
                         AllocatedHolder->CheckForNotConsumedLinear();
+                    }
+                    if (dataConsumed) {
+                        AllocatedHolder->Output->Flush();
                     }
                     return ERunStatus::PendingInput;
                 }
             }
         }
 
+        if (dataConsumed) {
+            AllocatedHolder->Output->Flush();
+        }
         return ERunStatus::PendingOutput;
     }
 

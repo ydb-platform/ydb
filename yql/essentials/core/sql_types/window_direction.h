@@ -32,7 +32,7 @@ inline TString DirectionToString(EDirection direction) {
     }
 }
 
-inline bool TryFromString(const TStringBuf& str, EDirection& direction) {
+inline bool TryParseDirectionFromString(const TStringBuf& str, EDirection& direction) {
     if (str == "Preceding") {
         direction = EDirection::Preceding;
         return true;
@@ -44,9 +44,3 @@ inline bool TryFromString(const TStringBuf& str, EDirection& direction) {
 }
 
 } // namespace NYql::NWindow
-
-// Specialization for TryFromString support
-template <>
-inline bool TryFromStringImpl<NYql::NWindow::EDirection>(const char* data, size_t len, NYql::NWindow::EDirection& result) {
-    return NYql::NWindow::TryFromString(TStringBuf(data, len), result);
-}

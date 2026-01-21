@@ -202,10 +202,15 @@ public:
 
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
-                PE_LOG_I("Partition " << partInfo->PartitionIndex << " completed successfully");
-                partInfo->RetryDelayMs = Settings.StartRetryDelayMs;
-                partInfo->LimitSize = std::min(partInfo->LimitSize * 2, Settings.MaxBatchSize);
-                return OnSuccessResponse(partInfo, ev->Get());
+                try {
+                    PE_LOG_I("Partition " << partInfo->PartitionIndex << " completed successfully");
+                    partInfo->RetryDelayMs = Settings.StartRetryDelayMs;
+                    partInfo->LimitSize = std::min(partInfo->LimitSize * 2, Settings.MaxBatchSize);
+                    return OnSuccessResponse(partInfo, ev->Get());
+                } catch (...) {
+                    ForgetPartition(partInfo);
+                    throw;
+                }
             case Ydb::StatusIds::STATUS_CODE_UNSPECIFIED:
             case Ydb::StatusIds::ABORTED:
             case Ydb::StatusIds::UNAVAILABLE:
@@ -258,6 +263,7 @@ public:
 
         switch (msg.StatusCode) {
             case NYql::NDqProto::StatusIds::SUCCESS:
+                ForgetPartition(partInfo);
                 YQL_ENSURE(false, "KqpBufferWriteActor should not return success by TEvKqpBuffer::TEvError");
                 break;
             case NYql::NDqProto::StatusIds::UNSPECIFIED:
@@ -321,7 +327,7 @@ public:
         auto it = BufferToPartition.find(ev->Sender);
         if (it == BufferToPartition.end()) {
             PE_LOG_D("Got TEvError in AbortState from unknown buffer with actorId = " << ev->Sender << ", status = "
-            << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << ", ignore");
+                << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << ", ignore");
             return;
         }
 
@@ -671,7 +677,9 @@ private:
                 for (auto keyId : KeyIds) {
                     auto it = std::find(rowColumnIds.begin(), rowColumnIds.end(), keyId);
                     if (it != rowColumnIds.end()) {
-                        newKey.emplace_back(key.GetCells()[it - rowColumnIds.begin()]);
+                        const auto pos = static_cast<size_t>(it - rowColumnIds.begin());
+                        YQL_ENSURE(pos < key.GetCells().size(), "Column with keyId = " << keyId << " not found in the key row");
+                        newKey.emplace_back(key.GetCells()[pos]);
                     } else {
                         YQL_ENSURE(false, "KeyId " << keyId << " not found in readKeyIds");
                     }
@@ -680,6 +688,8 @@ private:
                 return TSerializedCellVec(std::move(newKey));
             });
         }
+
+        YQL_ENSURE(!rowColumnIds.empty() || rows.empty(), "No column ids for key extraction");
 
         TSerializedCellVec result;
 

@@ -42,4 +42,3 @@ CREATE SECRET secret_name WITH (value = "secret_value", inherit_permissions = Tr
 
 * [ALTER SECRET](alter-secret.md)
 * [DROP SECRET](drop-secret.md)
-* [{#T}](../../../concepts/datamodel/secrets.md)

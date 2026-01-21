@@ -29,4 +29,3 @@ ALTER SECRET secret_name WITH (value = "secret_value_new");
 
 * [CREATE SECRET](create-secret.md)
 * [DROP SECRET](drop-secret.md)
-* [{#T}](../../../concepts/datamodel/secrets.md)

@@ -26,4 +26,3 @@ DROP SECRET secret_name;
 
 * [CREATE SECRET](create-secret.md)
 * [ALTER SECRET](alter-secret.md)
-* [{#T}](../../../concepts/datamodel/secrets.md)

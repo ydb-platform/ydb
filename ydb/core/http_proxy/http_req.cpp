@@ -1184,7 +1184,7 @@ namespace NKikimr::NHttpProxy {
                                  {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
                                  {"name", "api.sqs.response.count"},
                              })});
-                ReplyToHttpContext(ctx, issueCode);
+                ReplyToHttpContext(ctx, 0, issueCode);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
@@ -1209,14 +1209,14 @@ namespace NKikimr::NHttpProxy {
                                  {"code", ToString(httpStatusCode)},
                                  {"name", "api.sqs.response.count"},
                              })});
-                ReplyToHttpContext(ctx, errorText.size());
+                ReplyToHttpContext(ctx, errorText.size(), std::nullopt);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
                 TBase::Die(ctx);
             }
 
-            void ReplyToHttpContext(const TActorContext& ctx, size_t messageSize = 0, std::optional<size_t> issueCode = std::nullopt) {
+            void ReplyToHttpContext(const TActorContext& ctx, size_t messageSize, std::optional<size_t> issueCode) {
                 ReportLatencyCounters(ctx);
                 ReportResponseSizeCounters(TStringBuilder() << HttpContext.ResponseData.YmqHttpCode, messageSize, ctx);
                 LogHttpRequestResponse(ctx);
@@ -1279,7 +1279,7 @@ namespace NKikimr::NHttpProxy {
                                  AddCommonLabels({
                                      {"code", "200"},
                                      {"name", "api.sqs.response.count"}})});
-                    ReplyToHttpContext(ctx, ev->Get()->Message->ByteSizeLong());
+                    ReplyToHttpContext(ctx, ev->Get()->Message->ByteSizeLong(), std::nullopt);
                 } else {
                     auto retryClass =
                         NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());

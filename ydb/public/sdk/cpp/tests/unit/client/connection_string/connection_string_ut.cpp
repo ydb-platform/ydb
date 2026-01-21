@@ -1,6 +1,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
+#define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/common/parser.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
 #include <gtest/gtest.h>
 

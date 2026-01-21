@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(TBsOther1) {
 
     Y_UNIT_TEST(PoisonPill) {
         TManyPutRangeGet2Channels test(false, true, LARGE_MSG_NUM, 100, UNK);
-        TConfiguration Conf;
+        TConfiguration Conf = CreateErasureNone();
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
         bool success = Conf.Run<TManyPutRangeGet2Channels>(&test, TDuration::Minutes(100));
@@ -608,7 +608,7 @@ Y_UNIT_TEST_SUITE(TBsOther1) {
     void ChaoticParallelWriteGeneric(ui32 parallel, ui32 msgNum, ui32 msgSize,
                                      std::shared_ptr<IPutHandleClassGenerator> cls,
                                      TDuration workingTime, TDuration requestTimeout) {
-        TConfiguration Conf;
+        TConfiguration Conf = CreateErasureNone();
         TSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
 
@@ -659,7 +659,7 @@ Y_UNIT_TEST_SUITE(TBsDbStat) {
         const TDuration workingTime = TDuration::Seconds(600);
         const TDuration requestTimeout = TDuration();
 
-        TConfiguration Conf;
+        TConfiguration Conf = CreateErasureNone();
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
 
@@ -897,7 +897,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
     }
 
     Y_UNIT_TEST(SyncLogTest) {
-        TConfiguration Conf;
+        TConfiguration Conf = CreateErasureNone();
         TNoVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
         TSyncLogTestWrite test;

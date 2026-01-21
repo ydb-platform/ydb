@@ -1,3 +1,4 @@
+#define INCLUDE_YDB_INTERNAL_H
 #include "parser.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
@@ -10,9 +11,15 @@
 
 namespace NYdb::inline Dev {
 
+namespace {
+    void ThrowContractViolation(const std::string& connectionString, const std::string& message) {
+        ythrow TContractViolation("Failed to parse connection string: \"" + connectionString + "\", error: " + message + "\n");
+    }
+}
+
 TConnectionInfo ParseConnectionString(const std::string& connectionString) {
     if (connectionString.empty()) {
-        ythrow TContractViolation("Empty connection string ");
+        ThrowContractViolation(connectionString, "empty connection string");
     }
 
     std::string connectionStringWithScheme = connectionString;
@@ -34,14 +41,12 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
     );
 
     if (parseStatus != NUri::TUri::TState::EParsed::ParsedOK) {
-        ythrow TContractViolation(TStringBuilder() 
-            << "Failed to parse connection string: " 
-            << NUri::ParsedStateToString(parseStatus) << " ");
+        ThrowContractViolation(connectionString, "failure during URI parsing with status: " + std::string(NUri::ParsedStateToString(parseStatus)));
     }
 
     std::string_view host = uri.GetHost();
     if (host.empty()) {
-        ythrow TContractViolation("Connection string must contain a host ");
+        ThrowContractViolation(connectionString, "connection string must contain a host");
     }
 
     // Validate and extract scheme
@@ -51,7 +56,7 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
     } else if (scheme == "grpcs") {
         connectionInfo.EnableSsl = true;
     } else {
-        ythrow TContractViolation("Invalid scheme in connection string: only 'grpc' and 'grpcs' are allowed ");
+        ThrowContractViolation(connectionString, "invalid scheme in connection string: only 'grpc' and 'grpcs' are allowed");
     }
 
     std::uint16_t port = uri.GetPort();
@@ -76,7 +81,7 @@ TConnectionInfo ParseConnectionString(const std::string& connectionString) {
 
     if (!path.empty() && path != "/") {
         if (hasQueryDatabase) {
-            ythrow TContractViolation("Database cannot be specified in both path and query parameter ");
+            ThrowContractViolation(connectionString, "database cannot be specified in both path and query parameter");
         }
         connectionInfo.Database = path;
     }

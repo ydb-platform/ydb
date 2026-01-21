@@ -61,6 +61,7 @@ class TestCreateWithColumnCompression(TestCompressionBase):
         super(TestCreateWithColumnCompression, cls).setup_class()
         cls.single_upsert_rows_count = 1000
         cls.upsert_count = 10
+        cls.volumes_without_compression = {}
         cls.test_name = "all_supported_compression"
         cls.test_dir = f"{cls.ydb_client.database}/{cls.class_name}/{cls.test_name}"
 

@@ -121,30 +121,26 @@ public:
         PE_LOG_D("Got TEvResolveKeySetResult from actorId = " << ev->Sender);
 
         if (request->ErrorCount > 0) {
-            AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+            return AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
                 << "KqpPartitionedExecuterActor could not resolve a partitioning of the table, errorCount = "
                 << request->ErrorCount << ", state = " << CurrentStateFuncName())}));
-            return;
         }
 
         if (request->ResultSet.size() != 1) {
-            AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+            return AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
                 << "KqpPartitionedExecuterActor could not resolve a partitioning of the table, resultSet is empty, state = " << CurrentStateFuncName())}));
-            return;
         }
 
         const auto& result = request->ResultSet[0].KeyDescription;
         if (!result || !result->Partitioning) {
-            AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+            return AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
                 << "KqpPartitionedExecuterActor could not resolve a partitioning of the table, partitioning is null, state = " << CurrentStateFuncName())}));
-            return;
         }
 
         if (result->Partitioning->empty()) {
-            AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
+            return AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
                 << "KqpPartitionedExecuterActor could not resolve a partitioning of the table, partitioning is empty for tableId = "
                 << result->TableId << ", state = " << CurrentStateFuncName())}));
-            return;
         }
 
         TablePartitioning = result->Partitioning;
@@ -188,7 +184,7 @@ public:
         if (it == ExecuterToPartition.end()) {
             PE_LOG_D("Got TEvTxResponse from unknown actor with actorId = " << ev->Sender
                 << ", status = " << response->GetStatus() << ", ignore");
-            return;
+            return TryFinishExecution();
         }
 
         auto [_, partInfo] = *it;
@@ -248,7 +244,7 @@ public:
         if (it == BufferToPartition.end()) {
             PE_LOG_D("Got TEvError from unknown buffer with actorId = " << ev->Sender << ", status = "
                 << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << ", ignore");
-            return;
+            return TryFinishExecution();
         }
 
         auto [_, partInfo] = *it;
@@ -328,7 +324,7 @@ public:
         if (it == BufferToPartition.end()) {
             PE_LOG_D("Got TEvError in AbortState from unknown buffer with actorId = " << ev->Sender << ", status = "
                 << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << ", ignore");
-            return;
+            return TryFinishExecution();
         }
 
         auto [_, partInfo] = *it;
@@ -572,10 +568,9 @@ private:
             if (!IsKeyInPartition(minKey.GetCells(), partInfo)) {
                 PE_LOG_E("Partition " << partInfo->PartitionIndex << " returned key outside its range");
                 ForgetPartition(partInfo);
-                AbortWithError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(TStringBuilder()
+                return AbortWithError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(TStringBuilder()
                     << "The next key from KqpReadActor does not belong to the partition with partitionIndex = "
-                    << partInfo->PartitionIndex)}));
-                return;
+                    << partInfo->PartitionIndex)}));;
             }
 
             PE_LOG_D("Partition " << partInfo->PartitionIndex << " has more data, continue processing");
@@ -625,8 +620,7 @@ private:
             auto issues = NYql::TIssues({
                 NYql::TIssue(TStringBuilder() << "Cannot retry query execution because the maximum retry delay has been reached"),
             });
-            AbortWithError(Ydb::StatusIds::UNAVAILABLE, issues);
-            return;
+            return AbortWithError(Ydb::StatusIds::UNAVAILABLE, issues);
         }
 
         const auto decJitterDelay = RandomProvider->Uniform(Settings.StartRetryDelayMs, partInfo->RetryDelayMs * 3ul);

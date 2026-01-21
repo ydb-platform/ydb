@@ -203,6 +203,13 @@
 
   {% endcut %}
 
+  ```csharp
+  using Ydb.Sdk.Services.Query;
+
+  // ImplicitTx - single query without explicit transaction
+  var response = await queryClient.Exec("SELECT 1");
+  ```
+
 - Js/Ts
 
   ```typescript
@@ -451,6 +458,7 @@
   ```csharp
   using Ydb.Sdk.Ado;
 
+  // Режим Serializable используется по умолчанию
   await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
       {
           var ydbCommand = ydbConnection.CreateCommand();
@@ -477,6 +485,7 @@
   ```csharp
   var strategy = db.Database.CreateExecutionStrategy();
 
+  // Entity Framework использует режим Serializable по умолчанию
   strategy.ExecuteInTransaction(
       db,
       ctx =>
@@ -493,10 +502,7 @@
           foreach (var user in users)
               Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
       },
-      ctx =>
-          // verifySucceeded: проверка “успела ли операция закоммититься”
-          // (нужно на случай, если ошибка случилась ПОСЛЕ коммита, и EF решит повторить)
-          ctx.Users.Any(u => u.Email == "alex@example.com")
+      ctx => ctx.Users.Any(u => u.Email == "alex@example.com")
           && ctx.Users.Any(u => u.Email == "kirill@example.com")
     );
   ```
@@ -509,7 +515,7 @@
   using LinqToDB;
   using LinqToDB.Data;
 
-  // linq2db uses Serializable isolation by default
+  // linq2db использует режим Serializable по умолчанию
   using var db = new DataConnection(
       new DataOptions().UseConnectionString(
           "YDB",
@@ -532,6 +538,13 @@
   ```
 
   {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Services.Query;
+  
+  // Режим Serializable Read-Write используется по умолчанию
+  var response = await queryClient.Exec("SELECT 1");
+  ```
 
 - Js/Ts
 
@@ -694,15 +707,39 @@
 
 - C# (.NET)
 
+  {% cut "ADO.NET" %}
+
   ```csharp
   using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
 
   await using var connection = await dataSource.OpenConnectionAsync();
   await using var transaction = await connection.BeginTransactionAsync(TransactionMode.OnlineRo);
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
   await using var reader = await command.ExecuteReaderAsync();
   await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  Entity Framework не поддерживает режим OnlineRo напрямую.
+  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  linq2db не поддерживает режим OnlineRo напрямую.
+  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.OnlineRo);
   ```
 
 - Js/Ts
@@ -832,6 +869,8 @@
 
 - C# (.NET)
 
+  {% cut "ADO.NET" %}
+
   ```csharp
   using Ydb.Sdk.Ado;
   using Ydb.Sdk.Services.Query;
@@ -841,6 +880,29 @@
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
   await using var reader = await command.ExecuteReaderAsync();
   await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  Entity Framework не поддерживает режим StaleRo напрямую.
+  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  linq2db не поддерживает режим StaleRo напрямую.
+  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.StaleRo);
   ```
 
 - Js/Ts
@@ -1057,29 +1119,39 @@
 
 - C# (.NET)
 
-  {% cut "ydb-dotnet-sdk" %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows(
-      "SELECT 1",
-      txMode: TxMode.SnapshotRo
-  );
-  ```
-
-  {% endcut %}
-
-- C# (.NET)
+  {% cut "ADO.NET" %}
 
   ```csharp
   using Ydb.Sdk.Ado;
 
   await using var connection = await dataSource.OpenConnectionAsync();
   await using var transaction = await connection.BeginTransactionAsync(TransactionMode.SnapshotRo);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
   await using var reader = await command.ExecuteReaderAsync();
   await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  Entity Framework не поддерживает режим Snapshot Read-Only напрямую.
+  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  linq2db не поддерживает режим Snapshot Read-Only напрямую.
+  Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRo);
   ```
 
 - Js/Ts
@@ -1320,6 +1392,13 @@
   ```
 
   {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRw);
+  ```
 
 - Js/Ts
 

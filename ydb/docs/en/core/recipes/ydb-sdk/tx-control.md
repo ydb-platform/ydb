@@ -169,6 +169,8 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   using Ydb.Sdk.Ado;
 
   await using var connection = await dataSource.OpenRetryableConnectionAsync();
+  
+  // Execute without explicit transaction (auto-commit)
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
   await command.ExecuteNonQueryAsync();
   ```
@@ -181,6 +183,8 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   using Microsoft.EntityFrameworkCore;
 
   await using var context = await dbContextFactory.CreateDbContextAsync();
+  
+  // Entity Framework auto-commit mode (no explicit transaction)
   var result = await context.SomeEntities.FirstOrDefaultAsync();
   ```
 
@@ -198,11 +202,20 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
           "Host=localhost;Port=2136;Database=/local;UseTls=false"
       )
   );
+  
+  // linq2db auto-commit mode (no explicit transaction)
   var result = db.GetTable<Employee>().FirstOrDefault(e => e.Id == 1);
   ```
 
   {% endcut %}
 
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  // ImplicitTx - single query without explicit transaction
+  var response = await queryClient.Exec("SELECT 1");
+  ```
 
 - Js/Ts
 
@@ -447,6 +460,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```csharp
   using Ydb.Sdk.Ado;
 
+  // Serializable Read-Write mode is used by default
   await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
       {
           var ydbCommand = ydbConnection.CreateCommand();
@@ -473,6 +487,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```csharp
   var strategy = db.Database.CreateExecutionStrategy();
 
+  // Serializable Read-Write mode is used by default
   strategy.ExecuteInTransaction(
       db,
       ctx =>
@@ -489,12 +504,9 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
           foreach (var user in users)
               Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
       },
-      ctx =>
-          // verifySucceeded: проверка “успела ли операция закоммититься”
-          // (нужно на случай, если ошибка случилась ПОСЛЕ коммита, и EF решит повторить)
-          ctx.Users.Any(u => u.Email == "alex@example.com")
+      ctx => ctx.Users.Any(u => u.Email == "alex@example.com")
           && ctx.Users.Any(u => u.Email == "kirill@example.com")
-    );
+  );
   ```
 
   {% endcut %}
@@ -513,6 +525,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       )
   );
 
+  // Serializable Read-Write mode is used by default
   await using var tr = await db.BeginTransactionAsync();
 
   await db.InsertAsync(new Episode
@@ -528,6 +541,13 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
   {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Services.Query;
+  
+  // Serializable Read-Write mode is used by default
+  var response = await queryClient.Exec("SELECT 1");
+  ```
 
 - Js/Ts
 
@@ -692,6 +712,8 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - C# (.NET)
 
+  {% cut "ADO.NET" %}
+
   ```csharp
   using Ydb.Sdk.Ado;
 
@@ -700,6 +722,29 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
   await using var reader = await command.ExecuteReaderAsync();
   await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  Entity Framework does not expose Snapshot Read-Only mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  linq2db does not expose Snapshot Read-Only mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+  
+  {% endcut %}
+
+ ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.OnlineRo);
   ```
 
 - Js/Ts
@@ -829,6 +874,8 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - C# (.NET)
 
+  {% cut "ADO.NET" %}
+
   ```csharp
   using Ydb.Sdk.Ado;
 
@@ -837,6 +884,29 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
   await using var reader = await command.ExecuteReaderAsync();
   await transaction.CommitAsync();
+  ```
+  
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  Entity Framework does not expose StaleRo mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  linq2db does not expose StaleRo mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+
+  {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.StaleRo);
   ```
 
 - Js/Ts
@@ -1045,14 +1115,39 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - C# (.NET)
 
+  {% cut "ADO.NET" %}
+
   ```csharp
   using Ydb.Sdk.Ado;
 
   await using var connection = await dataSource.OpenConnectionAsync();
   await using var transaction = await connection.BeginTransactionAsync(TransactionMode.SnapshotRo);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
   await using var reader = await command.ExecuteReaderAsync();
   await transaction.CommitAsync();
+  ```
+
+  {% endcut %}
+
+  {% cut "Entity Framework" %}
+
+  Entity Framework does not expose SnapshotRo mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+
+  {% endcut %}
+
+  {% cut "linq2db" %}
+
+  linq2db does not expose SnapshotRo mode directly.
+  Use ydb-dotnet-sdk or ADO.NET for this isolation level.
+
+  {% endcut %}
+
+ ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRo);
   ```
 
 - Js/Ts
@@ -1304,6 +1399,13 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
   {% endcut %}
+
+  ```csharp
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Services.Query;
+
+  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRw);
+  ```
 
 - Js/Ts
 

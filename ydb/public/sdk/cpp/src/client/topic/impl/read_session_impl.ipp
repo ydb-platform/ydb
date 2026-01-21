@@ -48,7 +48,7 @@ TLog TPartitionStreamImpl<UseMigrationProtocol>::GetLog() const {
 }
 
 template<bool UseMigrationProtocol>
-void TPartitionStreamImpl<UseMigrationProtocol>::Commit(ui64 startOffset, ui64 endOffset) {
+void TPartitionStreamImpl<UseMigrationProtocol>::Commit(uint64_t startOffset, uint64_t endOffset) {
     std::vector<std::pair<ui64, ui64>> toCommit;
     if (auto sessionShared = CbContext->LockShared()) {
         Y_ABORT_UNLESS(endOffset > startOffset);
@@ -78,7 +78,7 @@ void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
 }
 
 template<bool UseMigrationProtocol>
-void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) {
+void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) {
     if (auto sessionShared = CbContext->LockShared()) {
         if (commitOffset.has_value()) {
             SetFirstNotReadOffset(commitOffset.value());
@@ -95,7 +95,7 @@ void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmDestroy() {
 }
 
 template<bool UseMigrationProtocol>
-void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmEnd(const std::vector<ui32>& childIds) {
+void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmEnd(std::span<const uint32_t> childIds) {
     if (auto sessionShared = CbContext->LockShared()) {
         sessionShared->ConfirmPartitionStreamEnd(this, childIds);
     }
@@ -2137,8 +2137,8 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::AllParentSessionsHasBe
     return true;
 }
 
-template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds) {
+template <>
+inline void TSingleClusterReadSessionImpl<false>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<false>* partitionStream, std::span<const ui32> childIds) {
     {
         std::lock_guard guard(HierarchyDataLock);
         ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
@@ -2151,6 +2151,12 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
             }
         }
     }
+}
+
+template <>
+inline void TSingleClusterReadSessionImpl<true>::ConfirmPartitionStreamEnd(TPartitionStreamImpl<true>* partitionStream, std::span<const ui32> childIds) {
+    Y_UNUSED(partitionStream, childIds);
+    Y_ABORT("Not implemented");
 }
 
 template <bool UseMigrationProtocol>

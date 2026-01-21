@@ -168,8 +168,7 @@
   ```csharp
   using Ydb.Sdk.Ado;
 
-  await using var connection = await dataSource.OpenConnectionAsync();
-  // Выполнение без явной транзакции (авто-коммит)
+  await using var connection = await dataSource.OpenRetryableConnectionAsync();
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
   await command.ExecuteNonQueryAsync();
   ```
@@ -181,7 +180,6 @@
   ```csharp
   using Microsoft.EntityFrameworkCore;
 
-  // Режим авто-коммита Entity Framework (без явной транзакции)
   await using var context = await dbContextFactory.CreateDbContextAsync();
   var result = await context.SomeEntities.FirstOrDefaultAsync();
   ```
@@ -194,28 +192,16 @@
   using LinqToDB;
   using LinqToDB.Data;
 
-  // Режим авто-коммита linq2db (без явной транзакции)
   using var db = new DataConnection(
       new DataOptions().UseConnectionString(
           "YDB",
           "Host=localhost;Port=2136;Database=/local;UseTls=false"
       )
   );
-
   var result = db.GetTable<Employee>().FirstOrDefault(e => e.Id == 1);
   ```
 
   {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  // ImplicitTx - один запрос без явной транзакции
-  var response = await queryClient.Exec(
-      "SELECT 1",
-      txMode: TxMode.None
-  );
-  ```
 
 - Js/Ts
 
@@ -460,29 +446,28 @@
 
 - C# (.NET)
 
-  {% cut "ydb-dotnet-sdk" %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  // Режим Serializable Read-Write используется по умолчанию
-  var response = await queryClient.Exec("SELECT 1");
-  ```
-
-  {% endcut %}
-
   {% cut "ADO.NET" %}
 
   ```csharp
   using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
 
-  await using var connection = await dataSource.OpenConnectionAsync();
-  // Режим Serializable используется по умолчанию
-  await using var transaction = await connection.BeginTransactionAsync(TxMode.SerializableRw);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
-  await command.ExecuteNonQueryAsync();
-  await transaction.CommitAsync();
+  await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
+      {
+          var ydbCommand = ydbConnection.CreateCommand();
+          ydbCommand.CommandText = """
+                                   UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
+                                   VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
+                                   """;
+          await ydbCommand.ExecuteNonQueryAsync();
+          ydbCommand.CommandText = """
+                                   INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
+                                   VALUES
+                                       (2, 5, 21, "Test 21", Date("2018-08-27")),
+                                       (2, 5, 22, "Test 22", Date("2018-08-27"))
+                                   """;
+          await ydbCommand.ExecuteNonQueryAsync();
+      }
+  );
   ```
 
   {% endcut %}
@@ -490,13 +475,30 @@
   {% cut "Entity Framework" %}
 
   ```csharp
-  using Microsoft.EntityFrameworkCore;
+  var strategy = db.Database.CreateExecutionStrategy();
 
-  // Entity Framework использует режим Serializable по умолчанию
-  await using var context = await dbContextFactory.CreateDbContextAsync();
-  await using var transaction = await context.Database.BeginTransactionAsync();
-  var result = await context.SomeEntities.FirstOrDefaultAsync();
-  await transaction.CommitAsync();
+  strategy.ExecuteInTransaction(
+      db,
+      ctx =>
+      {
+          ctx.Users.AddRange(
+              new User { Name = "Alex", Email = "alex@example.com" },
+              new User { Name = "Kirill", Email = "kirill@example.com" }
+          );
+
+          ctx.SaveChanges();
+
+          var users = ctx.Users.OrderBy(u => u.Id).ToList();
+          Console.WriteLine("Users in database:");
+          foreach (var user in users)
+              Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
+      },
+      ctx =>
+          // verifySucceeded: проверка “успела ли операция закоммититься”
+          // (нужно на случай, если ошибка случилась ПОСЛЕ коммита, и EF решит повторить)
+          ctx.Users.Any(u => u.Email == "alex@example.com")
+          && ctx.Users.Any(u => u.Email == "kirill@example.com")
+    );
   ```
 
   {% endcut %}
@@ -507,7 +509,7 @@
   using LinqToDB;
   using LinqToDB.Data;
 
-  // linq2db использует режим Serializable по умолчанию
+  // linq2db uses Serializable isolation by default
   using var db = new DataConnection(
       new DataOptions().UseConnectionString(
           "YDB",
@@ -515,8 +517,18 @@
       )
   );
 
-  // Выполнение запроса (транзакции управляются автоматически)
-  var result = db.GetTable<Employee>().FirstOrDefault(e => e.Id == 1);
+  await using var tr = await db.BeginTransactionAsync();
+
+  await db.InsertAsync(new Episode
+  {
+      SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
+  });
+  await db.InsertAsync(new Episode
+      { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
+  await db.InsertAsync(new Episode
+      { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
+
+  await tr.CommitAsync();
   ```
 
   {% endcut %}
@@ -682,28 +694,15 @@
 
 - C# (.NET)
 
-  {% cut "ADO.NET" %}
-
   ```csharp
   using Ydb.Sdk.Ado;
   using Ydb.Sdk.Services.Query;
 
   await using var connection = await dataSource.OpenConnectionAsync();
-  await using var transaction = await connection.BeginTransactionAsync(TxMode.OnlineRo);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.OnlineRo);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
   await using var reader = await command.ExecuteReaderAsync();
   await transaction.CommitAsync();
-  ```
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows(
-      "SELECT 1",
-      txMode: TxMode.OnlineRo
-  );
   ```
 
 - Js/Ts
@@ -833,28 +832,15 @@
 
 - C# (.NET)
 
-  {% cut "ADO.NET" %}
-
   ```csharp
   using Ydb.Sdk.Ado;
   using Ydb.Sdk.Services.Query;
 
   await using var connection = await dataSource.OpenConnectionAsync();
-  await using var transaction = await connection.BeginTransactionAsync(TxMode.StaleRo);
+  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.StaleRo);
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
   await using var reader = await command.ExecuteReaderAsync();
   await transaction.CommitAsync();
-  ```
-
-  {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows(
-      "SELECT 1",
-      txMode: TxMode.StaleRo
-  );
   ```
 
 - Js/Ts
@@ -1084,32 +1070,17 @@
 
   {% endcut %}
 
-  {% cut "ADO.NET" %}
+- C# (.NET)
 
   ```csharp
   using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
 
   await using var connection = await dataSource.OpenConnectionAsync();
-  await using var transaction = await connection.BeginTransactionAsync(TxMode.SnapshotRo);
+  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.SnapshotRo);
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
   await using var reader = await command.ExecuteReaderAsync();
   await transaction.CommitAsync();
   ```
-
-  {% endcut %}
-
-  {% cut "linq2db" %}
-
-  ```csharp
-  using LinqToDB;
-  using LinqToDB.Data;
-
-  // linq2db не поддерживает режим Snapshot Read-Only напрямую.
-  // Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
-  ```
-
-  {% endcut %}
 
 - Js/Ts
 
@@ -1283,14 +1254,49 @@
   {% cut "ADO.NET" %}
 
   ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
+  await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
+      {
+          var ydbCommand = ydbConnection.CreateCommand();
+          ydbCommand.CommandText = """
+                                   UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date)
+                                   VALUES (2, 5, 13, "Test Episode", Date("2018-08-27"))
+                                   """;
+          await ydbCommand.ExecuteNonQueryAsync();
+          ydbCommand.CommandText = """
+                                   INSERT INTO episodes(series_id, season_id, episode_id, title, air_date)
+                                   VALUES
+                                       (2, 5, 21, "Test 21", Date("2018-08-27")),
+                                       (2, 5, 22, "Test 22", Date("2018-08-27"))
+                                   """;
+          await ydbCommand.ExecuteNonQueryAsync();
+      }, TransactionMode.SnapshotRw
+  );
+  ```
+  {% endcut %}
 
-  await using var connection = await dataSource.OpenConnectionAsync();
-  await using var transaction = await connection.BeginTransactionAsync(TxMode.SnapshotRw);
-  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
-  await command.ExecuteNonQueryAsync();
-  await transaction.CommitAsync();
+  {% cut "EF" %}
+
+  ```csharp
+  var strategy = db.Database.CreateExecutionStrategy();
+
+  strategy.Execute(() =>
+      {
+          using var ctx = new AppDbContext(options);
+          using var tr = ctx.Database.BeginTransaction(IsolationLevel.Snapshot);
+
+          ctx.Users.AddRange(
+              new User { Name = "Alex", Email = "alex@example.com" },
+              new User { Name = "Kirill", Email = "kirill@example.com" }
+          );
+
+          ctx.SaveChanges();
+
+          var users = ctx.Users.OrderBy(u => u.Id).ToList();
+          Console.WriteLine("Users in database:");
+          foreach (var user in users)
+              Console.WriteLine($"- {user.Id}: {user.Name} ({user.Email})");
+        }
+  );
   ```
 
   {% endcut %}
@@ -1298,11 +1304,19 @@
   {% cut "linq2db" %}
 
   ```csharp
-  using LinqToDB;
-  using LinqToDB.Data;
-
-  // linq2db не поддерживает режим Snapshot Read-Write напрямую.
-  // Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
+  await using var db = new MyYdb(BuildOptions());
+  await using var tr = await db.BeginTransactionAsync(IsolationLevel.Snapshot);
+  
+  await db.InsertAsync(new Episode
+  {
+      SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
+  });
+  await db.InsertAsync(new Episode
+      { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
+  await db.InsertAsync(new Episode
+      { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
+    
+  await tr.CommitAsync();
   ```
 
   {% endcut %}

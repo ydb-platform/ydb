@@ -169,7 +169,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   using Ydb.Sdk.Ado;
 
   await using var connection = await dataSource.OpenRetryableConnectionAsync();
-  
+
   // Execute without explicit transaction (auto-commit)
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
   await command.ExecuteNonQueryAsync();
@@ -183,7 +183,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   using Microsoft.EntityFrameworkCore;
 
   await using var context = await dbContextFactory.CreateDbContextAsync();
-  
+
   // Entity Framework auto-commit mode (no explicit transaction)
   var result = await context.SomeEntities.FirstOrDefaultAsync();
   ```
@@ -202,7 +202,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
           "Host=localhost;Port=2136;Database=/local;UseTls=false"
       )
   );
-  
+
   // linq2db auto-commit mode (no explicit transaction)
   var result = db.GetTable<Employee>().FirstOrDefault(e => e.Id == 1);
   ```
@@ -479,7 +479,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       }
   );
   ```
-  
+
   {% endcut %}
 
   {% cut "Entity Framework" %}
@@ -544,7 +544,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   ```csharp
   using Ydb.Sdk.Services.Query;
-  
+
   // Serializable Read-Write mode is used by default
   var response = await queryClient.Exec("SELECT 1");
   ```
@@ -737,7 +737,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   linq2db does not expose Snapshot Read-Only mode directly.
   Use ydb-dotnet-sdk or ADO.NET for this isolation level.
-  
+
   {% endcut %}
 
   ```csharp
@@ -885,7 +885,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   await using var reader = await command.ExecuteReaderAsync();
   await transaction.CommitAsync();
   ```
-  
+
   {% endcut %}
 
   {% cut "Entity Framework" %}
@@ -1143,7 +1143,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   {% endcut %}
 
- ```csharp
+  ```csharp
   using Ydb.Sdk.Ado;
   using Ydb.Sdk.Services.Query;
 
@@ -1331,7 +1331,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - C# (.NET)
 
   {% cut "ADO.NET" %}
-  
+
   ```csharp
   await _ydbDataSource.ExecuteInTransactionAsync(async ydbConnection =>
       {
@@ -1379,13 +1379,13 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
   {% endcut %}
-  
+
   {% cut "linq2db" %}
 
   ```csharp
   await using var db = new MyYdb(BuildOptions());
   await using var tr = await db.BeginTransactionAsync(IsolationLevel.Snapshot);
-  
+
   await db.InsertAsync(new Episode
   {
       SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
@@ -1394,7 +1394,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
   await db.InsertAsync(new Episode
       { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
-    
+
   await tr.CommitAsync();
   ```
 

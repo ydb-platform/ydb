@@ -8,6 +8,7 @@ SPLIT_FACTOR(10)
 
 TEST_SRCS(
     test_rename_table.py
+    test_compression.py
 )
 
 SIZE(LARGE)

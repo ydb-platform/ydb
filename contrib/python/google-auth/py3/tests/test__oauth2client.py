@@ -16,8 +16,8 @@ import datetime
 import importlib
 import os
 import sys
+from unittest import mock
 
-import mock
 import pytest  # type: ignore
 
 try:
@@ -57,7 +57,7 @@ def test__convert_oauth2_credentials():
     assert new_credentials._client_id == old_credentials.client_id
     assert new_credentials._client_secret == old_credentials.client_secret
     assert new_credentials._token_uri == old_credentials.token_uri
-    assert new_credentials.scopes == old_credentials.scopes
+    assert set(new_credentials.scopes) == set(old_credentials.scopes)
 
 
 def test__convert_service_account_credentials():
@@ -116,7 +116,6 @@ def mock_oauth2client_gae_imports(mock_non_existent_module):
 def _test__convert_appengine_app_assertion_credentials(
     app_identity, mock_oauth2client_gae_imports
 ):
-
     # `oauth2client` requires `cgi` which was removed in Python 3.13
     # See https://github.com/googleapis/oauth2client/blob/50d20532a748f18e53f7d24ccbe6647132c979a9/oauth2client/contrib/appengine.py#L20
     # oauth2client is no longer being updated so this test must be skipped on newer Python Runtimes

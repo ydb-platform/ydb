@@ -223,6 +223,12 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
         }
     }
 
+    for (auto& info : infos) {
+        if (info) {
+            info->OnDestroyReadSession();
+        }
+    }
+
     deferred.DeferDestroyDecompressionInfos(std::move(infos));
 
     swap(ready, NotReady);

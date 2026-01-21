@@ -51,7 +51,7 @@
                                                         "Columns": "Key, Text, _yql_full_text_relevance",
                                                         "Index": "fulltext_relevance_idx",
                                                         "Inputs": [],
-                                                        "K1Factor": "expr",
+                                                        "K1Factor": "\"1.5\"",
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats dogs\"",
                                                         "QueryColumns": "Text",

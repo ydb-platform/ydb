@@ -1417,7 +1417,7 @@ private:
 
             if (settingsObj.BFactor) {
                 auto bFactor = TExprBase(settingsObj.BFactor);
-                auto just = bFactor.Cast<TCoJust>().Input();
+                auto just = bFactor.Maybe<TCoJust>() ? bFactor.Maybe<TCoJust>().Cast().Input() : bFactor;
                 if (just.Maybe<TCoParameter>()) {
                     fullTextProto.MutableBFactor()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
                 } else {
@@ -1427,7 +1427,7 @@ private:
 
             if (settingsObj.QueryMode) {
                 auto queryMode = TExprBase(settingsObj.QueryMode);
-                auto just = queryMode.Cast<TCoJust>().Input();
+                auto just = queryMode.Maybe<TCoJust>() ? queryMode.Maybe<TCoJust>().Cast().Input() : queryMode;
                 if (just.Maybe<TCoParameter>()) {
                     fullTextProto.MutableQueryMode()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
                 } else {
@@ -1437,7 +1437,7 @@ private:
 
             if (settingsObj.MinimumShouldMatch) {
                 auto minimumShouldMatch = TExprBase(settingsObj.MinimumShouldMatch);
-                auto just = minimumShouldMatch.Cast<TCoJust>().Input();
+                auto just = minimumShouldMatch.Maybe<TCoJust>() ? minimumShouldMatch.Maybe<TCoJust>().Cast().Input() : minimumShouldMatch;
                 if (just.Maybe<TCoParameter>()) {
                     fullTextProto.MutableMinimumShouldMatch()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
                 } else {
@@ -1447,7 +1447,7 @@ private:
 
             if (settingsObj.K1Factor) {
                 auto k1Factor = TExprBase(settingsObj.K1Factor);
-                auto just = k1Factor.Cast<TCoJust>().Input();
+                auto just = k1Factor.Maybe<TCoJust>() ? k1Factor.Maybe<TCoJust>().Cast().Input() : k1Factor;
                 if (just.Maybe<TCoParameter>()) {
                     fullTextProto.MutableK1Factor()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
                 } else {

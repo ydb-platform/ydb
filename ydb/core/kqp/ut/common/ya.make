@@ -21,7 +21,6 @@ PEERDIR(
     yql/essentials/udfs/common/re2
     yql/essentials/udfs/common/string
     yql/essentials/udfs/common/unicode_base
-    ydb/library/yql/udfs/common/fulltext
     yql/essentials/utils/backtrace
     ydb/public/lib/yson_value
     ydb/core/tx/columnshard/test_helper

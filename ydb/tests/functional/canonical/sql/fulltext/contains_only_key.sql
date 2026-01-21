@@ -1,4 +1,4 @@
 SELECT Key
 FROM FullTextTable VIEW fulltext_idx
-WHERE FullText::Contains(Text, "dogs")
+WHERE FulltextContains(Text, "dogs")
 ORDER BY Key;

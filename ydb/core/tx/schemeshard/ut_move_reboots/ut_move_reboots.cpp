@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
         });
     }
 
-    Y_UNIT_TEST(WithDataColumnTable) {
+    Y_UNIT_TEST(ColumnTable) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;

@@ -169,6 +169,7 @@
   using Ydb.Sdk.Ado;
 
   await using var connection = await dataSource.OpenRetryableConnectionAsync();
+  // Выполнение без явной транзакции (авто-коммит)
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
   await command.ExecuteNonQueryAsync();
   ```
@@ -181,6 +182,7 @@
   using Microsoft.EntityFrameworkCore;
 
   await using var context = await dbContextFactory.CreateDbContextAsync();
+  // Режим авто-коммита Entity Framework (без явной транзакции)
   var result = await context.SomeEntities.FirstOrDefaultAsync();
   ```
 
@@ -198,6 +200,7 @@
           "Host=localhost;Port=2136;Database=/local;UseTls=false"
       )
   );
+  // Режим авто-коммита linq2db (без явной транзакции)
   var result = db.GetTable<Employee>().FirstOrDefault(e => e.Id == 1);
   ```
 
@@ -206,7 +209,7 @@
   ```csharp
   using Ydb.Sdk.Services.Query;
 
-  // ImplicitTx - single query without explicit transaction
+  // ImplicitTx - один запрос без явной транзакции
   var response = await queryClient.Exec("SELECT 1");
   ```
 

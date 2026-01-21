@@ -1425,7 +1425,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
         return {CreateUpgradeSubDomainDecision(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
-        return CreateBuildColumn(op.NextPartId(), tx, context);
+        return {CreateBuildColumn(op.NextPartId(), tx, context)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
         return {DropBuildColumn(op.NextPartId(), tx, context)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:

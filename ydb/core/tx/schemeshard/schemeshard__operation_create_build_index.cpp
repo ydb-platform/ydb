@@ -11,7 +11,7 @@ namespace NKikimr::NSchemeShard {
 
 using namespace NTableIndex;
 
-TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+ISubOperation::TPtr CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
 
     if (!context.SS->EnableAddColumsWithDefaults) {
@@ -39,8 +39,6 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
         }
     }
 
-    TVector<ISubOperation::TPtr> result;
-
     // altering version of the table.
     {
         auto outTx = TransactionTemplate(tablePath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
@@ -50,10 +48,8 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
         snapshot.SetTableName(tablePath.LeafName());
 
-        result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
+        return CreateInitializeBuildIndexMainTable(opId, outTx);
     }
-
-    return result;
 }
 
 TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {

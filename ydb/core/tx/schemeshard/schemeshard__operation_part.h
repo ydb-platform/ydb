@@ -390,7 +390,7 @@ ISubOperation::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state);
 bool CreateDropTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 
-TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr DropBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);

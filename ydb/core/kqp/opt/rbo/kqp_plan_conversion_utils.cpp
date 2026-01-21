@@ -258,7 +258,8 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
     for (const auto& traits : opAggregate.AggregationTraitsList()) {
         const auto originalColName = TInfoUnit(TString(traits.OriginalColName()));
         const auto aggFuncName = TString(traits.AggregationFunction());
-        TOpAggregationTraits opAggTraits(originalColName, aggFuncName);
+        const auto resultColName = TInfoUnit(TString(traits.ResultColName()));
+        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, resultColName);
         opAggTraitsList.push_back(opAggTraits);
     }
 

@@ -532,7 +532,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
 
         countMapElements.emplace_back(countResult, zeroLambda);
         auto countMap = std::make_shared<TOpMap>(limit, filter->Pos, countMapElements, true);
-        TOpAggregationTraits aggFunction(countResult, "count");
+        TOpAggregationTraits aggFunction(countResult, "count", countResult);
         TVector<TOpAggregationTraits> aggs = {aggFunction};
         TVector<TInfoUnit> keyColumns;
 

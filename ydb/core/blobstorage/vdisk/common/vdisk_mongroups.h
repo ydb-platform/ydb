@@ -201,7 +201,15 @@ public:                                                                         
                 COUNTER_INIT(NormalizedOccupancyPerMille, false);
                 COUNTER_INIT(VDiskSlotUsagePerMille, false);
                 COUNTER_INIT(VDiskRawUsagePerMille, false);
-                COUNTER_INIT(CapacityAlert, false);
+                COUNTER_INIT(CapacityAlertGreen, false);
+                COUNTER_INIT(CapacityAlertCyan, false);
+                COUNTER_INIT(CapacityAlertLightYellow, false);
+                COUNTER_INIT(CapacityAlertYellow, false);
+                COUNTER_INIT(CapacityAlertLightOrange, false);
+                COUNTER_INIT(CapacityAlertPreOrange, false);
+                COUNTER_INIT(CapacityAlertOrange, false);
+                COUNTER_INIT(CapacityAlertRed, false);
+                COUNTER_INIT(CapacityAlertBlack, false);
             }
 
             COUNTER_DEF(DskOutOfSpace);
@@ -215,7 +223,15 @@ public:                                                                         
             COUNTER_DEF(NormalizedOccupancyPerMille);
             COUNTER_DEF(VDiskSlotUsagePerMille);
             COUNTER_DEF(VDiskRawUsagePerMille);
-            COUNTER_DEF(CapacityAlert);
+            COUNTER_DEF(CapacityAlertGreen);
+            COUNTER_DEF(CapacityAlertCyan);
+            COUNTER_DEF(CapacityAlertLightYellow);
+            COUNTER_DEF(CapacityAlertYellow);
+            COUNTER_DEF(CapacityAlertLightOrange);
+            COUNTER_DEF(CapacityAlertPreOrange);
+            COUNTER_DEF(CapacityAlertOrange);
+            COUNTER_DEF(CapacityAlertRed);
+            COUNTER_DEF(CapacityAlertBlack);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

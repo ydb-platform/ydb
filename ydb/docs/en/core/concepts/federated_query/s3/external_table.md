@@ -37,6 +37,8 @@ Where:
 - `csv_with_names` - one of the [permitted data storage formats](formats.md);
 - `gzip` - one of the [permitted compression algorithms](formats.md#compression).
 
+You can also specify [format settings](external_data_source.md#format_settings).
+
 ## Data model {#data-model}
 
 Reading data using external tables from S3 ({{ objstorage-name }}) is done with regular SQL queries as if querying a normal table.

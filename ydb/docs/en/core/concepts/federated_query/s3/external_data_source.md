@@ -1,5 +1,45 @@
 # Working with S3 buckets ({{objstorage-full-name}})
 
+To work with S3, you need to set up a data storage connection. There is a DDL for configuring such connections. Next, let's look at the SQL syntax and the management of these settings.
+
+There are two types of buckets in S3: public and private. To connect to a public bucket, use `AUTH_METHOD="NONE"`. To connect to a private bucket, use `AUTH_METHOD="AWS"`. A detailed description of `AWS` can be found [here](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-authentication-methods.html). `AUTH_METHOD="NONE"` means that no authentication is used. If `AUTH_METHOD="AWS"` is specified, several additional parameters are required:
+
+- `AWS_ACCESS_KEY_ID_SECRET_NAME` – reference to the name of the [secret](../../datamodel/secrets.md) where `AWS_ACCESS_KEY_ID` is stored.
+- `AWS_SECRET_ACCESS_KEY_SECRET_NAME` – reference to the name of the [secret](../../datamodel/secrets.md) where `AWS_SECRET_ACCESS_KEY` is stored.
+- `AWS_REGION` – region from which reading is performed, for example, `ru-central-1`.
+
+To set up a connection to a public bucket, execute the following SQL query. The query creates an external connection named `object_storage`, which points to a specific S3 bucket named `bucket`.
+
+```yql
+CREATE EXTERNAL DATA SOURCE object_storage WITH (
+  SOURCE_TYPE="ObjectStorage",
+  LOCATION="https://object_storage_domain/bucket/",
+  AUTH_METHOD="NONE"
+);
+```
+
+To set up a connection to a private bucket, you need to run a few SQL queries. First, create [secrets](../../datamodel/secrets.md) containing `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+
+```yql
+    CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=`<id>`);
+    CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=`<key>`);
+```
+
+The next step is to create an external connection named `object_storage`, which points to a specific S3 bucket named `bucket` and uses `AUTH_METHOD="AWS"`. The parameters `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, and `AWS_REGION` are filled in for `AWS`. The values of these parameters are described above.
+
+```yql
+CREATE EXTERNAL DATA SOURCE object_storage WITH (
+  SOURCE_TYPE="ObjectStorage",
+  LOCATION="https://object_storage_domain/bucket/",
+  AUTH_METHOD="AWS",
+  AWS_ACCESS_KEY_ID_SECRET_NAME="aws_access_id",
+  AWS_SECRET_ACCESS_KEY_SECRET_NAME="aws_access_key",
+  AWS_REGION="ru-central-1"
+);
+```
+
+## Using an external connection to an S3 bucket {#external-data-source-settings}
+
 When working with {{ objstorage-full-name }} using [external data sources](../../datamodel/external_data_source.md), it is convenient to perform prototyping and initial data connection setup.
 
 An example query to read data:
@@ -34,7 +74,8 @@ FROM
 WITH(
   FORMAT = "<file_format>",
   COMPRESSION = "<compression>",
-  SCHEMA = (<schema_definition>))
+  SCHEMA = (<schema_definition>),
+  <format_settings>)
 WHERE
   <filter>;
 ```
@@ -46,6 +87,7 @@ Where:
 * `file_format` — the [data format](formats.md#formats) in the files.
 * `compression` — the [compression format](formats.md#compression_formats) of the files.
 * `schema_definition` — the [schema definition](#schema) of the data stored in the files.
+* `format_settings` — optional [format settings](#format_settings)
 
 ### Data schema description {#schema}
 
@@ -97,11 +139,21 @@ Where:
 
 As a result of executing such a query, the names and types of fields will be inferred.
 
-### Data path formats {#path_format}
+### Data path formats specified in `file_path` {#path_format}
 
-In {{ ydb-full-name }}, the following data paths are supported:
+In {{ ydb-full-name }}, the followingdata paths are supported:
 
 {% include [!](_includes/path_format.md) %}
+
+### Format settings {#format_settings}
+
+In {{ ydb-full-name }}, the following format settings are supported:
+
+{% include [!](_includes/format_settings.md) %}
+
+You can only specify `file_pattern` setting if `file_path` is a path to a directory. Any conversion specifiers supported by [`strftime`(C99)](https://en.cppreference.com/w/c/chrono/strftime) function can be used in formatting strings. In {{ ydb-full-name }}, the following `Datetime` and `Timestamp` formats are supported:
+
+{% include [!](_includes/date_formats.md) %}
 
 ## Example {#read_example}
 
@@ -111,21 +163,28 @@ Example query to read data from S3 ({{ objstorage-full-name }}):
 SELECT
   *
 FROM
-  connection.`folder/filename.csv`
+  connection.`folder/`
 WITH(
   FORMAT = "csv_with_names",
+  COMPRESSION="gzip"
   SCHEMA =
   (
-    Year Int32,
-    Manufacturer Utf8,
-    Model Utf8,
-    Price Double
-  )
+    Id Int32 NOT NULL,
+    UserId Int32 NOT NULL,
+    TripDate Date NOT NULL,
+    TripDistance Double NOT NULL,
+    UserComment Utf8
+  ),
+  FILE_PATTERN="*.csv.gz",
+  `DATA.DATE.FORMAT`="%Y-%m-%d",
+  CSV_DELIMITER='/'
 );
 ```
 
 Where:
 
 * `connection` — the name of the external data source leading to the S3 bucket ({{ objstorage-full-name }}).
-* `folder/filename.csv` — the path to the file in the S3 bucket ({{ objstorage-full-name }}).
+* `folder/filename.csv` — the path to the directory in the S3 bucket ({{ objstorage-full-name }}).
 * `SCHEMA` — the data schema description in the file.
+* `*.csv.gz` — file name template.
+* `%Y-%m-%d` — format in which `Date` type is stored in S3.

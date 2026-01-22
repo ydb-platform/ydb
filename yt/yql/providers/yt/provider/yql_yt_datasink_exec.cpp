@@ -152,6 +152,7 @@ private:
         const IYtGateway::TRunResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, bool markFinished)
     {
         if (markFinished && !TYtDqProcessWrite::Match(input.Get())) {
+            state->FullHybridExecution = false;
             PushHybridStats(state, "YtExecution", input->Content());
         }
         auto outSection = TYtOutputOpBase(input).Output();
@@ -418,6 +419,7 @@ private:
                 output = input->HeadPtr();
                 break;
             case TExprNode::EState::Error: {
+                State_->FullHybridExecution = false;
                 PushHybridStats(State_, "Fallback", input->TailPtr()->Content());
                 if (State_->Configuration->HybridDqExecutionFallback.Get().GetOrElse(true)) {
                     output = input->TailPtr();

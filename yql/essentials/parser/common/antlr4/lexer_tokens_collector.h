@@ -14,7 +14,7 @@ class TLexerTokensCollector4 {
 public:
     TLexerTokensCollector4(TStringBuf data, const TString& queryName = "query")
         : QueryName(queryName)
-        , InputStream(std::string(data))
+        , InputStream(data)
         , Lexer(&InputStream)
     {
     }

@@ -336,9 +336,19 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateAsyncReplication().FileName);
     }
 
+    static bool IsTransfer(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTransfer().FileName);
+    }
+
+    static bool IsExternalDataSource(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateExternalDataSource().FileName);
+    }
+
     static bool IsCreatedByQuery(TStringBuf schemeKey) {
         return IsView(schemeKey)
-            || IsReplication(schemeKey);
+            || IsReplication(schemeKey)
+            || IsTransfer(schemeKey)
+            || IsExternalDataSource(schemeKey);
     }
 
     static bool NoObjectFound(Aws::S3::S3Errors errorType) {

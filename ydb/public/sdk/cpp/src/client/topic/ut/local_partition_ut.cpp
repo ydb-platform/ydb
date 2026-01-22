@@ -35,7 +35,6 @@ namespace NYdb::inline Dev::NTopic::NTests {
         TTopicSdkTestSetup CreateSetupForSplitMerge(const std::string& testCaseName) {
             NKikimrConfig::TFeatureFlags ff;
             ff.SetEnableTopicSplitMerge(true);
-            ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
             auto settings = TTopicSdkTestSetup::MakeServerSettings();
             settings.SetFeatureFlags(ff);
             auto setup = TTopicSdkTestSetup(testCaseName, settings, false);

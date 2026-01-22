@@ -1067,6 +1067,8 @@ NApi::TReadTablePartitionOptions SerializeOptionsForReadTablePartition(
 {
     NApi::TReadTablePartitionOptions result;
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    result.EnableRowIndex = options.ControlAttributes_.EnableRowIndex_;
+    result.EnableRangeIndex = options.ControlAttributes_.EnableRangeIndex_;
     return result;
 }
 

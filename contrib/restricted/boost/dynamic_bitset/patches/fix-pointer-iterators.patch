@@ -1,0 +1,42 @@
+--- dynamic_bitset/include/boost/dynamic_bitset/dynamic_bitset.hpp	(index)
++++ dynamic_bitset/include/boost/dynamic_bitset/dynamic_bitset.hpp	(working tree)
+@@ -1426,7 +1426,7 @@ template< typename Iterator >
+ class bit_iterator_base
+ {
+ public:
+-    typedef typename Iterator::iterator_category iterator_category;
++    typedef typename std::iterator_traits<Iterator>::iterator_category iterator_category;
+     typedef bool                                 value_type;
+     typedef std::ptrdiff_t                       difference_type;
+     typedef value_type *                         pointer;
+@@ -1444,7 +1444,7 @@ public:
+ protected:
+     BOOST_DYNAMIC_BITSET_CONSTEXPR20 void increment();
+     BOOST_DYNAMIC_BITSET_CONSTEXPR20 void decrement();
+-    BOOST_DYNAMIC_BITSET_CONSTEXPR20 void add( typename Iterator::difference_type n );
++    BOOST_DYNAMIC_BITSET_CONSTEXPR20 void add( typename std::iterator_traits<Iterator>::difference_type n );
+ 
+     Iterator                              m_block_iterator;
+     int                                   m_bit_index = 0;
+--- dynamic_bitset/include/boost/dynamic_bitset/impl/dynamic_bitset.ipp	(index)
++++ dynamic_bitset/include/boost/dynamic_bitset/impl/dynamic_bitset.ipp	(working tree)
+@@ -185,7 +185,7 @@ bit_iterator_base< Iterator >::decrement()
+ 
+ template< typename Iterator >
+ BOOST_DYNAMIC_BITSET_CONSTEXPR20 void
+-bit_iterator_base< Iterator >::add( typename Iterator::difference_type n )
++bit_iterator_base< Iterator >::add( typename std::iterator_traits<Iterator>::difference_type n )
+ {
+     typename Iterator::difference_type d = m_bit_index + n;
+     m_block_iterator += d / bits_per_block;
+--- dynamic_bitset/include/boost/dynamic_bitset/dynamic_bitset.hpp	(index)
++++ dynamic_bitset/include/boost/dynamic_bitset/dynamic_bitset.hpp	(working tree)
+@@ -1432,7 +1432,7 @@ public:
+     typedef value_type *                         pointer;
+     typedef value_type &                         reference;
+ 
+-    static constexpr int                         bits_per_block = std::numeric_limits< typename Iterator::value_type >::digits;
++    static constexpr int                         bits_per_block = std::numeric_limits< typename std::iterator_traits<Iterator>::value_type >::digits;
+ 
+     BOOST_DYNAMIC_BITSET_CONSTEXPR20             bit_iterator_base( Iterator block_iterator, int bit_index );
+ 

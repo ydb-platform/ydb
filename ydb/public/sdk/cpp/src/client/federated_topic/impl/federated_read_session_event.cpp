@@ -157,7 +157,7 @@ TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(NTopic::TReadSessionEv
 
 void TReadSessionEvent::TDataReceivedEvent::Commit() {
     for (auto [from, to] : OffsetRanges) {
-        static_cast<NTopic::TPartitionStreamImpl<false>*>(PartitionSession.Get())->Commit(from, to);
+        static_cast<NTopic::TPartitionSessionControl*>(PartitionSession.Get())->Commit(from, to);
     }
 }
 
@@ -165,4 +165,4 @@ std::string DebugString(const TReadSessionEvent::TEvent& event) {
     return std::visit([](const auto& ev) { return ev.DebugString(); }, event);
 }
 
-} // namespace NYdb::Dev::NFederatedTopic
+} // namespace NYdb::NFederatedTopic

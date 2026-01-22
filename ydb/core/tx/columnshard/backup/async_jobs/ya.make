@@ -1,5 +1,11 @@
 LIBRARY()
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+ENDIF()
+
 SRCS(
     import_downloader.cpp
 )

@@ -637,6 +637,22 @@ message SequenceDescription {
     optional Type data_type = 9; // data type of the sequence
 }
 
+// TODO: merge it with Column Family Compression
+message ColumnCompression {
+    enum Algorithm {
+        ALGORITHM_UNSPECIFIED = 0;
+        ALGORITHM_OFF = 1;
+        ALGORITHM_LZ4 = 2;
+        ALGORITHM_ZSTD = 3;
+    }
+
+    optional Algorithm algorithm = 1;
+
+    // Set the compression level for selected compression type. If no value is specified, default value will be chosen.
+    // For ZSTD compression level must be in range [-131072:22]
+    optional int32 compression_level = 2;
+}
+
 message ColumnMeta {
     // Name of column
     string name = 1;
@@ -652,6 +668,7 @@ message ColumnMeta {
         SequenceDescription from_sequence = 6;
         google.protobuf.NullValue empty_default = 7;
     }
+    optional ColumnCompression compression = 8;
 }
 
 message EvictionToExternalStorageSettings {

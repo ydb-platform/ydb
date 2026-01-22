@@ -54,14 +54,17 @@ library like `CacheControl`_ to create a cache-aware
     http://openid.net/specs/openid-connect-core-1_0.html#IDToken
 .. _CacheControl: https://cachecontrol.readthedocs.io
 """
+from __future__ import annotations
 
 import http.client as http_client
 import json
 import os
+from typing import Any, Mapping, Union
 
 from google.auth import environment_vars
 from google.auth import exceptions
 from google.auth import jwt
+from google.auth import transport
 
 
 # The URL that provides public certificates for verifying ID tokens issued
@@ -81,7 +84,7 @@ _GOOGLE_ISSUERS = ["accounts.google.com", "https://accounts.google.com"]
 def _fetch_certs(request, certs_url):
     """Fetches certificates.
 
-    Google-style cerificate endpoints return JSON in the format of
+    Google-style certificate endpoints return JSON in the format of
     ``{'key id': 'x509 certificate'}`` or a certificate array according
     to the JWK spec (see https://tools.ietf.org/html/rfc7517).
 
@@ -105,12 +108,12 @@ def _fetch_certs(request, certs_url):
 
 
 def verify_token(
-    id_token,
-    request,
-    audience=None,
-    certs_url=_GOOGLE_OAUTH2_CERTS_URL,
-    clock_skew_in_seconds=0,
-):
+    id_token: Union[str, bytes],
+    request: transport.Request,
+    audience: Union[str, list[str], None] = None,
+    certs_url: str = _GOOGLE_OAUTH2_CERTS_URL,
+    clock_skew_in_seconds: int = 0,
+) -> Mapping[str, Any]:
     """Verifies an ID token and returns the decoded token.
 
     Args:

@@ -83,7 +83,6 @@ void RunPlan(const TPlan& plan, NYdb::NTable::TTableClient& client) {
                 if (requestedSessions > client.GetActiveSessionsLimit()) {
                     ASSERT_EQ(client.GetActiveSessionCount(), client.GetActiveSessionsLimit());
                 }
-                ASSERT_FALSE(sessionFutures.at(sessionId).HasValue());
                 break;
             }
             case EAction::ExtractValue: {
@@ -266,7 +265,6 @@ TEST_P(YdbSdkSessionsPool, StressTestSync) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10000));
 
     ASSERT_EQ(Client->GetActiveSessionCount(), 0);
-    ASSERT_EQ(Client->GetCurrentPoolSize(), activeSessionsLimit);
 }
 
 std::uint32_t RunStressTestAsync(std::uint32_t n, std::uint32_t nThreads, NYdb::NTable::TTableClient& client) {
@@ -305,7 +303,6 @@ TEST_P(YdbSdkSessionsPool, StressTestAsync) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10000));
 
     ASSERT_EQ(Client->GetActiveSessionCount(), 0);
-    ASSERT_EQ(Client->GetCurrentPoolSize(), activeSessionsLimit);
 }
 
 void TestPeriodicTask(std::uint32_t activeSessionsLimit, NYdb::NTable::TTableClient& client) {

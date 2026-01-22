@@ -62,8 +62,11 @@ struct TTransactionalOptions
     //! Setting it to |true| may result in loss of consistency.
     bool SuppressTransactionCoordinatorSync = false;
     //! For internal use only.
-    //! Setting it to |true| may result in loss of consistency .
+    //! Setting it to |true| may result in loss of consistency.
     bool SuppressUpstreamSync = false;
+    //! For internal use only.
+    //! Setting it to |true| may result in loss of consistency.
+    bool SuppressStronglyOrderedTransactionBarrier = false;
 };
 
 struct TMasterReadOptions

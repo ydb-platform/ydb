@@ -127,12 +127,14 @@ struct TComputationContext: public TComputationContextLLVM {
     const NUdf::ISecureParamsProvider* const SecureParamsProvider;
     const NUdf::ILogProvider* LogProvider;
     NYql::TLangVersion LangVer = NYql::UnknownLangVersion;
+    TMaybe<NUdf::TSourcePosition>& NotConsumedLinear;
 
     TComputationContext(const THolderFactory& holderFactory,
                         const NUdf::IValueBuilder* builder,
                         const TComputationOptsFull& opts,
                         const TComputationMutables& mutables,
-                        arrow::MemoryPool& arrowMemoryPool);
+                        arrow::MemoryPool& arrowMemoryPool,
+                        TMaybe<NUdf::TSourcePosition>& notConsumedLinear);
 
     ~TComputationContext();
 
@@ -143,6 +145,9 @@ struct TComputationContext: public TComputationContextLLVM {
 
     void UpdateUsageAdjustor(ui64 memLimit);
     NUdf::TLoggerPtr MakeLogger() const;
+
+private:
+    NUdf::ITypeInfoHelper::TPtr MakeTypeHelper(TMaybe<NUdf::TSourcePosition>& target);
 
 private:
     ui64 InitRss_ = 0ULL;
@@ -330,6 +335,7 @@ public:
     virtual bool SetExecuteLLVM(bool value) = 0;
     virtual TString SaveGraphState() = 0;
     virtual void LoadGraphState(TStringBuf state) = 0;
+    virtual TMaybe<NUdf::TSourcePosition> GetNotConsumedLinear() = 0;
 };
 
 class TNodeFactory;

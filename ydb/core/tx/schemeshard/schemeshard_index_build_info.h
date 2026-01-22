@@ -749,6 +749,14 @@ public:
         return SubState == ESubState::UniqIndexValidation;
     }
 
+    bool IsFlatRelevanceFulltext() const {
+        if (BuildKind != EBuildKind::BuildFulltext) {
+            return false;
+        }
+        auto settings = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription).GetSettings();
+        return settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+    }
+
     void AddNotifySubscriber(const TActorId& actorID) {
         Y_ENSURE(!IsFinished());
         Subscribers.insert(actorID);

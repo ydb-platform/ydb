@@ -17,8 +17,8 @@ import datetime
 import http.client as http_client
 import json
 import os
+from unittest import mock
 
-import mock
 import pytest  # type: ignore
 
 from google.auth import _helpers
@@ -122,7 +122,6 @@ def mock_authorizedsession_idtoken():
 
 
 class TestImpersonatedCredentials(object):
-
     SERVICE_ACCOUNT_EMAIL = "service-account@example.com"
     TARGET_PRINCIPAL = "impersonated@project.iam.gserviceaccount.com"
     TARGET_SCOPES = ["https://www.googleapis.com/auth/devstorage.read_only"]
@@ -161,7 +160,6 @@ class TestImpersonatedCredentials(object):
         iam_endpoint_override=None,
         trust_boundary=None,  # Align with Credentials class default
     ):
-
         return Credentials(
             source_credentials=source_credentials,
             target_principal=target_principal,
@@ -174,16 +172,20 @@ class TestImpersonatedCredentials(object):
         )
 
     def test_from_impersonated_service_account_info(self):
-        credentials = impersonated_credentials.Credentials.from_impersonated_service_account_info(
-            IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO
+        credentials = (
+            impersonated_credentials.Credentials.from_impersonated_service_account_info(
+                IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO
+            )
         )
         assert isinstance(credentials, impersonated_credentials.Credentials)
 
     def test_from_impersonated_service_account_info_with_trust_boundary(self):
         info = copy.deepcopy(IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO)
         info["trust_boundary"] = self.VALID_TRUST_BOUNDARY
-        credentials = impersonated_credentials.Credentials.from_impersonated_service_account_info(
-            info
+        credentials = (
+            impersonated_credentials.Credentials.from_impersonated_service_account_info(
+                info
+            )
         )
         assert isinstance(credentials, impersonated_credentials.Credentials)
         assert credentials._trust_boundary == self.VALID_TRUST_BOUNDARY
@@ -217,8 +219,10 @@ class TestImpersonatedCredentials(object):
     def test_from_impersonated_service_account_info_with_scopes(self):
         info = copy.deepcopy(IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO)
         info["scopes"] = ["scope1", "scope2"]
-        credentials = impersonated_credentials.Credentials.from_impersonated_service_account_info(
-            info
+        credentials = (
+            impersonated_credentials.Credentials.from_impersonated_service_account_info(
+                info
+            )
         )
         assert credentials._target_scopes == ["scope1", "scope2"]
 
@@ -226,8 +230,10 @@ class TestImpersonatedCredentials(object):
         info = copy.deepcopy(IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO)
         info["scopes"] = ["scope_from_info_1", "scope_from_info_2"]
         scopes_param = ["scope_from_param_1", "scope_from_param_2"]
-        credentials = impersonated_credentials.Credentials.from_impersonated_service_account_info(
-            info, scopes=scopes_param
+        credentials = (
+            impersonated_credentials.Credentials.from_impersonated_service_account_info(
+                info, scopes=scopes_param
+            )
         )
         assert credentials._target_scopes == scopes_param
 
@@ -673,7 +679,8 @@ class TestImpersonatedCredentials(object):
         credentials._source_credentials.token = "Token"
 
         with mock.patch(
-            "google.oauth2.service_account.Credentials._refresh_token", autospec=True
+            "google.oauth2.service_account.Credentials._perform_refresh_token",
+            autospec=True,
         ) as source_cred_refresh_token:
             expire_time = (
                 _helpers.utcnow().replace(microsecond=0)
@@ -755,6 +762,28 @@ class TestImpersonatedCredentials(object):
                 id_creds.refresh(None)
 
         assert excinfo.match("Error getting ID token")
+
+    def test_refresh_failure_missing_token_in_200_response(self):
+        credentials = self.make_credentials(lifetime=None)
+        credentials.expiry = None
+        credentials.token = "token"
+        id_creds = impersonated_credentials.IDTokenCredentials(
+            credentials, target_audience="audience"
+        )
+
+        # Response has 200 OK status but is missing the "token" field
+        response = mock.create_autospec(transport.Response, instance=False)
+        response.status_code = http_client.OK
+        response.json = mock.Mock(return_value={"not_token": "something"})
+
+        with mock.patch(
+            "google.auth.transport.requests.AuthorizedSession.post",
+            return_value=response,
+        ):
+            with pytest.raises(exceptions.RefreshError) as excinfo:
+                id_creds.refresh(None)
+
+        assert excinfo.match("No ID token in response")
 
     def test_refresh_failure_http_error(self, mock_donor_credentials):
         credentials = self.make_credentials(lifetime=None)

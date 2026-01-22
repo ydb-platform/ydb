@@ -1,28 +1,11 @@
 #pragma once
 
 #include <library/cpp/yson/detail.h>
-
-#include <util/generic/string.h>
-#include <util/generic/hash.h>
-#include <util/generic/set.h>
-#include <util/generic/vector.h>
-#include <util/generic/hash_set.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
 
 using namespace NYson::NDetail;
 
 namespace NYql::NFmr {
-// Represents a byte range in the source data for a column value
-struct TColumnOffsetRange {
-    ui64 StartOffset = 0;
-    ui64 EndOffset = 0;
-
-    bool IsValid() const {
-        return EndOffset > StartOffset;
-    }
-};
-
-using TRowIndexMarkup = TVector<TColumnOffsetRange>;
-
 // Binary YSON parser for ListFragment format that extracts byte offsets for key columns
 // Usage:
 //   TParserFragmentListIndex parser(data, keyColumns);

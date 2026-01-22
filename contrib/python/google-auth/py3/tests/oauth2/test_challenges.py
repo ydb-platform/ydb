@@ -17,8 +17,8 @@
 import base64
 import os
 import sys
+from unittest import mock
 
-import mock
 import pytest  # type: ignore
 import pyu2f  # type: ignore
 
@@ -87,7 +87,6 @@ def test_security_key():
         "google.oauth2.challenges.SecurityKeyChallenge._obtain_challenge_input_webauthn",
         return_value={"securityKey": "security key response"},
     ):
-
         assert challenge.obtain_challenge_input(metadata) == {
             "securityKey": "security key response"
         }

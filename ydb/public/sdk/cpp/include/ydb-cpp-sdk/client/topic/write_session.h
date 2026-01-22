@@ -219,7 +219,7 @@ public:
 
     virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
 
-    //! Returns true if write session is alive and acitve. False if session was closed.
+    //! Returns true if write session is alive and active. False if session was closed.
     virtual bool IsAlive() const = 0;
 
     virtual TWriterCounters::TPtr GetCounters() = 0;
@@ -269,11 +269,11 @@ public:
     //! Return true if all writes were completed and acked, false if timeout was reached and some writes were aborted.
     virtual bool Close(TDuration closeTimeout = TDuration::Max()) = 0;
 
-    //! Writer counters with different stats (see TWriterConuters).
+    //! Writer counters with different stats (see TWriterCounters).
     virtual TWriterCounters::TPtr GetCounters() = 0;
 
     //! Close() with timeout = 0 and destroy everything instantly.
     virtual ~IWriteSession() = default;
 };
 
-}
+} // namespace NYdb::NTopic

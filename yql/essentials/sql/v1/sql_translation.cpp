@@ -5897,7 +5897,7 @@ TMaybe<TString> TSqlTranslation::ParseObjectPath(const TRule_object_ref& node, T
 }
 
 bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings) {
-    // streaming_query_setting: an_id_or_type = (id_or_type | STRING_VALUE | bool_value)
+    // streaming_query_setting: an_id_or_type = (id_or_type | STRING_VALUE | bool_value | streaming_query_settings)
 
     const auto& id = to_lower(Id(node.GetRule_an_id_or_type1(), *this));
     if (id.StartsWith(TStreamingQuerySettings::RESERVED_FEATURE_PREFIX)) {
@@ -5905,7 +5905,8 @@ bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_set
         return false;
     }
 
-    const auto [it, inserted] = settings.Features.emplace(id, TDeferredAtom{});
+    YQL_ENSURE(settings.Features);
+    const auto [feature, inserted] = settings.Features->AddFeature(id, Ctx_.Pos());
     if (!inserted) {
         Error() << "Found duplicated parameter: " << to_upper(id);
         return false;
@@ -5914,24 +5915,33 @@ bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_set
     const auto& valueNode = node.GetRule_streaming_query_setting_value3();
     switch (valueNode.GetAltCase()) {
         case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue1: {
-            it->second = TDeferredAtom(Ctx_.Pos(), Id(valueNode.GetAlt_streaming_query_setting_value1().GetRule_id_or_type1(), *this));
+            const auto& value = Id(valueNode.GetAlt_streaming_query_setting_value1().GetRule_id_or_type1(), *this);
+            feature = BuildQuotedAtom(Ctx_.Pos(), value);
             break;
         }
         case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue2: {
             const auto& strToken = Ctx_.Token(valueNode.GetAlt_streaming_query_setting_value2().GetToken1());
             const auto& strValue = StringContent(Ctx_, Ctx_.Pos(), strToken);
             if (!strValue) {
-                Error() << "Cannot parse string correctly: " << strToken;
                 return false;
             }
 
-            it->second = TDeferredAtom(Ctx_.Pos(), strValue->Content);
+            feature = BuildQuotedAtom(Ctx_.Pos(), strValue->Content);
             break;
         }
         case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue3: {
-            it->second = TDeferredAtom(BuildLiteralBool(
-                                           Ctx_.Pos(),
-                                           FromString<bool>(Ctx_.Token(valueNode.GetAlt_streaming_query_setting_value3().GetRule_bool_value1().GetToken1()))), Ctx_);
+            const auto& alt = valueNode.GetAlt_streaming_query_setting_value3();
+            const auto& token = Ctx_.Token(alt.GetRule_bool_value1().GetToken1());
+            feature = BuildLiteralBool(Ctx_.Pos(), FromString<bool>(token));
+            break;
+        }
+        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue4: {
+            TStreamingQuerySettings settings;
+            if (!ParseStreamingQuerySettings(valueNode.GetAlt_streaming_query_setting_value4().GetRule_streaming_query_settings1(), settings)) {
+                return false;
+            }
+
+            feature = settings.Features;
             break;
         }
         case TRule_streaming_query_setting_value::ALT_NOT_SET:
@@ -5946,6 +5956,12 @@ bool TSqlTranslation::ParseStreamingQuerySettings(const TRule_streaming_query_se
     //     streaming_query_setting
     //     (, streaming_query_setting)* ,?
     // )
+
+    Ctx_.Token(node.GetToken1());
+
+    if (!settings.Features) {
+        settings.Features = new TObjectFeatureNode(Ctx_.Pos());
+    }
 
     if (!ParseStreamingQuerySetting(node.GetRule_streaming_query_setting2(), settings)) {
         return false;
@@ -5963,7 +5979,13 @@ bool TSqlTranslation::ParseStreamingQuerySettings(const TRule_streaming_query_se
 bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings) {
     // streaming_query_definition: AS DO (BEGIN define_action_or_subquery_body END DO);
 
-    Ctx_.Token(node.GetToken1());
+    const auto& inlineAction = node.GetRule_inline_action3();
+    const auto& queryBegin = inlineAction.GetToken1();
+    Ctx_.Token(queryBegin);
+
+    if (!settings.Features) {
+        settings.Features = new TObjectFeatureNode(Ctx_.Pos());
+    }
 
     // Save query ast to perform type check and validation of allowed expressions
 
@@ -5979,7 +6001,6 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
     clearWorldNode->Add("World");
     innerBlocks.push_back(clearWorldNode);
 
-    const auto& inlineAction = node.GetRule_inline_action3();
     const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, inlineAction.GetRule_define_action_or_subquery_body2());
     auto queryNode = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
     if (!WarnUnusedNodes()) {
@@ -5994,14 +6015,12 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
 
     TNodePtr blockNode = new TAstListNodeImpl(Ctx_.Pos());
     blockNode->Add("block", blockNode->Q(queryNode));
-    settings.Features[TStreamingQuerySettings::QUERY_AST_FEATURE] = TDeferredAtom(blockNode, Ctx_);
+    settings.Features->AddFeature(TStreamingQuerySettings::QUERY_AST_FEATURE, Ctx_.Pos()).first = blockNode;
 
     // Extract whole query text between BEGIN and END tokens
 
-    const auto& queryBegin = inlineAction.GetToken1();
-    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryBegin.GetId(), BEGIN));
-
     const auto& queryEnd = inlineAction.GetToken3();
+    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryBegin.GetId(), BEGIN));
     Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryEnd.GetId(), END));
 
     auto beginPos = GetQueryPosition(Ctx_.Query, queryBegin);
@@ -6012,7 +6031,7 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
     }
 
     beginPos += queryBegin.value().size();
-    settings.Features[TStreamingQuerySettings::QUERY_TEXT_FEATURE] = TDeferredAtom(Ctx_.Pos(), Ctx_.Query.substr(beginPos, endPos - beginPos));
+    settings.Features->AddFeature(TStreamingQuerySettings::QUERY_TEXT_FEATURE, Ctx_.Pos()).first = BuildQuotedAtom(Ctx_.Pos(), Ctx_.Query.substr(beginPos, endPos - beginPos));
 
     return true;
 }

@@ -45,7 +45,7 @@ class TYqlMemoryPool: public arrow::MemoryPool {
         }
     }
 
-    virtual std::string backend_name() const final {
+    std::string backend_name() const final {
         return "yql";
     }
 

@@ -7,6 +7,7 @@
 #include "udf_version.h"
 
 #include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/utils/is_pod.h>
 
 #include <util/system/yassert.h>     // FAIL, VERIFY_DEBUG
 #include <util/generic/utility.h>    // Min, Max
@@ -750,7 +751,7 @@ private:
 class TBoxedValue: public TBoxedValueLink, public TWithUdfAllocator {
 public:
     TBoxedValue();
-    ~TBoxedValue();
+    ~TBoxedValue() override;
 };
 
 class TManagedBoxedValue: public TBoxedValueBase, public TWithUdfAllocator {
@@ -1008,11 +1009,7 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(TUnboxedValuePod, 16);
 
-static_assert(std::is_trivially_destructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_copy_assignable<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_move_assignable<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_copy_constructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_move_constructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
+static_assert(NYql::IsPod<TUnboxedValuePod>, "Incompatible with LLVM codegeneration!");
 
 //////////////////////////////////////////////////////////////////////////////
 // TUnboxedValue

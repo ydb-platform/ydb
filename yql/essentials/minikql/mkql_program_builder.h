@@ -199,7 +199,7 @@ public:
     TRuntimeNode NewVariant(TRuntimeNode item, ui32 tupleIndex, TType* variantType);
     TRuntimeNode NewVariant(TRuntimeNode item, const std::string_view& member, TType* variantType);
 
-    TRuntimeNode ToDynamicLinear(TRuntimeNode item);
+    TRuntimeNode ToDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column);
     TRuntimeNode FromDynamicLinear(TRuntimeNode item, const std::string_view& file, ui32 row, ui32 column);
 
     TRuntimeNode ToMutDict(TRuntimeNode dict, TType* mdictType, const TArrayRef<const TRuntimeNode>& dependentNodes);
@@ -686,7 +686,16 @@ public:
     TRuntimeNode QueuePeek(TRuntimeNode resource, TRuntimeNode index, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType);
     TRuntimeNode QueueRange(TRuntimeNode resource, TRuntimeNode begin, TRuntimeNode end, const TArrayRef<const TRuntimeNode>& dependentNodes, TType* returnType);
 
-    TRuntimeNode PreserveStream(TRuntimeNode stream, TRuntimeNode preserve, TRuntimeNode outpace);
+    TRuntimeNode PreserveStream(TRuntimeNode stream, TRuntimeNode queue, TRuntimeNode outpace);
+
+    TRuntimeNode WinFramesCollector(TRuntimeNode stream, TRuntimeNode storage, TRuntimeNode winBounds);
+    TRuntimeNode WinFrame(TRuntimeNode queue,
+                          TRuntimeNode handle,
+                          TRuntimeNode isIncremental,
+                          TRuntimeNode isRange,
+                          TRuntimeNode isSignleElement,
+                          const TArrayRef<const TRuntimeNode>& dependentNodes,
+                          TType* returnType);
 
     TRuntimeNode Seq(const TArrayRef<const TRuntimeNode>& items, TType* returnType);
 

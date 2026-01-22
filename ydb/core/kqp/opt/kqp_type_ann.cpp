@@ -379,13 +379,13 @@ TStatus AnnotateReadTableFullTextIndexSourceSettings(const TExprNode::TPtr& node
         return TStatus::Error;
     }
 
-    const auto& resultColumns = node->Child(TKqpReadTableFullTextIndexSourceSettings::idx_ResultColumns);
-    if (!EnsureTupleOfAtoms(*resultColumns, ctx)) {
+    const auto& queryColumns = node->Child(TKqpReadTableFullTextIndexSourceSettings::idx_QueryColumns);
+    if (!EnsureTupleOfAtoms(*queryColumns, ctx)) {
         return TStatus::Error;
     }
 
     auto rowType = GetReadTableRowTypeFullText(
-        ctx, tablesData, cluster, table.first, TCoAtomList(resultColumns), false);
+        ctx, tablesData, cluster, table.first, TCoAtomList(columns), false);
 
     node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
     return TStatus::Ok;
@@ -585,13 +585,13 @@ TStatus AnnotateReadTableFullTextIndex(const TExprNode::TPtr& node, TExprContext
         return TStatus::Error;
     }
 
-    const auto& resultColumns = node->ChildPtr(TKqlReadTableFullTextIndex::idx_ResultColumns);
-    if (!EnsureTupleOfAtoms(*resultColumns, ctx)) {
+    const auto& queryColumns = node->ChildPtr(TKqlReadTableFullTextIndex::idx_QueryColumns);
+    if (!EnsureTupleOfAtoms(*queryColumns, ctx)) {
         return TStatus::Error;
     }
 
     auto rowType = GetReadTableRowTypeFullText(
-        ctx, tablesData, cluster, table.first, TCoAtomList(resultColumns), false);
+        ctx, tablesData, cluster, table.first, TCoAtomList(columns), false);
 
     if (isPhysical) {
         node->SetTypeAnn(ctx.MakeType<TFlowExprType>(rowType));
@@ -1974,9 +1974,13 @@ TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    // Return type: List<String or Utf8>
+    // Return type: List<Struct<__ydb_token:String or Utf8,__ydb_freq:Uint32>>
     auto stringType = ctx.MakeType<TDataExprType>(textDataType->GetSlot());
-    auto listType = ctx.MakeType<TListExprType>(stringType);
+    TVector<const TItemExprType*> rowItems;
+    rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NFulltext::TokenColumn, stringType));
+    rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NFulltext::FreqColumn, ctx.MakeType<TDataExprType>(EDataSlot::Uint32)));
+    auto rowType = ctx.MakeType<TStructExprType>(rowItems);
+    auto listType = ctx.MakeType<TListExprType>(rowType);
     node->SetTypeAnn(listType);
 
     return TStatus::Ok;
@@ -2889,7 +2893,7 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
             }
 
             if (TKqpPhysicalQuery::Match(input.Get())) {
-                return AnnotateKqpPhysicalQuery(input, ctx, config->EnableNewRBO);
+                return AnnotateKqpPhysicalQuery(input, ctx, config->GetEnableNewRBO());
             }
 
             if (TKqpEffects::Match(input.Get())) {

@@ -24,10 +24,10 @@ public:
         Configure(false, cfg);
     }
     TUrlPreprocessing() = default;
-    ~TUrlPreprocessing() = default;
+    ~TUrlPreprocessing() override = default;
 
     void Configure(bool restrictedUser, const TGatewaysConfig& cfg);
-    std::pair<TString, TString> Preprocess(const TString& url);
+    std::pair<TString, TString> Preprocess(const TString& url) override;
 
 private:
     bool RestrictedUser_ = false;

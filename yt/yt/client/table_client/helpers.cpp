@@ -1598,26 +1598,26 @@ TSharedRange<TUnversionedRow> TUnversionedRowsBuilder::Build()
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TDataBlockMeta,
     /*last_key*/ 9,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TBoundaryKeysExt,
     /*min*/ 1,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TBoundaryKeysExt,
     /*max*/ 2,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::TSamplesExt,
     /*entries*/ 1,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::THeavyColumnStatisticsExt,
     /*column_data_weights*/ 5,
-    TUnversionedOwningRow)
+    TUnversionedOwningRow);
 
 ////////////////////////////////////////////////////////////////////////////////
 

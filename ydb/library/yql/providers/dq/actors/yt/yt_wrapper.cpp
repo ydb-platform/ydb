@@ -95,7 +95,7 @@ namespace NYql {
                                 return MakeFuture(TErrorOr<void>(yexception() << "request complete"));
                             }
                             if (err.IsOK() && req->Digest == NYTree::ConvertTo<TString>(err.Value())) {
-                                return VoidFuture;
+                                return OKFuture;
                             }
 
                             return MakeFuture(TErrorOr<void>(yexception() << "wrong checksum"));
@@ -319,7 +319,7 @@ namespace NYql {
                                         NYT::NodeToYsonString(NYT::TNode(ToString(TInstant::Now()))
                                     ))));
                             } catch (...) { }
-                            return VoidFuture;
+                            return OKFuture;
                         } else if (err.IsOK() || err.FindMatching(NYT::NYTree::EErrorCode::ResolveError)) {
                             TCreateNodeOptions options;
                             options.Recursive = true;
@@ -368,7 +368,7 @@ namespace NYql {
 
                         err.ThrowOnError();
 
-                        return VoidFuture;
+                        return OKFuture;
                     }))
                     .Apply(BIND([request, requestId](const TErrorOr<void>& err)
                     {

@@ -17,6 +17,10 @@ void TGRpcYdbSchemeService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error SETUP_SCHEME_METHOD macro already defined
 #endif
 
+#ifdef RemoveDirectory // Windows case
+    #undef RemoveDirectory
+#endif
+
 #define SETUP_SCHEME_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
     SETUP_METHOD(methodName, methodCallback, rlMode, requestType, scheme, auditMode)
 

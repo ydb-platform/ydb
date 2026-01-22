@@ -46,11 +46,9 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
     void ProcessTabletsFromConfig(const NKikimrConfig::TBootstrap &bootstrapConfig) {
         THashSet<ui64> currentTabletIds;
         for (const auto &tablet : bootstrapConfig.GetTablet()) {
-            if (tablet.GetAllowDynamicConfiguration()) {
-                ui64 tabletId = tablet.GetInfo().GetTabletID();
-                currentTabletIds.insert(tabletId);
-                UpdateTablet(tablet);
-            }
+            ui64 tabletId = tablet.GetInfo().GetTabletID();
+            currentTabletIds.insert(tabletId);
+            UpdateTablet(tablet);
         }
 
         // remove tablets that are no longer in config

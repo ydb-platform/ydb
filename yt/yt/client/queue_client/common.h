@@ -34,9 +34,9 @@ void Serialize(const TCrossClusterReference& queueRef, NYson::IYsonConsumer* con
 struct TProfilingTags
 {
     std::string Cluster;
-    TString LeadingStatus;
+    std::string LeadingStatus;
     std::string QueueAgentStage;
-    TString ObjectType;
+    std::string ObjectType;
 
     bool operator==(const TProfilingTags& other) const = default;
     bool operator<(const TProfilingTags& other) const = default;

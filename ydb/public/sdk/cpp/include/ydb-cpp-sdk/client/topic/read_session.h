@@ -193,8 +193,8 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
     //! AutoPartitioningSupport.
     FLUENT_SETTING_DEFAULT(bool, AutoPartitioningSupport, false);
 
-    // TODO(qyryq) Uncomment when direct read is ready.
-    // FLUENT_SETTING_DEFAULT(bool, DirectRead, false);
+    //! Direct read from partition nodes. Experimental setting — not recommended for use.
+    FLUENT_SETTING_DEFAULT(bool, DirectRead, false);
 
     //! Log.
     FLUENT_SETTING_OPTIONAL(TLog, Log);

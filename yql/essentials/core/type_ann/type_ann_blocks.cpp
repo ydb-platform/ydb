@@ -604,7 +604,13 @@ IGraphTransformer::TStatus BlockToPgWrapper(const TExprNode::TPtr& input, TExprN
     }
     bool isScalar;
     const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child->GetTypeAnn(), isScalar);
-    auto resultType = ToPgImpl(input->Pos(), blockItemType, ctx.Expr);
+    bool isUniversal;
+    auto resultType = ToPgImpl(input->Pos(), blockItemType, ctx.Expr, isUniversal);
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!resultType) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -625,7 +631,13 @@ IGraphTransformer::TStatus BlockFromPgWrapper(const TExprNode::TPtr& input, TExp
     }
     bool isScalar;
     const TTypeAnnotationNode* blockItemType = GetBlockItemType(*child->GetTypeAnn(), isScalar);
-    auto resultType = FromPgImpl(input->Pos(), blockItemType, ctx.Expr);
+    bool isUniversal;
+    auto resultType = FromPgImpl(input->Pos(), blockItemType, ctx.Expr, isUniversal);
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!resultType) {
         return IGraphTransformer::TStatus::Error;
     }

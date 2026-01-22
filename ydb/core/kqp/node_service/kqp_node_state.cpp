@@ -223,7 +223,7 @@ void TNodeState::DumpInfo(TStringStream& str) const {
                                     TABLED() {str << taskId;}
                                     TABLED() {
                                         if (actorId) {
-                                            HREF(TStringBuilder() << "/node/" << requester.NodeId() << "/actors/kqp_node?ca=" << *actorId)  {
+                                            HREF(TStringBuilder() << "/node/" << actorId->NodeId() << "/actors/kqp_node?ca=" << *actorId)  {
                                                 str << *actorId;
                                             }
                                         } else {

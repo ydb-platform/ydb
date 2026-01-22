@@ -4,6 +4,7 @@
 #include "client.h"
 #include "config.h"
 #include "private.h"
+#include "peer_priority_provider.h"
 #include "viable_peer_registry.h"
 
 #include <yt/yt/core/concurrency/periodic_executor.h>
@@ -36,6 +37,22 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+IPeerPriorityProviderPtr CreateDefaultPeerPriorityProvider(const TDynamicChannelPoolConfigPtr& config)
+{
+    switch (config->PeerPriorityStrategy) {
+        case EPeerPriorityStrategy::PreferLocal:
+            return GetYPClusterMatchingPeerPriorityProvider();
+        case EPeerPriorityStrategy::None:
+            return GetDummyPeerPriorityProvider();
+    }
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDynamicChannelPool::TImpl
     : public TRefCounted
 {
@@ -46,7 +63,8 @@ public:
         const std::string& endpointDescription,
         IAttributeDictionaryPtr endpointAttributes,
         std::string serviceName,
-        IPeerDiscoveryPtr peerDiscovery)
+        IPeerDiscoveryPtr peerDiscovery,
+        IPeerPriorityProviderPtr peerPriorityProvider)
         : Config_(std::move(config))
         , ChannelFactory_(std::move(channelFactory))
         , EndpointDescription_(endpointDescription)
@@ -65,6 +83,7 @@ public:
         , ViablePeerRegistry_(CreateViablePeerRegistry(
             Config_,
             BIND(&TImpl::CreateChannel, Unretained(this)),
+            std::move(peerPriorityProvider),
             Logger))
         , RandomPeerRotationExecutor_(New<TPeriodicExecutor>(
             TDispatcher::Get()->GetLightInvoker(),
@@ -903,14 +922,18 @@ TDynamicChannelPool::TDynamicChannelPool(
     const std::string& endpointDescription,
     NYTree::IAttributeDictionaryPtr endpointAttributes,
     std::string serviceName,
-    IPeerDiscoveryPtr peerDiscovery)
+    IPeerDiscoveryPtr peerDiscovery,
+    IPeerPriorityProviderPtr peerPriorityProvider)
     : Impl_(New<TImpl>(
         std::move(config),
         std::move(channelFactory),
         endpointDescription,
         std::move(endpointAttributes),
         std::move(serviceName),
-        std::move(peerDiscovery)))
+        std::move(peerDiscovery),
+        peerPriorityProvider
+            ? std::move(peerPriorityProvider)
+            : CreateDefaultPeerPriorityProvider(config)))
 { }
 
 TDynamicChannelPool::~TDynamicChannelPool() = default;

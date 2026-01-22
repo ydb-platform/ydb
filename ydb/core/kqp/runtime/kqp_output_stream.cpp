@@ -70,6 +70,12 @@ public:
         }
     }
 
+    void Flush() final {
+        for (auto& output : Outputs) {
+            output->Flush();
+        }
+    }
+
 private:
     const TTypeEnvironment& TypeEnv;
     TVector<NYql::NDq::IDqOutput::TPtr> Outputs;

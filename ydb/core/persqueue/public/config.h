@@ -21,7 +21,8 @@ bool CheckPersQueueConfig(const NKikimrPQ::TPQTabletConfig& config, const bool s
 
 namespace NPQ {
 
-bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig, bool isLocalDC);
+bool IsQuotingEnabled(const NKikimrPQ::TPQConfig& config, bool isLocalDC);
+bool DetailedMetricsAreEnabled(const NKikimrPQ::TPQTabletConfig& config);
 
 }
 

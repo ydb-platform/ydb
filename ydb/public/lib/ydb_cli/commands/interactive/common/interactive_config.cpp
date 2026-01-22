@@ -2,7 +2,7 @@
 #if defined(YDB_CLI_AI_ENABLED)
 #include "api_utils.h"
 #endif
-#include "interactive_log_defs.h"
+#include <ydb/public/lib/ydb_cli/common/log.h>
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
@@ -79,18 +79,16 @@ std::unordered_map<TString, TInteractiveConfigurationManager::TAiPresets::TInfo>
     };
 }
 
-TInteractiveConfigurationManager::TAiProfile::TAiProfile(const TString& name, YAML::Node config, TInteractiveConfigurationManager::TPtr manager, const TInteractiveLogger& log)
+TInteractiveConfigurationManager::TAiProfile::TAiProfile(const TString& name, YAML::Node config, TInteractiveConfigurationManager::TPtr manager)
     : Name(name)
     , Manager(manager)
-    , Log(log)
     , Config(config)
 {
     Y_VALIDATE(Config.IsNull() || Config.IsMap(), "Unexpected config type: " << static_cast<ui64>(Config.Type()));
 }
 
-TInteractiveConfigurationManager::TAiProfile::TAiProfile(TInteractiveConfigurationManager::TPtr manager, const TInteractiveLogger& log)
+TInteractiveConfigurationManager::TAiProfile::TAiProfile(TInteractiveConfigurationManager::TPtr manager)
     : Manager(manager)
-    , Log(log)
 {}
 
 bool TInteractiveConfigurationManager::TAiProfile::IsValid(TString& error) const {
@@ -414,7 +412,7 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
     std::vector<TString> allowedModels;
 #if defined(YDB_CLI_AI_ENABLED)
     try {
-        allowedModels = NAi::ListModelNames(apiEndpoint, GetApiToken(), Log);
+        allowedModels = NAi::ListModelNames(apiEndpoint, GetApiToken());
     } catch (const std::exception& e) {
         Cerr << Colors.Yellow() << "Failed to list model names, maybe model API endpoint is not correct: " << e.what() << Colors.OldColor() << Endl;
     }
@@ -470,9 +468,8 @@ bool TInteractiveConfigurationManager::TAiProfile::SetupModelName(const std::opt
     return true;
 }
 
-TInteractiveConfigurationManager::TInteractiveConfigurationManager(const TString& configurationPath, const TInteractiveLogger& log)
-    : Log(log)
-    , ConfigurationPath(configurationPath)
+TInteractiveConfigurationManager::TInteractiveConfigurationManager(const TString& configurationPath)
+    : ConfigurationPath(configurationPath)
 {
     LoadProfile();
     CanonizeStructure();
@@ -678,7 +675,7 @@ std::unordered_map<TString, TInteractiveConfigurationManager::TAiProfile::TPtr> 
             continue;
         }
 
-        auto aiProfile = std::make_shared<TAiProfile>(name, settings, shared_from_this(), Log);
+        auto aiProfile = std::make_shared<TAiProfile>(name, settings, shared_from_this());
         if (TString error; !aiProfile->IsValid(error)) {
             YDB_CLI_LOG(Warning, "AI profile \"" << name << "\" is invalid: " << error << ", profile skipped");
             continue;
@@ -755,7 +752,7 @@ void TInteractiveConfigurationManager::ChangeActiveAiProfile(const TString& name
 }
 
 TInteractiveConfigurationManager::TAiProfile::TPtr TInteractiveConfigurationManager::CreateNewAiModelProfile(const TString& presetId) {
-    auto aiProfile = std::make_shared<TAiProfile>(shared_from_this(), Log);
+    auto aiProfile = std::make_shared<TAiProfile>(shared_from_this());
     if (!aiProfile->SetupProfile(presetId)) {
         YDB_CLI_LOG(Warning, "AI profile settings setup failed");
         return nullptr;

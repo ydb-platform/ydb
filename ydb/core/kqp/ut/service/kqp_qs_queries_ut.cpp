@@ -323,8 +323,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL(count, 1);
     }
 
-    Y_UNIT_TEST(ExecuteQueryUpsertDoesntChangeIndexedValuesIfNotChanged) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(ExecuteQueryUpsertDoesntChangeIndexedValuesIfNotChanged, UseStreamIndex) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetQueryClient();
 
         auto settings = TExecuteQuerySettings()

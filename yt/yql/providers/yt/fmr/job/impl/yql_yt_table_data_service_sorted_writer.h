@@ -12,8 +12,7 @@
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_index_serialisation.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parser_fragment_list_index.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_base_writer.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_binary_yson_comparator.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_binary_yson_comparator.h>
+#include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_comparator.h>
 
 namespace NYql::NFmr {
 

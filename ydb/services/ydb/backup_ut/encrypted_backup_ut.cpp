@@ -685,8 +685,11 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/Prefix/001/create_topic.pb.enc",
+                "/test_bucket/Prefix/001/create_topic.pb.sha256",
                 "/test_bucket/Prefix/001/metadata.json.enc",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
                 "/test_bucket/Prefix/001/permissions.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
             });
         }
 
@@ -732,8 +735,11 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/Prefix/001/create_view.sql.enc",
+                "/test_bucket/Prefix/001/create_view.sql.sha256",
                 "/test_bucket/Prefix/001/metadata.json.enc",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
                 "/test_bucket/Prefix/001/permissions.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
             });
         }
 

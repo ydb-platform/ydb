@@ -1160,14 +1160,10 @@ void TPartition::Initialize(const TActorContext& ctx) {
         } else {
             SetupTopicCounters(ctx);
         }
-        if (DetailedMetricsAreEnabled()) {
+        if (DetailedMetricsAreEnabled(Config)) {
             SetupDetailedMetrics();
         }
     }
-}
-
-bool TPartition::DetailedMetricsAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == METRICS_LEVEL_DETAILED);
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {

@@ -290,7 +290,7 @@ bool EnsureParquetTypeSupported(TPositionHandle position, const TTypeAnnotationN
 
 class TS3DataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
-    TS3DataSourceTypeAnnotationTransformer(TS3State::TPtr state)
+    explicit TS3DataSourceTypeAnnotationTransformer(TS3State::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(state)
     {
@@ -462,7 +462,8 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureSpecificDataSource(*input->Child(TS3ReadObject::idx_DataSource), S3ProviderName, ctx)) {
+        const auto* dataSourceNode = input->Child(TS3ReadObject::idx_DataSource);
+        if (!EnsureSpecificDataSource(*dataSourceNode, S3ProviderName, ctx)) {
             return TStatus::Error;
         }
 
@@ -493,6 +494,30 @@ public:
             TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
             auto format = s3Object.Format().Ref().Content();
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
+
+            const auto& clusterSettings = State_->Configuration->Clusters.at(TS3DataSource(dataSourceNode).Cluster().StringValue());
+            if (clusterSettings.Url.StartsWith("file://")) {
+                bool hasErrors = false;
+
+                if (!useCoro) {
+                    ctx.AddError(TIssue(ctx.GetPosition(dataSourceNode->Pos()), "Reading from files is not supported with disabled pragma s3.SourceCoroActor, to read from files use: PRAGMA s3.SourceCoroActor = \"TRUE\""));
+                    hasErrors = true;
+                }
+
+                if (State_->Configuration->AsyncDecompressing.GetOrDefault()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(dataSourceNode->Pos()), "Reading from files is not supported with enabled pragma s3.AsyncDecompressing, to read from files use: PRAGMA s3.AsyncDecompressing = \"FALSE\""));
+                    hasErrors = true;
+                }
+
+                if (IsIn({"raw", "json_list"}, format)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(dataSourceNode->Pos()), TStringBuilder() << "Reading from files is not supported with format '" << format << "'"));
+                    hasErrors = true;
+                }
+
+                if (hasErrors) {
+                    return TStatus::Error;
+                }
+            }
 
             THashSet<TStringBuf> columns;
             for (const TItemExprType* item : structRowType->GetItems()) {
@@ -805,6 +830,7 @@ public:
             {
                 return TStatus::Error;
             }
+
             if (haveProjection && !havePartitionedBy) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Missing partitioned_by setting for projection"));
                 return TStatus::Error;
@@ -824,6 +850,7 @@ public:
         input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
         return TStatus::Ok;
     }
+
 private:
     const TS3State::TPtr State_;
 };

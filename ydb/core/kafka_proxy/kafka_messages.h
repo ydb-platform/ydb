@@ -8426,6 +8426,8 @@ public:
     };
     SessionLifetimeMsMeta::Type SessionLifetimeMs;
 
+    TString AuthBytesStr;
+
     i16 ApiKey() const override { return SASL_AUTHENTICATE; };
     i32 Size(TKafkaVersion version) const override;
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;

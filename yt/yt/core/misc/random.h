@@ -38,6 +38,9 @@ TOutputIterator RandomSampleN(
     size_t n,
     TGenerator&& generator);
 
+// Generates list of min(count, size) unique random numbers in [0, size) range.
+std::vector<size_t> GetRandomIndexes(int size, int count);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

@@ -492,7 +492,7 @@ TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
                 EWireType::Boolean,
                 EWireType::Double,
                 EWireType::Nothing,
-                EWireType::Yson32
+                EWireType::Yson32,
             });
             return CreatePrimitiveValueConverter(wireType, required);
 

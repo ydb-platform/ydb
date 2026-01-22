@@ -1,9 +1,14 @@
 #pragma once
 
-#include "interactive_log.h"
+#include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+
+#include <util/generic/string.h>
 
 #include <memory>
 #include <optional>
+#include <variant>
+#include <vector>
 
 namespace NYdb::NConsoleClient {
 
@@ -22,6 +27,15 @@ public:
 
     virtual void Finish(bool clear = false) = 0;
 
+    // Runtime configuration
+    virtual void SetHintsEnabled(bool enabled) = 0;
+    virtual bool IsHintsEnabled() const = 0;
+
+    virtual void SetColorSchema(const TColorSchema& schema) = 0;
+    virtual TColorSchema GetColorSchema() const = 0;
+
+    virtual void SetPrompt(const TString& prompt) = 0;
+
     virtual ~ILineReader() = default;
 };
 
@@ -37,6 +51,6 @@ struct TLineReaderSettings {
     bool ContinueAfterCancel = true;
 };
 
-ILineReader::TPtr CreateLineReader(const TLineReaderSettings& settings, const TInteractiveLogger& log);
+ILineReader::TPtr CreateLineReader(const TLineReaderSettings& settings);
 
 } // namespace NYdb::NConsoleClient

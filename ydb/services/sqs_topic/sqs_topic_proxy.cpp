@@ -1,5 +1,6 @@
 #include "sqs_topic_proxy.h"
 #include "actor.h"
+#include "change_message_visibility.h"
 #include "error.h"
 #include "delete_message.h"
 #include "request.h"
@@ -142,9 +143,7 @@ namespace NKikimr::NGRpcService {
     DECLARE_RPC_NI(ListQueues);
     DECLARE_RPC_NI(PurgeQueue);
     DECLARE_RPC_NI(DeleteQueue);
-    DECLARE_RPC_NI(ChangeMessageVisibility);
     DECLARE_RPC_NI(SetQueueAttributes);
-    DECLARE_RPC_NI(ChangeMessageVisibilityBatch);
     DECLARE_RPC_NI(ListDeadLetterSourceQueues);
     DECLARE_RPC_NI(ListQueueTags);
     DECLARE_RPC_NI(TagQueue);
@@ -175,4 +174,13 @@ namespace NKikimr::NGRpcService {
         return CreateDeleteMessageBatchActor(msg).release();
     }
 
+    template <>
+    IActor* TEvSqsTopicChangeMessageVisibilityRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+        return CreateChangeMessageVisibilityActor(msg).release();
+    }
+
+    template <>
+    IActor* TEvSqsTopicChangeMessageVisibilityBatchRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+        return CreateChangeMessageVisibilityBatchActor(msg).release();
+    }
 } // namespace NKikimr::NGRpcService

@@ -146,7 +146,7 @@ private:
         }
 
     private:
-        virtual void DoWrite(const void* buf, size_t len) override {
+        void DoWrite(const void* buf, size_t len) override {
             MKQL_ENSURE(len % sizeof(T) == 0, "size should always by multiple of sizeof(T)");
             const T* data = reinterpret_cast<const T*>(buf);
             Dst_.insert(Dst_.end(), data, data + len / sizeof(T));

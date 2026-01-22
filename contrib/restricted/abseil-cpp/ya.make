@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20250814.1)
+VERSION(20260107.0)
 
-ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20250814.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20260107.0.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -32,6 +32,7 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 SRCS(
+    absl/base/casts.cc
     absl/base/internal/cycleclock.cc
     absl/base/internal/low_level_alloc.cc
     absl/base/internal/poison.cc
@@ -59,6 +60,7 @@ SRCS(
     absl/crc/internal/crc_x86_arm_combined.cc
     absl/debugging/failure_signal_handler.cc
     absl/debugging/internal/address_is_readable.cc
+    absl/debugging/internal/borrowed_fixup_buffer.cc
     absl/debugging/internal/decode_rust_punycode.cc
     absl/debugging/internal/demangle.cc
     absl/debugging/internal/demangle_rust.cc
@@ -140,6 +142,7 @@ SRCS(
     absl/strings/internal/cordz_sample_token.cc
     absl/strings/internal/damerau_levenshtein_distance.cc
     absl/strings/internal/escaping.cc
+    absl/strings/internal/generic_printer.cc
     absl/strings/internal/memutil.cc
     absl/strings/internal/ostringstream.cc
     absl/strings/internal/str_format/arg.cc
@@ -155,7 +158,6 @@ SRCS(
     absl/strings/str_cat.cc
     absl/strings/str_replace.cc
     absl/strings/str_split.cc
-    absl/strings/string_view.cc
     absl/strings/substitute.cc
     absl/synchronization/barrier.cc
     absl/synchronization/blocking_counter.cc
@@ -187,5 +189,11 @@ SRCS(
     absl/time/internal/cctz/src/zone_info_source.cc
     absl/time/time.cc
 )
+
+IF (OS_WINDOWS)
+    SRCS(
+        absl/time/internal/cctz/src/time_zone_name_win.cc
+    )
+ENDIF()
 
 END()

@@ -20,6 +20,7 @@ SRCS(
     alloc.cpp
     spilled_storage.cpp
     join_defs.cpp
+    print_unboxed_value.cpp
 )
 
 IF (ARCH_X86_64 AND OS_LINUX)

@@ -101,6 +101,18 @@ auto RangeTo(TRange&& range)
     return NDetail::TRangeTo<TContainer>::template ToContainer<TRange>(std::forward<TRange>(range));
 }
 
+template <class TContainer>
+constexpr auto RangeTo()
+{
+    return NDetail::TRangeToTag<TContainer>();
+}
+
+template<std::ranges::input_range TRange, class TContainer>
+auto operator|(TRange&& range, NDetail::TRangeToTag<TContainer>)
+{
+    return RangeTo<TContainer>(std::forward<TRange>(range));
+}
+
 template <class TContainer, std::ranges::input_range TRange, class TTransformFunction>
 auto TransformRangeTo(TRange&& range, TTransformFunction&& function)
 {

@@ -27,7 +27,7 @@ class TestYdbWorkload(StressFixture):
             "--endpoint", self.endpoint,
             "--mon-endpoint", self.mon_endpoint,
             "--database", self.database,
-            "--duration", "120",
+            "--duration", self.base_duration,
         ]
         yatest.common.execute(cmd, wait=True)
 
@@ -52,6 +52,6 @@ class TestDeltaProtocol(StressFixture):
             "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
             "--mon-endpoint", f"http://localhost:{self.cluster.nodes[1].mon_port}",
             "--database", "/Root",
-            "--duration", "120",
+            "--duration", self.base_duration,
         ]
         yatest.common.execute(cmd, wait=True)

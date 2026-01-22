@@ -150,7 +150,11 @@ public:
                                     const void *data = tuple.Columns[i].Data();
                                     ui32 size = tuple.Columns[i].Size();
                                     str << "<td>";
-                                    if (data == nullptr) {
+                                    const auto& columnInfo = tableInfo->Columns.find(columns[i])->second;
+                                    if (columnInfo.IsSensitive) {
+                                        // Hide sensitive column value
+                                        str << "<i>&lt;HIDDEN VALUE&gt;</i>";
+                                    } else if (data == nullptr) {
                                         str << "<i>&lt;null&gt;</i>";
                                     } else {
                                         switch(tuple.Types[i].GetTypeId()) {

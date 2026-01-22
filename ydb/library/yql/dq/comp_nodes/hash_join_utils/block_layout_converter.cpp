@@ -1,5 +1,5 @@
 #include "block_layout_converter.h"
-
+#include "better_mkql_ensure.h"
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
@@ -11,7 +11,7 @@
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/minikql/computation/mkql_datum_validate.h>
-
+#include <yql/essentials/minikql/mkql_node_printer.h>
 #include <arrow/array/data.h>
 #include <arrow/datum.h>
 
@@ -59,8 +59,7 @@ public:
     {}
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-        Y_ENSURE(array->buffers.size() == 2);
-
+        MKQL_ENSURE(array->buffers.size() == 2, Sprintf("Got %i buffers instead of 2", array->buffers.size())); // todo: better assertions in whole file
         return {array->GetValues<ui8>(1)};
     }
 
@@ -239,7 +238,7 @@ public:
     {}
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-        Y_ENSURE(array->buffers.size() == 3);
+        MKQL_ENSURE(array->buffers.size() == 3, Sprintf("Got %i instead", array->buffers.size()));
         Y_ENSURE(array->child_data.empty());
 
         return {array->GetValues<ui8>(1), array->GetValues<ui8>(2)};
@@ -698,7 +697,8 @@ private:
 
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
     const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
-    const TVector<NPackedTuple::EColumnRole>& roles, arrow::MemoryPool* pool)
+    const TVector<NPackedTuple::EColumnRole>& roles, arrow::MemoryPool* pool,
+    bool rememberNullBitmaps)
 {
     TVector<IColumnDataExtractor::TPtr> extractors;
 
@@ -706,7 +706,7 @@ IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
         extractors.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, pool, type));
     }
 
-    return std::make_unique<TBlockLayoutConverter>(std::move(extractors), roles);
+    return std::make_unique<TBlockLayoutConverter>(std::move(extractors), roles, rememberNullBitmaps);
 }
 
 } // namespace NKikimr::NMiniKQL

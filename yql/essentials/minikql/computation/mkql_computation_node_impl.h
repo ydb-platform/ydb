@@ -1208,7 +1208,7 @@ public:
 #endif
     }
 
-    ~TComputationValueImpl() {
+    ~TComputationValueImpl() override {
 #ifndef NDEBUG
         MKQL_MEM_RETURN(GetMemInfo(), this, sizeof(TDerived));
 #endif

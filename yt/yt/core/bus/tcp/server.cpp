@@ -101,16 +101,16 @@ public:
         return Poller_->Unregister(this).Apply(BIND([this, this_ = MakeStrong(this)] {
             {
                 auto guard = Guard(ConnectionsSpinLock_);
-                YT_ASSERT(!AllConnectionsTerminated_);
-                AllConnectionsTerminated_ = NewPromise<void>();
+                YT_VERIFY(!AllConnectionsTerminatedPromise_);
+                AllConnectionsTerminatedPromise_ = NewPromise<void>();
 
                 if (Connections_.empty()) {
                     guard.Release();
-                    AllConnectionsTerminated_.Set();
+                    AllConnectionsTerminatedPromise_.Set();
                 }
             }
 
-            return AllConnectionsTerminated_.ToFuture().Apply(BIND([this, this_ = std::move(this_)] {
+            return AllConnectionsTerminatedPromise_.ToFuture().Apply(BIND([this, this_ = MakeStrong(this)] {
                 YT_LOG_INFO("Bus server stopped");
             }));
         }));
@@ -162,7 +162,7 @@ protected:
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConnectionsSpinLock_);
     THashSet<TTcpConnectionPtr> Connections_;
-    TPromise<void> AllConnectionsTerminated_;
+    TPromise<void> AllConnectionsTerminatedPromise_;
 
     virtual void CreateServerSocket() = 0;
     virtual void InitClientSocket(SOCKET clientSocket) = 0;
@@ -183,9 +183,9 @@ protected:
     {
         auto guard = Guard(ConnectionsSpinLock_);
         EraseOrCrash(Connections_, connection);
-        if (Connections_.empty() && AllConnectionsTerminated_) {
+        if (Connections_.empty() && AllConnectionsTerminatedPromise_) {
             guard.Release();
-            AllConnectionsTerminated_.Set();
+            AllConnectionsTerminatedPromise_.Set();
         }
     }
 
@@ -305,7 +305,7 @@ protected:
 
             {
                 auto guard = Guard(ConnectionsSpinLock_);
-                YT_ASSERT(!AllConnectionsTerminated_);
+                YT_VERIFY(!AllConnectionsTerminatedPromise_);
                 EmplaceOrCrash(Connections_, connection);
             }
 

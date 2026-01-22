@@ -26,6 +26,7 @@ struct TKqpRunScriptActorSettings {
     bool DisableDefaultTimeout = false;
     TString CheckpointId;
     TString StreamingQueryPath;
+    TString CustomerSuppliedId;
 };
 
 NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig);

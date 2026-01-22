@@ -19,7 +19,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
         TTestWithReboots t;
         t.GetTestEnvOptions()
             .EnableLocalDBBtreeIndex(enableLocalDBBtreeIndex)
-            .EnablePersistentPartitionStats(enablePersistentPartitionStats);
+            .EnablePersistentPartitionStats(enablePersistentPartitionStats)
+            .EnableRealSystemViewPaths(false);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
@@ -233,6 +234,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
     Y_UNIT_TEST(Replace) {
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -293,6 +295,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
     Y_UNIT_TEST(Chain) {
         TTestWithReboots t(true);
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pathVersion;
             {
@@ -356,7 +359,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
     Y_UNIT_TEST(AlterAfter) {
         TTestWithReboots t;
-
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

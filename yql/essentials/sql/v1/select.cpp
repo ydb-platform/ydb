@@ -3127,7 +3127,7 @@ public:
         return {};
     }
 
-    bool HasSkip() const {
+    bool HasSkip() const override {
         return IsSkipProvided_;
     }
 

@@ -892,6 +892,22 @@ static void MaybeCreateEmptyFile(const TFsPath& folderPath) {
     }
 }
 
+bool SkipItem(const TVector<TRegExMatch>& exclusionPatterns, const THashSet<TString>& seenItems,
+        TDbIterator<ETraverseType::Postordering>& dbIt
+) {
+    if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
+        LOG_D("Skip " << dbIt.GetFullPath().Quote());
+        dbIt.Next();
+        return true;
+    }
+    if (!seenItems.contains(dbIt.GetFullPath())) {
+        LOG_W("Skip " << dbIt.GetFullPath().Quote() << ": it was created after the dumping had started");
+        dbIt.Next();
+        return true;
+    }
+    return false;
+}
+
 void BackupFolderImpl(TDriver driver, const TString& database, const TString& dbPrefix, const TString& backupPrefix,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
@@ -900,7 +916,10 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
     TMap<TString, TAsyncStatus> copiedTablesStatuses;
+    // Track items seen during first iteration to skip the new ones created after
+    THashSet<TString> seenItems;
     TVector<NTable::TCopyItem> tablesToCopy;
+
     // Copy all tables to temporal folder and backup other scheme objects along the way.
     {
         TDbIterator<ETraverseType::Preordering> dbIt(driver, dbPrefix);
@@ -910,6 +929,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 dbIt.Next();
                 continue;
             }
+            seenItems.insert(dbIt.GetFullPath());
 
             auto childFolderPath = CreateDirectory(folderPath, dbIt.GetRelPath());
             TFile(childFolderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
@@ -965,9 +985,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     if (schemaOnly) {
         TDbIterator<ETraverseType::Postordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
-                LOG_D("Skip " << dbIt.GetFullPath().Quote());
-                dbIt.Next();
+            if (SkipItem(exclusionPatterns, seenItems, dbIt)) {
                 continue;
             }
 
@@ -995,9 +1013,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
     {
         TDbIterator<ETraverseType::Postordering> dbIt(driver, dbPrefix);
         while (dbIt) {
-            if (IsExcluded(dbIt.GetFullPath(), exclusionPatterns)) {
-                LOG_D("Skip " << dbIt.GetFullPath().Quote());
-                dbIt.Next();
+            if (SkipItem(exclusionPatterns, seenItems, dbIt)) {
                 continue;
             }
 

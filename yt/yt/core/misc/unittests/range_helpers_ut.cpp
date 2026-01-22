@@ -50,6 +50,33 @@ TEST(TRangeHelpersTest, RangeToString)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TRangeHelpersTest, MonadicRangeToVector)
+{
+    auto data = std::vector<std::string>{"A", "B", "C", "D"};
+    auto range = std::ranges::views::transform(data, [] (std::string x) {
+        return "_" + x;
+    });
+
+    std::initializer_list<std::string> expectedValues{"_A", "_B", "_C", "_D"};
+    EXPECT_EQ(std::vector<std::string>(expectedValues), range | RangeTo<std::vector<std::string>>());
+    using TSomeCompactVector = TCompactVector<std::string, 4>;
+    EXPECT_EQ(TSomeCompactVector(expectedValues), range  | RangeTo<TSomeCompactVector>());
+}
+
+TEST(TRangeHelpersTest, MonadicRangeToString)
+{
+    auto data = "_sample_"sv;
+    auto range = std::ranges::views::filter(data, [] (char x) {
+        return x != '_';
+    });
+    auto expectedData = "sample"sv;
+
+    EXPECT_EQ(std::string(expectedData), range | RangeTo<std::string>());
+    EXPECT_EQ(TString(expectedData), range | RangeTo<TString>());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TRangeHelpersTest, Fold)
 {
     EXPECT_EQ(0, FoldRange(std::vector<int>{}, std::plus{}));

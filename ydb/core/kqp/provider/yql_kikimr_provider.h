@@ -297,9 +297,6 @@ const TYdbOperations& KikimrDataOps();
 const TYdbOperations& KikimrModifyOps();
 const TYdbOperations& KikimrReadOps();
 
-TIssue AddDmlIssue(const TIssue& issue);
-bool AddDmlIssue(const TIssue& issue, TExprContext& ctx);
-
 class TKikimrTransactionContextBase : public TThrRefBase {
 public:
     explicit TKikimrTransactionContextBase()

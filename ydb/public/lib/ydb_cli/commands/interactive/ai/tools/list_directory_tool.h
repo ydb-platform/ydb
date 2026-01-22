@@ -2,7 +2,7 @@
 
 #include "tool_interface.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -11,6 +11,6 @@ struct TListDirectoryToolSettings {
     TDriver Driver;
 };
 
-ITool::TPtr CreateListDirectoryTool(const TListDirectoryToolSettings& settings, const TInteractiveLogger& log);
+ITool::TPtr CreateListDirectoryTool(const TListDirectoryToolSettings& settings);
 
 } // namespace NYdb::NConsoleClient::NAi

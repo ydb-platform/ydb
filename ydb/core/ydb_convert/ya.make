@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     column_families.cpp
     compression.cpp
+    kesus_description.cpp
     table_settings.cpp
     table_description.cpp
     table_profiles.cpp

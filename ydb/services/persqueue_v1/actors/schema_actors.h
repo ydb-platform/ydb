@@ -168,6 +168,8 @@ public:
 
     virtual void Reply(const TActorContext& ctx) = 0;
 
+    void PassAway(const TActorContext& ctx);
+
 private:
     std::map<ui64, TTabletInfo> Tablets;
     ui32 RequestsInfly = 0;
@@ -207,6 +209,8 @@ public:
     bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
     virtual void Reply(const TActorContext& ctx) override;
 
+    void PassAway() override;
+
 private:
     Ydb::Topic::DescribeTopicResult Result;
 };
@@ -234,6 +238,8 @@ public:
     void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr& ev, const TActorContext& ctx) override;
     bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
     virtual void Reply(const TActorContext& ctx) override;
+
+    void PassAway() override;
 
 private:
     Ydb::Topic::DescribeConsumerResult Result;
@@ -263,6 +269,8 @@ public:
     bool ApplyResponse(TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext& ctx) override;
 
     virtual void Reply(const TActorContext& ctx) override;
+
+    void PassAway() override;
 
 private:
 
@@ -452,6 +460,8 @@ public:
 
     void RaiseError(const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status, const TActorContext&) override;
     bool OnUnhandledException(const std::exception& exc) override;
+
+    void PassAway() override;
 
 private:
     THashSet<ui64> PartitionIds;

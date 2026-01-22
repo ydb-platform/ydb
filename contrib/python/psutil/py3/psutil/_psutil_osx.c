@@ -2,9 +2,9 @@
  * Copyright (c) 2009, Jay Loden, Giampaolo Rodola'. All rights reserved.
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
- *
- * macOS platform-specific module methods.
  */
+
+// macOS platform-specific module methods.
 
 #include <Python.h>
 #include <sys/time.h>  // needed for old macOS versions
@@ -43,6 +43,8 @@ static PyMethodDef mod_methods[] = {
     {"disk_partitions", psutil_disk_partitions, METH_VARARGS},
     {"disk_usage_used", psutil_disk_usage_used, METH_VARARGS},
     {"has_cpu_freq", psutil_has_cpu_freq, METH_VARARGS},
+    {"heap_info", psutil_heap_info, METH_VARARGS},
+    {"heap_trim", psutil_heap_trim, METH_VARARGS},
     {"net_io_counters", psutil_net_io_counters, METH_VARARGS},
     {"per_cpu_times", psutil_per_cpu_times, METH_VARARGS},
     {"pids", psutil_pids, METH_VARARGS},

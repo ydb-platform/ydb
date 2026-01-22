@@ -724,7 +724,7 @@ public:
 
 TDirectReadSessionImplTestSetup::TDirectReadSessionImplTestSetup() {
     ReadSessionSettings
-        // .DirectRead(true)
+        .DirectRead(true)
         .AppendTopics({"TestTopic"})
         .ConsumerName("TestConsumer")
         .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetFixedIntervalPolicy(TDuration::MilliSeconds(10)))
@@ -888,7 +888,7 @@ TEST_F(DirectReadWithClient, OneMessage) {
         auto settings = TReadSessionSettings()
             .ConsumerName(GetConsumerName())
             .AppendTopics(GetTopicPath())
-            // .DirectRead(true)
+            .DirectRead(true)
             ;
         auto reader = client.CreateReadSession(settings);
 
@@ -973,7 +973,7 @@ TEST_F(DirectReadWithClient, ManyMessages) {
             .ConsumerName(GetConsumerName())
             .AppendTopics(GetTopicPath())
             .MaxMemoryUsageBytes(1_MB)
-            // .DirectRead(GetEnv("DIRECT", "0") == "1")
+            .DirectRead(true)
             ;
 
         std::shared_ptr<IReadSession> reader;
@@ -1396,7 +1396,7 @@ TEST_F(DirectReadWithControlSession, EmptyDirectReadResponse) {
     // Sometimes the server might send a DirectReadResponse with no data, but with bytes_size value > 0.
     // It can happen, if the server tried to send DirectReadResponse, but did not succeed,
     // and in the meantime the messages that should had been sent have been rotated by retention period,
-    // and do not exist anymore. To keep ReadSizeBudget bookkeeping correct, the server still sends the an DirectReadResponse,
+    // and do not exist anymore. To keep ReadSizeBudget bookkeeping correct, the server still sends DirectReadResponse,
     // and SDK should process it correctly: basically it should immediately send a ReadRequest(bytes_size=DirectReadResponse.bytes_size).
 
     auto const startPartitionSessionRequest = TStartPartitionSessionRequest{
@@ -2048,7 +2048,7 @@ TEST_F(DirectReadWithServer, Devslice) {
     auto settings = TReadSessionSettings()
         .AppendTopics(TTopicReadSettings("t1").AppendPartitionIds({0}))
         .ConsumerName("c1")
-        // .DirectRead(true)
+        .DirectRead(true)
         ;
 
     settings.EventHandlers_

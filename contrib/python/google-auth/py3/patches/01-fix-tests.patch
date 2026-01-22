@@ -183,3 +183,10 @@
 @@ -66,1 +66,1 @@ def test_get_project_id_call_error(check_output):
 -def test__run_subprocess_ignore_stderr():
 +def _test__run_subprocess_ignore_stderr():
+--- contrib/python/google-auth/py3/tests/crypt/test_es.py	(index)
++++ contrib/python/google-auth/py3/tests/crypt/test_es.py	(working tree)
+@@ -27,2 +27,2 @@ from google.auth.crypt import es
+-
+-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
++import yatest.common as yc
++DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "..", "data")

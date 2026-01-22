@@ -275,6 +275,10 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(ChangeGroupSizeInUnits, CHANGE_GROUP_SIZE_IN_UNITS)
                             MAP_TIMING(ReconfigureVirtualGroup, RECONFIGURE_VIRTUAL_GROUP)
                             MAP_TIMING(RecommissionGroups, RECOMMISSION_GROUPS)
+                            MAP_TIMING(DefineDDiskPool, DEFINE_DDISK_POOL)
+                            MAP_TIMING(ReadDDiskPool, READ_DDISK_POOL)
+                            MAP_TIMING(DeleteDDiskPool, DELETE_DDISK_POOL)
+                            MAP_TIMING(MoveDDisk, MOVE_DDISK)
 
                             default:
                                 break;
@@ -395,6 +399,10 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
                     HANDLE_COMMAND(ReconfigureVirtualGroup)
                     HANDLE_COMMAND(RecommissionGroups)
+                    HANDLE_COMMAND(DefineDDiskPool)
+                    HANDLE_COMMAND(ReadDDiskPool)
+                    HANDLE_COMMAND(DeleteDDiskPool)
+                    HANDLE_COMMAND(MoveDDisk)
                     default: break;
                 }
 

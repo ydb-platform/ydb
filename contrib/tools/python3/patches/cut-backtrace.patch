@@ -10,8 +10,8 @@ revision: 5216645
     
     REVIEW: 869507
 
---- contrib/tools/python3/Python/import.c	(2e2af14ef0720fef44002ed5f6941f229bdd7440)
-+++ contrib/tools/python3/Python/import.c	(2f67b87b07c235c9673305da4d5530e220bc740e)
+--- a/Python/import.c	(2e2af14ef0720fef44002ed5f6941f229bdd7440)
++++ b/Python/import.c	(2f67b87b07c235c9673305da4d5530e220bc740e)
 @@ -1478,6 +1478,7 @@ remove_importlib_frames(PyThreadState *tstate)
  {
      const char *importlib_filename = "<frozen importlib._bootstrap>";

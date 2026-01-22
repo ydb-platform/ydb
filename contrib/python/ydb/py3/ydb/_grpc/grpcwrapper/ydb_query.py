@@ -69,6 +69,8 @@ class TransactionSettings(IFromPublic, IToProto):
         return TransactionSettings(tx_mode=tx_mode)
 
     def to_proto(self) -> ydb_query_pb2.TransactionSettings:
+        if self.tx_mode.name == "snapshot_read_write":
+            return ydb_query_pb2.TransactionSettings(snapshot_read_write=self.tx_mode.to_proto())
         if self.tx_mode.name == "snapshot_read_only":
             return ydb_query_pb2.TransactionSettings(snapshot_read_only=self.tx_mode.to_proto())
         if self.tx_mode.name == "serializable_read_write":

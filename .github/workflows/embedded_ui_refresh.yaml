@@ -23,6 +23,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: read
     env:
       ASSET_NAME: ${{ github.event.inputs && github.event.inputs.asset_name || github.event.client_payload.asset_name }}
       REPOSITORY: ${{ github.event.inputs && github.event.inputs.repository || github.event.client_payload.repository }}
@@ -68,7 +69,7 @@ jobs:
         with:
           token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           commit-message: "build: refresh Embedded UI (${{ env.TAG_NAME }})"
-          branch: embedded-ui-${{ env.TAG_NAME }}
+          branch: update-embedded-ui-${{ env.TAG_NAME }}
           delete-branch: true
           title: "build: refresh Embedded UI (${{ env.TAG_NAME }})"
           body: |

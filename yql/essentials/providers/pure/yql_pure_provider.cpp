@@ -147,6 +147,7 @@ public:
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();
         auto value = graph->GetValue();
+
         bool truncated = false;
         auto type = root.GetStaticType();
         TString data;
@@ -195,6 +196,12 @@ public:
         }
 
         writer.OnEndMap();
+        value = {};
+        graph->Invalidate();
+        if (auto pos = graph->GetNotConsumedLinear()) {
+            throw TErrorException(0) << pos << " Linear value is not consumed";
+        }
+
         input->SetState(TExprNode::EState::ExecutionComplete);
         input->SetResult(ctx.NewAtom(input->Pos(), out.Str()));
         return SyncOk();

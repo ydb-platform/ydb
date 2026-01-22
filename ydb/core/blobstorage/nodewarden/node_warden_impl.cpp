@@ -1263,6 +1263,10 @@ void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
 
 void TNodeWarden::FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus> *pb, bool initial) {
     for (auto& [vslotId, vdisk] : LocalVDisks) {
+        if (vdisk.RuntimeData && vdisk.RuntimeData->DDisk) {
+            continue; // do not report DDisks here
+        }
+
         const NKikimrBlobStorage::EVDiskStatus status = vdisk.RuntimeData
             ? vdisk.Status
             : NKikimrBlobStorage::EVDiskStatus::ERROR;

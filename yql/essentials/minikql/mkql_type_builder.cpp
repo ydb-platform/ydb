@@ -52,7 +52,7 @@ public:
         return Inner_->IsActive(component, level);
     }
 
-    void Log(NUdf::TLogComponentId component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+    void Log(NUdf::TLogComponentId component, NUdf::ELogLevel level, const NUdf::TStringRef& message) override {
         Inner_->Log(component, level, message);
     }
 
@@ -2203,6 +2203,16 @@ ui64 TTypeInfoHelper::GetMaxBlockLength(const NUdf::TType* type) const {
 
 ui64 TTypeInfoHelper::GetMaxBlockBytes() const {
     return MaxBlockSizeInBytes;
+}
+
+void TTypeInfoHelper::NotifyNotConsumedLinear(const NUdf::TSourcePosition& pos) const {
+    if (NotConsumedLinearCallback_) {
+        NotConsumedLinearCallback_(pos);
+    }
+}
+
+void TTypeInfoHelper::SetNotConsumedLinearCallback(const TNotConsumedLinearCallback& callback) {
+    NotConsumedLinearCallback_ = callback;
 }
 
 void TTypeInfoHelper::DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v) {

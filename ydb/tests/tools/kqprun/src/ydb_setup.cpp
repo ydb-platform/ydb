@@ -3,10 +3,14 @@
 #include <library/cpp/colorizer/colors.h>
 
 #include <ydb/core/blob_depot/mon_main.h>
+#include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/test_client.h>
+
+#include <ydb/services/persqueue_v1/grpc_pq_schema.h>
+#include <ydb/services/persqueue_v1/services_initializer.h>
 
 #include <ydb/tests/tools/kqprun/runlib/kikimr_setup.h>
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
@@ -519,9 +523,14 @@ private:
                     // Port for first static node also used in cluster initialization
                     Server_->EnableGRpc(GetGrpcSettings(grpcPortGen.GetPort(), node), node, absolutePath);
                 }
-            } else if (Settings_.MonitoringEnabled) {
-                NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
-                GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(absolutePath), "", edgeActor, 0, true), node, GetRuntime()->GetAppData(node).UserPoolId);
+            } else {
+                NKikimr::NGRpcProxy::V1::IClustersCfgProvider* clustersCfgProvider = nullptr;
+                NKikimr::NGRpcService::V1::ServicesInitializer(GetRuntime()->GetActorSystem(node), NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), MakeIntrusive<NMonitoring::TDynamicCounters>(), &clustersCfgProvider).Execute();
+
+                if (Settings_.MonitoringEnabled) {
+                    NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
+                    GetRuntime()->Register(NKikimr::CreateBoardPublishActor(NKikimr::MakeEndpointsBoardPath(absolutePath), "", edgeActor, 0, true), node, GetRuntime()->GetAppData(node).UserPoolId);
+                }
             }
 
             if (systemStateInfo) {

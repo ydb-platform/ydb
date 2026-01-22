@@ -124,34 +124,6 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(UnsafeTimestampCast) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("0");
-
-        TKikimrRunner kikimr({setting});
-        TScriptingClient client(kikimr.GetDriver());
-
-        auto result = client.ExecuteYqlScript(Q_(R"(
-            CREATE TABLE `/Root/TsTest` (
-                Key Timestamp,
-                Value String,
-                PRIMARY KEY (Key)
-            );
-            COMMIT;
-
-            UPSERT INTO `/Root/TsTest`
-            SELECT * FROM `/Root/KeyValue`;
-        )")).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = client.ExecuteYqlScript(Q1_(R"(
-            UPSERT INTO `/Root/TsTest`
-            SELECT * FROM `/Root/KeyValue`;
-        )")).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-    }
-
     Y_UNIT_TEST(ScanQuery) {
         TKikimrRunner kikimr;
         TScriptingClient client(kikimr.GetDriver());

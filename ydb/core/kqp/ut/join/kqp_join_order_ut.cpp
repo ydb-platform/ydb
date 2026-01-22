@@ -124,7 +124,6 @@ static TKikimrRunner GetKikimrWithJoinSettings(
     appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
     appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
-    appConfig.MutableFeatureFlags()->SetEnableViews(true);
     if (!useCBO) {
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
     } else {
@@ -407,7 +406,6 @@ private:
 
 void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
     auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
-    kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
     auto db = kikimr.GetQueryClient();
     auto result = db.GetSession().GetValueSync();
     NStatusHelpers::ThrowOnError(result);
@@ -434,7 +432,6 @@ void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TStr
 
 void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& statsPath) {
     auto kikimr = GetKikimrWithJoinSettings(false, GetStatic(statsPath));
-    kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
     auto db = kikimr.GetQueryClient();
     auto result = db.GetSession().GetValueSync();
     NStatusHelpers::ThrowOnError(result);
@@ -574,7 +571,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         const TExecuteParams& params = {}
     ) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO, params);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
         NStatusHelpers::ThrowOnError(result);
@@ -615,7 +611,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     void CheckJoinCardinality(const TString& queryPath, const TString& statsPath, const TString& joinKind, double card, bool useStreamLookupJoin, bool useColumnStore) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), true);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
         NStatusHelpers::ThrowOnError(result);

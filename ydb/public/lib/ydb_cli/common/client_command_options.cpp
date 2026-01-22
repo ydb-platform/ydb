@@ -3,7 +3,6 @@
 
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
-#include <library/cpp/colorizer/colors.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <library/cpp/yaml/as/tstring.h>
 

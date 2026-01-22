@@ -240,7 +240,8 @@ void TDataShardUserDb::UpdateRow(
 void TDataShardUserDb::IncrementRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops)
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    bool insertMissing)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected incrementRow for an unknown table");
@@ -251,8 +252,13 @@ void TDataShardUserDb::IncrementRow(
     }
 
     auto currentRow = GetRowState(tableId, key, columns);
+    IncreaseSelectCounters(key);
 
     if (currentRow.Size() == 0) {
+        if (insertMissing) {
+            UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
+            IncreaseUpdateCounters(key, ops);
+        }
         return;
     }
 
@@ -278,7 +284,6 @@ void TDataShardUserDb::IncrementRow(
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, newOps);
 
-    IncreaseSelectCounters(key);
     IncreaseUpdateCounters(key, ops);
 }
 

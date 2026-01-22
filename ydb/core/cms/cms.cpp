@@ -462,7 +462,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     if (schedule && response.GetStatus().GetCode() != TStatus::ALLOW_PARTIAL) {
         if (response.GetStatus().GetCode() == TStatus::DISALLOW_TEMP
             || response.GetStatus().GetCode() == TStatus::ERROR_TEMP)
-        {   
+        {
             if (!allowPartial) {
                 // Only the first problem action was scheduled during
                 // the actions check loop. Merge it with rest actions.
@@ -887,7 +887,7 @@ bool TCms::TryToLockPDisk(const TAction &action,
 {
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
     duration += opts.PermissionDuration;
-    
+
     if (pdisk.IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration))
         return false;
 
@@ -944,7 +944,7 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
         const auto &group = ClusterInfo->BSGroup(groupId);
         TInstant defaultDeadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
 
-        if (group.Erasure.GetErasure() == TErasureType::ErasureSpeciesCount) {
+        if (!TBlobStorageGroupType::ErasureNames.contains(group.Erasure.GetErasure())) {
             error.Code = TStatus::ERROR;
             error.Reason = Sprintf("Affected group %u has unknown erasure type", groupId);
             error.Deadline = defaultDeadline;

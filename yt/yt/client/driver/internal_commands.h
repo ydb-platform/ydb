@@ -208,4 +208,18 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TGetConnectionOrchidValue
+    : public TTypedCommand<NApi::TGetConnectionOrchidValueOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetConnectionOrchidValue);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

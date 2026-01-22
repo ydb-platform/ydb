@@ -188,7 +188,7 @@ struct IDqComputeActorAsyncOutput {
     virtual const TDqAsyncStats& GetEgressStats() const = 0;
 
     // Sends data.
-    // Method shoud be called under bound mkql allocator.
+    // Method should be called under bound mkql allocator.
     // Could throw YQL errors.
     // Checkpoint (if any) is supposed to be ordered after batch,
     // and finished flag is supposed to be ordered after checkpoint.

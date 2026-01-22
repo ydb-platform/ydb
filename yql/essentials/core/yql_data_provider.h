@@ -91,7 +91,7 @@ class IOptimizationContext;
 
 class IDataProvider : public TThrRefBase {
 public:
-    virtual ~IDataProvider() {}
+    ~IDataProvider() override {}
 
     virtual TStringBuf GetName() const = 0;
 

@@ -3,7 +3,7 @@
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
 
-#include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <util/string/cast.h>
 #include <util/string/builder.h>

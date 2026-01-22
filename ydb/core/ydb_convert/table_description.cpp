@@ -825,6 +825,43 @@ bool FillColumnFamily(
     return true;
 }
 
+
+bool FillColumnCompression(
+    const Ydb::Table::ColumnMeta& from, NKikimrSchemeOp::TOlapColumnDiff* to, Ydb::StatusIds::StatusCode& status, TString& error) {
+    to->SetName(from.name());
+    if (from.has_compression()) {
+        const auto fromCompression = from.compression();
+        auto toSerializer = to->MutableSerializer();
+
+        if (from.compression().algorithm()) {
+            toSerializer->SetClassName("ARROW_SERIALIZER");
+            auto arrowCompression = toSerializer->MutableArrowCompression();
+            switch (fromCompression.algorithm()) {
+                case Ydb::Table::ColumnCompression::ALGORITHM_OFF:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain);
+                    break;
+                case Ydb::Table::ColumnCompression::ALGORITHM_LZ4:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4);
+                    break;
+                case Ydb::Table::ColumnCompression::ALGORITHM_ZSTD:
+                    arrowCompression->SetCodec(::NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD);
+                    break;
+                    
+                default:
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = TStringBuilder() << "Unsupported compression algorithm " << (ui32)fromCompression.Getalgorithm() << " in compression settings";
+                    return false;
+            }
+        }
+
+        if (from.compression().has_compression_level()) {
+            auto arrowCompression = toSerializer->MutableArrowCompression();
+            arrowCompression->SetLevel(fromCompression.compression_level());
+        }
+    }
+    return true;
+}
+
 bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
     NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error) {
     const auto ops = GetAlterOperationKinds(req);
@@ -873,6 +910,12 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
             if (!alter.family().empty()) {
                 alterColumn->SetColumnFamilyName(alter.family());
+            }
+
+            if (alter.has_compression()) {
+                if (!FillColumnCompression(alter, alterColumn, status, error)) {
+                    return false;
+                }
             }
         }
 

@@ -46,6 +46,8 @@ const TVector<XxportProperties>& GetXxportProperties() {
         {NYdb::NDump::NFiles::CreateTopic().FileName, NBackup::EBackupFileType::TopicCreate, NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup},
         {NYdb::NDump::NFiles::CreateAsyncReplication().FileName, NBackup::EBackupFileType::AsyncReplicationCreate, NKikimrSchemeOp::EPathType::EPathTypeReplication},
         {NYdb::NDump::NFiles::CreateTransfer().FileName, NBackup::EBackupFileType::TransferCreate, NKikimrSchemeOp::EPathType::EPathTypeTransfer},
+        {NYdb::NDump::NFiles::CreateExternalDataSource().FileName, NBackup::EBackupFileType::ExternalDataSourceCreate, NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource},
+        {NYdb::NDump::NFiles::CreateExternalTable().FileName, NBackup::EBackupFileType::ExternalTableCreate, NKikimrSchemeOp::EPathType::EPathTypeExternalTable},
     };
 
     return properties;

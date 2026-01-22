@@ -1,6 +1,7 @@
 
 #include "pq_impl.h"
 #include "pq_impl_types.h"
+#include "fix_transaction_states.h"
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
@@ -793,62 +794,44 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     TxWrites.clear();
 
-    for (const auto& readRange : readRanges) {
-        PQ_ENSURE(readRange.HasStatus());
-        if (readRange.GetStatus() != NKikimrProto::OK &&
-            readRange.GetStatus() != NKikimrProto::OVERRUN &&
-            readRange.GetStatus() != NKikimrProto::NODATA) {
-            PQ_LOG_ERROR_AND_DIE("Transactions read error: " << readRange.GetStatus());
-            return;
-        }
-
-        for (size_t i = 0; i < readRange.PairSize(); ++i) {
-            const auto& pair = readRange.GetPair(i);
-
-            PQ_LOG_D("ReadRange pair." <<
-                     " Key " << (pair.HasKey() ? pair.GetKey() : "unknown") <<
-                     ", Status " << pair.GetStatus());
-
-            NKikimrPQ::TTransaction tx;
-            PQ_ENSURE(tx.ParseFromString(pair.GetValue()));
-
-            PQ_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN)("Key", pair.GetKey());
-
-            if (tx.HasStep()) {
-                if (tx.GetStep() > PlanStep) {
-                    PlanStep = tx.GetStep();
+    const auto txs = CollectTransactions(readRanges);
+    for (const auto& [txId, tx] : txs) {
+        if (tx.HasStep()) {
+            if (tx.GetStep() > PlanStep) {
+                PlanStep = tx.GetStep();
+                PlanTxId = tx.GetTxId();
+                PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
+            } else if (tx.GetStep() == PlanStep) {
+                if (tx.GetTxId() > PlanTxId) {
                     PlanTxId = tx.GetTxId();
                     PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
-                } else if (tx.GetStep() == PlanStep) {
-                    if (tx.GetTxId() > PlanTxId) {
-                        PlanTxId = tx.GetTxId();
-                        PQ_LOG_TX_D("PlanStep " << PlanStep << ", PlanTxId " << PlanTxId);
-                    }
                 }
             }
+        }
 
-            PQ_LOG_TX_I("Restore Tx. " <<
-                     "TxId: " << tx.GetTxId() <<
-                     ", Step: " << tx.GetStep() <<
-                     ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.GetState()) <<
-                     ", WriteId: " << tx.GetWriteId().ShortDebugString());
+        PQ_LOG_TX_I("Restore Tx. " <<
+                    "TxId: " << tx.GetTxId() <<
+                    ", Step: " << tx.GetStep() <<
+                    ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.GetState()) <<
+                    ", Predicate: " << tx.GetPredicate() << " (" << (tx.HasPredicate() ? "+" : "-") << ")" <<
+                    ", WriteId: " << tx.GetWriteId().ShortDebugString());
 
-            if (tx.GetState() == NKikimrPQ::TTransaction::CALCULATED) {
-                PQ_LOG_TX_D("Fix tx state");
-                tx.SetState(NKikimrPQ::TTransaction::PLANNED);
-            }
+        Txs.emplace(tx.GetTxId(), tx);
 
-            Txs.emplace(tx.GetTxId(), tx);
-            SetTxInFlyCounter();
+        if (tx.HasWriteId()) {
+            PQ_LOG_TX_I("Link TxId " << tx.GetTxId() << " with WriteId " << GetWriteId(tx));
+            TxWrites[GetWriteId(tx)].TxId = tx.GetTxId();
+        }
+    }
 
-            if (tx.HasStep()) {
-                PlannedTxs.emplace_back(tx.GetStep(), tx.GetTxId());
-            }
+    for (const auto& [txId, tx] : Txs) {
+        PQ_LOG_D("TxId: " << txId <<
+                 ", Step: " << tx.Step <<
+                 ", State: " << NKikimrPQ::TTransaction_EState_Name(tx.State) <<
+                 ", Decision: " << NKikimrTx::TReadSetData_EDecision_Name(tx.ParticipantsDecision));
 
-            if (tx.HasWriteId()) {
-                PQ_LOG_TX_I("Link TxId " << tx.GetTxId() << " with WriteId " << GetWriteId(tx));
-                TxWrites[GetWriteId(tx)].TxId = tx.GetTxId();
-            }
+        if (tx.Step != Max<ui64>()) {
+            PlannedTxs.emplace_back(tx.Step, txId);
         }
     }
 
@@ -992,8 +975,8 @@ void TPersQueue::ReturnTabletState(const TActorContext& ctx, const TChangeNotifi
 
 void TPersQueue::TryReturnTabletStateAll(const TActorContext& ctx, NKikimrProto::EReplyStatus status)
 {
-    if (AllTransactionsHaveBeenProcessed() && (TabletState == NKikimrPQ::EDropped)) {
-        for (auto req : TabletStateRequests) {
+    if (ReadyForDroppedReply()) {
+        for (const auto& req : TabletStateRequests) {
             ReturnTabletState(ctx, req, status);
         }
         TabletStateRequests.clear();
@@ -3560,11 +3543,6 @@ bool TPersQueue::CanProcessWriteTxs() const
     return !WriteTxs.empty();
 }
 
-bool TPersQueue::CanProcessDeleteTxs() const
-{
-    return !DeleteTxs.empty();
-}
-
 bool TPersQueue::CanProcessTxWrites() const
 {
     return !NewSupportivePartitions.empty();
@@ -3602,9 +3580,9 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     bool canProcess =
         CanProcessProposeTransactionQueue() ||
         CanProcessWriteTxs() ||
-        CanProcessDeleteTxs() ||
         CanProcessTxWrites() ||
-        TxWritesChanged
+        TxWritesChanged ||
+        DeleteTxsContainsKafkaTxs
         ;
     if (!canProcess) {
         return;
@@ -3613,9 +3591,8 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
     auto request = MakeHolder<TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(WRITE_TX_COOKIE);
 
-    ProcessProposeTransactionQueue(ctx);
+    ProcessProposeTransactionQueue(ctx, request->Record);
     ProcessWriteTxs(ctx, request->Record);
-    ProcessDeleteTxs(ctx, request->Record);
     AddCmdWriteTabletTxInfo(request->Record);
 
     WriteTxsInProgress = true;
@@ -3671,9 +3648,14 @@ void TPersQueue::TryWriteTxs(const TActorContext& ctx)
     }
 }
 
-void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
+void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx,
+                                                NKikimrClient::TKeyValueRequest& request)
 {
     PQ_ENSURE(!WriteTxsInProgress);
+
+    if (CanProcessProposeTransactionQueue() || DeleteTxsContainsKafkaTxs) {
+        ProcessDeleteTxs(ctx, request);
+    }
 
     while (CanProcessProposeTransactionQueue()) {
         const auto front = std::move(EvProposeTransactionQueue.front());
@@ -3895,17 +3877,17 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
     }
 
     DeleteTxs.clear();
+    DeleteTxsContainsKafkaTxs = false;
 }
 
 void TPersQueue::AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
                                 ui64 txId)
 {
-    TString key = GetTxKey(txId);
     auto range = request.AddCmdDeleteRange()->MutableRange();
-    range->SetFrom(key);
+    range->SetFrom(GetTxKey(txId));
     range->SetIncludeFrom(true);
-    range->SetTo(key);
-    range->SetIncludeTo(true);
+    range->SetTo(GetTxKey(txId + 1));
+    range->SetIncludeTo(false);
 }
 
 void TPersQueue::ProcessConfigTx(const TActorContext& ctx,
@@ -4159,7 +4141,7 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
 {
     PQ_LOG_T("Commit TxId " << tx.TxId);
 
-    TMaybe<NKikimrPQ::TTransaction> serializedTx = tx.Serialize(NKikimrPQ::TTransaction::EXECUTED);
+    const auto serializedTx = tx.Serialize(NKikimrPQ::TTransaction::EXECUTED);
     TMaybe<NKikimrPQ::TPQTabletConfig> tabletConfig;
 
     if (tx.Kind == NKikimrPQ::TTransaction::KIND_CONFIG) {
@@ -4171,11 +4153,7 @@ void TPersQueue::SendEvTxCommitToPartitions(const TActorContext& ctx,
         auto explicitMessageGroups = CreateExplicitMessageGroups(tx.BootstrapConfig, tx.PartitionsData, graph, partitionId);
         auto event = std::make_unique<TEvPQ::TEvTxCommit>(tx.Step, tx.TxId, explicitMessageGroups);
 
-        if (serializedTx.Defined()) {
-            event->SerializedTx = std::move(*serializedTx);
-
-            serializedTx = Nothing();
-        }
+        event->SerializedTx = serializedTx;
 
         if (tabletConfig.Defined()) {
             event->TabletConfig = std::move(*tabletConfig);
@@ -4582,6 +4560,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         SendPlanStepAcks(ctx, tx);
         SendEvReadSetAckToSenders(ctx, tx);
+        TryReturnTabletStateAll(ctx);
 
         PQ_LOG_TX_I("delete partitions for TxId " << tx.TxId);
         BeginDeletePartitions(tx);
@@ -4674,6 +4653,7 @@ void TPersQueue::DeleteTx(TDistributedTransaction& tx)
     PQ_LOG_TX_D("add an TxId " << tx.TxId << " to the list for deletion");
 
     DeleteTxs.insert(tx.TxId);
+    DeleteTxsContainsKafkaTxs |= (tx.WriteId.Defined() && tx.WriteId->IsKafkaApiTransaction());
 
     if (auto traceId = tx.GetExecuteSpanTraceId(); traceId) {
         HasTxDeleteSpan = true;
@@ -4746,34 +4726,31 @@ void TPersQueue::InitMediatorTimeCast(const TActorContext& ctx)
     }
 }
 
-bool TPersQueue::AllTransactionsHaveBeenProcessed() const
+bool TPersQueue::ReadyForDroppedReply() const 
 {
-    bool existDataTx = false;
-    bool existPlannedConfigTx = false;
-    bool existUnplannedConfigTx = false;
+    if (TabletState != NKikimrPQ::EDropped) {
+        return false;
+    }
 
     for (const auto& [_, tx] : Txs) {
         switch (tx.Kind) {
-        case NKikimrPQ::TTransaction::KIND_CONFIG:
-            ((tx.Step == Max<ui64>()) ? existUnplannedConfigTx : existPlannedConfigTx) = true;
-            break;
         case NKikimrPQ::TTransaction::KIND_DATA:
-            existDataTx = true;
+            if (tx.State < NKikimrPQ::TTransaction::EXECUTED) {
+                return false;
+            }
+            break;
+        case NKikimrPQ::TTransaction::KIND_CONFIG:
+            if ((tx.State < NKikimrPQ::TTransaction::EXECUTED) &&
+                (tx.Step != Max<ui64>())) {
+                return false;
+            }
             break;
         case NKikimrPQ::TTransaction::KIND_UNKNOWN:
             PQ_ENSURE(false);
         }
     }
 
-    if (existDataTx || existPlannedConfigTx) {
-        return false;
-    }
-
-    if (existUnplannedConfigTx) {
-        return true;
-    }
-
-    return EvProposeTransactionQueue.empty() && Txs.empty();
+    return EvProposeTransactionQueue.empty();
 }
 
 void TPersQueue::SendProposeTransactionResult(const TActorId& target,

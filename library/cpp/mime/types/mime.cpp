@@ -103,6 +103,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_CSV, "text/csv\0", "csv\0"},
     {MIME_VIDEO_MP4, "video/mp4\0", "mp4\0"},
     {MIME_VIDEO_AVI, "video/x-msvideo\0", "avi\0"},
+    {MIME_IMAGE_AVIF, "image/avif\0", "avif\0"},
     {MIME_MAX, nullptr, nullptr},
 
     // Additional records
@@ -258,4 +259,5 @@ const char* MimeNames[MIME_MAX] = {
     "csv",     // MIME_CSV             // 48
     "mp4",     // MIME_VIDEO_MP4       // 49
     "avi",     // MIME_VIDEO_AVI       // 50
+    "avif",    // MIME_IMAGE_AVIF      // 51
 };

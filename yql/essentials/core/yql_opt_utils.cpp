@@ -133,6 +133,10 @@ TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprCont
     return ctx.NewCallable(position, "Just", { MakeBool(position, value, ctx)});
 }
 
+TExprNode::TPtr MakeString(TPositionHandle position, TStringBuf buf, TExprContext& ctx) {
+    return ctx.Builder(position).Callable("String").Atom(0, buf).Seal().Build();
+}
+
 TExprNode::TPtr MakePgBool(TPositionHandle position, bool value, TExprContext& ctx) {
     return ctx.NewCallable(position, "PgConst", {
         ctx.NewAtom(position, value ? "t" : "f", TNodeFlags::Default),
@@ -2814,8 +2818,12 @@ bool IsNormalizedDependsOn(const TExprNode& node) {
     return false;
 }
 
+bool IsForbidConstantDependsEnabled(const TTypeAnnotationContext& types) {
+    return !IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types);
+}
+
 bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types) {
-    if (!IsOptimizerEnabled<ForbidConstantDependsOnFuseOptName>(types) || IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types)) {
+    if (!IsForbidConstantDependsEnabled(types)) {
         return true;
     }
 
@@ -2860,6 +2868,12 @@ bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* type
     YQL_ENSURE(types);
     static const char OptName[] = "ExtractMembersForPartitionsByKeys";
     return !IsOptimizerDisabled<OptName>(*types);
+}
+
+bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char OptName[] = "EmitPruneKeys";
+    return IsOptimizerEnabled<OptName>(*types) && !IsOptimizerDisabled<OptName>(*types);
 }
 
 }

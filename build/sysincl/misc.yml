@@ -455,3 +455,7 @@
   includes:
     - thread.h: contrib/restricted/ffmpeg/libavcodec/thread.h
     - jni.h: contrib/restricted/ffmpeg/libavcodec/jni.h
+
+- source_filter: "^contrib/libs/kvazaar"
+  includes:
+    - getopt.h: contrib/libs/kvazaar/src/extras/getopt.h

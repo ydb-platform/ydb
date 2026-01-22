@@ -276,7 +276,6 @@ class AuthorizedSession(aiohttp.ClientSession):
         auto_decompress=False,
         **kwargs,
     ):
-
         """Implementation of Authorized Session aiohttp request.
 
         Args:
@@ -302,7 +301,7 @@ class AuthorizedSession(aiohttp.ClientSession):
                 at ``max_allowed_time``. It might take longer, for example, if
                 an underlying request takes a lot of time, but the request
                 itself does not timeout, e.g. if a large file is being
-                transmitted. The timout error will be raised after such
+                transmitted. The timeout error will be raised after such
                 request completes.
         """
         # Headers come in as bytes which isn't expected behavior, the resumable
@@ -358,7 +357,6 @@ class AuthorizedSession(aiohttp.ClientSession):
                 response.status in self._refresh_status_codes
                 and _credential_refresh_attempt < self._max_refresh_attempts
             ):
-
                 requests._LOGGER.info(
                     "Refreshing credentials due to a %s response. Attempt %s/%s.",
                     response.status,

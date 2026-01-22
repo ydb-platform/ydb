@@ -400,7 +400,7 @@ struct TThrowerValue: public NUdf::TBoxedValue {
     {
         ++Count;
     }
-    ~TThrowerValue() {
+    ~TThrowerValue() override {
         --Count;
     }
 

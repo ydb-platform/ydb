@@ -74,7 +74,7 @@ public:
 
     TMapNode(TMapNode&& src);
 
-    ~TMapNode();
+    ~TMapNode() override;
 
     TUnboxedValue Lookup(const TStringRef& key) const;
 

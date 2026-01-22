@@ -1,13 +1,15 @@
 #pragma once
 
-#include "interactive_log.h"
+#include <ydb/public/lib/ydb_cli/common/command.h>
 
-#include <util/generic/fwd.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <yaml-cpp/node/node.h>
-#include <functional>
 
-#include <ydb/public/lib/ydb_cli/common/command.h>
+#include <util/generic/fwd.h>
+#include <util/stream/output.h>
+
+#include <functional>
 
 namespace NYdb::NConsoleClient {
 
@@ -53,9 +55,9 @@ public:
     public:
         using TPtr = std::shared_ptr<TAiProfile>;
 
-        TAiProfile(const TString& name, YAML::Node config, TInteractiveConfigurationManager::TPtr manager, const TInteractiveLogger& log);
+        TAiProfile(const TString& name, YAML::Node config, TInteractiveConfigurationManager::TPtr manager);
 
-        TAiProfile(TInteractiveConfigurationManager::TPtr manager, const TInteractiveLogger& log);
+        explicit TAiProfile(TInteractiveConfigurationManager::TPtr manager);
 
         bool IsValid(TString& error) const;
 
@@ -87,12 +89,11 @@ public:
     private:
         TString Name;
         const TInteractiveConfigurationManager::TPtr Manager;
-        const TInteractiveLogger Log;
         YAML::Node Config;
     };
 
 public:
-    TInteractiveConfigurationManager(const TString& configurationPath, const TInteractiveLogger& log);
+    explicit TInteractiveConfigurationManager(const TString& configurationPath);
 
     ~TInteractiveConfigurationManager();
 
@@ -132,7 +133,6 @@ private:
     void SaveConfig();
 
 private:
-    const TInteractiveLogger Log;
     const TString ConfigurationPath;
     YAML::Node Config;
     bool ConfigChanged = false;

@@ -126,7 +126,7 @@ TVector<TCell> FillKeyValues(const TVector<NScheme::TTypeInfo>& keyColumnTypes, 
             case NKqpProto::TKqpPhyValue::kLiteralValue: {
                 const auto& literal = tupleValue.GetLiteralValue();
                 auto binded = typeEnv.BindAllocator();
-                auto [type, value] = ImportValueFromProto(literal.GetType(), literal.GetValue(), typeEnv, holderFactory);
+                auto [type, value] = ImportValueFromProto(literal.type(), literal.value(), typeEnv, holderFactory);
                 keyValues.emplace_back(NMiniKQL::MakeCell(keyColumnTypes[i], value, typeEnv, /* copy */ true));
                 continue;
             }
@@ -777,7 +777,7 @@ NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto
             const auto& literalValue = protoPhyValue.GetLiteralValue();
 
             auto [type, value] = NMiniKQL::ImportValueFromProto(
-                literalValue.GetType(), literalValue.GetValue(), typeEnv, holderFactory);
+                literalValue.type(), literalValue.value(), typeEnv, holderFactory);
 
             YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
             return value;
@@ -796,7 +796,6 @@ NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto
         }
 
         case NKqpProto::TKqpPhyValue::kParamElementValue:
-        case NKqpProto::TKqpPhyValue::kRowsList:
             YQL_ENSURE(false, "Unexpected PhyValue kind " << protoPhyValue.DebugString());
 
         case NKqpProto::TKqpPhyValue::KIND_NOT_SET:

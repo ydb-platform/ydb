@@ -1,5 +1,7 @@
 #include "yql_pq_dummy_gateway.h"
-#include "yql_pq_file_topic_client.h"
+
+#include <ydb/library/yql/providers/pq/gateway/clients/file/yql_pq_file_federated_topic_client.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/file/yql_pq_file_topic_client.h>
 
 #include <util/generic/is_in.h>
 #include <util/generic/yexception.h>
@@ -8,46 +10,33 @@
 
 namespace NYql {
 
-struct TDummyFederatedTopicClient : public IFederatedTopicClient {
-    using TClusterNPath = TDummyPqGateway::TClusterNPath;
-    TDummyFederatedTopicClient(const NYdb::NTopic::TFederatedTopicClientSettings& settings = {}, const THashMap<TClusterNPath, TDummyTopic>& topics = {})
-        : Topics_(topics)
-        , FederatedClientSettings_(settings) {}
-
-    NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() override {
-        std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo> dbInfo;
-        dbInfo.emplace_back(
-                "",
-                FederatedClientSettings_.DiscoveryEndpoint_.value_or(""),
-                FederatedClientSettings_.Database_.value_or(""),
-                NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE);
-        return NThreading::MakeFuture(std::move(dbInfo));
-    }
-
-    std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NFederatedTopic::TFederatedWriteSessionSettings& settings) override {
-        if (!FileTopicClient_) {
-            FileTopicClient_ = MakeIntrusive<TFileTopicClient>(std::move(Topics_));
-        }
-        return FileTopicClient_->CreateWriteSession(settings);
-    }
-private:
-    THashMap<TClusterNPath, TDummyTopic> Topics_;
-    NYdb::NFederatedTopic::TFederatedTopicClientSettings FederatedClientSettings_;
-    TFileTopicClient::TPtr FileTopicClient_;
-};
+using namespace NYdb;
+using namespace NYdb::NFederatedTopic;
+using namespace NYdb::NTopic;
 
 TDummyPqGateway::TDummyPqGateway(bool skipDatabasePrefix)
     : SkipDatabasePrefix(skipDatabasePrefix)
 {}
 
+TDummyPqGateway& TDummyPqGateway::AddDummyTopic(const TDummyTopic& topic) {
+    with_lock (Mutex) {
+        Y_ENSURE(topic.Cluster);
+        Y_ENSURE(topic.TopicName);
+        const auto key = std::make_pair(topic.Cluster, topic.TopicName);
+        Y_ENSURE(Topics.emplace(key, topic).second, "Already inserted dummy topic {" << topic.Cluster << ", " << topic.Path << "}");
+        return *this;
+    }
+}
+
 NThreading::TFuture<void> TDummyPqGateway::OpenSession(const TString& sessionId, const TString& username) {
+    Y_UNUSED(username);
+
     with_lock (Mutex) {
         Y_ENSURE(sessionId);
-        Y_UNUSED(username);
-
         Y_ENSURE(!IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is already opened in pq gateway");
         OpenedSessions.insert(sessionId);
     }
+
     return NThreading::MakeFuture();
 }
 
@@ -103,49 +92,34 @@ NThreading::TFuture<IPqGateway::TListStreams> TDummyPqGateway::ListStreams(const
     return NThreading::MakeFuture<IPqGateway::TListStreams>();
 }
 
-TDummyPqGateway& TDummyPqGateway::AddDummyTopic(const TDummyTopic& topic) {
-    with_lock (Mutex) {
-        Y_ENSURE(topic.Cluster);
-        Y_ENSURE(topic.TopicName);
-        const auto key = std::make_pair(topic.Cluster, topic.TopicName);
-        Y_ENSURE(Topics.emplace(key, topic).second, "Already inserted dummy topic {" << topic.Cluster << ", " << topic.Path << "}");
-        return *this;
-    }
-}
-
-IPqGateway::TPtr CreatePqFileGateway(bool skipDatabasePrefix) {
-    return MakeIntrusive<TDummyPqGateway>(skipDatabasePrefix);
-}
-
-ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const NYdb::TDriver&, const NYdb::NTopic::TTopicClientSettings&) {
-    return MakeIntrusive<TFileTopicClient>(Topics);
-}
-
-IFederatedTopicClient::TPtr TDummyPqGateway::GetFederatedTopicClient(const NYdb::TDriver&, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) {
-    return MakeIntrusive<TDummyFederatedTopicClient>(settings, Topics);
-}
-NYdb::NFederatedTopic::TFederatedTopicClientSettings TDummyPqGateway::GetFederatedTopicClientSettings() const {
-    return {};
-}
-
-void TDummyPqGateway::UpdateClusterConfigs(
-    const TString& clusterName,
-    const TString& endpoint,
-    const TString& database,
-    bool secure)
-{
-    Y_UNUSED(clusterName);
-    Y_UNUSED(endpoint);
-    Y_UNUSED(database);
-    Y_UNUSED(secure);
+void TDummyPqGateway::UpdateClusterConfigs(const TString& clusterName, const TString& endpoint, const TString& database, bool secure) {
+    Y_UNUSED(clusterName, endpoint, database, secure);
 }
 
 void TDummyPqGateway::UpdateClusterConfigs(const TPqGatewayConfigPtr& config) {
      Y_UNUSED(config);
 }
 
-NYdb::NTopic::TTopicClientSettings TDummyPqGateway::GetTopicClientSettings() const {
-    return NYdb::NTopic::TTopicClientSettings();
+void TDummyPqGateway::AddCluster(const NYql::TPqClusterConfig& cluster) {
+    Y_UNUSED(cluster);
+}
+
+ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) {
+    Y_UNUSED(driver, settings);
+    return CreateFileTopicClient(Topics);
+}
+
+IFederatedTopicClient::TPtr TDummyPqGateway::GetFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings) {
+    Y_UNUSED(driver);
+    return CreateFileFederatedTopicClient(Topics, settings);
+}
+
+TTopicClientSettings TDummyPqGateway::GetTopicClientSettings() const {
+    return {};
+}
+
+TFederatedTopicClientSettings TDummyPqGateway::GetFederatedTopicClientSettings() const {
+    return {};
 }
 
 TString TDummyPqGateway::CanonizeCluster(const TString& cluster, const TString& database) const {
@@ -159,20 +133,8 @@ TString TDummyPqGateway::CanonizeCluster(const TString& cluster, const TString& 
     return TString(clusterCanonized);
 }
 
-class TPqFileGatewayFactory : public IPqGatewayFactory {
-public:
-    TPqFileGatewayFactory(const TDummyPqGateway::TPtr pqFileGateway)
-        : PqFileGateway(pqFileGateway) {}
-
-    IPqGateway::TPtr CreatePqGateway() override {
-        return PqFileGateway;
-    }
-private:
-    const TDummyPqGateway::TPtr PqFileGateway;
-};
-
-IPqGatewayFactory::TPtr CreatePqFileGatewayFactory(const TDummyPqGateway::TPtr pqFileGateway) {
-    return MakeIntrusive<TPqFileGatewayFactory>(pqFileGateway);
+TDummyPqGateway::TPtr CreatePqFileGateway(bool skipDatabasePrefix) {
+    return MakeIntrusive<TDummyPqGateway>(skipDatabasePrefix);
 }
 
 } // namespace NYql

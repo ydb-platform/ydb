@@ -535,6 +535,14 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerGroupMetricsExchange, EvControllerGroupMetricsExchange>
     {};
 
+    struct TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup : TEventPB<TEvControllerAllocateDDiskBlockGroup,
+            NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroup, EvControllerAllocateDDiskBlockGroup>
+    {};
+
+    struct TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult : TEventPB<TEvControllerAllocateDDiskBlockGroupResult,
+            NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult, EvControllerAllocateDDiskBlockGroupResult>
+    {};
+
     struct TEvBlobStorage::TEvPutVDiskToReadOnly : TEventLocal<TEvPutVDiskToReadOnly, EvPutVDiskToReadOnly> {
         const TVDiskID VDiskId;
 

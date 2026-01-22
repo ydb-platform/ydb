@@ -258,7 +258,7 @@ public:
     {
     }
 
-    ~TVectorHolderBase() {
+    ~TVectorHolderBase() override {
     }
 
 private:
@@ -657,7 +657,7 @@ public:
         }
     }
 
-    ~TSortedSetHolder() {
+    ~TSortedSetHolder() override {
         MKQL_MEM_RETURN(GetMemInfo(), &Items_, Items_.capacity() * sizeof(TItems::value_type));
     }
 
@@ -871,7 +871,7 @@ public:
         }
     }
 
-    ~TSortedDictHolder() {
+    ~TSortedDictHolder() override {
         MKQL_MEM_RETURN(GetMemInfo(), &Items_, Items_.capacity() * sizeof(TItems::value_type));
     }
 

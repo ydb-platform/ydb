@@ -270,7 +270,7 @@ static int test_vec(struct buf_desc *bd, struct iovec *vecs, int nr_vec,
 	struct sockaddr_storage addr;
 	int sock_server, sock_client;
 	struct verify_data vd;
-	size_t total_len = 0;
+	size_t total_len;
 	int i, ret;
 	void *verify_res;
 	pthread_t th;
@@ -285,9 +285,7 @@ static int test_vec(struct buf_desc *bd, struct iovec *vecs, int nr_vec,
 	for (i = 0; i < bd->size; i++)
 		bd->buf_wr[i] = i;
 	memset(bd->buf_rd, 0, bd->size);
-
-	for (i = 0; i < nr_vec; i++)
-		total_len += vecs[i].iov_len;
+	total_len = t_iovec_data_length(vecs, nr_vec);
 
 	vd.bd = bd;
 	vd.vecs = vecs;

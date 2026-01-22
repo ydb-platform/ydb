@@ -164,7 +164,7 @@ public:
     {
     }
 
-    ~TDynamicLinearProxy() {
+    ~TDynamicLinearProxy() override {
         const TPyGilLocker lock;
         PyObject_.Reset();
     }

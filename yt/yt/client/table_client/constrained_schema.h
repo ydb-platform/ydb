@@ -44,11 +44,9 @@ void Deserialize(TConstrainedTableSchema& schema, NYson::TYsonPullParserCursor* 
 namespace NProto {
 
 void ToProto(TColumnNameToConstraintMap* protoConstraints, const NTableClient::TColumnNameToConstraintMap& constraints);
-
-// useless
 void FromProto(NTableClient::TColumnNameToConstraintMap* constraints, const TColumnNameToConstraintMap& protoConstraints);
 
-} // namespace NYT::NTableClient::NProto
+} // namespace NYT::NProto
 
 ////////////////////////////////////////////////////////////////////////////////
 

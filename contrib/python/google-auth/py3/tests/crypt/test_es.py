@@ -24,8 +24,8 @@ from google.auth import _helpers
 from google.auth.crypt import base
 from google.auth.crypt import es
 
-
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+import yatest.common as yc
+DATA_DIR = os.path.join(os.path.dirname(yc.source_path(__file__)), "..", "data")
 
 # To generate es384_privatekey.pem, es384_privatekey.pub, and
 # es384_public_cert.pem:
@@ -68,7 +68,7 @@ class TestEsVerifier(object):
         assert verifier.verify(to_sign, actual_signature)
 
     def test_verify_unicode_success(self):
-        to_sign = u"foo"
+        to_sign = "foo"
         signer = es.EsSigner.from_string(PRIVATE_KEY_BYTES)
         actual_signature = signer.sign(to_sign)
 

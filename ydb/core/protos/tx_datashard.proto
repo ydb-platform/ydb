@@ -525,6 +525,11 @@ message TCreateIncrementalBackupSrc {
     optional TDropCdcStreamNotice DropCdcStreamNotice = 3;
 }
 
+message TTruncateTable {
+    optional NKikimrProto.TPathID PathId = 1;
+    optional uint64 TableSchemaVersion = 2;
+}
+
 message TFlatSchemeTransaction {
     optional NKikimrSchemeOp.TTableDescription CreateTable = 1;
     optional NKikimrSchemeOp.TTableDescription DropTable = 2;
@@ -558,6 +563,8 @@ message TFlatSchemeTransaction {
 
     optional NKikimrSchemeOp.TRestoreIncrementalBackup CreateIncrementalRestoreSrc = 22;
     optional TCreateIncrementalBackupSrc CreateIncrementalBackupSrc = 23;
+
+    optional TTruncateTable TruncateTable = 25;
 }
 
 message TDistributedEraseTransaction {

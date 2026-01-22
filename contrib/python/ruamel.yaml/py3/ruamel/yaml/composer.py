@@ -21,10 +21,14 @@ from ruamel.yaml.nodes import MappingNode, ScalarNode, SequenceNode
 if False:  # MYPY
     from typing import Any, Dict, Optional, List  # NOQA
 
-__all__ = ['Composer', 'ComposerError']
+__all__ = ['Composer', 'ComposerError', 'MaxDepthExceededError']
 
 
 class ComposerError(MarkedYAMLError):
+    pass
+
+
+class MaxDepthExceededError(MarkedYAMLError):
     pass
 
 
@@ -35,6 +39,7 @@ class Composer:
             self.loader._composer = self
         self.anchors: Dict[Any, Any] = {}
         self.warn_double_anchors = True
+        self.depth = 0
 
     @property
     def parser(self) -> Any:
@@ -111,7 +116,16 @@ class Composer:
                     None, None, f'found undefined alias {alias!r}', event.start_mark,
                 )
             return self.return_alias(self.anchors[alias])
+        self.depth += 1
         event = self.parser.peek_event()
+        if self.loader.max_depth and self.depth > self.loader.max_depth:
+            raise MaxDepthExceededError(
+                None,
+                None,
+                f'maximum depth of data structure exceeded ({self.depth}), '
+                'if necessary increase YAML().max_depth',
+                event.start_mark,
+            )
         anchor = event.anchor
         if anchor is not None:  # have an anchor
             if self.warn_double_anchors and anchor in self.anchors:
@@ -129,6 +143,7 @@ class Composer:
         elif self.parser.check_event(MappingStartEvent):
             node = self.compose_mapping_node(anchor)
         self.resolver.ascend_resolver()
+        self.depth -= 1
         return node
 
     def compose_scalar_node(self, anchor: Any) -> Any:

@@ -18,16 +18,11 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/generic/singleton.h>
-#include <util/generic/algorithm.h>
-
-#include <util/stream/mem.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <util/string/escape.h>
 #include <util/string/printf.h>
 
 #include <util/system/byteorder.h>
@@ -530,7 +525,7 @@ TConnectionPtr TConnectionPool::Connect(
             if (connection->DeadLine < now) {
                 continue;
             }
-            if (!AtomicCas(&connection->Busy, 1, 0)) {
+            if (bool expected = false; !connection->Busy.compare_exchange_strong(expected, true)) {
                 continue;
             }
 
@@ -576,7 +571,7 @@ void TConnectionPool::Release(TConnectionPtr connection)
     }
 
     connection->Socket->SetSocketTimeout(socketTimeout.Seconds());
-    AtomicSet(connection->Busy, 0);
+    connection->Busy.store(false);
 
     Refresh();
 }
@@ -621,7 +616,7 @@ void TConnectionPool::Refresh()
     for (const auto& item : sortedConnections) {
         const auto& mapIterator = item.second;
         auto connection = mapIterator->second;
-        if (AtomicGet(connection->Busy)) {
+        if (connection->Busy.load()) {
             continue;
         }
 

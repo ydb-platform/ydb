@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    fix_transaction_states.cpp
     metering_sink.cpp
     pq_impl.cpp
     pq_impl_app.cpp

@@ -4,7 +4,7 @@
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 
 #include <memory>
 

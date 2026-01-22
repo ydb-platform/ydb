@@ -5,7 +5,8 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
-DATABASE = "/Root/test"
+ROOT = "/Root"
+DATABASE = f"{ROOT}/test"
 USE_SECRET_GRANTS = ["ydb.granular.describe_schema", "ydb.granular.select_row"]
 ALTER_SECRET_GRANTS = ["ydb.granular.describe_schema", "ydb.granular.alter_schema"]
 DROP_SECRET_GRANTS = ["ydb.granular.describe_schema", "ydb.granular.remove_schema"]

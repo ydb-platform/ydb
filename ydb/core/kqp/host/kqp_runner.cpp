@@ -83,6 +83,29 @@ public:
 
             YQL_ENSURE(TransformCtx.DataQueryBlocks);
             auto compiler = CreateKqpQueryCompiler(Cluster, Database, FuncRegistry, TypesCtx, OptimizeCtx, Config);
+            if (!ctx.IssueManager.GetIssues().Empty()) {
+                bool errorFound = false;
+                bool wrongIndexUsageFound = false;
+                const auto& issues = ctx.IssueManager.GetIssues();
+                for(const auto& issue: issues) {
+                    WalkThroughIssues(issue, false, [&errorFound, &wrongIndexUsageFound](const NYql::TIssue& issue, int level) {
+                        Y_UNUSED(level);
+                        if (issue.GetSeverity() == NYql::TSeverityIds::S_FATAL || issue.GetSeverity() == NYql::TSeverityIds::S_ERROR) {
+                            errorFound = true;
+                        }
+
+                        if (issue.GetCode() == EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE) {
+                            wrongIndexUsageFound = true;
+                        }
+                    });
+                }
+
+                if (errorFound && wrongIndexUsageFound) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Failed to compile physical query."));
+                    return TStatus::Error;
+                }
+            }
+
             auto ret = compiler->CompilePhysicalQuery(physicalQuery, *TransformCtx.DataQueryBlocks, *preparedQuery.MutablePhysicalQuery(), ctx);
             if (!ret) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Failed to compile physical query."));
@@ -148,7 +171,7 @@ public:
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr(), sessionCtx->GetUserRequestContext()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
-        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel)))
+        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel())))
         , ActorSystem(actorSystem)
     {
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
@@ -206,7 +229,7 @@ public:
         const auto dataQueryBlocks = TKiDataQueryBlocks(query);
 
         if (IsOlapQuery(dataQueryBlocks)) {
-            switch (TransformCtx->Config->BlockChannelsMode) {
+            switch (TransformCtx->Config->GetBlockChannelsMode()) {
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
                     TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
@@ -288,7 +311,7 @@ private:
 
         TransformCtx->DataQueryBlocks = dataQueryBlocks;
 
-        if (Config->EnableNewRBO) {
+        if (Config->GetEnableNewRBO()) {
             YQL_CLOG(INFO, CoreDq) << "Taking the new RBO branch";
             return MakeIntrusive<TPrepareQueryAsyncResult>(query, *NewRBOTransformer, ctx, *TransformCtx);
             //return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);

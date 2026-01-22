@@ -15,6 +15,8 @@
 
 #include <ydb/core/protos/auth.pb.h>
 
+#include <ydb/library/security/util.h>
+
 namespace NKikimr::NSQS {
 
 bool UseMockedVersion(const NKikimrConfig::TSqsConfig& config) {
@@ -263,7 +265,14 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
     }
 
     UserSID_ = result.Token->GetUserSID();
-    AuthType_ = result.Token->GetAuthType();
+    MaskedToken_ = NKikimr::MaskIAMTicket(IamToken_);
+
+    // Of course, in practice the accounts that come in aren’t always of the "service_account" type.
+    // Nevertheless, this value is used only for logging, as it’s required by the cloud_events format.
+    // To determine the actual type of the cloud account, we would need to do some additional work—essentially,
+    //                                                                  make a careful request to the AccessService.
+    AuthType_ = "service_account";
+
     UserSidCallback_(UserSID_);
     OnFinishedRequest();
 }
@@ -438,6 +447,7 @@ void TBaseCloudAuthRequestProxy::ProposeStaticCreds(TProto& req) {
     req.MutableAuth()->SetFolderId(FolderId_);
     req.MutableAuth()->SetUserSID(UserSID_);
     req.MutableAuth()->SetAuthType(AuthType_);
+    req.MutableAuth()->SetMaskedToken(MaskedToken_);
 }
 
 void TBaseCloudAuthRequestProxy::Bootstrap() {

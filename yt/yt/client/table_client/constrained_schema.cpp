@@ -103,7 +103,7 @@ void FromProto(NTableClient::TColumnNameToConstraintMap* constraints, const TCol
     }
 }
 
-} // namespace NYT::NTableClient::NProto
+} // namespace NYT::NProto
 
 ////////////////////////////////////////////////////////////////////////////////
 

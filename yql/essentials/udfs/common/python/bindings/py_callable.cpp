@@ -172,7 +172,7 @@ public:
         }
     }
 
-    ~TPyCallable() {
+    ~TPyCallable() override {
         TPyGilLocker lock;
         Closure_.Reset();
         Function_.Reset();

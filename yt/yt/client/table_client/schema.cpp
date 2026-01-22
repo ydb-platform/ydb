@@ -1281,7 +1281,7 @@ TTableSchemaPtr TTableSchema::ToSorted(const TKeyColumns& keyColumns) const
     for (const auto& keyColumn : keyColumns) {
         sortColumns.push_back(TColumnSortSchema{
             .Name = keyColumn,
-            .SortOrder = ESortOrder::Ascending
+            .SortOrder = ESortOrder::Ascending,
         });
     }
 

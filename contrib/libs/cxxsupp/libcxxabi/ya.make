@@ -42,11 +42,9 @@ SRCS(
     src/cxa_aux_runtime.cpp
     src/cxa_default_handlers.cpp
     src/cxa_demangle.cpp
-    src/cxa_exception.cpp
     src/cxa_exception_storage.cpp
     src/cxa_guard.cpp
     src/cxa_handlers.cpp
-    src/cxa_personality.cpp
     src/cxa_thread_atexit.cpp
     src/cxa_vector.cpp
     src/cxa_virtual.cpp
@@ -57,6 +55,17 @@ SRCS(
     src/stdlib_stdexcept.cpp
     src/stdlib_typeinfo.cpp
 )
+
+IF (NO_CXX_EXCEPTIONS)
+    SRCS(
+        src/cxa_noexception.cpp
+    )
+ELSE()
+    SRCS(
+        src/cxa_exception.cpp
+        src/cxa_personality.cpp
+    )
+ENDIF()
 
 IF (OS_ANDROID)
     # __cxa_thread_atexit_impl was introduced in Android 6.0

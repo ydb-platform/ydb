@@ -38,7 +38,6 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetEnableTopicServiceTx(true);
     settings.SetEnableTopicSplitMerge(true);
-    settings.SetEnablePQConfigTransactionsAtSchemeShard(true);
     settings.SetEnableOltpSink(GetEnableOltpSink());
     settings.SetEnableOlapSink(GetEnableOlapSink());
     settings.SetEnableHtapTx(GetEnableHtapTx());
@@ -61,9 +60,10 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
 
 void TFixture::NotifySchemeShard(const TFeatureFlags& flags)
 {
+    Y_UNUSED(flags);
+
     auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
     *request->Record.MutableConfig() = *Setup->GetServer().ServerSettings.AppConfig;
-    request->Record.MutableConfig()->MutableFeatureFlags()->SetEnablePQConfigTransactionsAtSchemeShard(flags.EnablePQConfigTransactionsAtSchemeShard);
 
     auto& runtime = Setup->GetRuntime();
     auto actorId = runtime.AllocateEdgeActor();

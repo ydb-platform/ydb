@@ -661,6 +661,7 @@ streaming_query_setting_value:
     id_or_type
   | STRING_VALUE
   | bool_value
+  | streaming_query_settings
 ;
 
 streaming_query_definition: AS DO inline_action;

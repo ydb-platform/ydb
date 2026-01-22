@@ -1,10 +1,10 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "1.3.1";
+  version = "1.3.1.2";
 
   src = fetchFromGitHub {
     owner = "madler";
     repo = "zlib";
     rev = "v${version}";
-    hash = "sha256-TkPLWSN5QcPlL9D0kc/yhH0/puE9bFND24aj5NVDKYs=";
+    hash = "sha256-5g/Jo8M/jvkgV0NofSAV4JdwJSk5Lyv9iGRb2Kz/CC0=";
   };
 }

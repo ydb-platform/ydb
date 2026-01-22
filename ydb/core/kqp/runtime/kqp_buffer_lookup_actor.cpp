@@ -74,7 +74,7 @@ public:
     }
 
     void Bootstrap() {
-        CA_LOG_D("Start stream lookup actor");
+        CA_LOG_D("Start buffer lookup actor");
 
         Settings.Counters->StreamLookupActorsCount->Inc();
         Become(&TKqpBufferLookupActor::StateFunc);

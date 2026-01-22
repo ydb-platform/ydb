@@ -1108,6 +1108,9 @@ public:
             TaskRunner->RaiseException();
         }
     }
+
+    void Flush() override {
+    }
     // |>
 
     // <| consumer methods
@@ -1295,6 +1298,9 @@ public:
 
     void Finish() override {
         Y_ABORT("Unimplemented");
+    }
+
+    void Flush() override {
     }
 
     bool Pop(NDqProto::TWatermark& watermark) override {

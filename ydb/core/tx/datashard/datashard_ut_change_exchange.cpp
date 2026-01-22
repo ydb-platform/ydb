@@ -845,7 +845,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableParameterizedDecimal(true)
                 .SetEnablePgSyntax(true)
                 .SetEnableTopicSplitMerge(true)
-                .SetEnablePQConfigTransactionsAtSchemeShard(true)
                 .SetEnableTopicAutopartitioningForCDC(true);
 
             Server = new TServer(settings);
@@ -2910,13 +2909,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
-    void InitialScanTest(bool withTopicSchemeTx, bool topicAutoPartitioning) {
+    void InitialScanTest(bool topicAutoPartitioning) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
-            .SetEnablePQConfigTransactionsAtSchemeShard(withTopicSchemeTx)
             .SetEnableTopicSplitMerge(topicAutoPartitioning)
             .SetEnableTopicAutopartitioningForCDC(true)
         );
@@ -2961,16 +2959,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST(InitialScan) {
-        InitialScanTest(false, false);
-    }
-
     Y_UNIT_TEST(InitialScan_WithTopicSchemeTx) {
-        InitialScanTest(true, false);
+        InitialScanTest(false);
     }
 
     Y_UNIT_TEST(InitialScan_TopicAutoPartitioning) {
-        InitialScanTest(true, true);
+        InitialScanTest(true);
     }
 
     Y_UNIT_TEST(InitialScanDebezium) {

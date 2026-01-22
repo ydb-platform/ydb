@@ -1,0 +1,19 @@
+service: cc
+title: Third party components - parts of llvm project
+
+ci:
+  secret: sec-01e0d4agf6pfvwdjwxp61n3fvg
+  runtime:
+    sandbox-owner: DEVTOOLS-LARGE
+
+  # YNMT large tests autostart (within mt quota)
+  # Will not work until CI-6043 (discussion in DEVTOOLSSUPPORT-49576), commented for now.
+  #autocheck:
+  #  large-sandbox-owner: MT
+  #  large-autostart:
+  #    - dict/mt/libs/nn/ynmt/gtest/gpu
+  #    - dict/mt/libs/nn/ynmt_backend/gtest/gpu
+
+  on-demand-auto:
+    - abs-paths: [ dict/mt/libs/nn/** ]
+      tags: ynmt-gpu-tests-autostart

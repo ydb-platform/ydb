@@ -728,6 +728,7 @@ private:
     }
 
     void PushSkipStat(const TStringBuf& statName, const TStringBuf& nodeName) const {
+        State_->FullHybridExecution = false;
         PushHybridStat(statName, nodeName, "SkipReasons");
         PushHybridStat("Skip", nodeName);
     }

@@ -1,5 +1,5 @@
 diff --git a/include/typeinfo b/include/typeinfo
-index 51d6305..3808966 100644
+index 5319d6e..b9d648c 100644
 --- a/include/typeinfo
 +++ b/include/typeinfo
 @@ -334,24 +334,40 @@ public:

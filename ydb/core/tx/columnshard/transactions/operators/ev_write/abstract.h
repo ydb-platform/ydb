@@ -18,7 +18,8 @@ protected:
 private:
     virtual bool DoParseImpl(TColumnShard& owner, const NKikimrTxColumnShard::TCommitWriteTxBody& commitTxBody) = 0;
     virtual TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override final {
-        owner.GetOperationsManager().LinkTransactionOnExecute(LockId, GetTxId(), txc);
+        auto& lock = owner.GetOperationsManager().GetLockVerified(LockId);
+        owner.GetOperationsManager().LinkTransactionOnExecute(lock, txc);
         return TProposeResult();
     }
     virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) override final {

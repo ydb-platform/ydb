@@ -114,7 +114,6 @@ void TSessionPool::ReplySessionToUser(
     std::unique_ptr<IGetSessionCtx> ctx)
 {
     Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
-    Y_ABORT_UNLESS(!session->GetTimeInterval());
     session->MarkActive();
     session->SetNeedUpdateActiveCounter(true);
     ctx->ReplySessionToUser(session);

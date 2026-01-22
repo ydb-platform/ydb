@@ -163,7 +163,7 @@ public:
         LinkBefore(NImpl::GetLogContextList());
     }
 
-    ~TLogContext() {
+    ~TLogContext() override {
         Unlink();
     }
 
@@ -194,7 +194,7 @@ public:
         LinkBefore(ctxList);
     }
 
-    ~TRootLogContext() {
+    ~TRootLogContext() override {
         Unlink();
         NImpl::TLogContextListItem* ctxList = NImpl::GetLogContextList();
         ctxList->Prev = PrevLogContextHead_.Prev;

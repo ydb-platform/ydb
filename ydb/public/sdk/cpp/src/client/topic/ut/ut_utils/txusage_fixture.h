@@ -37,7 +37,6 @@ protected:
     };
 
     struct TFeatureFlags {
-        bool EnablePQConfigTransactionsAtSchemeShard = true;
     };
 
     class ISession {

@@ -3,9 +3,12 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/models/model_interface.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/ai/tools/tool_interface.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log.h>
+
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <util/generic/fwd.h>
+#include <util/stream/output.h>
+
 #include <functional>
 
 namespace NYdb::NConsoleClient::NAi {
@@ -22,7 +25,7 @@ public:
         TString ConnectionString;
     };
 
-    TModelHandler(const TSettings& settings, const TInteractiveLogger& log);
+    explicit TModelHandler(const TSettings& settings);
 
     void HandleLine(const TString& input, std::function<void()> onStartWaiting = {}, std::function<void()> onFinishWaiting = {}, std::function<double()> getThinkingTime = {});
 
@@ -36,7 +39,6 @@ private:
     void SetupTools(const TSettings& settings);
 
 private:
-    TInteractiveLogger Log;
     IModel::TPtr Model;
     std::unordered_map<TString, ITool::TPtr> Tools;
 };

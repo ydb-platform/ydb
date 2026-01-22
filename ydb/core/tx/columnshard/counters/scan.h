@@ -161,6 +161,8 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr HangingRequests;
 
+    NMonitoring::THistogramPtr HistogramReadMetadataDurationMs;
+
 public:
     const std::shared_ptr<TSubColumnCounters>& GetSubColumns() const {
         AFL_VERIFY(SubColumnCounters);
@@ -332,6 +334,10 @@ public:
     TScanAggregations BuildAggregations();
 
     void FillStats(::NKikimrTableStats::TTableStats& output) const;
+
+    void OnReadMetadata(const TDuration d) const {
+        HistogramReadMetadataDurationMs->Collect(d.MilliSeconds());
+    }
 };
 
 class TCounterGuard: TMoveOnly {

@@ -40,7 +40,6 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardVolatileTransactions)
     FEATURE_FLAG_SETTER(EnableTopicServiceTx)
     FEATURE_FLAG_SETTER(EnableTopicDiskSubDomainQuota)
-    FEATURE_FLAG_SETTER(EnablePQConfigTransactionsAtSchemeShard)
     FEATURE_FLAG_SETTER(EnableScriptExecutionOperations)
     FEATURE_FLAG_SETTER(EnableExternalDataSources)
     FEATURE_FLAG_SETTER(EnableForceImmediateEffectsExecution)

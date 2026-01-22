@@ -323,7 +323,8 @@ void TGetPipelineStateCommand::DoExecute(ICommandContextPtr context)
     auto result = WaitFor(client->GetPipelineState(PipelinePath, Options))
         .ValueOrThrow();
 
-    context->ProduceOutputValue(TYsonString(ToString(result.State)));
+    // TODO(dgolear): Switch to std::string.
+    context->ProduceOutputValue(TYsonString(TString(ToString(result.State))));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

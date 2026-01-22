@@ -1,0 +1,4 @@
+requirements:
+  - ruamel.yaml.clib
+exclude:
+  - ruamel/yaml/clibz/*

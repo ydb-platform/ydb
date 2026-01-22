@@ -311,7 +311,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableVectorIndex(true);
         kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAccessToIndexImplTables(true);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_INFO);
         NSchemeShard::gVectorIndexSeed = 1337;
@@ -715,7 +714,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         CompareYson(Expected, res.ResultSetYson);
     }
 
-    void CreateTestTable(auto session, bool isColumn, TString suff="") {
+    void CreateTestTable(auto session, bool isColumn, TString suff="", bool secondaryIndex=false) {
         UNIT_ASSERT(session.ExecuteQuery(std::format(R"(
             --!syntax_v1
             CREATE TABLE `/Root/TestTable{}` (
@@ -723,13 +722,17 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 Name String not null,
                 Amount Uint64,
                 Comment String,
+                {}
                 PRIMARY KEY (Group, Name)
             ) WITH (
                 STORE = {},
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
             );
 
-        )", suff.c_str(), isColumn ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
+        )",
+            suff.c_str(),
+            secondaryIndex ? "INDEX idx GLOBAL SYNC ON (Name)," : "",
+            isColumn ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
 
         auto result = session.ExecuteQuery(std::format(R"(
             REPLACE INTO `/Root/TestTable{}` (Group, Name, Amount, Comment) VALUES
@@ -1428,6 +1431,287 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     .Writes = 0,
                     .Reads = 0,
                     .Deletes = 1,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 0,
+                    .DeleteBytes = 0,
+                });
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(WriteRowInsertFailsSecondary, isSink) {
+        TKikimrRunner kikimr(GetAppConfig(false, false, isSink));
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, false, "", true);
+        CreateTestTable(session, false, "2", true);
+
+        {
+            // Three inserts
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (10u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (100u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 28,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT + UPSERT
+            auto query = Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (10u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (100u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 2,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 28,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT to different tales
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT to different tales
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT&UPSERT to different tales
+            auto query = Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT many
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (1000u, "Anna", 3500u, "None"),
+                    (1u, "Anna", 3500u, "None"),
+                    (1001u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT many
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (1000u, "Anna", 3500u, "None"),
+                    (100000u, "Anna", 3500u, "None"),
+                    (1001u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT many
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (1000u, "Anna", 3500u, "None"),
+                    (1001u, "Anna", 3500u, "None"),
+                    (100000u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 1,
+                    .Deletes = 0,
+
+                    .WriteBytes = 0,
+                    .ReadBytes = 8,
+                    .DeleteBytes = 0,
+                });
+        }
+
+        {
+            // INSERT duplicates
+            auto query = Q_(R"(
+                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
+                    (999997u, "Anna", 3500u, "None"),
+                    (999998u, "Anna", 3500u, "None"),
+                    (999999u, "Anna", 3500u, "None"),
+                    (999998u, "Anna", 3500u, "None");
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+            Cerr << stats.DebugString() << Endl;
+
+            Check(
+                FromProto(stats),
+                TTotalStats{
+                    .Writes = 0,
+                    .Reads = 0,
+                    .Deletes = 0,
 
                     .WriteBytes = 0,
                     .ReadBytes = 0,

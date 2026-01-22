@@ -18,6 +18,7 @@ RECURSE(
     maintenance
     metadata
     monitoring
+    nbs
     persqueue_cluster_discovery
     persqueue_v1
     rate_limiter

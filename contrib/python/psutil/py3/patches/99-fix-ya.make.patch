@@ -8,7 +8,7 @@
 -    -DPSUTIL_WINDOWS=1
 -    -DPSUTIL_SIZEOF_PID_T=4
 -    -DPSUTIL_MAYBE_EXTERN=extern
-@@ -42,50 +33,4 @@ SRCS(
+@@ -42,53 +33,4 @@ SRCS(
 -    psutil/_psutil_linux.c
 -    psutil/_psutil_osx.c
 -    psutil/_psutil_windows.c
@@ -17,11 +17,13 @@
      psutil/arch/all/pids.c
      psutil/arch/all/str.c
 -    psutil/arch/linux/disk.c
+-    psutil/arch/linux/heap.c
 -    psutil/arch/linux/mem.c
 -    psutil/arch/linux/net.c
 -    psutil/arch/linux/proc.c
 -    psutil/arch/osx/cpu.c
 -    psutil/arch/osx/disk.c
+-    psutil/arch/osx/heap.c
 -    psutil/arch/osx/init.c
 -    psutil/arch/osx/mem.c
 -    psutil/arch/osx/net.c
@@ -45,6 +47,7 @@
 -    psutil/arch/sunos/sys.c
 -    psutil/arch/windows/cpu.c
 -    psutil/arch/windows/disk.c
+-    psutil/arch/windows/heap.c
 -    psutil/arch/windows/init.c
 -    psutil/arch/windows/mem.c
 -    psutil/arch/windows/net.c
@@ -59,7 +62,7 @@
 -    psutil/arch/windows/socks.c
 -    psutil/arch/windows/sys.c
 -    psutil/arch/windows/wmi.c
-@@ -74,5 +36,99 @@ SRCS(
+@@ -74,5 +36,102 @@ SRCS(
 -PY_REGISTER(
 -    psutil._psutil_linux
 -    psutil._psutil_osx
@@ -74,6 +77,7 @@
 +    SRCS(
 +        psutil/_psutil_linux.c
 +        psutil/arch/linux/disk.c
++        psutil/arch/linux/heap.c
 +        psutil/arch/linux/mem.c
 +        psutil/arch/linux/net.c
 +        psutil/arch/linux/proc.c
@@ -105,6 +109,7 @@
 +        psutil/_psutil_osx.c
 +        psutil/arch/osx/cpu.c
 +        psutil/arch/osx/disk.c
++        psutil/arch/osx/heap.c
 +        psutil/arch/osx/init.c
 +        psutil/arch/osx/mem.c
 +        psutil/arch/osx/net.c
@@ -144,6 +149,7 @@
 +        psutil/_psutil_windows.c
 +        psutil/arch/windows/cpu.c
 +        psutil/arch/windows/disk.c
++        psutil/arch/windows/heap.c
 +        psutil/arch/windows/init.c
 +        psutil/arch/windows/mem.c
 +        psutil/arch/windows/net.c

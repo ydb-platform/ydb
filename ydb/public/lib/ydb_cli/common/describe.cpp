@@ -21,37 +21,13 @@ namespace NYdb::NConsoleClient {
 
 namespace {
 
-struct TPrettyDurationFormatParameters {
-    double EntitiesPerSecond;
-    TStringBuf EntityName;
-    TStringBuf ZeroString;
-    TStringBuf MaxString;
-    int MaxPrecision;
-};
-
-constexpr TPrettyDurationFormatParameters PRETTY_HOURS_DEFAULT{
-    .EntitiesPerSecond = 3600,
-    .EntityName = "hours",
-    .ZeroString = "0 hours",
-    .MaxString = "+infinity",
-    .MaxPrecision = 3,
-};
-
-constexpr TPrettyDurationFormatParameters PRETTY_HOURS_NON_ZERO{
-    .EntitiesPerSecond = 3600,
-    .EntityName = "hours",
-    .ZeroString = "",
-    .MaxString = "+infinity",
-    .MaxPrecision = 3,
-};
-
-TString PrettyDurationString(TDuration duration, const TPrettyDurationFormatParameters& paramerters) {
+// Helper function to format duration in human-readable format
+// Returns empty string for zero duration, otherwise returns duration in format like "2h", "5m 30s", etc.
+TString HumanReadableDurationOrEmpty(TDuration duration) {
     if (duration == TDuration::Zero()) {
-        return ToString(paramerters.ZeroString);
-    } else if (duration == TDuration::Max()) {
-        return ToString(paramerters.MaxString);
+        return "";
     }
-    return TStringBuilder() << Prec(duration.MillisecondsFloat() / (paramerters.EntitiesPerSecond * 1000.0), PREC_POINT_DIGITS_STRIP_ZEROES, paramerters.MaxPrecision) << " " << paramerters.EntityName;
+    return ToString(HumanReadable(duration));
 }
 
 TString FormatCodecs(const std::vector<NYdb::NTopic::ECodec>& codecs) {
@@ -69,7 +45,7 @@ void PrintTopicConsumers(const std::vector<NYdb::NTopic::TConsumer>& consumers, 
             .Column(1, FormatCodecs(c.GetSupportedCodecs()))
             .Column(2, c.GetReadFrom().ToRfc822StringLocal())
             .Column(3, c.GetImportant() ? "Yes" : "No")
-            .Column(4, PrettyDurationString(c.GetAvailabilityPeriod(), PRETTY_HOURS_NON_ZERO));
+            .Column(4, HumanReadableDurationOrEmpty(c.GetAvailabilityPeriod()));
     }
     out << Endl << "Consumers: " << Endl;
     out << table;
@@ -88,7 +64,7 @@ void PrintStatistics(const NTopic::TTopicDescription& topicDescription, IOutputS
 
 void PrintMain(const NTopic::TTopicDescription& topicDescription, IOutputStream& out) {
     out << Endl << "Main:";
-    out << Endl << "RetentionPeriod: " << PrettyDurationString(topicDescription.GetRetentionPeriod(), PRETTY_HOURS_DEFAULT);
+    out << Endl << "RetentionPeriod: " << HumanReadable(topicDescription.GetRetentionPeriod());
     if (topicDescription.GetRetentionStorageMb().has_value()) {
         out << Endl << "StorageRetention: " << *topicDescription.GetRetentionStorageMb() << " MB";
     }
@@ -171,7 +147,7 @@ int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& 
     const NYdb::NTopic::TConsumer& consumer = description.GetConsumer();
     out << "Consumer " << consumer.GetConsumerName() << ": " << Endl;
     out << "Important: " << (consumer.GetImportant() ? "Yes" : "No") << Endl;
-    if (const auto availabilityPeriodStr = PrettyDurationString(consumer.GetAvailabilityPeriod(), PRETTY_HOURS_NON_ZERO)) {
+    if (const auto availabilityPeriodStr = HumanReadableDurationOrEmpty(consumer.GetAvailabilityPeriod())) {
         out << "Availability period: " << availabilityPeriodStr << Endl;
     }
     if (const TInstant& readFrom = consumer.GetReadFrom()) {

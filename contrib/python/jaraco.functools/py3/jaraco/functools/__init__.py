@@ -712,3 +712,11 @@ def chainable(method: Callable[[_T, ...], None]) -> Callable[[_T, ...], _T]:
         return self
 
     return wrapper
+
+
+def noop(*args, **kwargs):
+    """
+    A no-operation function that does nothing.
+
+    >>> noop(1, 2, three=3)
+    """

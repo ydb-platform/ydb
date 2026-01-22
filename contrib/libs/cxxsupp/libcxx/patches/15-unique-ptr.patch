@@ -1,16 +1,16 @@
 diff --git a/include/__memory/unique_ptr.h b/include/__memory/unique_ptr.h
-index 9ca13d0..73e2f37 100644
+index 6e42ef1..b79bc40 100644
 --- a/include/__memory/unique_ptr.h
 +++ b/include/__memory/unique_ptr.h
-@@ -42,6 +42,7 @@
- #include <__utility/forward.h>
- #include <__utility/move.h>
+@@ -48,6 +48,7 @@
+ #include <__utility/private_constructor_tag.h>
  #include <cstddef>
+ #include <cstdint>
 +#include <stlfwd>
  
  #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
  #  pragma GCC system_header
-@@ -123,7 +124,7 @@ struct __unique_ptr_deleter_sfinae<_Deleter&> {
+@@ -135,7 +136,7 @@ struct __unique_ptr_deleter_sfinae<_Deleter&> {
  #  define _LIBCPP_UNIQUE_PTR_TRIVIAL_ABI
  #endif
  

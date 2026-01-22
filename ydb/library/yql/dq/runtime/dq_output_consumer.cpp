@@ -344,6 +344,12 @@ public:
         }
     }
 
+    void Flush() override {
+        for (auto& consumer : Consumers) {
+            consumer->Flush();
+        }
+    }
+
 private:
     TVector<IDqOutputConsumer::TPtr> Consumers;
 };
@@ -375,6 +381,10 @@ public:
 
     void Finish() override {
         Output->Finish();
+    }
+
+    void Flush() override {
+        Output->Flush();
     }
 
 private:
@@ -455,6 +465,12 @@ public:
     void Finish() final {
         for (auto& output : Outputs) {
             output->Finish();
+        }
+    }
+
+    void Flush() final {
+        for (auto& output : Outputs) {
+            output->Flush();
         }
     }
 
@@ -564,6 +580,12 @@ private:
     void Finish() final {
         for (auto& output : Outputs_) {
             output->Finish();
+        }
+    }
+
+    void Flush() final {
+        for (auto& output : Outputs_) {
+            output->Flush();
         }
     }
 
@@ -750,6 +772,12 @@ private:
         }
     }
 
+    void Flush() final {
+        for (auto& output : Outputs_) {
+            output->Flush();
+        }
+    }
+
     size_t GetHashPartitionIndex(const arrow::Datum* values[], ui64 blockIndex) {
         HashFunc.Start();
 
@@ -866,6 +894,12 @@ public:
     void Finish() override {
         for (auto& output : Outputs) {
             output->Finish();
+        }
+    }
+
+    void Flush() override {
+        for (auto& output : Outputs) {
+            output->Flush();
         }
     }
 

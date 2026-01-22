@@ -41,7 +41,7 @@ bool Tokenize(ILexer& lexer, const TString& query, const TString& queryName, TPa
 
 class ILexerFactory: public TThrRefBase {
 public:
-    virtual ~ILexerFactory() = default;
+    ~ILexerFactory() override = default;
 
     virtual ILexer::TPtr MakeLexer() const = 0;
 };

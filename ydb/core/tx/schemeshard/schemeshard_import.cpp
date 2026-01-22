@@ -37,7 +37,7 @@ namespace {
 
         return state;
     }
-    
+
     ui32 GetTablePartsFromRequest(const Ydb::Table::CreateTableRequest& table) {
         switch (table.partitions_case()) {
             case Ydb::Table::CreateTableRequest::PartitionsCase::kUniformPartitions:
@@ -89,7 +89,7 @@ namespace {
         }
     }
 
-    void AddBuildIndexesItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx, 
+    void AddBuildIndexesItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx,
         i32 indexIdx, Ydb::Import::ImportItemProgress& itemProgress) {
 
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
@@ -292,7 +292,21 @@ void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const T
     }
 }
 
+void TSchemeShard::AddImport(const TImportInfo::TPtr& importInfo) {
+    Imports[importInfo->Id] = importInfo;
+    ImportsByTime.emplace(importInfo->StartTime, importInfo->Id);
+    if (importInfo->Uid) {
+        ImportsByUid[importInfo->Uid] = importInfo;
+    }
+}
+
 void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+    if (importInfo.Uid) {
+        ImportsByUid.erase(importInfo.Uid);
+    }
+    ImportsByTime.erase(std::make_pair(importInfo.StartTime, importInfo.Id));
+    Imports.erase(importInfo.Id);
+
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
     }
@@ -307,6 +321,12 @@ void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& im
         NIceDb::TUpdate<Schema::Imports::StartTime>(importInfo.StartTime.Seconds()),
         NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo.EndTime.Seconds()),
         NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size())
+    );
+}
+
+void TSchemeShard::PersistImportSettings(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+    db.Table<Schema::Imports>().Key(importInfo.Id).Update(
+        NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.SettingsSerialized)
     );
 }
 

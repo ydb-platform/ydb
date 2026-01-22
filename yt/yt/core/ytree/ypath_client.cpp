@@ -376,6 +376,8 @@ TFuture<TSharedRefArray> ExecuteVerb(
     NLogging::TLogger logger,
     NLogging::ELogLevel logLevel)
 {
+    NTracing::TChildTraceContextGuard traceContextGuard("YPathClient.ExecuteVerb");
+
     IYPathServicePtr suffixService;
     TYPath suffixPath;
     try {
@@ -574,13 +576,7 @@ TFuture<std::vector<std::string>> AsyncYPathList(
     }
     return ExecuteVerb(service, request)
         .Apply(BIND([] (TYPathProxy::TRspListPtr response) {
-            auto tstringResult = ConvertTo<std::vector<TString>>(TYsonString(response->value()));
-            std::vector<std::string> result;
-            result.reserve(tstringResult.size());
-            for (const auto& str : tstringResult) {
-                result.push_back(str);
-            }
-            return result;
+            return ConvertTo<std::vector<std::string>>(TYsonString(response->value()));;
         }));
 }
 

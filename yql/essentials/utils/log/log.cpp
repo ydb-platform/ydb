@@ -68,7 +68,7 @@ public:
     {
     }
 
-    ~TEmergencyLogOutput() {
+    ~TEmergencyLogOutput() override {
     }
 
 private:

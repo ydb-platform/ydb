@@ -28,6 +28,7 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages
     BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
     Metrics.MessageLocks.Initialize(MLP_LOCKS_RANGES, std::size(MLP_LOCKS_RANGES), true);
     Metrics.MessageLockingDuration.Initialize(SLOW_LATENCY_RANGES, std::size(SLOW_LATENCY_RANGES), true);
+    Metrics.WaitingLockingDuration.Initialize(SLOW_LATENCY_RANGES, std::size(SLOW_LATENCY_RANGES), true);
 }
 
 void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
@@ -577,6 +578,8 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
 }
 
 ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
+    auto now = TimeProvider->Now();
+    
     AFL_VERIFY(message.GetStatus() == EMessageStatus::Unprocessed)("status", message.GetStatus());
     message.SetStatus(EMessageStatus::Locked);
     message.DeadlineDelta = NormalizeDeadline(deadline);
@@ -585,7 +588,7 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
         Metrics.MessageLocks.IncrementFor(message.ProcessingCount);
     }
 
-    SetMessageLockingTime(message, TimeProvider->Now(), BaseDeadline);
+    SetMessageLockingTime(message, now, BaseDeadline);
 
     Batch.AddChange(offset);
 
@@ -598,6 +601,10 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     ++Metrics.LockedMessageCount;
     AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
     --Metrics.UnprocessedMessageCount;
+
+    auto writeTimestamp = BaseWriteTimestamp + TDuration::Seconds(message.WriteTimestampDelta);
+    auto waitingLockingDuration = now > writeTimestamp ? now - writeTimestamp : TDuration::Zero();
+    Metrics.WaitingLockingDuration.IncrementFor(waitingLockingDuration.MilliSeconds());
 
     return offset;
 }

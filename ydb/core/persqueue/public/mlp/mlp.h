@@ -144,7 +144,7 @@ struct TMessageDeadlineChangerSettings {
     TString TopicName;
     TString Consumer;
     std::vector<TMessageId> Messages;
-    TInstant Deadline;
+    std::vector<TInstant> Deadlines;
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };

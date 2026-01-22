@@ -67,6 +67,7 @@ SRCS(
     concurrency/fair_share_queue_scheduler_thread.cpp
     concurrency/fair_share_thread_pool.cpp
     concurrency/fair_throttler.cpp
+    concurrency/fair_throttler_ipc.cpp
     concurrency/fiber_scheduler_thread.cpp
     concurrency/fiber.cpp
     concurrency/fiber_manager.cpp
@@ -139,6 +140,7 @@ SRCS(
     misc/adaptive_hedging_manager.cpp
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
+    misc/duration_moving_average.cpp
     misc/id_generator.cpp
     misc/inotify.cpp
     misc/fair_share_hierarchical_queue.cpp
@@ -212,6 +214,7 @@ SRCS(
     rpc/overload_controller.cpp
     rpc/overload_controlling_service_base.cpp
     rpc/peer_discovery.cpp
+    rpc/peer_priority_provider.cpp
     rpc/per_key_request_queue_provider.cpp
     rpc/protocol_version.cpp
     rpc/public.cpp

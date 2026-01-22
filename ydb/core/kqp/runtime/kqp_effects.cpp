@@ -39,6 +39,8 @@ public:
 
     void Finish() final {}
 
+    void Flush() final {}
+
 private:
     NUdf::IApplyContext* ApplyCtx;
 };

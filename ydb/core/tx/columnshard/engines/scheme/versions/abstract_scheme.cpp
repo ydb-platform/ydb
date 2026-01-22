@@ -126,6 +126,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
                 case NEvWrite::EModificationType::Delete:
                 case NEvWrite::EModificationType::Update:
                 case NEvWrite::EModificationType::Increment:
+                case NEvWrite::EModificationType::UpsertIncrement:
                     break;
             }
         }

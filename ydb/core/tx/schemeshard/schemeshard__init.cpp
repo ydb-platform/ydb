@@ -1857,6 +1857,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     bool parseOk = ParseFromStringNoSizeLimit(tableDesc, alterTabletFull);
                     Y_ABORT_UNLESS(parseOk);
 
+                    // Load CoordinatedSchemaVersion from proto (for crash recovery)
+                    if (tableDesc.HasCoordinatedSchemaVersion()) {
+                        tableInfo->AlterData->CoordinatedSchemaVersion = tableDesc.GetCoordinatedSchemaVersion();
+                    }
+
                     if (tableDesc.HasPartitionConfig() &&
                         tableDesc.GetPartitionConfig().ColumnFamiliesSize() > 1)
                     {
@@ -2050,6 +2055,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 backupCollection->AlterVersion = rowset.GetValue<Schema::BackupCollection::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Description.ParseFromString(rowset.GetValue<Schema::BackupCollection::Description>());
                 Self->IncrementPathDbRefCount(pathId);
+                Self->RegisterBackupCollectionTables(backupCollection);
 
                 if (!rowset.Next()) {
                     return false;
@@ -4465,10 +4471,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         exportInfo->ExportMetadata = rowset.GetValue<Schema::Exports::ExportMetadata>();
                     }
 
-                    Self->Exports[id] = exportInfo;
-                    if (uid) {
-                        Self->ExportsByUid[uid] = exportInfo;
-                    }
+                    Self->AddExport(exportInfo);
 
                     if (exportInfo->WaitTxId != InvalidTxId) {
                         Self->TxIdToExport[exportInfo->WaitTxId] = {id, Max<ui32>()};
@@ -4562,10 +4565,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     importInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::StartTime>());
                     importInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Imports::EndTime>());
 
-                    Self->Imports[id] = importInfo;
-                    if (uid) {
-                        Self->ImportsByUid[uid] = importInfo;
-                    }
+                    Self->AddImport(importInfo);
 
                     switch (importInfo->State) {
                     case TImportInfo::EState::DownloadExportMetadata:
@@ -4733,20 +4733,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         buildInfo->TargetName = TPath::Init(buildInfo->TablePathId, Self).PathString();
                     }
 
-                    // prevent build index from progress
-                    if (buildInfo->IsBuildVectorIndex() && !Self->EnableVectorIndex) {
-                        buildInfo->IsBroken = true;
-                        buildInfo->AddIssue(TStringBuilder() << "Vector index is not enabled");
-                    }
-
                     // Note: broken build are also added to IndexBuilds
-                    Y_ASSERT(!Self->IndexBuilds.contains(buildInfo->Id));
-                    Self->IndexBuilds[buildInfo->Id] = buildInfo;
-
-                    if (buildInfo->Uid) {
-                        Y_ASSERT(!Self->IndexBuildsByUid.contains(buildInfo->Uid));
-                        Self->IndexBuildsByUid[buildInfo->Uid] = buildInfo;
-                    }
+                    Self->AddIndexBuild(buildInfo);
 
                     OnComplete.ToProgress(buildInfo->Id);
 

@@ -38,7 +38,6 @@ const TString KikimrDefaultUtDomainRoot = "Root";
 
 extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 
-TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
 
 struct TTestLogSettings {
     NLog::EPriority DefaultLogPriority = NLog::PRI_WARN;

@@ -39,7 +39,7 @@ using TTypeAnnCallableFactory = std::function<TAutoPtr<IGraphTransformer>()>;
 
 class IUrlLoader : public TThrRefBase {
 public:
-    ~IUrlLoader() = default;
+    ~IUrlLoader() override = default;
 
     virtual TString Load(const TString& url, const TString& token) = 0;
 
@@ -443,6 +443,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>, TUdfCachedInfo> UdfTypeCache; // (name,typecfg,type)->info
     bool UseTableMetaFromGraph = false;
     bool DiscoveryMode = false;
+    bool WindowNewPipeline = false;
     bool ForceDq = false;
     bool DqCaptured = false; // TODO: Add before/after recapture transformers
     EFallbackPolicy DqFallbackPolicy = EFallbackPolicy::Default;

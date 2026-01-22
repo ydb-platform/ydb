@@ -37,7 +37,7 @@ public:
 
     TAsyncExpiringCache(
         TAsyncExpiringCacheConfigPtr config,
-        const IInvokerPtr& invoker,
+        IInvokerPtr invoker,
         NLogging::TLogger logger = {},
         NProfiling::TProfiler profiler = {});
 

@@ -360,6 +360,7 @@ private:
     std::array<TThreadState, TThreadPoolBase::MaxThreadCount> ThreadStates_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, TagMappingSpinLock_);
+    //! \note Beware of ~TBucket behavior, see comment there for details.
     THashMap<TFairShareThreadPoolTag, TWeakPtr<TBucket>> TagToBucket_;
 
     std::atomic<int> QueueSize_ = 0;
@@ -406,23 +407,6 @@ private:
         // For each currently evaluating buckets recalculate excess time.
         AccountCurrentlyExecutingBuckets(tscp);
 
-        #ifdef YT_ENABLE_TRACE_LOGGING
-        if (Logger().IsLevelEnabled(NLogging::ELogLevel::Trace)) {
-            auto guard = Guard(TagMappingSpinLock_);
-            YT_LOG_TRACE("Buckets: [%v]",
-                MakeFormattableView(
-                    TagToBucket_,
-                    [] (auto* builder, const auto& tagToBucket) {
-                        if (auto item = tagToBucket.second.Lock()) {
-                            auto excess = CpuDurationToDuration(tagToBucket.second.Lock()->ExcessTime).MilliSeconds();
-                            builder->AppendFormat("(%v %v)", tagToBucket.first, excess);
-                        } else {
-                            builder->AppendFormat("(%v *)", tagToBucket.first);
-                        }
-                    }));
-        }
-        #endif
-
         if (Heap_.empty()) {
             return nullptr;
         }
@@ -463,6 +447,17 @@ void TBucket::Invoke(TMutableRange<TClosure> callbacks)
 
 TBucket::~TBucket()
 {
+    // XXX(apachee): This destructor was discovered to be problematic.
+    // Removing bucket locks bucket map spinlock, but bucket destruction
+    // may occur when spinlock is already acquired.
+    //
+    // Example: Take map spinlock, lock any bucket weak ptr.
+    // Then, if at the end of strong ptr scope strong ref count reaches 1,
+    // strong ref descrutor will call ~TBucket, and in turn will recursively
+    // acquire map spinlock again, leading to deadlock.
+    //
+    // It does not happen now, but beware of that when modifying fair share thread pool logic.
+
     if (auto parent = Parent.Lock()) {
         parent->RemoveBucket(this);
     }

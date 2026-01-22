@@ -53,7 +53,11 @@ THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPat
         if (!streamPath || streamPath->Dropped()) {
             continue;
         }
-        
+
+        if (cdcStreamInfo->Format != NKikimrSchemeOp::ECdcStreamFormatProto) {
+            continue;
+        }
+
         if (streamPath->Name.EndsWith("_continuousBackupImpl")) {
             if (!context.SS->PathsById.contains(streamPath->ParentPathId)) {
                 continue;

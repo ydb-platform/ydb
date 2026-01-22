@@ -223,6 +223,12 @@ TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(con
         } else if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.K1Factor = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::QueryModeSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.QueryMode = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.MinimumShouldMatch = tuple.Value().Cast().Ptr();
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTableFullTextIndex setting name '" << name << "'");
         }
@@ -260,6 +266,20 @@ NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExp
         settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(K1FactorSettingName)
             .Value(K1Factor)
+            .Done());
+    }
+
+    if (QueryMode) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(QueryModeSettingName)
+            .Value(QueryMode)
+            .Done());
+    }
+
+    if (MinimumShouldMatch) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(MinimumShouldMatchSettingName)
+            .Value(MinimumShouldMatch)
             .Done());
     }
 

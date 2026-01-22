@@ -14,15 +14,15 @@ public:
         : Inner_(inner)
     {}
 
-    TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         return Inner_->Transform(input, output, ctx);
     }
 
-    NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) {
+    NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) final {
         return Inner_->GetAsyncFuture(input);
     }
 
-    TStatus ApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    TStatus ApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         return Inner_->ApplyAsyncChanges(input, output, ctx);
     }
 

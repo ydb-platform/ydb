@@ -6,16 +6,12 @@
 
 #include <yt/yt/core/misc/random.h>
 
-#include <yt/yt/core/net/address.h>
-#include <yt/yt/core/net/local_address.h>
-
 #include <library/cpp/yt/compact_containers/compact_set.h>
 
 namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using namespace NNet;
 using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -27,9 +23,11 @@ public:
     TViablePeerRegistry(
         TViablePeerRegistryConfigPtr config,
         TCreateChannelCallback createChannel,
+        IPeerPriorityProviderPtr peerPriorityProvider,
         const NLogging::TLogger& logger)
         : Config_(std::move(config))
         , CreateChannel_(std::move(createChannel))
+        , PeerPriorityProvider_(std::move(peerPriorityProvider))
         , Logger(logger)
     {
         {
@@ -40,10 +38,7 @@ public:
 
     bool RegisterPeer(const std::string& address) override
     {
-        int priority = 0;
-        if (Config_->PeerPriorityStrategy == EPeerPriorityStrategy::PreferLocal) {
-            priority = (InferYPClusterFromHostName(address) == GetLocalYPCluster()) ? 0 : 1;
-        }
+        EPeerPriority priority = PeerPriorityProvider_->GetPeerPriority(address);
 
         bool wasEmpty = false;
         bool peerAdded = false;
@@ -111,7 +106,6 @@ public:
     {
         auto guard = WriterGuard(SpinLock_);
 
-        BacklogPeers_.Clear();
         HashToActiveChannel_.clear();
         PriorityToHashToActiveChannel_.clear();
         ActivePeerToPriority_.Clear();
@@ -158,14 +152,6 @@ public:
     {
         auto guard = ReaderGuard(SpinLock_);
 
-        if (BacklogPeers_.Size() > 0) {
-            YT_LOG_WARNING(
-                "Sticky channels are used with non-empty peer backlog, random peer rotations might hurt stickiness (MaxPeerCount: %v, ViablePeerCount: %v, BacklogPeerCount: %v)",
-                Config_->MaxPeerCount,
-                ActivePeerToPriority_.Size(),
-                BacklogPeers_.Size());
-        }
-
         const auto& balancingExt = request->Header().GetExtension(NProto::TBalancingExt::balancing_ext);
         auto hash = balancingExt.has_balancing_hint()
             ? balancingExt.balancing_hint()
@@ -200,11 +186,10 @@ public:
         while (true) {
             rebaseIt();
             const auto& address = channelIt->first.second;
-            if (seenAddresses.count(address) == 0) {
+            if (seenAddresses.insert(address).second) {
                 if (currentRandomIndex == 0) {
                     break;
                 }
-                seenAddresses.insert(address);
                 --currentRandomIndex;
             } else {
                 ++channelIt;
@@ -220,19 +205,6 @@ public:
             channelIt->first.second);
 
         return channelIt->second;
-    }
-
-    // We only use this method for small counts, so this approach should work fine.
-    static THashSet<int> GetRandomIndexes(int max, int count = 1)
-    {
-        THashSet<int> result;
-        count = std::min(count, max);
-        result.reserve(count);
-        while (std::ssize(result) < count) {
-            result.insert(static_cast<int>(RandomNumber<unsigned int>(max)));
-        }
-
-        return result;
     }
 
     std::vector<std::pair<std::string, IChannelPtr>> PickRandomPeers(int peerCount = 1) const
@@ -350,6 +322,7 @@ public:
 private:
     const TViablePeerRegistryConfigPtr Config_;
     const TCallback<IChannelPtr(const std::string& address)> CreateChannel_;
+    const IPeerPriorityProviderPtr PeerPriorityProvider_;
     const NLogging::TLogger Logger;
 
     const size_t ClientStickinessRandomNumber_ = RandomNumber<size_t>();
@@ -358,17 +331,14 @@ private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
 
     // Information for active peers with created channels.
-    std::map<int, TIndexedHashMap<std::string, IChannelPtr>> PriorityToActivePeers_;
-    TIndexedHashMap<std::string, int> ActivePeerToPriority_;
+    std::map<EPeerPriority, TIndexedHashMap<std::string, IChannelPtr>> PriorityToActivePeers_;
+    TIndexedHashMap<std::string, EPeerPriority> ActivePeerToPriority_;
     // A consistent-hashing storage for serving sticky requests.
     std::map<std::pair<size_t, std::string>, IChannelPtr> HashToActiveChannel_;
-    THashMap<int, std::map<std::pair<size_t, std::string>, IChannelPtr>> PriorityToHashToActiveChannel_;
+    THashMap<EPeerPriority, std::map<std::pair<size_t, std::string>, IChannelPtr>> PriorityToHashToActiveChannel_;
 
-    // Information for non-active peers which go over the max peer count limit.
-    TIndexedHashMap<std::string, int> BacklogPeers_;
-
-    THashMap<std::string, int> BacklogPeerToPriority_;
-    std::map<int, TIndexedHashMap<std::string, std::monostate>> PriorityToBacklogPeers_;
+    THashMap<std::string, EPeerPriority> BacklogPeerToPriority_;
+    std::map<EPeerPriority, TIndexedHashMap<std::string, std::monostate>> PriorityToBacklogPeers_;
 
     TPromise<void> PeersAvailablePromise_;
 
@@ -410,7 +380,7 @@ private:
 
     //! Returns true if a new peer was successfully registered and false if it already existed.
     //! Trying to call this method for a currently viable address with a different priority than stored leads to failure.
-    bool RegisterPeerWithPriority(const std::string& address, int priority)
+    bool RegisterPeerWithPriority(const std::string& address, EPeerPriority priority)
     {
         YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -532,7 +502,7 @@ private:
         }
     }
 
-    void AddActivePeer(const std::string& address, int priority)
+    void AddActivePeer(const std::string& address, EPeerPriority priority)
     {
         YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -551,7 +521,7 @@ private:
         PriorityToActivePeers_[priority].Set(address, channel);
     }
 
-    void AddBacklogPeer(const std::string& address, int priority)
+    void AddBacklogPeer(const std::string& address, EPeerPriority priority)
     {
         YT_ASSERT_WRITER_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -614,9 +584,14 @@ private:
 IViablePeerRegistryPtr CreateViablePeerRegistry(
     TViablePeerRegistryConfigPtr config,
     TCreateChannelCallback createChannel,
+    IPeerPriorityProviderPtr peerPriorityProvider,
     const NLogging::TLogger& logger)
 {
-    return New<TViablePeerRegistry>(std::move(config), std::move(createChannel), logger);
+    return New<TViablePeerRegistry>(
+        std::move(config),
+        std::move(createChannel),
+        std::move(peerPriorityProvider),
+        logger);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

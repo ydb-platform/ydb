@@ -82,3 +82,14 @@ BELONGS ya.make
     Files with this license:
         guard.cc [2:2]
         typeinfo.cc [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fcd552aabdea9683f85caf1b64b1bbb2
+BELONGS ya.make
+    License text:
+         * Copyright 2021 Microsoft. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        noexception.cc [2:2]

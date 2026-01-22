@@ -428,7 +428,7 @@ public:
             return *counterIfExists;
         }
         auto lock = StepExecutionDurations.WriteGuard();
-        auto [it, ok] = lock.Value.emplace(stepName, std::make_shared<TAtomicCounter>());
+        auto [it, ok] = lock.Value.emplace(stepName, TPerStepCounters{});
         return it->second;
     }
 

@@ -80,6 +80,13 @@ Y_UNIT_TEST(TestName) {                                                         
     TestRun<ClassName, Setup>(&test, TIMEOUT);                                   \
 }
 
+#define Y_UNIT_TEST_COMP_DISK_BLOCK42(TestName, ClassName, Setup, CompParam, VDiskNumParam, g)     \
+Y_UNIT_TEST(TestName) {                                                                    \
+    IDataSetPtr ds = DataSetSelector(g, 64u << 10u);                                            \
+    ClassName test(ds, CompParam, VDiskNumParam);                                               \
+    TestRun<ClassName, Setup>(&test, TIMEOUT, DefChunkSize, DefDiskSize, 8, 1, NKikimr::TBlobStorageGroupType::Erasure4Plus2Block);                                   \
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // SIMPLE BS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////

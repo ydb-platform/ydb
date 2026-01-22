@@ -2642,17 +2642,28 @@ private:
         TPropertyValidator validator(*SchemeTx.MutableCreateStreamingQuery()->MutableProperties());
         CHECK_STATUS(validator.SaveDefault(EName::Run, previousSettings.Run ? "true" : "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, previousSettings.ResourcePool));
-        CHECK_STATUS(validator.SaveDefault(EName::StreamingDisposition, DefaultStreamingDisposition));
         CHECK_STATUS_RET(force, validator.ExtractDefault(EName::Force, "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS_RET(queryText, validator.ExtractOptional(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
+        CHECK_STATUS_RET(streamingDisposition, validator.ExtractOptional(EName::StreamingDisposition));
 
         const auto queryTextValue = queryText.DetachResult();
         if (queryTextValue && force.GetResult() != "true") {
             return TStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED, "Changing the query text will result in the loss of the checkpoint. Please use FORCE=true to change the request text");
         }
 
+        const auto streamingDispositionValue = streamingDisposition.DetachResult();
+        auto queryTestRevision = previousSettings.QueryTextRevision;
+        if (queryTextValue) {
+            queryTestRevision++;
+        } else if (streamingDispositionValue) {
+            NYql::NPq::NProto::StreamingDisposition disposition;
+            Y_VALIDATE(disposition.ParseFromString(*streamingDispositionValue), "Failed to parse StreamingDisposition");
+            queryTestRevision += !disposition.has_from_last_checkpoint(); // Recompile query and drop checkpoint if disposition changed
+        }
+
         CHECK_STATUS(validator.Save(ESqlSettings::QUERY_TEXT_FEATURE, queryTextValue.value_or(previousSettings.QueryText)));
-        CHECK_STATUS(validator.Save(EName::QueryTextRevision, ToString(queryTextValue.has_value() + previousSettings.QueryTextRevision)));
+        CHECK_STATUS(validator.Save(EName::QueryTextRevision, ToString(queryTestRevision)));
+        CHECK_STATUS(validator.Save(EName::StreamingDisposition, streamingDispositionValue.value_or(DefaultStreamingDisposition)));
 
         return validator.Finish();
     }

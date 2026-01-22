@@ -1529,7 +1529,7 @@ private:
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
     bool StopGivingGroups = false;
-    bool GroupLayoutSanitizerEnabled = false;
+    bool GroupLayoutSanitizerEnabled = true;
     bool AllowMultipleRealmsOccupation = true;
     bool Loaded = false;
     bool EnableConfigV2 = false;

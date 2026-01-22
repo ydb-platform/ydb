@@ -160,7 +160,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
             acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TSnapshotFilter>());
-        } else if (GetProgramInputColumns()->Cross(*GetSpecColumns())) {
+        } else if (!acc.GetAddedFetchingColumns().Contains(*GetSpecColumns()) && GetProgramInputColumns()->Cross(*GetSpecColumns())) {
+            AFL_VERIFY(!acc.GetAddedFetchingColumns().Cross(*GetSpecColumns()));
             acc.AddStep(std::make_shared<TBuildFakeSpec>());
         }
         acc.AddFetchingStep(*GetFFColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);

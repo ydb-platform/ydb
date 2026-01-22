@@ -2569,7 +2569,13 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
     auto sourceName = externalSource.GetSourceName();
     TString structuredToken;
     if (sourceName) {
-        structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
+        const auto parser = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo());
+        auto builder = parser.ToBuilder();
+        if (!parser.IsCurrentUserAuth()) {
+            structuredToken = builder.ReplaceReferences(GetMeta().SecureParams).ToJson();
+        } else if (UserToken && UserToken->GetSerializedToken()) {
+            structuredToken = builder.SetIAMToken(UserToken->GetSerializedToken()).ToJson();
+        }
     }
 
     ui64 nodeOffset = 0;
@@ -3280,13 +3286,15 @@ TKqpTasksGraph::TKqpTasksGraph(
     const TPartitionPrunerConfig& partitionPrunerConfig,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
     const TKqpRequestCounters::TPtr& counters,
-    TActorId bufferActorId)
+    TActorId bufferActorId,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken)
     : PartitionPruner(MakeHolder<TPartitionPruner>(txAlloc->HolderFactory, txAlloc->TypeEnv, std::move(partitionPrunerConfig)))
     , Transactions(transactions)
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
     , Counters(counters)
     , BufferActorId(bufferActorId)
+    , UserToken(std::move(userToken))
 {
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;

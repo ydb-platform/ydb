@@ -40,6 +40,12 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::SetTokenAuthWithSecret(const T
     return *this;
 }
 
+TStructuredTokenBuilder& TStructuredTokenBuilder::SetCurrentUserTokenAuth(const TString& userToken) {
+    Data_.SetField("token", userToken);
+    Data_.SetField("current_user_auth", "true");
+    return *this;
+}
+
 TStructuredTokenBuilder& TStructuredTokenBuilder::SetIAMToken(const TString& token) {
     Data_.SetField("token", token);
     return *this;
@@ -131,6 +137,10 @@ bool TStructuredTokenParser::IsNoAuth() const {
     return Data_.HasField("no_auth");
 }
 
+bool TStructuredTokenParser::IsCurrentUserAuth() const {
+    return Data_.HasField("current_user_auth");
+}
+
 void TStructuredTokenParser::ListReferences(TSet<TString>& references) const {
     if (Data_.HasField("basic_password_ref")) {
         references.insert(Data_.GetField("basic_password_ref"));
@@ -210,6 +220,18 @@ TString ComposeStructuredTokenJsonForTokenAuthWithSecret(const TString& tokenSec
 
     if (tokenSecretName && token) {
         result.SetTokenAuthWithSecret(tokenSecretName, token);
+        return result.ToJson();
+    }
+
+    result.SetNoAuth();
+    return result.ToJson();
+}
+
+TString ComposeStructuredTokenJsonForCurrentUserAuth(const TString& userToken) {
+    TStructuredTokenBuilder result;
+
+    if (userToken) {
+        result.SetCurrentUserTokenAuth(userToken);
         return result.ToJson();
     }
 

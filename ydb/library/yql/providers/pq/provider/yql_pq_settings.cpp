@@ -90,6 +90,8 @@ void TPqConfiguration::AddCluster(
         const TString& password = properties.Value("password", "");
         const TString& passwordReference = properties.Value("passwordReference", "");
         structuredTokenJson = ComposeStructuredTokenJsonForBasicAuthWithSecret(login, passwordReference, password);
+    } else if (properties.Value("use_current_user_token", "false") == "true") {
+        structuredTokenJson = ComposeStructuredTokenJsonForCurrentUserAuth(properties.Value("token", ""));
     } else {
         structuredTokenJson = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
     }

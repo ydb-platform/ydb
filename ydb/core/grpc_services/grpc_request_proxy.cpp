@@ -154,6 +154,16 @@ private:
 
         MaybeStartTracing(event);
 
+        // BootstrapCluster runs before SchemeBoard is available.
+        // We must bypass the proxy's database check which depends on SchemeBoard.
+        {
+            const TString reqName = requestBaseCtx->GetRequestName();
+            if (reqName.Contains("BootstrapCluster")) {
+                Handle(event, ctx);
+                return;
+            }
+        }
+
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
             return;

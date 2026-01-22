@@ -234,7 +234,7 @@ NColumnShard::TUnifiedPathId IPathIdTranslator::GetUnifiedByInternalVerified(con
 
 NColumnShard::TSchemeShardLocalPathId IPathIdTranslator::ResolveSchemeShardLocalPathIdVerified(const TInternalPathId internalPathId) const {
     auto result = ResolveSchemeShardLocalPathId(internalPathId);
-    AFL_VERIFY(result);
+    AFL_VERIFY(result)("path_id", internalPathId.DebugString());
     return *result;
 }
 

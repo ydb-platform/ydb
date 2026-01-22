@@ -58,6 +58,9 @@ NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructi
     for (auto&& info : PortionsToEvict) {
         if (auto pwb = UpdateEvictedPortion(info, Blobs, context)) {
             AddPortionToRemove(info.GetPortionInfo(), false);
+            for (const auto& x : pwb->MutableBlobs()) {
+                AFL_VERIFY(x.GetOperator()->GetStorageId() != IStoragesManager::LocalMetadataStorageId);
+            }
             AppendedPortions.emplace_back(std::move(*pwb));
         }
     }

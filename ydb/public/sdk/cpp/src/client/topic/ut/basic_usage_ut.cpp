@@ -2060,6 +2060,91 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(attempts < maxAttempts);
     }
 
+    Y_UNIT_TEST(AutoPartitioning_WriteSession) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 4, 1000);
+
+        auto client = setup.MakeClient();
+        const std::string producerId = CreateGuidAsString();
+
+        auto describeResponse = client.DescribeTopic(setup.GetTopicPath(TEST_TOPIC)).GetValueSync();
+        auto firstPartitionId = describeResponse.GetTopicDescription().GetPartitions().begin()->GetPartitionId();
+
+        TWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .MessageGroupId(producerId)
+            .ProducerId(producerId)
+            .PartitionId(firstPartitionId)
+            .DirectWriteToPartition(true)
+            .Codec(ECodec::RAW);
+
+        auto session = client.CreateWriteSession(writeSettings);
+
+        ui64 seqNo = 1;
+        std::queue<TContinuationToken> readyTokens;
+        bool autoPartitioningHappened = false;
+        bool someShitHappened = false;
+        TSessionClosedEvent* finalSessionClosedEvent = nullptr;
+
+        auto eventLoop = [&](TDuration timeout) {
+            const TInstant deadline = TInstant::Now() + timeout;
+            while (TInstant::Now() < deadline) {
+                session->WaitEvent().Wait(TDuration::Seconds(1));
+                for (auto& ev : session->GetEvents(false)) {
+                    if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&ev)) {
+                        readyTokens.push(std::move(ready->ContinuationToken));
+                    }
+
+                    if (auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&ev)) {
+                        autoPartitioningHappened = sessionClosedEvent->GetStatus() == EStatus::OVERLOADED;
+                        someShitHappened = !autoPartitioningHappened;
+                        finalSessionClosedEvent = sessionClosedEvent;
+                        return;
+                    }
+                }
+            }
+            UNIT_FAIL("Timed out waiting for ReadyToAcceptEvent");
+            Y_ABORT("Unreachable");
+        };
+
+        for (ui64 i = 0; i < 1000; ++i) {
+            auto key = CreateGuidAsString();
+            TWriteMessage msg("payload-" + ToString(seqNo));
+            msg.SeqNo(seqNo++);
+            
+            std::optional<TContinuationToken> token;
+
+            while (readyTokens.empty() && !autoPartitioningHappened) {
+                eventLoop(TDuration::Seconds(10));
+            }
+
+            if (someShitHappened) {
+                auto sb = TStringBuilder() << "Some shit happened: " << finalSessionClosedEvent->DebugString();
+                UNIT_ASSERT_C(false, sb.c_str());
+                break;
+            }
+
+            if (autoPartitioningHappened) {
+                auto sessionToClosedPartition = client.CreateWriteSession(writeSettings);
+                UNIT_ASSERT(sessionToClosedPartition);
+
+                auto initSeqNo = sessionToClosedPartition->GetInitSeqNo().GetValueSync();
+                UNIT_ASSERT(initSeqNo == seqNo - 1);
+                break;
+            }
+
+            token = std::move(readyTokens.front());
+            readyTokens.pop();
+            session->Write(std::move(*token), std::move(msg));
+        }
+
+        bool closeRes = session->Close(TDuration::Seconds(60));
+        UNIT_ASSERT(closeRes);
+
+        UNIT_ASSERT(autoPartitioningHappened);
+    }
+
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 
 } // namespace

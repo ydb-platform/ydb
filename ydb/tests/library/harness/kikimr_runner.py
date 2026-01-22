@@ -111,7 +111,13 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "stderr_file": "/dev/stderr"
                 }
 
-        daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs)
+        daemon.Daemon.__init__(self,
+            self.command,
+            cwd=self.__working_dir,
+            timeout=180,
+            stderr_on_error_lines=240,
+            env={'YDB_ENABLE_SIGNAL_BACKTRACE': '1'},
+            **kwargs)
 
     def is_port_listening(self, port):
         """Check if the port is listening after node startup"""

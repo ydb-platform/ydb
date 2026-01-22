@@ -43,7 +43,7 @@ namespace NKikimr::NSqsTopic::V1 {
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;
 
-    constexpr int MAX_LISTS_QUEUES_RESULT = 1'000;
+    constexpr int MAX_LIST_QUEUES_RESULT = 1'000;
 
     class TListQueuesActor: public TGrpcActorBase<TListQueuesActor, TEvSqsTopicListQueuesRequest> {
         using TBase = TGrpcActorBase<TListQueuesActor, TEvSqsTopicListQueuesRequest>;
@@ -81,7 +81,7 @@ namespace NKikimr::NSqsTopic::V1 {
     void TListQueuesActor::Bootstrap(const NActors::TActorContext& ctx) {
         TBase::Bootstrap(ctx);
         const auto& request = Request();
-        const int maxResults = request.has_max_results() ? request.max_results() : MAX_LISTS_QUEUES_RESULT;
+        const int maxResults = request.has_max_results() ? request.max_results() : MAX_LIST_QUEUES_RESULT;
         if (this->Request_->GetSerializedToken().empty()) {
             if (AppData(ctx)->EnforceUserTokenRequirement) {
                 return ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED, "Unauthenticated access is forbidden, please provide credentials"));
@@ -90,8 +90,8 @@ namespace NKikimr::NSqsTopic::V1 {
         if (DatabaseName_.empty()) {
             return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Request without database is forbidden"));
         }
-        if (maxResults > MAX_LISTS_QUEUES_RESULT) {
-            return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("MaxResults should be not greater than {}", MAX_LISTS_QUEUES_RESULT)));
+        if (maxResults > MAX_LIST_QUEUES_RESULT) {
+            return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("MaxResults should be not greater than {}", MAX_LIST_QUEUES_RESULT)));
         }
         if (maxResults < 1) {
             return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("MaxResults should be not less than {}", 1)));
@@ -163,7 +163,7 @@ namespace NKikimr::NSqsTopic::V1 {
             };
             std::erase_if(tc, pred);
         }
-        const int maxResults = Request().has_max_results() ? Request().max_results() : MAX_LISTS_QUEUES_RESULT;
+        const int maxResults = Request().has_max_results() ? Request().max_results() : MAX_LIST_QUEUES_RESULT;
         TString newNextToken;
         if (std::cmp_greater(tc.size(), maxResults)) {
             tc.resize(maxResults);

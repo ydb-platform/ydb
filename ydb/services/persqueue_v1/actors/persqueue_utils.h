@@ -11,6 +11,14 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // double check
 
+// Forward declarations for SetBatchSourceId
+namespace Ydb::PersQueue::V1 {
+    class MigrationStreamingReadServerMessage_DataBatch_Batch;
+}
+namespace Ydb::Topic {
+    class StreamReadMessage_ReadResponse_Batch;
+}
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 #ifdef PQ_LOG_PREFIX
@@ -85,5 +93,9 @@ static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketPar
 }
 
 Ydb::PersQueue::ErrorCode::ErrorCode ConvertNavigateStatus(NSchemeCache::TSchemeCacheNavigate::EStatus status);
+
+// Helper to set source ID on a batch, encoding non-UTF-8 values as Base64
+void SetBatchSourceId(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_Batch* batch, TString value);
+void SetBatchSourceId(Ydb::Topic::StreamReadMessage_ReadResponse_Batch* batch, TString value);
 
 } //namespace NKikimr::NGRpcProxy::V1

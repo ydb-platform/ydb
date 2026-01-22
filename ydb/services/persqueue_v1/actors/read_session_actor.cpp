@@ -2448,25 +2448,25 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
     NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
 
     if constexpr (!UseMigrationProtocol) {
+        TPartitionActorInfo* partitionInfo = nullptr;
+        for (auto& [_, p] : Partitions) {
+            if (p.Partition.Partition == msg->PartitionId) {
+                partitionInfo = &p;
+                break;
+            }
+        }
+
+        if (!partitionInfo) {
+            return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
+                << "Inconsistent state #04", ctx);
+        }
+
+        partitionInfo->EndOffset = msg->EndOffset;
+        partitionInfo->ReadingFinished = true;
+
+        NotifyChildren(*partitionInfo, ctx);
+
         if (AutoPartitioningSupport) {
-            TPartitionActorInfo* partitionInfo = nullptr;
-            for (auto& [_, p] : Partitions) {
-                if (p.Partition.Partition == msg->PartitionId) {
-                    partitionInfo = &p;
-                    break;
-                }
-            }
-
-            if (!partitionInfo) {
-                return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
-                    << "Inconsistent state #04", ctx);
-            }
-
-            partitionInfo->EndOffset = msg->EndOffset;
-            partitionInfo->ReadingFinished = true;
-
-            NotifyChildren(*partitionInfo, ctx);
-
             TServerMessage result;
             result.set_status(Ydb::StatusIds::SUCCESS);
             auto* r = result.mutable_end_partition_session();

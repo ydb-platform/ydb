@@ -88,7 +88,7 @@ namespace NKikimr::NSqsTopic::V1 {
             }
         }
         if (DatabaseName_.empty()) {
-            return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Request without database is forbiden"));
+            return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Request without database is forbidden"));
         }
         if (maxResults > MAX_LISTS_QUEUES_RESULT) {
             return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("MaxResults should be not greater than {}", MAX_LISTS_QUEUES_RESULT)));

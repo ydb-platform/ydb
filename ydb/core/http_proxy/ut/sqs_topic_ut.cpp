@@ -237,8 +237,17 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues);
             UNIT_ASSERT_VALUES_EQUAL(GetPathFromFullQueueUrl(json["QueueUrls"][0]), "/v1/5//Root/14/ExampleQueue-0/12/mlp-consumer");
 
-            json = ListQueues({{"MaxResults", 1}});
-            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), 1);
+            {
+                json = ListQueues({{"MaxResults", 1}});
+                UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), 1);
+                UNIT_ASSERT(json.Has("NextToken"));
+                TString queueUrl1 = GetPathFromFullQueueUrl(json["QueueUrls"][0]);
+                json = ListQueues({{"MaxResults", 1}, {"NextToken", json["NextToken"].GetString()}});
+                UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), 1);
+                UNIT_ASSERT(json.Has("NextToken"));
+                TString queueUrl2 = GetPathFromFullQueueUrl(json["QueueUrls"][0]);
+                UNIT_ASSERT_VALUES_UNEQUAL(queueUrl1, queueUrl2);
+            }
         }
 
         struct TSqsTopicPaths {

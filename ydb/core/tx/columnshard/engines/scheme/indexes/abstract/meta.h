@@ -46,7 +46,7 @@ private:
     YDB_READONLY_DEF(TString, IndexName);
     YDB_READONLY(ui32, IndexId, 0);
     YDB_READONLY(TString, DefaultStorageId, IStoragesManager::DefaultStorageId);
-    YDB_READONLY_DEF(bool, InheritPortionStorage);
+    YDB_READONLY(bool, InheritPortionStorage, true);
 
     virtual std::shared_ptr<NReader::NCommon::IKernelFetchLogic> DoBuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
         const std::shared_ptr<IIndexMeta>& selfPtr,

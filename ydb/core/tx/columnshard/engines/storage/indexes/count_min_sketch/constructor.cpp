@@ -22,7 +22,7 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor
     }
     AFL_VERIFY(columnIds.size() == 1);
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), *columnIds.begin());
+        GetInheritPortionStorage().value_or(true), *columnIds.begin());
 }
 
 NKikimr::TConclusionStatus TCountMinSketchConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {

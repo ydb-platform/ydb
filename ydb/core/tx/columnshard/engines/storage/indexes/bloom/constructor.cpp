@@ -15,7 +15,7 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
     }
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId, FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(),
+        GetInheritPortionStorage().value_or(true), columnId, FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(),
         TBase::GetBitsStorageConstructor());
 }
 

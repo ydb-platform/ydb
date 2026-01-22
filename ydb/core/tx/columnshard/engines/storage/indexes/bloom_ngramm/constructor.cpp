@@ -16,7 +16,7 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     }
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        GetInheritPortionStorage().value_or(false), columnId, GetDataExtractor(), HashesCount, FilterSizeBytes, NGrammSize, RecordsCount,
+        GetInheritPortionStorage().value_or(true), columnId, GetDataExtractor(), HashesCount, FilterSizeBytes, NGrammSize, RecordsCount,
         TBase::GetBitsStorageConstructor(), CaseSensitive);
 }
 

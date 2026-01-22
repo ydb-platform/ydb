@@ -188,18 +188,27 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
                     context.SS->PersistTableIndexAlterData(db, versionCtx.ParentPathId);
                 }
                 context.SS->PersistTableIndexAlterVersion(db, versionCtx.ParentPathId, index);
+            }
+
+            if (context.SS->PathsById.contains(versionCtx.ParentPathId)) {
+                auto indexPath = context.SS->PathsById.at(versionCtx.ParentPathId);
+
+                ++indexPath->DirAlterVersion;
+                context.SS->PersistPathDirAlterVersion(db, indexPath);
+
+                context.SS->ClearDescribePathCaches(indexPath);
+
                 indexesToPublish.push_back(versionCtx.ParentPathId);
 
-                if (context.SS->PathsById.contains(versionCtx.ParentPathId)) {
-                    auto indexPath = context.SS->PathsById.at(versionCtx.ParentPathId);
-                    context.SS->ClearDescribePathCaches(indexPath);
+                if (indexPath->ParentPathId && context.SS->PathsById.contains(indexPath->ParentPathId)) {
+                    auto mainTablePath = context.SS->PathsById.at(indexPath->ParentPathId);
+                    if (mainTablePath->IsTable()) {
+                        mainTableToPublish = indexPath->ParentPathId;
 
-                    if (indexPath->ParentPathId && context.SS->PathsById.contains(indexPath->ParentPathId)) {
-                        auto mainTablePath = context.SS->PathsById.at(indexPath->ParentPathId);
-                        if (mainTablePath->IsTable()) {
-                            mainTableToPublish = indexPath->ParentPathId;
-                            context.SS->ClearDescribePathCaches(mainTablePath);
-                        }
+                        ++mainTablePath->DirAlterVersion;
+                        context.SS->PersistPathDirAlterVersion(db, mainTablePath);
+
+                        context.SS->ClearDescribePathCaches(mainTablePath);
                     }
                 }
             }
@@ -234,7 +243,6 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
         mainTableToPublish = pathId;
     }
 
-    context.SS->PersistTableAlterVersion(db, pathId, table);
     context.SS->ClearDescribePathCaches(path);
 
     // Publish indexes first, then impl table, then main table

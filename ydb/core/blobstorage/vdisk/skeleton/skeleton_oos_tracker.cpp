@@ -96,6 +96,10 @@ namespace NKikimr {
             MonGroup.DskTotalBytes() = msg->TotalChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskFreeBytes() = msg->FreeChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskUsedBytes() = msg->UsedChunks * PDiskCtx->Dsk->ChunkSize;
+            MonGroup.NormalizedOccupancyMillis() = static_cast<ui32>(msg->NormalizedOccupancy * 1000);
+            MonGroup.VDiskSlotUsagePerMille() = static_cast<ui32>(msg->VDiskSlotUsage * 10);  // percent -> permille
+            MonGroup.VDiskRawUsagePerMille() = static_cast<ui32>(msg->VDiskRawUsage * 10);  // percent -> permille
+            MonGroup.CapacityAlert() = static_cast<ui32>(StatusFlagToSpaceColor(msg->StatusFlags));
             if (msg->NumSlots > 0) {
                 ui32 timeAvailable = 1'000'000'000 / msg->NumSlots;
                 CostGroup.DiskTimeAvailableNs() = timeAvailable;

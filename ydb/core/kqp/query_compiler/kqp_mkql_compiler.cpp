@@ -427,7 +427,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("BlockHashJoinCore",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 5, "BlockHashJoinCore should have 5 arguments");
+            YQL_ENSURE(node.ChildrenSize() == 7, "BlockHashJoinCore should have 7 arguments");
 
             // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
@@ -466,24 +466,55 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             auto leftKeyColumns = extractColumnIndices(node.Child(3));
             auto rightKeyColumns = extractColumnIndices(node.Child(4));
 
+            // Extract renames from tuple literals
+            auto extractRenames = [](const TExprNode* tupleNode) -> TVector<std::pair<TString, TString>> {
+                YQL_ENSURE(tupleNode->IsList(), "Expected tuple of atoms for renames");
+                TVector<std::pair<TString, TString>> renames;
+                for (size_t i = 0; i < tupleNode->ChildrenSize(); i += 2) {
+                    const auto& oldNameNode = tupleNode->Children()[i];
+                    const auto& newNameNode = tupleNode->Children()[i + 1];
+                    YQL_ENSURE(oldNameNode->IsAtom() && newNameNode->IsAtom(), "Expected atoms in renames");
+                    renames.emplace_back(oldNameNode->Content(), newNameNode->Content());
+                }
+                return renames;
+            };
+            auto leftRenames = extractRenames(node.Child(5));
+            auto rightRenames = extractRenames(node.Child(6));
+
+            std::ostringstream os;
+            os << "[MISHA][BHJ][compiler]";
+            os << "\n\tLEFT:\n\t";
+            for (const auto& [from, to] : leftRenames) {
+                os << from << " -> " << to << " ";
+            }
+            os << "\n\tRIGHT:\n\t";
+            for (const auto& [from, to] : rightRenames) {
+                os << from << " -> " << to << " ";
+            }
+            os << "\n";
+
+            std::cerr << os.str() << std::endl;
+
+            
+
             // Get return type from node annotation
             TStringStream errorStream;
             auto returnType = NCommon::BuildType(*node.GetTypeAnn(), ctx.PgmBuilder(), errorStream);
             YQL_ENSURE(returnType, "Failed to build return type: " << errorStream.Str());
 
             auto graceJoinRenames = [&]{
-                auto wideStreamComponentsSize = [](TRuntimeNode node)->int {
-                    return AS_TYPE(TMultiType, AS_TYPE(TStreamType,node.GetStaticType())->GetItemType())->GetElementsCount();
-                };
                 TDqUserRenames renames{};
-                for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
-                    renames.emplace_back(index, EJoinSide::kLeft);
-                }
-                if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
-                    for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
-                        renames.emplace_back(index, EJoinSide::kRight);       
-                    }
-                }
+                for (const auto& rename : leftRenames) {
+                    // rename is a pair [wideStreamIndex, outputIndex], we need wideStreamIndex
+                    renames.emplace_back(FromString<ui32>(rename.first), EJoinSide::kLeft);
+                 }
+				if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
+                    for (const auto& rename : rightRenames) {
+                        // rename is a pair [wideStreamIndex, outputIndex], we need wideStreamIndex
+                        renames.emplace_back(FromString<ui32>(rename.first), EJoinSide::kRight);
+                     }
+                 }
+
                 return TGraceJoinRenames::FromDq(renames);
             }();
 

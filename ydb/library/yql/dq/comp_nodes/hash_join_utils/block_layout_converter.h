@@ -25,6 +25,20 @@ public:
     virtual void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) = 0;
     // virtual void UnpackApply(const TPackResult& packed, std::function<void(const char*)>);
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
+
+    // Prints detailed debug information about the converter structure:
+    // - Types of extractors (Fixed/Variable/Tuple/String/etc)
+    // - Element sizes and nullable flags
+    // - Inner extractors and their indices
+    // - Mapping between outer and inner extractors
+    // - TupleLayout details (columns, offsets, sizes, roles)
+    //
+    // Example usage:
+    //   auto converter = MakeBlockLayoutConverter(...);
+    //   converter->DebugPrint();
+    virtual void DebugPrint() const = 0;
+
+private:
 };
 
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(

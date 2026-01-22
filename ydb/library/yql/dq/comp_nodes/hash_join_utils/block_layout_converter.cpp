@@ -46,6 +46,8 @@ struct IColumnDataExtractor {
     virtual std::shared_ptr<arrow::ArrayData> ReserveArray(const TVector<ui64>& bytes, ui32 len, [[maybe_unused]] bool isBitmapNull = false) = 0;
     // Ugly interface, but I dont care
     virtual void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) = 0;
+    
+    virtual TString GetDebugInfo(ui32 indent = 0) const = 0;
 };
 
 // ------------------------------------------------------------
@@ -109,6 +111,16 @@ public:
 
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
         extractors.push_back(this);
+    }
+
+    TString GetDebugInfo(ui32 indent = 0) const override {
+        TStringBuilder sb;
+        TString prefix(indent, ' ');
+        sb << prefix << "TFixedSizeColumnDataExtractor<" << TypeName<TLayout>() << ", " << (Nullable ? "Nullable" : "NonNullable") << ">\n";
+        sb << prefix << "  ElementSize: " << sizeof(TLayout) << " bytes\n";
+        sb << prefix << "  SizeType: Fixed\n";
+        sb << prefix << "  Type: " << PrintNode(Type_, false) << "\n";
+        return sb;
     }
 
 protected:
@@ -180,6 +192,16 @@ public:
         extractors.push_back(this);
     }
 
+    TString GetDebugInfo(ui32 indent = 0) const override {
+        TStringBuilder sb;
+        TString prefix(indent, ' ');
+        sb << prefix << "TResourceColumnDataExtractor<" << (Nullable ? "Nullable" : "NonNullable") << ">\n";
+        sb << prefix << "  ElementSize: " << sizeof(NUdf::TUnboxedValue) << " bytes\n";
+        sb << prefix << "  SizeType: Fixed\n";
+        sb << prefix << "  Type: " << PrintNode(Type_, false) << "\n";
+        return sb;
+    }
+
 protected:
     arrow::MemoryPool* Pool_;
     TType* Type_;
@@ -225,6 +247,16 @@ public:
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
         extractors.push_back(this);
     }
+
+    TString GetDebugInfo(ui32 indent = 0) const override {
+        TStringBuilder sb;
+        TString prefix(indent, ' ');
+        sb << prefix << "TSingularColumnDataExtractor\n";
+        sb << prefix << "  ElementSize: 1 byte\n";
+        sb << prefix << "  SizeType: Fixed\n";
+        sb << prefix << "  Type: Null/Singular\n";
+        return sb;
+    }
 };
 
 template <typename TStringType, bool Nullable>
@@ -237,12 +269,39 @@ public:
         , Type_(type)
     {}
 
-    TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-        MKQL_ENSURE(array->buffers.size() == 3, Sprintf("Got %i instead", array->buffers.size()));
-        Y_ENSURE(array->child_data.empty());
+TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
+    MKQL_ENSURE(array->buffers.size() == 3, Sprintf("Got %i instead", array->buffers.size()));
+    Y_ENSURE(array->child_data.empty());
 
-        return {array->GetValues<ui8>(1), array->GetValues<ui8>(2)};
-    }
+    // IMPORTANT:
+    // offsets must be offset-adjusted in units of TOffset, not bytes.
+    const auto* offsets = reinterpret_cast<const ui8*>(array->GetValues<TOffset>(1));
+
+    // IMPORTANT:
+    // values buffer must NOT be offset-adjusted by array->offset at all.
+    // take raw base pointer.
+    const auto* values = array->buffers[2] ? array->buffers[2]->data() : nullptr;
+
+    return {offsets, values};
+}
+
+TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
+    Y_ENSURE(array->buffers.size() == 3);
+    Y_ENSURE(array->child_data.empty());
+
+    auto* offsets = reinterpret_cast<ui8*>(array->GetMutableValues<TOffset>(1));
+    auto* values = array->buffers[2] ? array->buffers[2]->mutable_data() : nullptr;
+
+    return {offsets, values};
+}
+
+
+    // TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
+    //     MKQL_ENSURE(array->buffers.size() == 3, Sprintf("Got %i instead", array->buffers.size()));
+    //     Y_ENSURE(array->child_data.empty());
+
+    //     return {array->GetValues<ui8>(1), array->GetValues<ui8>(2)};
+    // }
 
     TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array) override {
         Y_ENSURE(array->buffers.size() > 0);
@@ -250,12 +309,12 @@ public:
         return {array->GetValues<ui8>(0), nullptr};
     }
 
-    TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
-        Y_ENSURE(array->buffers.size() == 3);
-        Y_ENSURE(array->child_data.empty());
+    // TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
+    //     Y_ENSURE(array->buffers.size() == 3);
+    //     Y_ENSURE(array->child_data.empty());
 
-        return {array->GetMutableValues<ui8>(1), array->GetMutableValues<ui8>(2)};
-    }
+    //     return {array->GetMutableValues<ui8>(1), array->GetMutableValues<ui8>(2)};
+    // }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
         Y_ENSURE(array->buffers.size() > 0);
@@ -294,6 +353,16 @@ public:
 
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
         extractors.push_back(this);
+    }
+
+    TString GetDebugInfo(ui32 indent = 0) const override {
+        TStringBuilder sb;
+        TString prefix(indent, ' ');
+        sb << prefix << "TStringColumnDataExtractor<" << TypeName<TStringType>() << ", " << (Nullable ? "Nullable" : "NonNullable") << ">\n";
+        sb << prefix << "  ElementSize: 16 bytes (variable threshold)\n";
+        sb << prefix << "  SizeType: Variable\n";
+        sb << prefix << "  Type: " << PrintNode(Type_, false) << "\n";
+        return sb;
     }
 
 protected:
@@ -399,6 +468,19 @@ public:
         }
     }
 
+    TString GetDebugInfo(ui32 indent = 0) const override {
+        TStringBuilder sb;
+        TString prefix(indent, ' ');
+        sb << prefix << "TTupleColumnDataExtractor<" << (Nullable ? "Nullable" : "NonNullable") << ">\n";
+        sb << prefix << "  Children count: " << Children_.size() << "\n";
+        sb << prefix << "  Type: " << PrintNode(Type_, false) << "\n";
+        for (size_t i = 0; i < Children_.size(); ++i) {
+            sb << prefix << "  Child[" << i << "]:\n";
+            sb << Children_[i]->GetDebugInfo(indent + 4);
+        }
+        return sb;
+    }
+
 protected:
     TTupleColumnDataExtractor() = default;
 
@@ -483,6 +565,16 @@ public:
 
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) override {
         extractors.push_back(this);
+    }
+
+    TString GetDebugInfo(ui32 indent = 0) const override {
+        TStringBuilder sb;
+        TString prefix(indent, ' ');
+        sb << prefix << "TExternalOptionalColumnDataExtractor\n";
+        sb << prefix << "  Type: " << PrintNode(Type_, false) << "\n";
+        sb << prefix << "  Inner:\n";
+        sb << Inner_->GetDebugInfo(indent + 4);
+        return sb;
     }
 
 private:
@@ -608,8 +700,17 @@ public:
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);
     }
 
+    void DebugPrint(const TVector<arrow::Datum>& columns) const {
+        TStringBuilder sb;
+        sb << "\t\t===(" << (const void*)this << ")===\n";
+        sb << DebugPrintStr();
+        sb << DebugPrintSoAMapping_(columns);
+        Cerr << sb;
+    }
+
     void Pack(const TVector<arrow::Datum>& columns, TPackResult& packed) override {
         auto [columnsData, columnsNullBitmap] = GetColumns_(columns);
+		DebugPrint(columns);
 
         auto& packedTuples = packed.PackedTuples;
         auto& overflow = packed.Overflow;
@@ -682,6 +783,130 @@ public:
         return TupleLayout_.get();
     }
 
+    static const void* PtrAt(const TVector<const ui8*>& v, ui32 idx) {
+        return (idx < v.size()) ? (const void*)v[idx] : (const void*)nullptr;
+    }
+
+    TString DebugPrintSoAMapping_(const TVector<arrow::Datum>& columns) const {
+        TStringBuilder sb;
+        Y_ENSURE(columns.size() == Extractors_.size());
+
+        TVector<const ui8*> columnsData;
+        TVector<const ui8*> columnsNullBitmap;
+        columnsData.reserve(64);
+        columnsNullBitmap.reserve(64);
+
+        for (size_t i = 0; i < columns.size(); ++i) {
+            const auto& column = columns[i];
+            auto data = Extractors_[i]->GetColumnsDataConst(column.array());
+            columnsData.insert(columnsData.end(), data.begin(), data.end());
+
+            auto nulls = Extractors_[i]->GetNullBitmapConst(column.array());
+            columnsNullBitmap.insert(columnsNullBitmap.end(), nulls.begin(), nulls.end());
+        }
+
+        sb << "\n=== Layout -> SoA pointer mapping (as passed to TupleLayout::Pack) ===\n";
+        sb << "columnsData.size=" << columnsData.size()
+             << " columnsNullBitmap.size=" << columnsNullBitmap.size() << "\n";
+
+        for (ui32 colInd = 0; colInd < TupleLayout_->Columns.size(); ++colInd) {
+            const auto& col = TupleLayout_->Columns[colInd];
+            const ui32 oi = col.OriginalIndex;
+
+            sb << "LayoutCol[" << colInd << "]: "
+                 << "Role=" << (col.Role == NPackedTuple::EColumnRole::Key ? "K" : "P")
+                 << " SizeType=" << (col.SizeType == NPackedTuple::EColumnSizeType::Fixed ? "Fixed" : "Variable")
+                 << " DataSize=" << col.DataSize
+                 << " Offset=" << col.Offset
+                 << " OriginalColumnIndex=" << col.OriginalColumnIndex
+                 << " OriginalIndex=" << oi
+                 << " | data[oi]=" << PtrAt(columnsData, oi)
+                 << " valid[oi]=" << PtrAt(columnsNullBitmap, oi);
+
+            if (col.SizeType == NPackedTuple::EColumnSizeType::Variable) {
+                sb << " | data[oi+1]=" << PtrAt(columnsData, oi + 1)
+                     << " valid[oi+1]=" << PtrAt(columnsNullBitmap, oi + 1);
+            }
+
+            sb << "\n";
+        }
+
+        sb << "====================================================================\n";
+		return sb;
+    }
+
+    TString DebugPrintStr() const {
+        TStringBuilder sb;
+        sb << "========== TBlockLayoutConverter Debug Info ==========\n";
+        sb << "RememberNullBitmaps: " << (RememberNullBitmaps_ ? "true" : "false") << "\n";
+        sb << "\n=== Extractors (" << Extractors_.size() << " total) ===\n";
+        for (size_t i = 0; i < Extractors_.size(); ++i) {
+            sb << "\nExtractor[" << i << "]:\n";
+            sb << Extractors_[i]->GetDebugInfo(2);
+            sb << "  IsBitmapNull[" << i << "]: " << (IsBitmapNull_[i] ? "true" : "false") << "\n";
+        }
+        
+        sb << "\n=== InnerExtractors (" << InnerExtractors_.size() << " total) ===\n";
+        for (size_t i = 0; i < InnerExtractors_.size(); ++i) {
+            sb << "InnerExtractor[" << i << "]: " << InnerExtractors_[i]->GetDebugInfo(2) 
+                 << " ElementSize=" << InnerExtractors_[i]->GetElementSize() 
+                 << " SizeType=" << (InnerExtractors_[i]->GetElementSizeType() == NPackedTuple::EColumnSizeType::Fixed ? "Fixed" : "Variable")
+                 << "\n";
+        }
+        
+        sb << "\n=== InnerMapping (" << InnerMapping_.size() << " entries) ===\n";
+        for (size_t i = 0; i < InnerMapping_.size(); ++i) {
+            sb << "Extractor[" << i << "] -> InnerExtractors: [";
+            for (size_t j = 0; j < InnerMapping_[i].size(); ++j) {
+                if (j > 0) sb << ", ";
+                sb << InnerMapping_[i][j];
+            }
+            sb << "]\n";
+        }
+        
+        sb << "\n=== TupleLayout ===\n";
+        if (TupleLayout_) {
+            sb << "  TotalRowSize: " << TupleLayout_->TotalRowSize << "\n";
+            sb << "  ColumnsCount: " << TupleLayout_->Columns.size() << "\n";
+            sb << "  KeyColumnsNum: " << TupleLayout_->KeyColumnsNum << "\n";
+            sb << "  KeyColumnsSize: " << TupleLayout_->KeyColumnsSize << "\n";
+            sb << "  KeyColumnsOffset: " << TupleLayout_->KeyColumnsOffset << "\n";
+            sb << "  KeyColumnsEnd: " << TupleLayout_->KeyColumnsEnd << "\n";
+            sb << "  BitmaskSize: " << TupleLayout_->BitmaskSize << "\n";
+            sb << "  BitmaskOffset: " << TupleLayout_->BitmaskOffset << "\n";
+            sb << "  PayloadSize: " << TupleLayout_->PayloadSize << "\n";
+            sb << "  PayloadOffset: " << TupleLayout_->PayloadOffset << "\n";
+            sb << "  PayloadEnd: " << TupleLayout_->PayloadEnd << "\n";
+            sb << "  Columns:\n";
+            for (size_t i = 0; i < TupleLayout_->Columns.size(); ++i) {
+                const auto& col = TupleLayout_->Columns[i];
+                sb << "    Column[" << i << "]:\n"
+                     << "\t\tOffset=" << col.Offset  << "\n"
+                     << "\t\tDataSize=" << col.DataSize  << "\n"
+                     << "\t\tSizeType=" << (col.SizeType == NPackedTuple::EColumnSizeType::Fixed ? "Fixed" : "Variable") << "\n"
+                     << "\t\tRole=" << static_cast<int>(col.Role) << "\n"
+                     << "\t\tOriginalIndex=" << col.OriginalIndex << "\n"
+                     << "\t\triginalColumnIndex=" << col.OriginalColumnIndex << "\n"
+                     << "\n";
+            }
+        } else {
+            sb << "  TupleLayout is null\n";
+        }
+        sb << "======================================================\n";
+
+        return sb;
+
+	}
+
+
+    void DebugPrint() const override {
+        TStringBuilder sb;
+        sb << "\t\t\t===(" << (const void*)this << ")===\n";
+        sb << DebugPrintStr();
+
+        Cerr << sb;
+    }
+
 private:
     TVector<IColumnDataExtractor::TPtr> Extractors_;
     std::vector<IColumnDataExtractor*> InnerExtractors_;
@@ -710,4 +935,3 @@ IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
 }
 
 } // namespace NKikimr::NMiniKQL
-

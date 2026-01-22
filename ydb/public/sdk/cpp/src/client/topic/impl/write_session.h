@@ -255,6 +255,8 @@ private:
     void CleanIdleSessions();
 
     void HandleReadyFutures(std::unique_lock<std::mutex>& lock);
+
+    bool IsQueueEmpty();
     
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,

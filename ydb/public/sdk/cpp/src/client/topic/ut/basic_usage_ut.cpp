@@ -2062,87 +2062,71 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     Y_UNIT_TEST(AutoPartitioning_WriteSession) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 4, 1000);
+        TTopicClient client = setup.MakeClient();
+        auto producerId1 = CreateGuidAsString();
+        auto producerId2 = CreateGuidAsString();
 
-        auto client = setup.MakeClient();
-        const std::string producerId = CreateGuidAsString();
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
 
-        auto describeResponse = client.DescribeTopic(setup.GetTopicPath(TEST_TOPIC)).GetValueSync();
-        auto firstPartitionId = describeResponse.GetTopicDescription().GetPartitions().begin()->GetPartitionId();
+        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        auto partitionId = describe.GetTopicDescription().GetPartitions()[0].GetPartitionId();
 
         TWriteSessionSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
-            .MessageGroupId(producerId)
-            .ProducerId(producerId)
-            .PartitionId(firstPartitionId)
+            .ProducerId(producerId1)
             .DirectWriteToPartition(true)
+            .PartitionId(partitionId)
+            .MessageGroupId(producerId1)
             .Codec(ECodec::RAW);
 
-        auto session = client.CreateWriteSession(writeSettings);
+        TWriteSessionSettings writeSettings2;
+        writeSettings2
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .ProducerId(producerId2)
+            .DirectWriteToPartition(true)
+            .PartitionId(partitionId)
+            .MessageGroupId(producerId2)
+            .Codec(ECodec::RAW);
 
-        ui64 seqNo = 1;
-        std::queue<TContinuationToken> readyTokens;
-        bool autoPartitioningHappened = false;
-        bool someShitHappened = false;
-        TSessionClosedEvent* finalSessionClosedEvent = nullptr;
+        auto session1 = client.CreateSimpleBlockingWriteSession(writeSettings);
+        auto session2 = client.CreateSimpleBlockingWriteSession(writeSettings2);
+        auto msgData = TString(1_MB, 'a');
 
-        auto eventLoop = [&](TDuration timeout) {
-            const TInstant deadline = TInstant::Now() + timeout;
-            while (TInstant::Now() < deadline) {
-                session->WaitEvent().Wait(TDuration::Seconds(1));
-                for (auto& ev : session->GetEvents(false)) {
-                    if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&ev)) {
-                        readyTokens.push(std::move(ready->ContinuationToken));
-                    }
-
-                    if (auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&ev)) {
-                        autoPartitioningHappened = sessionClosedEvent->GetStatus() == EStatus::OVERLOADED;
-                        someShitHappened = !autoPartitioningHappened;
-                        finalSessionClosedEvent = sessionClosedEvent;
-                        return;
-                    }
-                }
-            }
-            UNIT_FAIL("Timed out waiting for ReadyToAcceptEvent");
-            Y_ABORT("Unreachable");
-        };
-
-        for (ui64 i = 0; i < 1000; ++i) {
-            auto key = CreateGuidAsString();
-            TWriteMessage msg("payload-" + ToString(seqNo));
-            msg.SeqNo(seqNo++);
-            
-            std::optional<TContinuationToken> token;
-
-            while (readyTokens.empty() && !autoPartitioningHappened) {
-                eventLoop(TDuration::Seconds(10));
-            }
-
-            if (someShitHappened) {
-                auto sb = TStringBuilder() << "Some shit happened: " << finalSessionClosedEvent->DebugString();
-                UNIT_ASSERT_C(false, sb.c_str());
-                break;
-            }
-
-            if (autoPartitioningHappened) {
-                auto sessionToClosedPartition = client.CreateWriteSession(writeSettings);
-                UNIT_ASSERT(sessionToClosedPartition);
-
-                auto initSeqNo = sessionToClosedPartition->GetInitSeqNo().GetValueSync();
-                UNIT_ASSERT(initSeqNo == seqNo - 1);
-                break;
-            }
-
-            token = std::move(readyTokens.front());
-            readyTokens.pop();
-            session->Write(std::move(*token), std::move(msg));
+        {
+            UNIT_ASSERT(session1->Write(msgData, 1));
+            UNIT_ASSERT(session1->Write(msgData, 2));
+            Sleep(TDuration::Seconds(1));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
         }
 
-        bool closeRes = session->Close(TDuration::Seconds(60));
-        UNIT_ASSERT(closeRes);
+        {
+            UNIT_ASSERT(session1->Write(msgData, 3));
+            UNIT_ASSERT(session1->Write(msgData, 4));
+            UNIT_ASSERT(session1->Write(msgData, 5));
+            UNIT_ASSERT(session2->Write(msgData, 6));
+            Sleep(TDuration::Seconds(1));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        }
 
-        UNIT_ASSERT(autoPartitioningHappened);
+        auto sessionToSplittedPartition = client.CreateWriteSession(writeSettings);
+        auto initSeqNo = sessionToSplittedPartition->GetInitSeqNo().Wait(TDuration::Seconds(10));
+        UNIT_ASSERT(initSeqNo);
     }
 
 } // Y_UNIT_TEST_SUITE(BasicUsage)

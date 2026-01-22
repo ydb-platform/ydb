@@ -133,24 +133,16 @@ TKeyedWriteSession::TKeyedWriteSession(
         Y_ABORT("Unreachable");
     }
 
-    // Futures layout:
-    // 0..Partitions.size(): per-partition WaitEvent futures
-    // Partitions.size(): close future
-    // Partitions.size() + 1: events-processed future
-    Futures.resize(Partitions.size());
-    // CloseFutureIndex = Partitions.size();
-    // MessagesNotEmptyFutureIndex = Partitions.size() + 1;
     MessagesNotEmptyPromise = NThreading::NewPromise();
     MessagesNotEmptyFuture = MessagesNotEmptyPromise.GetFuture();
-
     ClosePromise = NThreading::NewPromise();
     CloseFuture = ClosePromise.GetFuture();
-    // Futures[CloseFutureIndex] = CloseFuture;
 
+    Futures.reserve(Partitions.size());
     // Initialize per-partition futures to a valid, non-ready future to avoid TFutures being uninitialized
     // (NThreading::WaitAny throws on uninitialized futures).
     for (size_t i = 0; i < Partitions.size(); ++i) {
-        Futures[i] = CloseFuture;
+        Futures.push_back(CloseFuture);
     }
 
     EventsProcessedPromise = NThreading::NewPromise();
@@ -293,16 +285,21 @@ void TKeyedWriteSession::HandleSessionClosedEvent(TSessionClosedEvent&& event) {
     NonBlockingClose();
 }
 
+bool TKeyedWriteSession::IsQueueEmpty() {
+    std::lock_guard lock(GlobalLock);
+    return InFlightMessages.empty() && PendingMessages.empty();
+}
+
 bool TKeyedWriteSession::Close(TDuration closeTimeout) {
     if (Closed.exchange(true)) {
-        return PendingMessages.empty() && InFlightMessages.empty();
+        return IsQueueEmpty();
     }
 
     SetCloseDeadline(closeTimeout);
 
     ClosePromise.TrySetValue();
     if (!MainWorker.joinable()) {
-        return PendingMessages.empty() && InFlightMessages.empty();
+        return IsQueueEmpty();
     }
 
     if (MainWorker.get_id() == std::this_thread::get_id()) {
@@ -311,7 +308,7 @@ bool TKeyedWriteSession::Close(TDuration closeTimeout) {
         MainWorker.join();
     }
 
-    return PendingMessages.empty() && InFlightMessages.empty();
+    return IsQueueEmpty();
 }
 
 void TKeyedWriteSession::AddSessionClosedEvent() {
@@ -388,11 +385,7 @@ void TKeyedWriteSession::TransferEventsToOutputQueue() {
         return ackEvent;
     };
 
-    while (true) {
-        if (InFlightMessages.empty()) {
-            break;
-        }
-
+    while (!InFlightMessages.empty()) {
         const auto& head = InFlightMessages.front();
 
         auto remainingAcks = acks.find(head.Partition);

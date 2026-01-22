@@ -855,14 +855,16 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         },
         profile);
 
-        // --user option + password from active profile
-        ExpectUserAndPassword("user-from-explicit-option", "password-from-active-profile");
+        // --user option + password from environment (active profile password is ignored)
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-env");
         RunCli({
             "-v",
             "--user", "user-from-explicit-option",
             "scheme", "ls",
         },
-        {},
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
         profile);
 
         // user from environment + --password-file option
@@ -879,14 +881,15 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         },
         profile);
 
-        // user from environment + password from active profile
-        ExpectUserAndPassword("user-from-env", "password-from-active-profile");
+        // user from environment + password from environment (active profile password is ignored)
+        ExpectUserAndPassword("user-from-env", "password-from-env");
         RunCli({
             "-v",
             "scheme", "ls",
         },
         {
             {"YDB_USER", "user-from-env"},
+            {"YDB_PASSWORD", "password-from-env"},
         },
         profile);
 
@@ -914,15 +917,17 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         {},
         profile);
 
-        // --user option + password from explicit profile (user and password from active profile are overridden)
-        ExpectUserAndPassword("user-from-explicit-option", "password-from-explicit-profile");
+        // --user option + password from env (explicit profile password is ignored)
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-env");
         RunCli({
             "-v",
             "-p", "test_profile",
             "--user", "user-from-explicit-option",
             "scheme", "ls",
         },
-        {},
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
         profile);
 
         // --user option + --no-password (override env and active profile password)

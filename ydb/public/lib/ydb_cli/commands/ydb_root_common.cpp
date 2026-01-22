@@ -322,10 +322,10 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         auto userParser = [this](const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly) -> bool {
             Y_UNUSED(isFileName);
             Y_UNUSED(errors);
-            TString user;
-            if (authData["user"]) {
-                user = authData["user"].as<TString>();
+            if (!authData["user"]) {
+                return false;
             }
+            TString user = authData["user"].as<TString>();
             if (value) {
                 *value = user;
             }
@@ -600,6 +600,22 @@ void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
     const TOptionParseResult* userResult = ParseResult->FindResult("user");
     const TOptionParseResult* passwordResult = ParseResult->FindResult("password-file");
     if (passwordResult && userResult) {
+        const EOptionValueSource userSource = userResult->GetValueSource();
+        const EOptionValueSource passwordSource = passwordResult->GetValueSource();
+        // Ignore profile password if user comes from a different source.
+        const bool ignoreExplicitProfilePassword =
+            passwordSource == EOptionValueSource::ExplicitProfile &&
+            userSource != EOptionValueSource::ExplicitProfile;
+        const bool ignoreActiveProfilePassword =
+            passwordSource == EOptionValueSource::ActiveProfile &&
+            userSource != EOptionValueSource::ActiveProfile;
+        if (ignoreExplicitProfilePassword || ignoreActiveProfilePassword) {
+            Password.reset();
+            PasswordFile.clear();
+            if (TMaybe<TString> envPassword = TryGetEnv("YDB_PASSWORD")) {
+                Password = envPassword.GetRef();
+            }
+        }
         if (passwordResult->GetValueSource() != EOptionValueSource::DefaultValue && userResult->GetValueSource() == EOptionValueSource::DefaultValue) { // Both from command line or both from env
             MisuseErrors.push_back("User password was provided without user name");
             return;

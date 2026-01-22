@@ -49,6 +49,8 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("enable_histogram_compat", &TThis::EnableHistogramCompat)
         .Default(false);
+    registrar.Parameter("split_rate_histogram_into_gauges", &TThis::SplitRateHistogramIntoGauges)
+        .Default(false);
     registrar.Parameter("report_timestamps_for_rate_metrics", &TThis::ReportTimestampsForRateMetrics)
         .Default(true);
 

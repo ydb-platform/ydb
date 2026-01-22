@@ -44,6 +44,7 @@ struct TSolomonExporterConfig
     bool RenameConvertedCounters;
     bool ConvertCountersToDeltaGauge;
     bool EnableHistogramCompat;
+    bool SplitRateHistogramIntoGauges;
     bool ReportTimestampsForRateMetrics;
 
     bool ExportSummary;

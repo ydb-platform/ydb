@@ -7,6 +7,8 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <library/cpp/iterator/functools.h>
+
 #include <library/cpp/yt/assert/assert.h>
 
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
@@ -16,6 +18,18 @@
 namespace NYT::NProfiling {
 
 using namespace NYTree;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+struct TIntPoint
+{
+    TInstant Time;
+    i64 Value;
+};
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -238,9 +252,7 @@ int TCube<T>::ReadSensors(
     });
 
     // Set appropriate |summaryPolicy| to aggregate by host.
-    auto writeLabels = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, ESummaryPolicy summaryPolicy) {
-        consumer->OnLabelsBegin();
-
+    auto writeLabelsInternal = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, ESummaryPolicy summaryPolicy) {
         consumer->OnLabel(nameLabel.first, nameLabel.second);
 
         if (options.Global) {
@@ -283,7 +295,11 @@ int TCube<T>::ReadSensors(
                 consumer->OnLabel(tag.first, tag.second);
             }
         }
+    };
 
+    auto writeLabels = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, ESummaryPolicy summaryPolicy) {
+        consumer->OnLabelsBegin();
+        writeLabelsInternal(tagIds, nameLabel, summaryPolicy);
         consumer->OnLabelsEnd();
     };
 
@@ -446,6 +462,55 @@ int TCube<T>::ReadSensors(
                 }
             }
         };
+
+        if constexpr (std::is_same_v<T, TTimeHistogramSnapshot> || std::is_same_v<T, TRateHistogramSnapshot>) {
+            bool needToSplitHistogram =
+                (
+                    std::is_same_v<T, TTimeHistogramSnapshot> &&
+                    (options.ConvertCountersToRateGauge || options.EnableHistogramCompat) &&
+                    options.SplitRateHistogramIntoGauges
+                ) ||
+                (std::is_same_v<T, TRateHistogramSnapshot> && options.SplitRateHistogramIntoGauges);
+
+            if (needToSplitHistogram) {
+                if (options.RateDenominator < 0.1) {
+                    THROW_ERROR_EXCEPTION("Invalid rate denominator");
+                }
+                THashMap<double, std::vector<TIntPoint>> boundToValues;
+                // Histograms may have different numbers of buckets, merge them into map.
+                rangeValues([&] (auto value, auto time, const auto& /*indices*/) {
+                    for (const auto& [bound, value] : Zip(value.Bounds, value.Values)) {
+                        boundToValues[bound].push_back(TIntPoint{time, value});
+                    }
+                    if (value.Values.size() > value.Bounds.size()) {
+                        boundToValues[NMonitoring::HISTOGRAM_INF_BOUND].push_back(TIntPoint{time, value.Values[value.Bounds.size()]});
+                    } else {
+                        boundToValues[NMonitoring::HISTOGRAM_INF_BOUND].push_back(TIntPoint{time, 0});
+                    }
+                });
+
+                for (const auto& [bucket, values] : boundToValues) {
+                    consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
+                    writeFlags();
+
+                    consumer->OnLabelsBegin();
+                    writeLabelsInternal(tagIds, nameLabel, ESummaryPolicy::Sum);
+                    if (bucket == NMonitoring::HISTOGRAM_INF_BOUND) {
+                        consumer->OnLabel("bin", "inf");
+                    } else {
+                        consumer->OnLabel("bin", ToString(bucket));
+                    }
+                    consumer->OnLabelsEnd();
+                    for (const auto& [time, value] : values) {
+                        consumer->OnDouble(time, static_cast<double>(value) / options.RateDenominator);
+                    }
+                    consumer->OnMetricEnd();
+                }
+
+                sensorsEmitted += boundToValues.size();
+                continue;
+            }
+        }
 
         if constexpr (std::is_same_v<T, i64> || std::is_same_v<T, TDuration>) {
             if (options.ConvertCountersToRateGauge || options.ConvertCountersToDeltaGauge) {

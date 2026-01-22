@@ -95,6 +95,53 @@ TEST(TSolomonExporterTest, ReadJsonHistogram)
     exporter->Stop();
 }
 
+TEST(TSolomonExporterTest, SplitRateHistogramIntoGauges)
+{
+    auto registry = New<TSolomonRegistry>();
+    auto hist = TProfiler{registry, "yt"}.TimeHistogram("/foo", TDuration::MilliSeconds(1), TDuration::Seconds(1));
+
+    auto config = New<TSolomonExporterConfig>();
+    config->GridStep = TDuration::Seconds(5);
+    config->EnableCoreProfilingCompatibility = true;
+    config->EnableSelfProfiling = false;
+
+    auto exporter = NYT::New<TSolomonExporter>(config, registry);
+    auto json = exporter->ReadJson();
+    EXPECT_FALSE(json);
+
+    exporter->Start();
+
+    hist.Record(TDuration::MilliSeconds(500));
+    hist.Record(TDuration::MilliSeconds(500));
+    hist.Record(TDuration::MilliSeconds(500));
+    Sleep(TDuration::Seconds(6));
+
+    auto options = TReadOptions{
+        .ConvertCountersToRateGauge = true,
+        .RateDenominator = 5.0,
+        .SplitRateHistogramIntoGauges = true,
+    };
+    json = exporter->ReadJson(options);
+    ASSERT_TRUE(json);
+
+    NJson::TJsonValue jsonValue;
+    NJson::ReadJsonTree(*json, &jsonValue, true);
+    auto sensors = jsonValue["sensors"].GetArraySafe();
+    EraseIf(sensors, [] (const auto& sensor) {
+        return sensor["labels"]["sensor"].GetStringSafe() != "ytyt.foo";
+    });
+    THashSet<TString> buckets = {"0.001", "0.002", "0.004", "0.008", "0.016", "0.032", "0.064", "0.125", "0.25", "0.5", "1", "inf"};
+    ASSERT_EQ(buckets.size(), sensors.size());
+    for (const auto& sensor : sensors) {
+        auto bin = sensor["labels"]["bin"].GetStringSafe();
+        ASSERT_TRUE(buckets.contains(bin));
+        if (sensor["labels"]["bin"].GetString() == "0.5") {
+            ASSERT_DOUBLE_EQ(sensor["value"].GetDoubleSafe(), 3.0 / 5.0);
+        }
+    }
+    exporter->Stop();
+}
+
 TEST(TSolomonExporterTest, ReadSpackHistogram)
 {
     auto registry = New<TSolomonRegistry>();

@@ -643,6 +643,7 @@ void TSolomonExporter::DoHandleShard(
         if (Config_->EnableHistogramCompat && outputEncodingContext.IsSolomonPull) {
             options.EnableHistogramCompat = true;
         }
+        options.SplitRateHistogramIntoGauges = Config_->SplitRateHistogramIntoGauges;
 
         options.EnableSolomonAggregationWorkaround = outputEncodingContext.IsSolomonPull;
         options.Times = readWindow;

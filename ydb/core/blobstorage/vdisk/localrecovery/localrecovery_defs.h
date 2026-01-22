@@ -93,7 +93,7 @@ namespace NKikimr {
         ui64 LogRecAddBulkSst = 0;
         ui64 LogRecScrub = 0;
         ui64 LogRecMetadata = 0;
-        ui64 LogRecChunkKeeperd = 0;
+        ui64 LogRecChunkKeeper = 0;
 
         // statistics for record dispatching
         NLocRecovery::TRecordDispatcherStat RecDispatcherStat;

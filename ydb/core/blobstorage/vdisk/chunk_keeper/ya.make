@@ -6,6 +6,7 @@ PEERDIR(
 )
 
 SRCS(
+    chunk_keeper_actor.cpp
     chunk_keeper_events.cpp
 )
 

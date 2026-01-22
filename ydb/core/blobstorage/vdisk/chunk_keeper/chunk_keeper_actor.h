@@ -2,10 +2,11 @@
 
 #include <ydb/core/blobstorage/defs.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_log_context.h>
 
 namespace NKikimr {
 
-IActor* CreateChunkKeeperActor(TIntrusivePtr<TVDiskContext> vctx,
+IActor* CreateChunkKeeperActor(TIntrusivePtr<TLogContext> logCtx,
         NKikimrVDiskData::TChunkKeeperEntryPoint entryPoint);
 
 } // namespace NKikimr

@@ -6,7 +6,7 @@
 
 namespace NKikimr {
 
-class TMetadataContext : public TThrRefBase {
+class TLogContext : public TThrRefBase {
 public:
     const TIntrusivePtr<TVDiskContext> VCtx;
     const TIntrusivePtr<TLsnMngr> LsnMngr;
@@ -14,17 +14,11 @@ public:
     const TActorId LoggerId;
     const TActorId LogCutterId;
 
-    TMetadataContext(TIntrusivePtr<TVDiskContext> vctx,
+    TLogContext(TIntrusivePtr<TVDiskContext> vctx,
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
             const TActorId& loggerId,
-            const TActorId& logCutterId)
-        : VCtx(std::move(vctx))
-        , LsnMngr(std::move(lsnMngr))
-        , PDiskCtx(std::move(pdiskCtx))
-        , LoggerId(loggerId)
-        , LogCutterId(logCutterId)
-    {}
+            const TActorId& logCutterId);
 };
 
 } // NKikimr

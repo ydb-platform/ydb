@@ -1985,14 +1985,14 @@ namespace NKikimr {
             ActiveActors.Insert(Db->LogCutterID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run metadata actor
-            auto metadataCtx = MakeIntrusive<TMetadataContext>(VCtx, Db->LsnMngr, PDiskCtx,
+            auto logCtx = MakeIntrusive<TLogContext>(VCtx, Db->LsnMngr, PDiskCtx,
                     (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID));
-            auto metadataActor = CreateMetadataActor(metadataCtx, std::move(ev->Get()->MetadataEntryPoint));
+            auto metadataActor = CreateMetadataActor(logCtx, std::move(ev->Get()->MetadataEntryPoint));
             MetadataActorId = ctx.Register(metadataActor);
             ActiveActors.Insert(MetadataActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run chunk keeper actor
-            IActor* chunkKeeperActor = CreateChunkKeeperActor(VCtx, std::move(ev->Get()->ChunkKeeperEntryPoint));
+            IActor* chunkKeeperActor = CreateChunkKeeperActor(logCtx, std::move(ev->Get()->ChunkKeeperEntryPoint));
             ChunkKeeperActorId = ctx.Register(chunkKeeperActor);
             ActiveActors.Insert(ChunkKeeperActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 

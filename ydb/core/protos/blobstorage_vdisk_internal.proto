@@ -286,14 +286,14 @@ message TMetadataEntryPoint {
 }
 
 message TChunkKeeperEntryPoint {
-    enum EChunkOwner {
+    enum ESubsystem {
         PhantomFlagStorage = 1;
-    }
+    };
 
-    message TOwnedChunk {
+    message TChunk {
         optional uint32 ChunkIdx = 1;
-        optional uint32 ChunkOwner = 2;
+        optional uint32 Subsystem = 2;
     }
 
-    repeated TOwnedChunk OwnedChunks = 1;
+    repeated TChunk Chunks = 1;
 }

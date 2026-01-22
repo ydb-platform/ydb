@@ -125,6 +125,7 @@ namespace NKikimr {
                                                 VDiskIncarnationGuid,
                                                 {},
                                                 0,
+                                                {},
                                                 {}));
             Die(ctx);
         }
@@ -159,7 +160,8 @@ namespace NKikimr {
                                                               VDiskIncarnationGuid,
                                                               std::move(ScrubEntrypoint),
                                                               ScrubEntrypointLsn,
-                                                              std::move(MetadataEntryPoint)));
+                                                              std::move(MetadataEntryPoint),
+                                                              std::move(ChunkKeeperEntryPoint)));
             Die(ctx);
         }
 

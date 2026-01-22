@@ -842,7 +842,9 @@ struct TEvBlobStorage {
         EvChunkWriteRawResult,
         EvChunkKeeperAllocate,
         EvChunkKeeperAllocateResult,
-        EvChunkKeeperFree,                                      /// 268 636 732
+        EvChunkKeeperDiscover,                                  /// 268 636 732
+        EvChunkKeeperDiscoverResult,
+        EvChunkKeeperFree,
         EvChunkKeeperFreeResult,
         EvChunkKeeperGetOwnedChunks,
 

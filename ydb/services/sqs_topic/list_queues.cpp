@@ -10,8 +10,8 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/error/error.h>
+#include <ydb/services/sqs_topic/queue_url/consumer.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
-#include <ydb/services/sqs_topic/queue_url/holder/queue_url_holder.h>
 
 #include <ydb/core/grpc_services/service_sqs_topic.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
@@ -44,7 +44,6 @@ namespace NKikimr::NSqsTopic::V1 {
     using namespace NGRpcProxy::V1;
 
     constexpr int MAX_LISTS_QUEUES_RESULT = 1'000;
-    const TString DEFAULT_SQS_CONSUMER = "ydb-sqs-consumer";
 
     class TListQueuesActor: public TGrpcActorBase<TListQueuesActor, TEvSqsTopicListQueuesRequest> {
         using TBase = TGrpcActorBase<TListQueuesActor, TEvSqsTopicListQueuesRequest>;
@@ -69,11 +68,13 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
     private:
+        TString DatabaseName_;
         TActorId DescriberActorId;
     };
 
     TListQueuesActor::TListQueuesActor(NKikimr::NGRpcService::IRequestOpCtx* request)
         : TBase(request, "")
+        , DatabaseName_(Request_->GetDatabaseName().GetOrElse(""))
     {
     }
 
@@ -86,7 +87,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::ACCESS_DENIED, "Unauthenticated access is forbidden, please provide credentials"));
             }
         }
-        if (!Request_->GetDatabaseName()) {
+        if (DatabaseName_.empty()) {
             return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Request without database is forbiden"));
         }
         if (maxResults > MAX_LISTS_QUEUES_RESULT) {
@@ -98,7 +99,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         const TString startFrom{TStringBuf(request.next_token()).Before('@')}; // use only queue name
 
-        ctx.Register(NPQ::MakeListAllTopicsActor(SelfId(), *Request_->GetDatabaseName(),
+        ctx.Register(NPQ::MakeListAllTopicsActor(SelfId(), DatabaseName_,
                                                  this->Request_->GetSerializedToken(), true,
                                                  startFrom));
         Become(&TListQueuesActor::StateWork);
@@ -113,14 +114,29 @@ namespace NKikimr::NSqsTopic::V1 {
             .UserToken = MakeIntrusive<NACLib::TUserToken>(this->Request_->GetSerializedToken()),
             .AccessRights = NACLib::EAccessRights::DescribeSchema,
         };
-        std::unordered_set<TString> topicsSet(topics.begin(), topics.end());
+        std::unordered_set<TString> topicsSet(topics.size());
+        for (const auto& topic : topics) {
+            TString fullTopicPath = CanonizePath(NKikimr::JoinPath({DatabaseName_, topic}));
+            topicsSet.insert(std::move(fullTopicPath));
+        }
         DescriberActorId = RegisterWithSameMailbox(NPQ::NDescriber::CreateDescriberActor(SelfId(), *Request_->GetDatabaseName(), std::move(topicsSet), settings));
     }
+
+    struct TTopicConsumerPair {
+        TString Topic;
+        TString Consumer;
+        bool Fifo{};
+
+        friend auto operator<=>(const TTopicConsumerPair& lhs, const TTopicConsumerPair& rhs) {
+            return std::tie(lhs.Topic, lhs.Consumer) <=> std::tie(rhs.Topic, rhs.Consumer);
+        };
+    };
+
 
     void TListQueuesActor::Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
         DescriberActorId = {};
         const auto& topicsMap = ev->Get()->Topics;
-        TVector<std::pair<TString, TString>> tc(Reserve(topicsMap.size()));
+        TVector<TTopicConsumerPair> tc(Reserve(topicsMap.size()));
 
         for (const auto& [name, describeResult] : topicsMap) {
             if (describeResult.Status != NPQ::NDescriber::EStatus::SUCCESS) {
@@ -131,14 +147,19 @@ namespace NKikimr::NSqsTopic::V1 {
                 if (consumer.GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
                     continue;
                 }
-                tc.emplace_back(name, consumer.GetName());
+                TTopicConsumerPair tcp{
+                    .Topic = name,
+                    .Consumer = consumer.GetName(),
+                    .Fifo = consumer.GetKeepMessageOrder(),
+                };
+                tc.push_back(std::move(tcp));
             }
         }
         Sort(tc);
         if (Request().has_next_token()) {
             const TString nextToken = Request().next_token();
             const auto pred = [&nextToken](const auto& item) {
-                TString name = TString::Join(item.first, '@', item.second);
+                TString name = TString::Join(item.Topic, '@', item.Consumer);
                 return name <= nextToken;
             };
             std::erase_if(tc, pred);
@@ -148,7 +169,7 @@ namespace NKikimr::NSqsTopic::V1 {
         if (std::cmp_greater(tc.size(), maxResults)) {
             tc.resize(maxResults);
             const auto& threshold = tc.back();
-            newNextToken = TString::Join(threshold.first, '@', threshold.second);
+            newNextToken = TString::Join(threshold.Topic, '@', threshold.Consumer);
         }
 
         Ydb::Ymq::V1::ListQueuesResult result;
@@ -156,12 +177,17 @@ namespace NKikimr::NSqsTopic::V1 {
             result.set_next_token(newNextToken);
         }
 
-        for (const auto& [topic, consumer] : tc) {
+        for (const auto& topicConsumer : tc) {
+            TStringBuf topicPath = TStringBuf{topicConsumer.Topic};
+            bool isFull = true;
+            isFull &= topicPath.SkipPrefix(DatabaseName_);
+            isFull &= topicPath.SkipPrefix("/"sv);
+            Y_ASSERT(isFull);
             const TRichQueueUrl queueUrl{
-                .Database = *Request_->GetDatabaseName(),
-                .TopicPath = topic,
-                .Consumer = consumer,
-                .Fifo = AsciiHasSuffixIgnoreCase(consumer, ".fifo"),
+                .Database = DatabaseName_,
+                .TopicPath = ToString(topicPath),
+                .Consumer = topicConsumer.Consumer,
+                .Fifo = topicConsumer.Fifo,
             };
             TString path = PackQueueUrlPath(queueUrl);
             TString url = TStringBuilder() << GetEndpoint(Cfg()) << path;

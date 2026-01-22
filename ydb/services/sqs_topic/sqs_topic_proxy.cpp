@@ -9,6 +9,7 @@
 #include "send_message.h"
 #include "utils.h"
 
+#include <ydb/services/sqs_topic/queue_url/consumer.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
 
 #include <ydb/core/grpc_services/service_sqs_topic.h>
@@ -92,7 +93,7 @@ namespace NKikimr::NSqsTopic::V1 {
         const TRichQueueUrl queueUrl{
             .Database = this->Database,
             .TopicPath = this->TopicPath,
-            .Consumer = this->Consumer.empty() ? DEFAULT_SQS_CONSUMER : this->Consumer,
+            .Consumer = this->Consumer.empty() ? GetDefaultSqsConsumerName() : this->Consumer,
             .Fifo = AsciiHasSuffixIgnoreCase(this->Consumer, ".fifo"),
         };
 

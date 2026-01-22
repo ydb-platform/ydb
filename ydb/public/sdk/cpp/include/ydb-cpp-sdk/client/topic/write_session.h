@@ -174,6 +174,10 @@ struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
     FLUENT_SETTING_DEFAULT(std::function<std::string(const std::string& key)>, PartitioningKeyHasher, [](const std::string& key) -> std::string {
         return MD5::Calc(key);
     });
+
+    //! ProducerId prefix to use.
+    //! ProducerId is generated as ProducerIdPrefix + partition id.
+    FLUENT_SETTING(std::string, ProducerIdPrefix);
 };
 
 //! Contains the message to write and all the options.

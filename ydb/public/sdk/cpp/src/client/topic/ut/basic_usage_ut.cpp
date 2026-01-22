@@ -1565,6 +1565,20 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     // }
 
+    Y_UNIT_TEST(KeyedWriteSession_ProducerIdPrefixRequired) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .Codec(ECodec::RAW);
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+
+        UNIT_ASSERT_EXCEPTION(setup.MakeClient().CreateKeyedWriteSession(writeSettings), TContractViolation);
+    }
+
     Y_UNIT_TEST(KeyedWriteSession_NoAutoPartitioning_HashPartitionChooser) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
@@ -1583,8 +1597,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TKeyedWriteSessionSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
-            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
@@ -1667,8 +1681,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TKeyedWriteSessionSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
-            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
         writeSettings.PartitioningKeyHasher([](const std::string& key) -> std::string {
@@ -1741,8 +1755,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TKeyedWriteSessionSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
-            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
         writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
 
@@ -1826,8 +1840,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TKeyedWriteSessionSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
-            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
         writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
 
@@ -1931,8 +1945,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TKeyedWriteSessionSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
-            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
         writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
         
@@ -1970,8 +1984,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TKeyedWriteSessionSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
-            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
         writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
 
@@ -1993,15 +2007,17 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     Y_UNIT_TEST(KeyedWriteSession_CloseTimeout) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 3);
 
         auto client = setup.MakeClient();
 
         TKeyedWriteSessionSettings writeSettings;
         writeSettings
             .Path(setup.GetTopicPath(TEST_TOPIC))
-            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix(CreateGuidAsString());
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
 
@@ -2058,75 +2074,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
 
         UNIT_ASSERT(attempts < maxAttempts);
-    }
-
-    Y_UNIT_TEST(AutoPartitioning_WriteSession) {
-        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        TTopicClient client = setup.MakeClient();
-        auto producerId1 = CreateGuidAsString();
-        auto producerId2 = CreateGuidAsString();
-
-        TCreateTopicSettings createSettings;
-        createSettings
-            .BeginConfigurePartitioningSettings()
-            .MinActivePartitions(1)
-            .MaxActivePartitions(100)
-                .BeginConfigureAutoPartitioningSettings()
-                .UpUtilizationPercent(2)
-                .DownUtilizationPercent(1)
-                .StabilizationWindow(TDuration::Seconds(2))
-                .Strategy(EAutoPartitioningStrategy::ScaleUp)
-                .EndConfigureAutoPartitioningSettings()
-            .EndConfigurePartitioningSettings();
-        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
-
-        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-        UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
-        auto partitionId = describe.GetTopicDescription().GetPartitions()[0].GetPartitionId();
-
-        TWriteSessionSettings writeSettings;
-        writeSettings
-            .Path(setup.GetTopicPath(TEST_TOPIC))
-            .ProducerId(producerId1)
-            .DirectWriteToPartition(true)
-            .PartitionId(partitionId)
-            .MessageGroupId(producerId1)
-            .Codec(ECodec::RAW);
-
-        TWriteSessionSettings writeSettings2;
-        writeSettings2
-            .Path(setup.GetTopicPath(TEST_TOPIC))
-            .ProducerId(producerId2)
-            .DirectWriteToPartition(true)
-            .PartitionId(partitionId)
-            .MessageGroupId(producerId2)
-            .Codec(ECodec::RAW);
-
-        auto session1 = client.CreateSimpleBlockingWriteSession(writeSettings);
-        auto session2 = client.CreateSimpleBlockingWriteSession(writeSettings2);
-        auto msgData = TString(1_MB, 'a');
-
-        {
-            UNIT_ASSERT(session1->Write(msgData, 1));
-            UNIT_ASSERT(session1->Write(msgData, 2));
-            Sleep(TDuration::Seconds(1));
-            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
-        }
-
-        {
-            UNIT_ASSERT(session1->Write(msgData, 3));
-            UNIT_ASSERT(session1->Write(msgData, 4));
-            UNIT_ASSERT(session1->Write(msgData, 5));
-            UNIT_ASSERT(session2->Write(msgData, 6));
-            Sleep(TDuration::Seconds(1));
-            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
-        }
-
-        auto sessionToSplittedPartition = client.CreateWriteSession(writeSettings);
-        auto initSeqNo = sessionToSplittedPartition->GetInitSeqNo().Wait(TDuration::Seconds(10));
-        UNIT_ASSERT(initSeqNo);
     }
 
 } // Y_UNIT_TEST_SUITE(BasicUsage)

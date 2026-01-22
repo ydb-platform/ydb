@@ -660,7 +660,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         result.Reader->Close();
     }
 
-    Y_UNIT_TEST(CommitMessages_Continue) {
+    Y_UNIT_TEST(CommitMessages_Continue_WithoutAutoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        });
+        }, std::nullopt, TDuration::Seconds(5), false);
 
         //UNIT_ASSERT(!result.Timeout);
         UNIT_ASSERT_VALUES_EQUAL(count, expected);

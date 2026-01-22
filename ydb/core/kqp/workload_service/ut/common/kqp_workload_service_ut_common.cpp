@@ -244,6 +244,7 @@ struct TFakeTicketParserActor : public TActor<TFakeTicketParserActor> {
 IActor* CreateFakeTicketParser(const TTicketParserSettings&) {
     return new TFakeTicketParserActor();
 }
+
 // Ydb setup
 
 class TWorkloadServiceYdbSetup : public IYdbSetup {
@@ -260,6 +261,7 @@ private:
         featureFlags.SetEnableExternalDataSources(true);
         featureFlags.SetEnableResourcePoolsCounters(true);
         featureFlags.SetEnableStreamingQueries(true);
+        featureFlags.SetEnableResourcePoolsScheduler(Settings_.EnableResourcePoolsScheduler_);
 
         auto& queryServiceConfig = *appConfig.MutableQueryServiceConfig();
         queryServiceConfig.SetAllExternalDataSourcesAreAvailable(true);
@@ -272,6 +274,7 @@ private:
     void SetLoggerSettings(TServerSettings& serverSettings) const {
         auto loggerInitializer = [](TTestActorRuntime& runtime) {
             runtime.SetLogPriority(NKikimrServices::KQP_WORKLOAD_SERVICE, NLog::EPriority::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE_SCHEDULER, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::EPriority::PRI_TRACE);
         };
 
@@ -316,6 +319,12 @@ private:
         {  // Dedicated
             Ydb::Cms::CreateDatabaseRequest request;
             SetupResourcesTenant(request, request.mutable_resources()->add_storage_units(), Settings_.GetDedicatedTenantName());
+
+            if (Settings_.DedicatedDiskQuota_ > -1) {
+                request.mutable_database_quotas()->set_data_size_hard_quota(Settings_.DedicatedDiskQuota_);
+                request.mutable_database_quotas()->set_data_size_soft_quota(Settings_.DedicatedDiskQuota_);
+            }
+
             Tenants_->CreateTenant(std::move(request));
             const auto describeResult = Client_->Describe(GetRuntime(), Settings_.GetDedicatedTenantName());
             DedicatedTenantPathId = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey().GetPathId();
@@ -385,7 +394,6 @@ public:
         CreateSamplePool();
     }
 
-    // Cluster helpers
     void UpdateNodeCpuInfo(double usage, ui32 threads, ui64 nodeIndex = 0) override {
         TVector<std::tuple<TString, double, ui32, ui32>> pools;
         pools.emplace_back("User", usage, threads, threads);
@@ -427,7 +435,8 @@ public:
 
     void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const override {
         TStatus status = TableClientSession_->ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), expectedStatus,
+            TStringBuilder() << "Query: " << query << Endl << status.GetIssues().ToOneLineString());
         if (expectedStatus != NYdb::EStatus::SUCCESS) {
             UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), expectedMessage);
         }
@@ -470,9 +479,9 @@ public:
         auto event = GetQueryRequest(query, settings);
         auto promise = NewPromise<TQueryRunnerResult>();
         auto edgeActor = GetRuntime()->AllocateEdgeActor();
-        auto runerActor = GetRuntime()->Register(new TQueryRunnerActor(std::move(event), promise, settings, GetRuntime()->GetNodeId(settings.NodeIndex_)), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        auto runnerActor = GetRuntime()->Register(new TQueryRunnerActor(std::move(event), promise, settings, GetRuntime()->GetNodeId(settings.NodeIndex_)), 0, 0, TMailboxType::Simple, 0, edgeActor);
 
-        return {.AsyncResult = promise.GetFuture(), .QueryRunnerActor = runerActor, .EdgeActor = edgeActor};
+        return {.AsyncResult = promise.GetFuture(), .QueryRunnerActor = runnerActor, .EdgeActor = edgeActor};
     }
 
     void ExecuteQueryRetry(const TString& retryMessage, const TString& query, TQueryRunnerSettings settings = TQueryRunnerSettings(), TDuration timeout = FUTURE_WAIT_TIMEOUT) const override {
@@ -500,6 +509,30 @@ public:
     }
 
     // Pools actions
+    void CreateResourcePool(const TString& poolId, const NResourcePool::TPoolSettings& settings) const override {
+        auto edgeActor = GetRuntime()->AllocateEdgeActor();
+
+        GetRuntime()->Register(CreatePoolCreatorActor(edgeActor, Settings_.DomainName_, poolId, settings, nullptr, {}));
+        auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
+    }
+
+    void CreateSamplePoolOn(const TString& databaseId) const override {
+        auto edgeActor = GetRuntime()->AllocateEdgeActor();
+        auto actor = CreatePoolCreatorActor(
+            edgeActor,
+            databaseId,
+            Settings_.PoolId_,
+            Settings_.GetDefaultPoolSettings(),
+            nullptr,
+            {}
+        );
+
+        GetRuntime()->Register(actor);
+        auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvCreatePoolResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
+    }
+
     TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const override {
         const auto& edgeActor = GetRuntime()->AllocateEdgeActor();
 

@@ -244,6 +244,13 @@ public:
         return result;
     }
 
+    TString TraceId() const {
+        if (QueryState && QueryState->KqpSessionSpan) {
+            return QueryState->KqpSessionSpan.GetTraceId().GetHexTraceId();
+        }
+        return TString();
+    }
+
     void MakeNewQueryState(TEvKqp::TEvQueryRequest::TPtr& ev) {
         ++QueryId;
         YQL_ENSURE(!QueryState);
@@ -512,17 +519,24 @@ public:
         }
 
         const TString& poolId = ev->Get()->PoolId;
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && !ev->Get()->IsDiskFull()) {
             google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
             NYql::IssuesToMessage(std::move(ev->Get()->Issues), &issues);
             ReplyQueryError(ev->Get()->Status, TStringBuilder() << "Query failed during adding/waiting in workload pool " << poolId, issues);
             return;
         }
 
-        LOG_D("continue request, pool id: " << poolId);
+        if (ev->Get()->IsDiskFull()) {
+            LOG_W("Database disks are without free space, pool id: " << poolId << ", trace id:" << TraceId());
+            FillQueryIssues(ev->Get()->Issues);
+        }
+
+        LOG_D("Continue request, pool id: " << poolId << ", trace id:" << TraceId());
+
         QueryState->PoolHandlerActor = ev->Sender;
         QueryState->UserRequestContext->PoolId = poolId;
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
+
         CompileQuery();
     }
 
@@ -1985,6 +1999,20 @@ public:
         }
     }
 
+    void FillQueryIssues(const NYql::TIssues& issues) {
+        if (!QueryState) {
+            LOG_W("Try to put issues into empty QueryState, issues:" << issues.ToOneLineString() << " trace id: " << TraceId());
+            return;
+        }
+
+        if (!QueryState->Issues) {
+            QueryState->Issues = issues;
+            return;
+        }
+
+        QueryState->Issues.AddIssues(issues);
+    }
+
     void ProcessExecuterResult(TEvKqpExecuter::TEvTxResponse* ev) {
         QueryState->Orbit = std::move(ev->Orbit);
 
@@ -2082,7 +2110,9 @@ public:
         }
 
         if (!response->GetIssues().empty()){
-            NYql::IssuesFromMessage(response->GetIssues(), QueryState->Issues);
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(response->GetIssues(), issues);
+            FillQueryIssues(issues);
         }
 
         ExecuteOrDefer();
@@ -2285,7 +2315,18 @@ public:
         }
     }
 
-    void UpdateQueryExecutionCountes() {
+    void FillPoolId(NKikimrKqp::TQueryResponse* response) {
+        YQL_ENSURE(QueryState);
+        if (QueryState->UserRequestContext) {
+            if (QueryState->UserRequestContext->PoolId.empty()) {
+                response->SetEffectivePoolId(NResourcePool::DEFAULT_POOL_ID);
+            } else {
+                response->SetEffectivePoolId(QueryState->UserRequestContext->PoolId);
+            }
+        }
+    }
+
+    void UpdateQueryExecutionCounters() {
         auto now = TInstant::Now();
         auto queryDuration = now - QueryState->StartTime;
 
@@ -2350,8 +2391,9 @@ public:
         }
 
         FillTxInfo(response);
+        FillPoolId(response);
 
-        UpdateQueryExecutionCountes();
+        UpdateQueryExecutionCounters();
 
         bool replyQueryId = false;
         bool replyQueryParameters = false;
@@ -2484,7 +2526,9 @@ public:
         }
 
         auto* record = &QueryResponse->Record;
-        FillTxInfo(record->MutableResponse());
+        auto* response = record->MutableResponse();
+        FillTxInfo(response);
+        FillPoolId(response);
         record->SetConsumedRu(1);
 
         Cleanup(IsFatalError(record->GetYdbStatus()));
@@ -2504,7 +2548,8 @@ public:
             Transactions.AddToBeAborted(std::move(ctx));
         }
 
-        FillTxInfo(record.MutableResponse());
+        FillTxInfo(&response);
+        FillPoolId(&response);
 
         Cleanup(false);
     }
@@ -2936,6 +2981,7 @@ public:
         }
 
         FillTxInfo(response);
+        FillPoolId(response);
 
         ExecuterId = TActorId{};
         Cleanup(IsFatalError(ydbStatus));

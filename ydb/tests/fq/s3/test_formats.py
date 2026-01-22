@@ -153,7 +153,7 @@ class TestS3Formats:
         result_set = data.result.result_set
         self.validate_result_inference(result_set)
 
-    @yq_all
+    @yq_v2
     def test_btc(self, kikimr, s3, client, unique_prefix):
         self.create_bucket_and_upload_file("btct.parquet", s3, kikimr)
         storage_connection_name = unique_prefix + "btct"
@@ -164,31 +164,13 @@ class TestS3Formats:
             SELECT
                 *
             FROM `{storage_connection_name}`.`btct.parquet`
-            WITH (format=`parquet`,
-                SCHEMA=(
-                    hash STRING,
-                    version INT64,
-                    size INT64,
-                    block_hash UTF8,
-                    block_number INT64,
-                    virtual_size INT64,
-                    lock_time INT64,
-                    input_count INT64,
-                    output_count INT64,
-                    is_coinbase BOOL,
-                    output_value DOUBLE,
-                    block_timestamp DATETIME,
-                    date DATE
-                )
-            );
+            WITH (format=`parquet`, with_infer="true");
             '''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
         describe_result = client.describe_query(query_id).result
-        issues = describe_result.query.issue[0].issues
-        assert "Error while reading file btct.parquet" in issues[0].message
-        assert "File contains LIST field outputs and can\'t be parsed" in issues[0].issues[0].message
+        assert len(describe_result.query.issue) == 0
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

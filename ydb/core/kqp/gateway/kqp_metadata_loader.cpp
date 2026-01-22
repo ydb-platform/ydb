@@ -470,13 +470,17 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             return ResultFromError<TResult>(ToString(entry.Status));
     }
 
-    YQL_ENSURE(IsIn({EKind::KindTable,
-                     EKind::KindColumnTable,
-                     EKind::KindExternalTable,
-                     EKind::KindExternalDataSource,
-                     EKind::KindView,
-                     EKind::KindSysView,
-                     EKind::KindTopic}, entry.Kind));
+    if (!IsIn({
+        EKind::KindTable,
+        EKind::KindColumnTable,
+        EKind::KindExternalTable,
+        EKind::KindExternalDataSource,
+        EKind::KindView,
+        EKind::KindSysView,
+        EKind::KindTopic
+    }, entry.Kind)) {
+        return ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_ERROR, "Path is not a table or topic"));
+    }
 
     TTableMetadataResult result;
     switch (entry.Kind) {

@@ -523,6 +523,7 @@ private:
 
         auto& topic = *initRequest.add_topics_read_settings();
         topic.set_path(ReadSettings.Topic);
+        topic.mutable_partition_ids()->Assign(ReadSettings.PartitionIds.begin(), ReadSettings.PartitionIds.end());
         if (ReadSettings.ReadFrom) {
             *topic.mutable_read_from() = NProtoInterop::CastToProto(*ReadSettings.ReadFrom);
         }

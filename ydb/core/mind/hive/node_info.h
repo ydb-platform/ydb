@@ -107,7 +107,7 @@ public:
 
     void ChangeVolatileState(EVolatileState state);
     bool OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState);
-    void UpdateResourceValues(const TTabletInfo* tablet, const NKikimrTabletBase::TMetrics& before, const NKikimrTabletBase::TMetrics& after);
+    void UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& before, const TMetrics& after);
 
     ui32 GetTabletsScheduled() const {
         auto it = Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING);

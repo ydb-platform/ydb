@@ -69,9 +69,13 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::EntityName::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            const auto colName = Schema->GetIndexInfo().GetColumnFieldVerified(i.GetEntityId())->name();
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(colName.data(), colName.size()));
+            auto field = Schema->GetIndexInfo().GetColumnFieldVerified(i.GetEntityId());
+            if (field) {
+                const auto colName = (*field)->name();
+                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(colName.data(), colName.size()));
+            }
         }
+
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
             const auto idxName = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId())->GetIndexName();
             NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(idxName.data(), idxName.size()));

@@ -16,7 +16,7 @@ private:
     ISnapshotSchema::TPtr SchemaInfo;
     YDB_ACCESSOR_DEF(TColumnSaver, Saver);
     YDB_READONLY_DEF(std::shared_ptr<TColumnLoader>, Loader);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Field>, ResultField);
+    YDB_READONLY_DEF(std::optional<std::shared_ptr<arrow::Field>>, ResultField);
     YDB_READONLY(ui64, ChunkPackedBytesLimit, 7 * 1024 * 1024);
     YDB_READONLY(ui64, ExpectedBlobPackedBytes, 4 * 1024 * 1024);
     YDB_READONLY(ui64, ChunkRawBytesLimit, 50 * 1024 * 1024);
@@ -41,7 +41,11 @@ public:
     }
 
     std::unique_ptr<arrow::ArrayBuilder> MakeBuilder() const {
-        return NArrow::MakeBuilder(ResultField);
+        if (!ResultField) {
+            return nullptr;
+        }
+
+        return NArrow::MakeBuilder(*ResultField);
     }
 
     const TIndexInfo& GetIndexInfo() const {
@@ -56,10 +60,12 @@ public:
         , Loader(schema->GetColumnLoaderOptional(columnId))
         , ResultField(schema->GetIndexInfo().GetColumnFieldVerified(columnId))
         , ChunkRawBytesLimit(chunkRawBytesLimit)
-        , UseWholeChunksOptimization(!schema->GetIndexInfo().GetReplaceKey()->GetFieldByName(ResultField->name()))
         , ColumnStat(columnStat)
         , IndexInfo(schema->GetIndexInfo()) {
         Y_ABORT_UNLESS(ChunkRawBytesLimit);
+        if (ResultField) {
+            UseWholeChunksOptimization = !schema->GetIndexInfo().GetReplaceKey()->GetFieldByName((*ResultField)->name());
+        }
     }
 };
 }   // namespace NKikimr::NOlap::NCompaction

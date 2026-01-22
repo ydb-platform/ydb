@@ -185,6 +185,10 @@ public:
         , FullReadSchema(fullReadSchema) {
         AFL_VERIFY(!!FullReadSchema);
         Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
+        if (!Schema) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "failed_to_create_schema")("column_ids", ColumnIds);
+            return;
+        }
         Rebuild();
     }
 
@@ -193,6 +197,10 @@ public:
         , FullReadSchema(fullReadSchema) {
         AFL_VERIFY(!!FullReadSchema);
         Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
+        if (!Schema) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "failed_to_create_schema")("column_ids", ColumnIds);
+            return;
+        }
         Rebuild();
     }
 

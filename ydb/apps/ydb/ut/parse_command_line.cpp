@@ -397,6 +397,34 @@ public:
         return output;
     }
 
+    TString RunCliWithInput(TList<TString> args, const TString& input, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}) {
+        Auth.ClearFailures();
+        Scheme.ClearFailures();
+        IamTokenService.ClearFailures();
+
+        if (profileFileContent) {
+            TString profileFile = EnvFile(profileFileContent, "profile.yaml");
+            args.emplace_front(profileFile);
+            args.emplace_front("--profile-file");
+        }
+        TString output = RunYdbWithInput(
+            args,
+            {},
+            input,
+            true,
+            false,
+            env,
+            ExpectedExitCode
+        );
+        CheckExpectations();
+        // reset
+        ExpectedExitCode = 0;
+        Scheme.ClearExpectations();
+        Auth.ClearExpectations();
+        IamTokenService.ClearExpectations();
+        return output;
+    }
+
     TIamTokenServiceImpl& GetIamTokenService() {
         return IamTokenService;
     }
@@ -666,8 +694,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         profile);
     }
 
-    Y_UNIT_TEST_F(StaticCredentials, TCliTestFixture) {
-        TString profilePasswordFile = EnvFile("password-from-file-in-profile  \n", "password");
+    Y_UNIT_TEST_F(StaticCredentialsExplicitOptions, TCliTestFixture) {
         TString explicitPasswordFile = EnvFile("password-from-file-explicit  \n", "password2");
 
         // user and password-file from explicit options
@@ -706,7 +733,181 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "--password-file", explicitPasswordFile,
             "scheme", "ls",
         });
+    }
 
+    Y_UNIT_TEST_F(StaticCredentialsProfileActivePasswordFile, TCliTestFixture) {
+        TString explicitPasswordFile = EnvFile("password-from-file-explicit  \n", "password2");
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-active-profile
+                        password: password-from-active-profile
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        // user from active profile, password from explicit password file
+        ExpectUserAndPassword("user-from-active-profile", "password-from-file-explicit");
+        RunCli({
+            "-v",
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        },
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsProfileActivePassword, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-active-profile
+                        password: password-from-active-profile
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        // user and password from active profile
+        ExpectUserAndPassword("user-from-active-profile", "password-from-active-profile");
+        RunCli({
+            "-v",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsProfileExplicitPassword, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-explicit-profile
+                        password: password-from-explicit-profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        // explicit profile
+        ExpectUserAndPassword("user-from-explicit-profile", "password-from-explicit-profile");
+        RunCli({
+            "-v",
+            "-p", "test_profile",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsProfilePasswordFile, TCliTestFixture) {
+        TString profilePasswordFile = EnvFile("password-from-file-in-profile  \n", "password");
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            test_profile_with_password_file:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-explicit-profile
+                        password-file: {password_file}
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "password_file"_a = profilePasswordFile
+        );
+
+        // explicit profile with password file
+        ExpectUserAndPassword("user-from-explicit-profile", "password-from-file-in-profile");
+        RunCli({
+            "-v",
+            "-p", "test_profile_with_password_file",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsProfileBothPasswords, TCliTestFixture) {
+        TString profilePasswordFile = EnvFile("password-from-file-in-profile  \n", "password");
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            test_profile_with_both_passwords:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: users
+                        password: pwd
+                        password-file: {password_file}
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "password_file"_a = profilePasswordFile
+        );
+
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-p", "test_profile_with_both_passwords",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsProfileNoPassword, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            test_profile_without_password:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user_no_password
+                        password: ""
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        ExpectUserAndPassword("user_no_password", "");
+        RunCli({
+            "-v",
+            "-p", "test_profile_without_password",
+            "--no-password",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsEnvSources, TCliTestFixture) {
+        TString profilePasswordFile = EnvFile("password-from-file-in-profile  \n", "password");
+        TString explicitPasswordFile = EnvFile("password-from-file-explicit  \n", "password2");
         TString profile = fmt::format(R"yaml(
         profiles:
             active_test_profile:
@@ -733,48 +934,12 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
                     data:
                         user: user-from-explicit-profile
                         password-file: {password_file}
-            test_profile_with_both_passwords:
-                endpoint: {endpoint}
-                database: {database}
-                authentication:
-                    method: static-credentials
-                    data:
-                        user: users
-                        password: pwd
-                        password-file: {password_file}
-            test_profile_without_password:
-                endpoint: {endpoint}
-                database: {database}
-                authentication:
-                    method: static-credentials
-                    data:
-                        user: user_no_password
-                        password: ""
         active_profile: active_test_profile
         )yaml",
         "endpoint"_a = GetEndpoint(),
         "database"_a = GetDatabase(),
         "password_file"_a = profilePasswordFile
         );
-
-        // user from active profile, password from explicit password file
-        ExpectUserAndPassword("user-from-active-profile", "password-from-file-explicit");
-        RunCli({
-            "-v",
-            "--password-file", explicitPasswordFile,
-            "scheme", "ls",
-        },
-        {},
-        profile);
-
-        // user and password from active profile
-        ExpectUserAndPassword("user-from-active-profile", "password-from-active-profile");
-        RunCli({
-            "-v",
-            "scheme", "ls",
-        },
-        {},
-        profile);
 
         // user from active profile, password from env
         ExpectUserAndPassword("user-from-active-profile", "password-from-env");
@@ -797,47 +962,6 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             {"YDB_USER", "user-from-env"},
             {"YDB_PASSWORD", "password-from-env"},
             {"YDB_OAUTH2_KEY_FILE", "not used"},
-        },
-        profile);
-
-        // explicit profile
-        ExpectUserAndPassword("user-from-explicit-profile", "password-from-explicit-profile");
-        RunCli({
-            "-v",
-            "-p", "test_profile",
-            "scheme", "ls",
-        },
-        {},
-        profile);
-
-        ExpectFail();
-        RunCli({
-            "-v",
-            "-p", "test_profile_with_both_passwords",
-            "scheme", "ls",
-        },
-        {},
-        profile);
-
-        ExpectUserAndPassword("user_no_password", "");
-        RunCli({
-            "-v",
-            "-p", "test_profile_without_password",
-            "--no-password",
-            "scheme", "ls",
-        },
-        {},
-        profile);
-
-        // explicit profile with password file
-        ExpectUserAndPassword("user-from-explicit-profile", "password-from-file-in-profile");
-        RunCli({
-            "-v",
-            "-p", "test_profile_with_password_file",
-            "scheme", "ls",
-        },
-        {
-            {"YDB_PASSWORD", "password-from-env"},
         },
         profile);
 
@@ -892,6 +1016,43 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             {"YDB_PASSWORD", "password-from-env"},
         },
         profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsOverrides, TCliTestFixture) {
+        TString profilePasswordFile = EnvFile("password-from-file-in-profile  \n", "password");
+        TString explicitPasswordFile = EnvFile("password-from-file-explicit  \n", "password2");
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-active-profile
+                        password: password-from-active-profile
+            test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-explicit-profile
+                        password: password-from-explicit-profile
+            test_profile_without_password:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user_no_password
+                        password: ""
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "password_file"_a = profilePasswordFile
+        );
 
         // user + empty password from explicit profile (password from environment is overridden)
         ExpectUserAndPassword("user_no_password", "");
@@ -969,6 +1130,78 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             {"YDB_PASSWORD", "password-from-env"},
         },
         profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsInteractivePrompt, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-active-profile
+                        password: password-from-active-profile
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        const TString typedPassword = "typed-password";
+        ExpectUserAndPassword("user-from-explicit-option", typedPassword);
+        RunCliWithInput({
+            "-v",
+            "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        typedPassword + "\n",
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsInteractivePromptEnvUser, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-active-profile
+                        password: password-from-active-profile
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        const TString typedPassword = "typed-password-env";
+        ExpectUserAndPassword("user-from-env", typedPassword);
+        RunCliWithInput({
+            "-v",
+            "scheme", "ls",
+        },
+        typedPassword + "\n",
+        {
+            {"YDB_USER", "user-from-env"},
+        },
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsInteractivePromptNoProfile, TCliTestFixture) {
+        const TString typedPassword = "typed-password-no-profile";
+        ExpectUserAndPassword("user-from-explicit-option", typedPassword);
+        RunCliWithInput({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        typedPassword + "\n");
     }
 
     Y_UNIT_TEST_F(AnonymousCredentials, TCliTestFixture) {

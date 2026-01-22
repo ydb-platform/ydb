@@ -24,11 +24,22 @@ TString GetYdbDatabase()
 class TShellCommandEnvScope {
 public:
     explicit TShellCommandEnvScope(const THashMap<TString, TString>& env) {
-        if (!env.contains("YDB_ENDPOINT")) {
-            Unset("YDB_ENDPOINT");
-        }
-        if (!env.contains("YDB_DATABASE")) {
-            Unset("YDB_DATABASE");
+        const TStringBuf varsToUnset[] = {
+            "YDB_ENDPOINT",
+            "YDB_DATABASE",
+            "YDB_USER",
+            "YDB_PASSWORD",
+            "YDB_TOKEN",
+            "IAM_TOKEN",
+            "YC_TOKEN",
+            "USE_METADATA_CREDENTIALS",
+            "SA_KEY_FILE",
+            "YDB_OAUTH2_KEY_FILE",
+        };
+        for (const TStringBuf var : varsToUnset) {
+            if (!env.contains(TString{var})) {
+                Unset(TString{var});
+            }
         }
         for (const auto& [key, value] : env) {
             Set(key, value);

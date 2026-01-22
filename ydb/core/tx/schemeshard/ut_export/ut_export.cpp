@@ -1046,6 +1046,39 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         )");
     }
 
+    Y_UNIT_TEST(ShouldSucceedOnALotOfSources) {
+        TTestBasicRuntime runtime;
+        TVector<TString> tableDesc;
+        TVector<TString> exportItem;
+        ui32 tablesCount = 515;
+        for (ui32 i = 1; i <= tablesCount; i++) {
+            tableDesc.push_back(Sprintf(R"(
+                Name: "Table%d"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )", i));
+        }
+
+        TStringBuilder items;
+        items << "ExportToS3Settings {"
+        << " endpoint: \"localhost:%d\""
+        << " scheme: HTTP\n";
+
+        TString qwdqwd = items.c_str();
+
+        for (ui32 i = 1; i <= tablesCount; i++) {
+            items << "items {"
+                << " source_path: \"/MyRoot/Table" << i << "\""
+                << " destination_prefix: \"\""
+            << " }\n";
+        }
+        items << "}\n";
+
+        RunS3(runtime, tableDesc, items.c_str());
+    }
+
+
     Y_UNIT_TEST(ShouldOmitNonStrictStorageSettings) {
         const TVector<TString> tables = {R"(
             Name: "Table"

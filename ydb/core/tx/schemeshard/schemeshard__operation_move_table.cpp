@@ -612,7 +612,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         txState->ClearShardsInProgress();
-        for (auto&& shard : txState->Shards) {
+        for (TTxState::TShardOperation& shard : txState->Shards) {
             if (shard.Operation < TTxState::ProposedWaitParts) {
                 shard.Operation = TTxState::ProposedWaitParts;
                 context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
@@ -651,8 +651,78 @@ public:
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         return HandleReplyImpl(ev, context);
     }
-};
+};    
     
+class TDone: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+            << "TMoveTable TDone"
+            << ", operationId: " << OperationId;
+    }
+public:
+    TDone(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), AllIncomingEvents());
+    }
+    template<typename TEvent>
+    bool HandleReplyImpl(TEvent& ev, TOperationContext& context) {
+        TTabletId ssId = context.SS->SelfTabletId();
+        const TActorId& ackTo = ev->Sender;
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
+                               << " repeated message, ack it anyway"
+                               << " at tablet: " << ssId);
+
+        THolder<TEvDataShard::TEvSchemaChangedResult> event = MakeHolder<TEvDataShard::TEvSchemaChangedResult>();
+        event->Record.SetTxId(ui64(OperationId.GetTxId()));
+
+        context.OnComplete.Send(ackTo, std::move(event));
+        return false;
+    }
+    
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
+
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTable);
+
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", SourcePathId: " << txState->SourcePathId
+                               << ", TargetPathId: " << txState->TargetPathId
+                               << ", at schemeshard: " << ssId);
+
+        // clear resources on src
+        NIceDb::TNiceDb db(context.GetDB());
+        TPathElement::TPtr srcPath = context.SS->PathsById.at(txState->SourcePathId);
+        context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNotExist);
+
+        TPathElement::TPtr dstPath = context.SS->PathsById.at(txState->TargetPathId);
+        context.OnComplete.ReleasePathState(OperationId, dstPath->PathId, TPathElement::EPathState::EPathStateNoChanges);
+
+        context.OnComplete.DoneOperation(OperationId);
+        return true;
+    }
+};
+
 class TMoveTable: public TSubOperation {
     TTxState::ETxState AfterPropose = TTxState::Invalid;
 

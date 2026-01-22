@@ -533,6 +533,7 @@ public:
     }
 };
 
+// Must be in sync with NTableState::TProposedWaitParts
 class TMoveTableProposedWaitParts : public TSubOperationState {
 private:
     const TOperationId OperationId;
@@ -633,6 +634,10 @@ public:
 
         txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
 
+        // Move all notifications that were already received
+        // NOTE: SchemeChangeNotification is sent form DS after it has got PlanStep from coordinator and the schema tx has completed
+        // At that moment the SS might not have received PlanStep from coordinator yet (this message might be still on its way to SS)
+        // So we are going to accumulate SchemeChangeNotification that are received before this Tx switches to WaitParts state
         txState->AcceptPendingSchemeNotification();
 
         if (txState->ShardsInProgress.empty()) {

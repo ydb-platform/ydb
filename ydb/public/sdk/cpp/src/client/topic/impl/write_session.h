@@ -252,12 +252,6 @@ private:
 
     TDuration GetCloseTimeout();
 
-    TInstant GetCloseDeadline();
-
-    void RemoveIdleSession(WrappedWriteSessionPtr session);
-
-    void AddIdleSession(WrappedWriteSessionPtr session);
-
     void CleanIdleSessions();
 
     void HandleReadyFutures(std::unique_lock<std::mutex>& lock);

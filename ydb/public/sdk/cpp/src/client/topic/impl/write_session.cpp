@@ -344,11 +344,6 @@ void TKeyedWriteSession::SetCloseDeadline(const TDuration& closeTimeout) {
     CloseDeadline = TInstant::Now() + closeTimeout;
 }
 
-TInstant TKeyedWriteSession::GetCloseDeadline() {
-    std::lock_guard lock(GlobalLock);
-    return CloseDeadline;
-}
-
 TKeyedWriteSession::~TKeyedWriteSession() {
     if (MainWorker.joinable()) {
         Close(TDuration::Zero());

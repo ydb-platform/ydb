@@ -33,7 +33,12 @@ select
                      ) tmp1
                where ranking <= 5
              )
- group by rollup(store.s_state,store.s_county)
+ -- group by rollup(store.s_state,store.s_county)
+ group by grouping sets (
+   (store.s_state,store.s_county),
+   (store.s_state),
+   ((d1.d_month_seq < 0) as FAKE)
+ )
  order by
    lochierarchy desc
   ,case when lochierarchy = 0 then s_state else null end

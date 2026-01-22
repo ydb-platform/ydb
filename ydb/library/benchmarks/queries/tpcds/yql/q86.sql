@@ -19,7 +19,12 @@ select
     d1.d_month_seq between 1200 and 1200+11
  and d1.d_date_sk = ws_sold_date_sk
  and i_item_sk  = ws_item_sk
- group by rollup(item.i_category,item.i_class)
+ -- group by rollup(item.i_category,item.i_class)
+ group by grouping sets (
+   (item.i_category,item.i_class),
+   (item.i_category),
+   ((d1.d_month_seq < 0) as FAKE)
+ )
  order by
    lochierarchy desc,
    case when lochierarchy = 0 then i_category else null end,

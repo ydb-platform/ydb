@@ -39,6 +39,7 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
     )
 {% if feature_map_tables %}
     WITH ( key = value, ... )
+    [AS SELECT ...]
 {% endif %}
 
 {% if oss == true and backend_name == "YDB" %}
@@ -248,10 +249,12 @@ When creating row-oriented tables, it is possible to specify:
 * [A vector index](vector_index.md).
 * [Column groups](family.md).
 * [Additional parameters](with.md).
+* [Creating a table filled with query results](as_select.md).
 
 When creating column-oriented tables, it is possible to specify:
 
 * [Column groups](family.md).
 * [Additional parameters](with.md).
+* [Creating a table filled with query results](as_select.md).
 
 {% endif %}

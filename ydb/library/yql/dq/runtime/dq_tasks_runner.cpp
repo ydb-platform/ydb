@@ -1127,6 +1127,7 @@ private:
                     return ERunStatus::Finished;
                 }
                 case NUdf::EFetchStatus::Yield: {
+                    auto status = ERunStatus::PendingInput;
                     // only for sync ca
                     if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
                         const auto watermark = WatermarksTracker->GetPendingWatermark();
@@ -1137,6 +1138,9 @@ private:
                         watermarkRequest.SetTimestampUs(watermark->MicroSeconds());
                         AllocatedHolder->Output->Consume(std::move(watermarkRequest));
                         dataConsumed = true;
+                        // there may be some data available in input producer after we removed pending watermark, we should send watermark and then continue input processing;
+                        // alternatively, we could've continue'd, but by then we could've run behind watermark
+                        status = ERunStatus::PendingOutput;
                     }
                     if (LangVer >= MakeLangVersion(2025, 4)) {
                         AllocatedHolder->CheckForNotConsumedLinear();
@@ -1144,7 +1148,7 @@ private:
                     if (dataConsumed) {
                         AllocatedHolder->Output->Flush();
                     }
-                    return ERunStatus::PendingInput;
+                    return status;
                 }
             }
         }

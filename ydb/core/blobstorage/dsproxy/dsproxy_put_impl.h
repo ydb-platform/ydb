@@ -267,16 +267,18 @@ public:
                 HandoffPartsSent += ptr->IsHandoff;
                 ++VPutRequests;
             } else { // TEvVMultiPut
+                ui32 itemsCount = 0;
                 TInstant deadline;
                 for (auto temp = it; temp != end; ++temp) {
                     auto [orderNumber, ptr] = *temp;
                     deadline = Max(deadline, Blobs[ptr->BlobIdx].Deadline);
+                    ++itemsCount;
                 }
                 auto ev = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, deadline, Blackboard.PutHandleClass,
                     false);
 
                 ui8 orderNumber = it->first;
-                auto vput = History.CreateVPut(ev->Record.ItemsSize(), orderNumber);
+                auto vput = History.CreateVPut(itemsCount, orderNumber);
                 while (it != end) {
                     auto [orderNumber, ptr] = *it++;
                     TBlobInfo& blob = Blobs[ptr->BlobIdx];

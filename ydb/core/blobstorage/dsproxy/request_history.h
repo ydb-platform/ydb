@@ -42,8 +42,7 @@ public:
             str << " TimestampMs# " << Timestamp.MillisecondsFloat()
                 << " QueryCount# "  << QueryCount
                 << " VDiskId# "     << info->GetVDiskId(OrderNumber).ToString()
-                << " NodeId# "      << info->GetActorId(OrderNumber).NodeId()
-                << " }";
+                << " NodeId# "      << info->GetActorId(OrderNumber).NodeId();
         }
     };
 

@@ -17,8 +17,8 @@ import http.client as http_client
 import importlib
 import json
 import os
+from unittest import mock
 
-import mock
 import pytest  # type: ignore
 import requests
 
@@ -409,7 +409,7 @@ def test_get_failure_connection_failed(mock_sleep):
         _metadata.get(request, PATH)
 
     assert excinfo.match(
-        r"Compute Engine Metadata server unavailable due to failure message"
+        r"Compute Engine Metadata server unavailable. Last exception: failure message"
     )
 
     request.assert_called_with(
@@ -428,7 +428,7 @@ def test_get_too_many_requests_retryable_error_failure():
         _metadata.get(request, PATH)
 
     assert excinfo.match(
-        r"Compute Engine Metadata server unavailable due to too many requests"
+        r"Compute Engine Metadata server unavailable. Response status: 429\nResponse details:\ntoo many requests"
     )
 
     request.assert_called_with(

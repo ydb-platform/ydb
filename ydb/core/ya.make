@@ -34,6 +34,7 @@ RECURSE(
     kesus
     keyvalue
     kqp
+    linkage_test
     load_test
     local_pgwire
     log_backend

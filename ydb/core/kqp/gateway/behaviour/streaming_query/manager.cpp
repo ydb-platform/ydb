@@ -87,7 +87,7 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown streaming_disposition property: " << streamingDispositionExtractor.GetRemainedParamsString());
     }
 
-    Y_VALIDATE(result.GetDispositionCase() != NYql::NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET, "Failed to parse streamin disposition");
+    Y_VALIDATE(result.GetDispositionCase() != NYql::NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET, "Failed to parse streaming disposition");
 
     return result;
 }

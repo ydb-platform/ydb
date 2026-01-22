@@ -110,7 +110,7 @@ class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicR
         };
     };
 
-    class TLocalPartitionSession final : public TPartitionSession {
+    class TLocalPartitionSession final : public TPartitionSessionControl {
     public:
         struct TSettings {
             i64 PartitionSessionId = 0;
@@ -140,11 +140,11 @@ class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicR
             ActorSystem->Send(SelfId, new TEvPrivate::TEvPartitionStatusRequest(PartitionSessionId));
         }
 
-        void Commit(ui64 startOffset, ui64 endOffset) final {
+        void Commit(uint64_t startOffset, uint64_t endOffset) final {
             ActorSystem->Send(SelfId, new TEvPrivate::TEvPartitionOffsetsCommitRequest(PartitionSessionId, startOffset, endOffset));
         }
 
-        void ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) final {
+        void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) final {
             ActorSystem->Send(SelfId, new TEvPrivate::TEvPartitionConfirmCreate(PartitionSessionId, readOffset, commitOffset));
         }
 
@@ -152,7 +152,7 @@ class TLocalTopicReadSessionActor final : public TActorBootstrapped<TLocalTopicR
             ActorSystem->Send(SelfId, new TEvPrivate::TEvPartitionConfirmDestroy(PartitionSessionId));
         }
 
-        void ConfirmEnd(const std::vector<ui32>& childIds) final {
+        void ConfirmEnd(std::span<const uint32_t> childIds) final {
             Y_UNUSED(childIds);
         }
 

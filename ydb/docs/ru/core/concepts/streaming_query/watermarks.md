@@ -29,35 +29,43 @@
 Входными данными для примера являются:
 
 ```json
-{"ts": 40, "pass": 1, "payload": "a"}
-{"ts": 42, "pass": 1, "payload": "b"}
-{"ts": 50, "pass": 0, "payload": "c"}
-{"ts": 40, "pass": 1, "payload": "d"}
+{"pass": 1, "payload": "a"} // 40
+{"pass": 1, "payload": "b"} // 42
+{"pass": 0, "payload": "c"} // 50
+{"pass": 1, "payload": "d"} // 40
 ```
+
+Пусть для примера каждое событие было записано во время, указанное в комментарии
 
 Тело запроса:
 
 ```sql
 CREATE STREAMING QUERY example AS
 DO BEGIN
+    $input =
+        SELECT
+            t.*,
+            SystemMetadata("write_time") AS ts
+        FROM
+            input_topic
+        WITH (
+            FORMAT = json_each_row,
+            SCHEMA = (
+                pass Int64,
+                payload String
+            ),
+            WATERMARK = SystemMetadata("write_time") - Interval("PT5S")
+            -- , WATERMARK_ADJUST_LATE_EVENTS
+        ) AS t;
+
     SELECT
         AGGREGATE_LIST(payload) AS result,
         HOP_END() AS ts
     FROM
-        input_topic
-    WITH (
-        FORMAT = json_each_row,
-        SCHEMA = (
-            ts Uint32,
-            pass Int64,
-            payload String
-        ),
-        WATERMARK = SystemMetadata("write_time") - Interval("PT5S")
-        -- , WATERMARK_ADJUST_LATE_EVENTS
-    )
+        $input
     WHERE pass > 0
     GROUP BY
-        HoppingWindow(DateTime::FromSeconds(ts), "PT5S", "PT10S");
+        HoppingWindow(ts, "PT5S", "PT10S");
 END DO;
 ```
 
@@ -68,6 +76,8 @@ END DO;
 ```
 
 Пояснение:
+
+Отметим, что для корректности работы водяных знаков [HoppingWindow](../../yql/reference/syntax/select/group-by.md#hopping_window) также должен считаться поверх `SystemMetadata("write_time")`
 
 1. Первое событие порождает водяной знак, равный 35 секундам. Первое событие проходит сквозь фильтр и "застревает" в HoppingWindow. Водяной знак, порожденный первым событием, не оказывает никакого влияния;
 2. Второе событие порождает водяной знак, равный 37 секундам. Далее - аналогично первому событию;

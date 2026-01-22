@@ -34,7 +34,9 @@ TString TColumnShardScanIterator::DebugString(const bool verbose) const {
         summ.IntegralRawBytesRead += counters.IntegralRawBytesRead;
 
     }
-    perStepCounters.pop_back(); // last '\n'
+    if (!perStepCounters.empty()) {
+        perStepCounters.pop_back(); // last '\n'
+    }
     
     
     return TStringBuilder()

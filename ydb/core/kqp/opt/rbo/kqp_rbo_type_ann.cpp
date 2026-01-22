@@ -300,18 +300,25 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
 }
 
 TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext& ctx) {
-    // FIXME: This works correctly only for inner joins, other join types 
     auto leftInputType = join->GetLeftInput()->Type;
     auto rightInputType = join->GetRightInput()->Type;
 
     auto leftItemType = leftInputType->Cast<TListExprType>()->GetItemType();
     auto rightItemType = rightInputType->Cast<TListExprType>()->GetItemType();
 
-    TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
+    TVector<const TItemExprType*> structItemTypes;
+    TVector<const TItemExprType*> leftItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
+    TVector<const TItemExprType*> rightItemTypes = rightItemType->Cast<TStructExprType>()->GetItems();
 
-    for (const auto* item : rightItemType->Cast<TStructExprType>()->GetItems()){
-        structItemTypes.push_back(item);
+    if (join->JoinKind == "LeftOnly" || join->JoinKind == "LeftSemi") {
+        rightItemTypes = {};
     }
+    if (join->JoinKind == "RightOnly" || join->JoinKind == "RightSemi") {
+        leftItemTypes = {};
+    }
+
+    structItemTypes.insert(structItemTypes.end(), leftItemTypes.begin(), leftItemTypes.end());
+    structItemTypes.insert(structItemTypes.end(), rightItemTypes.begin(), rightItemTypes.end());
 
     auto resultStructType = ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes);
     const TTypeAnnotationNode* resultAnn = ctx.ExprCtx.MakeType<TListExprType>(resultStructType);

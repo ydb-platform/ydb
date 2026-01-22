@@ -982,38 +982,42 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
     class TUpdateColumns: public TTableDataModificationTester {
     protected:
         void DoExecute() override {
-            if (GetIsOlap()) {
-                //TODO fix https://github.com/ydb-platform/ydb/issues/25020
-                return;
-            }
             auto client = Kikimr->GetQueryClient();
             auto session1 = client.GetSession().GetValueSync().GetSession();
             auto session2 = client.GetSession().GetValueSync().GetSession();
-            
-            auto insertResult1 = session1.ExecuteQuery(R"(
-                        UPSERT INTO `/Root/Test` (Group, Name, Amount) VALUES (1u, "Anna", 7000ul)
-                )", NQuery::TTxControl::BeginTx()) .GetValueSync();
-            UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult1.GetStatus(), insertResult1.GetIssues().ToString());
-            auto tx1 = insertResult1.GetTransaction();
+            auto readResult1 = session1.ExecuteQuery(R"(
+                        SELECT * FROM `/Root/Test`;
+                    )", NQuery::TTxControl::BeginTx()) .GetValueSync();
+            UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, readResult1.GetStatus(), readResult1.GetIssues().ToString());
+            auto tx1 = readResult1.GetTransaction();
             UNIT_ASSERT(tx1);
+            auto readResult2 = session2.ExecuteQuery(R"(
+                        SELECT * FROM `/Root/Test`;
+                    )", NQuery::TTxControl::BeginTx()) .GetValueSync();
+            UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, readResult2.GetStatus(), readResult2.GetIssues().ToString());
+            auto tx2 = readResult2.GetTransaction();
+            UNIT_ASSERT(tx2);   
 
+            auto insertResult1 = session1.ExecuteQuery(R"(
+                        REPLACE INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 7000ul, "None")
+                )", NQuery::TTxControl::Tx(*tx1)) .GetValueSync();
+            UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult1.GetStatus(), insertResult1.GetIssues().ToString());
             auto insertResult2 = session2.ExecuteQuery(R"(
-                        UPSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Anna", "Changed")
-                )", NQuery::TTxControl::BeginTx()) .GetValueSync();
+                        REPLACE INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500ul, "Changed")
+                )", NQuery::TTxControl::Tx(*tx2)).GetValueSync();
             UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, insertResult2.GetStatus(), insertResult2.GetIssues().ToString());
-            auto tx2 = insertResult2.GetTransaction();
-            UNIT_ASSERT(tx2);
 
             auto commitResult1 = tx1->Commit().GetValueSync();
-            UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, commitResult1.GetStatus(), commitResult1.GetIssues().ToString());
+            UNIT_ASSERT_EQUAL_C(commitResult1.GetStatus(), NYdb::EStatus::SUCCESS, commitResult1.GetIssues().ToString());
+
             auto commitResult2 = tx2->Commit().GetValueSync();
-            UNIT_ASSERT_EQUAL_C(commitResult2.GetStatus(), NYdb::EStatus::SUCCESS, commitResult2.GetIssues().ToString());
+            UNIT_ASSERT_EQUAL_C(commitResult2.GetStatus(), NYdb::EStatus::ABORTED, commitResult2.GetIssues().ToString());
 
             auto readResult = client.ExecuteQuery(R"(
                         SELECT * FROM `/Root/Test` WHERE Group = 1u AND Name = "Anna";
                     )", NQuery::TTxControl::NoTx()) .GetValueSync();
             UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, readResult.GetStatus(), readResult.GetIssues().ToString());
-            CompareYson("[[[7000u];[\"Changed\"];1u;\"Anna\"]]", FormatResultSetYson(readResult.GetResultSet(0)));
+            CompareYson("[[[7000u];[\"None\"];1u;\"Anna\"]]", FormatResultSetYson(readResult.GetResultSet(0)));
         }
     };
 

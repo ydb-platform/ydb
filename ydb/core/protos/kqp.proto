@@ -334,6 +334,7 @@ message TCompileCacheQueryInfo {
     optional string Warnings = 8;
     optional google.protobuf.Duration CompilationDuration = 9;
     optional string MetaInfo = 10;
+    optional bool IsTruncated = 11;
 }
 
 message TSessionInfo {

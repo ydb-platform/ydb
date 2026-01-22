@@ -74,6 +74,10 @@ public:
             insert({TSchema::Metadata::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 10
                 return TCell(info.GetMetaInfo());
             }});
+
+            insert({TSchema::IsTruncated::ColumnId, [] (const TCompileCacheQuery& info, ui32) {  // 11
+                return TCell::Make<bool>(info.GetIsTruncated());
+            }});
         }
     };
 

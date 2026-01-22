@@ -31,6 +31,7 @@ struct TEvPrivate {
     struct TQueryToCompile {
         TString QueryText;
         TString UserSID;
+        ui64 CompilationDurationMs = 0;
     };
 
     struct TEvFetchCacheResult : public NActors::TEventLocal<TEvFetchCacheResult, EvFetchCacheResult> {
@@ -61,8 +62,9 @@ public:
         // fetch all the queries as the system user
         const auto limit = std::max<ui32>(1u, MaxQueriesToLoad);
         TString sql = TStringBuilder()
-            << "SELECT Query, UserSID, SUM(AccessCount) AS AccessCount"
+            << "SELECT Query, UserSID, SUM(AccessCount) AS AccessCount, MAX(CompilationDuration) AS CompilationDuration"
             << " FROM `" << Database << "/.sys/compile_cache_queries` "
+            << "WHERE IsTruncated = false "
             << "GROUP BY Query, UserSID "
             << "ORDER BY AccessCount DESC "
             << "LIMIT " << limit;
@@ -75,11 +77,13 @@ public:
         while (parser.TryNextRow()) {
             auto queryText = parser.ColumnParser("Query").GetOptionalUtf8();
             auto userSID = parser.ColumnParser("UserSID").GetOptionalUtf8();
+            auto compilationDuration = parser.ColumnParser("CompilationDuration").GetOptionalUint64();
 
             if (queryText && !queryText->empty()) {
                 TEvPrivate::TQueryToCompile query;
                 query.QueryText = TString(*queryText);
                 query.UserSID = userSID ? TString(*userSID) : TString();
+                query.CompilationDurationMs = compilationDuration.value_or(0);
                 Result->Queries.push_back(std::move(query));
             }
         }
@@ -311,30 +315,40 @@ private:
     }
 
     void StartCompilations() {
+        const ui64 maxCompilationDurationMs = Config.Deadline.MilliSeconds() + 1000;
+
         while (PendingCompilations < MaxConcurrentCompilations && !QueriesToCompile.empty()) {
             auto query = std::move(QueriesToCompile.front());
             QueriesToCompile.pop_front();
+
+            if (query.CompilationDurationMs > maxCompilationDurationMs) {
+                LOG_D("Skipping query with too long compilation time: " << query.CompilationDurationMs 
+                      << "ms > " << maxCompilationDurationMs << "ms");
+                EntriesSkipped++;
+                continue;
+            }
 
             SendPrepareRequest(query);
             PendingCompilations++;
         }
 
         if (PendingCompilations == 0 && QueriesToCompile.empty()) {
-            LOG_I("All compilations finished, loaded: " << EntriesLoaded << ", failed: " << EntriesFailed);
+            LOG_I("All compilations finished, loaded: " << EntriesLoaded 
+                  << ", failed: " << EntriesFailed << ", skipped: " << EntriesSkipped);
             Complete(true, TStringBuilder() << "Compiled " << EntriesLoaded << " queries");
         }
     }
 
     void HandleHardDeadline() {
         LOG_I("Hard deadline reached (waited too long for discovery), compiled: " << EntriesLoaded
-              << ", failed: " << EntriesFailed
+              << ", failed: " << EntriesFailed << ", skipped: " << EntriesSkipped
               << ", pending: " << PendingCompilations);
         Complete(false, "Hard deadline exceeded (discovery not ready in time)");
     }
 
     void HandleSoftDeadline() {
         LOG_I("Soft deadline reached, compiled: " << EntriesLoaded
-              << ", failed: " << EntriesFailed
+              << ", failed: " << EntriesFailed << ", skipped: " << EntriesSkipped
               << ", pending: " << PendingCompilations);
         Complete(false, "Warmup deadline exceeded");
     }
@@ -377,6 +391,7 @@ private:
     ui32 PendingCompilations = 0;
     ui32 EntriesLoaded = 0;
     ui32 EntriesFailed = 0;
+    ui32 EntriesSkipped = 0;
     ui32 MaxConcurrentCompilations = 1;
     bool Completed = false;
     TString SkipReason;

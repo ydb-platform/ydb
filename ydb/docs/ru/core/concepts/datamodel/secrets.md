@@ -5,9 +5,11 @@
 
 ## Синтаксис {#syntax}
 
-* Создание секрета выполняется с помощью  [CREATE SECRET](../../yql/reference/syntax/create-secret.md)
-* Изменение секрета выполняется с помощью  [ALTER SECRET](../../yql/reference/syntax/alter-secret.md).
-* Удаление секрета выполняется с помощью  [DROP SECRET](../../yql/reference/syntax/drop-secret.md).
+Для управления секретами используются следующие операторы YQL:
+
+- [CREATE SECRET](../../yql/reference/syntax/create-secret.md) — создание секрета.
+- [ALTER SECRET](../../yql/reference/syntax/alter-secret.md) — изменение существующего секрета.
+- [DROP SECRET](../../yql/reference/syntax/drop-secret.md) — удаление секрета.
 
 ## Использование {#secret-usage}
 

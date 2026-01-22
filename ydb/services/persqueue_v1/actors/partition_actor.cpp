@@ -1376,7 +1376,7 @@ NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
 
 void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " READ FROM " << Partition
-                    << "maxCount " << ev->Get()->MaxCount << " maxSize " << ev->Get()->MaxSize << " maxTimeLagMs "
+                    << " maxCount " << ev->Get()->MaxCount << " maxSize " << ev->Get()->MaxSize << " maxTimeLagMs "
                     << ev->Get()->MaxTimeLagMs << " readTimestampMs " << ev->Get()->ReadTimestampMs
                     << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " ClientCommitOffset "
                     << ClientCommitOffset << " committedOffset " << CommittedOffset << " Guid " << ev->Get()->Guid);

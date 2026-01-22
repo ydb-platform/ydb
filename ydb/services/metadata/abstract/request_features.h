@@ -6,6 +6,8 @@
 #include <optional>
 #include <unordered_set>
 
+#include <set>
+
 namespace NYql {
 
 class TFeaturesExtractor : TMoveOnly {
@@ -66,7 +68,7 @@ public:
     bool ExtractResetFeature(const TString& featureId);
 
 private:
-    static void GetRemainedFeatures(const TFeatures& features, const TString& prefix, std::unordered_set<TString>& result);
+    static void GetRemainedFeatures(const TFeatures& features, const TString& prefix, std::set<TString>& result);
 };
 
 } // namespace NYql

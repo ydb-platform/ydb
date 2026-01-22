@@ -46,7 +46,7 @@ bool TFeaturesExtractor::IsFinished() const {
 }
 
 TString TFeaturesExtractor::GetRemainedParamsString() const {
-    std::unordered_set<TString> features;
+    std::set<TString> features;
 
     GetRemainedFeatures(Features, "", features);
 
@@ -58,7 +58,7 @@ TString TFeaturesExtractor::GetRemainedParamsString() const {
 }
 
 std::optional<TString> TFeaturesExtractor::ValidateResetFeatures() const {
-    std::unordered_set<TString> duplicateFeatures;
+    std::set<TString> duplicateFeatures;
     for (const auto& feature : ResetFeatures) {
         if (Features.contains(feature)) {
             duplicateFeatures.emplace(feature);
@@ -109,7 +109,7 @@ bool TFeaturesExtractor::ExtractResetFeature(const TString& featureId) {
     return true;
 }
 
-void TFeaturesExtractor::GetRemainedFeatures(const TFeatures& features, const TString& prefix, std::unordered_set<TString>& result) {
+void TFeaturesExtractor::GetRemainedFeatures(const TFeatures& features, const TString& prefix, std::set<TString>& result) {
     for (const auto& [key, value] : features) {
         auto name = TStringBuilder() << prefix << key;
         if (std::holds_alternative<TString>(value.Value)) {

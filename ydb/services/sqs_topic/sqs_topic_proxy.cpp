@@ -3,6 +3,7 @@
 #include "change_message_visibility.h"
 #include "error.h"
 #include "delete_message.h"
+#include "list_queues.h"
 #include "request.h"
 #include "receive_message.h"
 #include "send_message.h"
@@ -140,7 +141,6 @@ namespace NKikimr::NGRpcService {
     DECLARE_RPC(GetQueueUrl);
     DECLARE_RPC_NI(CreateQueue);
     DECLARE_RPC_NI(GetQueueAttributes);
-    DECLARE_RPC_NI(ListQueues);
     DECLARE_RPC_NI(PurgeQueue);
     DECLARE_RPC_NI(DeleteQueue);
     DECLARE_RPC_NI(SetQueueAttributes);
@@ -148,6 +148,11 @@ namespace NKikimr::NGRpcService {
     DECLARE_RPC_NI(ListQueueTags);
     DECLARE_RPC_NI(TagQueue);
     DECLARE_RPC_NI(UntagQueue);
+
+    template <>
+    IActor* TEvSqsTopicListQueuesRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+        return CreateListQueuesActor(msg).release();
+    }
 
     template <>
     IActor* TEvSqsTopicSendMessageRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

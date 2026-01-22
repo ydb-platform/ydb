@@ -1488,6 +1488,7 @@ namespace NKikimr::NHttpProxy {
                                                             NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
 
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(ListQueues);
 
 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN
 

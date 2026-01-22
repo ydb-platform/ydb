@@ -182,6 +182,42 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
         }
 
+        Y_UNIT_TEST_F(TestListQueues, TFixture) {
+            auto json = ListQueues({});
+
+            size_t numOfExampleQueues = 10;
+            TVector<TString> queueUrls;
+            for (size_t i = 0; i < numOfExampleQueues; ++i) {
+                auto json = CreateQueue({{"QueueName", TStringBuilder() << "ExampleQueue-" << i}});
+                queueUrls.push_back(GetByPath<TString>(json, "QueueUrl"));
+            }
+
+            json = CreateQueue({{"QueueName", "AnotherQueue"}});
+            auto anotherQueueUrl = GetByPath<TString>(json, "QueueUrl");
+            queueUrls.push_back(anotherQueueUrl);
+
+            json = ListQueues({});
+            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues + 1);
+
+            json = ListQueues({{"QueueNamePrefix", ""}});
+            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues + 1);
+
+            json = ListQueues({{"QueueNamePrefix", "BadPrefix"}});
+            UNIT_ASSERT(json["QueueUrls"].GetArray().empty());
+
+            json = ListQueues({{"QueueNamePrefix", "Another"}});
+            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"][0], anotherQueueUrl);
+
+            json = ListQueues({{"QueueNamePrefix", "Ex"}});
+            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues);
+            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"][0], queueUrls[0]);
+
+            // MaxResults and NextToken query parameters are currently ignored.
+            json = ListQueues({{"MaxResults", 1}, {"NextToken", "unknown-next-token"}});
+            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues + 1);
+        }
+
         struct TSqsTopicPaths {
             TString Database = "/Root";
             TString TopicName = "topic1";

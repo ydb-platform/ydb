@@ -1129,7 +1129,6 @@ bool TProposedWaitParts::ProgressState(TOperationContext& context) {
             shard.Operation = TTxState::ProposedWaitParts;
             context.SS->PersistUpdateTxShard(db, OperationId, shard.Idx, shard.Operation);
         }
-
         Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
         context.OnComplete.RouteByTablet(OperationId,  context.SS->ShardInfos.at(shard.Idx).TabletID);
     }

@@ -157,6 +157,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             .Columns(BuildColumnsList(insertColumns, insert.Pos(), ctx))
             .ReturningColumns(insert.ReturningColumns())
             .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+            .GenerateColumnsIfInsert<TCoAtomList>().Build()
             .Settings(insert.Settings())
             .Done());
     } else {
@@ -166,6 +167,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             .Columns(insert.Columns())
             .ReturningColumns(insert.ReturningColumns())
             .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+            .GenerateColumnsIfInsert<TCoAtomList>().Build()
             .Done());
     }
 
@@ -253,6 +255,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                         .Columns(BuildColumnsList(docsColumns, insert.Pos(), ctx))
                         .ReturningColumns<TCoAtomList>().Build()
                         .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+                        .GenerateColumnsIfInsert<TCoAtomList>().Build()
                         .Done());
                     // Update statistics
                     const auto& statsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
@@ -271,6 +274,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             .Columns(BuildColumnsList(indexTableColumns, insert.Pos(), ctx))
             .ReturningColumns<TCoAtomList>().Build()
             .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+            .GenerateColumnsIfInsert<TCoAtomList>().Build()
             .Done();
 
         effects.emplace_back(upsertIndex);

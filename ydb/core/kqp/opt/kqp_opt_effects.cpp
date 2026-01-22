@@ -15,7 +15,8 @@ namespace {
 
 TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
         const bool allowInconsistentWrites, const bool enableStreamWrite, bool isBatch,
-        const TStringBuf mode, const bool isIndexImplTable, const TVector<TCoNameValueTuple>& settings, const i64 order, TExprContext& ctx) {
+        const TStringBuf mode, const bool isIndexImplTable, const TCoAtomList& defaultColumns,
+        const TVector<TCoNameValueTuple>& settings, const i64 order, TExprContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
 
     auto settingsNode = Build<TCoNameValueTupleList>(ctx, expr.Pos())
@@ -54,6 +55,7 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
                     .IsIndexImplTable(isIndexImplTable
                         ? ctx.NewAtom(expr.Pos(), "true")
                         : ctx.NewAtom(expr.Pos(), "false"))
+                    .DefaultColumns(defaultColumns)
                     .Settings(settingsNode)
                     .Build()
                 .Build()
@@ -116,7 +118,8 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
         stageInput = RebuildPureStageWithSink(
             node.Input(), table,
             /* allowInconsistentWrites */ true, /* useStreamWrite */ true,
-            /* isBatch */ false, "fill_table", /* isIndexImplTable */ false, settings,
+            /* isBatch */ false, "fill_table", /* isIndexImplTable */ false,
+            Build<TCoAtomList>(ctx, node.Pos()).Done(), settings,
             priority, ctx);
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
             .Stage(stageInput.Cast().Ptr())
@@ -152,6 +155,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
             .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
             .IsBatch(ctx.NewAtom(node.Pos(), "false"))
             .IsIndexImplTable(ctx.NewAtom(node.Pos(), "false"))
+            .DefaultColumns<TCoAtomList>().Build()
             .Settings(settingsNode)
             .Build()
         .Done();
@@ -223,7 +227,8 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),
                 settings.AllowInconsistentWrites, useStreamWrite,
-                node.IsBatch() == "true", settings.Mode, isIndexImplTable, {}, priority, ctx);
+                node.IsBatch() == "true", settings.Mode, isIndexImplTable,
+                node.GenerateColumnsIfInsert(), {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -269,6 +274,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 .IsIndexImplTable(isIndexImplTable
                     ? ctx.NewAtom(node.Pos(), "true")
                     : ctx.NewAtom(node.Pos(), "false"))
+                .DefaultColumns(node.GenerateColumnsIfInsert())
                 .Settings()
                     .Build()
                 .Build()
@@ -377,7 +383,8 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
             stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),
                 false, useStreamWrite, node.IsBatch() == "true",
-                "delete", isIndexImplTable, {}, priority, ctx);
+                "delete", isIndexImplTable,
+                Build<TCoAtomList>(ctx, node.Pos()).Done(), {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -421,6 +428,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                 .IsIndexImplTable(isIndexImplTable
                         ? ctx.NewAtom(node.Pos(), "true")
                         : ctx.NewAtom(node.Pos(), "false"))
+                .DefaultColumns<TCoAtomList>().Build()
                 .Settings()
                     .Build()
                 .Build()

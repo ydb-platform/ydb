@@ -660,6 +660,49 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         result.Reader->Close();
     }
 
+    Y_UNIT_TEST(CommitMessages_Continue) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedTopic(setup);
+
+        auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 3);
+        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "The consumer has just started reading the inactive partition and he can commit");
+
+        status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 2, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "A consumer who has not read to the end can commit messages forward.");
+
+        auto count = 0;
+        const auto expected = 25;
+
+        auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+            auto& messages = x.GetMessages();
+            for (size_t i = 0u; i < messages.size(); ++i) {
+                ++count;
+
+                setup.Write(TStringBuilder() << "message-new-" << count, 2);
+
+                auto& message = messages[i];
+                Cerr << "SESSION EVENT read message: " << count << " from partition: " << message.GetPartitionSession()->GetPartitionId() << Endl << Flush;
+                message.Commit();
+
+                if (count == expected) {
+                    return false;
+                }
+            }
+
+            return true;
+        }, std::nullopt, TDuration::Seconds(30));
+
+        //UNIT_ASSERT(!result.Timeout);
+        UNIT_ASSERT_VALUES_EQUAL(count, expected);
+
+        auto other = GetCommittedOffset(setup, 0)
+            + GetCommittedOffset(setup, 1)
+            + GetCommittedOffset(setup, 3)
+            + GetCommittedOffset(setup, 4);
+
+        UNIT_ASSERT_VALUES_EQUAL(4 + expected - other, GetCommittedOffset(setup, 2));
+    }
+
 }
 
 } // namespace NKikimr

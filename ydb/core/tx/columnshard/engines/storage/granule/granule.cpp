@@ -24,8 +24,8 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     Portions.emplace(info->GetPortionId(), info);
     OnAfterChangePortion(info, nullptr);
 
-    Intervals.AddRange(GranuleInternal::TPortionIntervalTree::TOwnedRange(info->IndexKeyStart().BuildSortablePosition(), true,
-                       info->IndexKeyEnd().BuildSortablePosition(), true), info);
+    Intervals.AddRange(GranuleInternal::TPortionIntervalTree::TOwnedRange(GranuleInternal::TRowView(info, true), true,
+        GranuleInternal::TRowView(info, false), true), info);
 }
 
 void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& info) {
@@ -168,8 +168,8 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
     } else {
         auto portionId = portion->GetPortionId();
         AFL_VERIFY(Portions.emplace(portionId, portion).second);
-        Intervals.AddRange(GranuleInternal::TPortionIntervalTree::TOwnedRange(portion->IndexKeyStart().BuildSortablePosition(), true,
-                    portion->IndexKeyEnd().BuildSortablePosition(), true), portion);
+        Intervals.AddRange(GranuleInternal::TPortionIntervalTree::TOwnedRange(GranuleInternal::TRowView(portion, true), true,
+            GranuleInternal::TRowView(portion, false), true), portion);
     }
 }
 

@@ -39,8 +39,58 @@ struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::sh
     }
 };
 
-class TTSortableBatchPositionBorderComparator {
-    using TBorder = NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>;
+class TRowView {
+    using TState = std::variant<std::monostate,
+        std::shared_ptr<TPortionInfo>,
+        std::shared_ptr<TPortionInfo>,
+        const NArrow::NMerger::TSortableBatchPosition*>;
+
+    TState State;
+
+public:
+    explicit TRowView(const NArrow::NMerger::TSortableBatchPosition* sortableBatchPosition)
+        : State(sortableBatchPosition) {}
+
+    TRowView(std::shared_ptr<TPortionInfo> portionInfo, bool isLeft)
+        : State(isLeft ? TState(std::in_place_index<1>, portionInfo) : TState(std::in_place_index<2>, portionInfo)) {}
+
+    TRowView() = default;
+
+    NArrow::NMerger::TSortableBatchPosition GetSortableBatchPosition() const {
+        if (auto val = std::get_if<1>(&State); val) {
+            return (*val)->IndexKeyStart().BuildSortablePosition();
+        } else if (auto val = std::get_if<2>(&State); val) {
+            return (*val)->IndexKeyEnd().BuildSortablePosition();
+        } else if (auto val = std::get_if<3>(&State); val) {
+            return **val;
+        } else {
+            AFL_VERIFY(false)("error", "invalid type in TRowView variant for GetSortableBatchPosition");
+        }
+    }
+
+    std::partial_ordering Compare(const TRowView& rhs) const {
+        if ((State.index() == 3 || rhs.State.index() == 3) && State.index() != rhs.State.index()) {
+            return GetSortableBatchPosition().ComparePartial(rhs.GetSortableBatchPosition());
+        }
+
+        if (auto val = std::get_if<1>(&State); val) {
+            return (*val)->IndexKeyStart().CompareNotNull(rhs.State.index() == 1
+                                                          ? std::get<1>(rhs.State)->IndexKeyStart()
+                                                          : std::get<2>(rhs.State)->IndexKeyEnd());
+        } else if (auto val = std::get_if<2>(&State); val) {
+            return (*val)->IndexKeyEnd().CompareNotNull(rhs.State.index() == 1
+                                                        ? std::get<1>(rhs.State)->IndexKeyStart()
+                                                        : std::get<2>(rhs.State)->IndexKeyEnd());
+        } else if (auto val = std::get_if<3>(&State); val) {
+            return (*val)->ComparePartial(*std::get<3>(rhs.State));
+        } else {
+            AFL_VERIFY(false)("error", "invalid type in TRowView variant for GetSortableBatchPosition");
+        }
+    }
+};
+
+class TSimpleRowViewBorderComparator {
+    using TBorder = NRangeTreap::TBorder<TRowView>;
 
 public:
     static int Compare(const TBorder& lhs, const TBorder& rhs) {
@@ -50,7 +100,7 @@ public:
             return lhs.GetMode() == rhs.GetMode() ? 0 : 1;
         }
 
-        auto comp = lhs.GetKey().ComparePartial(rhs.GetKey());
+        auto comp = lhs.GetKey().Compare(rhs.GetKey());
         if (comp == std::partial_ordering::less) {
             return -1;
         } else if (comp == std::partial_ordering::greater) {
@@ -60,16 +110,15 @@ public:
         return NRangeTreap::TBorderModeTraits::CompareEqualPoint(lhs.GetMode(), rhs.GetMode());
     }
 
-    static void ValidateKey(const NArrow::NMerger::TSortableBatchPosition& /*key*/) {
+    static void ValidateKey(const TRowView& /*key*/) {
         // Do nothing
     }
 };
 
 using TPortionIntervalTree =
-    NRangeTreap::TRangeTreap<NArrow::NMerger::TSortableBatchPosition, std::shared_ptr<TPortionInfo>,
-                             NArrow::NMerger::TSortableBatchPosition, TPortionIntervalTreeValueTraits,
-                             TTSortableBatchPositionBorderComparator>;
-
+    NRangeTreap::TRangeTreap<TRowView, std::shared_ptr<TPortionInfo>,
+                             TRowView, TPortionIntervalTreeValueTraits,
+                             TSimpleRowViewBorderComparator>;
 }
 
 class TGranulesStorage;

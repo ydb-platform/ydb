@@ -474,7 +474,6 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
 
     const bool calculateProbe = LWPROBE_ENABLED(ColumnEngineForLogsSelect);
     TInstant start;
-    TDuration timeOfInsertedIsUsed;
     ui64 totalPortionsCount = 0;
     ui64 totalFilteredPortionsCount = 0;
     for (const auto& [writeId, portion] : spg->GetInsertedPortions()) {
@@ -490,17 +489,7 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
             continue;
         }
 
-        bool takePortion;
-        if (calculateProbe) {
-            start = TAppData::TimeProvider->Now();
-            takePortion = pkRangesFilter.IsUsed(*portion);
-            timeOfInsertedIsUsed += TAppData::TimeProvider->Now() - start;
-            if (!takePortion) {
-                ++totalFilteredPortionsCount;
-            }
-        } else {
-            takePortion = pkRangesFilter.IsUsed(*portion);
-        }
+        bool takePortion = pkRangesFilter.IsUsed(*portion);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
         if (takePortion) {
@@ -552,10 +541,6 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
         }
     }
 
-    if (calculateProbe) {
-        LWPROBE(ColumnEngineForLogsSelect, pathId.DebugString(), timeOfInsertedIsUsed.MilliSeconds(), timeOfCompactedIsUsed.MilliSeconds(), totalPortionsCount, totalFilteredPortionsCount, out.size());
-    }
-
     const auto collector = [&](const GranuleInternal::TPortionIntervalTree::TRange& /*interval*/,
                             const std::shared_ptr<TPortionInfo>& portion) -> bool {
         // AFL_VERIFY(intersectingPortions.insert(portion->GetPortionId()).second);
@@ -583,30 +568,27 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
 
     auto& intervals = spg->GetPortionsIntervals();
     if (pkRangesFilter.IsEmpty()) {
-        intervals.EachIntersection(NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeLeftInf(),
-                                   NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeRightInf(), collector);
+        intervals.EachIntersection(NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeLeftInf(),
+                                   NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeRightInf(), collector);
     }
 
+    TDuration timeOfIntervalTreeIsUsed;
+    start = TAppData::TimeProvider->Now();
     for (auto& filter : pkRangesFilter) {
         const auto& from = filter.GetPredicateFrom();
         const auto& to = filter.GetPredicateTo();
 
-        const auto& leftBorder = from.IsAll() ? NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeLeftInf() :
-                                                NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeLeft(from.GetSortableBatchPosition(), from.IsInclude());
-        const auto& rightBorder = to.IsAll() ? NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeRightInf() :
-                                               NRangeTreap::TBorder<NArrow::NMerger::TSortableBatchPosition>::MakeRight(to.GetSortableBatchPosition(), to.IsInclude());
+        const auto& leftBorder = from.IsAll() ? NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeLeftInf() :
+                                                NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeLeft(GranuleInternal::TRowView(&from.GetSortableBatchPosition()), from.IsInclude());
+        const auto& rightBorder = to.IsAll() ? NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeRightInf() :
+                                               NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeRight(GranuleInternal::TRowView(&to.GetSortableBatchPosition()), to.IsInclude());
 
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD TColumnEngineForLogs::Select filter")
             ("from", from.DebugString())("to", to.DebugString());
 
-        // if (from.IsAll() || to.IsAll()) {
-        //     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "!!VLAD TColumnEngineForLogs::Select IS ALL");
-        //     continue;
-        //     //TODO: allrange
-        // }
-
         intervals.EachIntersection(leftBorder, rightBorder, collector);
     }
+    timeOfIntervalTreeIsUsed += TAppData::TimeProvider->Now() - start;
 
     bool allOk = true;
     if (out.size() != out2.size()) {
@@ -626,7 +608,7 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
                 ("p.GetPortion()", (long long int)(p.GetPortion().get()))
                 ("found->second.GetPortion()->GetPortionId()", found == out2.end() ? 0 : found->second.GetPortion()->GetPortionId())
                 ("found->second.GetIsVisible()", found == out2.end() ? 0 : found->second.GetIsVisible())
-                ("found->second.GetPortion()", found == out2.end() ? 0 : (long long int)(p.GetPortion().get()))
+                ("found->second.GetPortion()", found == out2.end() ? 0 : (long long int)(found->second.GetPortion().get()))
                 ;
             allOk = false;
             break;
@@ -638,16 +620,20 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
             ("out.size()", out.size())("out2.size()", out2.size());
     }
 
+    start = TAppData::TimeProvider->Now();
     std::vector<TSelectedPortionInfo> res;
     res.reserve(out2.size());
 
     for (auto&& [_, pi] : out2) {
         res.emplace_back(std::move(pi));
     }
+    timeOfIntervalTreeIsUsed += TAppData::TimeProvider->Now() - start;
+
+    if (calculateProbe) {
+        LWPROBE(ColumnEngineForLogsSelect, pathId.DebugString(), timeOfIntervalTreeIsUsed.MilliSeconds(), timeOfCompactedIsUsed.MilliSeconds(), totalPortionsCount, totalFilteredPortionsCount, out.size());
+    }
 
     return res;
-
-    // return out;
 }
 
 bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction) {

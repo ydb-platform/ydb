@@ -132,7 +132,6 @@ namespace NKikimr::NSqsTopic::V1 {
         };
     };
 
-
     void TListQueuesActor::Handle(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
         DescriberActorId = {};
         const auto& topicsMap = ev->Get()->Topics;

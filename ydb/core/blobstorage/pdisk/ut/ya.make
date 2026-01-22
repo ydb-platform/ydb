@@ -14,6 +14,11 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+    #CFLAGS(
+    #    -DDISABLE_PDISK_ENCRYPTION
+    #)
+
+
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion

@@ -665,7 +665,84 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
     }
 
-    void AfterObliterateDontReuseOldChunkDataWithoutEncryption(bool plainDataChunks) {
+    void AfterObliterateShouldNotReadLog(bool encryptMetadata) {
+        // regression test for #31337
+        const TString expectedLogData = PrepareData(12346);
+        TActorTestContext::TSettings settings{};
+        settings.UseSectorMap = true;
+        settings.InitiallyZeroed = true;
+        settings.ChunkSize = NPDisk::SmallDiskMaximumChunkSize;
+        settings.DiskSize = (ui64)settings.ChunkSize * 50;
+        settings.SmallDisk = true;
+
+        TActorTestContext testCtx(settings);
+
+        // enable or disable encryption and restart with formatting
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->SectorMap = testCtx.TestCtx.SectorMap;
+        cfg->EnableSectorEncryption = false;
+        cfg->EnableMetadataEncryption = encryptMetadata;
+        cfg->ReadOnly = false;
+        cfg->NonceRandNum = 13;
+        testCtx.UpdateConfigRecreatePDisk(cfg, true);
+
+        {
+            TVDiskMock vdisk(&testCtx);
+            vdisk.InitFull();
+            vdisk.SendEvLogSync(12346);
+
+            vdisk.Init();
+            bool foundExpected = false;
+            const ui64 logRecordsRead = vdisk.ReadLog(false, [&](const NPDisk::TLogRecord& rec) {
+                if (rec.Data.size() == expectedLogData.size()) {
+                    const TString data = TRcBuf(rec.Data).ExtractUnderlyingContainerOrCopy<TString>();
+                    if (data == expectedLogData) {
+                        foundExpected = true;
+                    }
+                }
+            });
+            UNIT_ASSERT(logRecordsRead > 0);
+            UNIT_ASSERT(foundExpected);
+        }
+
+        {
+            const ui64 formatBytes = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
+            const ui64 obliterateSectors = formatBytes /  NPDisk::NSectorMap::SECTOR_SIZE;
+            testCtx.TestCtx.SectorMap->ZeroInit(obliterateSectors);
+
+            // finally restart: disk must be clean/empty
+            testCtx.RestartPDiskSync();
+
+            TVDiskMock vdisk(&testCtx);
+            vdisk.Init();
+            const ui64 logRecordsRead = vdisk.ReadLog();
+            UNIT_ASSERT_VALUES_EQUAL(logRecordsRead, 0UL);
+
+            // if the old log is still readable, startup randomizes nonces by ForceLogNonceDiff
+            const auto [nonceLog, nonceLogDiff] = testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+                return std::pair{
+                    pdisk->SysLogRecord.Nonces.Value[NPDisk::NonceLog],
+                    pdisk->ForceLogNonceDiff.Value[NPDisk::NonceLog],
+                };
+            });
+
+            const ui64 initialNonce = 1;
+            ui64 nonceDelta = nonceLogDiff + 1 + *cfg->NonceRandNum % nonceLogDiff;
+            ui64 expectedNonce = initialNonce + nonceDelta + 1;
+            UNIT_ASSERT_VALUES_EQUAL(nonceLog, expectedNonce);
+        }
+    }
+
+    Y_UNIT_TEST(AfterObliterateShouldNotReadLog) {
+        AfterObliterateShouldNotReadLog(true);
+    }
+
+    Y_UNIT_TEST(AfterObliterateShouldNotReadLogNoEncryption) {
+        AfterObliterateShouldNotReadLog(false);
+    }
+
+    void AfterObliterateDontReuseOldChunkData(bool encryptMetadata, bool plainDataChunks) {
+        // regression test for #31337
         const TString writeData = PrepareData(4096);
         const size_t chunkCount = 10;
         TVector<ui32> firstChunks;
@@ -680,13 +757,13 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         TActorTestContext testCtx(settings);
 
-        // disable encryption
-
+        // enable or disable encryption and restart with formatting
         auto cfg = testCtx.GetPDiskConfig();
         cfg->SectorMap = testCtx.TestCtx.SectorMap;
         cfg->EnableSectorEncryption = false;
-        cfg->EnableMetadataEncryption = false;
+        cfg->EnableMetadataEncryption = encryptMetadata;
         cfg->ReadOnly = false;
+        cfg->NonceRandNum = 13;
         testCtx.UpdateConfigRecreatePDisk(cfg, true);
 
         {
@@ -694,7 +771,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             vdisk.InitFull();
 
             // here we write unencrypted data
-
             for (ui32 i = 0; i < chunkCount; ++i) {
                 vdisk.ReserveChunk();
             }
@@ -711,7 +787,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             }
 
             // sanity check read
-
             for (ui32 chunkIdx = 0; chunkIdx < firstChunks.size(); ++chunkIdx) {
                 const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
                     new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
@@ -725,15 +800,52 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             }
         }
 
+        // below we want format disk and check there is no way to read old chunks
+
         {
             // now, we format PDisk via obliterate
             const ui64 formatBytes = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
             const ui64 obliterateSectors = formatBytes /  NPDisk::NSectorMap::SECTOR_SIZE;
             testCtx.TestCtx.SectorMap->ZeroInit(obliterateSectors);
+
+            // also we zero log (it's beyond obliteration): with the bug we are fixing,
+            // we were able to read the log and advance nonce as it would after regular
+            // restart: with nonce advanced we can't read old chunk data. However,
+            // it's still legit to have log zeroed (for example after dd'ing).
+
+            ui64 sysLogOffsetBytes = 0;
+            ui64 sysLogBytes = 0;
+            ui64 chunkSizeBytes = 0;
+            TSet<ui32> logChunkIds;
+            testCtx.SafeRunOnPDisk([&](auto* pdisk) {
+                const auto& format = pdisk->Format;
+                sysLogOffsetBytes = format.FirstSysLogSectorIdx() * format.SectorSize;
+                sysLogBytes = format.SysLogSectorCount * NPDisk::ReplicationFactor * format.SectorSize;
+                chunkSizeBytes = format.ChunkSize;
+                for (const auto& chunk : pdisk->LogChunks) {
+                    logChunkIds.insert(chunk.ChunkIdx);
+                }
+                logChunkIds.insert(pdisk->SysLogRecord.LogHeadChunkIdx);
+            });
+            auto zeroRange = [&](ui64 offsetBytes, ui64 sizeBytes) {
+                if (sizeBytes == 0) {
+                    return;
+                }
+                const ui64 sectorSize = NPDisk::NSectorMap::SECTOR_SIZE;
+                const ui64 alignedSize = (sizeBytes + sectorSize - 1) / sectorSize * sectorSize;
+                NPDisk::TAlignedData zero(alignedSize);
+                memset(zero.Get(), 0, alignedSize);
+                testCtx.TestCtx.SectorMap->Write(zero.Get(), alignedSize, offsetBytes);
+            };
+            zeroRange(sysLogOffsetBytes, sysLogBytes);
+            for (ui32 chunkIdx : logChunkIds) {
+                zeroRange(chunkSizeBytes * chunkIdx, chunkSizeBytes);
+            }
+
+            // finally restart: disk must be clean/empty
             testCtx.RestartPDiskSync();
 
-            // reserve chunks (must be empty)
-
+            // reserve chunks as we did before (but don't write to chunks)
             TVDiskMock vdisk(&testCtx);
             vdisk.InitFull();
             for (ui32 i = 0; i < chunkCount; ++i) {
@@ -743,7 +855,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT_VALUES_EQUAL(vdisk.Chunks[EChunkState::COMMITTED].size(), chunkCount);
             TVector<ui32> newChunks(vdisk.Chunks[EChunkState::COMMITTED].begin(), vdisk.Chunks[EChunkState::COMMITTED].end());
 
-            // note, chunk ids in firstChunks and newChunks might differ,
+            // note, chunk ids in firstChunks and newChunks might slightly differ,
             // but it is OK to check both
 
             // firstChunks
@@ -772,12 +884,12 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
     }
 
-    Y_UNIT_TEST(AfterObliterateDontReuseOldChunkDataWithoutEncryption) {
-        AfterObliterateDontReuseOldChunkDataWithoutEncryption(false);
+    Y_UNIT_TEST(AfterObliterateDontReuseOldChunkData) {
+        AfterObliterateDontReuseOldChunkData(true, false);
     }
 
-    Y_UNIT_TEST(AfterObliterateDontReuseOldChunkDataWithoutEncryptionPlainDataChunks) {
-        AfterObliterateDontReuseOldChunkDataWithoutEncryption(true);
+    Y_UNIT_TEST(AfterObliterateDontReuseOldChunkDataNoEncryption) {
+        AfterObliterateDontReuseOldChunkData(false, false);
     }
 
     Y_UNIT_TEST(PDiskOwnerSlayRace) {

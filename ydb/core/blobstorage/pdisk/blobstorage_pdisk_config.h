@@ -185,6 +185,9 @@ struct TPDiskConfig : public TThrRefBase {
 
     bool ReadOnly = false;
 
+    // used for tests only
+    std::optional<ui64> NonceRandNum;
+
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
     {}

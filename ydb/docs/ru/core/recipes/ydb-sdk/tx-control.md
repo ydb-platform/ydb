@@ -96,24 +96,7 @@
 
   {% cut "JDBC" %}
 
-  ```java
-  import java.sql.Connection;
-  import java.sql.DriverManager;
-  import java.sql.ResultSet;
-  import java.sql.Statement;
-
-  // ...
-
-  try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
-      // Режим авто-коммита (по умолчанию)
-      connection.setAutoCommit(true);
-
-      try (Statement statement = connection.createStatement()) {
-          ResultSet rs = statement.executeQuery("SELECT 1");
-          // работа с rs
-      }
-  }
-  ```
+  Функционал находится в разработке.
 
   {% endcut %}
 
@@ -126,7 +109,7 @@
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
       SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
       QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1"))
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
       );
       // работа с reader
   }
@@ -367,7 +350,11 @@
 
 - Java
 
-  {% cut "ydb-java-sdk" %}
+  {% cut "JDBC" %}
+
+  Функционал находится в разработке.
+
+  {% endcut %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -384,34 +371,6 @@
       // Работа с reader
   }
   ```
-
-  {% endcut %}
-
-  {% cut "JDBC" %}
-
-  ```java
-  import java.sql.Connection;
-  import java.sql.DriverManager;
-  import java.sql.ResultSet;
-  import java.sql.Statement;
-
-  // ...
-
-  try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
-      // Режим Serializable используется по умолчанию
-      connection.setAutoCommit(false);
-      connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
-
-      try (Statement statement = connection.createStatement()) {
-          ResultSet rs = statement.executeQuery("SELECT 1");
-          // работа с rs
-      }
-
-      connection.commit();
-  }
-  ```
-
-  {% endcut %}
 
 - Python
 
@@ -540,7 +499,7 @@
 
   ```csharp
   using Ydb.Sdk.Services.Query;
-  
+
   // Режим Serializable Read-Write используется по умолчанию
   var response = await queryClient.Exec("SELECT 1");
   ```
@@ -705,6 +664,12 @@
   ```
 
 - Java
+
+  {% cut "JDBC" %}
+
+  Функционал находится в разработке.
+
+  {% endcut %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -923,6 +888,12 @@
 
 - Java
 
+  {% cut "JDBC" %}
+
+  Функционал находится в разработке.
+
+  {% endcut %}
+
   ```java
   import tech.ydb.query.QueryClient;
   import tech.ydb.query.TxMode;
@@ -1139,7 +1110,11 @@
 
 - Java
 
-  {% cut "ydb-java-sdk" %}
+  {% cut "JDBC" %}
+
+  Функционал находится в разработке.
+
+  {% endcut %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -1156,34 +1131,6 @@
       // Работа с reader
   }
   ```
-
-  {% endcut %}
-
-  {% cut "JDBC" %}
-
-  ```java
-  import java.sql.Connection;
-  import java.sql.DriverManager;
-  import java.sql.ResultSet;
-  import java.sql.Statement;
-
-  // ...
-
-  try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
-      connection.setAutoCommit(false);
-      // Режим SNAPSHOT_RO используется по умолчанию для read-only подключений
-      connection.setReadOnly(true);
-
-      try (Statement statement = connection.createStatement()) {
-          ResultSet rs = statement.executeQuery("SELECT 1");
-          // работа с rs
-      }
-
-      connection.commit();
-  }
-  ```
-
-  {% endcut %}
 
 - Python
 
@@ -1369,6 +1316,12 @@
 
 - Java
 
+  {% cut "JDBC" %}
+
+  Функционал находится в разработке.
+
+  {% endcut %}
+
   ```java
   import tech.ydb.query.QueryClient;
   import tech.ydb.query.TxMode;
@@ -1479,7 +1432,7 @@
   ```csharp
   await using var db = new MyYdb(BuildOptions());
   await using var tr = await db.BeginTransactionAsync(IsolationLevel.Snapshot);
-  
+
   await db.InsertAsync(new Episode
   {
       SeriesId = 2, SeasonId = 5, EpisodeId = 13, Title = "Test Episode", AirDate = new DateTime(2018, 08, 27)
@@ -1488,7 +1441,7 @@
       { SeriesId = 2, SeasonId = 5, EpisodeId = 21, Title = "Test 21", AirDate = new DateTime(2018, 08, 27) });
   await db.InsertAsync(new Episode
       { SeriesId = 2, SeasonId = 5, EpisodeId = 22, Title = "Test 22", AirDate = new DateTime(2018, 08, 27) });
-    
+
   await tr.CommitAsync();
   ```
 

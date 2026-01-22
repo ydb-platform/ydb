@@ -96,24 +96,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   {% cut "JDBC" %}
 
-  ```java
-  import java.sql.Connection;
-  import java.sql.DriverManager;
-  import java.sql.ResultSet;
-  import java.sql.Statement;
-
-  // ...
-
-  try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
-      // Auto-commit mode (default)
-      connection.setAutoCommit(true);
-
-      try (Statement statement = connection.createStatement()) {
-          ResultSet rs = statement.executeQuery("SELECT 1");
-          // work with rs
-      }
-  }
-  ```
+  Functionality is under development.
 
   {% endcut %}
 
@@ -126,7 +109,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
       SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
       QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1"))
+          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
       );
       // work with reader
   }
@@ -374,27 +357,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   {% cut "JDBC" %}
 
-  ```java
-  import java.sql.Connection;
-  import java.sql.DriverManager;
-  import java.sql.ResultSet;
-  import java.sql.Statement;
-
-  // ...
-
-  try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
-      // Serializable mode is used by default
-      connection.setAutoCommit(false);
-      connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
-
-      try (Statement statement = connection.createStatement()) {
-          ResultSet rs = statement.executeQuery("SELECT 1");
-          // work with rs
-      }
-
-      connection.commit();
-  }
-  ```
+  Functionality is under development.
 
   {% endcut %}
 
@@ -412,7 +375,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       );
       // work with reader
   }
-
   ```
 
 - Python
@@ -712,6 +674,12 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Java
 
+  {% cut "JDBC" %}
+
+  Functionality is under development.
+
+  {% endcut %}
+
   ```java
   import tech.ydb.query.QueryClient;
   import tech.ydb.query.TxMode;
@@ -928,6 +896,12 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
 - Java
+
+  {% cut "JDBC" %}
+
+  Functionality is under development.
+
+  {% endcut %}
 
   ```java
   import tech.ydb.query.QueryClient;
@@ -1170,6 +1144,12 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
   {% endcut %}
 
+  {% cut "JDBC" %}
+
+  Functionality is under development.
+
+  {% endcut %}
+
   ```java
   import tech.ydb.query.QueryClient;
   import tech.ydb.query.TxMode;
@@ -1384,6 +1364,12 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   ```
 
 - Java
+
+  {% cut "JDBC" %}
+
+  Functionality is under development.
+
+  {% endcut %}
 
   ```java
   import tech.ydb.query.QueryClient;

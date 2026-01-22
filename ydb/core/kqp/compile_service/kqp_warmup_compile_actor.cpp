@@ -281,7 +281,8 @@ private:
     static std::unique_ptr<TEvKqp::TEvQueryRequest> CreatePrepareRequest(
         const TString& database,
         const TString& queryText,
-        const TString& userSid)
+        const TString& userSid,
+        TDuration timeout)
     {
         auto queryEv = std::make_unique<TEvKqp::TEvQueryRequest>();
         auto& record = queryEv->Record;
@@ -295,7 +296,7 @@ private:
         request.SetAction(NKikimrKqp::QUERY_ACTION_PREPARE);
         request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         request.SetKeepSession(false);
-        request.SetTimeoutMs(30000);
+        request.SetTimeoutMs(timeout.MilliSeconds());
         request.SetIsInternalCall(true);
         
         return queryEv;
@@ -306,7 +307,7 @@ private:
               << ", query length: " << query.QueryText.size());
         
         Send(MakeKqpProxyID(SelfId().NodeId()), 
-             CreatePrepareRequest(Database, query.QueryText, query.UserSID).release());
+             CreatePrepareRequest(Database, query.QueryText, query.UserSID, Config.Deadline).release());
     }
 
     void StartCompilations() {

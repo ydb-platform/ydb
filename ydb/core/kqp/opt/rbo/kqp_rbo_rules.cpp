@@ -632,8 +632,8 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndApply(const std::shared_p
     bool canPushRight = join->JoinKind != "Left" && join->JoinKind != "LeftOnly";
     bool canPushLeft = join->JoinKind != "Right" && join->JoinKind != "RightOnly";
 
-    // Make sure the join and its inputs are single consumer
-    if (!join->IsSingleConsumer() || !join->GetLeftInput()->IsSingleConsumer() || !join->GetRightInput()->IsSingleConsumer()) {
+    // Make sure the join is single consumer
+    if (!join->IsSingleConsumer()) {
         return input;
     }
 
@@ -721,8 +721,8 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
     // Only handle Inner and Cross join at this time
     auto join = CastOperator<TOpJoin>(filter->GetInput());
 
-    // Make sure the join and its inputs are single consumer
-    if (!join->IsSingleConsumer() || !join->GetLeftInput()->IsSingleConsumer() || !join->GetRightInput()->IsSingleConsumer()) {
+    // Make sure the join is single consumer
+    if (!join->IsSingleConsumer()) {
         return input;
     }
 

@@ -691,9 +691,9 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
+        }, std::nullopt, TDuration::Seconds(15), autoPartitioningSupport);
 
-        //UNIT_ASSERT(!result.Timeout);
+        UNIT_ASSERT(!result.Timeout);
         UNIT_ASSERT_VALUES_EQUAL(count, expected);
 
         auto other = GetCommittedOffset(setup, 0)

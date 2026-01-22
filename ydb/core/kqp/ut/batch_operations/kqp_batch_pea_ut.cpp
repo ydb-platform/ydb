@@ -13,11 +13,18 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-TKikimrSettings GetDefaultSettings() {
+TKikimrSettings GetTestSettings() {
     auto appConfig = NKikimrConfig::TAppConfig();
     appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
     appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+    auto logConfig = TTestLogSettings()
+        .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_EXECUTER, NLog::EPriority::PRI_TRACE)
+        .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_COMPUTE, NLog::EPriority::PRI_INFO);
+    logConfig.DefaultLogPriority = NLog::EPriority::PRI_CRIT;
+
     return TKikimrSettings(std::move(appConfig))
+        .SetLogSettings(std::move(logConfig))
         .SetWithSampleTables(false)
         .SetUseRealThreads(false);
 }
@@ -68,7 +75,7 @@ void FillTable(TKikimrRunner& kikimr, TSession& session, const std::string_view&
 */
 Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     Y_UNIT_TEST(PrepareState_PartitioningResolutionError) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -148,7 +155,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(PrepareState_AbortExecution) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -188,7 +195,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(PrepareState_UnknownEvent) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -227,7 +234,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_AbortBeforeAnyResponse) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -290,7 +297,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_AbortAfterPartialCompletion) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -364,7 +371,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_ChildExecuterAbort) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -438,7 +445,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_AbortBeforeDelayedResponses) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -517,7 +524,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_ChildExecuterRetryLimitExceeded) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -598,7 +605,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_AbortDuringRetry) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -686,7 +693,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_ChildExecuterInternalError) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -765,7 +772,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_MinKeyErrorIssues) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -903,7 +910,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(ExecuteState_UnknownEvent) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -969,7 +976,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(AbortState_DoubleAbort) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -1067,7 +1074,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(AbortState_AbortFromExecuterActor) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -1166,7 +1173,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
     }
 
     Y_UNIT_TEST(AbortState_UnknownEvent) {
-        auto kikimr = TKikimrRunner(GetDefaultSettings());
+        auto kikimr = TKikimrRunner(GetTestSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });

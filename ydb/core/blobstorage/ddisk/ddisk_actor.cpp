@@ -21,8 +21,15 @@ namespace NKikimr::NDDisk {
 
     STRICT_STFUNC(TDDiskActor::StateFunc,
         hFunc(TEvDDiskConnect, Handle)
+        hFunc(TEvDDiskDisconnect, Handle)
         hFunc(TEvDDiskWrite, Handle)
         hFunc(TEvDDiskRead, Handle)
+        hFunc(TEvDDiskWritePersistentBuffer, Handle)
+        hFunc(TEvDDiskReadPersistentBuffer, Handle)
+        hFunc(TEvDDiskFlushPersistentBuffer, Handle)
+        hFunc(TEvDDiskWriteResult, Handle)
+        hFunc(TEvents::TEvUndelivered, Handle)
+        hFunc(TEvDDiskListPersistentBuffer, Handle)
         cFunc(TEvents::TSystem::Poison, PassAway)
     )
 

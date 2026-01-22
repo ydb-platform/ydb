@@ -466,5 +466,45 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             }
         });
     }
+
+    Y_UNIT_TEST(ColumnTable) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "ColumnTable"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key" Type: "Uint64" NotNull: true }
+                        Columns { Name: "value" Type: "Utf8" }
+                        KeyColumnNames: "key"
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                                   {NLs::PathExist,
+                                    NLs::ChildrenCount(2)});
+            }
+
+            t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId, "/MyRoot/ColumnTable", "/MyRoot/ColumnTableMove", TTestTxConfig::SchemeShard, {pathVersion}),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                                   {NLs::ChildrenCount(2)});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableMove"),
+                                   {NLs::PathVersionEqual(4),
+                                    NLs::PathExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"),
+                                   {NLs::PathNotExist});
+            }
+        });
+    }
 }
 

@@ -412,7 +412,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [=, resultSets=resultSets, commonCounters=requestCounters.Common] {
+    auto prepare = [permissions, user, extractSensitiveFields, resultSets=resultSets, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
@@ -503,7 +503,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     );
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>> response = std::make_shared<std::pair<FederatedQuery::ModifyConnectionResult, TAuditDetails<FederatedQuery::Connection>>>();
-    auto prepareParams = [=, this, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [config=Config, commonCounters=requestCounters.Common, response, user, request, scope, connectionId, idempotencyKey, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 1) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -559,7 +559,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         response->second.After.ConstructInPlace().CopyFrom(connection);
         response->second.CloudId = connectionInternal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyConnection(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "ModifyConnection(write)");
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("connection_id", connectionId);
         writeQueryBuilder.AddInt64("visibility", connection.content().acl().visibility());
@@ -567,7 +567,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
         writeQueryBuilder.AddInt64("revision", meta.revision());
         writeQueryBuilder.AddString("internal", connectionInternal.SerializeAsString());
         writeQueryBuilder.AddString("connection", connection.SerializeAsString());
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config->IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + config->IdempotencyKeyTtl);
         writeQueryBuilder.AddText(
             "UPDATE `" CONNECTIONS_TABLE_NAME "` SET `" VISIBILITY_COLUMN_NAME "` = $visibility, `" NAME_COLUMN_NAME "` = $name, `" REVISION_COLUMN_NAME "` = $revision, `" INTERNAL_COLUMN_NAME "` = $internal, `" CONNECTION_COLUMN_NAME "` = $connection\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"

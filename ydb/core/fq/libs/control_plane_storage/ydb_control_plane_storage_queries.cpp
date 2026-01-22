@@ -138,11 +138,12 @@ std::pair<FederatedQuery::Query, FederatedQuery::Job> TControlPlaneStorageBase::
 }
 
 FederatedQuery::Internal::QueryInternal TControlPlaneStorageBase::GetQueryInternalProto(
+    const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
     const FederatedQuery::CreateQueryRequest& request, const TString& cloudId, const TString& token,
-    const TMaybe<TQuotaMap>& quotas) const
+    const TMaybe<TQuotaMap>& quotas)
 {
     FederatedQuery::Internal::QueryInternal queryInternal;
-    if (!Config->Proto.GetDisableCurrentIam()) {
+    if (!config->Proto.GetDisableCurrentIam()) {
         queryInternal.set_token(token);
     }
 
@@ -162,23 +163,24 @@ FederatedQuery::Internal::QueryInternal TControlPlaneStorageBase::GetQueryIntern
 }
 
 void TControlPlaneStorageBase::FillConnectionsAndBindings(
+    const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
     FederatedQuery::Internal::QueryInternal& queryInternal, FederatedQuery::QueryContent::QueryType queryType,
     const TVector<FederatedQuery::Connection>& allConnections,
     const THashMap<TString, FederatedQuery::Connection>& visibleConnections,
-    const THashMap<TString, FederatedQuery::Binding>& visibleBindings) const
+    const THashMap<TString, FederatedQuery::Binding>& visibleBindings)
 {
     TSet<TString> disabledConnections;
     for (const auto& connection : allConnections) {
         const auto connectionCase = connection.content().setting().connection_case();
-        if (!Config->AvailableConnections.contains(connectionCase)) {
+        if (!config->AvailableConnections.contains(connectionCase)) {
             disabledConnections.insert(connection.meta().id());
             continue;
         }
-        if ((queryType == FederatedQuery::QueryContent::STREAMING) && !Config->AvailableStreamingConnections.contains(connectionCase)) {
+        if ((queryType == FederatedQuery::QueryContent::STREAMING) && !config->AvailableStreamingConnections.contains(connectionCase)) {
             disabledConnections.insert(connection.meta().id());
             continue;
         }
-        if (GetIamAuth(connection) == FederatedQuery::IamAuth::kCurrentIam && Config->Proto.GetDisableCurrentIam()) {
+        if (GetIamAuth(connection) == FederatedQuery::IamAuth::kCurrentIam && config->Proto.GetDisableCurrentIam()) {
             disabledConnections.insert(connection.meta().id());
             continue;
         }
@@ -194,7 +196,7 @@ void TControlPlaneStorageBase::FillConnectionsAndBindings(
     }
 
     for (const auto& [_, binding] : visibleBindings) {
-        if (!Config->AvailableBindings.contains(binding.content().setting().binding_case())) {
+        if (!config->AvailableBindings.contains(binding.content().setting().binding_case())) {
             continue;
         }
         if (disabledConnections.contains(binding.content().connection_id())) {
@@ -265,7 +267,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         );
     }
 
-    auto prepareParams = [=, this, as=TActivationContext::ActorSystem(), commonCounters=requestCounters.Common, quotas=event.Quotas](const std::vector<TResultSet>& resultSets) mutable {
+    auto prepareParams = [as=TActivationContext::ActorSystem(), commonCounters=requestCounters.Common, quotas=event.Quotas, idempotencyKey, request, response, cloudId, token, computeDatabase, queryType, query, queryId, mapResult, scope, user, jobId, startTime, tablePathPrefix=YdbConnection->TablePathPrefix, job, config=Config](const std::vector<TResultSet>& resultSets) mutable {
         const size_t countSets = (idempotencyKey ? 1 : 0) + (request.execute_mode() != FederatedQuery::SAVE ? 2 : 0);
         if (resultSets.size() != countSets) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to " << countSets << " but equal " << resultSets.size() << ". Please contact internal support";
@@ -283,31 +285,32 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             }
         }
 
-        auto queryInternal = GetQueryInternalProto(request, cloudId, token, quotas);
+        auto queryInternal = GetQueryInternalProto(config, request, cloudId, token, quotas);
 
         if (request.execute_mode() != FederatedQuery::SAVE) {
             // TODO: move to run actor priority selection
             *queryInternal.mutable_compute_connection() = computeDatabase.connection();
             FillConnectionsAndBindings(
+                config,
                 queryInternal,
                 queryType,
-                GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters),
-                GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters),
-                GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 1], BINDING_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters)
+                GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters),
+                GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 2], CONNECTION_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters),
+                GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 1], BINDING_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters)
             );
         }
 
-        if (query.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
+        if (query.ByteSizeLong() > config->Proto.GetMaxRequestSize()) {
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
         }
 
-        if (queryInternal.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << queryInternal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
+        if (queryInternal.ByteSizeLong() > config->Proto.GetMaxRequestSize()) {
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << queryInternal.ByteSizeLong() << " of " << config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
         }
 
         response->second.After.ConstructInPlace().CopyFrom(query);
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "CreateQuery(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "CreateQuery(write)");
         writeQueryBuilder.AddString("tenant", mapResult.TenantName);
         std::optional<std::string> nodes;
         if (mapResult.NodeIds) {
@@ -328,7 +331,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         writeQueryBuilder.AddString("internal", queryInternal.SerializeAsString());
         writeQueryBuilder.AddString("job_id", jobId);
 
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config->IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + config->IdempotencyKeyTtl);
 
         if (request.execute_mode() != FederatedQuery::SAVE) {
             writeQueryBuilder.AddString("job", job.SerializeAsString());
@@ -562,16 +565,17 @@ NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::
 }
 
 void TControlPlaneStorageBase::FillDescribeQueryResult(
+    const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config,
     FederatedQuery::DescribeQueryResult& result, FederatedQuery::Internal::QueryInternal internal,
-    const TString& user, TPermissions permissions) const
+    const TString& user, TPermissions permissions)
 {
     const auto lastJobId = result.query().meta().last_job_id();
     result.mutable_query()->mutable_meta()->set_last_job_id(lastJobId + "-" + result.query().meta().common().id());
 
-    permissions = Config->Proto.GetEnablePermissions()
+    permissions = config->Proto.GetEnablePermissions()
         ? permissions
         : TPermissions{TPermissions::VIEW_PUBLIC | TPermissions::VIEW_AST | TPermissions::VIEW_QUERY_TEXT};
-    if (IsSuperUser(user)) {
+    if (IsSuperUser(config, user)) {
         permissions.SetAll();
     }
 
@@ -659,7 +663,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [this, resultSets=resultSets, user, permissions=event.Permissions, commonCounters=requestCounters.Common] {
+    auto prepare = [resultSets=resultSets, user, permissions=event.Permissions, commonCounters=requestCounters.Common, config=Config] {
         if (resultSets->size() != 1) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
@@ -681,7 +685,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
         }
 
-        FillDescribeQueryResult(result, internal, user, permissions);
+        FillDescribeQueryResult(config, result, internal, user, permissions);
         return result;
     };
 
@@ -696,7 +700,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
         prepare,
         debugInfo);
 
-    success.Apply([=](const auto& future) {
+    success.Apply([startTime, scope, user, queryId, byteSize](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
             LWPROBE(DescribeQueryRequest, scope, user, queryId, delta, byteSize, future.GetValue());
         });
@@ -870,7 +874,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);"
     );
 
-    auto prepareParams = [=, this, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [config=Config, commonCounters=requestCounters.Common, user, token, permissions, request=std::move(request), response, executionLimitMills, computeDatabase, tablePathPrefix=YdbConnection->TablePathPrefix, mapResult=std::move(mapResult), scope, queryId, idempotencyKey, startTime](const std::vector<TResultSet>& resultSets) {
         const size_t countSets = 1 + (request.execute_mode() != FederatedQuery::SAVE ? 2 : 0);
 
         if (resultSets.size() != countSets) {
@@ -937,7 +941,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Conversion from status " << FederatedQuery::QueryMeta::ComputeStatus_Name(query.meta().status()) << " to " << FederatedQuery::QueryMeta::ComputeStatus_Name(FederatedQuery::QueryMeta::STARTING) << " is not possible. Please wait for the query to complete or stop it";
         }
 
-        if (!Config->Proto.GetDisableCurrentIam()) {
+        if (!config->Proto.GetDisableCurrentIam()) {
             internal.set_token(token);
         }
         if (request.execute_mode() != FederatedQuery::SAVE) {
@@ -953,25 +957,25 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
 
             // TODO: move to run actor priority selection
             TSet<TString> disabledConnections;
-            for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters)) {
+            for (const auto& connection: GetEntities<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters)) {
                 auto connectionCase = connection.content().setting().connection_case();
-                if (!Config->AvailableConnections.contains(connectionCase)) {
+                if (!config->AvailableConnections.contains(connectionCase)) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }
-                if ((query.content().type() == FederatedQuery::QueryContent::STREAMING) && !Config->AvailableStreamingConnections.contains(connectionCase)) {
+                if ((query.content().type() == FederatedQuery::QueryContent::STREAMING) && !config->AvailableStreamingConnections.contains(connectionCase)) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }
 
-                if (GetIamAuth(connection) == FederatedQuery::IamAuth::kCurrentIam && Config->Proto.GetDisableCurrentIam()) {
+                if (GetIamAuth(connection) == FederatedQuery::IamAuth::kCurrentIam && config->Proto.GetDisableCurrentIam()) {
                     disabledConnections.insert(connection.meta().id());
                     continue;
                 }
             }
 
             TSet<TString> connectionIds;
-            auto connections = GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters);
+            auto connections = GetEntitiesWithVisibilityPriority<FederatedQuery::Connection>(resultSets[resultSets.size() - 3], CONNECTION_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters);
             for (const auto& [_, connection]: connections) {
                 if (disabledConnections.contains(connection.meta().id())) {
                     continue;
@@ -980,9 +984,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
                 connectionIds.insert(connection.meta().id());
             }
 
-            auto bindings = GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 2], BINDING_COLUMN_NAME, Config->Proto.GetIgnorePrivateSources(), commonCounters);
+            auto bindings = GetEntitiesWithVisibilityPriority<FederatedQuery::Binding>(resultSets[resultSets.size() - 2], BINDING_COLUMN_NAME, config->Proto.GetIgnorePrivateSources(), commonCounters);
             for (const auto& [_, binding]: bindings) {
-                if (!Config->AvailableBindings.contains(binding.content().setting().binding_case())) {
+                if (!config->AvailableBindings.contains(binding.content().setting().binding_case())) {
                     continue;
                 }
 
@@ -997,16 +1001,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             }
         }
 
-        if (query.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
+        if (query.ByteSizeLong() > config->Proto.GetMaxRequestSize()) {
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << config->Proto.GetMaxRequestSize() <<  ". Please shorten your request";
         }
 
-        if (internal.ByteSizeLong() > Config->Proto.GetMaxRequestSize()) {
-            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << internal.ByteSizeLong() << " of " << Config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
+        if (internal.ByteSizeLong() > config->Proto.GetMaxRequestSize()) {
+            ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << internal.ByteSizeLong() << " of " << config->Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
         }
 
         FederatedQuery::Job job;
-        const TString jobId = request.execute_mode() == FederatedQuery::SAVE ? "" : GetEntityIdAsString(Config->IdsPrefix, EEntityType::JOB);
+        const TString jobId = request.execute_mode() == FederatedQuery::SAVE ? "" : GetEntityIdAsString(config->IdsPrefix, EEntityType::JOB);
         if (request.execute_mode() != FederatedQuery::SAVE) {
             internal.clear_action();
             query.clear_result_set_meta();
@@ -1051,11 +1055,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         response->second.After.ConstructInPlace().CopyFrom(query);
         response->second.CloudId = internal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyQuery(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "ModifyQuery(write)");
         writeQueryBuilder.AddString("tenant", mapResult.TenantName);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("query_id", queryId);
-        writeQueryBuilder.AddUint64("max_count_jobs", Config->Proto.GetMaxCountJobs());
+        writeQueryBuilder.AddUint64("max_count_jobs", config->Proto.GetMaxCountJobs());
         writeQueryBuilder.AddInt64("visibility", query.content().acl().visibility());
         writeQueryBuilder.AddString("job_id", jobId);
         writeQueryBuilder.AddString("query", query.SerializeAsString());
@@ -1082,7 +1086,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             ");\n"
         );
 
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + Config->IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), startTime + config->IdempotencyKeyTtl);
 
         if (request.content().acl().visibility() == oldVisibility) {
             writeQueryBuilder.AddInt64("visibility", query.content().acl().visibility());
@@ -1365,7 +1369,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
     );
 
-    auto prepareParams = [=, this, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [config=Config, commonCounters=requestCounters.Common, permissions, user, action, response, idempotencyKey, scope, queryId, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -1473,7 +1477,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         response->second.After.ConstructInPlace().CopyFrom(query);
         response->second.CloudId = queryInternal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ControlQuery(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "ControlQuery(write)");
         writeQueryBuilder.AddString("tenant", tenantName);
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("job", job.SerializeAsString());
@@ -1484,7 +1488,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
         writeQueryBuilder.AddInt64("status", query.meta().status());
         writeQueryBuilder.AddString("internal", queryInternal.SerializeAsString());
 
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), now + Config->IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), now + config->IdempotencyKeyTtl);
         writeQueryBuilder.AddText(
             "UPDATE `" JOBS_TABLE_NAME "` SET `" JOB_COLUMN_NAME "` = $job\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $job_id;\n"
@@ -1876,7 +1880,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
 
-    auto prepare = [=, id=request.job_id(), resultSets=resultSets, commonCounters=requestCounters.Common] {
+    auto prepare = [permissions, user, id=request.job_id(), resultSets=resultSets, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }

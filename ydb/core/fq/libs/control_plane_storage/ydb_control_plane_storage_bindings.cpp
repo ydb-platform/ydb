@@ -380,7 +380,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeBin
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [=, resultSets=resultSets, commonCounters=requestCounters.Common] {
+    auto prepare = [permissions, user, resultSets=resultSets, commonCounters=requestCounters.Common] {
         if (resultSets->size() != 1) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
@@ -473,7 +473,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     );
 
     std::shared_ptr<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>> response = std::make_shared<std::pair<FederatedQuery::ModifyBindingResult, TAuditDetails<FederatedQuery::Binding>>>();
-    auto prepareParams = [=, this, config=Config, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [response, permissions, bindingId, idempotencyKey, user, scope, request=request, tablePathPrefix=YdbConnection->TablePathPrefix, idempotencyKeyTtl=Config->IdempotencyKeyTtl, commonCounters=requestCounters.Common](const std::vector<TResultSet>& resultSets) {
         if (resultSets.size() != 2) {
             ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets.size() << ". Please contact internal support";
         }
@@ -538,7 +538,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         response->second.After.ConstructInPlace().CopyFrom(binding);
         response->second.CloudId = bindingInternal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyBinding(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "ModifyBinding(write)");
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("binding_id", bindingId);
         writeQueryBuilder.AddInt64("visibility", binding.content().acl().visibility());
@@ -546,7 +546,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         writeQueryBuilder.AddInt64("revision", meta.revision());
         writeQueryBuilder.AddString("internal", bindingInternal.SerializeAsString());
         writeQueryBuilder.AddString("binding", binding.SerializeAsString());
-        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + Config->IdempotencyKeyTtl);
+        InsertIdempotencyKey(writeQueryBuilder, scope, idempotencyKey, response->first.SerializeAsString(), TInstant::Now() + idempotencyKeyTtl);
         writeQueryBuilder.AddText(
             "UPDATE `" BINDINGS_TABLE_NAME "` SET `" VISIBILITY_COLUMN_NAME "` = $visibility, `" NAME_COLUMN_NAME "` = $name, `" REVISION_COLUMN_NAME "` = $revision, `" INTERNAL_COLUMN_NAME "` = $internal, `" BINDING_COLUMN_NAME "` = $binding\n"
             "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" BINDING_ID_COLUMN_NAME "` = $binding_id;\n"

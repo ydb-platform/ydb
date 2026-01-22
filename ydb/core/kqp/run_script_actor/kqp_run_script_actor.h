@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-// #include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 

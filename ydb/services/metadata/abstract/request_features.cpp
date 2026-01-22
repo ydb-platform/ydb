@@ -48,9 +48,7 @@ bool TFeaturesExtractor::IsFinished() const {
 TString TFeaturesExtractor::GetRemainedParamsString() const {
     std::unordered_set<TString> features;
 
-    for (const auto& [key, _] : Features) {
-        features.emplace(key);
-    }
+    GetRemainedFeatures(Features, "", features);
 
     for (const auto& feature : ResetFeatures) {
         features.emplace(feature);

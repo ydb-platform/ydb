@@ -19,7 +19,7 @@ message TTraceInfo
     uint64 RequestEndTime = 2;
 
     // serialized lwtrace probes.
-    NLWTrace.TTraceResponse LWTrace = 3;
+    // NLWTrace.TTraceResponse LWTrace = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

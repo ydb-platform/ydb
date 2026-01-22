@@ -59,13 +59,13 @@ message THeaders
         // From which channel this request comes from.
         NYdb.NBS.NProto.ERequestSource RequestSource = 2;
 
-        NLWTrace.TTraceRequest Trace = 3;
+        // NLWTrace.TTraceRequest Trace = 3;
 
-        // Ts when request tracing actually started.
-        uint64 TraceTs = 4;
+        // // Ts when request tracing actually started.
+        // uint64 TraceTs = 4;
 
-        // Source of control plane request.
-        EControlRequestSource ControlSource = 5;
+        // // Source of control plane request.
+        // EControlRequestSource ControlSource = 5;
     }
 
     // These headers must not be set by end clients. They will be overwritten

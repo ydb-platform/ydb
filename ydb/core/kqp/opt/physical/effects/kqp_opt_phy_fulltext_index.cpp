@@ -446,145 +446,32 @@ TExprBase BuildFulltextPostingKeys(const TKikimrTableDescription& table, const N
         .Done();
 }
 
-// Until we have INSERT-or-INCREMENT (!) support at data shards, we have to do it like this:
-//
-// UPSERT INTO <dictTable>
-// SELECT token, SUM(freq) AS freq FROM (
-//     SELECT * FROM <dictTable> WHERE token IN (SELECT token FROM <tokenRows>)
-//     UNION ALL
-//     SELECT token, SUM(freq) AS freq FROM <tokenRows>
-// ) GROUP BY token
+// We use UPSERT_INCREMENT data shard operations to update term statistics
 TExprBase BuildFulltextDictUpsert(const TKikimrTableDescription& dictTable, const NNodes::TExprBase& dictRows,
     TPositionHandle pos, NYql::TExprContext& ctx)
 {
-    auto dictRowsPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
-        .Connection(dictRows.Cast<TDqCnUnionAll>())
-        .Done();
-
-    TKqpStreamLookupSettings streamLookupSettings;
-    streamLookupSettings.Strategy = EStreamLookupStrategyType::LookupRows;
-
-    TVector<const TItemExprType*> inputItems;
-    {
-        auto type = dictTable.GetColumnType(NTableIndex::NFulltext::TokenColumn);
-        YQL_ENSURE(type, "No token column in dict table: " << NTableIndex::NFulltext::TokenColumn);
-        auto itemType = ctx.MakeType<TItemExprType>(NTableIndex::NFulltext::TokenColumn, type);
-        inputItems.push_back(itemType);
-    }
-    auto inputType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(inputItems));
-
-    const auto dictRowsArg = Build<TCoArgument>(ctx, pos).Name("dictRows").Done();
-    const auto rowArg = Build<TCoArgument>(ctx, pos).Name("row").Done();
-    const auto keyArg = Build<TCoArgument>(ctx, pos).Name("key").Done();
     auto dictTableNode = BuildTableMeta(dictTable, pos, ctx);
     auto dictColumns = BuildColumnsList(TVector<TStringBuf>({
         NTableIndex::NFulltext::TokenColumn,
         NTableIndex::NFulltext::FreqColumn
     }), pos, ctx);
 
-    auto distinctTokens = Build<TCoMap>(ctx, pos)
-        .Input<TCoDictKeys>()
-            .Dict<TCoToDict>()
-                .List(dictRowsArg)
-                .KeySelector()
-                    .Args({rowArg})
-                    .Body<TCoMember>()
-                        .Struct(rowArg)
-                        .Name().Build(NTableIndex::NFulltext::TokenColumn)
-                        .Build()
-                    .Build()
-                .PayloadSelector()
-                    .Args({"stub"})
-                    .Body<TCoVoid>()
-                        .Build()
-                    .Build()
-                .Settings()
-                    .Add().Build("One")
-                    .Add().Build("Hashed")
-                    .Build()
-                .Build()
-            .Build()
-        .Lambda()
-            .Args({keyArg})
-            .Body<TCoAsStruct>()
-                .Add<TCoNameValueTuple>()
-                    .Name().Build(NTableIndex::NFulltext::TokenColumn)
-                    .Value(keyArg)
-                    .Build()
-                .Build()
-            .Build()
-        .Done();
-
-    auto dictLookup = Build<TKqpCnStreamLookup>(ctx, pos)
-        .Output()
-            .Stage<TDqStage>()
-                .Inputs()
-                    .Add(dictRowsPrecompute)
-                    .Build()
-                .Program()
-                    .Args({dictRowsArg})
-                    .Body<TCoToStream>()
-                        .Input(distinctTokens)
-                        .Build()
-                    .Build()
-                .Settings().Build()
-                .Build()
-            .Index().Build(0)
-            .Build()
-        .Table(dictTableNode)
-        .Columns(dictColumns)
-        .InputType(ExpandType(pos, *inputType, ctx))
-        .Settings(streamLookupSettings.BuildNode(ctx, pos))
-        .Done();
-
-    const auto lookupRowsArg = Build<TCoArgument>(ctx, pos).Name("rows").Done();
-    const auto incRowsArg = Build<TCoArgument>(ctx, pos).Name("inc").Done();
-    auto mergeStage = Build<TDqStage>(ctx, pos)
-        .Inputs()
-            .Add(dictLookup)
-            .Add(dictRowsPrecompute)
-            .Build()
-        .Program()
-            .Args({lookupRowsArg, incRowsArg})
-            .Body<TCoExtend>()
-                .Add(lookupRowsArg)
-                .Add<TCoIterator>()
-                    .List(incRowsArg)
-                    .Build()
-                .Build()
-            .Build()
-        .Settings().Build()
-        .Done();
-
-    auto mergeUnion = Build<TDqCnUnionAll>(ctx, pos)
-        .Output()
-            .Stage(mergeStage)
-            .Index().Build("0")
-            .Build()
-        .Done();
-
-    auto incrementStage = BuildFulltextDictRows(mergeUnion, true /*useSum*/, true /*useStage*/, pos, ctx);
-
     return Build<TKqlUpsertRows>(ctx, pos)
         .Table(dictTableNode)
-        .Input(incrementStage)
+        .Input(dictRows)
         .Columns(dictColumns)
         .ReturningColumns<TCoAtomList>().Build()
         .IsBatch(ctx.NewAtom(pos, "false"))
+        .Settings<TCoNameValueTupleList>()
+            .Add()
+                .Name().Build("Mode")
+                .Value<TCoAtom>().Build("upsert_increment")
+                .Build()
+            .Build()
         .Done();
 }
 
-// And one more emulated INCREMENT:
-//
-// UPSERT INTO <statsTable>
-// SELECT __ydb_id,
-//     (__ydb_sum_doc_length
-//         + (SELECT SUM(length) FROM <addedDocs>)
-//         - (SELECT SUM(length) FROM <removedDocs>)) AS __ydb_sum_doc_length,
-//     (__ydb_doc_count
-//         + (SELECT COUNT(*) FROM <addedDocs>)
-//         - (SELECT COUNT(*) FROM <removedDocs>)) AS __ydb_doc_count
-// FROM <statsTable>
+// And for total statistics, too
 TExprBase BuildFulltextStatsUpsert(const TKikimrTableDescription& statsTable,
     const TMaybeNode<TExprBase>& addedDocs, const TMaybeNode<TExprBase>& removedDocs,
     TPositionHandle pos, NYql::TExprContext& ctx)
@@ -596,46 +483,14 @@ TExprBase BuildFulltextStatsUpsert(const TKikimrTableDescription& statsTable,
         NTableIndex::NFulltext::DocCountColumn
     }, pos, ctx);
     const auto statsTableNode = BuildTableMeta(statsTable, pos, ctx);
-    TExprBase readStats = Build<TKqpReadTable>(ctx, pos)
-        .Table(statsTableNode)
-        .Columns(statsColumns)
-        .Range()
-            .From<TKqlKeyInc>()
-                .Build()
-            .To<TKqlKeyInc>()
-                .Build()
-            .Build()
-        .Settings(TKqpReadTableSettings().BuildNode(ctx, pos))
-        .Done();
-    readStats = Build<TDqCnUnionAll>(ctx, pos)
-        .Output()
-            .Stage<TDqStage>()
-                .Inputs()
-                    .Build()
-                .Program()
-                    .Args({})
-                    .Body<TCoToStream>()
-                        .Input(readStats)
-                        .Build()
-                    .Build()
-                .Settings().Build()
-                .Build()
-            .Index().Build("0")
-            .Build()
-        .Done();
 
-    const auto statsArg = Build<TCoArgument>(ctx, pos).Name("stats").Done();
-    const auto statsRowArg = Build<TCoArgument>(ctx, pos).Name("row").Done();
-    TVector<TExprBase> inputs = {readStats};
-    TVector<TCoArgument> args = {statsArg};
-    TExprBase totalDocLength = Build<TCoMember>(ctx, pos)
-        .Struct(statsRowArg)
-        .Name().Build(NTableIndex::NFulltext::SumDocLengthColumn)
+    TVector<TExprBase> inputs = {};
+    TVector<TCoArgument> args = {};
+    TExprBase zero = Build<TCoUint64>(ctx, pos)
+        .Literal().Build("0")
         .Done();
-    TExprBase docCount = Build<TCoMember>(ctx, pos)
-        .Struct(statsRowArg)
-        .Name().Build(NTableIndex::NFulltext::DocCountColumn)
-        .Done();
+    TExprBase totalDocLength = zero;
+    TExprBase docCount = zero;
     if (addedDocs) {
         const auto addedDocsArg = Build<TCoArgument>(ctx, pos).Name("added").Done();
         inputs.push_back(addedDocs.Cast());
@@ -654,11 +509,8 @@ TExprBase BuildFulltextStatsUpsert(const TKikimrTableDescription& statsTable,
                     .Build()
                 .Build()
             .Done();
-        docCount = Build<TCoAdd>(ctx, pos)
-            .Left(docCount)
-            .Right<TCoLength>()
-                .List(addedDocsArg)
-                .Build()
+        docCount = Build<TCoLength>(ctx, pos)
+            .List(addedDocsArg)
             .Done();
     }
     if (removedDocs) {
@@ -693,27 +545,20 @@ TExprBase BuildFulltextStatsUpsert(const TKikimrTableDescription& statsTable,
             .Build()
         .Program()
             .Args(args)
-            .Body<TCoToStream>()
-                .Input<TCoMap>()
-                    .Input(statsArg)
-                    .Lambda()
-                        .Args({statsRowArg})
-                        .Body<TCoAsStruct>()
-                            .Add<TCoNameValueTuple>()
-                                .Name().Build(NTableIndex::NFulltext::IdColumn)
-                                .Value<TCoMember>()
-                                    .Struct(statsRowArg)
-                                    .Name().Build(NTableIndex::NFulltext::IdColumn)
-                                    .Build()
-                                .Build()
-                            .Add<TCoNameValueTuple>()
-                                .Name().Build(NTableIndex::NFulltext::SumDocLengthColumn)
-                                .Value(totalDocLength)
-                                .Build()
-                            .Add<TCoNameValueTuple>()
-                                .Name().Build(NTableIndex::NFulltext::DocCountColumn)
-                                .Value(docCount)
-                                .Build()
+            .Body<TCoIterator>()
+                .List<TCoAsList>()
+                    .Add<TCoAsStruct>()
+                        .Add<TCoNameValueTuple>()
+                            .Name().Build(NTableIndex::NFulltext::IdColumn)
+                            .Value(zero)
+                            .Build()
+                        .Add<TCoNameValueTuple>()
+                            .Name().Build(NTableIndex::NFulltext::SumDocLengthColumn)
+                            .Value(totalDocLength)
+                            .Build()
+                        .Add<TCoNameValueTuple>()
+                            .Name().Build(NTableIndex::NFulltext::DocCountColumn)
+                            .Value(docCount)
                             .Build()
                         .Build()
                     .Build()
@@ -735,6 +580,12 @@ TExprBase BuildFulltextStatsUpsert(const TKikimrTableDescription& statsTable,
         .Columns(statsColumns)
         .ReturningColumns<TCoAtomList>().Build()
         .IsBatch(ctx.NewAtom(pos, "false"))
+        .Settings<TCoNameValueTupleList>()
+            .Add()
+                .Name().Build("Mode")
+                .Value<TCoAtom>().Build("upsert_increment")
+                .Build()
+            .Build()
         .Done();
 }
 

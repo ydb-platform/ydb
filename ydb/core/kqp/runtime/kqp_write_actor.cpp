@@ -52,6 +52,8 @@ namespace {
         case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
         case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL: // Rows were already checked during WHERE execution.
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT;
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT:
+            return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT;
         case NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT:
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
         case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:

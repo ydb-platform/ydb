@@ -165,7 +165,7 @@ struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
     TKeyedWriteSessionSettings& operator=(TKeyedWriteSessionSettings&&) = default;
 
     //! Session lifetime.
-    FLUENT_SETTING(TDuration, SubSessionIdleTimeout);
+    FLUENT_SETTING_DEFAULT(TDuration, SubSessionIdleTimeout, TDuration::Seconds(30));
 
     //! Partition chooser strategy.
     FLUENT_SETTING_DEFAULT(EPartitionChooserStrategy, PartitionChooserStrategy, EPartitionChooserStrategy::Bound);

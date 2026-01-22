@@ -9,6 +9,7 @@
 #include <util/generic/buffer.h>
 
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <memory>
 
@@ -66,8 +67,6 @@ class TKeyedWriteSession : public IKeyedWriteSession,
                            public TContinuationTokenIssuer,
                            public std::enable_shared_from_this<TKeyedWriteSession> {
 private:
-    static constexpr auto MAX_CLEANED_SESSIONS_COUNT = 100;
-
     using WriteSessionPtr = std::shared_ptr<IWriteSession>;
 
     struct TPartitionBound {
@@ -138,15 +137,71 @@ private:
     struct WriteSessionWrapper {
         WriteSessionPtr Session;
         ui64 PartitionId;
-        TInstant ExpirationTime;
+        TDuration IdleTimeout;
+        std::optional<TInstant> EmptySince;
+        ui64 QueueSize = 0;
 
-        bool operator<(const WriteSessionWrapper& other) const {
-            return ExpirationTime < other.ExpirationTime;
+        WriteSessionWrapper(WriteSessionPtr session, ui64 partitionId, TDuration idleTimeout)
+            : Session(std::move(session))
+            , PartitionId(partitionId)
+            , IdleTimeout(idleTimeout)
+            , QueueSize(0)
+        {}
+
+        bool IsExpired() {
+            if (!EmptySince) {
+                return false;
+            }
+
+            return TInstant::Now() - *EmptySince > IdleTimeout;
         }
 
-        bool IsExpired() const {
-            return ExpirationTime < TInstant::Now();
+        bool IsQueueEmpty() {
+            return QueueSize == 0;
         }
+
+        bool AddToQueue(ui64 delta) {
+            bool idle = EmptySince.has_value();
+            if (idle) {
+                EmptySince = std::nullopt;
+            }
+            QueueSize += delta;
+            return idle;
+        }
+
+        bool RemoveFromQueue(ui64 delta) {
+            QueueSize -= delta;
+            if (QueueSize == 0) {
+                EmptySince = TInstant::Now();
+            }
+            return EmptySince.has_value();
+        }
+
+        bool Less(const std::shared_ptr<WriteSessionWrapper>& other) {
+            if (!EmptySince.has_value() && !other->EmptySince.has_value()) {
+                return PartitionId < other->PartitionId;
+            }
+
+            if (EmptySince.has_value() && !other->EmptySince.has_value()) {
+                return true;
+            }
+
+            if (!EmptySince.has_value() && other->EmptySince.has_value()) {
+                return false;
+            }
+
+            if (*EmptySince == *other->EmptySince) {
+                return PartitionId < other->PartitionId;
+            }
+
+            return *EmptySince < *other->EmptySince;
+        }
+
+        struct Comparator {
+            bool operator()(const std::shared_ptr<WriteSessionWrapper>& first, const std::shared_ptr<WriteSessionWrapper>& second) const {
+                return first->Less(second);
+            }
+        };
     };
 
     using WrappedWriteSessionPtr = std::shared_ptr<WriteSessionWrapper>;
@@ -170,13 +225,9 @@ private:
         TKeyedWriteSession* Session;
     };
 
-    void AddPartitionsBoundsIfNeeded();
-
-    void CleanExpiredSessions();
-
     WrappedWriteSessionPtr GetWriteSession(ui64 partitionId);
 
-    void RunEventLoop(ui64 partitionId);
+    void RunEventLoop(ui64 partitionId, WrappedWriteSessionPtr wrappedSession);
 
     WrappedWriteSessionPtr CreateWriteSession(ui64 partitionId);
 
@@ -207,9 +258,17 @@ private:
 
     bool IsMemoryUsageOK() const;
 
-    void SetCloseTimeout(const TDuration& closeTimeout);
+    void SetCloseDeadline(const TDuration& closeTimeout);
 
     TDuration GetCloseTimeout();
+
+    TInstant GetCloseDeadline();
+
+    void RemoveIdleSession(WrappedWriteSessionPtr session);
+
+    void AddIdleSession(WrappedWriteSessionPtr session);
+
+    void CleanIdleSessions();
     
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -243,11 +302,12 @@ private:
 
     std::vector<TPartitionInfo> Partitions;
     std::vector<NThreading::TFuture<void>> Futures;
-    std::vector<size_t> ReadyFutures;
+    std::unordered_set<size_t> ReadyFutures;
     std::unique_ptr<IPartitionChooser> PartitionChooser;
 
+    std::set<WrappedWriteSessionPtr, WriteSessionWrapper::Comparator> IdlerSessions;
     std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
-    std::unordered_map<ui64, TContinuationToken> ContinuationTokens;
+    std::unordered_map<ui64, std::deque<TContinuationToken>> ContinuationTokens;
     std::unordered_map<ui64, ui64> PartitionsPrimaryIndex;
     std::map<TPartitionBound, ui64> PartitionsIndex;
 
@@ -265,7 +325,7 @@ private:
 
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;
-    TDuration CloseTimeout = TDuration::Zero();
+    TInstant CloseDeadline = TInstant::Max();
     std::optional<TSessionClosedEvent> CloseEvent;
 
     size_t MessagesNotEmptyFutureIndex;
@@ -323,8 +383,6 @@ private:
     template<typename F>
     bool Wait(const TDuration& timeout, F&& stopFunc);
 
-    void RecreateGotEventsPromise();
-
     void RunEventLoop();
 
 public:
@@ -347,8 +405,6 @@ protected:
     std::unordered_set<ui64> AckedSeqNos;
     std::queue<TContinuationToken> ContinuationTokensQueue;
 
-    NThreading::TPromise<void> GotEventsPromise;
-    NThreading::TFuture<void> GotEventsFuture;
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;
 

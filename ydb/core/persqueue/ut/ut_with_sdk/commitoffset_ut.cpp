@@ -681,7 +681,8 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
                 setup.Write(TStringBuilder() << "message-new-" << count, 2);
 
                 auto& message = messages[i];
-                Cerr << "SESSION EVENT read message: " << count << " from partition: " << message.GetPartitionSession()->GetPartitionId() << Endl << Flush;
+                Cerr << "SESSION EVENT read message: " << count << " from partition: "
+                    << message.GetPartitionSession()->GetPartitionId() << Endl << Flush;
                 message.Commit();
 
                 if (count == expected) {

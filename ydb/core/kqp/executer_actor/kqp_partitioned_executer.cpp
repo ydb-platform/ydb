@@ -88,8 +88,6 @@ public:
         if (TableServiceConfig.HasBatchOperationSettings()) {
             Settings = NBatchOperations::ImportSettingsFromProto(TableServiceConfig.GetBatchOperationSettings());
         }
-
-        FillTableMetaInfo();
     }
 
     TString LogPrefix() const {
@@ -106,6 +104,7 @@ public:
 
         PE_STLOG_I("Start resolving table partitions");
 
+        FillTableMetaInfo();
         ResolvePartitioning();
     }
 

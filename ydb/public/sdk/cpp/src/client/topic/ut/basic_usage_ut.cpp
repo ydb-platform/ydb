@@ -1867,7 +1867,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                             }
                             done = (ackedSeqNos.size() >= total);
                         }
-                        std::cerr << "acks: " << ackedSeqNos.size() << std::endl;
                         ackCv.notify_all();
                         if (done) {
                             stopEventLoop.store(true);
@@ -1925,7 +1924,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_BasicWrite) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 5);
 
         auto client = setup.MakeClient();
         
@@ -1964,7 +1963,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_ManyMessages) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 4);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
 
         auto client = setup.MakeClient();
 
@@ -1981,10 +1980,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         ui64 seqNo = 1;
 
         for (ui64 i = 0; i < 1000; ++i) {
-            if (i % 100 == 0) {
-                std::cerr << "wrote " << i << " messages" << std::endl;
-            }
-
             auto key = CreateGuidAsString();
             TWriteMessage msg("payload-" + ToString(seqNo));
             msg.SeqNo(seqNo++);

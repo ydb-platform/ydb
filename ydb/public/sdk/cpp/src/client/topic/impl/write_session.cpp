@@ -368,9 +368,7 @@ void TKeyedWriteSession::DestroyWriteSession(TSessionsIndexIterator& it, const T
     }
 
     if (!alreadyClosed) {
-        std::cerr << "[keyed write session] Closing write session" << std::endl;
         it->second->Session->Close(closeTimeout);
-        std::cerr << "[keyed write session] Write session closed" << std::endl;
     }
 
     auto partitionIndex = PartitionsPrimaryIndex.find(it->second->PartitionId);

@@ -53,7 +53,7 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
         } else if (str == "from_checkpoint_force") {
             result.mutable_from_last_checkpoint()->set_force(true);
         } else {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: " << str);
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: '" << str << "'");
         }
 
         return result;
@@ -64,20 +64,20 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
     const auto& fromTime = streamingDispositionExtractor.Extract(TStreamingQueryConfig::TProperties::StreamingDispositionFromTime);
     const auto& timeAgo = streamingDispositionExtractor.Extract(TStreamingQueryConfig::TProperties::StreamingDispositionTimeAgo);
     if (fromTime && timeAgo) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Invalid value for streaming_disposition: from_time and time_ago are mutually exclusive");
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Invalid value for streaming_disposition: properties 'from_time' and 'time_ago' are mutually exclusive");
     }
 
     if (fromTime) {
         TInstant timestamp;
         if (!TInstant::TryParseIso8601(*fromTime, timestamp)) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: from_time is not a valid ISO 8601 timestamp: " << *fromTime);
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: property 'from_time' is not a valid ISO 8601 timestamp: '" << *fromTime << "'");
         }
 
         *result.mutable_from_time()->mutable_timestamp() = NProtoInterop::CastToProto(timestamp);
     } else if (timeAgo) {
         auto duration = NMiniKQL::ValueFromString(NYql::NUdf::EDataSlot::Interval, *timeAgo);
         if (!duration) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: time_ago is not a valid ISO 8601 duration: " << *timeAgo);
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: property 'time_ago' is not a valid ISO 8601 duration: '" << *timeAgo << "'");
         }
 
         *result.mutable_time_ago()->mutable_duration() = NProtoInterop::CastToProto(TDuration::MicroSeconds(duration.Get<ui64>()));
@@ -107,7 +107,7 @@ TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStre
     }) {
         if (const auto& value = featuresExtractor.Extract(property)) {
             if (!properties.emplace(property, *value).second) {
-                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Duplicate property " << property);
+                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Duplicate property '" << property << "'");
             }
         }
     }

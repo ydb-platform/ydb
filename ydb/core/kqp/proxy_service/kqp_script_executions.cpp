@@ -1136,6 +1136,7 @@ public:
             .CheckpointId = meta.GetCheckpointId(),
             .StreamingQueryPath = meta.GetStreamingQueryPath(),
             .CustomerSuppliedId = meta.GetCustomerSuppliedId(),
+            .StreamingDisposition = streamingDisposition,
         }, QueryServiceConfig));
 
         KQP_PROXY_LOG_D("Restart with RunScriptActorId: " << RunScriptActorId << ", has PhysicalGraph: " << hasPhysicalGraph);

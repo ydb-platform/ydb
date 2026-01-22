@@ -2167,6 +2167,10 @@ public:
     }
 
     void HandleExecute(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
+        if (!ExecuterId) {
+            LOG_D("Ignoring TEvStreamDataAck - no active executer");
+            return;
+        }
         TlsActivationContext->Send(ev->Forward(ExecuterId));
     }
 

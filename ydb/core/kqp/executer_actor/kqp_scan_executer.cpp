@@ -69,6 +69,8 @@ public:
                 hFunc(NShardResolver::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+
+                IgnoreFunc(TEvKqpExecuter::TEvStreamDataAck);  // stale ack from previous executer
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
             }

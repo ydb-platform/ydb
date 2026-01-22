@@ -14,7 +14,7 @@ NActors::IActor* CreatePoolResolverActor(TEvPlaceRequestIntoPool::TPtr event, bo
 
 // Fetch and create pool in scheme shard
 NActors::IActor* CreatePoolFetcherActor(const NActors::TActorId& replyActorId, const TString& databaseId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig);
-NActors::IActor* CreatePoolCreatorActor(const NActors::TActorId& replyActorId, const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl);
+NActors::IActor* CreateOrAlterPoolActor(const NActors::TActorId& replyActorId, const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl, bool isAlter);
 
 // Checks that database is serverless and return database id
 NActors::IActor* CreateDatabaseFetcherActor(const NActors::TActorId& replyActorId, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr, NACLib::EAccessRights checkAccess = NACLib::EAccessRights::NoAccess);

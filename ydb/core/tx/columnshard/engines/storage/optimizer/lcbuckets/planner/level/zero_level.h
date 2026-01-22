@@ -14,7 +14,7 @@ private:
     const bool CompactAtLevel;
     const ui64 Concurrency;
 
-    std::set<TOrderedPortion> Portions;
+    TOrderedPortionsContainer Portions;
 
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         return NArrow::NMerger::TIntervalPositions();
@@ -26,7 +26,7 @@ private:
     }
 
     virtual bool IsAppropriatePortionToMove(const TPortionInfoForCompaction& info) const override {
-        return info.GetTotalBlobBytes() > NextLevel->GetExpectedPortionSize();
+        return info.GetIsCommitted() && info.GetTotalBlobBytes() > NextLevel->GetExpectedPortionSize();
     }
 
     virtual bool IsAppropriatePortionToStore(const TPortionInfoForCompaction& info) const override {
@@ -40,7 +40,7 @@ private:
     virtual std::vector<TPortionInfo::TPtr> DoModifyPortions(
         const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         std::vector<TPortionInfo::TPtr> problems;
-        const bool constructionFlag = Portions.empty();
+        const bool constructionFlag = Portions.GetPortions().empty();
         if (constructionFlag) {
             std::vector<TOrderedPortion> ordered;
             ordered.reserve(add.size());
@@ -49,21 +49,21 @@ private:
             }
             std::sort(ordered.begin(), ordered.end());
             AFL_VERIFY(std::unique(ordered.begin(), ordered.end()) == ordered.end());
-            Portions = std::set<TOrderedPortion>(ordered.begin(), ordered.end());
+            Portions = std::set<TOrderedPortion, std::less<>>(ordered.begin(), ordered.end());
         }
         for (auto&& i : add) {
             if (!constructionFlag) {
-                AFL_VERIFY(Portions.emplace(i).second);
+                Portions.Emplace(i);
             }
         }
         for (auto&& i : remove) {
-            AFL_VERIFY(Portions.erase(i));
+            Portions.Erase(i);
         }
         return problems;
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
-        for (auto&& i : Portions) {
+        for (auto&& i : Portions.GetPortions()) {
             if (locksManager->IsLocked(*i.GetPortion(), NDataLocks::ELockCategory::Compaction)) {
                 return true;
             }

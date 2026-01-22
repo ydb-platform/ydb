@@ -377,7 +377,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
     }
 
-    Y_UNIT_TEST(DistributedTxCommit) {
+    Y_UNIT_TEST_FLAG(DistributedTxCommit, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -394,7 +394,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        });
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
 
         UNIT_ASSERT(result.Timeout);
         UNIT_ASSERT_VALUES_EQUAL(count, expected);
@@ -456,7 +456,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 4));
     }
 
-    Y_UNIT_TEST(DistributedTxCommit_CheckSessionResetAfterCommit) {
+    Y_UNIT_TEST_FLAG(DistributedTxCommit_CheckSessionResetAfterCommit, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        });
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
 
         UNIT_ASSERT_VALUES_EQUAL_C(1, counters["message-0-1"], "Message must be read 1 times because reset commit to offset 3, but 0 message has been read " << counters["message-0-1"] << " times") ;
         UNIT_ASSERT_VALUES_EQUAL_C(2, counters["message-0-2"], "Message must be read 2 times because reset commit to offset 1, but 1 message has been read " << counters["message-0-2"] << " times") ;
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
     }
 
-    Y_UNIT_TEST(DistributedTxCommit_CheckOffsetCommitForDifferentCases) {
+    Y_UNIT_TEST_FLAG(DistributedTxCommit_CheckOffsetCommitForDifferentCases, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -555,10 +555,10 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        });
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
     }
 
-    Y_UNIT_TEST(DistributedTxCommit_Flat_CheckOffsetCommitForDifferentCases) {
+    Y_UNIT_TEST_FLAG(DistributedTxCommit_Flat_CheckOffsetCommitForDifferentCases, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareFlatTopic(setup);
 
@@ -615,10 +615,10 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        });
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
     }
 
-    Y_UNIT_TEST(DistributedTxCommit_LongReadSession) {
+    Y_UNIT_TEST_FLAG(DistributedTxCommit_LongReadSession, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -627,7 +627,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
             messages.push_back(x);
             return true;
-        });
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
 
         {
             Cerr << ">>>>> Alter topic" << Endl << Flush;
@@ -660,7 +660,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         result.Reader->Close();
     }
 
-    Y_UNIT_TEST(CommitMessages_Continue_WithoutAutoPartitioningSupport) {
+    Y_UNIT_TEST_FLAG(CommitMessages_Continue, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        }, std::nullopt, TDuration::Seconds(5), false);
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
 
         //UNIT_ASSERT(!result.Timeout);
         UNIT_ASSERT_VALUES_EQUAL(count, expected);
@@ -704,7 +704,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         UNIT_ASSERT_VALUES_EQUAL(4 + expected - other, GetCommittedOffset(setup, 2));
     }
 
-    Y_UNIT_TEST(CommitMessages_ReloadPQRB) {
+    Y_UNIT_TEST_FLAG(CommitMessages_ReloadPQRB, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -743,7 +743,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        }, std::nullopt, TDuration::Seconds(30));
+        }, std::nullopt, TDuration::Seconds(10), autoPartitioningSupport);
 
         UNIT_ASSERT(result.Timeout);
 

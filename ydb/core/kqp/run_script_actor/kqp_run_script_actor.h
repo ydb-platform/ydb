@@ -1,15 +1,22 @@
 #pragma once
 
-#include <ydb/core/kqp/counters/kqp_counters.h>
-
-#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/counters/kqp_counters.h>
+// #include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 
 namespace NKikimrConfig {
-    class TQueryServiceConfig;
-}
+
+class TQueryServiceConfig;
+
+} // namespace NKikimrConfig
+
+namespace NYql::NPq::NProto {
+
+class StreamingDisposition;
+
+} // namespace NYql::NPq::NProto
 
 namespace NKikimr::NKqp {
 
@@ -27,6 +34,7 @@ struct TKqpRunScriptActorSettings {
     TString CheckpointId;
     TString StreamingQueryPath;
     TString CustomerSuppliedId;
+    std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
 };
 
 NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig);

@@ -1,51 +1,46 @@
 #pragma once
+
 #include "request_features.h"
+
 #include <ydb/library/accessor/accessor.h>
+
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 #include <util/generic/string.h>
 #include <util/generic/typetraits.h>
-#include <map>
-#include <optional>
 
 namespace NYql {
 
 namespace NObjectOptionsParsing {
+
 Y_HAS_MEMBER(ExistingOk); // for create
 Y_HAS_MEMBER(MissingOk); // for alter, drop
 Y_HAS_MEMBER(ReplaceIfExists); // for create
 Y_HAS_MEMBER(ResetFeatures); // for alter
+
 } // namespace NObjectOptionsParsing
 
 class TObjectSettingsImpl {
 public:
-    using TFeaturesExtractor = NYql::TFeaturesExtractor;
+    using TFeaturesExtractor = TFeaturesExtractor;
+
 private:
-    using TFeatures = THashMap<TString, TString>;
     using TResetFeatures = std::unordered_set<TString>;
     YDB_READONLY_DEF(TString, TypeId);
     YDB_READONLY_DEF(TString, ObjectId);
     YDB_READONLY_DEF(bool, ExistingOk); // for create
     YDB_READONLY_DEF(bool, MissingOk); // for alter, drop
     YDB_READONLY_DEF(bool, ReplaceIfExists); // for create
-    TFeatures Features;
+    TFeaturesExtractor::TFeatures Features;
     TResetFeatures ResetFeatures;
     std::shared_ptr<TFeaturesExtractor> FeaturesExtractor;
+
 public:
     TObjectSettingsImpl() = default;
 
-    TObjectSettingsImpl(const TString& typeId, const TString& objectId, const TFeatures& features, const TResetFeatures& resetFeatures = {})
-        : TypeId(typeId)
-        , ObjectId(objectId)
-        , Features(features)
-        , ResetFeatures(resetFeatures)
-        , FeaturesExtractor(std::make_shared<TFeaturesExtractor>(Features, ResetFeatures))
-        {}
+    TObjectSettingsImpl(const TString& typeId, const TString& objectId, const THashMap<TString, TString>& features, const TResetFeatures& resetFeatures = {});
 
-    TFeaturesExtractor& GetFeaturesExtractor() const {
-        Y_ABORT_UNLESS(!!FeaturesExtractor);
-        return *FeaturesExtractor;
-    }
+    TFeaturesExtractor& GetFeaturesExtractor() const;
 
     template <class TKiObject>
     bool DeserializeFromKi(const TKiObject& data) {
@@ -62,28 +57,18 @@ public:
         }
         if constexpr (NObjectOptionsParsing::THasResetFeatures<TKiObject>::value) {
             for (auto&& i : data.ResetFeatures()) {
-                if (auto maybeAtom = i.template Maybe<NYql::NNodes::TCoAtom>()) {
+                if (auto maybeAtom = i.template Maybe<NNodes::TCoAtom>()) {
                     ResetFeatures.emplace(maybeAtom.Cast().StringValue());
                 }
             }
         }
-        for (auto&& i : data.Features()) {
-            if (auto maybeAtom = i.template Maybe<NYql::NNodes::TCoAtom>()) {
-                Features.emplace(maybeAtom.Cast().StringValue(), "");
-            } else if (auto maybeTuple = i.template Maybe<NNodes::TCoNameValueTuple>()) {
-                NNodes::TCoNameValueTuple tuple = maybeTuple.Cast();
-                if (auto maybeAtom = tuple.Value().template Maybe<NNodes::TCoAtom>()) {
-                    Features.emplace(tuple.Name().Value(), maybeAtom.Cast().Value());
-                } else if (auto maybeInt = tuple.Value().template Maybe<NNodes::TCoIntegralCtor>()) {
-                    Features.emplace(tuple.Name().Value(), maybeInt.Cast().Literal().Cast<NNodes::TCoAtom>().Value());
-                } else if (auto maybeBool = tuple.Value().template Maybe<NNodes::TCoBool>()) {
-                    Features.emplace(tuple.Name().Value(), maybeBool.Cast().Literal().Cast<NNodes::TCoAtom>().Value());
-                }
-            }
-        }
+        DeserializeFeatures(data.Features(), Features);
         FeaturesExtractor = std::make_shared<TFeaturesExtractor>(Features, ResetFeatures);
         return true;
     }
+
+private:
+    static void DeserializeFeatures(const NNodes::TCoNameValueTupleList& features, TFeaturesExtractor::TFeatures& result);
 };
 
 using TCreateObjectSettings = TObjectSettingsImpl;
@@ -91,4 +76,4 @@ using TUpsertObjectSettings = TObjectSettingsImpl;
 using TAlterObjectSettings = TObjectSettingsImpl;
 using TDropObjectSettings = TObjectSettingsImpl;
 
-}
+} // namespace NYql

@@ -5,7 +5,10 @@
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/services/metadata/service.h>
+
+#include <library/cpp/protobuf/interop/cast.h>
 
 namespace NKikimr::NKqp {
 
@@ -31,6 +34,64 @@ struct TFeatureFlagExtractor : public IFeatureFlagExtractor {
     }
 };
 
+TYqlConclusion<std::optional<NYql::NPq::NProto::StreamingDisposition>> ParseStreamingDisposition(NYql::TFeaturesExtractor& featuresExtractor) {
+    auto value = featuresExtractor.ExtractNested(TStreamingQueryConfig::TProperties::StreamingDisposition);
+    if (!value) {
+        return std::nullopt;
+    }
+
+    NYql::NPq::NProto::StreamingDisposition result;
+
+    if (std::holds_alternative<TString>(*value)) {
+        const auto& str = to_lower(std::get<TString>(*value));
+        if (str == "oldest") {
+            result.mutable_oldest();
+        } else if (str == "fresh") {
+            result.mutable_fresh();
+        } else if (str == "from_checkpoint") {
+            result.mutable_from_last_checkpoint()->set_force(false);
+        } else if (str == "from_checkpoint_force") {
+            result.mutable_from_last_checkpoint()->set_force(true);
+        } else {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: " << str);
+        }
+
+        return result;
+    }
+
+    auto streamingDispositionExtractor = std::get<NYql::TFeaturesExtractor>(std::move(*value));
+
+    const auto& fromTime = streamingDispositionExtractor.Extract(TStreamingQueryConfig::TProperties::StreamingDispositionFromTime);
+    const auto& timeAgo = streamingDispositionExtractor.Extract(TStreamingQueryConfig::TProperties::StreamingDispositionTimeAgo);
+    if (fromTime && timeAgo) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "Invalid value for streaming_disposition: from_time and time_ago are mutually exclusive");
+    }
+
+    if (fromTime) {
+        TInstant timestamp;
+        if (!TInstant::TryParseIso8601(*fromTime, timestamp)) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: from_time is not a valid ISO 8601 timestamp: " << *fromTime);
+        }
+
+        *result.mutable_from_time()->mutable_timestamp() = NProtoInterop::CastToProto(timestamp);
+    } else if (timeAgo) {
+        auto duration = NMiniKQL::ValueFromString(NYql::NUdf::EDataSlot::Interval, *timeAgo);
+        if (!duration) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid value for streaming_disposition: time_ago is not a valid ISO 8601 duration: " << *timeAgo);
+        }
+
+        *result.mutable_time_ago()->mutable_duration() = NProtoInterop::CastToProto(TDuration::MicroSeconds(duration.Get<ui64>()));
+    }
+
+    if (!streamingDispositionExtractor.IsFinished()) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Unknown streaming_disposition property: " << streamingDispositionExtractor.GetRemainedParamsString());
+    }
+
+    Y_VALIDATE(result.GetDispositionCase() != NYql::NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET, "Failed to parse streamin disposition");
+
+    return result;
+}
+
 [[nodiscard]] TYqlConclusionStatus FillStreamingQueryDesc(NKikimrSchemeOp::TStreamingQueryDescription& streamingQueryDesc, const TString& name, const NYql::TObjectSettingsImpl& settings) {
     streamingQueryDesc.SetName(name);
 
@@ -49,6 +110,15 @@ struct TFeatureFlagExtractor : public IFeatureFlagExtractor {
                 return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Duplicate property " << property);
             }
         }
+    }
+
+    auto streamingDispositionStatus = ParseStreamingDisposition(featuresExtractor);
+    if (streamingDispositionStatus.IsFail()) {
+        return streamingDispositionStatus;
+    }
+
+    if (const auto streamingDisposition = streamingDispositionStatus.DetachResult()) {
+        properties.emplace(TStreamingQueryConfig::TProperties::StreamingDisposition, streamingDisposition->SerializeAsString());
     }
 
     if (!featuresExtractor.IsFinished()) {

@@ -21,6 +21,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 #include <fmt/format.h>
 
@@ -1517,6 +1518,7 @@ public:
         NKikimrKqp::TStreamingQueryState InitialState;
         TPathId QueryPathId;
         ui64 QueryTextRevision = 0;
+        std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     };
 
     TStartStreamingQueryTableActor(const TExternalContext& context, const TString& queryPath, const TSettings& settings)
@@ -1748,6 +1750,7 @@ private:
         ev->CheckpointId = State.GetCheckpointId();
         ev->StreamingQueryPath = QueryPath;
         ev->CustomerSuppliedId = State.GetCurrentExecutionId();
+        ev->StreamingDisposition = Settings.StreamingDisposition;
 
         if (const auto statsPeriod = AppData()->QueryServiceConfig.GetProgressStatsPeriodMs()) {
             ev->ProgressStatsPeriod = TDuration::MilliSeconds(statsPeriod);
@@ -2114,6 +2117,7 @@ private:
             .InitialState = State,
             .QueryPathId = SchemeInfo.PathId,
             .QueryTextRevision = QuerySettings.QueryTextRevision,
+            .StreamingDisposition = QuerySettings.StreamingDisposition,
         }));
         LOG_D("Start TStartStreamingQueryTableActor " << startActorId);
     }
@@ -2347,9 +2351,17 @@ template <typename TDerived>
 class TRequestHandlerWithSync : public TRequestHandlerBase<TDerived> {
     using TBase = TRequestHandlerBase<TDerived>;
 
+    static NYql::NPq::NProto::StreamingDisposition GetDefaultStreamingDisposition() {
+        NYql::NPq::NProto::StreamingDisposition result;
+        result.mutable_from_last_checkpoint()->set_force(true);
+        return result;
+    }
+
 public:
     using TBase::LogPrefix;
     using TBase::TBase;
+
+    static inline const TString DefaultStreamingDisposition = GetDefaultStreamingDisposition().SerializeAsString();
 
     STFUNC(StateFuncSync) {
         switch (ev->GetTypeRewrite()) {
@@ -2523,6 +2535,7 @@ private:
         CHECK_STATUS(validator.SaveRequired(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS(validator.SaveDefault(EName::Run, "true", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, NResourcePool::DEFAULT_POOL_ID));
+        CHECK_STATUS(validator.SaveDefault(EName::StreamingDisposition, DefaultStreamingDisposition));
         CHECK_STATUS(validator.Save(
             EName::QueryTextRevision,
             ToString(SchemeInfo ? TStreamingQuerySettings().FromProto(SchemeInfo->Properties).QueryTextRevision + 1 : 1)
@@ -2629,6 +2642,7 @@ private:
         TPropertyValidator validator(*SchemeTx.MutableCreateStreamingQuery()->MutableProperties());
         CHECK_STATUS(validator.SaveDefault(EName::Run, previousSettings.Run ? "true" : "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, previousSettings.ResourcePool));
+        CHECK_STATUS(validator.SaveDefault(EName::StreamingDisposition, DefaultStreamingDisposition));
         CHECK_STATUS_RET(force, validator.ExtractDefault(EName::Force, "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS_RET(queryText, validator.ExtractOptional(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
 

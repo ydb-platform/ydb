@@ -665,10 +665,10 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         PrepareAutopartitionedTopic(setup);
 
         auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 3);
-        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "The consumer has just started reading the inactive partition and he can commit");
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
 
         status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 2, 1);
-        UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "A consumer who has not read to the end can commit messages forward.");
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
 
         auto count = 0;
         const auto expected = 25;
@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        }, std::nullopt, TDuration::Seconds(30));
+        });
 
         //UNIT_ASSERT(!result.Timeout);
         UNIT_ASSERT_VALUES_EQUAL(count, expected);
@@ -701,6 +701,49 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             + GetCommittedOffset(setup, 4);
 
         UNIT_ASSERT_VALUES_EQUAL(4 + expected - other, GetCommittedOffset(setup, 2));
+    }
+
+    Y_UNIT_TEST(CommitMessages_ReloadPQRB) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedTopic(setup);
+
+        auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 3);
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
+
+        status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 2, 1);
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
+
+        bool reloaded = false;
+        auto count = 0;
+
+        auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+            auto& messages = x.GetMessages();
+            for (size_t i = 0u; i < messages.size(); ++i) {
+                ++count;
+
+                setup.Write(TStringBuilder() << "message-new-" << count, 2);
+
+                auto& message = messages[i];
+                Cerr << "SESSION EVENT read message: " << count << " from partition: " << message.GetPartitionSession()->GetPartitionId() << Endl << Flush;
+                message.Commit();
+            }
+
+            if (!reloaded && x.GetPartitionSession()->GetPartitionId() == 2) {
+                reloaded = true;
+                ReloadPQRBTablet(setup.GetRuntime(), TString{setup.GetDatabase()},
+                    TStringBuilder() << setup.GetDatabase() << "/" << TEST_TOPIC);
+            }
+
+            return true;
+        }, std::nullopt, TDuration::Seconds(30));
+
+        UNIT_ASSERT(result.Timeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 1));
+        UNIT_ASSERT_LE(3, GetCommittedOffset(setup, 2));
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 3));
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 4));
     }
 
 }

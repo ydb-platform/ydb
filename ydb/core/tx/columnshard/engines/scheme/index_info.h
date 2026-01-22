@@ -227,7 +227,9 @@ public:
     }
 
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
-        return *ColumnFeatures[GetColumnIndexVerified(columnId)];
+        auto index = GetColumnIndexVerified(columnId);
+        AFL_VERIFY(index < ColumnFeatures.size())("column_id", columnId)("index", index)("size", ColumnFeatures.size());
+        return *ColumnFeatures[index];
     }
 
     const std::shared_ptr<TColumnFeatures>& GetColumnFeaturesOptional(const ui32 columnId) const {

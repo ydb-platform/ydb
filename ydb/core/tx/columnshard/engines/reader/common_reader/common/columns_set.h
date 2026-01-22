@@ -94,6 +94,7 @@ public:
     bool operator!() const {
         return IsEmpty();
     }
+
     ui32 GetColumnsCount() const {
         return ColumnIds.size();
     }
@@ -184,7 +185,21 @@ public:
         : TBase(columnIds)
         , FullReadSchema(fullReadSchema) {
         AFL_VERIFY(!!FullReadSchema);
-        Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
+        arrow::FieldVector fields;
+        std::set<ui32> validColumnIds;
+        for (auto&& id : ColumnIds) {
+            auto f = FullReadSchema->GetFieldByColumnIdOptional(id);
+            if (f) {
+                fields.emplace_back(f);
+                validColumnIds.emplace(id);
+            } else {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "columns_set_missing_column")("column_id", id)
+                    ("full_schema", FullReadSchema->DebugString());
+            }
+        }
+        ColumnIds.swap(validColumnIds);
+        Schema = std::make_shared<arrow::Schema>(fields);
+
         Rebuild();
     }
 
@@ -192,7 +207,21 @@ public:
         : TBase(columnIds)
         , FullReadSchema(fullReadSchema) {
         AFL_VERIFY(!!FullReadSchema);
-        Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
+        arrow::FieldVector fields;
+        std::set<ui32> validColumnIds;
+        for (auto&& id : ColumnIds) {
+            auto f = FullReadSchema->GetFieldByColumnIdOptional(id);
+            if (f) {
+                fields.emplace_back(f);
+                validColumnIds.emplace(id);
+            } else {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "columns_set_missing_column")("column_id", id)
+                    ("full_schema", FullReadSchema->DebugString());
+            }
+        }
+        ColumnIds.swap(validColumnIds);
+        Schema = std::make_shared<arrow::Schema>(fields);
+
         Rebuild();
     }
 

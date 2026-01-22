@@ -175,7 +175,11 @@ std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 colu
 
 std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldVerified(const ui32 columnId) const {
     auto result = GetColumnFieldOptional(columnId);
-    AFL_VERIFY(!!result)("column_id", columnId);
+    if (!result) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("column_id", columnId)("event", "column_not_found_race_condition");
+        return nullptr;
+    }
+
     return result;
 }
 
@@ -183,8 +187,15 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>
     AFL_VERIFY(columnIds.size());
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : columnIds) {
-        fields.emplace_back(GetColumnFieldVerified(i));
+        auto field = GetColumnFieldVerified(i);
+        if (!field) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("column_id", i)("event", "failed_to_get_column_field");
+            return nullptr;
+        }
+
+        fields.emplace_back(field);
     }
+
     return std::make_shared<arrow::Schema>(fields);
 }
 
@@ -693,7 +704,11 @@ TConclusion<std::shared_ptr<arrow::Array>> TIndexInfo::BuildDefaultColumn(const 
 
 ui32 TIndexInfo::GetColumnIndexVerified(const ui32 id) const {
     auto result = GetColumnIndexOptional(id);
-    AFL_VERIFY(result)("id", id)("indexes", JoinSeq(",", SchemaColumnIdsWithSpecials));
+    if (!result) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("id", id)("indexes", JoinSeq(",", SchemaColumnIdsWithSpecials))("event", "column_index_not_found_race_condition");
+        return 0;
+    }
+
     return *result;
 }
 

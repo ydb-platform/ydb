@@ -90,22 +90,33 @@ void TTieringActualizer::AddPortionImpl(const TPortionInfo& portion, const TInst
     if (!info) {
         return;
     }
-    AFL_VERIFY(PortionIdByWaitDuration[info->GetAddress()].AddPortion(*info, portion.GetPortionId(), now));
+
+    if (!PortionIdByWaitDuration[info->GetAddress()].AddPortion(*info, portion.GetPortionId(), now)) {
+        return;
+    }
+
     auto address = info->GetAddress();
     TFindActualizationInfo findId(std::move(address), info->GetWaitInstant(now));
-    AFL_VERIFY(PortionsInfo.emplace(portion.GetPortionId(), std::move(findId)).second);
+    if (!PortionsInfo.emplace(portion.GetPortionId(), std::move(findId)).second) {
+        return;
+    }
 }
 
 void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExternalContext& addContext) {
-    AFL_VERIFY(PathId == portion.GetPathId());
+    if (PathId != portion.GetPathId()) {
+        return;
+    }
+
     if (!addContext.GetPortionExclusiveGuarantee()) {
         if (PortionsInfo.contains(portion.GetPortionId())) {
             return;
         }
     } else {
-        AFL_VERIFY(!PortionsInfo.contains(portion.GetPortionId()))("id", portion.GetPortionId())("path_id", portion.GetPathId());
-        AFL_VERIFY(!NewPortionIds.contains(portion.GetPortionId()))("id", portion.GetPortionId())("path_id", portion.GetPathId());
+        if (PortionsInfo.contains(portion.GetPortionId()) || NewPortionIds.contains(portion.GetPortionId())) {
+            return;
+        }
     }
+
     if (!Tiering || MaxByPortionId.contains(portion.GetPortionId())) {
         AddPortionImpl(portion, addContext.GetNow());
     } else {
@@ -114,7 +125,7 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
             NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
             const auto lastPk = portion.IndexKeyEnd();
             const auto max = lastPk.GetScalar(0);
-            AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
+            MaxByPortionId.emplace(portion.GetPortionId(), max);
             AddPortionImpl(portion, addContext.GetNow());
         } else {
             NewPortionIds.emplace(portion.GetPortionId());
@@ -126,9 +137,11 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
     if (!NewPortionIds.erase(accessor.GetPortionInfo().GetPortionId())) {
         return;
     }
+
     if (NewPortionIds.empty()) {
         NYDBTest::TControllers::GetColumnShardController()->OnTieringMetadataActualized();
     }
+
     auto& portion = accessor.GetPortionInfo();
     if (Tiering) {
         std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
@@ -138,11 +151,16 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
             const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
             if (!data.empty()) {
-                max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+                auto field = portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId);
+                if (field) {
+                    max = indexMeta->GetMaxScalarVerified(data, field->type());
+                }
             }
         }
-        AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
+
+        MaxByPortionId.emplace(portion.GetPortionId(), max);
     }
+
     AddPortionImpl(portion, context.GetNow());
 }
 
@@ -153,11 +171,16 @@ void TTieringActualizer::DoRemovePortion(const ui64 portionId) {
     if (it == PortionsInfo.end()) {
         return;
     }
+
     auto itAddress = PortionIdByWaitDuration.find(it->second.GetRWAddress());
-    AFL_VERIFY(itAddress != PortionIdByWaitDuration.end());
+    if (itAddress == PortionIdByWaitDuration.end()) {
+        return;
+    }
+
     if (itAddress->second.RemovePortion(it->second, portionId)) {
         PortionIdByWaitDuration.erase(itAddress);
     }
+
     PortionsInfo.erase(it);
 }
 
@@ -199,7 +222,7 @@ void TTieringActualizer::DoExtractTasks(
                     case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:
                         break;
                     case TTieringProcessContext::EAddPortionResult::SUCCESS:
-                        AFL_VERIFY(portionIds.emplace(portion->GetPortionId()).second);
+                        portionIds.emplace(portion->GetPortionId());
                         break;
                 }
                 if (limitEnriched) {

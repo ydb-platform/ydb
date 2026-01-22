@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/providers/pq/gateway/clients/external/yql_pq_federated_topic_client.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/external/yql_pq_topic_client.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -29,6 +30,7 @@ public:
         , CmConnections(services.CmConnections)
         , YdbDriver(services.YdbDriver)
         , CommonTopicClientSettings(services.CommonTopicClientSettings)
+        , LocalTopicClientFactory(services.LocalTopicClientFactory)
     {
         UpdateClusterConfigs(Config);
     }
@@ -45,7 +47,8 @@ public:
                 CmConnections,
                 YdbDriver,
                 ClusterConfigs,
-                CredentialsFactory
+                CredentialsFactory,
+                LocalTopicClientFactory
             ));
             if (!isNewSession) {
                 YQL_LOG_CTX_THROW yexception() << "Session already exists: " << sessionId;
@@ -98,10 +101,17 @@ public:
     }
 
     ITopicClient::TPtr GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) final {
+        const bool hasEndpoint = HasEndpoint<TTopicClientSettings>(driver, settings);
+        if (!hasEndpoint && LocalTopicClientFactory) {
+            return LocalTopicClientFactory->CreateTopicClient(settings);
+        }
+
+        Y_VALIDATE(hasEndpoint, "Missing endpoint value for topic client and local topics are not allowed");
         return CreateExternalTopicClient(driver, settings);
     }
 
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings) final {
+        Y_VALIDATE(HasEndpoint<TFederatedTopicClientSettings>(driver, settings), "Missing endpoint value for federated topic client");
         return CreateExternalFederatedTopicClient(driver, settings);
     }
 
@@ -134,6 +144,14 @@ public:
     }
 
 private:
+    template <typename TSettings>
+    static bool HasEndpoint(const TDriver& driver, const TCommonClientSettingsBase<TSettings>& settings) {
+        if (!driver.GetConfig().GetEndpoint().empty()) {
+            return true;
+        }
+        return !settings.DiscoveryEndpoint_.value_or("").empty();
+    }
+
     TPqSession::TPtr GetExistingSession(const TString& sessionId) const {
         with_lock (Mutex) {
             auto sessionIt = Sessions.find(sessionId);
@@ -151,6 +169,7 @@ private:
     const ::NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     const TDriver YdbDriver;
     const TMaybe<TTopicClientSettings> CommonTopicClientSettings;
+    const IPqLocalClientFactory::TPtr LocalTopicClientFactory;
     mutable TMutex Mutex;
     TPqClusterConfigsMapPtr ClusterConfigs;
     THashMap<TString, TPqSession::TPtr> Sessions;

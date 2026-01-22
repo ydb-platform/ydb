@@ -307,7 +307,7 @@ void TestLarge(size_t maxBatchSize, size_t rowsPerShard) {
 
 Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     Y_UNIT_TEST(SimpleOnePartition) {
-        for (size_t size = 10; size <= 10; size *= 10) {
+        for (size_t size = 1; size <= 1000; size *= 10) {
             TestSimpleOnePartition(size);
         }
     }

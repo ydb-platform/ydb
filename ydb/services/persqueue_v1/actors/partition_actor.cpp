@@ -441,23 +441,6 @@ TString GetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch) {
     return batch->producer_id();
 }
 
-void SetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString value) {
-    Y_ABORT_UNLESS(batch);
-    batch->set_source_id(std::move(value));
-}
-
-void SetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch, TString value) {
-    Y_ABORT_UNLESS(batch);
-    if (IsUtf(value)) {
-        batch->set_producer_id(std::move(value));
-    } else {
-        TString res = Base64Encode(value);
-        batch->set_producer_id(res);
-        (*batch->mutable_write_session_meta())["_encoded_producer_id"] = res;
-
-    }
-}
-
 void SetBatchExtraField(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString key, TString value) {
     Y_ABORT_UNLESS(batch);
     auto* item = batch->add_extra_fields();

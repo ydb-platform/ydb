@@ -58,6 +58,8 @@ class TTableBucketSpiller;
 #define GRACEJOIN_DEBUG NUdf::ELogLevel::Debug
 #define GRACEJOIN_TRACE NUdf::ELogLevel::Trace
 
+const ui32 PartialJoinBatchSize = 100000; // Number of tuples for one join batch
+const ui32 JoinResultsSizeLimit = 2*PartialJoinBatchSize; // Limit for number of tuple pairs returned in one go (not a *hard* limit, it can be overshoot by approximately right-side size)
 const ui64 BitsForNumberOfBuckets = 6; // 2^6 = 64
 const ui64 BucketsMask = (0x00000001 << BitsForNumberOfBuckets) - 1;
 const ui64 NumberOfBuckets = (0x00000001 << BitsForNumberOfBuckets); // Number of hashed keys buckets to distribute incoming tables tuples
@@ -199,18 +201,15 @@ struct KeysHashTable {
 };
 
 struct TTableBucket {
-    std::vector<ui64, TMKQLAllocator<ui64>> KeyIntVals;                // Vector to store table key values
-    std::vector<ui64, TMKQLAllocator<ui64>> DataIntVals;               // Vector to store data values in bucket
-    std::vector<char, TMKQLAllocator<char>> StringsValues;             // Vector to store data strings values
-    std::vector<ui32, TMKQLAllocator<ui32>> StringsOffsets;            // Vector to store strings values sizes (offsets in StringsValues are calculated) for particular tuple.
-    std::vector<char, TMKQLAllocator<char>> InterfaceValues;           // Vector to store types to work through external-provided IHash, IEquate interfaces
-    std::vector<ui32, TMKQLAllocator<ui32>> InterfaceOffsets;          // Vector to store sizes of columns to work through IHash, IEquate interfaces
-    std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>> JoinIds; // Results of join operations stored as index of tuples in buckets
-                                                                       // of two tables with the same number
-    std::vector<ui32, TMKQLAllocator<ui32>> LeftIds;                   // Left-side ids missing in other table
+    std::vector<ui64, TMKQLAllocator<ui64>> KeyIntVals;       // Vector to store table key values
+    std::vector<ui64, TMKQLAllocator<ui64>> DataIntVals;      // Vector to store data values in bucket
+    std::vector<char, TMKQLAllocator<char>> StringsValues;    // Vector to store data strings values
+    std::vector<ui32, TMKQLAllocator<ui32>> StringsOffsets;   // Vector to store strings values sizes (offsets in StringsValues are calculated) for particular tuple.
+    std::vector<char, TMKQLAllocator<char>> InterfaceValues;  // Vector to store types to work through external-provided IHash, IEquate interfaces
+    std::vector<ui32, TMKQLAllocator<ui32>> InterfaceOffsets; // Vector to store sizes of columns to work through IHash, IEquate interfaces
 
-    std::vector<ui64, TMKQLAllocator<ui64>> JoinSlots; // Hashtable
-    ui64 NSlots = 0;                                   // Hashtable
+    std::vector<ui64, TMKQLAllocator<ui64>> JoinSlots;        // Hashtable
+    ui64 NSlots = 0;                                          // Hashtable
 };
 
 struct TTableBucketStats {
@@ -356,8 +355,8 @@ class TTable {
     // Current iterator index for NextJoinedData iterator
     ui64 CurrIterIndex = 0;
 
-    // Current bucket for iterators
-    ui64 CurrIterBucket = 0;
+    // Current bucket
+    ui64 CurrIterBucket = NumberOfBuckets;
 
     // True if table joined from two other tables
     bool IsTableJoined = false;
@@ -368,6 +367,12 @@ class TTable {
     // Pointers to the joined tables. Lifetime of source tables to join should be greater than joined table
     TTable* JoinTable1 = nullptr;
     TTable* JoinTable2 = nullptr;
+
+    // Results of join operations stored as index of tuples in buckets
+    // of two tables with the same number (only in result tables)
+    std::vector<JoinTuplesIds, TMKQLAllocator<JoinTuplesIds>> JoinIds;
+    // Left-side ids missing in other table (only in joined tables)
+    std::vector<ui32, TMKQLAllocator<ui32>> LeftIds;
 
     // Returns tuple data in td from bucket with id bucketNum.  Tuple id inside bucket is tupleId.
     inline void GetTupleData(ui32 bucketNum, ui32 tupleId, TupleData& td);
@@ -384,6 +389,10 @@ class TTable {
     bool HasMoreLeftTuples_ = false;  // True if join is not completed, rows from left table are coming
     bool HasMoreRightTuples_ = false; // True if join is not completed, rows from right table are coming
 
+    bool PartialJoinIncomplete_ = false;
+    ui64 ResumeOffset_ = 0;
+    ui32 ResumeIdx_ = 0;
+
     bool IsAny_ = false; // True if key duplicates need to be removed from table (any join)
 
     ui64 TuplesFound_ = 0; // Total number of matching keys found during join
@@ -398,19 +407,21 @@ public:
     // Returns value of next tuple. Returs true if there are more tuples
     bool NextTuple(TupleData& td);
 
+    // Last join was incomplete
+    bool PartialJoinIncomplete() {
+        return PartialJoinIncomplete_;
+    }
+
     bool TryToPreallocateMemoryForJoin(TTable& t1, TTable& t2, EJoinKind joinKind, bool hasMoreLeftTuples, bool hasMoreRightTuples);
 
     // Joins two tables and stores join result in table data. Tuples of joined table could be received by
     // joined table iterator.  Life time of t1, t2 should be greater than lifetime of joined table
     // hasMoreLeftTuples, hasMoreRightTuples is true if join is partial and more rows are coming.  For final batch hasMoreLeftTuples = false, hasMoreRightTuples = false
-    void Join(TTable& t1, TTable& t2, EJoinKind joinKind = EJoinKind::Inner, bool hasMoreLeftTuples = false, bool hasMoreRightTuples = false, ui32 fromBucket = 0, ui32 toBucket = NumberOfBuckets);
+    // When PartialJoinIncomplete() is true after Join finished, you should process result, ClearResults and and call Join again with same parameters.
+    void Join(ui32 bucket, TTable& t1, TTable& t2, EJoinKind joinKind = EJoinKind::Inner, bool hasMoreLeftTuples = false, bool hasMoreRightTuples = false);
 
     // Returns next jointed tuple data. Returs true if there are more tuples
-    bool NextJoinedData(TupleData& td1, TupleData& td2, ui64 bucketLimit);
-
-    bool NextJoinedData(TupleData& td1, TupleData& td2) {
-        return NextJoinedData(td1, td2, JoinTable1->TableBucketsStats.size());
-    }
+    bool NextJoinedData(TupleData& td1, TupleData& td2);
 
     // Creates buckets that support spilling.
     void InitializeBucketSpillers(ISpiller::TPtr spiller);
@@ -456,6 +467,12 @@ public:
 
     // Clears table content
     void Clear();
+
+    // Clear join results
+    void ClearResults();
+
+    // Forces release the space used for underlying results containers.
+    void ShrinkResults();
 
     // Creates new table with key columns and data columns
     TTable(NUdf::TLoggerPtr logger = nullptr, NUdf::TLogComponentId logComponent = 0,

@@ -291,7 +291,7 @@
             "Children": [
                 {"Index": 3, "Name": "ReturningColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "IsBatch", "Type": "TCoAtom"},
-                {"Index": 5, "Name": "GenerateColumnsIfInsert", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "DefaultColumns", "Type": "TCoAtomList"},
                 {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
         },

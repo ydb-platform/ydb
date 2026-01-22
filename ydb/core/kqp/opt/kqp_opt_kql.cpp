@@ -360,7 +360,7 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
         .Columns(columns.Ptr())
         .ReturningColumns(write.ReturningColumns())
         .IsBatch(ctx.NewAtom(write.Pos(), "false"))
-        .GenerateColumnsIfInsert(generateColumnsIfInsert)
+        .DefaultColumns(generateColumnsIfInsert)
         .Settings(settings)
         .Done();
 
@@ -397,7 +397,7 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
                 .Columns(columns.Ptr())
                 .ReturningColumns(write.ReturningColumns())
                 .IsBatch(ctx.NewAtom(write.Pos(), "false"))
-                .GenerateColumnsIfInsert(generateColumnsIfInsert)
+                .DefaultColumns(generateColumnsIfInsert)
                 .Settings(settings)
                 .Done();
         }
@@ -428,7 +428,7 @@ TExprBase BuildReplaceTable(const TKiWriteTable& write, const TCoAtomList& input
         .Columns(columns)
         .ReturningColumns(write.ReturningColumns())
         .IsBatch(ctx.NewAtom(write.Pos(), "false"))
-        .GenerateColumnsIfInsert<TCoAtomList>().Build()
+        .DefaultColumns<TCoAtomList>().Build()
         .Settings(settings)
         .Done();
 
@@ -713,7 +713,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
             .Add(updateColumnsList)
             .Build()
         .IsBatch(update.IsBatch())
-        .GenerateColumnsIfInsert<TCoAtomList>().Build()
+        .DefaultColumns<TCoAtomList>().Build()
         .Settings(IsConditionalUpdateSetting(false, ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
@@ -787,7 +787,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Add(updateColumnsList)
             .Build()
         .IsBatch(update.IsBatch())
-        .GenerateColumnsIfInsert<TCoAtomList>().Build()
+        .DefaultColumns<TCoAtomList>().Build()
         .Settings(IsConditionalUpdateSetting(false, ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
@@ -859,7 +859,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                     .Add(indexColumnsList)
                     .Build()
                 .IsBatch(update.IsBatch())
-                .GenerateColumnsIfInsert<TCoAtomList>().Build()
+                .DefaultColumns<TCoAtomList>().Build()
                 .Settings().Build()
                 .Done();
 

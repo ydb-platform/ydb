@@ -636,7 +636,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
             .Columns(inputColumns)
             .ReturningColumns(returningColumns.Ptr())
             .IsBatch(ctx.NewAtom(pos, "false"))
-            .GenerateColumnsIfInsert(columnsWithDefaults)
+            .DefaultColumns(columnsWithDefaults)
             .Settings(settings)
             .Done());
         return Build<TExprList>(ctx, pos)
@@ -703,7 +703,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         .Columns(inputColumns)
         .ReturningColumns(returningColumns)
         .IsBatch(ctx.NewAtom(pos, "false"))
-        .GenerateColumnsIfInsert(columnsWithDefaults)
+        .DefaultColumns(columnsWithDefaults)
         .Settings(settings)
         .Done());
 
@@ -1032,7 +1032,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                             .Columns(BuildColumnsList(docsColumns, pos, ctx))
                             .ReturningColumns<TCoAtomList>().Build()
                             .IsBatch(ctx.NewAtom(pos, "false"))
-                            .GenerateColumnsIfInsert<TCoAtomList>().Build()
+                            .DefaultColumns<TCoAtomList>().Build()
                             .Done());
                         // Remember added documents for stats
                         addedDocs = docsRows;
@@ -1060,7 +1060,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 .Input(upsertIndexRows)
                 .Columns(BuildColumnsList(indexTableColumns, pos, ctx))
                 .ReturningColumns<TCoAtomList>().Build()
-                .GenerateColumnsIfInsert<TCoAtomList>().Build()
+                .DefaultColumns<TCoAtomList>().Build()
                 .IsBatch(ctx.NewAtom(pos, "false"))
                 .Done();
 

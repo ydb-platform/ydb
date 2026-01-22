@@ -228,7 +228,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 node.Input(), node.Table(),
                 settings.AllowInconsistentWrites, useStreamWrite,
                 node.IsBatch() == "true", settings.Mode, isIndexImplTable,
-                node.GenerateColumnsIfInsert(), {}, priority, ctx);
+                node.DefaultColumns(), {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -274,7 +274,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 .IsIndexImplTable(isIndexImplTable
                     ? ctx.NewAtom(node.Pos(), "true")
                     : ctx.NewAtom(node.Pos(), "false"))
-                .DefaultColumns(node.GenerateColumnsIfInsert())
+                .DefaultColumns(node.DefaultColumns())
                 .Settings()
                     .Build()
                 .Build()

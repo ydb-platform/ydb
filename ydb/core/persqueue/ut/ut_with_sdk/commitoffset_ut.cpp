@@ -714,6 +714,8 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
 
         bool reloaded = false;
+        bool firstMessage = true;
+
         auto count = 0;
 
         auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
@@ -729,6 +731,11 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             if (!reloaded && x.GetPartitionSession()->GetPartitionId() == 2) {
+                if (firstMessage) {
+                    firstMessage = false;
+                    return true;
+                }
+
                 reloaded = true;
                 ReloadPQRBTablet(setup.GetRuntime(), TString{setup.GetDatabase()},
                     TStringBuilder() << setup.GetDatabase() << "/" << TEST_TOPIC);

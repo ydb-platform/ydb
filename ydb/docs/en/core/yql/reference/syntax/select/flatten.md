@@ -2,7 +2,7 @@
 
 ## FLATTEN BY {#flatten-by}
 
-Converts rows in the source table using vertical unpacking of [containers](../types/containers.md) of variable length (lists or dictionaries).
+Converts rows in the source table using vertical unpacking of [containers](../../types/containers.md) of variable length (lists or dictionaries).
 
 For example:
 
@@ -41,7 +41,7 @@ SELECT value, id FROM as_table($sample) FLATTEN BY (value);
 
 This conversion can be convenient in the following cases:
 
-* When it is necessary to output statistics by cells from a container column (for example, via [`GROUP BY`](group_by.md)).
+* When it is necessary to output statistics by cells from a container column (for example, via [`GROUP BY`](group-by.md)).
 
 {% if feature_join %}
 
@@ -68,7 +68,7 @@ This conversion can be convenient in the following cases:
 
 {% note info %}
 
-`FLATTEN BY` interprets [optional data types](../types/optional.md) as lists of length 0 or 1. The table rows with `NULL` are skipped, and the column type changes to a similar non-optional type.
+`FLATTEN BY` interprets [optional data types](../../types/optional.md) as lists of length 0 or 1. The table rows with `NULL` are skipped, and the column type changes to a similar non-optional type.
 
 `FLATTEN BY` makes only one conversion at a time, so use `FLATTEN LIST BY` or `FLATTEN OPTIONAL BY` on optional containers, for example, `Optional<List<String>>`.
 

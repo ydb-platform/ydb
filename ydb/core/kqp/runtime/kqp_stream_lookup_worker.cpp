@@ -1304,6 +1304,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
     }
 
     switch (settings.GetLookupStrategy()) {
+        case NKqpProto::EStreamLookupStrategy::UNSPECIFIED:  // for backward compatibility
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
         case NKqpProto::EStreamLookupStrategy::UNIQUE:
             return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory);

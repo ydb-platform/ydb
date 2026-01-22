@@ -44,7 +44,7 @@ GRANT CREATE TABLE ON my_queries TO `user@domain`
 
 ## Использование читателя {#consumer-usage}
 
-Чтобы использовать читателя необходимо предварительно его создать через [CLI](../reference/ydb-cli/topic-consumer-add) или при создании топика с помощью [CREATE TOPIC](../yql/reference/syntax/create-topic.md). Далее указать его имя в тексте запроса через `PRAGMA pq.Consumer="my_consumer"`.
+Чтобы использовать читателя необходимо предварительно его создать через [CLI](../reference/ydb-cli/topic-consumer-add) или при создании топика с помощью [CREATE TOPIC](create-topic.md). Далее указать его имя в тексте запроса через `PRAGMA pq.Consumer="my_consumer"`.
 
 ## Примеры {#examples}
 

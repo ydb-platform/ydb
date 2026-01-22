@@ -31,7 +31,7 @@ constexpr TDuration RestartDuration = TDuration::Seconds(3); // Delay before nex
 //constexpr TDuration CoordinationSessionTimeout = TDuration::Seconds(30);
 constexpr char SemaphoreName[] = "RowDispatcher";
 constexpr char DefaultCoordinationNodePath[] = ".metadata/streaming/coordination_node";
-
+constexpr TDuration SessionTimeout = TDuration::Seconds(1);
 
 using TRpcIn = Ydb::Coordination::SessionRequest;
 using TRpcOut = Ydb::Coordination::SessionResponse;
@@ -42,9 +42,7 @@ struct TEvPrivate {
     enum EEv : ui32 {
         EvBegin = TLocalRpcCtx::TRpcEvents::EvEnd,
         EvCreateNodeResult = EvBegin,
-        EvCreateSessionResult,
-        EvAcquireSemaphoreResult,
-        EvDescribeSemaphoreResult,
+        EvSelfPing,
         EvSessionStopped,
         EvTimeout,
         EvOnChangedResult,
@@ -61,7 +59,7 @@ struct TEvPrivate {
             : Status(std::move(status)) {}
     };
 
-    struct TEvSessionStopped : NActors::TEventLocal<TEvSessionStopped, EvSessionStopped> {};
+    struct TEvSelfPing : NActors::TEventLocal<TEvSelfPing, EvSelfPing> {};
     struct TEvRestart : NActors::TEventLocal<TEvRestart, EvTimeout> {};
 };
 
@@ -93,6 +91,11 @@ class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection>, pub
         Started
     };
 
+    struct TOperation {
+        TInstant SendTimestamp = TInstant::Now();
+    };
+
+
     TString CoordinationNodePath;
     TActorId ParentId;
     TActorId CoordinatorId;
@@ -121,6 +124,9 @@ class TLocalLeaderElection: public TActorBootstrapped<TLocalLeaderElection>, pub
     uint64_t SessionId = 0;
     uint64_t NextReqId = 1;
 
+    TInstant SessionLastKnownGoodTimestamp;
+    std::unordered_map<uint64_t, std::unique_ptr<TOperation>> SentRequests;
+
 public:
     TLocalLeaderElection(
         NActors::TActorId parentId,
@@ -134,7 +140,7 @@ public:
 
     void Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev);
     void Handle(TEvPrivate::TEvCreateNodeResult::TPtr& ev);
-    void Handle(TEvPrivate::TEvSessionStopped::TPtr& ev);
+    void Handle(TEvPrivate::TEvSelfPing::TPtr& ev);
     void Handle(TEvPrivate::TEvRestart::TPtr&);
     void Handle(TLocalRpcCtx::TRpcEvents::TEvActorAttached::TPtr&);
     void Handle(TLocalRpcCtx::TRpcEvents::TEvReadRequest::TPtr&);
@@ -146,7 +152,7 @@ public:
     STRICT_STFUNC_EXC(StateFunc,
         hFunc(NFq::TEvents::TEvSchemaCreated, Handle);
         hFunc(TEvPrivate::TEvCreateNodeResult, Handle);
-        hFunc(TEvPrivate::TEvSessionStopped, Handle);
+        hFunc(TEvPrivate::TEvSelfPing, Handle);
         hFunc(TEvPrivate::TEvRestart, Handle);
         cFunc(NActors::TEvents::TSystem::Poison, PassAway);
         hFunc(TLocalRpcCtx::TRpcEvents::TEvActorAttached, Handle);
@@ -190,6 +196,8 @@ private:
     void ProcessDeleteSemaphoreResult(const TRpcOut& message);
 
     NYql::TIssues AddRootIssue(const TString& message, const NYql::TIssues& issues);
+    void UpdateLastKnownGoodTimestampLocked(TInstant timestamp);
+    TOperation* FindSentRequest(uint64_t reqId) const;
 
     template <typename TRpc, typename TSettings>
     NThreading::TFuture<NKikimr::NRpcService::TLocalRpcOperationResult> DoLocalRpcRequest(typename TRpc::TRequest&& proto, const NYdb::TOperationRequestSettings<TSettings>& settings, NKikimr::NRpcService::TLocalRpcOperationRequestCreator requestCreator) {
@@ -279,10 +287,12 @@ void TLocalLeaderElection::CreateSemaphore() {
     LOG_ROW_DISPATCHER_DEBUG("Try to create semaphore");
     TRpcIn message;
     auto& inner = *message.mutable_create_semaphore();
-    inner.set_req_id(NextReqId++);
+    uint64_t reqId = NextReqId++;
+    inner.set_req_id(reqId);
     inner.set_name(SemaphoreName);
     inner.set_limit(1);
     AddSessionEvent(std::move(message));
+    SentRequests[reqId] = std::make_unique<TOperation>();
 }
 
 void TLocalLeaderElection::AcquireSemaphore() {
@@ -301,13 +311,15 @@ void TLocalLeaderElection::AcquireSemaphore() {
 
     TRpcIn message;
     auto& inner = *message.mutable_acquire_semaphore();
-    inner.set_req_id(NextReqId++);
+    uint64_t reqId = NextReqId++;
+    inner.set_req_id(reqId);
     inner.set_name(SemaphoreName);
     inner.set_count(1);
     inner.set_data(strActorId);
     inner.set_ephemeral(false);
-    inner.set_timeout_millis(1000);
+    inner.set_timeout_millis(SessionTimeout.MilliSeconds());
     AddSessionEvent(std::move(message));
+    SentRequests[reqId] = std::make_unique<TOperation>();
 }
 
 void TLocalLeaderElection::StartSession() {
@@ -342,11 +354,30 @@ void TLocalLeaderElection::PassAway() {
     TActorBootstrapped::PassAway();
 }
 
-void TLocalLeaderElection::Handle(TEvPrivate::TEvSessionStopped::TPtr&) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvSessionStopped");
-    PendingAcquire = false;
-    PendingDescribe = false;
-    ResetState();
+void TLocalLeaderElection::Handle(TEvPrivate::TEvSelfPing::TPtr&) {
+    LOG_ROW_DISPATCHER_DEBUG("TEvSelfPing");
+    if (SessionClosed) {
+        return;
+    }
+
+    TInstant nextTimerTimestamp;
+    auto now = TInstant::Now();
+    auto half = SessionLastKnownGoodTimestamp + SessionTimeout / 2;
+    if (now < half) {
+        nextTimerTimestamp = SessionLastKnownGoodTimestamp + SessionTimeout * (2.0 / 3.0);
+    } else {
+        TRpcIn message;
+        auto& inner = *message.mutable_ping();
+        uint64_t reqId = NextReqId++;
+        inner.set_opaque(reqId);
+        AddSessionEvent(std::move(message));
+        SentRequests[reqId] = std::make_unique<TOperation>();
+
+        auto expectedSessionDeadline = SessionLastKnownGoodTimestamp + SessionTimeout;
+        auto minimalWaitDeadline = now + SessionTimeout / 4;
+        nextTimerTimestamp = Max(expectedSessionDeadline, minimalWaitDeadline);
+    }
+    Schedule(nextTimerTimestamp - TInstant::Now(), new TEvPrivate::TEvSelfPing());
 }
 
 void TLocalLeaderElection::SetTimeout() {
@@ -372,12 +403,14 @@ void TLocalLeaderElection::DescribeSemaphore() {
 
     TRpcIn message;
     auto& inner = *message.mutable_describe_semaphore();
-    inner.set_req_id(NextReqId++);
+    uint64_t reqId = NextReqId++;
+    inner.set_req_id(reqId);
     inner.set_name(SemaphoreName);
     inner.set_include_owners(true);
     inner.set_watch_data(true);
     inner.set_watch_owners(true);
     AddSessionEvent(std::move(message));
+    SentRequests[reqId] = std::make_unique<TOperation>();
 }
 
 void TLocalLeaderElection::HandleException(const std::exception& e) {
@@ -521,6 +554,7 @@ void TLocalLeaderElection::SendStartSession() {
     auto& start = *message.mutable_session_start();
     start.set_seq_no(0);
     start.set_path(CoordinationNodePath);
+    start.set_timeout_millis(SessionTimeout.MilliSeconds());
     AddSessionEvent(std::move(message));
 }
 
@@ -647,14 +681,17 @@ void TLocalLeaderElection::ProcessPing(const TRpcOut& message) {
     LOG_ROW_DISPATCHER_DEBUG("Received Ping, send Pong");
     const auto& source = message.ping();
     TRpcIn in;
-    in.mutable_pong()->set_opaque(source.opaque());;
+    in.mutable_pong()->set_opaque(source.opaque());
     AddSessionEvent(std::move(in));
 }
 
-void TLocalLeaderElection::ProcessPong(const TRpcOut& /*message*/) {
+void TLocalLeaderElection::ProcessPong(const TRpcOut& message) {
     LOG_ROW_DISPATCHER_DEBUG("Received Pong");
-    //const auto& source = message.pong();
-    // TODO
+    const auto& source = message.pong();
+    const uint64_t reqId = source.opaque();
+    auto* op = FindSentRequest(reqId);
+    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    SentRequests.erase(reqId);
 }
 
 void TLocalLeaderElection::ProcessFailure(const TRpcOut& message) {
@@ -672,6 +709,8 @@ void TLocalLeaderElection::ProcessSessionStarted(const TRpcOut& message) {
     LOG_ROW_DISPATCHER_DEBUG("Received SessionStarted, session successfully created");
     const auto& source = message.session_started();
     SessionId = source.session_id();
+
+    Schedule(SessionTimeout * (2.0 / 3.0), new TEvPrivate::TEvSelfPing());
     ProcessState();
 }
 
@@ -693,6 +732,10 @@ void TLocalLeaderElection::ProcessCreateSemaphoreResult(const TRpcOut& message) 
         ResetState();
         return;
     }
+    const uint64_t reqId = source.req_id();
+    auto* op = FindSentRequest(reqId);
+    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    SentRequests.erase(reqId);
     SemaphoreCreated = true;
     LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully created");
     ProcessState();
@@ -713,6 +756,10 @@ void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message)
         ResetState();
         return;
     }
+    uint64_t reqId = source.req_id();
+    auto* op = FindSentRequest(reqId);
+    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    SentRequests.erase(reqId);
     LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully acquired " << source.acquired());
 }
 
@@ -722,16 +769,19 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message
     NYdb::NIssue::TIssues issues;
     NYdb::NIssue::IssuesFromMessage(source.issues(), issues);
     auto status = NYdb::TStatus(static_cast<NYdb::EStatus>(source.status()), std::move(issues));
-    
-    //Send(SelfId(), new TEvPrivate::TEvDescribeSemaphoreResult(NYdb::NCoordination::TDescribeSemaphoreResult(status, source.semaphore_description())));
 
     PendingDescribe = false;
-   // auto result = ev->Get()->Result;
     if (!status.IsSuccess()) {
         LOG_ROW_DISPATCHER_ERROR("Semaphore describe fail, " << status.GetIssues());
         Metrics.Errors->Inc();
         ResetState();
         return;
+    }
+    const uint64_t reqId = source.req_id();
+    auto* op = FindSentRequest(reqId);
+    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    if (!source.watch_added()) {
+        SentRequests.erase(reqId);
     }
 
     const NYdb::NCoordination::TSemaphoreDescription& description = source.semaphore_description();
@@ -759,9 +809,16 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message
     LeaderActorId = id;
 }
 
-void TLocalLeaderElection::ProcessDescribeSemaphoreChanged(const TRpcOut& /*message*/) {
+void TLocalLeaderElection::ProcessDescribeSemaphoreChanged(const TRpcOut& message) {
     LOG_ROW_DISPATCHER_DEBUG("Received DescribeSemaphoreChanged");
     PendingDescribe = false;
+
+    const auto& source = message.describe_semaphore_changed();
+    const uint64_t reqId = source.req_id();
+    auto* op = FindSentRequest(reqId);
+    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    SentRequests.erase(reqId);
+
     ProcessState();
 }
 
@@ -773,14 +830,37 @@ void TLocalLeaderElection::ProcessAcquireSemaphorePending(const TRpcOut& /*messa
     LOG_ROW_DISPATCHER_DEBUG("Received AcquireSemaphorePending");
 }
 
-void TLocalLeaderElection::ProcessUpdateSemaphoreResult(const TRpcOut& /*message*/) {
+void TLocalLeaderElection::ProcessUpdateSemaphoreResult(const TRpcOut& message) {
     LOG_ROW_DISPATCHER_DEBUG("Received UpdateSemaphoreResult");
+
+    const auto& source = message.update_semaphore_result();
+    const uint64_t reqId = source.req_id();
+    auto* op = FindSentRequest(reqId);
+    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    SentRequests.erase(reqId);
 }
 
-void TLocalLeaderElection::ProcessDeleteSemaphoreResult(const TRpcOut& /*message*/) {
+void TLocalLeaderElection::ProcessDeleteSemaphoreResult(const TRpcOut& message) {
     LOG_ROW_DISPATCHER_DEBUG("Received DeleteSemaphoreResult");
+    const auto& source = message.delete_semaphore_result();
+    const uint64_t reqId = source.req_id();
+    auto* op = FindSentRequest(reqId);
+    UpdateLastKnownGoodTimestampLocked(op->SendTimestamp);
+    SentRequests.erase(reqId);
 }
 
+void TLocalLeaderElection::UpdateLastKnownGoodTimestampLocked(TInstant timestamp) {
+    SessionLastKnownGoodTimestamp = Max(SessionLastKnownGoodTimestamp, timestamp);
+    Cerr << "" << "UpdateLastKnownGoodTimestampLocked timestamp " << timestamp  << " new " << SessionLastKnownGoodTimestamp << Endl;
+}
+
+TLocalLeaderElection::TOperation* TLocalLeaderElection::FindSentRequest(uint64_t reqId) const {
+    auto it = SentRequests.find(reqId);
+    if (it == SentRequests.end()) {
+        return nullptr;
+    }
+    return it->second.get();
+}
 
 } // anonymous namespace
 

@@ -3,8 +3,11 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
-namespace NCloud::NBlockStore::NStorage::NPartitionDirect {
+
+namespace NYdb::NBS::NStorage::NPartitionDirect {
 
 using namespace NActors;
 
@@ -17,6 +20,14 @@ public:
 
 private:
     STFUNC(StateWork);
+
+    void HandleWriteBlocksRequest(
+        const TEvService::TEvWriteBlocksRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleReadBlocksRequest(
+        const TEvService::TEvReadBlocksRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
 };
 
-} // namespace NCloud::NBlockStore::NStorage::NPartitionDirect
+} // namespace NYdb::NBS::NStorage::NPartitionDirect

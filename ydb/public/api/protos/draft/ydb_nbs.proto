@@ -1,12 +1,13 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-package Ydb.Nbs;
+package NYdb.NBS.NProto;
 
 option java_package = "com.yandex.ydb.nbs.proto";
 option java_outer_classname = "NbsProtos";
 option java_multiple_files = true;
 
+import "ydb/core/nbs/cloud/blockstore/public/api/protos/io.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 
 
@@ -65,4 +66,34 @@ message ListPartitionsResponse {
 
 message ListPartitionsResult {
     repeated string TabletId = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Blocks read request/response.
+
+message ReadBlocksRequest
+{
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    TReadBlocksRequest request = 2;
+}
+
+message ReadBlocksResponse
+{
+    Ydb.Operations.Operation operation = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Blocks write request/response.
+
+message WriteBlocksRequest
+{
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    TWriteBlocksRequest request = 2;
+}
+
+message WriteBlocksResponse
+{
+    Ydb.Operations.Operation operation = 1;
 }

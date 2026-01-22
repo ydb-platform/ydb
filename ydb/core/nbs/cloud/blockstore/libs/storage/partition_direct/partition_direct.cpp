@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/core/base/appdata_fwd.h>
 
-namespace NCloud::NBlockStore::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -19,4 +19,4 @@ TActorId CreatePartitionTablet(
         NKikimr::AppData()->SystemPoolId);
 }
 
-} // namespace NCloud::NBlockStore::NStorage::NPartitionDirect
+} // namespace NYdb::NBS::NStorage::NPartitionDirect

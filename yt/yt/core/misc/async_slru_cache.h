@@ -162,7 +162,7 @@ public:
     public:
         TInsertCookie() = default;
         explicit TInsertCookie(const TKey& key);
-        TInsertCookie(TInsertCookie&& other);
+        TInsertCookie(TInsertCookie&& other) noexcept;
         TInsertCookie(const TInsertCookie& other) = delete;
         ~TInsertCookie();
 

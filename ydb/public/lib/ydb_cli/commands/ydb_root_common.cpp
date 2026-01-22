@@ -622,6 +622,10 @@ void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
         }
     }
 
+    if (!MisuseErrors.empty()) {
+        return;
+    }
+
     if (UserName.empty()) {
         return;
     }

@@ -115,6 +115,9 @@ The term **interactive transactions** refers to transactions that are split into
 1. Update some data in the database.
 1. Commit the transaction in a separate query.
 
+### Sessions
+
+Logical "connections" to the database that maintains the context needed to execute queries and manage transactions. They are explained in more detail in [{#T}](query_execution.md#sessions).
 
 ### Multi-version concurrency control {#mvcc}
 

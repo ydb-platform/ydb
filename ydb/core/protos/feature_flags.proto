@@ -250,5 +250,5 @@ message TFeatureFlags {
     optional bool EnableCmsLocksPriority = 223 [default = false];
     optional bool EnableResourcePoolsScheduler = 224 [default = true]; // works only with EnableResourcePools = true
     optional bool EnableTruncateTable = 225 [default = false];
-    optional bool EnableTopicsSqlIoOperations = 224 [default = false];
+    optional bool EnableTopicsSqlIoOperations = 226 [default = false];
 }

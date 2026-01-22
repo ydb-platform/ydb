@@ -24,9 +24,20 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
+        THashMap<TPortionKey, NKikimrTxColumnShard::TIndexPortionMeta> portionMeta;
         for (auto&& chunkInfo : Chunks) {
             NKikimrTxColumnShard::TIndexColumnMeta metaProto = chunkInfo.GetMetaProto();
-            metaProto.MutablePortionMeta()->CopyFrom(chunkInfo.GetUpdate().GetPortionMeta());
+            auto portionKey = TPortionKey(chunkInfo.GetPathId(), chunkInfo.GetKey().GetPortion());
+            auto* findMeta = portionMeta.FindPtr(portionKey);
+            if (!findMeta) {
+                auto metadata = GetPortionMeta(db, portionKey);
+                if (metadata.IsFail()) {
+                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", metadata.GetErrorMessage());
+                    return false;
+                }
+                findMeta = &portionMeta.emplace(portionKey, metadata.DetachResult()).first->second;
+            }
+            metaProto.MutablePortionMeta()->CopyFrom(*findMeta);
 
             const auto& key = chunkInfo.GetKey();
 
@@ -39,6 +50,17 @@ public:
 
     ui64 GetSize() const override {
         return Chunks.size();
+    }
+
+    TConclusion<NKikimrTxColumnShard::TIndexPortionMeta> GetPortionMeta(NIceDb::TNiceDb& db, const TPortionKey& key) const {
+        auto rowset = db.Table<NColumnShard::Schema::IndexPortions>().Key(key.GetPathId(), key.GetPortionId()).Select();
+        if (!rowset.IsReady()) {
+            return TConclusionStatus::Fail("Not ready");
+        }
+        AFL_VERIFY(!rowset.EndOfSet());
+        NKikimrTxColumnShard::TIndexColumnMeta metaProto;
+        AFL_VERIFY(metaProto.ParseFromString(rowset.GetValue<NColumnShard::Schema::IndexPortions::Metadata>()));
+        return metaProto.GetPortionMeta();
     }
 };
 
@@ -82,11 +104,6 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TChunksV0MetaNormalizer::DoInit(
 
             TChunkInfo chunkInfo(std::move(key), rowset, &*DsGroupSelector, tablesManager);
             if (chunkInfo.NormalizationRequired()) {
-                auto metadata = GetPortionMeta(TPortionKey(rowset.GetValue<Schema::IndexColumns::PathId>(), key.GetPortion()), db);
-                if (metadata.IsFail()) {
-                    return metadata;
-                }
-                chunkInfo.SetUpdate(metadata.DetachResult());
                 chunks.emplace_back(std::move(chunkInfo));
             }
 

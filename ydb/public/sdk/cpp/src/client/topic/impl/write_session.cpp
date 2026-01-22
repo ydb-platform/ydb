@@ -95,6 +95,18 @@ TKeyedWriteSession::TKeyedWriteSession(
     std::shared_ptr<TGRpcConnectionsImpl> connections,
     TDbDriverStatePtr dbDriverState
 ): Connections(connections), Client(client), DbDriverState(dbDriverState), Settings(settings), MemoryUsage(0) {    
+    if (settings.ProducerIdPrefix_.empty()) {
+        ythrow TContractViolation("ProducerIdPrefix is required for KeyedWriteSession");
+    }
+
+    if (!settings.ProducerId_.empty()) {
+        ythrow TContractViolation("ProducerId should be empty for KeyedWriteSession, use ProducerIdPrefix instead");
+    }
+
+    if (!settings.MessageGroupId_.empty()) {
+        ythrow TContractViolation("MessageGroupId should be empty for KeyedWriteSession");
+    }
+    
     TDescribeTopicSettings describeTopicSettings;
     auto topicConfig = client->DescribeTopic(settings.Path_, describeTopicSettings).GetValueSync();
     const auto& partitions = topicConfig.GetTopicDescription().GetPartitions();
@@ -157,7 +169,7 @@ const std::vector<TKeyedWriteSession::TPartitionInfo>& TKeyedWriteSession::GetPa
 }
 
 TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::CreateWriteSession(ui64 partition) {
-    auto producerId = std::format("{}_{}", Settings.ProducerId_, partition);
+    auto producerId = std::format("{}_{}", Settings.ProducerIdPrefix_, partition);
     auto alteredSettings = Settings;
     alteredSettings
         .DirectWriteToPartition(true)
@@ -562,15 +574,13 @@ void TKeyedWriteSession::RunMainWorker() {
         
         {
             std::unique_lock lock(GlobalLock);
+            HandleReadyFutures(lock);
+            TransferEventsToOutputQueue();
             if (Closed.load() && ((InFlightMessages.empty() && PendingMessages.empty()) || CloseDeadline <= TInstant::Now())) {
-                TransferEventsToOutputQueue();
                 break;
             }
 
-            HandleReadyFutures(lock);
-            TransferEventsToOutputQueue();
             CleanIdleSessions();
-
             if (!PendingMessages.empty()) {
                 msgToSend = &PendingMessages.front();
             }
@@ -601,7 +611,7 @@ void TKeyedWriteSession::RunMainWorker() {
             // When waiting for a token (!didWrite with Pending), MessagesNotEmpty is already
             // ready from the push — reset it so WaitAny blocks until a partition Future is
             // ready; otherwise we spin and starve RunEventLoop which produces the token.
-            if (!PendingMessages.empty() && MessagesNotEmptyFuture.IsReady()) {
+            if (PendingMessages.empty() && MessagesNotEmptyFuture.IsReady()) {
                 MessagesNotEmptyPromise = NThreading::NewPromise();
                 MessagesNotEmptyFuture = MessagesNotEmptyPromise.GetFuture();
             }

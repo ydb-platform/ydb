@@ -141,15 +141,15 @@ TKeyedWriteSession::TKeyedWriteSession(
     // 0..Partitions.size(): per-partition WaitEvent futures
     // Partitions.size(): close future
     // Partitions.size() + 1: events-processed future
-    Futures.resize(2 + Partitions.size());
-    CloseFutureIndex = Partitions.size();
-    MessagesNotEmptyFutureIndex = Partitions.size() + 1;
+    Futures.resize(Partitions.size());
+    // CloseFutureIndex = Partitions.size();
+    // MessagesNotEmptyFutureIndex = Partitions.size() + 1;
     MessagesNotEmptyPromise = NThreading::NewPromise();
-    Futures[MessagesNotEmptyFutureIndex] = MessagesNotEmptyPromise.GetFuture();
+    MessagesNotEmptyFuture = MessagesNotEmptyPromise.GetFuture();
 
     ClosePromise = NThreading::NewPromise();
     CloseFuture = ClosePromise.GetFuture();
-    Futures[CloseFutureIndex] = CloseFuture;
+    // Futures[CloseFutureIndex] = CloseFuture;
 
     // Initialize per-partition futures to a valid, non-ready future to avoid TFutures being uninitialized
     // (NThreading::WaitAny throws on uninitialized futures).
@@ -161,7 +161,7 @@ TKeyedWriteSession::TKeyedWriteSession(
     EventsProcessedFuture = EventsProcessedPromise.GetFuture();
     EventsOutputQueue.push_back(TWriteSessionEvent::TReadyToAcceptEvent(IssueContinuationToken()));
     EventsProcessedPromise.TrySetValue();
-    MessageSenderWorker = std::thread([this]() { RunMessageSender(); });
+    MainWorker = std::thread([this]() { RunMainWorker(); });
 }
 
 const std::vector<TKeyedWriteSession::TPartitionInfo>& TKeyedWriteSession::GetPartitions() const {
@@ -195,7 +195,6 @@ TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::CreateWriteSessio
 }
 
 void TKeyedWriteSession::RunEventLoop(ui64 partitionId, WrappedWriteSessionPtr wrappedSession) {
-    std::unique_lock lock(GlobalLock);
     while (true) {
         auto event = wrappedSession->Session->GetEvent(false);
         if (!event) {
@@ -211,16 +210,15 @@ void TKeyedWriteSession::RunEventLoop(ui64 partitionId, WrappedWriteSessionPtr w
             HandleReadyToAcceptEvent(partitionId, std::move(*readyToAcceptEvent));
             continue;
         }
-            
-        HandleAcksEvent(partitionId, std::move(*event));
-        if (wrappedSession->RemoveFromQueue(1)) {
-            IdlerSessions.insert(wrappedSession);
+
+        if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+            HandleAcksEvent(partitionId, std::move(*acksEvent));
+            if (wrappedSession->RemoveFromQueue(1)) {
+                IdlerSessions.insert(wrappedSession);
+            }
+            continue;
         }
     }
-
-    auto partitionIndex = PartitionsPrimaryIndex.find(partitionId);
-    Y_ABORT_UNLESS(partitionIndex != PartitionsPrimaryIndex.end());
-    ReadyFutures.insert(partitionIndex->second);
 }
 
 void TKeyedWriteSession::SubscribeToPartition(ui64 partitionId) {
@@ -229,11 +227,13 @@ void TKeyedWriteSession::SubscribeToPartition(ui64 partitionId) {
     auto sessionIter = SessionsIndex.find(partitionId);
     Y_ABORT_UNLESS(sessionIter != SessionsIndex.end());
 
+    auto idx = partitionIndex->second;
     auto wrappedSession = sessionIter->second;
     auto newFuture = sessionIter->second->Session->WaitEvent();
-    Futures[partitionIndex->second] = newFuture;
-    newFuture.Subscribe([this, partitionId, wrappedSession](const NThreading::TFuture<void>&) {
-        this->RunEventLoop(partitionId, wrappedSession);
+    Futures[idx] = newFuture;
+    newFuture.Subscribe([this, idx](const NThreading::TFuture<void>&) {
+        std::lock_guard lock(GlobalLock);
+        this->ReadyFutures.insert(idx);
     });
 }
 
@@ -313,14 +313,14 @@ bool TKeyedWriteSession::Close(TDuration closeTimeout) {
     SetCloseDeadline(closeTimeout);
 
     ClosePromise.TrySetValue();
-    if (!MessageSenderWorker.joinable()) {
+    if (!MainWorker.joinable()) {
         return PendingMessages.empty() && InFlightMessages.empty();
     }
 
-    if (MessageSenderWorker.get_id() == std::this_thread::get_id()) {
-        MessageSenderWorker.detach();
+    if (MainWorker.get_id() == std::this_thread::get_id()) {
+        MainWorker.detach();
     } else {
-        MessageSenderWorker.join();
+        MainWorker.join();
     }
 
     return PendingMessages.empty() && InFlightMessages.empty();
@@ -357,7 +357,7 @@ TInstant TKeyedWriteSession::GetCloseDeadline() {
 }
 
 TKeyedWriteSession::~TKeyedWriteSession() {
-    if (MessageSenderWorker.joinable()) {
+    if (MainWorker.joinable()) {
         Close(TDuration::Zero());
     }
 }
@@ -511,7 +511,7 @@ std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::GetEvents(bool block
 
 std::optional<TContinuationToken> TKeyedWriteSession::GetContinuationToken(ui64 partitionId) {
     // Only check under lock, never wait here. Waiting in GetContinuationToken would
-    // prevent RunMessageSender from processing ReadyFutures and re-subscribing to
+    // prevent RunMainWorker from processing ReadyFutures and re-subscribing to
     // partition WaitEvent() futures; without re-subscription we stop receiving new
     // ReadyToAccept events and can deadlock. The caller must WaitForEvents() in the
     // main loop when nullopt is returned.
@@ -545,11 +545,16 @@ TDuration TKeyedWriteSession::GetCloseTimeout() {
 
 void TKeyedWriteSession::WaitForEvents() {
     if (Closed.load()) {
-        NThreading::WaitAny(Futures).Wait(GetCloseTimeout());
         return;
     }
 
-    NThreading::WaitAny(Futures).Wait();
+    auto partitionsWaitFuture = NThreading::WaitAny(Futures);
+
+    std::vector<NThreading::TFuture<void>> futures;
+    futures.push_back(partitionsWaitFuture);
+    futures.push_back(MessagesNotEmptyFuture);
+    futures.push_back(CloseFuture);
+    NThreading::WaitAny(futures).Wait();
 }
 
 void TKeyedWriteSession::CleanIdleSessions() {
@@ -563,7 +568,22 @@ void TKeyedWriteSession::CleanIdleSessions() {
     }
 }
 
-void TKeyedWriteSession::RunMessageSender() {
+void TKeyedWriteSession::HandleReadyFutures(std::unique_lock<std::mutex>& lock) {
+    while (!ReadyFutures.empty()) {
+        auto idx = *ReadyFutures.begin();
+        Y_ABORT_UNLESS(Futures[idx].IsReady(), "Future is not ready");
+
+        auto partitionId = Partitions[idx].PartitionId_;
+        RunEventLoop(partitionId, GetWriteSession(partitionId));
+
+        ReadyFutures.erase(idx);
+        lock.unlock();
+        SubscribeToPartition(partitionId);
+        lock.lock();
+    }
+}
+
+void TKeyedWriteSession::RunMainWorker() {
     while (true) {
         TMessageInfo* msgToSend = nullptr;
         bool didWrite = false;
@@ -575,16 +595,7 @@ void TKeyedWriteSession::RunMessageSender() {
                 break;
             }
 
-            while (!ReadyFutures.empty()) {
-                auto idx = *ReadyFutures.begin();
-                Y_ABORT_UNLESS(Futures[idx].IsReady(), "Future is not ready");
-    
-                ReadyFutures.erase(idx);
-                lock.unlock();
-                SubscribeToPartition(Partitions[idx].PartitionId_);
-                lock.lock();
-            }
-
+            HandleReadyFutures(lock);
             TransferEventsToOutputQueue();
             CleanIdleSessions();
 
@@ -618,9 +629,9 @@ void TKeyedWriteSession::RunMessageSender() {
             // When waiting for a token (!didWrite with Pending), MessagesNotEmpty is already
             // ready from the push — reset it so WaitAny blocks until a partition Future is
             // ready; otherwise we spin and starve RunEventLoop which produces the token.
-            if (!PendingMessages.empty() && Futures.size() > MessagesNotEmptyFutureIndex && Futures[MessagesNotEmptyFutureIndex].IsReady()) {
+            if (!PendingMessages.empty() && MessagesNotEmptyFuture.IsReady()) {
                 MessagesNotEmptyPromise = NThreading::NewPromise();
-                Futures[MessagesNotEmptyFutureIndex] = MessagesNotEmptyPromise.GetFuture();
+                MessagesNotEmptyFuture = MessagesNotEmptyPromise.GetFuture();
             }
             lock.unlock();
             WaitForEvents();

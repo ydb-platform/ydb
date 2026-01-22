@@ -236,7 +236,7 @@ private:
 
     void SaveMessage(TWriteMessage&& message, ui64 partitionId, TTransactionBase* tx);
 
-    void RunMessageSender();
+    void RunMainWorker();
 
     std::optional<TContinuationToken> GetContinuationToken(ui64 partitionId);
 
@@ -269,6 +269,8 @@ private:
     void AddIdleSession(WrappedWriteSessionPtr session);
 
     void CleanIdleSessions();
+
+    void HandleReadyFutures(std::unique_lock<std::mutex>& lock);
     
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -294,7 +296,7 @@ public:
     ~TKeyedWriteSession();
 
 private:
-    std::thread MessageSenderWorker;
+    std::thread MainWorker;
 
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     std::shared_ptr<TTopicClient::TImpl> Client;
@@ -318,6 +320,7 @@ private:
     std::list<TMessageInfo> InFlightMessages;
 
     NThreading::TPromise<void> MessagesNotEmptyPromise;
+    NThreading::TFuture<void> MessagesNotEmptyFuture;
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;
     NThreading::TPromise<void> EventsProcessedPromise;
@@ -328,8 +331,6 @@ private:
     TInstant CloseDeadline = TInstant::Max();
     std::optional<TSessionClosedEvent> CloseEvent;
 
-    size_t MessagesNotEmptyFutureIndex;
-    size_t CloseFutureIndex;
     size_t MemoryUsage;
 
     std::function<std::string(const std::string& key)> PartitioningKeyHasher;

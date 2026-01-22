@@ -26,6 +26,10 @@ public:
         const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
         const TGUCSettings& gUCSettings);
 
+    TKqpQueryId(const TString& cluster, const TString& database, const TString& databaseId,
+        const TString& text, const TKqpQuerySettings& settings, std::shared_ptr<std::map<TString, Ydb::Type>> queryParameterTypes,
+        const TGUCSettings& gUCSettings);
+
     bool IsSql() const;
 
     bool operator==(const TKqpQueryId& other) const;

@@ -67,10 +67,18 @@ namespace NKikimr::NSqsTopic {
         const TString& method,
         TVector<std::pair<TString, TString>>&& labels
     ) {
+        TString fullDatabasePath = databasePath + "/";
+        TString adjustedTopicPath;
+        if (topicPath.StartsWith(fullDatabasePath)) {
+            adjustedTopicPath = topicPath.substr(fullDatabasePath.size());
+        } else {
+            adjustedTopicPath = topicPath;
+        }
+
         TVector<std::pair<TString, TString>> common{
             {"database", databasePath},
             {"method", method},
-            {"topic", topicPath},
+            {"topic", adjustedTopicPath},
             {"consumer", consumerName},
         };
         std::move(labels.begin(), labels.end(), std::back_inserter(common));
@@ -126,6 +134,23 @@ namespace NKikimr::NSqsTopic {
             method,
             {
                 {"name", "api.sqs.response.empty_count"}
+            }
+        );
+    }
+
+    TVector<std::pair<TString, TString>> GetRequestSizeMetricsLabels(
+        const TString& databasePath,
+        const TString& topicPath,
+        const TString& consumer,
+        const TString& method
+    ) {
+        return GetMetricsLabels(
+            databasePath,
+            topicPath,
+            consumer,
+            method,
+            {
+                {"name", "api.sqs.request.bytes"}
             }
         );
     }

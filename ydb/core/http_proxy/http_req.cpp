@@ -1184,7 +1184,7 @@ namespace NKikimr::NHttpProxy {
                                  {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
                                  {"name", "api.sqs.response.count"},
                              })});
-                ReplyToHttpContext(ctx, issueCode);
+                ReplyToHttpContext(ctx, 0, issueCode);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
@@ -1209,15 +1209,16 @@ namespace NKikimr::NHttpProxy {
                                  {"code", ToString(httpStatusCode)},
                                  {"name", "api.sqs.response.count"},
                              })});
-                ReplyToHttpContext(ctx);
+                ReplyToHttpContext(ctx, errorText.size(), std::nullopt);
 
                 ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
 
                 TBase::Die(ctx);
             }
 
-            void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
+            void ReplyToHttpContext(const TActorContext& ctx, size_t messageSize, std::optional<size_t> issueCode) {
                 ReportLatencyCounters(ctx);
+                ReportResponseSizeCounters(TStringBuilder() << HttpContext.ResponseData.YmqHttpCode, messageSize, ctx);
                 LogHttpRequestResponse(ctx);
 
                 if (issueCode.has_value()) {
@@ -1251,7 +1252,17 @@ namespace NKikimr::NHttpProxy {
                 TDuration dur = ctx.Now() - StartTime;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
-                             BuildLabels(Method, HttpContext, "api.sqs.response.duration_milliseconds")
+                            AddCommonLabels({{"name", "api.sqs.response.duration_milliseconds"}})
+                        });
+            }
+
+            void ReportResponseSizeCounters(const TString& code, size_t value, const TActorContext& ctx) {
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvCounter{static_cast<i64>(value), true, true,
+                            AddCommonLabels({
+                                {"code", code},
+                                {"name", "api.sqs.response.bytes"}
+                            })
                         });
             }
 
@@ -1268,7 +1279,7 @@ namespace NKikimr::NHttpProxy {
                                  AddCommonLabels({
                                      {"code", "200"},
                                      {"name", "api.sqs.response.count"}})});
-                    ReplyToHttpContext(ctx);
+                    ReplyToHttpContext(ctx, ev->Get()->Message->ByteSizeLong(), std::nullopt);
                 } else {
                     auto retryClass =
                         NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());

@@ -142,6 +142,7 @@ private:
 
     NMonitoring::THistogramPtr MessageLocks;
     NMonitoring::THistogramPtr MessageLockingDuration;
+    NMonitoring::THistogramPtr WaitingLockingDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr DeletedByRetentionPolicy;
     NMonitoring::TDynamicCounters::TCounterPtr DeletedByDeadlinePolicy;

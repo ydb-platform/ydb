@@ -1958,6 +1958,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             }
 
             SET_METRIC(userInfo.LabeledCounters, METRIC_COMMIT_MESSAGE_LAG, lag);
+            SET_METRIC(userInfo.LabeledCounters, METRIC_TOTAL_COMMIT_MESSAGE_LAG, lag);
         }
 
         ui64 readMessageLag = GetEndOffset() - snapshot.ReadOffset;

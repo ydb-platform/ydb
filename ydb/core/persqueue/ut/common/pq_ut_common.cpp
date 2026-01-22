@@ -190,7 +190,13 @@ void PQTabletPrepareFromResource(const TTabletPreparationParameters& parameters,
         UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
     }
 
-    PQTabletRestart(runtime, tabletId, edge);
+    ForwardToTablet(runtime, tabletId, edge, new TEvents::TEvPoisonPill());
+
+    TDispatchOptions rebootOptions;
+    rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvPQ::EvInitComplete, parameters.partitions));
+    runtime.DispatchEvents(rebootOptions);
+
+
 }
 
 void PQTabletPrepareFromResource(const TTabletPreparationParameters& parameters,

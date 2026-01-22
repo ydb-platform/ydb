@@ -519,7 +519,7 @@ static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
 
     if (lhs.GetOffset() == rhs.GetOffset()) {
         if (lhs.GetPartNo() == rhs.GetPartNo()) {
-            Y_ABORT_UNLESS(lhs.GetCount() < rhs.GetCount(),
+            Y_ABORT_UNLESS(lhs.GetCount() <= rhs.GetCount(),
                            "lhs: %s, rhs: %s",
                            lhs.ToString().data(), rhs.ToString().data());
             return RhsContainsLhs;

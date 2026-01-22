@@ -935,6 +935,7 @@ class TestJoinStreaming(TestYdsBase):
         "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
     )
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
+    @pytest.mark.parametrize("wide_channels", [False, True] if DEBUG else [True])
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
     @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
@@ -944,11 +945,12 @@ class TestJoinStreaming(TestYdsBase):
         testcase,
         streamlookup,
         partitions_count,
+        wide_channels,
         fq_client: FederatedQueryClient,
         yq_version,
     ):
         self.init_topics(
-            f"pq_yq_str_lookup_{partitions_count}{streamlookup}{testcase}_{yq_version}",
+            f"pq_yq_slj_{partitions_count}{streamlookup}{testcase}w{wide_channels}_{yq_version}",
             partitions_count=partitions_count,
         )
         fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
@@ -962,6 +964,7 @@ class TestJoinStreaming(TestYdsBase):
         )
 
         sql, messages, *options = TESTCASES[testcase]
+
         sql = sql.format(
             input_topic=self.input_topic,
             output_topic=self.output_topic,
@@ -969,10 +972,17 @@ class TestJoinStreaming(TestYdsBase):
             streamlookup=Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else '',
         )
 
+        if wide_channels:
+            sql = 'pragma dq.UseWideChannels = "true";\n' + sql
+        elif wide_channels is not None:
+            sql = 'pragma dq.UseWideChannels = "false";\n' + sql
+
         one_time_waiter.wait()
 
         query_id = fq_client.create_query(
-            f"streamlookup_{partitions_count}{streamlookup}{testcase}", sql, type=fq.QueryContent.QueryType.STREAMING
+            f"slj_{partitions_count}{streamlookup}{testcase}w{wide_channels}",
+            sql,
+            type=fq.QueryContent.QueryType.STREAMING,
         ).result.query_id
 
         if not streamlookup and "MultiGet true" in sql:

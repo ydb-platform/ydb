@@ -725,7 +725,9 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
     if (node.HasBlock10()) {
         // const auto& with = node.GetBlock4();
         auto& index = indexes.back();
-        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree || index.Type == TIndexDescription::EType::GlobalFulltextPlain || index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree ||
+            index.Type == TIndexDescription::EType::GlobalFulltextPlain ||
+            index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
             if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
                 return false;
             }

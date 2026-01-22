@@ -19,6 +19,7 @@ PEERDIR(
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/topic
     ydb/services/persqueue_v1/actors
+    ydb/services/persqueue_v1
 )
 
 END()

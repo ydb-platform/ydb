@@ -1533,15 +1533,20 @@ IGraphTransformer::TStatus PgConstWrapper(const TExprNode::TPtr& input, TExprNod
     }
 
     // TODO: validate value
-    if (!EnsureAtom(input->Head(), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(input->Head(), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (input->ChildrenSize() >= 3) {
         auto type = input->Child(2)->GetTypeAnn();
         ui32 typeModType;
         bool convertToPg;
-        bool isUniversal;
         if (!ExtractPgType(type, typeModType, convertToPg, input->Child(2)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1692,6 +1697,11 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
     }
 
     auto func = input->Child(0)->Content();
+    if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureType(*input->Child(1), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }

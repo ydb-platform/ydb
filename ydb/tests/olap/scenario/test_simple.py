@@ -108,9 +108,6 @@ class TestSimple(BaseTestSet):
         sth.execute_scheme_query(
             AlterTableStore('testStore').add_column(sth.Column('not_level', PrimitiveType.Uint32)).drop_column('level')
         )
-        #        sth.execute_scheme_query(
-        #            AlterTableStore('testStoreAlter').drop_column('level')
-        #        )
         assert sth.get_table_rows_count(table_name) == 10
         altered_schema = (
             ScenarioTestHelper.Schema()

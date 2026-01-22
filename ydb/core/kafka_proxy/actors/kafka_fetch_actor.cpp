@@ -223,7 +223,9 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         header.Value = header.CodecValueStr;
         record.Headers.push_back(header);
 
-        record.Value = record.DataChunk.GetData();
+        if (record.DataChunk.HasData()) {
+            record.Value = record.DataChunk.GetData();
+        }
         record.OffsetDelta = lastOffset - baseOffset;
         record.TimestampDelta = lastTimestamp - baseTimestamp;
 

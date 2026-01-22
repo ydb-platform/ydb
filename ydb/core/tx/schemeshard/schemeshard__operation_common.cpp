@@ -1131,10 +1131,8 @@ bool TProposedWaitParts::ProgressState(TOperationContext& context) {
         }
 
         Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
-
-        context.OnComplete.RouteByTablet(OperationId, context.SS->ShardInfos.at(shard.Idx).TabletID);
+        context.OnComplete.RouteByTablet(OperationId,  context.SS->ShardInfos.at(shard.Idx).TabletID);
     }
-
     txState->UpdateShardsInProgress(TTxState::ProposedWaitParts);
 
     // Move all notifications that were already received

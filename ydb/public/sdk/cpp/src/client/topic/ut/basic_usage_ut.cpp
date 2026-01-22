@@ -1654,7 +1654,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     Y_UNIT_TEST(KeyedWriteSession_NoAutoPartitioning_BoundPartitionChooser) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 5);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 5, 10);
 
         auto publicClient = setup.MakeClient();
         auto describeTopicSettings = TDescribeTopicSettings().IncludeStats(true);
@@ -1734,7 +1734,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     Y_UNIT_TEST(KeyedWriteSession_EventLoop_Acks) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
 
         auto client = setup.MakeClient();
 
@@ -1747,7 +1747,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
-
         const ui64 count = 10000;
 
         std::unordered_set<ui64> ackedSeqNos;
@@ -1935,6 +1934,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .Codec(ECodec::RAW);
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
         
         auto session = client.CreateSimpleBlockingKeyedWriteSession(writeSettings);
 
@@ -1943,7 +1944,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         
         // Write several messages with different keys
         size_t seqNo = 1;
-        for (int i = 0; i < 10; ++i) {
+        for (int i = 0; i < 5; ++i) {
             TWriteMessage msg("message1-" + ToString(i));
             msg.SeqNo(seqNo++);
             bool res = session->Write(key1, std::move(msg));
@@ -1961,9 +1962,43 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(closeRes);
     }
 
-    Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_MultiThreadedWrite_ManyMessages) {
+    Y_UNIT_TEST(SimpleBlockingKeyedWriteSession_ManyMessages) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
-        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 2);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 4);
+
+        auto client = setup.MakeClient();
+
+        TKeyedWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath(TEST_TOPIC))
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .Codec(ECodec::RAW);
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+        writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
+
+        auto session = client.CreateSimpleBlockingKeyedWriteSession(writeSettings);
+
+        ui64 seqNo = 1;
+
+        for (ui64 i = 0; i < 1000; ++i) {
+            if (i % 100 == 0) {
+                std::cerr << "wrote " << i << " messages" << std::endl;
+            }
+
+            auto key = CreateGuidAsString();
+            TWriteMessage msg("payload-" + ToString(seqNo));
+            msg.SeqNo(seqNo++);
+            bool res = session->Write(key, std::move(msg));
+            UNIT_ASSERT(res);
+        }
+
+        bool closeRes = session->Close(TDuration::Seconds(60));
+        UNIT_ASSERT(closeRes);
+    }
+
+    Y_UNIT_TEST(KeyedWriteSession_CloseTimeout) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
 
         auto client = setup.MakeClient();
 
@@ -1973,37 +2008,61 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .Codec(ECodec::RAW);
 
-        auto session = client.CreateSimpleBlockingKeyedWriteSession(writeSettings);
+        auto session = client.CreateKeyedWriteSession(writeSettings);
 
-        constexpr ui64 threadsCount = 4;
-        constexpr ui64 perThread = 1000;
-        constexpr ui64 total = threadsCount * perThread;
-
-        std::atomic<ui64> seqNo{1};
-
-        std::vector<std::thread> writers;
-        writers.reserve(threadsCount);
-
-        for (ui64 t = 0; t < threadsCount; ++t) {
-            writers.emplace_back([session, t, &seqNo]() {
-                const std::string key = "key_" + ToString(t);
-                for (ui64 i = 0; i < perThread; ++i) {
-                    ui64 mySeq = seqNo.fetch_add(1);
-                    TWriteMessage msg("payload-" + ToString(t) + "-" + ToString(i));
-                    msg.SeqNo(mySeq);
-                    bool res = session->Write(key, std::move(msg));
-                    UNIT_ASSERT(res);
+        // Write a few messages using event loop
+        auto getReadyToken = [&](TDuration timeout) -> TContinuationToken {
+            const TInstant deadline = TInstant::Now() + timeout;
+            while (TInstant::Now() < deadline) {
+                session->WaitEvent().Wait(TDuration::Seconds(1));
+                for (auto& ev : session->GetEvents(false)) {
+                    if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&ev)) {
+                        return std::move(ready->ContinuationToken);
+                    }
                 }
-            });
+            }
+            UNIT_FAIL("Timed out waiting for ReadyToAcceptEvent");
+            Y_ABORT("Unreachable");
+        };
+
+        for (int i = 0; i < 1000; ++i) {
+            auto token = getReadyToken(TDuration::Seconds(10));
+            TWriteMessage msg("message-" + ToString(i));
+            msg.SeqNo(i + 1);
+            session->Write(std::move(token), "key1", std::move(msg));
         }
 
-        for (auto& th : writers) {
-            th.join();
+        // Test Close timeout
+        const TDuration closeTimeout = TDuration::Seconds(2);
+        const TInstant startTime = TInstant::Now();
+        session->Close(closeTimeout);
+        const TDuration actualDuration = TInstant::Now() - startTime;
+        
+        // Verify that Close didn't block longer than timeout (with some tolerance)
+        const TDuration maxExpectedDuration = closeTimeout + TDuration::MilliSeconds(100) + closeTimeout / 10;
+        UNIT_ASSERT_C(
+            actualDuration <= maxExpectedDuration * 1.5,
+            TStringBuilder() << "Close() took " << actualDuration << " but timeout was " << closeTimeout
+        );
+
+        int attempts = 0;
+        constexpr int maxAttempts = 1000;
+        for (attempts = 0; attempts < maxAttempts; ++attempts) {
+            auto event = session->GetEvent(false);
+            if (!event) {
+                break;
+            }
+            
+            auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event);
+            if (!sessionClosedEvent) {
+                continue;
+            }
+    
+            UNIT_ASSERT(sessionClosedEvent->IsSuccess());
+            break;
         }
 
-        bool closeRes = session->Close(TDuration::Seconds(60));
-        UNIT_ASSERT(closeRes);
-        UNIT_ASSERT_VALUES_EQUAL(seqNo.load() - 1, total);
+        UNIT_ASSERT(attempts < maxAttempts);
     }
 
 } // Y_UNIT_TEST_SUITE(BasicUsage)

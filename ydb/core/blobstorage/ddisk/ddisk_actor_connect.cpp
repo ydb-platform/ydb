@@ -37,6 +37,17 @@ namespace NKikimr::NDDisk {
         }
     }
 
+    void TDDiskActor::Handle(TEvDDiskDisconnect::TPtr ev) {
+        if (!CheckQuery(*ev)) {
+            return;
+        }
+
+        const auto& record = ev->Get()->Record;
+        const TQueryCredentials creds(record.GetCredentials());
+        Connections.erase(creds.TabletId);
+        SendReply(*ev, std::make_unique<TEvDDiskDisconnectResult>(NKikimrBlobStorage::TDDiskReplyStatus::OK));
+    }
+
     bool TDDiskActor::ValidateConnection(const IEventHandle& ev, const TQueryCredentials& creds) const {
         const auto it = Connections.find(creds.TabletId);
         if (it == Connections.end()) {
@@ -45,12 +56,12 @@ namespace NKikimr::NDDisk {
         const TConnectionInfo& connection = it->second;
         return connection.TabletId == creds.TabletId &&
             connection.Generation == creds.Generation &&
+            creds.DDiskInstanceGuid == DDiskInstanceGuid && (creds.FromPersistentBuffer || (
             connection.NodeId == ev.Sender.NodeId() &&
-            connection.InterconnectSessionId == ev.InterconnectSession &&
-            creds.DDiskInstanceGuid == DDiskInstanceGuid;
+            connection.InterconnectSessionId == ev.InterconnectSession));
     }
 
-    void TDDiskActor::SendReply(const IEventHandle& queryEv, std::unique_ptr<IEventBase> replyEv) {
+    void TDDiskActor::SendReply(const IEventHandle& queryEv, std::unique_ptr<IEventBase> replyEv) const {
         auto h = std::make_unique<IEventHandle>(queryEv.Sender, SelfId(), replyEv.release(), 0, queryEv.Cookie);
         if (queryEv.InterconnectSession) {
             h->Rewrite(TEvInterconnect::EvForward, queryEv.InterconnectSession);

@@ -11,6 +11,7 @@ message TDDiskReplyStatus {
         LOST_DATA = 4;
         SESSION_MISMATCH = 5;
         INCORRECT_REQUEST = 6;
+        MISSING_RECORD = 7;
     }
 }
 
@@ -29,6 +30,7 @@ message TDDiskQueryCredentials {
     uint64 TabletId = 1;
     uint32 Generation = 2;
     optional fixed64 DDiskInstanceGuid = 3;
+    bool FromPersistentBuffer = 4;
 }
 
 // DDisk block selector defines the range of blocks we are operating at; it includes through-numbered vChunk index and
@@ -130,7 +132,7 @@ message TEvDDiskWritePersistentBufferResult {
 message TEvDDiskReadPersistentBuffer {
     TDDiskQueryCredentials Credentials = 1;
     TDDiskBlockSelector Selector = 2;
-    uint64 MaxLsn = 3;
+    uint64 Lsn = 3;
     TDDiskReadInstruction Instruction = 4;
 }
 
@@ -144,7 +146,8 @@ message TEvDDiskFlushPersistentBuffer {
     TDDiskQueryCredentials Credentials = 1;
     TDDiskBlockSelector Selector = 2;
     uint64 Lsn = 3;
-    TDDiskId DDiskId = 4;
+    TDDiskId DDiskId = 4; // when this entry is not filled, record is just deleted from the buffer
+    optional fixed64 DDiskInstanceGuid = 5;
 }
 
 message TEvDDiskFlushPersistentBufferResult {

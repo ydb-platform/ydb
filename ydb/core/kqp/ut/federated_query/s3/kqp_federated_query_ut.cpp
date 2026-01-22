@@ -2845,6 +2845,177 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_STRING_CONTAINS(issues, "Field 'data' has incompatible with S3 json_list input format type: Variant");
     }
 
+    Y_UNIT_TEST(TestReadingFromFileValidation) {
+        {
+            TFileOutput out("data.txt");
+            out << R"({"data": "test_data"})";
+        }
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().ExtractValueSync().GetSession();
+        {
+            const TString query = R"(
+                CREATE EXTERNAL DATA SOURCE test_bucket WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "file://./",
+                    AUTH_METHOD = "NONE"
+                );)";
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        {
+            const TString query = R"(
+                SELECT * FROM test_bucket.`data.txt` WITH (
+                    FORMAT = raw,
+                    SCHEMA (
+                        data String
+                    )
+                );
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Reading from files is not supported with format 'raw'");
+        }
+
+        {
+            const TString query = R"(
+                PRAGMA s3.AsyncDecompressing = "TRUE";
+
+                SELECT * FROM test_bucket.`data.txt` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        data String
+                    )
+                );
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Reading from files is not supported with enabled pragma s3.AsyncDecompressing, to read from files use: PRAGMA s3.AsyncDecompressing = \"FALSE\"");
+        }
+
+        {
+            const TString query = R"(
+                PRAGMA s3.UseRuntimeListing = "TRUE";
+
+                SELECT * FROM test_bucket.`/` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        data String
+                    )
+                );
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            const auto& issues = result.GetIssues().ToOneLineString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Subdirectory listing is not supported for local files (can not use delimiter: '/')");
+        }
+    }
+
+    Y_UNIT_TEST(TestAsyncDecompressionErrorHandle) {
+        const TString bucket = "test_async_decompressing_error_bucket";
+        CreateBucketWithObject(bucket, "test/data.json", R"({"data": "test_data"})");
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().ExtractValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE test_bucket WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "{location}",
+                    AUTH_METHOD = "NONE"
+                );)",
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+
+        const TString query = R"(
+            PRAGMA s3.AsyncDecompressing = "TRUE";
+
+            SELECT * FROM test_bucket.`test/data.json` WITH (
+                FORMAT = json_each_row,
+                COMPRESSION = zstd,
+                SCHEMA (
+                    data String
+                )
+            );
+        )";
+        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        const auto& issues = result.GetIssues().ToString();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, issues);
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Error while reading file test/data.json");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Decompress failed: Unknown frame descriptor");
+    }
+
+    Y_UNIT_TEST(TestAsyncDecompressionWithLargeFile) {
+        const TString bucket = "test_async_decompressing_with_large_file_bucket";
+        CreateBucket(bucket);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableQueryServiceConfig()->MutableS3()->SetDataInflight(1_KB);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().ExtractValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE test_bucket WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "{location}",
+                    AUTH_METHOD = "NONE"
+                );)",
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        {
+            const TString query = fmt::format(R"(
+                INSERT INTO test_bucket.`test/` WITH (
+                    FORMAT = csv_with_names,
+                    COMPRESSION = zstd
+                ) SELECT
+                    data,
+                    RandomNumber(TableRow()) AS guid
+                FROM AS_TABLE(ListReplicate(<|data: "{payload}"|>, 10000)))",
+                "payload"_a = TString(200, 'X')
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            PRAGMA s3.AsyncDecompressing = "TRUE";
+
+            SELECT COUNT(*) FROM test_bucket.`test/` WITH (
+                FORMAT = csv_with_names,
+                COMPRESSION = zstd,
+                SCHEMA (
+                    data String NOT NULL,
+                    guid Uint64 NOT NULL,
+                )
+            );
+        )";
+        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        auto resultSet = result.GetResultSetParser(0);
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUint64(), 10000);
+    }
+
     Y_UNIT_TEST(TestRestartQueryAndCleanupWithGetOperation) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);

@@ -151,10 +151,10 @@ public:
         UserRequestContext->StreamingQueryPath = StreamingQueryPath;
         UserRequestContext->StreamingDisposition = StreamingDisposition;
 
-        LOG_I("Bootstrap"
+        LOG_I("Bootstrap "
             << "StreamingQueryPath: " << StreamingQueryPath
-            << "CheckpointId: " << CheckpointId
-            << "StreamingDisposition: " << (StreamingDisposition ? StreamingDisposition->DebugString() : "null"));
+            << ", CheckpointId: " << CheckpointId
+            << ", StreamingDisposition: " << (StreamingDisposition ? StreamingDisposition->DebugString() : "null"));
 
         Become(&TRunScriptActor::StateFunc);
     }

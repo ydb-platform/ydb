@@ -51,7 +51,7 @@ const TString& TCompactedPortionInfo::GetEntityStorageId(const ui32 columnId, co
 }
 
 const TString& TCompactedPortionInfo::GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const {
-    return indexInfo.GetIndexStorageId(indexId);
+    return indexInfo.GetIndexStorageId(indexId, GetMeta().GetTierName());
 }
 
 }   // namespace NKikimr::NOlap

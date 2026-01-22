@@ -1126,7 +1126,8 @@ public:
     TIndexChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
         : PathId(TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PathId>()))
         , PortionId(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PortionId>())
-        , Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
+        , Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(),
+              rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
         , RecordsCount(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RecordsCount>())
         , RawBytes(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RawBytes>())
     {

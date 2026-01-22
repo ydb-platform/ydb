@@ -7,6 +7,9 @@ void TOlapIndexUpsert::SerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& re
     if (StorageId && !!*StorageId) {
         requestedProto.SetStorageId(*StorageId);
     }
+    if (!!InheritPortionStorage) {
+        requestedProto.SetInheritPortionStorage(*InheritPortionStorage);
+    }
     IndexConstructor.SerializeToProto(requestedProto);
 }
 
@@ -14,6 +17,9 @@ bool TOlapIndexUpsert::DeserializeFromProto(const NKikimrSchemeOp::TOlapIndexReq
     Name = indexSchema.GetName();
     if (!!indexSchema.GetStorageId()) {
         StorageId = indexSchema.GetStorageId();
+    }
+    if (indexSchema.HasInheritPortionStorage()) {
+        InheritPortionStorage = indexSchema.GetInheritPortionStorage();
     }
     AFL_VERIFY(IndexConstructor.DeserializeFromProto(indexSchema))("incorrect_proto", indexSchema.DebugString());
     return true;

@@ -3,11 +3,11 @@
 #include "column_features.h"
 #include "objects_cache.h"
 #include "schema_diff.h"
-#include "tier_info.h"
 
 #include "abstract/index_info.h"
 #include "indexes/abstract/meta.h"
 
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
@@ -151,10 +151,13 @@ private:
     std::shared_ptr<TColumnFeatures> BuildDefaultColumnFeatures(
         const NTable::TColumn& column, const std::shared_ptr<IStoragesManager>& operators) const;
 
-    const TString& GetIndexStorageId(const ui32 indexId) const {
+    const TString& GetIndexStorageId(const ui32 indexId, const TString& specialTier) const {
         auto it = Indexes.find(indexId);
         AFL_VERIFY(it != Indexes.end());
-        return it->second->GetStorageId();
+        if (specialTier && specialTier != IStoragesManager::DefaultStorageId && it->second->GetInheritPortionStorage()) {
+            return specialTier;
+        }
+        return it->second->GetDefaultStorageId();
     }
 
     const TString& GetColumnStorageId(const ui32 columnId, const TString& specialTier) const {
@@ -175,9 +178,8 @@ private:
 
 public:
     const TString& GetEntityStorageId(const ui32 entityId, const TString& specialTier) const {
-        auto it = Indexes.find(entityId);
-        if (it != Indexes.end()) {
-            return it->second->GetStorageId();
+        if (Indexes.contains(entityId)) {
+            return GetIndexStorageId(entityId, specialTier);
         }
         return GetColumnStorageId(entityId, specialTier);
     }
@@ -360,11 +362,11 @@ public:
     };
 
     [[nodiscard]] TConclusion<TSecondaryData> AppendIndexes(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& primaryData,
-        const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount) const {
+        const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier) const {
         TSecondaryData result;
         result.MutableExternalData() = primaryData;
         for (auto&& i : Indexes) {
-            auto conclusion = AppendIndex(primaryData, i.first, operators, recordsCount, result);
+            auto conclusion = AppendIndex(primaryData, i.first, operators, recordsCount, specialTier, result);
             if (conclusion.IsFail()) {
                 return conclusion;
             }
@@ -378,7 +380,8 @@ public:
     std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 
     [[nodiscard]] TConclusionStatus AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
-        const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, TSecondaryData& result) const;
+        const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier,
+        TSecondaryData& result) const;
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnIdVerified(const std::string& name) const;

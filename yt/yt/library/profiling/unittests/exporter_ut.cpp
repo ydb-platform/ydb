@@ -6,10 +6,21 @@
 #include <yt/yt/library/profiling/solomon/exporter.h>
 #include <yt/yt/library/profiling/solomon/registry.h>
 
+#include <library/cpp/json/yson/json2yson.h>
+
 namespace NYT::NProfiling {
 namespace {
 
 using namespace NConcurrency;
+
+////////////////////////////////////////////////////////////////////////////////
+
+auto GetSensors(const std::string& json)
+{
+    auto yson = NYson::TYsonString(NJson2Yson::SerializeJsonValueAsYson(NJson::ReadJsonFastTree(json)));
+    auto sensors = NYTree::ConvertToNode(yson)->AsMap()->GetChildOrThrow("sensors");
+    return sensors->AsList()->GetChildren();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -226,6 +237,89 @@ TEST(TSolomonExporterTest, ReadSensorsStripSensorsOption)
     sensors = out.value();
     ASSERT_TRUE(sensors.contains("uptime"));
     ASSERT_FALSE(sensors.contains("uptime."));
+
+    exporter->Stop();
+}
+
+TEST(TSolomonExporterTest, ReadSensorsSolomonAggregates)
+{
+    auto registry = New<TSolomonRegistry>();
+    auto config = New<TSolomonExporterConfig>();
+    config->GridStep = TDuration::Seconds(1);
+    config->EnableCoreProfilingCompatibility = true;
+    config->EnableSelfProfiling = false;
+    config->ReportBuildInfo = false;
+    config->ReportKernelVersion = false;
+    config->ReportRestart = false;
+
+    config->EnableSolomonAggregates = true;
+    config->MarkAggregates = true;
+    config->ExportSummaryAsSum = true;
+    config->ExportSummaryAsMax = true;
+    config->ExportSummaryAsMin = true;
+    config->ExportSummaryAsAvg = true;
+    config->Shards.try_emplace("default", New<TShardConfig>());
+
+    auto exporter = NYT::New<TSolomonExporter>(config, registry);
+
+    auto summaryDefault = TProfiler("", "", {}, registry).Summary("summary");
+    auto summaryMax = TProfiler("", "", {}, registry)
+        .Summary("max_only", ESummaryPolicy::Max | ESummaryPolicy::OmitNameLabelSuffix);
+
+    exporter->Start();
+
+    summaryDefault.Record(42);
+    summaryDefault.Record(21);
+
+    summaryMax.Record(42);
+    summaryMax.Record(21);
+
+    Sleep(TDuration::Seconds(1));
+
+    TReadOptions readOptions;
+    readOptions.MarkAggregates = true;
+    readOptions.SummaryPolicy = config->GetSummaryPolicy();
+    // Enable solomon aggregates.
+
+    auto findYtAggrValue = [&] (auto& sensors, std::string_view sensorName) {
+        for (const auto& sensor : sensors) {
+            auto labels = sensor->AsMap()->GetChildOrThrow("labels")->AsMap();
+            if (labels->GetChildOrThrow("sensor")->AsString()->GetValue() == sensorName) {
+                auto ytAggr = labels->FindChild("yt_aggr");
+                if (ytAggr) {
+                    return std::optional<std::string>(ytAggr->AsString()->GetValue());
+                }
+                break;
+            }
+        }
+        return std::optional<std::string>();
+    };
+
+    {
+        readOptions.EnableSolomonAggregates = true;
+        std::optional<std::string> out = exporter->ReadJson(readOptions);
+        ASSERT_TRUE(out);
+        auto sensors = GetSensors(*out);
+        EXPECT_EQ("sum"sv, findYtAggrValue(sensors, "summary.sum"sv));
+        EXPECT_EQ("max"sv, findYtAggrValue(sensors, "summary.max"sv));
+        EXPECT_EQ("min"sv, findYtAggrValue(sensors, "summary.min"sv));
+        EXPECT_EQ("avg"sv, findYtAggrValue(sensors, "summary.avg"sv));
+        EXPECT_EQ("max"sv, findYtAggrValue(sensors, "max_only"sv));
+    }
+
+    // Disable solomon aggregates.
+    {
+        readOptions.EnableSolomonAggregates = false;
+        std::optional<std::string> out = exporter->ReadJson(readOptions);
+        ASSERT_TRUE(out);
+        auto sensors = GetSensors(*out);
+
+        EXPECT_EQ("1"sv, findYtAggrValue(sensors, "summary.sum"sv));
+        EXPECT_EQ(std::nullopt, findYtAggrValue(sensors, "summary.max"sv));
+        EXPECT_EQ(std::nullopt, findYtAggrValue(sensors, "summary.min"sv));
+        EXPECT_EQ(std::nullopt, findYtAggrValue(sensors, "summary.avg"sv));
+        EXPECT_EQ(std::nullopt, findYtAggrValue(sensors, "max_only"sv));
+    }
 
     exporter->Stop();
 }

@@ -36,6 +36,7 @@ struct TReadOptions
     ESummaryPolicy SummaryPolicy = ESummaryPolicy::Default;
 
     bool MarkAggregates = false;
+    bool EnableSolomonAggregates = false;
 
     std::optional<std::string> Host;
 

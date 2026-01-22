@@ -271,7 +271,12 @@ protected:
         }
 
         if (this->Task.GetEnableSpilling()) {
-            TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
+            auto spillerFactory = std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback());
+            spillerFactory->SetMemoryReportingCallbacks(
+                [this, alloc](ui64 bytes){ this->MemoryQuota->ReportAllocated(bytes, alloc); },
+                [this, alloc](ui64 bytes){ this->MemoryQuota->ReportFreed(bytes, alloc); }
+            );
+            TaskRunner->SetSpillerFactory(std::move(spillerFactory));
         }
 
         TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker);

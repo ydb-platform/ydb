@@ -8,7 +8,6 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/public/sdk/cpp/src/client/impl/internal/common/parser.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
@@ -594,6 +593,55 @@ bool IsDdlPrepareAllowed(TKikimrSessionContext& sessionCtx) {
     }
 
     return true;
+}
+
+struct TConnectionInfo {
+    std::string Endpoint = "";
+    std::string Database = "";
+    bool EnableSsl = false;
+};
+
+TConnectionInfo ParseConnectionString(const std::string& connectionString) {
+    if (connectionString.length() == 0) {
+        throw yexception() << "Empty connection string";
+    }
+
+    const std::string databaseFlag = "/?database=";
+    const std::string grpcProtocol = "grpc://";
+    const std::string grpcsProtocol = "grpcs://";
+    const std::string localhostDomain = "localhost:";
+
+    TConnectionInfo connectionInfo;
+    std::string endpoint;
+
+    size_t pathIndex = connectionString.find(databaseFlag);
+    if (pathIndex == std::string::npos){
+        pathIndex = connectionString.length();
+    }
+    if (pathIndex != connectionString.length()) {
+        connectionInfo.Database = connectionString.substr(pathIndex + databaseFlag.length());
+        endpoint = connectionString.substr(0, pathIndex);
+    } else {
+        endpoint = connectionString;
+    }
+
+    if (!std::string_view{endpoint}.starts_with(grpcProtocol) && !std::string_view{endpoint}.starts_with(grpcsProtocol) &&
+        !std::string_view{endpoint}.starts_with(localhostDomain))
+    {
+        connectionInfo.Endpoint = endpoint;
+        connectionInfo.EnableSsl = true;
+    } else if (std::string_view{endpoint}.starts_with(grpcProtocol)) {
+        connectionInfo.Endpoint = endpoint.substr(grpcProtocol.length());
+        connectionInfo.EnableSsl = false;
+    } else if (std::string_view{endpoint}.starts_with(grpcsProtocol)) {
+        connectionInfo.Endpoint = endpoint.substr(grpcsProtocol.length());
+        connectionInfo.EnableSsl = true;
+    } else {
+        connectionInfo.Endpoint = endpoint;
+        connectionInfo.EnableSsl = false;
+    }
+
+    return connectionInfo;
 }
 
 #define FORWARD_ENSURE_NO_PREPARE(name, ...) \
@@ -2617,7 +2665,7 @@ public:
             auto& config = *op.MutableConfig();
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
-                const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                const auto parseResult = ParseConnectionString(*connectionString);
                 params.SetEndpoint(TString{parseResult.Endpoint});
                 params.SetDatabase(TString{parseResult.Database});
                 params.SetEnableSsl(parseResult.EnableSsl);
@@ -2722,7 +2770,7 @@ public:
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
-                    const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                    const auto parseResult = ParseConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);
@@ -2838,7 +2886,7 @@ public:
             auto& config = *op.MutableConfig();
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
-                const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                const auto parseResult = ParseConnectionString(*connectionString);
                 params.SetEndpoint(TString{parseResult.Endpoint});
                 params.SetDatabase(TString{parseResult.Database});
                 params.SetEnableSsl(parseResult.EnableSsl);
@@ -2965,7 +3013,7 @@ public:
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
-                    const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                    const auto parseResult = ParseConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);

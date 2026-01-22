@@ -412,7 +412,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     LastResultInstant = TMonotonic::Now();
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();
-    Result->ScanSnapshot = ScanCountersPool.GetScanCountersSnapshot();
+    Result->CurrentCounters = ScanCountersPool.GetCurrentScanCounters();
     Result->WaitTime = WaitTime;
     Result->RawBytes = ScanCountersPool.GetRawBytes();
 

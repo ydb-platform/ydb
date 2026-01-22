@@ -3,11 +3,17 @@
 #include <util/datetime/base.h>
 namespace NKikimr::NKqp {
 TString FormatDurationAsMilliseconds(TDuration duration);
-struct TPerStepScanCountersSnapshot {
-    TDuration ExecutionDuration;
-    TDuration WaitDuration;
-    ui64 RawBytesRead = 0;
+struct TCurrentPerStepScanCounters {
+    // integral counter only grows during scan, delta counter gets zeroed on another chunk
+    TDuration IntegralExecutionDuration;
+    TDuration IntegralWaitDuration;
+    ui64 IntegralRawBytesRead = 0;
     TString DebugString() const;
+};
+
+struct TPerStepCountersAndStepName {
+    TString StepName;
+    TCurrentPerStepScanCounters Counters;
 };
 
 }

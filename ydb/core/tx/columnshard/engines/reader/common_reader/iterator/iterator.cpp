@@ -26,12 +26,12 @@ TConclusion<bool> TColumnShardScanIterator::ReadNextInterval() {
 
 TString TColumnShardScanIterator::DebugString(const bool verbose) const {
     TStringBuilder perStepCounters;
-    NKqp::TPerStepScanCountersSnapshot summ;
-    for(auto& [name, counters]:  Context->GetCounters().GetScanCountersSnapshot()){
+    NKqp::TCurrentPerStepScanCounters summ;
+    for(auto& [name, counters]:  Context->GetCounters().GetCurrentScanCounters()){
         perStepCounters << "[step_name: " << name << "; counters: " << counters.DebugString() << "]\n";
-        summ.ExecutionDuration += counters.ExecutionDuration;
-        summ.WaitDuration += counters.WaitDuration;
-        summ.RawBytesRead += counters.RawBytesRead;
+        summ.IntegralExecutionDuration += counters.IntegralExecutionDuration;
+        summ.IntegralWaitDuration += counters.IntegralWaitDuration;
+        summ.IntegralRawBytesRead += counters.IntegralRawBytesRead;
 
     }
     perStepCounters.pop_back(); // last '\n'

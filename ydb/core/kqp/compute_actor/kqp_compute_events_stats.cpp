@@ -4,14 +4,14 @@
 namespace NKikimr::NKqp {
 
 
-inline TString FormatDurationAsMilliseconds(TDuration duration) {
-    return TStringBuilder() << duration.MicroSeconds()/1000.0 << "ms";
+TString FormatDurationAsMilliseconds(TDuration duration) {
+    return TStringBuilder() << duration.MicroSeconds() / 1000.0 << "ms";
 }
 
-TString TPerStepScanCountersSnapshot::DebugString() const {
-    return TStringBuilder() << "ExecutionDuration:" << FormatDurationAsMilliseconds(ExecutionDuration) << ";"
-                            << "WaitDuration:" << FormatDurationAsMilliseconds(WaitDuration) << ";"
-                            << "RawBytesRead:" << RawBytesRead << ";";
+TString TCurrentPerStepScanCounters::DebugString() const {
+    return TStringBuilder() << "ExecutionDuration:" << FormatDurationAsMilliseconds(IntegralExecutionDuration) << ";"
+                            << "WaitDuration:" << FormatDurationAsMilliseconds(IntegralWaitDuration) << ";"
+                            << "RawBytesRead:" << IntegralRawBytesRead << ";";
 }
 
 }

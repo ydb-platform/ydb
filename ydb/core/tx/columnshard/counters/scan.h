@@ -361,8 +361,8 @@ public:
 class TConcreteScanCounters: public TScanCounters {
 public:
     struct TPerStepCounters{
-        std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds = std::make_shared<TAtomicCounter>();
-        std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds = std::make_shared<TAtomicCounter>();
+        std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds = std::make_shared<TAtomicCounter>(); // time step was executing in conveyor
+        std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds = std::make_shared<TAtomicCounter>(); // time spent in another actor before next step(for example in dedublication)
         std::shared_ptr<TAtomicCounter> RawBytesRead = std::make_shared<TAtomicCounter>(); // From BS, S3, previous step
     };
 private:
@@ -403,16 +403,19 @@ public:
         }
     }
 
-    THashMap<TString, NKqp::TPerStepScanCountersSnapshot> GetScanCountersSnapshot() const {
+    TVector<NKqp::TPerStepCountersAndStepName> GetCurrentScanCounters() const {
         auto lock = StepExecutionDurations.ReadGuard();
-        THashMap<TString, NKqp::TPerStepScanCountersSnapshot> timesPerStep;
+        TVector<NKqp::TPerStepCountersAndStepName> timesPerStep;
         for(auto& kv: lock.Value) {
-            NKqp::TPerStepScanCountersSnapshot stats;
-            stats.ExecutionDuration = TDuration::MicroSeconds(kv.second.ExecutionDurationMicroSeconds->Val());
-            stats.WaitDuration = TDuration::MicroSeconds(kv.second.WaitDurationMicroSeconds->Val());
-            stats.RawBytesRead = kv.second.RawBytesRead->Val();
-            timesPerStep.emplace(kv.first, stats);
+            NKqp::TCurrentPerStepScanCounters stats;
+            stats.IntegralExecutionDuration = TDuration::MicroSeconds(kv.second.ExecutionDurationMicroSeconds->Val());
+            stats.IntegralWaitDuration = TDuration::MicroSeconds(kv.second.WaitDurationMicroSeconds->Val());
+            stats.IntegralRawBytesRead = kv.second.RawBytesRead->Val();
+            timesPerStep.emplace_back(kv.first, stats);
         }
+        Sort(timesPerStep, [](const auto& l,const auto& r ){
+            return l.StepName < r.StepName;
+        });
         return timesPerStep;
     }
 

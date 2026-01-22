@@ -90,12 +90,6 @@ private:
     struct TPartitionInfo {
         using TSelf = TPartitionInfo;
 
-        struct THash {
-            size_t operator()(const TPartitionInfo& v) const noexcept {
-                return std::hash<ui64>{}(v.PartitionId_);
-            }
-        };
-
         bool InRange(const std::string& key) const {
             if (FromBound_ > key)
                 return false;
@@ -118,14 +112,14 @@ private:
     };
 
     struct TMessageInfo {
-        TMessageInfo(TWriteMessage&& message, ui64 partitionId, TTransactionBase* tx)
+        TMessageInfo(TWriteMessage&& message, ui64 partition, TTransactionBase* tx)
             :Message(std::move(message))
-            , PartitionId(partitionId)
+            , Partition(partition)
             , Tx(tx)
         {}
 
         TWriteMessage Message;
-        ui64 PartitionId;
+        ui64 Partition;
         TTransactionBase* Tx;
     };
 
@@ -136,14 +130,14 @@ private:
 private:
     struct WriteSessionWrapper {
         WriteSessionPtr Session;
-        ui64 PartitionId;
+        ui64 Partition;
         TDuration IdleTimeout;
         std::optional<TInstant> EmptySince;
         ui64 QueueSize = 0;
 
-        WriteSessionWrapper(WriteSessionPtr session, ui64 partitionId, TDuration idleTimeout)
+        WriteSessionWrapper(WriteSessionPtr session, ui64 partition, TDuration idleTimeout)
             : Session(std::move(session))
-            , PartitionId(partitionId)
+            , Partition(partition)
             , IdleTimeout(idleTimeout)
             , QueueSize(0)
         {}
@@ -154,10 +148,6 @@ private:
             }
 
             return TInstant::Now() - *EmptySince > IdleTimeout;
-        }
-
-        bool IsQueueEmpty() {
-            return QueueSize == 0;
         }
 
         bool AddToQueue(ui64 delta) {
@@ -179,7 +169,7 @@ private:
 
         bool Less(const std::shared_ptr<WriteSessionWrapper>& other) {
             if (!EmptySince.has_value() && !other->EmptySince.has_value()) {
-                return PartitionId < other->PartitionId;
+                return Partition < other->Partition;
             }
 
             if (EmptySince.has_value() && !other->EmptySince.has_value()) {
@@ -191,7 +181,7 @@ private:
             }
 
             if (*EmptySince == *other->EmptySince) {
-                return PartitionId < other->PartitionId;
+                return Partition < other->Partition;
             }
 
             return *EmptySince < *other->EmptySince;
@@ -207,42 +197,42 @@ private:
     using WrappedWriteSessionPtr = std::shared_ptr<WriteSessionWrapper>;
 
     struct IPartitionChooser {
-        virtual const TPartitionInfo& ChoosePartition(const std::string& key) = 0;
+        virtual ui64 ChoosePartition(const std::string& key) = 0;
         virtual ~IPartitionChooser() = default;
     };
 
     struct TBoundPartitionChooser : public IPartitionChooser {
         TBoundPartitionChooser(TKeyedWriteSession* session);
-        const TPartitionInfo& ChoosePartition(const std::string& key) override;
+        ui64 ChoosePartition(const std::string& key) override;
     private:
         TKeyedWriteSession* Session;
     };
 
     struct THashPartitionChooser : public IPartitionChooser {
         THashPartitionChooser(TKeyedWriteSession* session);
-        const TPartitionInfo& ChoosePartition(const std::string& key) override;
+        ui64 ChoosePartition(const std::string& key) override;
     private:
         TKeyedWriteSession* Session;
     };
 
-    WrappedWriteSessionPtr GetWriteSession(ui64 partitionId);
+    WrappedWriteSessionPtr GetWriteSession(ui64 partition);
 
-    void RunEventLoop(ui64 partitionId, WrappedWriteSessionPtr wrappedSession);
+    void RunEventLoop(ui64 partition, WrappedWriteSessionPtr wrappedSession);
 
-    WrappedWriteSessionPtr CreateWriteSession(ui64 partitionId);
+    WrappedWriteSessionPtr CreateWriteSession(ui64 partition);
 
     using TSessionsIndexIterator = std::unordered_map<ui64, WrappedWriteSessionPtr>::iterator;
     void DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout, bool alreadyClosed = false);
 
-    void SaveMessage(TWriteMessage&& message, ui64 partitionId, TTransactionBase* tx);
+    void SaveMessage(TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
 
     void RunMainWorker();
 
-    std::optional<TContinuationToken> GetContinuationToken(ui64 partitionId);
+    std::optional<TContinuationToken> GetContinuationToken(ui64 partition);
 
     void TransferEventsToOutputQueue();
 
-    void SubscribeToPartition(ui64 partitionId);
+    void SubscribeToPartition(ui64 partition);
 
     void AddReadyToAcceptEvent();
 
@@ -250,11 +240,11 @@ private:
 
     void NonBlockingClose();
 
-    void HandleAcksEvent(ui64 partitionId, TWriteSessionEvent::TEvent&& event);
+    void HandleAcksEvent(ui64 partition, TWriteSessionEvent::TEvent&& event);
 
     void HandleSessionClosedEvent(TSessionClosedEvent&& event);
 
-    void HandleReadyToAcceptEvent(ui64 partitionId, TWriteSessionEvent::TReadyToAcceptEvent&& event);
+    void HandleReadyToAcceptEvent(ui64 partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
 
     bool IsMemoryUsageOK() const;
 
@@ -310,7 +300,6 @@ private:
     std::set<WrappedWriteSessionPtr, WriteSessionWrapper::Comparator> IdlerSessions;
     std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
     std::unordered_map<ui64, std::deque<TContinuationToken>> ContinuationTokens;
-    std::unordered_map<ui64, ui64> PartitionsPrimaryIndex;
     std::map<TPartitionBound, ui64> PartitionsIndex;
 
     TKeyedWriteSessionSettings Settings;

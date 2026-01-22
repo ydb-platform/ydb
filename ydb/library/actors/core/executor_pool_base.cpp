@@ -53,9 +53,9 @@ namespace NActors {
                 Y_ABORT_UNLESS(actor->StuckIndex == i);
                 const TDuration delta = now - actor->LastReceiveTimestamp;
                 if (delta > TDuration::Seconds(30)) {
-                    ++stats.StuckActorsByActivity[actor->GetActivityType()];
+                    ++stats.StuckActorsByActivity[actor->GetActivityType().GetIndex()];
                 }
-                accountUsage(actor->GetActivityType(), actor->GetUsage(GetCycleCountFast()));
+                accountUsage(actor->GetActivityType().GetIndex(), actor->GetUsage(GetCycleCountFast()));
             }
             for (const auto& [activityType, usage] : DeadActorsUsage) {
                 accountUsage(activityType, usage);
@@ -154,7 +154,7 @@ namespace NActors {
         NHPTimer::STime hpstart = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER, false> activityGuard(hpstart);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
-        ui32 at = actor->GetActivityType();
+        ui32 at = actor->GetActivityType().GetIndex();
         Y_DEBUG_ABORT_UNLESS(at < Stats.ActorsAliveByActivity.size());
         if (at >= Stats.MaxActivityType()) {
             at = TActorTypeOperator::GetActorActivityIncorrectIndex();
@@ -242,7 +242,7 @@ namespace NActors {
         NHPTimer::STime hpstart = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER, false> activityGuard(hpstart);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
-        ui32 at = actor->GetActivityType();
+        ui32 at = actor->GetActivityType().GetIndex();
         if (at >= Stats.MaxActivityType())
             at = 0;
         AtomicIncrement(Stats.ActorsAliveByActivity[at]);

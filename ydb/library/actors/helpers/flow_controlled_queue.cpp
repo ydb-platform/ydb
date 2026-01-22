@@ -23,7 +23,7 @@ public:
     const ui32 Flags;
     const ui64 StartCounter;
 
-    TFlowControlledRequestActor(ui32 activity, TFlowControlledRequestQueue *queue, TActorId source, ui64 cookie, ui32 flags)
+    TFlowControlledRequestActor(TActorActivityType activity, TFlowControlledRequestQueue *queue, TActorId source, ui64 cookie, ui32 flags)
         : IActorCallback(static_cast<TReceiveFunc>(&TFlowControlledRequestActor::StateWait), activity)
         , QueueActor(queue)
         , Source(source)

@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
     }
 
     Y_UNIT_TEST(TableNotExists) {
-        TKikimrRunner kikimr(TKikimrSettings(GetAppConfig()).SetWithSampleTables(false));
+        TKikimrRunner kikimr(GetTestSettings().SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 

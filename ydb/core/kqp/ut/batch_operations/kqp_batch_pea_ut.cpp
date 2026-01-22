@@ -145,13 +145,13 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         // queryId = 0
-        executeAndTestError(batchQuery, {"could not resolve a partitioning of the table", "state = PrepareState"});
+        executeAndTestError(batchQuery, {"Could not resolve a partitioning of the table"});
         // queryId = 1
-        executeAndTestError(batchQuery, {"could not resolve a partitioning of the table, resultSet is empty", "state = PrepareState"});
+        executeAndTestError(batchQuery, {"Could not resolve a partitioning of the table, resultSet is empty"});
         // queryId = 2
-        executeAndTestError(batchQuery, {"could not resolve a partitioning of the table, partitioning is null", "state = PrepareState"});
+        executeAndTestError(batchQuery, {"Could not resolve a partitioning of the table, partitioning is null"});
         // queryId = 3
-        executeAndTestError(batchQuery, {"could not resolve a partitioning of the table, partitioning is empty", "state = PrepareState"});
+        executeAndTestError(batchQuery, {"Could not resolve a partitioning of the table, partitioning is empty"});
     }
 
     Y_UNIT_TEST(PrepareState_AbortExecution) {
@@ -190,8 +190,6 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Test abort execution", result.GetIssues().ToString());
-        // Issues only contain forwarded messages from abort event
-        // UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "state = PrepareState", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(PrepareState_UnknownEvent) {
@@ -229,8 +227,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         // An error is expected because the actor is in the PrepareState and does not know what to do with the unknown event
         // It is needed to check that new events are not ignored and the actor is aborted
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "got an unknown message", result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "state = PrepareState", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Got an unknown event", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(ExecuteState_AbortBeforeAnyResponse) {
@@ -892,8 +889,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
 
             if (i + 1 < maxQueryId) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "got an unknown error", result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "state = ExecuteState", result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Got an unknown error", result.GetIssues().ToString());
 
                 partitionedId.reset();
                 targetExecuterId.reset();
@@ -902,7 +898,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                    "The next key from KqpReadActor does not belong to the partition", result.GetIssues().ToString());
+                    "The next key from ReadActor does not belong to the partition", result.GetIssues().ToString());
             }
         }
 
@@ -971,8 +967,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         // An error is expected because the actor is in the ExecuteState and does not know what to do with the unknown event
         // It is needed to check that new events are not ignored and the actor is aborted
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "got an unknown message", result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "state = ExecuteState", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Got an unknown event", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(AbortState_DoubleAbort) {

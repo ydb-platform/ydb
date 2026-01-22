@@ -179,15 +179,10 @@ TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::CreateWriteSessio
         Settings.SubSessionIdleTimeout_
     );
 
-    WrappedWriteSessionPtr resultSession = nullptr;
-    {
-        std::unique_lock lock(GlobalLock);
-        auto [it, inserted] = SessionsIndex.try_emplace(partition, writeSession);
-        resultSession = inserted ? writeSession : it->second;
-    }
+    SessionsIndex.emplace(partition, writeSession);
 
     SubscribeToPartition(partition);
-    return resultSession;
+    return writeSession;
 }
 
 void TKeyedWriteSession::RunEventLoop(ui64 partition, WrappedWriteSessionPtr wrappedSession) {

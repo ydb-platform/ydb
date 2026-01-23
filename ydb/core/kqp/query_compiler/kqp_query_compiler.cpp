@@ -1537,6 +1537,7 @@ private:
     THashMap<TStringBuf, ui32> CreateColumnToOrder(
             const TVector<TStringBuf>& columns,
             const TKikimrTableMetadataPtr& tableMeta,
+            const THashSet<TStringBuf>& localDefaultColumnsIds,
             bool keysFirst) {
         THashSet<TStringBuf> usedColumns;
         for (const auto& columnName : columns) {
@@ -1551,8 +1552,37 @@ private:
                 columnToOrder[columnName] = number++;
             }
         }
+
+        const auto isDefaultColumn = [&tableMeta](const TString& columnName) {
+            const auto defaultKind = tableMeta->Columns.at(columnName).DefaultKind;
+            return defaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
+                || defaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+        };
+
+        // Not DEFAULT columns
+        for (const auto& columnName : tableMeta->ColumnOrder) {
+            if (usedColumns.contains(columnName)
+                    && !columnToOrder.contains(columnName)
+                    && !isDefaultColumn(columnName)) {
+                columnToOrder[columnName] = number++;
+            }
+        }
+
+        // Default columns without local processing
+        for (const auto& columnName : tableMeta->ColumnOrder) {
+            if (usedColumns.contains(columnName)
+                    && !columnToOrder.contains(columnName)
+                    && !localDefaultColumnsIds.contains(columnName)) {
+                AFL_ENSURE(isDefaultColumn(columnName));
+                columnToOrder[columnName] = number++;
+            }
+        }
+
+        // Default columns with local processing
         for (const auto& columnName : tableMeta->ColumnOrder) {
             if (usedColumns.contains(columnName) && !columnToOrder.contains(columnName)) {
+                AFL_ENSURE(isDefaultColumn(columnName));
+                AFL_ENSURE(localDefaultColumnsIds.contains(columnName));
                 columnToOrder[columnName] = number++;
             }
         }
@@ -1609,7 +1639,10 @@ private:
 
                 const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
 
-                auto fillColumnProto = [] (TStringBuf columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto ) {
+                auto fillColumnProto = [] (
+                        TStringBuf columnName,
+                        const NYql::TKikimrColumnMetadata* column,
+                        NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
                     columnProto->SetId(column->Id);
                     columnProto->SetName(TString(columnName));
                     columnProto->SetTypeId(column->TypeInfo.GetTypeId());
@@ -1619,38 +1652,22 @@ private:
                     }
                 };
 
-                for (const auto& columnName : tableMeta->KeyColumnNames) {
-                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-
-                    auto keyColumnProto = settingsProto.AddKeyColumns();
-                    fillColumnProto(columnName, columnMeta, keyColumnProto);
-                }
-
-                for (const auto& columnName : columns) {
-                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-
-                    auto columnProto = settingsProto.AddColumns();
-                    fillColumnProto(columnName, columnMeta, columnProto);
-                }
-
-                AFL_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
-                const auto columnToOrder = CreateColumnToOrder(
-                    columns,
-                    tableMeta,
-                    tableMeta->Kind == EKikimrTableKind::Datashard);
-                for (const auto& columnName : columns) {
-                    settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
-                }
-
-                settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
-
-                const bool inconsistentWrite = settings.InconsistentWrite().Cast().Value() == "true"sv;
-                AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
-                settingsProto.SetInconsistentTx(inconsistentWrite);
-
+                THashSet<ui32> defaultColumnsIds;
+                THashSet<TStringBuf> localDefaultColumns; // for shards DefaultColumnsCount feature
                 if (Config->GetEnableIndexStreamWrite()) {
+                    for (const auto& columnNameAtom : settings.DefaultColumns().Cast()) {
+                        const auto& columnName = columnNameAtom.StringValue();
+                        const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                        YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                        const bool isDefault = columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
+                                        ||  columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+                        if (isDefault) {
+                            defaultColumnsIds.insert(columnMeta->Id);
+                            localDefaultColumns.insert(columnName);
+                        }
+                    }
+                
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
 
                     std::vector<size_t> affectedIndexes;
@@ -1736,6 +1753,8 @@ private:
                             for (const auto& [columnName, columnMeta] : tableMeta->Columns) {
                                 if (!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.contains(columnName)) {
                                     lookupColumns.push_back(columnName);
+                                    localDefaultColumns.erase(columnName);
+
                                     auto columnProto = settingsProto.AddLookupColumns();
                                     fillColumnProto(columnName, &columnMeta, columnProto);
                                 }
@@ -1791,6 +1810,7 @@ private:
                         const auto indexColumnToOrder = CreateColumnToOrder(
                             indexColumns,
                             implTable,
+                            localDefaultColumns,
                             true);
                         for (const auto& columnName: indexColumns) {
                             indexSettings->AddWriteIndexes(indexColumnToOrder.at(columnName));
@@ -1800,7 +1820,48 @@ private:
                             indexColumns,
                             tablesMap);
                     }
+                } else {
+                    AFL_ENSURE(localDefaultColumns.empty());
+                    AFL_ENSURE(defaultColumnsIds.empty());
                 }
+
+                for (const auto& columnName : tableMeta->KeyColumnNames) {
+                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                    auto keyColumnProto = settingsProto.AddKeyColumns();
+                    fillColumnProto(columnName, columnMeta, keyColumnProto);
+                }
+
+                for (const auto& columnName : columns) {
+                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                    auto columnProto = settingsProto.AddColumns();
+                    fillColumnProto(columnName, columnMeta, columnProto);
+                }
+
+                AFL_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
+                const auto columnToOrder = CreateColumnToOrder(
+                    columns,
+                    tableMeta,
+                    localDefaultColumns,
+                    tableMeta->Kind == EKikimrTableKind::Datashard);
+                for (const auto& columnName : columns) {
+                    settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
+                }
+
+                AFL_ENSURE(settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+                            || defaultColumnsIds.empty());
+                for (const auto& defaultColumnId : defaultColumnsIds) { // from plan!!!
+                    settingsProto.AddDefaultColumnsIds(defaultColumnId);
+                }
+
+                settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
+
+                const bool inconsistentWrite = settings.InconsistentWrite().Cast().Value() == "true"sv;
+                AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
+                settingsProto.SetInconsistentTx(inconsistentWrite);
             } else {
                 // Table info will be filled during execution after resolving table by name.
                 settingsProto.MutableTable()->SetPath(TString(settings.Table().Cast().Path()));

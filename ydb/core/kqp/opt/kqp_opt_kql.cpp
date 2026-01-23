@@ -342,7 +342,9 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
     }
 
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, isSink, write.Pos(), ctx);
-    if (generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
+
+    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
+    if (!useStreamIndex && generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
         return Build<TKqlInsertOnConflictUpdateRows>(ctx, write.Pos())
             .Table(BuildTableMeta(table, write.Pos(), ctx))
             .Input(input.Ptr())
@@ -358,6 +360,7 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
         .Columns(columns.Ptr())
         .ReturningColumns(write.ReturningColumns())
         .IsBatch(ctx.NewAtom(write.Pos(), "false"))
+        .DefaultColumns(generateColumnsIfInsert)
         .Settings(settings)
         .Done();
 
@@ -389,22 +392,13 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
         });
 
         if (onlyStreamIndexes) {
-            if (generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
-                return Build<TKqlInsertOnConflictUpdateRows>(ctx, write.Pos())
-                    .Table(BuildTableMeta(table, write.Pos(), ctx))
-                    .Input(input.Ptr())
-                    .Columns(columns.Ptr())
-                    .ReturningColumns(write.ReturningColumns())
-                    .GenerateColumnsIfInsert(generateColumnsIfInsert)
-                    .Done();
-            }
-
             return Build<TKqlUpsertRows>(ctx, write.Pos())
                 .Table(BuildTableMeta(table, write.Pos(), ctx))
                 .Input(input.Ptr())
                 .Columns(columns.Ptr())
                 .ReturningColumns(write.ReturningColumns())
                 .IsBatch(ctx.NewAtom(write.Pos(), "false"))
+                .DefaultColumns(generateColumnsIfInsert)
                 .Settings(settings)
                 .Done();
         }
@@ -435,6 +429,7 @@ TExprBase BuildReplaceTable(const TKiWriteTable& write, const TCoAtomList& input
         .Columns(columns)
         .ReturningColumns(write.ReturningColumns())
         .IsBatch(ctx.NewAtom(write.Pos(), "false"))
+        .DefaultColumns<TCoAtomList>().Build()
         .Settings(settings)
         .Done();
 
@@ -719,6 +714,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
             .Add(updateColumnsList)
             .Build()
         .IsBatch(update.IsBatch())
+        .DefaultColumns<TCoAtomList>().Build()
         .Settings(IsConditionalUpdateSetting(false, ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
@@ -793,6 +789,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             .Add(updateColumnsList)
             .Build()
         .IsBatch(update.IsBatch())
+        .DefaultColumns<TCoAtomList>().Build()
         .Settings(IsConditionalUpdateSetting(false, ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
@@ -864,6 +861,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                     .Add(indexColumnsList)
                     .Build()
                 .IsBatch(update.IsBatch())
+                .DefaultColumns<TCoAtomList>().Build()
                 .Settings().Build()
                 .Done();
 

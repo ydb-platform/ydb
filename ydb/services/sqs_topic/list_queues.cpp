@@ -166,9 +166,11 @@ namespace NKikimr::NSqsTopic::V1 {
         const int maxResults = Request().has_max_results() ? Request().max_results() : MAX_LIST_QUEUES_RESULT;
         TString newNextToken;
         if (std::cmp_greater(tc.size(), maxResults)) {
-            tc.resize(maxResults);
-            const auto& threshold = tc.back();
-            newNextToken = TString::Join(threshold.Topic, '@', threshold.Consumer);
+            if (Request().has_max_results()) { // Use paging only if the limit has been explicitly specified
+                tc.resize(maxResults);
+                const auto& threshold = tc.back();
+                newNextToken = TString::Join(threshold.Topic, '@', threshold.Consumer);
+            }
         }
 
         Ydb::Ymq::V1::ListQueuesResult result;

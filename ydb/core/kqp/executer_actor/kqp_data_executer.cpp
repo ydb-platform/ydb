@@ -7,12 +7,12 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
+#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/reattach.h>
-#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -25,12 +25,13 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/persqueue/events/global.h>
 
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
-#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -2950,7 +2951,29 @@ private:
         }
 
         FederatedQuery::StreamingDisposition streamingDisposition;
-        streamingDisposition.mutable_from_last_checkpoint()->set_force(true);
+        if (const auto disposition = context->StreamingDisposition) {
+            switch (disposition->GetDispositionCase()) {
+                case NYql::NPq::NProto::StreamingDisposition::kOldest:
+                    *streamingDisposition.mutable_oldest() = disposition->oldest();
+                    break;
+                case NYql::NPq::NProto::StreamingDisposition::kFresh:
+                    *streamingDisposition.mutable_fresh() = disposition->fresh();
+                    break;
+                case NYql::NPq::NProto::StreamingDisposition::kFromTime:
+                    *streamingDisposition.mutable_from_time()->mutable_timestamp() = disposition->from_time().timestamp();
+                    break;
+                case NYql::NPq::NProto::StreamingDisposition::kTimeAgo:
+                    *streamingDisposition.mutable_time_ago()->mutable_duration() = disposition->time_ago().duration();
+                    break;
+                case NYql::NPq::NProto::StreamingDisposition::kFromLastCheckpoint:
+                    streamingDisposition.mutable_from_last_checkpoint()->set_force(disposition->from_last_checkpoint().force());
+                    break;
+                case NYql::NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET:
+                    break;
+            }
+        } else {
+            streamingDisposition.mutable_from_last_checkpoint()->set_force(true);
+        }
 
         const auto stateLoadMode = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetZeroCheckpointSaved()
             ? FederatedQuery::FROM_LAST_CHECKPOINT

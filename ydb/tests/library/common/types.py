@@ -40,14 +40,7 @@ def _erasure_type(id_, min_fail_domains, min_alive_replicas):
 @unique
 class Erasure(Enum):
     NONE = _erasure_type(id_=0, min_fail_domains=1, min_alive_replicas=1)
-    MIRROR_3 = _erasure_type(id_=1, min_fail_domains=4, min_alive_replicas=1)
-    BLOCK_3_1 = _erasure_type(id_=2, min_fail_domains=5, min_alive_replicas=4)
-    STRIPE_3_1 = _erasure_type(id_=3, min_fail_domains=5, min_alive_replicas=4)
     BLOCK_4_2 = _erasure_type(id_=4, min_fail_domains=8, min_alive_replicas=6)
-    BLOCK_3_2 = _erasure_type(id_=5, min_fail_domains=7, min_alive_replicas=5)
-    STRIPE_4_2 = _erasure_type(id_=6, min_fail_domains=8, min_alive_replicas=6)
-    STRIPE_3_2 = _erasure_type(id_=7, min_fail_domains=7, min_alive_replicas=5)
-    MIRROR_3_2 = _erasure_type(id_=8, min_fail_domains=5, min_alive_replicas=3)
     MIRROR_3_DC = _erasure_type(id_=9, min_fail_domains=3, min_alive_replicas=3)
     MIRROR_3OF4 = _erasure_type(id_=18, min_fail_domains=8, min_alive_replicas=6)
 
@@ -89,8 +82,7 @@ class Erasure(Enum):
     @staticmethod
     def common_used():
         return (
-            Erasure.NONE, Erasure.BLOCK_4_2, Erasure.MIRROR_3_DC,
-            Erasure.MIRROR_3
+            Erasure.NONE, Erasure.BLOCK_4_2, Erasure.MIRROR_3_DC
         )
 
 

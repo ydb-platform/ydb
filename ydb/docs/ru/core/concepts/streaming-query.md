@@ -149,5 +149,5 @@
 
 ## См. также
 
-- [Форматы данных потоковых запросов](../dev/streaming-query-formats.md)
+- [Форматы данных потоковых запросов](../dev/streaming-query/streaming-query-formats.md)
 - [Рецепты работы с потоковыми запросами](../recipes/streaming_queries/index.md)

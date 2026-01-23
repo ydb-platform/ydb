@@ -99,7 +99,7 @@ FROM
 END DO
 ```
 
-Подробнее про агрегацию `GROUP BY HOP` можно прочитать в статье [{#T}](../../../yql/reference/syntax/select/group-by#group-by-hop). Подробнее про запись данных в топик можно прочитать в статье [{#T}](../../dev/streaming-query-formats.md#write_formats).
+Подробнее про агрегацию `GROUP BY HOP` можно прочитать в статье [{#T}](../../../yql/reference/syntax/select/group-by#group-by-hop). Подробнее про запись данных в топик можно прочитать в статье [{#T}](../../dev/streaming-query/streaming-query-formats.md#write_formats).
 
 ## Шаг 4. Просмотр состояния запроса {#step4}
 

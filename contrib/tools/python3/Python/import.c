@@ -1388,6 +1388,7 @@ is_builtin(PyObject *name)
 static PyObject*
 create_builtin(PyThreadState *tstate, PyObject *name, PyObject *spec)
 {
+    const char *oldcontext, *newcontext;
     PyObject *mod = import_find_extension(tstate, name, name);
     if (mod || _PyErr_Occurred(tstate)) {
         return mod;
@@ -1401,7 +1402,13 @@ create_builtin(PyThreadState *tstate, PyObject *name, PyObject *spec)
                 mod = PyImport_AddModuleObject(name);
                 return Py_XNewRef(mod);
             }
+            newcontext = PyUnicode_AsUTF8(name);
+            if (newcontext == NULL) {
+                Py_RETURN_NONE;
+            }
+            oldcontext = _PyImport_SwapPackageContext(newcontext);
             mod = _PyImport_InitFunc_TrampolineCall(*p->initfunc);
+            _PyImport_SwapPackageContext(oldcontext);
             if (mod == NULL) {
                 return NULL;
             }

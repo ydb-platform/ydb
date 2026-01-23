@@ -829,12 +829,20 @@ Ydb::Table::DescribeSystemViewResult DescribeSystemView(TDriver driver, const TS
 
 }
 
-void BackupExternalTable(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
-    Y_ENSURE(!dbPath.empty());
+void BackupExternalTable(
+    TDriver driver,
+    const TString& db,
+    const TString& dbBackupRoot,
+    const TString& dbPathRelativeToBackupRoot,
+    const TFsPath& fsBackupFolder)
+{
+    Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
+    const auto dbPath = JoinDatabasePath(dbBackupRoot, dbPathRelativeToBackupRoot);
+
     LOG_I("Backup external table " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
     const auto description = DescribeExternalTable(driver, dbPath);
-    const auto creationQuery = NDump::BuildCreateExternalTableQuery(description);
+    const auto creationQuery = NDump::BuildCreateExternalTableQuery(db, dbBackupRoot, description);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalTable());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -965,7 +973,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                 } else if (dbIt.IsExternalDataSource()) {
                     BackupExternalDataSource(driver, database, dbIt.GetFullPath(), childFolderPath);
                 } else if (dbIt.IsExternalTable()) {
-                    BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
+                    BackupExternalTable(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
                 } else if (dbIt.IsSystemView()) {
                     BackupSystemView(driver, dbIt.GetFullPath(), childFolderPath);
                 } else if (dbIt.IsTransfer()) {

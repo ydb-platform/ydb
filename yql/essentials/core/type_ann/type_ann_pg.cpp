@@ -452,7 +452,13 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
     }
 }
 
-const TTypeAnnotationNode* FromPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx) {
+const TTypeAnnotationNode* FromPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
+    if (type->GetKind() == ETypeAnnotationKind::Universal) {
+        isUniversal = true;
+        return nullptr;
+    }
+
     auto res = ConvertFromPgType(type->Cast<TPgExprType>()->GetId());
     if (!res) {
         ctx.AddError(TIssue(ctx.GetPosition(pos),
@@ -483,7 +489,13 @@ IGraphTransformer::TStatus FromPgWrapper(const TExprNode::TPtr& input, TExprNode
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto resultType = FromPgImpl(input->Pos(), input->Head().GetTypeAnn(), ctx.Expr);
+    bool isUniversal;
+    auto resultType = FromPgImpl(input->Pos(), input->Head().GetTypeAnn(), ctx.Expr, isUniversal);
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!resultType) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -492,10 +504,15 @@ IGraphTransformer::TStatus FromPgWrapper(const TExprNode::TPtr& input, TExprNode
     return IGraphTransformer::TStatus::Ok;
 }
 
-const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx) {
+const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
     bool isOptional;
     const TDataExprType* dataType;
-    if (!EnsureDataOrOptionalOfData(pos, type, isOptional, dataType, ctx)) {
+    if (!EnsureDataOrOptionalOfData(pos, type, isOptional, dataType, ctx, isUniversal)) {
+        return nullptr;
+    }
+
+    if (isUniversal) {
         return nullptr;
     }
 
@@ -522,7 +539,13 @@ IGraphTransformer::TStatus ToPgWrapper(const TExprNode::TPtr& input, TExprNode::
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto resultType = ToPgImpl(input->Pos(), input->Head().GetTypeAnn(), ctx.Expr);
+    bool isUniversal;
+    auto resultType = ToPgImpl(input->Pos(), input->Head().GetTypeAnn(), ctx.Expr, isUniversal);
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!resultType) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -1510,15 +1533,20 @@ IGraphTransformer::TStatus PgConstWrapper(const TExprNode::TPtr& input, TExprNod
     }
 
     // TODO: validate value
-    if (!EnsureAtom(input->Head(), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(input->Head(), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (input->ChildrenSize() >= 3) {
         auto type = input->Child(2)->GetTypeAnn();
         ui32 typeModType;
         bool convertToPg;
-        bool isUniversal;
         if (!ExtractPgType(type, typeModType, convertToPg, input->Child(2)->Pos(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1669,6 +1697,11 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
     }
 
     auto func = input->Child(0)->Content();
+    if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureType(*input->Child(1), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -6241,6 +6274,11 @@ IGraphTransformer::TStatus PgSubLinkWrapper(const TExprNode::TPtr& input, TExprN
 
     const TTypeAnnotationNode* valueType = nullptr;
     if (linkType != "exists") {
+        if (input->Child(4)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(4)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         auto itemType = input->Child(4)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         if (itemType->GetSize() != 1) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),

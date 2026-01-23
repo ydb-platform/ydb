@@ -1,0 +1,3 @@
+/* postgres can not */
+/* custom error:Fulltext contains is not implemented yet*/
+select FulltextContains("some text", "text");

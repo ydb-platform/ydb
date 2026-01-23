@@ -176,13 +176,13 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
     SetLangVer(config.GetDefaultLangVer());
     SetBackportMode(config.GetYqlBackportMode());
     SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
+    KqpYqlSyntaxVersion = config.GetSqlVersion();
     return *this;
 }
 
 NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql::TExprContext& ctx) {
     NSQLTranslation::TTranslationSettings settings;
     settings.PgParser = UsePgParser && *UsePgParser;
-    settings.Antlr4Parser = true;
     settings.EmitReadsForExists = true;
     settings.LangVer = LangVer;
     settings.BackportMode = BackportMode;

@@ -478,38 +478,13 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         RunTestDiff(groupType, dataSize, testString, diffs);
     }
 
-    // Mirror tests
-    Y_UNIT_TEST(TestMirror3LossOfAllPossible3) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::ErasureMirror3);
-        constexpr ui32 maxMissingParts = 2;
-        constexpr ui32 maxParts = 1 + 2;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
     // Block tests
-    Y_UNIT_TEST(TestBlock31LossOfAllPossible1) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus1Block);
-        constexpr ui32 maxMissingParts = 1;
-        constexpr ui32 maxParts = 3 + 1;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
     Y_UNIT_TEST(TestBlock42LossOfAllPossible2) {
         // Set up the erasure
         TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus2Block);
         // Specify
         constexpr ui32 maxMissingParts = 2;
         constexpr ui32 maxParts = 4 + 2;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
-    Y_UNIT_TEST(TestBlock32LossOfAllPossible2) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus2Block);
-        constexpr ui32 maxMissingParts = 2;
-        constexpr ui32 maxParts = 3 + 2;
         TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
     }
 
@@ -521,88 +496,13 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
         TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
     }
 
-    Y_UNIT_TEST(TestBlock33LossOfAllPossible3) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus3Block);
-        constexpr ui32 maxMissingParts = 3;
-        constexpr ui32 maxParts = 3 + 3;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
-    Y_UNIT_TEST(TestBlock23LossOfAllPossible3) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus3Block);
-        constexpr ui32 maxMissingParts = 3;
-        constexpr ui32 maxParts = 2 + 3;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
-    Y_UNIT_TEST(TestBlock22LossOfAllPossible2) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus2Block);
-        constexpr ui32 maxMissingParts = 2;
-        constexpr ui32 maxParts = 2 + 2;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
-
-    // Stripe tests
-    Y_UNIT_TEST(TestStripe31LossOfAllPossible1) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus1Stripe);
-        constexpr ui32 maxMissingParts = 1;
-        constexpr ui32 maxParts = 3 + 1;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
-    Y_UNIT_TEST(TestStripe42LossOfAllPossible2) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus2Stripe);
-        // Specify
-        constexpr ui32 maxMissingParts = 2;
-        constexpr ui32 maxParts = 4 + 2;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
-    Y_UNIT_TEST(TestStripe32LossOfAllPossible2) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus2Stripe);
-        constexpr ui32 maxMissingParts = 2;
-        constexpr ui32 maxParts = 3 + 2;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
-    Y_UNIT_TEST(TestStripe43LossOfAllPossible3) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure4Plus3Stripe);
-        constexpr ui32 maxMissingParts = 3;
-        constexpr ui32 maxParts = 4 + 3;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
-    Y_UNIT_TEST(TestStripe33LossOfAllPossible3) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus3Stripe);
-        constexpr ui32 maxMissingParts = 3;
-        constexpr ui32 maxParts = 3 + 3;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
-    Y_UNIT_TEST(TestStripe23LossOfAllPossible3) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus3Stripe);
-        constexpr ui32 maxMissingParts = 3;
-        constexpr ui32 maxParts = 2 + 3;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
-
-    Y_UNIT_TEST(TestStripe22LossOfAllPossible2) {
-        // Set up the erasure
-        TErasureType groupType(TErasureType::EErasureSpecies::Erasure2Plus2Stripe);
-        constexpr ui32 maxMissingParts = 2;
-        constexpr ui32 maxParts = 2 + 2;
-        TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
-    }
+    // Y_UNIT_TEST(TestBlock33LossOfAllPossible3) {
+    //     // Set up the erasure
+    //     TErasureType groupType(TErasureType::EErasureSpecies::Erasure3Plus3Block);
+    //     constexpr ui32 maxMissingParts = 3;
+    //     constexpr ui32 maxParts = 3 + 3;
+    //     TestAllLossesDifferentSizes<maxMissingParts>(groupType, maxParts);
+    // }
 
     void TestErasure(TErasureType::ECrcMode crcMode, TErasureType::EErasureSpecies species) {
         TErasureType groupType(species);

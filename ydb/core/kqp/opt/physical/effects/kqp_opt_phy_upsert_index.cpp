@@ -219,11 +219,14 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
         } else {
             if (mode != TKqpPhyUpsertIndexMode::UpdateOn) {
                 auto columnType = table.GetColumnType(TString(column));
+                const auto* optionalColumnType = columnType->IsOptionalOrNull()
+                    ? columnType
+                    : ctx.MakeType<TOptionalExprType>(columnType);
                 absentKeyRow.emplace_back(
                     Build<TCoNameValueTuple>(ctx, pos)
                         .Name(columnAtom)
                         .Value<TCoNothing>()
-                            .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
+                            .OptionalType(NCommon::BuildTypeExpr(pos, *optionalColumnType, ctx))
                             .Build()
                         .Done()
                 );
@@ -377,6 +380,24 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
                     .Build()
                 .Done();
         };
+        auto getterFromValueAsOptional = [&ctx, &pos] (const TStringBuf& x, const TCoArgument& arg, bool makeOptional) -> TExprBase {
+            auto member = Build<TCoMember>(ctx, pos)
+                .Struct(arg)
+                .Name().Build(x)
+                .Done();
+
+            TExprBase value = member;
+            if (makeOptional) {
+                value = Build<TCoJust>(ctx, pos)
+                    .Input(member)
+                    .Done();
+            }
+
+            return Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(x)
+                .Value(value)
+                .Done();
+        };
 
         for (const auto& x : inputColumns) {
             bool hasDefaultToCheck = checkDefaults.contains(x);
@@ -392,13 +413,16 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         for (const auto& x : missedKeyInput) {
             auto columnType = table.GetColumnType(TString(x));
             YQL_ENSURE(columnType);
+            const auto* optionalColumnType = columnType->IsOptionalOrNull()
+                ? columnType
+                : ctx.MakeType<TOptionalExprType>(columnType);
 
-            existingRow.emplace_back(getterFromValue(x, lookupRowArgument));
+            existingRow.emplace_back(getterFromValueAsOptional(x, lookupRowArgument, optionalColumnType != columnType));
             nonExistingRow.emplace_back(
                 Build<TCoNameValueTuple>(ctx, pos)
                     .Name().Build(x)
                     .Value<TCoNothing>()
-                        .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
+                        .OptionalType(NCommon::BuildTypeExpr(pos, *optionalColumnType, ctx))
                         .Build()
                     .Done());
         }
@@ -620,12 +644,13 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     const auto indexes = BuildAffectedIndexTables(table, pos, ctx, filter);
 
     const bool isSink = NeedSinks(table, kqpCtx);
-    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
+    const bool useStreamIndex = isSink && kqpCtx.Config->GetEnableIndexStreamWrite();
     const bool needPrecompute = !useStreamIndex
         || !columnsWithDefaultsSet.empty()
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
             return index.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree
-                || index.second->Type == TIndexDescription::EType::GlobalFulltext;
+                || index.second->Type == TIndexDescription::EType::GlobalFulltextPlain
+                || index.second->Type == TIndexDescription::EType::GlobalFulltextRelevance;
         });
 
     if (!needPrecompute) {
@@ -636,6 +661,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
             .Columns(inputColumns)
             .ReturningColumns(returningColumns.Ptr())
             .IsBatch(ctx.NewAtom(pos, "false"))
+            .DefaultColumns(columnsWithDefaults)
             .Settings(settings)
             .Done());
         return Build<TExprList>(ctx, pos)
@@ -702,6 +728,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         .Columns(inputColumns)
         .ReturningColumns(returningColumns)
         .IsBatch(ctx.NewAtom(pos, "false"))
+        .DefaultColumns(columnsWithDefaults)
         .Settings(settings)
         .Done());
 
@@ -943,7 +970,8 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                         indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, false, pos, ctx);
                     break;
                 }
-                case TIndexDescription::EType::GlobalFulltext: {
+                case TIndexDescription::EType::GlobalFulltextPlain:
+                case TIndexDescription::EType::GlobalFulltextRelevance: {
                     // For fulltext indexes, we need to tokenize the text and create deleted rows
                     auto deleteKeysPrecompute = ReadInputToPrecompute(deleteIndexKeys, pos, ctx);
                     deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet,
@@ -1013,7 +1041,8 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
                     break;
                 }
-                case TIndexDescription::EType::GlobalFulltext: {
+                case TIndexDescription::EType::GlobalFulltextPlain:
+                case TIndexDescription::EType::GlobalFulltextRelevance: {
                     // For fulltext indexes, we need to tokenize the text and create upserted rows
                     auto upsertPrecompute = ReadInputToPrecompute(upsertIndexRows, pos, ctx);
                     upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertPrecompute, indexTableColumnsSet,
@@ -1030,6 +1059,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                             .Columns(BuildColumnsList(docsColumns, pos, ctx))
                             .ReturningColumns<TCoAtomList>().Build()
                             .IsBatch(ctx.NewAtom(pos, "false"))
+                            .DefaultColumns<TCoAtomList>().Build()
                             .Done());
                         // Remember added documents for stats
                         addedDocs = docsRows;
@@ -1057,6 +1087,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 .Input(upsertIndexRows)
                 .Columns(BuildColumnsList(indexTableColumns, pos, ctx))
                 .ReturningColumns<TCoAtomList>().Build()
+                .DefaultColumns<TCoAtomList>().Build()
                 .IsBatch(ctx.NewAtom(pos, "false"))
                 .Done();
 

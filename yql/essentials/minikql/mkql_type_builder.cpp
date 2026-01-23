@@ -2205,6 +2205,16 @@ ui64 TTypeInfoHelper::GetMaxBlockBytes() const {
     return MaxBlockSizeInBytes;
 }
 
+void TTypeInfoHelper::NotifyNotConsumedLinear(const NUdf::TSourcePosition& pos) const {
+    if (NotConsumedLinearCallback_) {
+        NotConsumedLinearCallback_(pos);
+    }
+}
+
+void TTypeInfoHelper::SetNotConsumedLinearCallback(const TNotConsumedLinearCallback& callback) {
+    NotConsumedLinearCallback_ = callback;
+}
+
 void TTypeInfoHelper::DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v) {
     const auto typeId = dt->GetSchemeType();
     v->OnDataType(typeId);

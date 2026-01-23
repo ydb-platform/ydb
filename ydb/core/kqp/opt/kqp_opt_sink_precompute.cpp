@@ -34,7 +34,7 @@ public:
     TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final {
         outputExpr = inputExpr;
 
-        if (!KqpCtx->Config->EnableOltpSink) {
+        if (!KqpCtx->Config->GetEnableOltpSink()) {
             return TStatus::Ok;
         }
 
@@ -234,7 +234,7 @@ private:
                             return true;
                         });
                 } else if (input.Maybe<TKqpTxResultBinding>()) {
-                    // This transformer must be executed before building transactions 
+                    // This transformer must be executed before building transactions
                     YQL_ENSURE(false, "Unexpected TKqpTxResultBinding");
                 }
             }

@@ -1,5 +1,4 @@
 #include "log.h"
-#include "log_manager.h"
 
 #include <yt/yt/core/tracing/trace_context.h>
 
@@ -17,10 +16,15 @@ namespace NYT::NLogging {
 
 TLoggingContext GetLoggingContext()
 {
+    auto now = GetCpuInstant();
+
     auto* traceContext = NTracing::TryGetCurrentTraceContext();
+    if (traceContext) {
+        traceContext->CheckForLeak(now);
+    }
 
     return TLoggingContext{
-        .Instant = GetCpuInstant(),
+        .Instant = now,
         .ThreadId = TThread::CurrentThreadId(),
         .ThreadName = GetCurrentThreadName(),
         .FiberId = NConcurrency::GetCurrentFiberId(),

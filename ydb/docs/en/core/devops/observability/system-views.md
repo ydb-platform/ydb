@@ -12,6 +12,20 @@ Similar system views exist for what happens inside a specific database; they are
 
 {% endnote %}
 
+## Access control
+
+The ability to flexibly configure the access rights to system views allows for precise separation of access to service information and user data.
+
+### Typical access control scenarios
+
+- **Access only to system views:**
+  If your infrastructure has users or services that need to monitor the state of the cluster or database — for example, database administrators — but do not require access to user data, it is recommended to grant these users read-only permissions for the `.sys` directory.
+
+- **Access only to data:**
+  When you need to hide information about service and system objects from individual users or groups (for example, analysts who do not need access to internal diagnostics), it is sufficient to grant read-only permissions for the corresponding directory containing user data. In this case, there is no need to grant permissions for the `.sys` directory or the database root — this ensures that users will not see and will not be able to query system views.
+
+You can also assign different permissions to individual system views — both for specific users and for groups. This approach enables flexible implementation of the principle of least privilege and control over different levels of access to service information for various roles and tasks.
+
 ## Distributed Storage
 
 Information about the distributed storage operation is contained in several interconnected views, each responsible for describing its own entity:
@@ -40,19 +54,9 @@ Additionally, there is a separate view that shows statistics on the usage of gro
 | TotalSize             | Uint64    |         | Total number of bytes on PDisk                                                                                                                                   |
 | Status                | String    |         | PDisk operating mode that affects its participation in group allocation (`ACTIVE`, `INACTIVE`, `BROKEN`, `FAULTY`, `TO_BE_REMOVED`)                                       |
 | StatusChangeTimestamp | Timestamp |         | Time when `Status` last changed; if `NULL`, `Status` has not changed since PDisk creation                                                                              |
-| ExpectedSlotCount     | Uint32    |         | Maximum number of VSlots that can be created on this PDisk. Either user-defined or inferred from `InferPDiskSlotCountFromUnitSize`.                                |
-| NumActiveSlots        | Uint32    |         | Number of currently occupied VSlots with respect to `GroupSizeInUnits` of VDisks                                                                                   |
-| SlotSizeInUnits       | Uint32    |         | Size of VSlot in abstract units. Either user-defined or inferred from `InferPDiskSlotCountFromUnitSize`.                                                           |
+| ExpectedSlotCount     | Uint32    |         | Maximum number of VSlots that can be created on this PDisk                                                                                                       |
+| NumActiveSlots        | Uint32    |         | Number of currently occupied VSlots                                                                                                                              |
 | DecommitStatus        | String    |         | Status of PDisk [decommissioning](../deployment-options/manual/decommissioning.md) (`DECOMMIT_NONE`, `DECOMMIT_PENDING`, `DECOMMIT_IMMINENT`, `DECOMMIT_REJECTED`)       |
-| InferPDiskSlotCountFromUnitSize  | Uint64    |         | Size of VSlot in bytes from which `ExpectedSlotCount` and `SlotSizeInUnits` values are inferred unless user-defined. |
-
-The inferred values of `ExpectedSlotCount` and `SlotSizeInUnits` are defined by the following formula:
-
-$$
-\text{ExpectedSlotCount} \times \text{SlotSizeInUnits} = \frac{\text{TotalSize}}{\text{InferPDiskSlotCountFromUnitSize}}
-$$
-
-Where $\text{SlotSizeInUnits} = 2^N$ is chosen to meet $\text{ExpectedSlotCount} \leq 16$.
 
 ### ds_vslots
 
@@ -92,9 +96,6 @@ Note that the tuple `(NodeId, PDiskId)` forms a foreign key to the `ds_pdisks` v
 | GetFastLatency      | Interval |         | 90th percentile of `GetFast` request execution time                                                         |
 | OperatingStatus     | String   |         | Group status based on latest VDisk reports only (`UNKNOWN`, `FULL`, `PARTIAL`, `DEGRADED`, `DISINTEGRATED`)         |
 | ExpectedStatus      | String   |         | Status based not only on operational report, but on PDisk status and plans too (`UNKNOWN`, `FULL`, `PARTIAL`, `DEGRADED`, `DISINTEGRATED`) |
-| GroupSizeInUnits    | Uint32   |         | Size of the group in abstract units. In proportion to it, VDisks receive a storage quota. |
-
-The number of VSlots occupied by VDisk is defined as $ceil(\frac{\text{VDisk.GroupSizeInUnits}}{\text{PDisk.SlotSizeInUnits}})$.
 
 In this view, the tuple `(BoxId, StoragePoolId)` forms a foreign key to the `ds_storage_pools` view.
 
@@ -113,7 +114,6 @@ In this view, the tuple `(BoxId, StoragePoolId)` forms a foreign key to the `ds_
 | EncryptionMode | Uint32   |         | Data encryption setting for all groups (similar to `ds_groups.EncryptionMode`)                               |
 | SchemeshardId  | Uint64   |         | [SchemeShard](../../concepts/glossary.md#scheme-shard) identifier of the schema object to which this storage pool belongs (currently always `NULL`)      |
 | PathId         | Uint64   |         | Schema object node identifier within the specified SchemeShard to which this storage pool belongs          |
-| DefaultGroupSizeInUnits | Uint32   |         | The value of `GroupSizeInUnits` inherited by groups when new groups are added to the pool                                |
 
 ### ds_storage_stats
 

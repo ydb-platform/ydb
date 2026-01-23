@@ -72,6 +72,8 @@ SRCS(
     rpc_make_directory.cpp
     rpc_modify_permissions.cpp
     rpc_monitoring.cpp
+    rpc_nbs.cpp
+    rpc_nbs_io.cpp
     rpc_node_registration.cpp
     rpc_object_storage.cpp
     rpc_ping.cpp
@@ -135,6 +137,10 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
+    ydb/core/nbs/cloud/blockstore/libs/service
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct
+    ydb/core/nbs/cloud/blockstore/public/api/protos
+    ydb/core/nbs/cloud/storage/core/libs/common
     ydb/core/protos
     ydb/core/scheme
     ydb/core/sys_view
@@ -147,6 +153,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/core/security
     ydb/core/security/ldap_auth_provider
+    ydb/core/security/sasl
     ydb/library/aclib
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber

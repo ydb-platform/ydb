@@ -150,8 +150,10 @@ static INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& n
             return node.Q("syncGlobalUnique");
         case TIndexDescription::EType::GlobalVectorKmeansTree:
             return node.Q("globalVectorKmeansTree");
-        case TIndexDescription::EType::GlobalFulltext:
-            return node.Q("globalFulltext");
+        case TIndexDescription::EType::GlobalFulltextPlain:
+            return node.Q("globalFulltextPlain");
+        case TIndexDescription::EType::GlobalFulltextRelevance:
+            return node.Q("globalFulltextRelevance");
     }
 }
 
@@ -2625,23 +2627,23 @@ private:
 };
 
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-                                    std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TUpsertObject(pos, objectId, typeId, context, std::move(features));
+                                    TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
+    return new TUpsertObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features));
 }
 
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-                                    bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context) {
-    return new TCreateObject(pos, objectId, typeId, context, std::move(features), existingOk, replaceIfExists);
+                                    bool existingOk, bool replaceIfExists, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
+    return new TCreateObject(pos, objectId, typeId, context, TObjectFeatureNode::SkipEmpty(features), existingOk, replaceIfExists);
 }
 
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-                                   bool missingOk, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context) {
-    return new TAlterObject(pos, secretId, typeId, context, std::move(features), std::move(featuresToReset), missingOk);
+                                   bool missingOk, TObjectFeatureNodePtr features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context) {
+    return new TAlterObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), std::move(featuresToReset), missingOk);
 }
 
 TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-                                  bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context) {
-    return new TDropObject(pos, secretId, typeId, context, std::move(options), missingOk);
+                                  bool missingOk, TObjectFeatureNodePtr features, const TObjectOperatorContext& context) {
+    return new TDropObject(pos, secretId, typeId, context, TObjectFeatureNode::SkipEmpty(features), missingOk);
 }
 
 TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped) {
@@ -3494,6 +3496,11 @@ public:
                 if (ctx.DebugPositions) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                                             BuildQuotedAtom(Pos_, "DebugPositions"))));
+                }
+
+                if (ctx.WindowNewPipeline) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                                            BuildQuotedAtom(Pos_, "WindowNewPipeline"))));
                 }
 
                 if (ctx.DirectRowDependsOn.Defined()) {

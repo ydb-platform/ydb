@@ -88,7 +88,7 @@ class Workload():
         )
 
     def check_status(self):
-        result_sets = self.pool.execute_with_retries(f"SELECT Status FROM `.sys/streaming_queries` WHERE Path = '/Root/{self.prefix}/query_name'")
+        result_sets = self.pool.execute_with_retries(f"SELECT Status FROM `.sys/streaming_queries` WHERE Path = '{self.database}/{self.prefix}/query_name'")
         status = result_sets[0].rows[0].Status
         if status != 'RUNNING':
             raise Exception(f"Unexpected query status: expected 'RUNNING', got '{status}'")

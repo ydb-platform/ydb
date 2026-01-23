@@ -233,7 +233,7 @@ message TTableServiceConfig {
     optional uint32 CompileTimeoutMs = 12 [default = 60000];
     optional TResourceManager ResourceManager = 13;
     optional TQueryLimits QueryLimits = 14;
-    optional uint32 SqlVersion = 15 [(InvalidateCompileCache) = true];
+    optional uint32 SqlVersion = 15 [default = 1, (InvalidateCompileCache) = true];
     optional TSpillingServiceConfig SpillingServiceConfig = 16;
     optional TShutdownSettings ShutdownSettings = 17;
     optional TSessionBalancerSettings SessionBalancerSettings = 18;
@@ -372,7 +372,7 @@ message TTableServiceConfig {
     // if the underlying array buffer is filled less than this value, then the buffer's capacity gets shrunk to actual size.
     // Otherwise, we potentially don't track the real buffer capacity and it may lead to OOM situations inside DqOutputChannel's.
 
-    optional bool EnableSnapshotIsolationRW = 76 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableSnapshotIsolationRW = 76 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableStreamWrite = 77 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableBatchUpdates = 78 [default = true];
 
@@ -448,7 +448,7 @@ message TTableServiceConfig {
         All = 1;
     }
 
-    optional EBackportMode BackportMode = 108 [ default = Released, (InvalidateCompileCache) = true];
+    optional EBackportMode BackportMode = 108 [ default = All, (InvalidateCompileCache) = true];
 
     optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
 
@@ -471,9 +471,11 @@ message TTableServiceConfig {
 
     optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
 
-    optional bool EnableDqHashAggregateByDefault = 117 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableDqHashAggregateByDefault = 117 [default = false, (InvalidateCompileCache) = true];
 
     optional bool DefaultEnableShuffleEliminationForAggregation = 118 [default = false, (InvalidateCompileCache) = true];
 
     optional bool Antlr4ParserIsAmbiguityError = 119 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool DqHashOperatorsUseBlocks = 120 [default = false, (InvalidateCompileCache) = true];
 };

@@ -1,0 +1,57 @@
+## Visual Studio Code
+
+### Generate workspace
+
+Run vscode_generate_workspace.sh to generate a workspace.
+```
+./vscode_generate_workspace.sh
+```
+
+### Open workspace
+
+Execute
+```
+code workspace/workspace.code-workspace
+```
+
+## Run project locally
+
+1) Firstly you need to build ydbd app.
+    ```
+    ya make ../../apps/ydbd
+    ```
+
+2) Then you can run project locally.
+    ```
+    tmux
+    cd ../../tests/tools/local_cluster
+    ./start.sh --binary-path ../../../apps/ydbd/ydbd
+    ```
+3) Forward the monitoring ports via SSH.
+
+    You can find them in the startup script log.
+    
+    Example:
+    ```
+    2026-01-16 08:46:09,089 - __main__ - INFO - Cluster started successfully!
+    2026-01-16 08:46:09,089 - __main__ - INFO - Total nodes: 9
+    2026-01-16 08:46:09,089 - __main__ - INFO - Node 1: GRPC=2135, MON=8765, IC=19001, Endpoint=localhost:2135
+    2026-01-16 08:46:09,089 - __main__ - INFO - Node 2: GRPC=2145, MON=8775, IC=19011, Endpoint=localhost:2145
+    2026-01-16 08:46:09,089 - __main__ - INFO - Node 3: GRPC=2155, MON=8785, IC=19021, Endpoint=localhost:2155
+    2026-01-16 08:46:09,089 - __main__ - INFO - Node 4: GRPC=2165, MON=8795, IC=19031, Endpoint=localhost:2165
+    2026-01-16 08:46:09,089 - __main__ - INFO - Node 5: GRPC=2175, MON=8805, IC=19041, Endpoint=localhost:2175
+    2026-01-16 08:46:09,089 - __main__ - INFO - Node 6: GRPC=2185, MON=8815, IC=19051, Endpoint=localhost:2185
+    2026-01-16 08:46:09,089 - __main__ - INFO - Node 7: GRPC=2195, MON=8825, IC=19061, Endpoint=localhost:2195
+    2026-01-16 08:46:09,089 - __main__ - INFO - Node 8: GRPC=2205, MON=8835, IC=19071, Endpoint=localhost:2205
+    2026-01-16 08:46:09,089 - __main__ - INFO - Node 9: GRPC=2215, MON=8845, IC=19081, Endpoint=localhost:2215
+    ```
+
+    You only need to forward one of the MON ports:
+    ```
+    в ssh -L [LOCAL_PORT]:[DESTINATION_ADDRESS]:[DESTINATION_PORT] [USER@]SSH_SERVER
+    ```
+    For example:
+    ```
+    ssh -L 8765:localhost:8765 cloud
+    ```
+    Alternatively, you can forward ports directly through VS Code.

@@ -1830,6 +1830,7 @@ private:
         }
 
         if (!ValidateSettings(*settings, EYtSettingType::Initial
+            | EYtSettingType::Mode
             | EYtSettingType::CompressionCodec
             | EYtSettingType::ErasureCodec
             | EYtSettingType::ReplicationFactor
@@ -1856,6 +1857,17 @@ private:
             const TYtTableInfo tableInfo(create.Table());
             YQL_ENSURE(tableInfo.Meta);
             if (tableInfo.Meta->DoesExist || !initial) {
+                if (const auto m = NYql::GetSetting(*settings, EYtSettingType::Mode)) {
+                    if (EYtWriteMode::CreateIfNotExists == FromString<EYtWriteMode>(m->Tail().Content())) {
+                        YQL_CLOG(INFO, ProviderYt) <<
+                            (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name <<
+                            " already exists. 'CREATE TABLE IF NOT EXISTS' statement will do nothing.";
+
+                        output = create.World().Ptr();
+                        return TStatus::Repeat;
+                    }
+                }
+
                 ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), TStringBuilder() <<
                     (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name << " already exists."));
                 return TStatus::Error;
@@ -1933,12 +1945,19 @@ private:
     }
 
     TStatus HandleDrop(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 3, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 3U, 4U, ctx)) {
             return TStatus::Error;
         }
 
         if (!ValidateOpBase(input, ctx)) {
             return TStatus::Error;
+        }
+
+        if (input->ChildrenSize() < 4U) {// Add empty settings.
+            auto children = input->ChildrenList();
+            children.emplace_back(ctx.NewList(input->Pos(), {}));
+            output = ctx.ChangeChildren(*input, std::move(children));
+            return TStatus::Repeat;
         }
 
         const auto table = input->ChildPtr(TYtIsolatedOpBase::idx_Table);
@@ -1954,13 +1973,27 @@ private:
             return TStatus::Error;
         }
 
+        const bool isDropTable = input->IsCallable(TYtDropTable::CallableName());
+        const auto settings = input->Child(isDropTable ? TYtDropTable::idx_Settings : TYtDropView::idx_Settings);
+        if (!EnsureTuple(*settings, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateSettings(*settings, EYtSettingType::Mode, ctx)) {
+            return TStatus::Error;
+        }
+
+        bool ifExists = false;
+        if (const auto m = NYql::GetSetting(*settings, EYtSettingType::Mode)) {
+            ifExists = (isDropTable ? EYtWriteMode::DropIfExists : EYtWriteMode::DropObjectIfExists) == FromString<EYtWriteMode>(m->Tail().Content());
+        }
+
         const TYtIsolatedOpBase drop(input);
         if (!TYtTableInfo::HasSubstAnonymousLabel(drop.Table())) {
             const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
 
             TExprNode::TPtr newTable;
-            auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx);
-            if (TStatus::Ok != status.Level) {
+            if (auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx); TStatus::Ok != status.Level) {
                 if (TStatus::Error != status.Level && newTable != table) {
                     output = ctx.ChangeChild(*input, TYtWriteTable::idx_Table, std::move(newTable));
                 }
@@ -1969,7 +2002,15 @@ private:
             const TYtTableInfo tableInfo(drop.Table());
             YQL_ENSURE(tableInfo.Meta);
 
-            const bool isDropTable = drop.Ref().IsCallable(TYtDropTable::CallableName());
+            if (!tableInfo.Meta->DoesExist && ifExists) {
+                YQL_CLOG(INFO, ProviderYt) <<
+                    (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name <<
+                    " does not exist. 'DROP " << (isDropTable ? "TABLE" : "VIEW") << " IF EXISTS' statement will do nothing.";
+
+                output = drop.World().Ptr();
+                return TStatus::Repeat;
+            }
+
             if (isDropTable) {
                 if (tableInfo.Meta->IsDynamic) {
                     ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
@@ -2048,6 +2089,7 @@ private:
         }
 
         if (!ValidateSettings(*settings, EYtSettingType::Initial
+            | EYtSettingType::Mode
             | EYtSettingType::UserAttrs
             | EYtSettingType::Expiration
             , ctx))
@@ -2065,8 +2107,7 @@ private:
             const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
 
             TExprNode::TPtr newTable;
-            auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx);
-            if (TStatus::Ok != status.Level) {
+            if (auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx); TStatus::Ok != status.Level) {
                 if (TStatus::Error != status.Level && newTable != table) {
                     output = ctx.ChangeChild(*input, TYtWriteTable::idx_Table, std::move(newTable));
                 }
@@ -2075,6 +2116,17 @@ private:
             TYtTableInfo tableInfo(create.Table());
             YQL_ENSURE(tableInfo.Meta);
             if (tableInfo.Meta->DoesExist) {
+                if (const auto m = NYql::GetSetting(*settings, EYtSettingType::Mode)) {
+                    if (EYtWriteMode::CreateObjectIfNotExists == FromString<EYtWriteMode>(m->Tail().Content())) {
+                        YQL_CLOG(INFO, ProviderYt) <<
+                            (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name <<
+                            " already exists. 'CREATE VIEW IF NOT EXISTS' statement will do nothing.";
+
+                        output = create.World().Ptr();
+                        return TStatus::Repeat;
+                    }
+                }
+
                 ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), TStringBuilder() <<
                     (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name << " already exists."));
                 return TStatus::Error;

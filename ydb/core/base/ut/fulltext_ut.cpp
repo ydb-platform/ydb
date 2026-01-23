@@ -29,10 +29,6 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         TString error;
 
         UNIT_ASSERT(!ValidateSettings(settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "layout should be set");
-
-        settings.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
-        UNIT_ASSERT(!ValidateSettings(settings, error));
         UNIT_ASSERT_VALUES_EQUAL(error, "columns should be set");
         
         auto columnSettings = settings.add_columns();
@@ -107,14 +103,6 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(settings.columns().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(settings.columns().at(0).column(), "text");
         
-        UNIT_ASSERT_C(FillSetting(settings, "layout", "flat", error), error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
-        UNIT_ASSERT_EQUAL(settings.layout(), Ydb::Table::FulltextIndexSettings::FLAT);
-
-        UNIT_ASSERT_C(FillSetting(settings, "layout", "flat_relevance", error), error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "");
-        UNIT_ASSERT_EQUAL(settings.layout(), Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
-
         UNIT_ASSERT_C(FillSetting(settings, "tokenizer", "standard", error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
         UNIT_ASSERT_EQUAL(settings.columns().at(0).analyzers().tokenizer(), Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -144,6 +132,15 @@ Y_UNIT_TEST_SUITE(NFulltext) {
             TString error;
             UNIT_ASSERT_C(!FillSetting(settings, "asdf", "qwer", error), error);
             UNIT_ASSERT_VALUES_EQUAL(error, "Unknown index setting: asdf");
+        }
+
+        {
+            Ydb::Table::FulltextIndexSettings settings;
+            settings.add_columns()->set_column("text");
+
+            TString error;
+            UNIT_ASSERT_C(!FillSetting(settings, "layout", "flat", error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "Unknown index setting: layout");
         }
 
         {

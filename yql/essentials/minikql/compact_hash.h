@@ -5,6 +5,7 @@
 
 #include <yql/essentials/public/udf/sanitizer_utils.h>
 #include <yql/essentials/utils/hash.h>
+#include <yql/essentials/utils/is_pod.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>
@@ -865,6 +866,7 @@ class TCompactHashBase {
 protected:
     using TItemNode = TNode<TItemType>;
     static_assert(sizeof(TItemNode) == 1 + Max<size_t>(sizeof(TItemType), sizeof(void*)), "Unexpected size");
+    static_assert(sizeof(TKeyType) <= sizeof(void*) * 2, "Key must be small enough for passing by value inside unaligned api.");
 
 public:
     template <typename T>
@@ -1479,8 +1481,8 @@ template <typename TKey,
           typename TKeyEqual = TEqualTo<TKey>>
 class TCompactHash: public TCompactHashBase<TKeyValuePair<TKey, TValue>, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual> {
 private:
-    static_assert(std::is_trivially_destructible<TKey>::value && std::is_trivially_copy_assignable<TKey>::value && std::is_trivially_move_assignable<TKey>::value && std::is_trivially_copy_constructible<TKey>::value && std::is_trivially_move_constructible<TKey>::value, "Expected POD key type");
-    static_assert(std::is_trivially_destructible<TValue>::value && std::is_trivially_copy_assignable<TValue>::value && std::is_trivially_move_assignable<TValue>::value && std::is_trivially_copy_constructible<TValue>::value && std::is_trivially_move_constructible<TValue>::value, "Expected POD value type");
+    static_assert(NYql::IsPod<TKey>, "Expected POD key type");
+    static_assert(NYql::IsPod<TValue>, "Expected POD value type");
 
     using TItem = TKeyValuePair<TKey, TValue>;
     using TBase = TCompactHashBase<TItem, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual>;
@@ -1545,8 +1547,8 @@ template <typename TKey,
           typename TKeyEqual = TEqualTo<TKey>>
 class TCompactMultiHash: public TCompactHashBase<TKeyNodePair<TKey, TValue>, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual, TValue> {
 private:
-    static_assert(std::is_trivially_destructible<TKey>::value && std::is_trivially_copy_assignable<TKey>::value && std::is_trivially_move_assignable<TKey>::value && std::is_trivially_copy_constructible<TKey>::value && std::is_trivially_move_constructible<TKey>::value, "Expected POD key type");
-    static_assert(std::is_trivially_destructible<TValue>::value && std::is_trivially_copy_assignable<TValue>::value && std::is_trivially_move_assignable<TValue>::value && std::is_trivially_copy_constructible<TValue>::value && std::is_trivially_move_constructible<TValue>::value, "Expected POD value type");
+    static_assert(NYql::IsPod<TKey>, "Expected POD key type");
+    static_assert(NYql::IsPod<TValue>, "Expected POD value type");
 
     using TUserItem = std::pair<TKey, TValue>;
     using TStoreItem = TKeyNodePair<TKey, TValue>;
@@ -1606,7 +1608,7 @@ template <typename TKey,
           typename TKeyEqual = TEqualTo<TKey>>
 class TCompactHashSet: public TCompactHashBase<TKey, TKey, TIdentity, TKeyHash, TKeyEqual> {
 private:
-    static_assert(std::is_trivially_destructible<TKey>::value && std::is_trivially_copy_assignable<TKey>::value && std::is_trivially_move_assignable<TKey>::value && std::is_trivially_copy_constructible<TKey>::value && std::is_trivially_move_constructible<TKey>::value, "Expected POD key type");
+    static_assert(NYql::IsPod<TKey>, "Expected POD key type");
 
     using TBase = TCompactHashBase<TKey, TKey, TIdentity, TKeyHash, TKeyEqual>;
 

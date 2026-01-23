@@ -168,22 +168,22 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
 
     if (expectedType.GetKind() == ETypeAnnotationKind::Universal) {
         node = ctx.NewCallable(node->Pos(), "InstanceOf", { ExpandType(node->Pos(), expectedType, ctx) });
-        return IGraphTransformer::TStatus::Ok;
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     if (expectedType.GetKind() == ETypeAnnotationKind::UniversalStruct && sourceType.GetKind() == ETypeAnnotationKind::Struct) {
         node = ctx.NewCallable(node->Pos(), "InstanceOf", { ExpandType(node->Pos(), expectedType, ctx) });
-        return IGraphTransformer::TStatus::Ok;
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     if (sourceType.GetKind() == ETypeAnnotationKind::Universal) {
         node = ctx.NewCallable(node->Pos(), "InstanceOf", { ExpandType(node->Pos(), expectedType, ctx) });
-        return IGraphTransformer::TStatus::Ok;
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     if (sourceType.GetKind() == ETypeAnnotationKind::UniversalStruct && expectedType.GetKind() == ETypeAnnotationKind::Struct) {
         node = ctx.NewCallable(node->Pos(), "InstanceOf", { ExpandType(node->Pos(), expectedType, ctx) });
-        return IGraphTransformer::TStatus::Ok;
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     if (expectedType.GetKind() == ETypeAnnotationKind::Stream) {
@@ -1692,8 +1692,6 @@ NUdf::TCastResultOptions CastResult(const TTypeAnnotationNode* source, const TTy
             case ETypeAnnotationKind::Null:
             case ETypeAnnotationKind::EmptyList:
             case ETypeAnnotationKind::EmptyDict:
-            case ETypeAnnotationKind::Universal:
-            case ETypeAnnotationKind::UniversalStruct:
                 return NUdf::ECastOptions::Complete;
             case ETypeAnnotationKind::Optional:
                 return CastResult<Strong>(source->Cast<TOptionalExprType>(), target->Cast<TOptionalExprType>());
@@ -1739,18 +1737,6 @@ NUdf::TCastResultOptions CastResult(const TTypeAnnotationNode* source, const TTy
         return NUdf::ECastOptions::Complete;
     }
 
-    if (sKind == ETypeAnnotationKind::Universal || tKind == ETypeAnnotationKind::Universal) {
-        return NUdf::ECastOptions::Complete;
-    }
-
-    if (sKind == ETypeAnnotationKind::UniversalStruct && tKind == ETypeAnnotationKind::Struct) {
-        return NUdf::ECastOptions::Complete;
-    }
-
-    if (tKind == ETypeAnnotationKind::UniversalStruct && sKind == ETypeAnnotationKind::Struct) {
-        return NUdf::ECastOptions::Complete;
-    }
-
     return NUdf::ECastOptions::Impossible;
 }
 
@@ -1766,19 +1752,19 @@ ECompareOptions CanCompare(const TTypeAnnotationNode* left, const TTypeAnnotatio
     const auto lKind = left->GetKind();
     const auto rKind = right->GetKind();
     if (lKind == ETypeAnnotationKind::Universal || rKind == ETypeAnnotationKind::Universal) {
-        return ECompareOptions::Optional;
+        return ECompareOptions::Comparable;
     }
 
     if (lKind == ETypeAnnotationKind::UniversalStruct && rKind == ETypeAnnotationKind::Struct) {
-        return Equality ? ECompareOptions::Optional : ECompareOptions::Uncomparable;
+        return Equality ? ECompareOptions::Comparable : ECompareOptions::Uncomparable;
     }
 
     if (rKind == ETypeAnnotationKind::UniversalStruct && lKind == ETypeAnnotationKind::Struct) {
-        return Equality ? ECompareOptions::Optional : ECompareOptions::Uncomparable;
+        return Equality ? ECompareOptions::Comparable : ECompareOptions::Uncomparable;
     }
 
     if (rKind == ETypeAnnotationKind::UniversalStruct && lKind == ETypeAnnotationKind::UniversalStruct) {
-        return Equality ? ECompareOptions::Optional : ECompareOptions::Uncomparable;
+        return Equality ? ECompareOptions::Comparable : ECompareOptions::Uncomparable;
     }
 
     if (lKind == rKind) {
@@ -3825,6 +3811,22 @@ bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext&
     return EnsureOneOrTupleOfDataOrOptionalOfData(node.Pos(), *node.GetTypeAnn(), ctx);
 }
 
+bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() <<
+            "Expected either data (optional of data) or non-empty tuple of data (optional of data), but got lambda"));
+        return false;
+    }
+
+    return EnsureOneOrTupleOfDataOrOptionalOfData(node.Pos(), *node.GetTypeAnn(), ctx, isUniversal);
+}
+
 bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
     bool ok = false;
     bool isOptional = false;
@@ -3841,6 +3843,42 @@ bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTyp
         }
     } else {
         ok = IsDataOrOptionalOfData(pos, &type, isOptional, dataType, err, hasErrorType);
+    }
+
+    if (!ok) {
+        ctx.AddError(err);
+        if (!hasErrorType) {
+            ctx.AddError(TIssue(pos, TStringBuilder()
+                << "Expected either data (optional of data) or non-empty tuple of data (optional of data), but got: " << type));
+        }
+    }
+
+    return ok;
+}
+
+bool EnsureOneOrTupleOfDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
+    bool ok = false;
+    bool isOptional = false;
+    const TDataExprType* dataType = nullptr;
+    TIssue err;
+    bool hasErrorType = false;
+    TPosition pos = ctx.GetPosition(position);
+    if (type.GetKind() == ETypeAnnotationKind::Tuple) {
+        for (auto& child: type.Cast<TTupleExprType>()->GetItems()) {
+            ok = IsDataOrOptionalOfData(pos, child, isOptional, dataType, err, hasErrorType, &isUniversal);
+            if (!ok) {
+                break;
+            }
+            if (isUniversal) {
+                return true;
+            }
+        }
+    } else {
+        ok = IsDataOrOptionalOfData(pos, &type, isOptional, dataType, err, hasErrorType, &isUniversal);
+        if (isUniversal) {
+            return true;
+        }
     }
 
     if (!ok) {
@@ -6745,7 +6783,13 @@ bool EnsureScalarType(TPositionHandle position, const TTypeAnnotationNode& type,
     return true;
 }
 
-bool EnsureValidJsonPath(const TExprNode& node, TExprContext& ctx) {
+bool EnsureValidJsonPath(const TExprNode& node, TExprContext& ctx, bool& isUniversal) {
+    isUniversal = false;
+    if (node.GetTypeAnn() && node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        isUniversal = true;
+        return true;
+    }
+
     if (!EnsureSpecificDataType(node, EDataSlot::Utf8, ctx))
         return false;
 

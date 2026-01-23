@@ -28,6 +28,7 @@ struct TReadOptions
     bool RenameConvertedCounters = true;
     double RateDenominator = 1.0;
     bool EnableHistogramCompat = false;
+    bool SplitRateHistogramIntoGauges = false;
     bool ReportTimestampsForRateMetrics = true;
 
     bool EnableSolomonAggregationWorkaround = false;
@@ -36,6 +37,7 @@ struct TReadOptions
     ESummaryPolicy SummaryPolicy = ESummaryPolicy::Default;
 
     bool MarkAggregates = false;
+    bool EnableSolomonAggregates = false;
 
     std::optional<std::string> Host;
 

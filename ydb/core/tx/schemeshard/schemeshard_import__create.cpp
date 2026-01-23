@@ -13,6 +13,8 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
@@ -29,6 +31,12 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
+void TSchemeShard::EraseEncryptionKey(NIceDb::TNiceDb& db, TImportInfo& importInfo) {
+    if (importInfo.EraseEncryptionKey()) {
+        PersistImportSettings(db, importInfo);
+    }
+}
+
 namespace {
 
 using TItem = TImportInfo::TItem;
@@ -44,10 +52,6 @@ THashMap<EState, int> CountItemsByState(const TVector<TItem>& items) {
 
 bool AllDone(const THashMap<EState, int>& stateCounts) {
     return AllOf(stateCounts, [](const auto& stateCount) { return stateCount.first == EState::Done; });
-}
-
-bool AllWaiting(const THashMap<EState, int>& stateCounts) {
-    return AllOf(stateCounts, [](const auto& stateCount) { return stateCount.first == EState::Waiting; });
 }
 
 bool AllDoneOrWaiting(const THashMap<EState, int>& stateCounts) {
@@ -74,6 +78,14 @@ bool IsCreateTransferQuery(const TString& query) {
     return query.Contains("CREATE TRANSFER");
 }
 
+bool IsCreateExternalDataSourceQuery(const TString& query) {
+    return query.Contains("CREATE EXTERNAL DATA SOURCE");
+}
+
+bool IsCreateExternalTableQuery(const TString& query) {
+    return query.Contains("CREATE EXTERNAL TABLE");
+}
+
 bool RewriteCreateQuery(
     TString& query,
     const TString& dbRestoreRoot,
@@ -82,12 +94,14 @@ bool RewriteCreateQuery(
 {
     if (IsCreateViewQuery(query)) {
         return NYdb::NDump::RewriteCreateViewQuery(query, dbRestoreRoot, true, dbPath, issues);
-    }
-    if (IsCreateReplicationQuery(query)) {
+    } else if (IsCreateReplicationQuery(query)) {
         return NYdb::NDump::RewriteCreateAsyncReplicationQuery(query, dbRestoreRoot, dbPath, issues);
-    }
-    if (IsCreateTransferQuery(query)) {
+    } else if (IsCreateTransferQuery(query)) {
         return NYdb::NDump::RewriteCreateTransferQuery(query, dbRestoreRoot, dbPath, issues);
+    } else if (IsCreateExternalDataSourceQuery(query)) {
+        return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
+    } else if (IsCreateExternalTableQuery(query)) {
+        return NYdb::NDump::RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues);
     }
 
     issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);
@@ -96,6 +110,23 @@ bool RewriteCreateQuery(
 
 TString GetDatabase(TSchemeShard& ss) {
     return CanonizePath(ss.RootPathElements);
+}
+
+bool ShouldDelayQueryExecutionOnError(
+    const NKikimrSchemeOp::TModifyScheme& preparedQuery,
+    NKikimrScheme::EStatus status)
+{
+    switch (preparedQuery.GetOperationType()) {
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
+            return status == NKikimrScheme::StatusNotAvailable;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
+            return IsIn({
+                NKikimrScheme::StatusPathDoesNotExist,
+                NKikimrScheme::StatusSchemeError,
+            }, status);
+        default:
+            return false;
+    }
 }
 
 }
@@ -288,11 +319,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         importInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistImportState(db, *importInfo);
 
-        Self->Imports[id] = importInfo;
-        if (uid) {
-            Self->ImportsByUid[uid] = importInfo;
-        }
-
+        Self->AddImport(importInfo);
         Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *importInfo);
 
         Progress = true;
@@ -627,17 +654,18 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
+        LOG_D("TImport::TTxProgress: delay scheme object query execution"
+            << ": id# " << importInfo->Id
+            << ", delayed item# " << itemIdx);
+
         item.State = EState::Waiting;
         Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         const auto stateCounts = CountItemsByState(importInfo->Items);
-        if (AllWaiting(stateCounts)) {
-            // Cancel the import, or we will end up waiting indefinitely.
-            return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed");
-        } else if (AllDoneOrWaiting(stateCounts)) {
+        if (AllDoneOrWaiting(stateCounts)) {
             if (stateCounts.at(EState::Waiting) == importInfo->WaitingSchemeObjects) {
-                // No progress has been made since the last scheme objec creation retry.
-                return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed");
+                // No progress has been made since the last scheme object creation retry.
+                return CancelAndPersist(db, importInfo, itemIdx, error, "creation query failed, no progress");
             }
             RetrySchemeObjectsQueryExecution(*importInfo, db, ctx);
         }
@@ -958,6 +986,7 @@ private:
 
         Cancel(*importInfo, itemIdx, marker);
         PersistImportState(db, *importInfo);
+        EraseEncryptionKey(db, *importInfo);
 
         SendNotificationsIfFinished(importInfo);
     }
@@ -1320,6 +1349,11 @@ private:
         if (item.State == EState::CreateSchemeObject) {
             item.PreparedCreationQuery = std::get<NKikimrSchemeOp::TModifyScheme>(message.Result);
             PersistImportItemPreparedCreationQuery(db, *importInfo, message.ItemIdx);
+            if (item.PreparedCreationQuery->HasReplication()) {
+                // In case async replication or transfer is created, it is essential to execute modify scheme
+                // After all other objects, as they do not fail in case their dependencies are not imported yet
+                return DelayObjectCreation(importInfo, message.ItemIdx, db, error, ctx);
+            }
             AllocateTxId(*importInfo, message.ItemIdx);
         }
     }
@@ -1453,9 +1487,13 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
-        if (record.GetStatus() == NKikimrScheme::StatusNotAvailable) {
-            // Query compiled, but execution was unsuccessful
-            return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
+        if (IsCreatedByQuery(item)) {
+            // As for created by query objects query must be compiled to execute
+            Y_ABORT_UNLESS(item.PreparedCreationQuery);
+
+            if (ShouldDelayQueryExecutionOnError(*item.PreparedCreationQuery, record.GetStatus())) {
+                return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
+            }
         }
 
         if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
@@ -1467,6 +1505,9 @@ private:
             )) {
                 if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
+                } else if (item.State == EState::CreateSchemeObject) {
+                    // In case dependency object is being created
+                    return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
                 } else if (item.State == EState::Transferring) {
                     txId = GetActiveRestoreTxId(*importInfo, itemIdx);
                 } else if (item.State == EState::CreateChangefeed) {
@@ -1475,7 +1516,6 @@ private:
                     } else {
                         txId = GetActiveCreateConsumerTxId(*importInfo, itemIdx);
                     }
-
                 }
             }
 
@@ -1579,6 +1619,7 @@ private:
 
                 Cancel(*importInfo, itemIdx, "unhappy propose");
                 Self->PersistImportState(db, *importInfo);
+                Self->EraseEncryptionKey(db, *importInfo);
 
                 return SendNotificationsIfFinished(importInfo);
             }
@@ -1667,6 +1708,7 @@ private:
             if (const auto issue = GetIssues(item.DstPathId, txId)) {
                 item.Issue = *issue;
                 Cancel(*importInfo, itemIdx, "issues during restore");
+                Self->EraseEncryptionKey(db, *importInfo);
             } else {
                 const auto needToBuildIndexes = NeedToBuildIndexes(*importInfo, itemIdx);
                 if (needToBuildIndexes && item.Table && item.NextIndexIdx < item.Table->indexes_size()) {
@@ -1686,6 +1728,7 @@ private:
             if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
                 item.Issue = *issue;
                 Cancel(*importInfo, itemIdx, "issues during index building");
+                Self->EraseEncryptionKey(db, *importInfo);
             } else {
                 if (item.Table && ++item.NextIndexIdx < item.Table->indexes_size()) {
                     AllocateTxId(*importInfo, itemIdx);

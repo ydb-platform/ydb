@@ -513,6 +513,12 @@ bool TDescribeTopicActorImpl::StateWork(TAutoPtr<IEventHandle>& ev, const TActor
     return true;
 }
 
+void TDescribeTopicActorImpl::PassAway(const TActorContext& ctx) {
+    for (auto& [_, tablet] : Tablets) {
+        NTabletPipe::CloseClient(ctx, tablet.Pipe);
+    }
+}
+
 void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
     if (!TDescribeTopicActorImpl::StateWork(ev, this->ActorContext())) {
         TBase::StateWork(ev);
@@ -921,6 +927,10 @@ bool TDescribeTopicActor::ApplyResponse(
     return true;
 }
 
+void TDescribeTopicActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
 
 
 void TDescribeTopicActor::Reply(const TActorContext& ctx) {
@@ -1035,6 +1045,10 @@ bool TDescribeConsumerActor::ApplyResponse(
     return true;
 }
 
+void TDescribeConsumerActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
 
 void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
@@ -1321,6 +1335,11 @@ bool TDescribePartitionActor::ApplyResponse(
     return true;
 }
 
+void TDescribePartitionActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
+}
+
 void TDescribePartitionActor::RaiseError(
         const TString& error, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const Ydb::StatusIds::StatusCode status,
         const TActorContext&
@@ -1399,6 +1418,11 @@ bool TPartitionsLocationActor::ApplyResponse(
     }
     Finalize();
     return true;
+}
+
+void TPartitionsLocationActor::PassAway() {
+    TDescribeTopicActorImpl::PassAway(ActorContext());
+    TBase::PassAway();
 }
 
 void TPartitionsLocationActor::Finalize() {

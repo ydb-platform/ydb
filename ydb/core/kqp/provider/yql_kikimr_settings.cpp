@@ -91,6 +91,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptShuffleElimination);
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OptShuffleEliminationForAggregation);
+    REGISTER_SETTING(*this, OptDisallowFuseJoins);
+    REGISTER_SETTING(*this, OptCreateStageForAggregation);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
@@ -100,6 +102,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     REGISTER_SETTING(*this, UseDqHashCombine);
     REGISTER_SETTING(*this, UseDqHashAggregate);
+    REGISTER_SETTING(*this, DqHashOperatorsUseBlocks);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -227,12 +230,8 @@ TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
     return std::make_shared<const TKikimrSettings>(*this);
 }
 
-void TKikimrConfiguration::SetDefaultEnabledSpillingNodes(const TString& node) {
-    DefaultEnableSpillingNodes = ParseEnableSpillingNodes(node);
-}
-
 ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
-    return EnableSpillingNodes.Get().GetOrElse(DefaultEnableSpillingNodes);
+    return EnableSpillingNodes.Get().GetOrElse(ParseEnableSpillingNodes(TTableServiceConfig::GetEnableSpillingNodes()));
 }
 
 bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
@@ -292,6 +291,10 @@ NYql::EBackportCompatibleFeaturesMode TKikimrConfiguration::GetYqlBackportMode()
 
 bool TKikimrConfiguration::GetUseDqHashAggregate() const {
     return UseDqHashAggregate.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashAggregateByDefault());
+}
+
+bool TKikimrConfiguration::GetDqHashOperatorsUseBlocks() const {
+    return DqHashOperatorsUseBlocks.Get().GetOrElse(TTableServiceConfig::GetDqHashOperatorsUseBlocks());
 }
 
 }

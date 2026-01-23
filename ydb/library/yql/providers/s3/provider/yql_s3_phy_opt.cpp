@@ -321,7 +321,9 @@ public:
         const auto stageOutputs = Build<TDqStageOutputsList>(ctx, target.Pos())
             .Add<TDqSink>()
                 .DataSink(dataSink)
-                .Index(dqUnion.Output().Index())
+                .Index()
+                    .Value("0", TNodeFlags::Default)
+                    .Build()
                 .Settings(sinkSettings)
                 .Build()
             .Done();

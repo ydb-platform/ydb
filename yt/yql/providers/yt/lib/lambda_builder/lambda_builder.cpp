@@ -156,6 +156,9 @@ public:
     void LoadGraphState(TStringBuf state) final {
         Graph->LoadGraphState(state);
     }
+    TMaybe<NUdf::TSourcePosition> GetNotConsumedLinear() final {
+        return Graph->GetNotConsumedLinear();
+    }
 private:
     IComputationPattern::TPtr Pattern;
     THolder<IComputationGraph> Graph;

@@ -9,6 +9,7 @@
 #include <span>
 
 #include <yql/essentials/minikql/mkql_rh_hash_utils.h>
+#include <yql/essentials/utils/is_pod.h>
 #include <yql/essentials/utils/prefetch.h>
 
 #include <util/digest/city.h>
@@ -48,6 +49,9 @@ constexpr ui32 PrefetchBatchSize = 64;
 template <typename TKey, typename TEqual, typename THash, typename TAllocator, typename TDeriv, bool CacheHash>
 class TRobinHoodHashBase {
 public:
+    static_assert(sizeof(TKey) <= sizeof(void*) * 4, "Key must be small enough for passing by value inside unaligned api.");
+    static_assert(NYql::IsPod<TKey>, "Expected POD value type");
+
     using iterator = char*;
     using const_iterator = const char*;
 
@@ -547,6 +551,8 @@ public:
     using TSelf = TRobinHoodHashFixedMap<TKey, TPayload, TEqual, THash, TAllocator, TSettings>;
     using TBase = TRobinHoodHashBase<TKey, TEqual, THash, TAllocator, TSelf, TSettings::CacheHash>;
     using TPayloadStore = TPayload;
+
+    static_assert(NYql::IsPod<TPayload>, "Expected POD value type");
 
     explicit TRobinHoodHashFixedMap(ui64 initialCapacity = 1u << 8)
         : TBase(initialCapacity, THash(), TEqual())

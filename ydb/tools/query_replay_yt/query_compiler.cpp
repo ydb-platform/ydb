@@ -207,8 +207,9 @@ public:
         , FunctionRegistry(functionRegistry)
         , HttpGateway(std::move(httpGateway))
     {
-        Config->EnableOltpSink = enableOltpSink;
+        Config->SetEnableOltpSink(enableOltpSink);
         Config->SetAntlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError);
+        Config->SetEnableBatchUpdates(true);
     }
 
     void Bootstrap() {
@@ -561,7 +562,7 @@ private:
         if (queryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
             syntax = 1;
         }
-	    Config->_KqpYqlSyntaxVersion = syntax;
+	    Config->SetSqlVersion(syntax);
         Config->FreezeDefaults();
 
         MetadataLoader = make_shared<TStaticTableMetadataLoader>(TlsActivationContext->ActorSystem(), TableMetadata);

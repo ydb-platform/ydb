@@ -1,0 +1,86 @@
+{
+    "Plan": {
+        "Node Type": "Query",
+        "PlanNodeType": "Query",
+        "Plans": [
+            {
+                "Node Type": "ResultSet",
+                "PlanNodeId": 5,
+                "PlanNodeType": "ResultSet",
+                "Plans": [
+                    {
+                        "Node Type": "Limit",
+                        "Operators": [
+                            {
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 3
+                                    }
+                                ],
+                                "Limit": "1001",
+                                "Name": "Limit"
+                            }
+                        ],
+                        "PlanNodeId": 4,
+                        "Plans": [
+                            {
+                                "Node Type": "Merge",
+                                "PlanNodeId": 3,
+                                "PlanNodeType": "Connection",
+                                "Plans": [
+                                    {
+                                        "Node Type": "TopSort",
+                                        "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "TopSort",
+                                                "TopSortBy": "argument._yql_full_text_relevance"
+                                            }
+                                        ],
+                                        "PlanNodeId": 2,
+                                        "Plans": [
+                                            {
+                                                "Node Type": "ReadFullTextIndex",
+                                                "Operators": [
+                                                    {
+                                                        "BFactor": "\"0.75\"",
+                                                        "Columns": "Key, Text, _yql_full_text_relevance",
+                                                        "Index": "fulltext_relevance_idx",
+                                                        "Inputs": [],
+                                                        "K1Factor": "\"1.2\"",
+                                                        "Name": "ReadFullTextIndex",
+                                                        "Query": "\"cats dogs\"",
+                                                        "QueryColumns": "Text",
+                                                        "RelevanceQuery": "True",
+                                                        "Table": "/local/base_fulltext_relevance_k1_b_sql_plan/FullTextTable"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 1
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "SortColumns": [
+                                    "_yql_full_text_relevance (Desc)"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "Stats": {
+            "ResourcePoolId": "default"
+        }
+    },
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": []
+}

@@ -819,11 +819,6 @@ public:
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 }
             } else if (tableDesc.Metadata->Kind == EKikimrTableKind::View && !IsShowCreate(*read)) {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableViews()) {
-                    ctx.AddError(TIssue(node->Pos(ctx),
-                                        "Views are disabled. Please contact your system administrator to enable the feature"));
-                    return nullptr;
-                }
 
                 ctx.Step
                     .Repeat(TExprStep::ExpandApplyForLambdas)
@@ -838,7 +833,6 @@ public:
 
                 NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                     SessionCtx->Query().Type,
-                    SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(),
                     cluster,
                     viewData.QueryText,
                     SessionCtx->Config().GetYqlBindingsMode(),

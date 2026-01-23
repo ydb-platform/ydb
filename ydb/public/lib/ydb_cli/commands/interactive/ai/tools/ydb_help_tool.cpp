@@ -3,9 +3,13 @@
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
+
+#include <util/string/builder.h>
+#include <util/string/cast.h>
+#include <util/string/strip.h>
 #include <util/system/execpath.h>
 #include <util/system/shellcommand.h>
-#include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -48,8 +52,8 @@ Examples:
     static constexpr char COMMAND_PROPERTY[] = "command";
 
 public:
-    TYdbHelpTool(const TYdbHelpToolSettings& /*settings*/, const TInteractiveLogger& log)
-        : TBase(CreateParametersSchema(), DESCRIPTION, log)
+    explicit TYdbHelpTool(const TYdbHelpToolSettings& /*settings*/)
+        : TBase(CreateParametersSchema(), DESCRIPTION)
     {}
 
 protected:
@@ -88,7 +92,7 @@ protected:
 
         TString fullCmd = cmdBuilder;
 
-        if (Log.IsVerbose()) {
+        if (GetGlobalLogger().IsVerbose()) {
             Cout << "Executing: " << fullCmd << Endl;
         }
 
@@ -103,7 +107,7 @@ protected:
             result += "\nStderr:\n" + error;
         }
 
-        if (Log.IsVerbose()) {
+        if (GetGlobalLogger().IsVerbose()) {
             Cout << result << Endl;
         }
 
@@ -133,8 +137,8 @@ private:
 
 } // anonymous namespace
 
-ITool::TPtr CreateYdbHelpTool(const TYdbHelpToolSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<TYdbHelpTool>(settings, log);
+ITool::TPtr CreateYdbHelpTool(const TYdbHelpToolSettings& settings) {
+    return std::make_shared<TYdbHelpTool>(settings);
 }
 
 } // namespace NYdb::NConsoleClient::NAi

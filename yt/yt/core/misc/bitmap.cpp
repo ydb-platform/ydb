@@ -93,7 +93,7 @@ TCompactBitmap::~TCompactBitmap()
     }
 }
 
-TCompactBitmap::TCompactBitmap(TCompactBitmap&& other)
+TCompactBitmap::TCompactBitmap(TCompactBitmap&& other) noexcept
 {
     Ptr_ = other.Ptr_;
     other.SetUninitializedState();

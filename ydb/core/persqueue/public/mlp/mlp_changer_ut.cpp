@@ -138,12 +138,12 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
     }
 
     {
-        CreateMessageDeadlineChangerActor(runtime, {
+        CreateMessageDeadlineChangerActor(runtime, TMessageDeadlineChangerSettings{
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .Messages = { TMessageId(0, 0) },
-            .Deadline = TInstant::Now() - TDuration::Seconds(1)
+            .Deadlines = {TInstant::Now() - TDuration::Seconds(1), },
         });
 
         auto result = GetChangeResponse(runtime);

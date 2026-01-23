@@ -1059,6 +1059,9 @@
     "name": "DisableWarnUntypedStringLiterals"
   },
   {
+    "name": "DisableWindowNewPipeline"
+  },
+  {
     "name": "DiscoveryMode"
   },
   {
@@ -1237,6 +1240,9 @@
   },
   {
     "name": "WarningMsg"
+  },
+  {
+    "name": "WindowNewPipeline"
   },
   {
     "name": "YqlSelect"

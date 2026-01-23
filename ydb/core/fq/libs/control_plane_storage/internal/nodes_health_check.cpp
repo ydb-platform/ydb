@@ -67,7 +67,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         "WHERE `" TENANT_COLUMN_NAME"` = $tenant AND `" EXPIRE_AT_COLUMN_NAME "` >= $now;\n"
     );
 
-    auto prepareParams = [=, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
+    auto prepareParams = [tenant, nodeId, instanceId, hostName, deadline, activeWorkers, memoryLimit, memoryAllocated, icPort, nodeAddress, dataCenter, response=response, tablePathPrefix=YdbConnection->TablePathPrefix](const std::vector<TResultSet>& resultSets) {
         for (const auto& resultSet : resultSets) {
             TResultSetParser parser(resultSet);
             while (parser.TryNextRow()) {

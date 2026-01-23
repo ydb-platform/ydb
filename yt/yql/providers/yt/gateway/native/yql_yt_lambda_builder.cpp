@@ -61,7 +61,7 @@ NKikimr::NMiniKQL::TComputationNodeFactory GetGatewayNodeFactory(TCodecContext* 
                 YQL_ENSURE(fileInfo, "Unknown file path " << fullFileName);
                 const auto path = fileInfo->Path->GetPath();
                 const auto content = callable.GetType()->GetName() == "FileContentJob" ? TFileInput(path).ReadAll() : path.GetPath();
-                return ctx.NodeFactory.CreateImmutableNode(MakeString(content));
+                return ctx.NodeFactory.CreateImmutableNode(NKikimr::NMiniKQL::MakeString(content));
             }
         }
 

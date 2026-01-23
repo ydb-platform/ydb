@@ -8,7 +8,6 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/public/sdk/cpp/src/client/impl/internal/common/parser.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
@@ -596,6 +595,53 @@ bool IsDdlPrepareAllowed(TKikimrSessionContext& sessionCtx) {
     return true;
 }
 
+struct TConnectionData {
+    std::string Endpoint = "";
+    std::string Database = "";
+    bool EnableSsl = false;
+};
+
+TConnectionData GetDataFromConnectionString(const std::string& connectionString) {
+    if (connectionString.empty()) {
+        throw yexception() << "Empty connection string";
+    }
+
+    constexpr std::string_view databaseFlag = "/?database=";
+    constexpr std::string_view grpcProtocol = "grpc://";
+    constexpr std::string_view grpcsProtocol = "grpcs://";
+    constexpr std::string_view localhostDomain = "localhost:";
+
+    TConnectionData connectionData;
+    std::string endpoint;
+
+    size_t pathIndex = connectionString.find(databaseFlag);
+    if (pathIndex == std::string::npos){
+        pathIndex = connectionString.size();
+    }
+    if (pathIndex != connectionString.size()) {
+        connectionData.Database = connectionString.substr(pathIndex + databaseFlag.size());
+        endpoint = connectionString.substr(0, pathIndex);
+    } else {
+        endpoint = connectionString;
+    }
+
+    if (!endpoint.starts_with(grpcProtocol) && !endpoint.starts_with(grpcsProtocol) && !endpoint.starts_with(localhostDomain)) {
+        connectionData.Endpoint = endpoint;
+        connectionData.EnableSsl = true;
+    } else if (endpoint.starts_with(grpcProtocol)) {
+        connectionData.Endpoint = endpoint.substr(grpcProtocol.size());
+        connectionData.EnableSsl = false;
+    } else if (endpoint.starts_with(grpcsProtocol)) {
+        connectionData.Endpoint = endpoint.substr(grpcsProtocol.size());
+        connectionData.EnableSsl = true;
+    } else {
+        connectionData.Endpoint = endpoint;
+        connectionData.EnableSsl = false;
+    }
+
+    return connectionData;
+}
+
 #define FORWARD_ENSURE_NO_PREPARE(name, ...) \
     if (IsPrepare()) { \
         return PrepareUnsupported<TGenericResult>(#name); \
@@ -765,22 +811,56 @@ public:
         }
     }
 
+    TGenericResult PrepareTruncateTable(const TTruncateTableSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& cluster) {
+        TString workingDir;
+        TString tableName;
+        {
+            auto metadata = SessionCtx->Tables().GetTable(cluster, settings.TablePath).Metadata;
+
+            std::pair<TString, TString> pathPair;
+            TString error;
+            if (!NSchemeHelpers::SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, false)) {
+                return ResultFromError<TGenericResult>(error);
+            }
+
+            workingDir = pathPair.first;
+            tableName = pathPair.second;
+        }
+
+        modifyScheme.SetWorkingDir(workingDir);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable);
+        modifyScheme.MutableTruncateTable()->SetTableName(tableName);
+
+        TGenericResult result;
+        result.SetSuccess();
+        return result;
+    }
+
     TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) override {
         CHECK_PREPARED_DDL(TruncateTable);
 
-        Y_UNUSED(settings);
-        if (cluster != SessionCtx->GetCluster()) {
-            return InvalidCluster<TGenericResult>(cluster);
-        }
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
 
-        auto tablePromise = NewPromise<TGenericResult>();
-        auto code = Ydb::StatusIds::BAD_REQUEST;
-        auto error = TStringBuilder() << "Truncate table not supported yet";
-        IKqpGateway::TGenericResult errResult;
-        errResult.AddIssue(NYql::TIssue(error));
-        errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
-        tablePromise.SetValue(errResult);
-        return tablePromise.GetFuture();
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            auto preparation = PrepareTruncateTable(settings, modifyScheme, cluster);
+            if (!preparation.Success()) {
+                return MakeFuture<TGenericResult>(preparation);
+            }
+
+            if (IsPrepare()) {
+                auto& phyTx = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                phyTx.MutableSchemeOperation()->MutableTruncateTable()->Swap(&modifyScheme);
+                return MakeFuture<TGenericResult>(preparation);
+            }
+
+            return Gateway->ModifyScheme(std::move(modifyScheme));
+        } catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
     }
 
     TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {
@@ -838,7 +918,8 @@ public:
                             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                                 *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
-                            case TIndexDescription::EType::GlobalFulltext:
+                            case TIndexDescription::EType::GlobalFulltextPlain:
+                            case TIndexDescription::EType::GlobalFulltextRelevance:
                                 *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                         }
@@ -2583,7 +2664,7 @@ public:
             auto& config = *op.MutableConfig();
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
-                const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                const auto parseResult = GetDataFromConnectionString(*connectionString);
                 params.SetEndpoint(TString{parseResult.Endpoint});
                 params.SetDatabase(TString{parseResult.Database});
                 params.SetEnableSsl(parseResult.EnableSsl);
@@ -2688,7 +2769,7 @@ public:
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
-                    const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                    const auto parseResult = GetDataFromConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);
@@ -2804,7 +2885,7 @@ public:
             auto& config = *op.MutableConfig();
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
-                const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                const auto parseResult = GetDataFromConnectionString(*connectionString);
                 params.SetEndpoint(TString{parseResult.Endpoint});
                 params.SetDatabase(TString{parseResult.Database});
                 params.SetEnableSsl(parseResult.EnableSsl);
@@ -2931,7 +3012,7 @@ public:
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
-                    const auto parseResult = NYdb::ParseConnectionString(*connectionString);
+                    const auto parseResult = GetDataFromConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);

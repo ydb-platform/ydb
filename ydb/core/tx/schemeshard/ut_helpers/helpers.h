@@ -397,6 +397,11 @@ namespace NSchemeShardUT_Private {
     void TestMoveSequence(TTestActorRuntime& runtime, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
     void TestMoveSequence(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
 
+    TEvTx* TruncateTableRequest(ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard, const TApplyIf& applyIf = {});
+    void AsyncTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard);
+    void TestTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
+    void TestTruncateTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& workingDir, const TString& tableName, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
+
     // locks
     TEvTx* LockRequest(ui64 txId, const TString &parentPath, const TString& name);
     void AsyncLock(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name);
@@ -592,6 +597,10 @@ namespace NSchemeShardUT_Private {
         const TString& user, const TString& password,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
 
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
+        const TString& user, const TString& hashedPassword, const TString& hashedPasswordOldFormat,
+        const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
+
     void CreateAlterLoginRemoveUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
         const TString& user,
         const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusSuccess}});
@@ -612,6 +621,10 @@ namespace NSchemeShardUT_Private {
 
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
         const TString& user, const TString& password);
+
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime,
+        const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech,
+        NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage = "");
 
     NKikimrScheme::TEvLoginResult LoginFinalize(
         TTestActorRuntime& runtime,

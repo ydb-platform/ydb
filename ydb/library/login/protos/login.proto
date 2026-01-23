@@ -17,12 +17,25 @@ message ESidType {
     }
 }
 
+message ESaslAuthMech {
+    enum SaslAuthMech {
+        Unknown = 0;
+        Plain = 1;
+        Scram = 2;
+    }
+}
+
 message EHashType {
     enum HashType {
         Unknown = 0;
         Argon = 1;
         ScramSha256 = 2;
     }
+}
+
+message THashInitParams {
+    EHashType.HashType HashType = 1;
+    string InitParams = 2;
 }
 
 message TSid {
@@ -36,6 +49,7 @@ message TSid {
     uint64 FailedLoginAttemptCount = 8;
     bool IsEnabled = 9;
     string PasswordHashes = 10; // Base64 encoded JSON map with hash type and hash secrets
+    repeated THashInitParams HashesInitParams = 11;
 }
 
 message TSecurityState {

@@ -883,7 +883,7 @@ public:
 
     ~TColumnNode() override;
     bool IsAsterisk() const override;
-    virtual bool IsArtificial() const;
+    bool IsArtificial() const;
     const TString* GetColumnName() const override;
     const TString* GetSourceName() const override;
     TColumnNode* GetColumnNode() override;
@@ -1163,6 +1163,9 @@ private:
     TNodePtr Node_;
 };
 
+class TObjectFeatureNode;
+using TObjectFeatureNodePtr = TIntrusivePtr<TObjectFeatureNode>;
+
 struct TStringContent {
     TString Content;
     NYql::NUdf::EDataSlot Type = NYql::NUdf::EDataSlot::String;
@@ -1242,7 +1245,8 @@ struct TIndexDescription {
         GlobalAsync,
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
-        GlobalFulltext
+        GlobalFulltextPlain,
+        GlobalFulltextRelevance
     };
 
     struct TIndexSetting {
@@ -1502,7 +1506,7 @@ struct TStreamingQuerySettings {
     inline static constexpr char QUERY_TEXT_FEATURE[] = "__query_text";
     inline static constexpr char QUERY_AST_FEATURE[] = "__query_ast";
 
-    std::map<TString, TDeferredAtom> Features;
+    TObjectFeatureNodePtr Features;
 };
 
 TString IdContent(TContext& ctx, const TString& str);
@@ -1624,13 +1628,13 @@ TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAt
 TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
 TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-                                    std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
+                                    TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-                                    bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
+                                    bool existingOk, bool replaceIfExists, TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-                                   bool missingOk, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
+                                   bool missingOk, TObjectFeatureNodePtr features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
 TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-                                  bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context);
+                                  bool missingOk, TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
                                      std::vector<std::pair<TString, TString>>&& targets,
                                      std::map<TString, TNodePtr>&& settings,

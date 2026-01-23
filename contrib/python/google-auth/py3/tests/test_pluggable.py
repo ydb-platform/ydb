@@ -15,8 +15,8 @@
 import json
 import os
 import subprocess
+from unittest import mock
 
-import mock
 import pytest  # type: ignore
 
 from google.auth import exceptions
@@ -32,8 +32,10 @@ SERVICE_ACCOUNT_EMAIL = "service-1234@service-name.iam.gserviceaccount.com"
 SERVICE_ACCOUNT_IMPERSONATION_URL_BASE = (
     "https://us-east1-iamcredentials.googleapis.com"
 )
-SERVICE_ACCOUNT_IMPERSONATION_URL_ROUTE = "/v1/projects/-/serviceAccounts/{}:generateAccessToken".format(
-    SERVICE_ACCOUNT_EMAIL
+SERVICE_ACCOUNT_IMPERSONATION_URL_ROUTE = (
+    "/v1/projects/-/serviceAccounts/{}:generateAccessToken".format(
+        SERVICE_ACCOUNT_EMAIL
+    )
 )
 SERVICE_ACCOUNT_IMPERSONATION_URL = (
     SERVICE_ACCOUNT_IMPERSONATION_URL_BASE + SERVICE_ACCOUNT_IMPERSONATION_URL_ROUTE
@@ -543,7 +545,6 @@ class TestCredentials(object):
 
     @mock.patch.dict(os.environ, {"GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES": "1"})
     def test_retrieve_subject_token_saml_interactive_mode(self, tmpdir):
-
         ACTUAL_CREDENTIAL_SOURCE_EXECUTABLE_OUTPUT_FILE = tmpdir.join(
             "actual_output_file"
         )
@@ -1108,7 +1109,7 @@ class TestCredentials(object):
 
     @mock.patch.dict(os.environ, {"GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES": "1"})
     def test_retrieve_subject_token_fail_on_validation_missing_interactive_timeout(
-        self
+        self,
     ):
         CREDENTIAL_SOURCE_EXECUTABLE = {
             "command": self.CREDENTIAL_SOURCE_EXECUTABLE_COMMAND,
@@ -1230,16 +1231,6 @@ class TestCredentials(object):
             _ = credentials.revoke(None)
 
     @mock.patch.dict(os.environ, {"GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES": "1"})
-    def test_retrieve_subject_token_python_2(self):
-        with mock.patch("sys.version_info", (2, 7)):
-            credentials = self.make_pluggable(credential_source=self.CREDENTIAL_SOURCE)
-
-            with pytest.raises(exceptions.RefreshError) as excinfo:
-                _ = credentials.retrieve_subject_token(None)
-
-            assert excinfo.match(r"Pluggable auth is only supported for python 3.7+")
-
-    @mock.patch.dict(os.environ, {"GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES": "1"})
     def test_retrieve_subject_token_with_quoted_command(self):
         command_with_spaces = '"/path/with spaces/to/executable" "arg with spaces"'
         credential_source = {
@@ -1268,17 +1259,3 @@ class TestCredentials(object):
                 stderr=subprocess.STDOUT,
                 env=mock.ANY,
             )
-
-    @mock.patch.dict(os.environ, {"GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES": "1"})
-    def test_revoke_subject_token_python_2(self):
-        with mock.patch("sys.version_info", (2, 7)):
-            credentials = self.make_pluggable(
-                audience=WORKFORCE_AUDIENCE,
-                credential_source=self.CREDENTIAL_SOURCE,
-                interactive=True,
-            )
-
-            with pytest.raises(exceptions.RefreshError) as excinfo:
-                _ = credentials.revoke(None)
-
-            assert excinfo.match(r"Pluggable auth is only supported for python 3.7+")

@@ -29,6 +29,7 @@
   - cuda/std/limits
   - cuda/std/tuple
   - cuda/std/type_traits
+  - cuda/std/__tuple_dir/structured_bindings.h
   - cuda/std/utility
   - cudaEGL.h
   - cudaProfiler.h

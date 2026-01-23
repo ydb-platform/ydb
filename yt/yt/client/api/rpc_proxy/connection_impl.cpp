@@ -415,8 +415,7 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
         auto client = IsProxyUrlSecure(url)
             ? NHttps::CreateClient(Config_->HttpsClient, std::move(poller))
             : NHttp::CreateClient(Config_->HttpClient, std::move(poller));
-        // TODO(babenko): switch to std::string
-        auto rsp = WaitFor(client->Get(TString(url), headers))
+        auto rsp = WaitFor(client->Get(url, headers))
             .ValueOrThrow();
 
         if (rsp->GetStatusCode() != EStatusCode::OK) {

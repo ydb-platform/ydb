@@ -137,14 +137,14 @@ void TAsyncReaderWriterLock::TImpl::WakeNext(TGuard<NThreading::TSpinLock>& guar
     }
 }
 
-void TAsyncReaderWriterLock::TImpl::ReleaseReaders(int amount)
+void TAsyncReaderWriterLock::TImpl::ReleaseReaders(int count)
 {
     auto guard = Guard(SpinLock_);
 
     YT_VERIFY(!HasActiveWriter_);
-    YT_VERIFY(ActiveReaderCount_ >= amount);
+    YT_VERIFY(ActiveReaderCount_ >= count);
 
-    ActiveReaderCount_ -= amount;
+    ActiveReaderCount_ -= count;
     if (ActiveReaderCount_ == 0) {
         WakeNext(guard);
     }

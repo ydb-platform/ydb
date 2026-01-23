@@ -4693,6 +4693,13 @@ private:
         });
     }
 
+    static void CheckNotConsumedLinear(NKikimr::NMiniKQL::IComputationGraph& graph) {
+        graph.Invalidate();
+        if (auto pos = graph.GetNotConsumedLinear()) {
+            UdfTerminate((TStringBuilder() << pos << " Linear value is not consumed").c_str());
+        }
+    }
+
     static void ExecSafeFill(const TVector<TRichYPath>& outYPaths,
         TRuntimeNode root,
         const TString& outSpec,
@@ -4755,6 +4762,8 @@ private:
             YQL_ENSURE(value.IsFinish());
         }
 
+        value = {};
+        CheckNotConsumedLinear(*graph);
         mkqlWriter.Finish();
         for (auto& writer: writers) {
             writer->Finish();
@@ -5567,11 +5576,15 @@ private:
 
                         auto skiffBuilder = factory.Create(codecCtx, holderFactory);
                         skiffBuilder->WriteValue(value, root.GetStaticType());
+                        value = {};
+                        CheckNotConsumedLinear(*graph);
                         return MakeFuture(skiffBuilder->Make());
                     }
                     case IDataProvider::EResultFormat::Yson: {
                         auto ysonBuilder = factory.Create();
                         ysonBuilder->WriteValue(value, root.GetStaticType());
+                        value = {};
+                        CheckNotConsumedLinear(*graph);
                         return MakeFuture(ysonBuilder->Make());
                     }
                     default:

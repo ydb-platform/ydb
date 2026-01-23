@@ -133,6 +133,11 @@ IGraphTransformer::TStatus YqlAggWrapper(
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     YQL_ENSURE(input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit);
 
     if (!EnsureTuple(*input->Child(1), ctx.Expr)) {

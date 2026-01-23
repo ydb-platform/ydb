@@ -95,16 +95,18 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
         if (transactions[0].GetSchemeOperation().HasCreateView()) {
             const auto& createView = transactions[0].GetSchemeOperation().GetCreateView();
             return Finish(result->Status, createView);
-        }
-
-        if (transactions[0].GetSchemeOperation().HasCreateReplication()) {
+        } else if (transactions[0].GetSchemeOperation().HasCreateReplication()) {
             const auto& createReplication = transactions[0].GetSchemeOperation().GetCreateReplication();
             return Finish(result->Status, createReplication);
-        }
-
-        if (transactions[0].GetSchemeOperation().HasCreateTransfer()) {
+        } else if (transactions[0].GetSchemeOperation().HasCreateTransfer()) {
             const auto& createTransfer = transactions[0].GetSchemeOperation().GetCreateTransfer();
             return Finish(result->Status, createTransfer);
+        } else if (transactions[0].GetSchemeOperation().HasCreateExternalDataSource()) {
+            const auto& createExternalDataSource = transactions[0].GetSchemeOperation().GetCreateExternalDataSource();
+            return Finish(result->Status, createExternalDataSource);
+        } else if (transactions[0].GetSchemeOperation().HasCreateExternalTable()) {
+            const auto& createExternalTable = transactions[0].GetSchemeOperation().GetCreateExternalTable();
+            return Finish(result->Status, createExternalTable);
         }
 
         return Finish(Ydb::StatusIds::GENERIC_ERROR, "no supported create operation");

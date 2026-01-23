@@ -519,14 +519,14 @@ public:
     {
         BuildTxTransformer = new TKqpBuildTxTransformer();
 
-        config->EnableSpilling &= (kqpCtx->IsGenericQuery() || kqpCtx->IsScanQuery()) && config->SpillingEnabled();
+        bool enableSpilling = config->GetEnableQueryServiceSpilling() && (kqpCtx->IsGenericQuery() || kqpCtx->IsScanQuery()) && config->SpillingEnabled();
 
         DataTxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
             .Add(TExprLogTransformer::Sync("TxOpt", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxOpt")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
-            .Add(CreateKqpBuildPhyStagesTransformer(config->EnableSpilling, typesCtx, config->GetBlockChannelsMode()), "BuildPhysicalStages")
+            .Add(CreateKqpBuildPhyStagesTransformer(enableSpilling, typesCtx, config->GetBlockChannelsMode()), "BuildPhysicalStages")
             .Add(CreateKqpPhyOptTransformer(kqpCtx, typesCtx, config,
                 CreateTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(kqpCtx->Cluster, kqpCtx->Tables, typesCtx, config), typesCtx)), "KqpPhysicalOptimize")
             // TODO(ilezhankin): "BuildWideBlockChannels" transformer is required only for BLOCK_CHANNELS_FORCE mode.

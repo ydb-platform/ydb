@@ -43,7 +43,7 @@ public:
         ui64 TotalKeysSize = 0;
     };
 
-    TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId);
+    TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, const TString& userSID);
 
     virtual ~TEngineBay();
 

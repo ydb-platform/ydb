@@ -18,6 +18,7 @@ IActor* CreateUploadColumnsInternal(const TActorId& sender,
                                     const TString& table,
                                     std::shared_ptr<TUploadTypes> types,
                                     std::shared_ptr<arrow::RecordBatch> data,
+                                    const TString& userSID = TString(),
                                     ui64 cookie = 0);
 
 } // namespace NKikimr::NTxProxy

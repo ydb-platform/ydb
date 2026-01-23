@@ -56,7 +56,7 @@ namespace NKikimr::NEvWrite {
     }
 
     void TShardWriter::SendWriteRequest() {
-        auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, "cdcuser@shard_writer"); // недрами уходит в TLongTxWriteBase. Что это?
         DataForShard->Serialize(*ev, TableId, SchemaVersion);
         if (Timeout) {
             ev->Record.SetTimeoutSeconds(Timeout->Seconds());

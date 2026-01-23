@@ -32,6 +32,9 @@
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 
+#include <filesystem>
+#include <fstream>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -223,6 +226,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
 
     SetTxKeys(tableInfo, tabletId, keyValidator);
+    UserSID = ev.Record.GetUserSID();
 
     return {NKikimrTxDataShard::TError::OK, {}};
 }
@@ -341,7 +345,7 @@ TWriteOperation* TWriteOperation::TryCastWriteOperation(TOperation::TPtr op)
     return writeOp;
 }
 
-TWriteOperation::TWriteOperation(const TBasicOpInfo& op, ui64 tabletId, const TString& userSID)
+TWriteOperation::TWriteOperation(const TBasicOpInfo& op, ui64 tabletId)
     : TOperation(op)
     , TabletId(tabletId)
     , ArtifactFlags(0)
@@ -349,13 +353,12 @@ TWriteOperation::TWriteOperation(const TBasicOpInfo& op, ui64 tabletId, const TS
     , ReleasedTxDataSize(0)
     , SchemeShardId(0)
     , SubDomainPathId(0)
-    , UserSID(userSID)
 {
     TrackMemory();
 }
 
-TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self, const TString& userSID)
-    : TWriteOperation(op, self->TabletID(), userSID)
+TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self)
+    : TWriteOperation(op, self->TabletID())
 {
     Recipient = ev->Recipient;
     SetTarget(ev->Sender);

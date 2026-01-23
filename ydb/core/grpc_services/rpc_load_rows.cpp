@@ -156,7 +156,9 @@ class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::T
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded, const char* name)
-        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(),
+                (request->GetInternalToken()!=nullptr)?(request->GetInternalToken()->GetUserSID()):"",
+                GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
                 NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
@@ -313,7 +315,9 @@ class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
-        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
+        : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), 
+                (request!=nullptr)?request->GetInternalToken()->GetUserSID():"",
+                GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
         , Database(Request->GetDatabaseName().GetOrElse(""))
     {

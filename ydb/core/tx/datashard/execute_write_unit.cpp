@@ -8,6 +8,9 @@
 
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 
+#include <filesystem>
+#include <fstream>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -184,6 +187,7 @@ public:
 
         const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
         const auto operationType = validatedOperation.GetOperationType();
+        const auto userSID = validatedOperation.GetUserSID();
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
@@ -198,31 +202,31 @@ public:
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnCount, "cdcuser@write_uint");
+                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnCount, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.ReplaceRow(fullTableId, key, ops, "cdcuser@write_uint2");
+                    userDb.ReplaceRow(fullTableId, key, ops, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE: {
-                    userDb.EraseRow(fullTableId, key, "cdcuser@write_uint3");
+                    userDb.EraseRow(fullTableId, key, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.InsertRow(fullTableId, key, ops, "cdcuser@write_uint4");
+                    userDb.InsertRow(fullTableId, key, ops, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpdateRow(fullTableId, key, ops, "cdcuser@write_uint5");
+                    userDb.UpdateRow(fullTableId, key, ops, userSID);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.IncrementRow(fullTableId, key, ops, "cdcuser@write_uint6");
+                    userDb.IncrementRow(fullTableId, key, ops, userSID  + ";cdcuser@write_increment");
                     break;
                 }
                 default:

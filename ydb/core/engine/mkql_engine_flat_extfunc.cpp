@@ -233,7 +233,7 @@ namespace {
                 ExtractRow(Row, Owner->RowType, row, *engineCtx.Env);
 
                 if (!engineCtx.Host->IsPathErased(Owner->TableId) && engineCtx.Host->IsMyKey(Owner->TableId, row)) {
-                    engineCtx.Host->EraseRow(Owner->TableId, row, "cdcuser@flat_extfunc1");
+                    engineCtx.Host->EraseRow(Owner->TableId, row, Owner->UserSID);
                 }
             }
 
@@ -241,11 +241,12 @@ namespace {
             const NUdf::TUnboxedValue Row;
         };
 
-        TEraseRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row)
+        TEraseRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row, const TString& userSID)
             : TBaseComputation(mutables)
             , TableId(tableId)
             , RowType(rowType)
             , Row(row)
+            , UserSID(userSID)
         {
         }
 
@@ -261,6 +262,7 @@ namespace {
         const TTableId TableId;
         TTupleType* const RowType;
         IComputationNode* const Row;
+        TString UserSID;
     };
 
     class TUpdateRowWrapper : public TMutableComputationNode<TUpdateRowWrapper> {
@@ -314,7 +316,7 @@ namespace {
                         }
                     }
 
-                    engineCtx.Host->UpdateRow(Owner->TableId, row, commands, "cdcuser@flat_extfunc2");
+                    engineCtx.Host->UpdateRow(Owner->TableId, row, commands, Owner->UserSID);
                 }
             }
 
@@ -324,13 +326,14 @@ namespace {
         };
 
         TUpdateRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row,
-            TStructLiteral* updateStruct, IComputationNode* update)
+            TStructLiteral* updateStruct, IComputationNode* update, const TString& userSID)
             : TBaseComputation(mutables)
             , TableId(tableId)
             , RowType(rowType)
             , Row(row)
             , UpdateStruct(updateStruct)
             , Update(update)
+            , UserSID(userSID)
         {
         }
 
@@ -349,6 +352,7 @@ namespace {
         IComputationNode* const Row;
         TStructLiteral* const UpdateStruct;
         IComputationNode* const Update;
+        TString UserSID;
     };
 
     IComputationNode* WrapAsDummy(TComputationMutables& mutables) {
@@ -738,7 +742,7 @@ namespace {
         return ctx.NodeFactory.CreateImmutableNode(std::move(result));
     }
 
-    IComputationNode* WrapEraseRow(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    IComputationNode* WrapEraseRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, const TString& userSID) {
         MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arg");
 
         auto tableNode = callable.GetInput(0);
@@ -746,10 +750,10 @@ namespace {
         auto tupleType = AS_TYPE(TTupleType, callable.GetInput(1));
 
         return new TEraseRowWrapper(ctx.Mutables, tableId, tupleType,
-            LocateNode(ctx.NodeLocator, callable, 1));
+            LocateNode(ctx.NodeLocator, callable, 1), userSID);
     }
 
-    IComputationNode* WrapUpdateRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, IEngineFlatHost* host) {
+    IComputationNode* WrapUpdateRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, IEngineFlatHost* host, const TString& userSID) {
         MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arg");
 
         auto tableNode = callable.GetInput(0);
@@ -789,7 +793,8 @@ namespace {
         }
 
         return new TUpdateRowWrapper(ctx.Mutables, tableId, tupleType,
-            LocateNode(ctx.NodeLocator, callable, 1), structUpdate, LocateNode(ctx.NodeLocator, callable, 2));
+            LocateNode(ctx.NodeLocator, callable, 1), structUpdate, LocateNode(ctx.NodeLocator, callable, 2),
+            userSID);
     }
 
     IComputationNode* WrapMergedTakeResults(TCallable& callable, TIncomingResults::const_iterator resultIt,
@@ -832,9 +837,9 @@ namespace {
     }
 }
 
-TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly) {
+TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly, const TString& userSID ) {
     auto builtins = GetBuiltinFactory();
-    return [builtins, &execData, validateOnly]
+    return [builtins, &execData, validateOnly, usid=userSID]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         const TEngineFlatSettings& settings = execData.Settings;
         const TFlatEngineStrings& strings = execData.Strings;
@@ -874,11 +879,11 @@ TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, b
         }
 
         if (nameStr == strings.EraseRow) {
-            return WrapEraseRow(callable, ctx);
+            return WrapEraseRow(callable, ctx, usid);
         }
 
         if (nameStr == strings.UpdateRow) {
-            return WrapUpdateRow(callable, ctx, settings.Host);
+            return WrapUpdateRow(callable, ctx, settings.Host, usid);
         }
 
         if (nameStr == strings.AcquireLocks) {

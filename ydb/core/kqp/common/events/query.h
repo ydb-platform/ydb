@@ -99,6 +99,10 @@ public:
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
     }
 
+    const TString& GetUserSID() const {
+        return UserSID;
+    }
+
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
         return RequestCtx;
     }
@@ -450,6 +454,7 @@ private:
     TString Database;
     TString DatabaseId;
     TString SessionId;
+    TString UserSID;
     TString YqlText;
     TString QueryId;
     TString PoolId;

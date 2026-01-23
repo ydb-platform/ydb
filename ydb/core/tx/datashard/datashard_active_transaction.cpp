@@ -22,7 +22,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    bool isPropose)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
-    , EngineBay(self, txc, ctx, stepTxId)
+    , EngineBay(self, txc, ctx, stepTxId, "cdcuser@TValidatedDataTx")   // По идее, тут вряд ли бкдет генерироваться CDC
     , ErrCode(NKikimrTxDataShard::TError::OK)
     , TxSize(0)
     , IsReleased(false)

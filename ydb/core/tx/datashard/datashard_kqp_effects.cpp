@@ -85,7 +85,7 @@ private:
 } // namespace
 
 IComputationNode* WrapKqpEffects(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx)
+    TKqpDatashardComputeContext& computeCtx, const TString& /*userSID*/)
 {
     Y_UNUSED(computeCtx);
 

@@ -331,7 +331,7 @@ public:
                 .WithSchemaVersion(table->GetTableSchemaVersion())
                 .WithBody(body.SerializeAsString())
                 .WithSource(TChangeRecord::ESource::InitialScan)
-                .WithUser("cdcuser@cdc_stream_scan") // RFC?
+                .WithUser("cdcuser@cdc_stream_scan") // Первоначальное сканирование
                 .Build();
 
             const auto& record = *recordPtr;

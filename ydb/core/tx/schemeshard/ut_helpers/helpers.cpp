@@ -2774,7 +2774,7 @@ namespace NSchemeShardUT_Private {
 
         auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(tableDesc.GetPathId());
-
+        
         auto& scheme = *ev->Record.MutableRowScheme();
         for (ui32 tag : keyTags) {
             scheme.AddKeyColumnIds(tag);

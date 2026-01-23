@@ -116,9 +116,9 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
         if (details.template HaveValue<typename TDetailsTable::User>()) {
             TString user = details.template GetValue<typename TDetailsTable::User>();
-            builder.WithUser(user+"_from_nicedb");
+            builder.WithUser(user + ";cdcuser@from_nice_db");    // Технологическое
         } else
-            builder.WithUser("cdcuser@no_details");
+            builder.WithUser(";cdcuser@no_nicedb_details");      // Технологическое
 
         if constexpr (HaveLock) {
             Y_ENSURE(commited);

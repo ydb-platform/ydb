@@ -869,6 +869,7 @@ message TKqpTableSinkSettings {
     repeated TKqpColumnMetadataProto LookupColumns = 20;
     optional bool IsIndexImplTable = 21;
     optional string Database = 22;
+    optional string UserSID = 23;
 }
 
 message TReadVectorTopK {

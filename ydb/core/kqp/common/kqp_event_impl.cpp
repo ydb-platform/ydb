@@ -45,6 +45,9 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
             CancelAfter = GetDuration(operationParams->cancel_after());
         }
     }
+
+    if (RequestCtx!=nullptr && RequestCtx->GetInternalToken()!=nullptr)
+        UserSID = RequestCtx->GetInternalToken()->GetUserSID();
 }
 
 void TEvKqp::TEvQueryRequest::PrepareRemote() const {

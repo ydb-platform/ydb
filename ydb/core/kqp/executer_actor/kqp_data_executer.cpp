@@ -1706,6 +1706,7 @@ private:
         evWriteTransaction->Record = evWrite;
         evWriteTransaction->Record.SetTxMode(ImmediateTx ? NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE : NKikimrDataEvents::TEvWrite::MODE_PREPARE);
         evWriteTransaction->Record.SetTxId(TxId);
+        evWriteTransaction->Record.SetUserSID((UserToken!=nullptr)?UserToken->GetUserSID():"");
 
         auto locksCount = evWriteTransaction->Record.GetLocks().LocksSize();
         shardState.DatashardState->ShardReadLocks = locksCount > 0;
@@ -2256,9 +2257,9 @@ private:
                 if (auto it = evWriteTxs.find(shardId); it != evWriteTxs.end()) {
                     locks = it->second->MutableLocks();
                 } else {
-                    auto [eIt, success] = evWriteTxs.emplace(
-                        shardId,
-                        TasksGraph.GetMeta().Allocate<NKikimrDataEvents::TEvWrite>());
+                    auto ev = TasksGraph.GetMeta().Allocate<NKikimrDataEvents::TEvWrite>();
+                    ev->SetUserSID((UserToken!=nullptr)?UserToken->GetUserSID():"");
+                    auto [eIt, success] = evWriteTxs.emplace(shardId, ev);
                     locks = eIt->second->MutableLocks();
                 }
             } else {

@@ -433,9 +433,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
     class TUploadRowsRequestBuilder {
     public:
-        void New(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme) {
+        void New(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme,
+                 const TString& userSID) {
             Record = std::make_shared<NKikimrTxDataShard::TEvUploadRowsRequest>();
             Record->SetTableId(tableInfo.GetId());
+            Record->SetUserSID(userSID);
 
             TVector<TString> columnNames;
             for (const auto& column : scheme.GetColumns()) {
@@ -788,7 +790,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
         Counters.LatencyProcess.Start(Now());
 
-        RequestBuilder.New(TableInfo, Scheme);
+        RequestBuilder.New(TableInfo, Scheme, UserSID);
 
         // Special case:
         // in encrypted file we have nonzero bytes on input, but can still have zero bytes on output
@@ -1058,7 +1060,8 @@ public:
         return LogPrefix_;
     }
 
-    explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo)
+    explicit TS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& tableInfo,
+        const TString& userSID)
         : ExternalStorageConfig(new NExternalStorage::TS3ExternalStorageConfig(task.GetS3Settings()))
         , DataShard(dataShard)
         , TxId(txId)
@@ -1074,6 +1077,7 @@ public:
         , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
         , ProcessedChecksumState(Checksum ? Checksum->GetState() : NKikimrBackup::TChecksumState())
         , Counters(GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "import"))
+        , UserSID(userSID)
     {
     }
 
@@ -1158,11 +1162,13 @@ private:
     TString ExpectedChecksum;
 
     TCounters Counters;
+    TString UserSID;
 
 }; // TS3Downloader
 
-IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info) {
-    return new TS3Downloader(dataShard, txId, task, info);
+IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info,
+    const TString& userSID) {
+    return new TS3Downloader(dataShard, txId, task, info, userSID);
 }
 
 } // NDataShard

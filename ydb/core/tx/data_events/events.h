@@ -43,16 +43,17 @@ struct TDataEvents {
     public:
         TEvWrite() = default;
 
-
-        TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+        TEvWrite(const ui64 txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const TString& userSID) {
             Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);
             Record.SetTxId(txId);
+            Record.SetUserSID(userSID);
         }
 
-        TEvWrite(NKikimrDataEvents::TEvWrite::ETxMode txMode) {
+        TEvWrite(NKikimrDataEvents::TEvWrite::ETxMode txMode, const TString& userSID) {
             Y_ABORT_UNLESS(txMode != NKikimrDataEvents::TEvWrite::MODE_UNSPECIFIED);
             Record.SetTxMode(txMode);
+            Record.SetUserSID(userSID);
         }
 
         TEvWrite& SetTxId(const ui64 txId) {

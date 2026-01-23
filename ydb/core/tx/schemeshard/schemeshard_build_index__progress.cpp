@@ -233,6 +233,7 @@ private:
             TargetTable,
             Types,
             UploadRows,
+            "cdcuser@Upload",
             NTxProxy::EUploadRowsMode::WriteToTableShadow, // TODO(mbkkt) is it fastest?
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);

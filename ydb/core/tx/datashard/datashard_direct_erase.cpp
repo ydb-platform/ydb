@@ -146,16 +146,17 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         if (auto collector = params.GetChangeCollector()) {
+            const TString ttlUserSID = "ttl@system"; // Где определить эту константу "cdcuser@"ttl
             if (!volatileDependencies.empty()) {
                 if (!params.GlobalTxId) {
                     throw TNeedGlobalTxId();
                 }
 
-                if (!collector->OnUpdateTx(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId, "cdcuser@from_msg_TEvEraseRowsRequest1")) {
+                if (!collector->OnUpdateTx(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.GlobalTxId, ttlUserSID)) {
                     pageFault = true;
                 }
             } else {
-                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion, "cdcuser@from_msg_TEvEraseRowsRequest2")) {
+                if (!collector->OnUpdate(fullTableId, localTableId, NTable::ERowOp::Erase, key, {}, params.MvccVersion, ttlUserSID)) {
                     pageFault = true;
                 }
             }

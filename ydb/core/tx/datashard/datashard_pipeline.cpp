@@ -1705,7 +1705,7 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         info.SetMvccSnapshot(TRowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId()),
             rec.GetMvccSnapshot().GetRepeatableRead());
     }
-    auto writeOp = MakeIntrusive<TWriteOperation>(info, std::move(ev), Self, "cdcuser@write_operation1");
+    auto writeOp = MakeIntrusive<TWriteOperation>(info, std::move(ev), Self);
     writeOp->OperationSpan = std::move(operationSpan);
     auto writeTx = writeOp->GetWriteTx();
     Y_ENSURE(writeTx);

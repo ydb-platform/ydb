@@ -187,7 +187,8 @@ public:
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
             const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-            const TActorId& kqpTempTablesAgentActor)
+            const TActorId& kqpTempTablesAgentActor,
+            const TString& userSID)
         : Owner(owner)
         , QueryCache(std::move(queryCache))
         , SessionId(sessionId)
@@ -204,6 +205,7 @@ public:
         , QueryServiceConfig(queryServiceConfig)
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
         , GUCSettings(std::make_shared<TGUCSettings>())
+        , UserSID(userSID)
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
@@ -1820,7 +1822,9 @@ public:
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
                 .Alloc = std::move(alloc),
+                .UserSID = UserSID
             };
+
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
         } else if (txCtx->EnableOltpSink.value_or(false) && txCtx->BufferActorId) {
@@ -3396,6 +3400,7 @@ private:
     std::shared_ptr<std::atomic<bool>> CompilationCookie;
 
     TGUCSettings::TPtr GUCSettings;
+    TString UserSID;
 };
 
 } // namespace
@@ -3409,13 +3414,14 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-    const TActorId& kqpTempTablesAgentActor)
+    const TActorId& kqpTempTablesAgentActor,
+    const TString& userSID)
 {
     return new TKqpSessionActor(
         owner, std::move(queryCache),
         std::move(resourceManager), std::move(caFactory), sessionId, kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
-                                queryServiceConfig, kqpTempTablesAgentActor);
+                                queryServiceConfig, kqpTempTablesAgentActor, userSID);
 }
 
 }

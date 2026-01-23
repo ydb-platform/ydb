@@ -242,7 +242,7 @@ public:
                 // .WithSchemaVersion(ReadVersion) // TODO(use SchemaVersion)
                 .WithBody(body.SerializeAsString())
                 .WithSource(TChangeRecord::ESource::InitialScan)
-                .WithUser("cdcuser@incr_restore_scan") // not reauired
+                .WithUser("cdcuser@incr_restore_scan") // Восстановление инкрементального backup
                 .Build();
 
             const auto& record = *recordPtr;

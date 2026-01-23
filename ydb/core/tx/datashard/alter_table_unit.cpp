@@ -184,7 +184,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                 .WithPathId(streamPathId)
                 .WithTableId(tableId)
                 .WithSchemaVersion(newInfo->GetTableSchemaVersion())
-                .WithUser("cdcuser@alter_table")
+                .WithUser("cdcuser@alter_table") // В CDC не попадает
                 .Build();
 
             const auto& record = *recordPtr;

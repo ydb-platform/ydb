@@ -19,7 +19,7 @@ public:
     }
 
     TChangeRecord::TPtr Parse(const TString& source, ui64 id, TString&& body) override {
-        return TChangeRecordBuilder("cdcuser@table_writer")
+        return TChangeRecordBuilder("cdcuser@table_writer") // Чисто технологическое, будет удалено
             .WithSourceId(source)
             .WithOrder(id)
             .WithBody(std::move(body))

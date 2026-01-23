@@ -2323,7 +2323,12 @@ public:
             ui32 effectiveSlotCount, effectiveSlotSizeInUnits;
             pdisk->ExtractInferredPDiskSettings(effectiveSlotCount, effectiveSlotSizeInUnits);
             bool settingsShouldBeInferred = !pdisk->HasExpectedSlotCount && !pdisk->HasExpectedSlotSize &&
-                pdisk->InferPDiskSlotCountFromUnitSize;
+                (pdisk->InferPDiskSlotCountFromUnitSize ||
+                    StorageConfig && StorageConfig->HasBlobStorageConfig() &&
+                    StorageConfig->GetBlobStorageConfig().HasInferPDiskSlotCountSettings() &&
+                    (pdisk->Kind.Type() == NPDisk::DEVICE_TYPE_ROT ?
+                        StorageConfig->GetBlobStorageConfig().GetInferPDiskSlotCountSettings().HasRot() :
+                        StorageConfig->GetBlobStorageConfig().GetInferPDiskSlotCountSettings().HasSsd()));
 
             numWithoutExpectedSlotCount += !effectiveSlotCount;
             numWithoutSerial += !pdisk->ExpectedSerial;

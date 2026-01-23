@@ -243,17 +243,36 @@ namespace NKikimr::NStorage {
                     (FromDriveSize, size),
                     (FromMaxSlots, pdiskConfig->MaxSlots));
             }
-        } else if (pdisk.GetPDiskConfig().GetExpectedSlotCount() != 0) {
-            // Skip inferring PDisk SlotCount
         } else if (ui64 unitSizeInBytes = pdisk.GetInferPDiskSlotCountFromUnitSize()) {
-            const ui64 size = getDriveSize();
-            if (!size) {
+            // per-drive settings from BSC host config take precedence over cluster-wide InferPDiskSlotCountSettings
+            if (pdisk.GetPDiskConfig().GetExpectedSlotCount() != 0) {
+                // Skip inferring PDisk SlotCount
+            } else if (const ui64 size = getDriveSize(); !size) {
                 STLOG(PRI_ERROR, BS_NODE, NW96, "Unable to determine drive size for inferring PDisk slot count",
                     (Path, path), (Details, driveSizeDetails));
             } else {
                 ui32 maxSlots = pdisk.GetInferPDiskSlotCountMax();
                 InferPDiskSlotCount(pdiskConfig, size, unitSizeInBytes, maxSlots);
             }
+        } else if (auto inferSettings = TInferPDiskSlotCountSettingsForDriveType(InferPDiskSlotCountSettings, deviceType); !inferSettings) {
+            STLOG(PRI_DEBUG, BS_NODE, NW102, "Inferring PDisk slot count not configured", (Path, path),
+                (SlotCount, pdiskConfig->ExpectedSlotCount),
+                (SlotSizeInUnits, pdiskConfig->SlotSizeInUnits));
+        } else if (pdiskConfig->ExpectedSlotCount != 0 && !inferSettings.PreferInferredSettingsOverExplicit) {
+            STLOG(PRI_DEBUG, BS_NODE, NW102, "Skipped inferring PDisk slot count, using explicit settings", (Path, path),
+                (SlotCount, pdiskConfig->ExpectedSlotCount),
+                (SlotSizeInUnits, pdiskConfig->SlotSizeInUnits));
+        } else if (const ui64 size = getDriveSize(); !size) {
+            STLOG(PRI_ERROR, BS_NODE, NW96, "Unable to determine drive size for inferring PDisk slot count",
+                (Path, path), (Details, driveSizeDetails));
+        } else {
+            InferPDiskSlotCount(pdiskConfig, size, inferSettings.UnitSize, inferSettings.MaxSlots);
+            STLOG(PRI_DEBUG, BS_NODE, NW102, "Inferred PDisk slot count", (Path, path),
+                (SlotCount, pdiskConfig->ExpectedSlotCount),
+                (SlotSizeInUnits, pdiskConfig->SlotSizeInUnits),
+                (FromDriveSize, size),
+                (FromUnitSize, inferSettings.UnitSize),
+                (FromMaxSlots, inferSettings.MaxSlots));
         }
 
         const NPDisk::TMainKey& pdiskKey = Cfg->PDiskKey;

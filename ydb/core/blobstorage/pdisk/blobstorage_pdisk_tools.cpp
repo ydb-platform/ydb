@@ -159,7 +159,9 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
             NPDisk::TReqId(NPDisk::TReqId::ReadFormatInfo, 0), {});
 
     for (auto& key : mainKey.Keys) {
-        NPDisk::TPDiskStreamCypher cypher(true); // Format record is always encrypted (except some tests, which don't rely on this func)
+        // Format record is always encrypted (except some tests, which don't rely on this func).
+        // Or encryption is disabled via macros, so that cypher does nothing.
+        NPDisk::TPDiskStreamCypher cypher(true);
         cypher.SetKey(key);
         bool isOk = false;
         alignas(16) NPDisk::TDiskFormat format;

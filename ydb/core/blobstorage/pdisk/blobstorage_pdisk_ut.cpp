@@ -665,7 +665,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(readRes->Data.ToString(), writeData);
     }
 
-    void AfterObliterateShouldNotReadLog(bool encryptMetadata) {
+    void AfterObliterateShouldNotReadLog(bool encryptFormat) {
         // regression test for #31337
         const TString expectedLogData = PrepareData(12346);
         TActorTestContext::TSettings settings{};
@@ -681,7 +681,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         auto cfg = testCtx.GetPDiskConfig();
         cfg->SectorMap = testCtx.TestCtx.SectorMap;
         cfg->EnableSectorEncryption = false;
-        cfg->EnableFormatEncryption = encryptMetadata;
+        cfg->EnableFormatEncryption = encryptFormat;
         cfg->ReadOnly = false;
         cfg->NonceRandNum = 13;
         testCtx.UpdateConfigRecreatePDisk(cfg, true);
@@ -741,7 +741,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         AfterObliterateShouldNotReadLog(false);
     }
 
-    void AfterObliterateDontReuseOldChunkData(bool encryptMetadata, bool plainDataChunks) {
+    void AfterObliterateDontReuseOldChunkData(bool encryptFormat) {
         // regression test for #31337
         const TString writeData = PrepareData(4096);
         const size_t chunkCount = 10;
@@ -753,7 +753,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         settings.ChunkSize = NPDisk::SmallDiskMaximumChunkSize;
         settings.DiskSize = (ui64)settings.ChunkSize * 50;
         settings.SmallDisk = true;
-        settings.PlainDataChunks = plainDataChunks;
+        settings.PlainDataChunks = false;
 
         TActorTestContext testCtx(settings);
 
@@ -761,7 +761,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         auto cfg = testCtx.GetPDiskConfig();
         cfg->SectorMap = testCtx.TestCtx.SectorMap;
         cfg->EnableSectorEncryption = false;
-        cfg->EnableFormatEncryption = encryptMetadata;
+        cfg->EnableFormatEncryption = encryptFormat;
         cfg->ReadOnly = false;
         cfg->NonceRandNum = 13;
         testCtx.UpdateConfigRecreatePDisk(cfg, true);
@@ -885,11 +885,11 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(AfterObliterateDontReuseOldChunkData) {
-        AfterObliterateDontReuseOldChunkData(true, false);
+        AfterObliterateDontReuseOldChunkData(true);
     }
 
     Y_UNIT_TEST(AfterObliterateDontReuseOldChunkDataNoEncryption) {
-        AfterObliterateDontReuseOldChunkData(false, false);
+        AfterObliterateDontReuseOldChunkData(false);
     }
 
     Y_UNIT_TEST(PDiskOwnerSlayRace) {

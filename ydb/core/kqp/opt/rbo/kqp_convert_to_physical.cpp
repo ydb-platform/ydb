@@ -2,6 +2,7 @@
 #include "kqp_rbo_physical_convertion_utils.h"
 #include "kqp_rbo_physical_sort_builder.h"
 #include "kqp_rbo_physical_aggregation_builder.h"
+#include "kqp_rbo_physical_map_builder.h"
 #include "kqp_rbo_physical_join_builder.h"
 
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -428,79 +429,22 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
                     .Build()
                 .Build()
             .Done().Ptr();
-            // clang-format off
+            // clang-format on
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Filter " << opStageId;
         } else if (op->Kind == EOperator::Map) {
+            auto map = CastOperator<TOpMap>(op);
+
             if (!currentStageBody) {
                 auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *op->Children[0]->Props.StageId);
                 stageArgs[opStageId].push_back(stageArg);
                 currentStageBody = stageInput;
             }
 
-            auto map = CastOperator<TOpMap>(op);
-            const bool isOrdered = map->IsOrdered();
-
-            auto arg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
-
-            TVector<TExprBase> items;
-            if (!map->Project) {
-                for (const auto& iu : map->GetInput()->GetOutputIUs()) {
-                    // clang-format off
-                    auto tuple = Build<TCoNameValueTuple>(ctx, op->Pos)
-                        .Name().Value(iu.GetFullName()).Build()
-                        .Value<TCoMember>()
-                            .Struct(arg)
-                            .Name().Value(iu.GetFullName()).Build()
-                        .Build()
-                    .Done();
-                    // clang-format on
-
-                    tuple = TCoNameValueTuple(NPhysicalConvertionUtils::ReplaceArg(tuple.Ptr(), arg, ctx));
-                    items.push_back(tuple);
-                }
-            }
-
-            for (const auto& mapElement : map->MapElements) {
-                TMaybeNode<TCoLambda> mapLambda;
-                if (mapElement.IsExpression()) {
-                    auto lambda = TCoLambda(mapElement.GetExpression());
-                    // clang-format off
-                    mapLambda = Build<TCoLambda>(ctx, op->Pos)
-                        .Args({arg})
-                        .Body<TExprApplier>()
-                            .Apply(lambda.Body())
-                            .With(TExprBase(lambda.Args().Arg(0)), TExprBase(arg))
-                        .Build()
-                    .Done();
-                    // clang-format on
-                } else {
-                    const auto var = mapElement.GetRename();
-                    // clang-format off
-                    mapLambda = Build<TCoLambda>(ctx, op->Pos)
-                        .Args({arg})
-                        .Body<TCoMember>()
-                            .Struct(arg)
-                            .Name().Value(var.GetFullName()).Build()
-                        .Build()
-                    .Done();
-                    // clang-format on
-                }
-
-                // clang-format off
-                auto tuple = Build<TCoNameValueTuple>(ctx, op->Pos)
-                    .Name().Value(mapElement.GetElementName().GetFullName()).Build()
-                    .Value(mapLambda.Body())
-                .Done();
-                // clang-format on
-
-                items.push_back(tuple);
-            }
-
-            currentStageBody = isOrdered ? BuildMap<TCoOrderedMap>(currentStageBody, arg, std::move(items), ctx, op->Pos)
-                                         : BuildMap<TCoMap>(currentStageBody, arg, std::move(items), ctx, op->Pos);
+            TPhysicalMapBuilder phyMapBuilder(map, ctx, op->Pos);
+            currentStageBody = phyMapBuilder.BuildPhysicalMap(currentStageBody);
 
             if (NPhysicalConvertionUtils::IsMultiConsumerHandlerNeeded(op)) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);

@@ -67,4 +67,31 @@ TExprNode::TPtr BuildNarrowMapForWideInput(TExprNode::TPtr input, const TVector<
     .Build();
     // clang-format on
 }
+
+template <typename T>
+TExprNode::TPtr BuildNarrowMapForWideInput(TExprNode::TPtr input, const TVector<T>& inputs, THashMap<ui32, TString> renameMap, TExprContext& ctx) {
+    // clang-format off
+    return ctx.Builder(input->Pos())
+        .Callable("NarrowMap")
+            .Add(0, input)
+            .Lambda(1)
+                .Params("wide_input", inputs.size())
+                .Callable("AsStruct")
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    for (ui32 i = 0; i < inputs.size(); ++i) {
+                        auto it = renameMap.find(i);
+                        const auto fullName = it != renameMap.end() ? it->second : GetFullName(inputs[i]);
+                        parent.List(i)
+                            .Atom(0, fullName)
+                            .Arg(1, "wide_input", i)
+                        .Seal();
+                    }
+                    return parent;
+                })
+                .Seal()
+            .Seal()
+        .Seal()
+    .Build();
+    // clang-format on
+}
 }

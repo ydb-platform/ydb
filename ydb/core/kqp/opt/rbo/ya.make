@@ -18,6 +18,7 @@ SRCS(
     kqp_rbo_physical_aggregation_builder.cpp
     kqp_rbo_physical_sort_builder.cpp
     kqp_rbo_physical_join_builder.cpp
+    kqp_rbo_physical_map_builder.cpp
     kqp_rbo_physical_convertion_utils.cpp
 )
 

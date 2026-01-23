@@ -1086,6 +1086,10 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery)
 
+    // test shard
+    GENERIC_HELPERS(CreateTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableCreateTestShardSet)
+    GENERIC_HELPERS(DropTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS

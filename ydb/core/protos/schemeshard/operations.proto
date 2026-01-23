@@ -211,5 +211,9 @@ enum EOperationType {
     // Truncate table
     ESchemeOpTruncateTable = 133;
 
+    // TestShardSet
+    ESchemeOpCreateTestShardSet = 134;
+    ESchemeOpDropTestShardSet = 135;
+
     // Some entries are grouped by semantics, so are out of order
 }

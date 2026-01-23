@@ -14,6 +14,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
+#include <ydb/core/test_tablet/events.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
 
@@ -1307,6 +1308,12 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxTruncateTable:
         return CreateTruncateTable(NextPartId(), txState);
 
+    // TestShardSet
+    case TTxState::ETxType::TxCreateTestShardSet:
+        return CreateNewTestShardSet(NextPartId(), txState);
+    case TTxState::ETxType::TxDropTestShardSet:
+        return CreateDropTestShardSet(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1651,6 +1658,12 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         return CreateConsistentTruncateTable(op.NextPartId(), tx, context);
+
+    // TestShardSet
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
+        return {CreateNewTestShardSet(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
+        return {CreateDropTestShardSet(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();

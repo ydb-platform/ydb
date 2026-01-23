@@ -272,6 +272,11 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxAlterStreamingQuery = 212  [(CounterOpts) = {Name: "InFlightOps/AlterStreamingQuery"}];
 
     COUNTER_IN_FLIGHT_OPS_TxTruncateTable = 213 [(CounterOpts) = {Name: "InFlightOps/TruncateTable"}];
+
+    COUNTER_TEST_SHARD_SET_COUNT = 214                     [(CounterOpts) = {Name: "TestShardSetCount"}];
+    COUNTER_TEST_SHARD_COUNT = 215                         [(CounterOpts) = {Name: "TestShardCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateTestShardSet = 216      [(CounterOpts) = {Name: "InFlightOps/CreateTestShardSet"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 217        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
 }
 
 enum ECumulativeCounters {
@@ -444,6 +449,9 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAlterStreamingQuery = 132  [(CounterOpts) = {Name: "FinishedOps/AlterStreamingQuery"}];
 
     COUNTER_FINISHED_OPS_TxTruncateTable = 133 [(CounterOpts) = {Name: "FinishedOps/TruncateTable"}];
+
+    COUNTER_FINISHED_OPS_TxCreateTestShardSet = 134      [(CounterOpts) = {Name: "FinishedOps/CreateTestShardSet"}];
+    COUNTER_FINISHED_OPS_TxDropTestShardSet = 135        [(CounterOpts) = {Name: "FinishedOps/DropTestShardSet"}];
 }
 
 enum EPercentileCounters {
@@ -699,4 +707,5 @@ enum ETxTypes {
     TXTYPE_GET_BACKUP_COLLECTION_RESTORE = 107 [(TxTypeOpts) = {Name: "TxGetBackupCollectionRestore"}];
     TXTYPE_LIST_BACKUP_COLLECTION_RESTORE = 108 [(TxTypeOpts) = {Name: "TxListBackupCollectionRestore"}];
     TXTYPE_FORGET_BACKUP_COLLECTION_RESTORE = 109 [(TxTypeOpts) = {Name: "TxForgetBackupCollectionRestore"}];
+    TXTYPE_TEST_SHARD_CONTROL = 110 [(TxTypeOpts) = {Name: "TxTestShardControl"}];
 }

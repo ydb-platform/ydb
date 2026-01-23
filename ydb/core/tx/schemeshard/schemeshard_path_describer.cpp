@@ -1152,6 +1152,29 @@ void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr p
     *entry.MutableProperties() = streamingQueryInfo->Properties;
 }
 
+void TPathDescriber::DescribeTestShardSet(TPathId pathId, TPathElement::TPtr pathEl) {
+    const auto it = Self->TestShardSets.FindPtr(pathId);
+    Y_ABORT_UNLESS(it, "TestShardSet is not found");
+    const auto testShardSetInfo = *it;
+
+    auto& entry = *Result->Record.MutablePathDescription()->MutableTestShardSetDescription();
+    entry.SetName(pathEl->Name);
+    entry.SetPathId(pathId.LocalPathId);
+
+    for (const auto& [shardIdx, tabletId] : testShardSetInfo->TestShards) {
+        entry.AddTabletIds(ui64(tabletId));
+    }
+
+    if (testShardSetInfo->TestShards.size() > 0) {
+        auto shardIdx = testShardSetInfo->TestShards.begin()->first;
+        auto shardInfo = Self->ShardInfos.FindPtr(shardIdx);
+        Y_ABORT_UNLESS(shardInfo);
+        for (const auto& channel : shardInfo->BindedChannels) {
+            entry.AddBoundChannels()->CopyFrom(channel);
+        }
+    }
+}
+
 static bool ConsiderAsDropped(const TPath& path) {
     Y_ABORT_UNLESS(path.IsResolved());
 
@@ -1322,6 +1345,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeStreamingQuery:
             DescribeStreamingQuery(base->PathId, base);
+            break;
+        case NKikimrSchemeOp::EPathTypeTestShardSet:
+            DescribeTestShardSet(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();

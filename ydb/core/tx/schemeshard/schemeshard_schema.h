@@ -2273,6 +2273,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
     };
 
+    struct TestShardSet : Table<130> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct TestShards : Column<3, NScheme::NTypeIds::String> { using Type = TString; };
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, TestShards>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2400,7 +2409,8 @@ struct Schema : NIceDb::Schema {
         IncrementalBackupItems,
         Secrets,
         SecretsAlterData,
-        StreamingQueryState
+        StreamingQueryState,
+        TestShardSet
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

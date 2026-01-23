@@ -1352,6 +1352,10 @@ struct TShardInfo {
     static TShardInfo BlobDepotInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::BlobDepot);
     }
+
+    static TShardInfo TestShardSetInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::TestShard);
+    }
 };
 
 /**
@@ -3725,6 +3729,29 @@ struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSchemeOp::TStreamingQueryProperties Properties;
+};
+
+struct TTestShardSetInfo : public TSimpleRefCount<TTestShardSetInfo> {
+    using TPtr = TIntrusivePtr<TTestShardSetInfo>;
+
+    THashMap<TShardIdx, TTabletId> TestShards; // ShardIdx -> TabletId
+    ui64 AlterVersion = 0;
+    TTestShardSetInfo::TPtr AlterData;
+
+    TTestShardSetInfo(ui64 alterVersion)
+        : AlterVersion(alterVersion)
+    {}
+
+    TTestShardSetInfo::TPtr CreateAlter() const {
+        return CreateAlter(AlterVersion + 1);
+    }
+
+    TTestShardSetInfo::TPtr CreateAlter(ui64 version) const {
+        Y_ENSURE(AlterVersion < version);
+        TTestShardSetInfo::TPtr alter = new TTestShardSetInfo(*this);
+        alter->AlterVersion = version;
+        return alter;
+    }
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

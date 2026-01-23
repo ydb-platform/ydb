@@ -8,6 +8,7 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
@@ -258,6 +259,9 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
             break;
         case ETabletType::BackupController:
             context.SS->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
+            break;
+        case ETabletType::TestShard:
+            context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
             break;
         default:
             break;

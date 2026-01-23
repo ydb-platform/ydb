@@ -178,6 +178,7 @@ protected:
     friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
     friend struct TLeaderTabletInfo;
+    friend class TReassignTabletsActor;
 
     friend class TTxInitScheme;
     friend class TTxDeleteBase;
@@ -248,6 +249,7 @@ protected:
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
     friend class TTxProcessTabletMetrics;
+    friend class TTxUpdateLastReassign;
 
     friend class TDeleteTabletActor;
 
@@ -259,6 +261,8 @@ protected:
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
+    void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description);
+    void StartReassignActor(std::vector<TReassignOperation> operations);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -476,6 +480,8 @@ protected:
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
     std::unordered_map<TDataCenterId, TDataCenterInfo> DataCenters;
     std::unordered_set<TNodeId> ConnectedNodes;
+    TString LastReassignStatus;
+    ui32 ReassignsRunning = 0;
 
     // normalized to be sorted list of unique values
     std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig

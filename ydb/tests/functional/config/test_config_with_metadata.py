@@ -148,6 +148,7 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
             additional_log_configs={'BS_NODE': LogLevels.DEBUG,
                                     'BS_CONTROLLER': LogLevels.DEBUG},
             enable_audit_log=True,
+            explicit_hosts_and_host_configs=True,
             default_users=dict((i, '') for i in ('root', 'other-user')),
         )
         cls.cluster = KiKiMR(configurator=configurator)

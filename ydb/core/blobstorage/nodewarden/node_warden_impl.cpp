@@ -229,6 +229,7 @@ void TNodeWarden::Bootstrap() {
 
         icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
         icb->RegisterSharedControl(LongRequestReportingDelayMs, "DSProxyControls.LongRequestReportingDelayMs");
+        icb->RegisterSharedControl(EnableDeepScrubbing, "VDiskControls.EnableDeepScrubbing");
     }
 
     // start replication broker

@@ -1167,9 +1167,6 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         }
                         break;
                     }
-                    case EKind::KindTopic: {
-                        auto topicMetadata = GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table);
-                    }
                     default: {
                         promise.SetValue(GetLoadTableMetadataResult(entry, cluster, mainCluster, database, table, queryName));
                     }

@@ -485,7 +485,8 @@ private:
                 i64 write_ts = static_cast<i64>(r.GetWriteTimestampMS());
                 AFL_ENSURE(write_ts >= 0);
                 *currentBatch->mutable_written_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(write_ts);
-                currentBatch->set_producer_id(std::move(sourceId));
+                // Use shared helper to properly encode non-UTF-8 source IDs
+                NGRpcProxy::V1::SetBatchSourceId(currentBatch, std::move(sourceId));
                 batchCodec = GetDataChunkCodec(proto);
                 currentBatch->set_codec(batchCodec);
 

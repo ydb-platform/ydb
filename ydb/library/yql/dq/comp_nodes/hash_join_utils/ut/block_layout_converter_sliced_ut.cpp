@@ -13,6 +13,7 @@
 #include <array>
 #include <numeric>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using namespace NYql::NUdf;
@@ -135,7 +136,6 @@ static void CheckFixed(
     }
 }
 
-
 struct TStringArena {
     std::string Buf;
 
@@ -200,41 +200,50 @@ static void CheckStrings(
 #define STRING_CASES(X) \
     X(String, NUdf::EDataSlot::String)
 
-#define GEN_FIXED_TEST(NAME, SLOT, CPP_T, OPT, SLICE)                                    \
-Y_UNIT_TEST(Test_##NAME##_opt##OPT##_slice##SLICE) {                                     \
-    TBlockLayoutConverterTestData data;                                                   \
-    const bool isOpt = (OPT);                                                             \
-    const bool doSlice = (SLICE);                                                         \
-    auto type = data.PgmBuilder.NewDataType((SLOT), isOpt);                                \
-    constexpr ui32 N = 1024;                                                              \
-    RunRoundTripOneColumn(                                                                 \
-        data, type, NPackedTuple::EColumnRole::Key, N, doSlice,                           \
-        FillFixed<CPP_T>(isOpt),                                                          \
-        [](const std::shared_ptr<arrow::ArrayData>& a,                                    \
-           const std::shared_ptr<arrow::ArrayData>& b,                                    \
-           NKikimr::NMiniKQL::TType* t) {                                                  \
-            CheckFixed<CPP_T>(a, b, t);                                                   \
-        }                                                                                  \
-    );                                                                                     \
+// --- один тест на тип: все комбинации opt/slice внутри ---
+template <NUdf::EDataSlot Slot, class TCxx>
+static void RunFixedAllModes() {
+    TBlockLayoutConverterTestData data;
+
+    for (bool isOpt : {false, true}) {
+        for (bool doSlice : {false, true}) {
+            auto type = data.PgmBuilder.NewDataType(Slot, isOpt);
+            constexpr ui32 N = 1024;
+
+            RunRoundTripOneColumn(
+                data, type, NPackedTuple::EColumnRole::Key, N, doSlice,
+                FillFixed<TCxx>(isOpt),
+                [](const std::shared_ptr<arrow::ArrayData>& a,
+                   const std::shared_ptr<arrow::ArrayData>& b,
+                   NKikimr::NMiniKQL::TType* t) {
+                    CheckFixed<TCxx>(a, b, t);
+                }
+            );
+        }
+    }
 }
 
-#define GEN_STRING_TEST(NAME, SLOT, OPT, SLICE)                                           \
-Y_UNIT_TEST(Test_##NAME##_opt##OPT##_slice##SLICE) {                                      \
-    TBlockLayoutConverterTestData data;                                                   \
-    TStringArena arena;                                                                   \
-    const bool isOpt = (OPT);                                                             \
-    const bool doSlice = (SLICE);                                                         \
-    auto type = data.PgmBuilder.NewDataType((SLOT), isOpt);                                \
-    constexpr ui32 N = 1024;                                                              \
-    RunRoundTripOneColumn(                                                                 \
-        data, type, NPackedTuple::EColumnRole::Key, N, doSlice,                           \
-        FillStrings(isOpt, arena),                                                        \
-        [](const std::shared_ptr<arrow::ArrayData>& a,                                    \
-           const std::shared_ptr<arrow::ArrayData>& b,                                    \
-           NKikimr::NMiniKQL::TType* t) {                                                  \
-            CheckStrings(a, b, t);                                                        \
-        }                                                                                  \
-    );                                                                                     \
+template <NUdf::EDataSlot Slot>
+static void RunStringAllModes() {
+    TBlockLayoutConverterTestData data;
+    TStringArena arena;
+
+    for (bool isOpt : {false, true}) {
+        for (bool doSlice : {false, true}) {
+            auto type = data.PgmBuilder.NewDataType(Slot, isOpt);
+            constexpr ui32 N = 1024;
+
+            RunRoundTripOneColumn(
+                data, type, NPackedTuple::EColumnRole::Key, N, doSlice,
+                FillStrings(isOpt, arena),
+                [](const std::shared_ptr<arrow::ArrayData>& a,
+                   const std::shared_ptr<arrow::ArrayData>& b,
+                   NKikimr::NMiniKQL::TType* t) {
+                    CheckStrings(a, b, t);
+                }
+            );
+        }
+    }
 }
 
 } // anonymous namespace
@@ -242,22 +251,15 @@ Y_UNIT_TEST(Test_##NAME##_opt##OPT##_slice##SLICE) {                            
 Y_UNIT_TEST_SUITE(TBlockLayoutConverterGeneratedTest) {
 
 #define X_FIXED(NAME, SLOT, CPP_T) \
-    GEN_FIXED_TEST(NAME, SLOT, CPP_T, false, false) \
-    GEN_FIXED_TEST(NAME, SLOT, CPP_T, false, true)  \
-    GEN_FIXED_TEST(NAME, SLOT, CPP_T, true,  false) \
-    GEN_FIXED_TEST(NAME, SLOT, CPP_T, true,  true)
+    Y_UNIT_TEST(Test_##NAME##_AllModes) { RunFixedAllModes<SLOT, CPP_T>(); }
 
 FIXED_CASES(X_FIXED)
 #undef X_FIXED
 
 #define X_STR(NAME, SLOT) \
-    GEN_STRING_TEST(NAME, SLOT, false, false) \
-    GEN_STRING_TEST(NAME, SLOT, false, true)  \
-    GEN_STRING_TEST(NAME, SLOT, true,  false) \
-    GEN_STRING_TEST(NAME, SLOT, true,  true)
+    Y_UNIT_TEST(Test_##NAME##_AllModes) { RunStringAllModes<SLOT>(); }
 
 STRING_CASES(X_STR)
 #undef X_STR
 
 } // Y_UNIT_TEST_SUITE
-

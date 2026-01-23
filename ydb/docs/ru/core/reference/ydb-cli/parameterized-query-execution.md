@@ -571,15 +571,15 @@ for i in $(seq 1 100000); do echo "$i";done | \
 
 ```bash
 {{ ydb-cli }} -p quickstart sql \
-  -s 'SELECT t.id FROM test_delete_1 AS t WHERE t.id > 10' \
-  --format json-unicode | \
-{{ ydb-cli }} -p quickstart sql \
   -s 'DECLARE $lines AS List<Struct<id:UInt64>>;
       DELETE FROM test_delete_1 WHERE id IN (SELECT tl.id FROM AS_TABLE($lines) AS tl)' \
   --input-framing newline-delimited \
   --input-param-name lines \
   --input-batch adaptive \
-  --input-batch-max-rows 10000
+  --input-batch-max-rows 10000 \
+  --input-file <(ydb -p quickstart sql \
+    -s 'SELECT t.id FROM test_delete_1 AS t WHERE t.id < 10' \
+    --format json-unicode)
 ```
 
 #### Обработка сообщений, считываемых из топика {#example-adaptive-pipeline-from-topic}

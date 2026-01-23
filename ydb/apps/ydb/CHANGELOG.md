@@ -11,6 +11,7 @@
 * Added the `--index-population-mode` option to the `ydb import s3` command, allowing selection of the index population mode (e.g. build or import).
 * Added unified time interval format support across CLI commands. Options accepting time durations now support explicit time units (e.g., `5s`, `2m`, `1h`) while maintaining backward compatibility with plain numbers interpreted using their original default units.
 * Fixed static credentials parsing to avoid using a profile password when the username comes from another source.
+* Added "Cache mode" option to column families description instead of deprecated "Keep in memory" option in the `ydb scheme describe` command.
 
 ## 2.28.0 ##
 

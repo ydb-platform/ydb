@@ -390,8 +390,9 @@ void TKeyedWriteSession::TransferEventsToOutputQueue() {
     bool shouldAddReadyToAcceptEvent = false;
     std::unordered_map<ui64, std::deque<TWriteSessionEvent::TWriteAck>> acks;
 
-    auto buildOutputAckEvent = [](std::deque<TWriteSessionEvent::TWriteAck>& acksQueue) -> TWriteSessionEvent::TAcksEvent {
+    auto buildOutputAckEvent = [](std::deque<TWriteSessionEvent::TWriteAck>& acksQueue, ui64 expectedSeqNo) -> TWriteSessionEvent::TAcksEvent {
         TWriteSessionEvent::TAcksEvent ackEvent;
+        Y_ENSURE(acksQueue.front().SeqNo == expectedSeqNo, TStringBuilder() << "Expected seqNo=" << expectedSeqNo << " but got " << acksQueue.front().SeqNo);
         auto ack = std::move(acksQueue.front());
         ackEvent.Acks.push_back(std::move(ack));
         acksQueue.pop_front();
@@ -400,10 +401,11 @@ void TKeyedWriteSession::TransferEventsToOutputQueue() {
 
     while (!InFlightMessages.empty()) {
         const auto& head = InFlightMessages.front();
+        Y_ENSURE(head.Message.SeqNo_.has_value(), "SeqNo is not set");
 
         auto remainingAcks = acks.find(head.Partition);
         if (remainingAcks != acks.end() && remainingAcks->second.size() > 0) {
-            EventsOutputQueue.push_back(buildOutputAckEvent(remainingAcks->second));
+            EventsOutputQueue.push_back(buildOutputAckEvent(remainingAcks->second, *head.Message.SeqNo_));
             InFlightMessages.pop_front();
             continue;
         }
@@ -420,7 +422,7 @@ void TKeyedWriteSession::TransferEventsToOutputQueue() {
 
         std::deque<TWriteSessionEvent::TWriteAck> acksQueue;
         std::copy(acksEvent->Acks.begin(), acksEvent->Acks.end(), std::back_inserter(acksQueue));
-        EventsOutputQueue.push_back(buildOutputAckEvent(acksQueue));
+        EventsOutputQueue.push_back(buildOutputAckEvent(acksQueue, *head.Message.SeqNo_));
         acks[head.Partition] = std::move(acksQueue);
         eventsQueueIt->second.pop_front();
         eventsTransferred = true;

@@ -30,7 +30,7 @@ public:
 private:
     const ui32 NumNodes;
     const TString Address = "::1";
-    TDuration DeadPeerTimeout = TDuration::Seconds(2);
+    const TDuration DeadPeerTimeout;
     NMonitoring::TDynamicCounterPtr Counters;
     THashMap<ui32, THolder<TNode>> Nodes;
     TList<TTrafficInterrupter> interrupters;
@@ -41,8 +41,9 @@ private:
 public:
     TTestICCluster(ui32 numNodes = 1, NActors::TChannelsConfig channelsConfig = NActors::TChannelsConfig(),
                    TTrafficInterrupterSettings* tiSettings = nullptr, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, Flags flags = EMPTY,
-                   TCheckerFactory checkerFactory = {})
+                   TCheckerFactory checkerFactory = {}, TDuration deadPeerTimeout = TDuration::Seconds(2))
         : NumNodes(numNodes)
+        , DeadPeerTimeout(deadPeerTimeout)
         , Counters(new NMonitoring::TDynamicCounters)
         , ChannelsConfig(channelsConfig)
         , PortManager(NInterconnectTest::CreatePortmanager())
@@ -135,3 +136,27 @@ public:
         return promise.GetFuture();
     }
 };
+
+struct TPatternNotFound : public yexception {};
+
+inline TString ExtractPattern(TTestICCluster& testCluster, ui32 me, ui32 peer, TString patternStart, TString patternEnd) {
+    auto httpResp = testCluster.GetSessionDbg(me, peer);
+    const TString& resp = httpResp.GetValueSync();
+    auto pos = resp.find(patternStart);
+    if (pos == std::string::npos) {
+        ythrow TPatternNotFound() << "pattern was not found: " << httpResp.GetValueSync();
+    }
+    pos += patternStart.size();
+    size_t end = resp.find(patternEnd, pos);
+    Y_ABORT_UNLESS(end != std::string::npos);
+    return resp.substr(pos, end - pos);
+
+}
+
+inline TString GetRdmaQpStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
+    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaQp</td><td>[", "]<");
+}
+
+inline TString GetRdmaChecksumStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
+    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaMode</td><td>", "<");
+}

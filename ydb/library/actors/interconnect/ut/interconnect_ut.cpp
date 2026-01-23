@@ -7,26 +7,6 @@
 
 using namespace NActors;
 
-static TString ExtractPattern(TTestICCluster& testCluster, ui32 me, ui32 peer, TString patternStart, TString patternEnd) {
-    auto httpResp = testCluster.GetSessionDbg(me, peer);
-    const TString& resp = httpResp.GetValueSync();
-    auto pos = resp.find(patternStart);
-    UNIT_ASSERT_C(pos != std::string::npos, "rdma qp status field was not found in http info");
-    pos += patternStart.size();
-    size_t end = resp.find(patternEnd, pos);
-    UNIT_ASSERT(end != std::string::npos);
-    return resp.substr(pos, end - pos);
-
-}
-
-static TString GetRdmaQpStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
-    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaQp</td><td>[", "]<");
-}
-
-static TString GetRdmaChecksumStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
-    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaMode</td><td>", "<");
-}
-
 class TSenderActor : public TActorBootstrapped<TSenderActor> {
     const TActorId Recipient;
     const size_t SendLimit;

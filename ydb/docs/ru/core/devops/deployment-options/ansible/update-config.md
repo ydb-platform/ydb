@@ -4,7 +4,7 @@
 
 ## Обновление конфигурации через Ansible playbook
 
-В репозитории [ydb-ansible](https://github.com/ydb-platform/ydb-ansible) есть playbook под названием `ydb_platform.ydb.update_config`, который можно использовать для обновления конфигурации кластера {{ ydb-short-name }}. Перейдите в ту же директорию, которая использовалась для [первоначального развёртывания](initial-deployment.md) кластера, отредактируйте файл `files/config.yaml` по необходимости и затем запустите этот playbook:
+В репозитории [ydb-ansible](https://github.com/ydb-platform/ydb-ansible) есть playbook под названием `ydb_platform.ydb.update_config`, который можно использовать для обновления конфигурации кластера {{ ydb-short-name }}. Перейдите в ту же директорию, которая использовалась для [первоначального развёртывания](./initial-deployment/index.md) кластера, отредактируйте файл `files/config.yaml` по необходимости и затем запустите этот playbook:
 
 ```bash
 ansible-playbook ydb_platform.ydb.update_config

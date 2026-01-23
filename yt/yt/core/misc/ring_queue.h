@@ -91,7 +91,7 @@ public:
         Head_ = Tail_ = Begin_;
     }
 
-    TRingQueue(TRingQueue&& other)
+    TRingQueue(TRingQueue&& other) noexcept
         : Allocator_(std::move(other.Allocator_))
     {
         Capacity_ = other.Capacity_;

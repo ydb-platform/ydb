@@ -37,6 +37,7 @@ struct TSchemeIds {
         TabletKickCooldownPeriod,
         ResourceOvercommitment,
         TabletOwnersSynced,
+        LastReassignStatus,
     };
 };
 
@@ -45,9 +46,10 @@ struct Schema : NIceDb::Schema {
         struct KeyCol : Column<0, NScheme::NTypeIds::Uint64> { static TString GetColumnName(const TString&) { return "Key"; } using Type = TSchemeIds::State; };
         struct Value : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Config : Column<2, NScheme::NTypeIds::String> { using Type = NKikimrConfig::THiveConfig; };
+        struct StringValue : Column<3, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<KeyCol>;
-        using TColumns = TableColumns<KeyCol, Value, Config>;
+        using TColumns = TableColumns<KeyCol, Value, Config, StringValue>;
     };
 
     struct OldTablet : Table<1> {

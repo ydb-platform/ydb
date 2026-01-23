@@ -51,7 +51,7 @@ public:
 
     TTopFreqData(const NKikimr::NUdf::TUnboxedValuePod& value, const ui32 minSize, const ui32 maxSize);
     TTopFreqData(const TTopFreqData& topFreq1, const TTopFreqData& topFreq2);
-    TTopFreqData(const NKikimr::NUdf::TUnboxedValuePod& serialized);
+    explicit TTopFreqData(const NKikimr::NUdf::TUnboxedValuePod& serialized);
 
     NKikimr::NUdf::TUnboxedValue Serialize(const NKikimr::NUdf::IValueBuilder* builder);
     NKikimr::NUdf::TUnboxedValue Get(const NKikimr::NUdf::IValueBuilder* builder, ui32 resultSize);

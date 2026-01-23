@@ -168,7 +168,7 @@ void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
 
 class TSimpleSecureParamsProvider: public NUdf::ISecureParamsProvider {
 public:
-    TSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams)
+    explicit TSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams)
         : SecureParams_(secureParams)
     {
     }

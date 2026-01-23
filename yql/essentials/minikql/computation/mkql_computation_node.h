@@ -37,7 +37,7 @@ enum class EGraphPerProcess {
 };
 
 struct TComputationOpts {
-    TComputationOpts(IStatsRegistry* stats)
+    explicit TComputationOpts(IStatsRegistry* stats)
         : Stats(stats)
     {
     }

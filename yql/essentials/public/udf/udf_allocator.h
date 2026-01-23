@@ -38,7 +38,7 @@ struct TStdAllocatorForUdf {
     ~TStdAllocatorForUdf() noexcept = default;
 
     template <typename U>
-    TStdAllocatorForUdf(const TStdAllocatorForUdf<U>&) noexcept {};
+    explicit TStdAllocatorForUdf(const TStdAllocatorForUdf<U>&) noexcept {};
     template <typename U>
     struct rebind { // NOLINT(readability-identifier-naming)
         typedef TStdAllocatorForUdf<U> other;

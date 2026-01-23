@@ -19,7 +19,7 @@ struct TLazyVerifyListValue;
 
 template <class TValidateErrorPolicy>
 struct TLazyVerifyListIterator: public TBoxedValue {
-    TLazyVerifyListIterator(const TLazyVerifyListValue<TValidateErrorPolicy>& lazyList, ui64 index = 0)
+    explicit TLazyVerifyListIterator(const TLazyVerifyListValue<TValidateErrorPolicy>& lazyList, ui64 index = 0)
         : LazyList_(lazyList)
         , OrigIter_(TBoxedValueAccessor::GetListIterator(*lazyList.Orig))
         , Index_(index)
@@ -144,7 +144,7 @@ private:
 
 template <class TValidateErrorPolicy, bool Keys>
 struct TLazyVerifyDictIterator: public TBoxedValue {
-    TLazyVerifyDictIterator(const TLazyVerifyDictValue<TValidateErrorPolicy>& lazyDict, ui64 index = 0)
+    explicit TLazyVerifyDictIterator(const TLazyVerifyDictValue<TValidateErrorPolicy>& lazyDict, ui64 index = 0)
         : LazyDict_(lazyDict)
         , OrigIter_((Keys ? &TBoxedValueAccessor::GetKeysIterator : &TBoxedValueAccessor::GetDictIterator)(*LazyDict_.Orig))
         , Index_(index)

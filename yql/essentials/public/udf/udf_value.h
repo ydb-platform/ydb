@@ -1019,7 +1019,12 @@ public:
     inline TUnboxedValue() noexcept = default;
     inline ~TUnboxedValue() noexcept;
 
+    // They are almost the same thing.
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TUnboxedValue(const TUnboxedValuePod& value) noexcept;
+
+    // They are almost the same thing.
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TUnboxedValue(TUnboxedValuePod&& value) noexcept;
 
     inline TUnboxedValue(const TUnboxedValue& value) noexcept;
@@ -1044,7 +1049,7 @@ template <typename TResourceData, const char* ResourceTag>
 class TBoxedResource: public TBoxedValue {
 public:
     template <typename... Args>
-    inline TBoxedResource(Args&&... args)
+    inline explicit TBoxedResource(Args&&... args)
         : ResourceData_(std::forward<Args>(args)...)
     {
     }
@@ -1080,14 +1085,14 @@ template <typename TResourceData>
 class TBoxedDynamicResource: public TBoxedValue {
 public:
     template <typename... Args>
-    inline TBoxedDynamicResource(TString&& tag, Args&&... args)
+    inline explicit TBoxedDynamicResource(TString&& tag, Args&&... args)
         : ResourceData_(std::forward<Args>(args)...)
         , Tag_(std::move(tag))
     {
     }
 
     template <typename... Args>
-    inline TBoxedDynamicResource(const TString& tag, Args&&... args)
+    inline explicit TBoxedDynamicResource(const TString& tag, Args&&... args)
         : ResourceData_(std::forward<Args>(args)...)
         , Tag_(tag)
     {

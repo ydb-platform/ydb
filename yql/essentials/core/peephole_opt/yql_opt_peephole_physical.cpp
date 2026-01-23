@@ -2423,7 +2423,7 @@ IGraphTransformer::TStatus PeepHoleBlockStage(const TExprNode::TPtr& input, TExp
 
 class TStrongTypeErrorProxy : public IGraphTransformer {
 public:
-    TStrongTypeErrorProxy(IGraphTransformer& inner)
+    explicit TStrongTypeErrorProxy(IGraphTransformer& inner)
         : Inner_(inner)
     {}
 

@@ -15169,7 +15169,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
     class TIntentDeterminationTransformer : public TSyncTransformerBase {
     public:
-        TIntentDeterminationTransformer(const TTypeAnnotationContext& types)
+        explicit TIntentDeterminationTransformer(const TTypeAnnotationContext& types)
             : Types_(types)
         {}
 

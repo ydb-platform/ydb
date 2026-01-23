@@ -46,6 +46,7 @@ Checks: >
   bugprone-unused-return-value,
   bugprone-use-after-move,
   bugprone-virtual-near-miss,
+  google-explicit-constructor,
   modernize-use-override
 CheckOptions:
   - key: readability-identifier-naming.StructPrefix

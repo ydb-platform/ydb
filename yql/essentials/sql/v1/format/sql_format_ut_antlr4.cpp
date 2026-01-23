@@ -16,7 +16,7 @@ namespace {
 using TCases = TVector<std::pair<TString, TString>>;
 
 struct TSetup {
-    TSetup(bool ansiLexer = false) {
+    explicit TSetup(bool ansiLexer = false) {
         NSQLTranslationV1::TLexers lexers;
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
         lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();

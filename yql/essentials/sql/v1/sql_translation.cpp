@@ -5684,7 +5684,7 @@ bool TSqlTranslation::ParseTransferLambda(
 
 class TReturningListColumns: public INode {
 public:
-    TReturningListColumns(TPosition pos)
+    explicit TReturningListColumns(TPosition pos)
         : INode(pos)
     {
     }

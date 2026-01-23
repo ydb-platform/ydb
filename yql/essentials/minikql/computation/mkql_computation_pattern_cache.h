@@ -36,7 +36,7 @@ struct TPatternCacheEntry {
         SizeForCache = Alloc.GetAllocated();
     }
 
-    TPatternCacheEntry(bool useAlloc = true)
+    explicit TPatternCacheEntry(bool useAlloc = true)
         : Alloc(__LOCATION__)
         , Env(Alloc)
         , UseAlloc(useAlloc)
@@ -90,8 +90,8 @@ public:
     // TODO(YQL-20086): Migrate YDB to TConfig
     using Config = TConfig;
 
-    TComputationPatternLRUCache(const TConfig& configuration,
-                                NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
+    explicit TComputationPatternLRUCache(const TConfig& configuration,
+                                         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
     ~TComputationPatternLRUCache();
 
     static TPatternCacheEntryPtr CreateCacheEntry(bool useAlloc = true) {

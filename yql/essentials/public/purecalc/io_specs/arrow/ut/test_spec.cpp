@@ -45,7 +45,7 @@ struct TVectorStream: public NYql::NPureCalc::IStream<T*> {
     size_t Index = 0;
 
 public:
-    TVectorStream(TVector<T> items)
+    explicit TVectorStream(TVector<T> items)
         : Data(std::move(items))
     {
     }
@@ -152,7 +152,7 @@ TVector<std::tuple<ui64, i64>> CanonLiteralBatches(const TVector<arrow::compute:
 using TExecBatchStreamImpl = TVectorStream<arrow::compute::ExecBatch>;
 struct TExecBatchConsumerImpl: public TVectorConsumer<arrow::compute::ExecBatch, std::tuple<ui64, i64>> {
 public:
-    TExecBatchConsumerImpl(TVector<std::tuple<ui64, i64>>& output)
+    explicit TExecBatchConsumerImpl(TVector<std::tuple<ui64, i64>>& output)
         : TVectorConsumer(output, &AddBatch)
     {
     }

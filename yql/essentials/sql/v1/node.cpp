@@ -2065,7 +2065,7 @@ TString IdContentFromString(TContext& ctx, const TString& str) {
 namespace {
 class TInvalidLiteralNode final: public INode {
 public:
-    TInvalidLiteralNode(TPosition pos)
+    explicit TInvalidLiteralNode(TPosition pos)
         : INode(pos)
     {
     }
@@ -3632,7 +3632,7 @@ TNodePtr BuildNamedExprReference(TNodePtr parent, const TString& name, TMaybe<si
 
 class TNamedExprNode: public IProxyNode {
 public:
-    TNamedExprNode(TNodePtr parent)
+    explicit TNamedExprNode(TNodePtr parent)
         : IProxyNode(parent->GetPos(), parent)
         , FakeSource_(BuildFakeSource(parent->GetPos()))
         , Referenced_(false)

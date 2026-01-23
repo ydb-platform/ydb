@@ -186,7 +186,7 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
                 }
 
                 TStringStream err;
-                mkqlUserType = BuildType(*udf.UserType, {env}, err); //
+                mkqlUserType = BuildType(*udf.UserType, TTypeBuilder(env), err);
                 if (!mkqlUserType) {
                     auto issue = TIssue(udf.Pos, TStringBuilder() << "Invalid user type for function: "
                                                                   << udf.Name << ", error: " << err.Str());
@@ -207,7 +207,7 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
 
             TFunctionTypeInfo funcInfo;
             auto status = functionRegistry.FindFunctionTypeInfo(udf.LangVer, env, typeInfoHelper, nullptr,
-                                                                udf.Name, mkqlUserType, udf.TypeConfig, NUdf::IUdfModule::TFlags::TypesOnly, {}, secureParamsProvider.get(),
+                                                                udf.Name, mkqlUserType, udf.TypeConfig, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), secureParamsProvider.get(),
                                                                 logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
                 ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Failed to find UDF function: " << udf.Name

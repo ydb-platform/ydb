@@ -3150,7 +3150,7 @@ TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& t
 
 class TClustersSinkOperationBase: public TAstListNode {
 protected:
-    TClustersSinkOperationBase(TPosition pos)
+    explicit TClustersSinkOperationBase(TPosition pos)
         : TAstListNode(pos)
     {
     }
@@ -3179,7 +3179,7 @@ protected:
 
 class TCommitClustersNode: public TClustersSinkOperationBase {
 public:
-    TCommitClustersNode(TPosition pos)
+    explicit TCommitClustersNode(TPosition pos)
         : TClustersSinkOperationBase(pos)
     {
     }
@@ -3195,7 +3195,7 @@ TNodePtr BuildCommitClusters(TPosition pos) {
 
 class TRollbackClustersNode: public TClustersSinkOperationBase {
 public:
-    TRollbackClustersNode(TPosition pos)
+    explicit TRollbackClustersNode(TPosition pos)
         : TClustersSinkOperationBase(pos)
     {
     }

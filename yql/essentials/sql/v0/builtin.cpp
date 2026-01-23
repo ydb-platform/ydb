@@ -1581,7 +1581,7 @@ private:
 template <bool IsStart>
 class THoppingTime final: public TAstListNode {
 public:
-    THoppingTime(TPosition pos, const TVector<TNodePtr>& args = {})
+    explicit THoppingTime(TPosition pos, const TVector<TNodePtr>& args = {})
         : TAstListNode(pos)
     {
         Y_UNUSED(args);

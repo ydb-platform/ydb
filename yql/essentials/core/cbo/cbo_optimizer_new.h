@@ -35,7 +35,7 @@ public:
     EOptimizerNodeKind Kind;
     TOptimizerStatistics Stats;
 
-    IBaseOptimizerNode(EOptimizerNodeKind k)
+    explicit IBaseOptimizerNode(EOptimizerNodeKind k)
         : Kind(k)
     {
     }
@@ -164,7 +164,7 @@ struct TJoinOrderHints {
     };
 
     struct TRelationNode: public ITreeNode {
-        TRelationNode(TString label)
+        explicit TRelationNode(TString label)
             : Label(std::move(label))
         {
             this->Type = ITreeNode::Relation;
@@ -380,7 +380,7 @@ public:
     using TPtr = std::shared_ptr<IOptimizerNew>;
     IProviderContext& Pctx;
 
-    IOptimizerNew(IProviderContext& ctx)
+    explicit IOptimizerNew(IProviderContext& ctx)
         : Pctx(ctx)
     {
     }

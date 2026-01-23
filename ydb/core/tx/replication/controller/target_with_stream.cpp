@@ -40,7 +40,7 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
             auto ev = MakeRunWorkerEv(
                 ReplicationId, TargetId, Config, partition.GetPartitionId(),
                 ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId,
-                BatchingSettings, Database, MetricsLevel, ReplicationName);
+                BatchingSettings, Database, MetricsLevel, Location);
             Send(Parent, std::move(ev));
         }
 
@@ -71,7 +71,7 @@ public:
             const NKikimrReplication::TBatchingSettings& batchingSettings,
             const TString& database,
             const NKikimrReplication::TReplicationConfig::TMetricsConfig& metricsConfig,
-            const TString& replicationName
+            const NKikimrReplication::TReplicationLocationConfig& location
     )
         : Parent(parent)
         , YdbProxy(proxy)
@@ -87,7 +87,7 @@ public:
         , BatchingSettings(batchingSettings)
         , Database(database)
         , MetricsLevel(metricsConfig.GetLevel())
-        , ReplicationName(replicationName)
+        , Location(location)
     {
     }
 
@@ -119,7 +119,7 @@ private:
     const NKikimrReplication::TBatchingSettings BatchingSettings;
     const TString Database;
     NKikimrReplication::TReplicationConfig::TMetricsConfig::EMetricsLevel MetricsLevel;
-    TString ReplicationName;
+    NKikimrReplication::TReplicationLocationConfig Location;
 
 }; // TWorkerRegistar
 
@@ -171,7 +171,7 @@ IActor* TTargetWithStream::CreateWorkerRegistar(const TActorContext& ctx) const 
         config.GetSrcConnectionParams(), config.GetConsistencySettings(),
         replication->GetId(), GetId(), GetStreamPath(), GetStreamConsumerName(), GetDstPathId(), GetConfig(),
         config.GetTransferSpecific().GetBatching(), replication->GetDatabase(), config.GetMetricsConfig(),
-        replication->GetName());
+        replication->GetLocation());
 }
 
 }

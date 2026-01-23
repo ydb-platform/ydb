@@ -12,8 +12,9 @@ namespace NKikimr::NReplication::NController {
 TTargetTransfer::TTargetTransfer(TReplication* replication, ui64 id, const IConfig::TPtr& config)
     : TTargetWithStream(replication, ETargetKind::Transfer, id, config)
     , Stats(std::make_unique<TTransferStats>(Now()))
-    , Name(replication->GetName())
+    , Location(replication->GetLocation())
 {
+    MetricsLevel = replication->GetConfig().HasMetricsConfig() ? replication->GetConfig().GetMetricsConfig().GetLevel() : 0;
 }
 
 void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig& cfg) {
@@ -26,7 +27,7 @@ void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig&
         t.GetDirectoryPath());
 
     MetricsLevel = cfg.HasMetricsConfig() ? cfg.GetMetricsConfig().GetLevel() : 0;
-    Name = TStringBuilder() << GetConfig()->GetSrcPath() << "--" << GetConfig()->GetDstPath();
+    Location.CopyFrom(cfg.GetLocation());
 }
 
 void TTargetTransfer::Progress(const TActorContext& ctx) {
@@ -124,33 +125,76 @@ void TTargetTransfer::RemoveWorker(ui64 id) {
         }                                       \
         break;
 
-void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats, NMonitoring::TDynamicCounterPtr counters) {
-    if (!HasWorker(workerId)) {
-        Stats->WorkersStats.erase(workerId);
-        return;
-    }
+void TTargetTransfer::EnsureCounters(NMonitoring::TDynamicCounterPtr counters) {
+
     auto metricsValEnumVal = static_cast<NKikimrReplication::TReplicationConfig::TMetricsConfig::EMetricsLevel>(MetricsLevel);
     switch (metricsValEnumVal) {
         case NKikimrReplication::TReplicationConfig::TMetricsConfig::LEVEL_OBJECT:
         case NKikimrReplication::TReplicationConfig::TMetricsConfig::LEVEL_DETAILED:
             if (!Counters) {
-                Counters.ConstructInPlace(counters, Name);
+                Counters.ConstructInPlace(counters, Location);
             }
-
             break;
         default:
             Counters = Nothing();
             break;
     }
+}
+
+void TTargetTransfer::WorkerStatusChanged(ui64 workerId, ui64 status, NMonitoring::TDynamicCounterPtr counters) {
+    EnsureCounters(counters);
+    auto& workerStats = Stats->WorkersStats[workerId];
+    switch (static_cast<NKikimrReplication::TEvWorkerStatus::EStatus>(status)) {
+        case NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING:
+            workerStats.RestartsCount += 1;
+            workerStats.Restarts.Hour.Update(1, Now());
+            workerStats.Restarts.Minute.Update(1, Now());
+            workerStats.StartTime = Now();
+            if (Counters) {
+                Counters->Restarts->Add(1);
+            }
+            break;
+        case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
+            workerStats.StartTime = TInstant::Zero();
+            Stats->LastWorkerStartTime = TInstant::Zero();
+            break;
+        default:
+            break;
+    }
+    if (Counters) {
+        Counters->MinWorkerUptime->Set(0);
+    }
+}
+
+void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats, NMonitoring::TDynamicCounterPtr counters) {
+    if (!HasWorker(workerId)) {
+        Stats->WorkersStats.erase(workerId);
+        return;
+    }
+    EnsureCounters(counters);
 
     auto& workerStats = Stats->WorkersStats[workerId];
     if (newStats.HasStartTime()) {
         workerStats.StartTime = TInstant::Seconds(newStats.GetStartTime().seconds());
-        if (Stats->LastWorkerStartTime == TInstant::Zero() || Stats->LastWorkerStartTime < workerStats.StartTime) {
-            Stats->LastWorkerStartTime = workerStats.StartTime;
-            if (Counters && Stats->LastWorkerStartTime) {
-                Counters->MinWorkerUptime->Set((Now() - Stats->LastWorkerStartTime).MilliSeconds());
+    }
+    bool hasWorkerWithoutStartTime = false;
+    if (Stats->LastWorkerStartTime == TInstant::Zero()) {
+        for (const auto& [_, workerStats] : Stats->WorkersStats) {
+            if (workerStats.StartTime == TInstant::Zero()) {
+                hasWorkerWithoutStartTime = true;
+                break;
             }
+        }
+    }
+    if ((!hasWorkerWithoutStartTime && Stats->LastWorkerStartTime == TInstant::Zero()) || Stats->LastWorkerStartTime < workerStats.StartTime) {
+        Stats->LastWorkerStartTime = workerStats.StartTime;
+    }
+
+    if (Counters) {
+        if (Stats->LastWorkerStartTime) {
+            Counters->MinWorkerUptime->Set((Now() - Stats->LastWorkerStartTime).MilliSeconds());
+        } else {
+            Counters->MinWorkerUptime->Set(0);
         }
     }
 
@@ -166,19 +210,10 @@ void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWork
             ADD_STATS_TO_WINDOW_AND_CNTR(PROCESSING_ELAPSED_CPU, ProcessingCpuTime)
 
             ADD_STATS_TO_CNTR(READ_TIME, ReadTime);
+            ADD_STATS_TO_CNTR(PROCESSING_TIME, ProcessingTime);
             ADD_STATS_TO_CNTR(WRITE_TIME, WriteTime);
             ADD_STATS_TO_CNTR(WRITE_ERRORS, WriteErrors);
-
-            case NKikimrReplication::TWorkerStats::RESTARTS_COUNT:
-                workerStats.RestartsCount += value;
-                workerStats.Restarts.Hour.Update(value, Now());
-                workerStats.Restarts.Minute.Update(value, Now());
-                if (Counters) {
-                    Counters->Restarts->Add(value);
-                }
-
-                break;
-
+            ADD_STATS_TO_CNTR(PROCESSING_ERRORS, ProcessingErrors);
             case NKikimrReplication::TWorkerStats::READ_PARTITION:
                 workerStats.Partition = value;
                 break;
@@ -187,11 +222,7 @@ void TTargetTransfer::UpdateStats(ui64 workerId, const NKikimrReplication::TWork
                 break;
 
             case NKikimrReplication::TWorkerStats::WORK_OPERATION: {
-                auto newOp = static_cast<NKikimrReplication::EWorkOperation>(value);
-                if (newOp != workerStats.Operation) {
-                    workerStats.ChangeStateTime = Now();
-                }
-
+                workerStats.ChangeStateTime = Now();
                 workerStats.Operation = static_cast<NKikimrReplication::EWorkOperation>(value);
                 break;
             }
@@ -223,7 +254,7 @@ void TTransferStats::FillToProto(NKikimrReplication::TEvDescribeReplicationResul
     if (LastWorkerStartTime) {
         dstStats.mutable_min_worker_uptime()->set_seconds((Now() - LastWorkerStartTime).Seconds());
     }
-    
+
     dstStats.mutable_stats_collection_start()->set_seconds(CollectionStartTime.Seconds());
 
     if (includeDetailed) {

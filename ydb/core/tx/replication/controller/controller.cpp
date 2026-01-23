@@ -464,9 +464,12 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
             UpdateLag(id, TDuration::MilliSeconds(record.GetLagMilliSeconds()));
         } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_STATS) {
             UpdateStats(id, record.GetStats());
+        } else if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ACK) {
+            UpdateStats(id, record.GetStatus());
         }
         break;
     case NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED:
+        UpdateStats(id, record.GetStatus());
         if (!MaybeRemoveWorker(id, ctx)) {
             if (record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR) {
                 RunTxWorkerError(id, record.GetErrorDescription(), ctx);
@@ -491,6 +494,15 @@ void TController::Handle(TEvService::TEvWorkerStatus::TPtr& ev, const TActorCont
     ScheduleProcessQueues();
 }
 
+TReplication::ITarget* TController::FindTarget(const TWorkerId& id) const {
+    auto replication = Find(id.ReplicationId());
+    if (!replication) {
+        return nullptr;
+    }
+
+    return replication->FindTarget(id.TargetId());
+}
+
 void TController::UpdateLag(const TWorkerId& id, TDuration lag) {
     auto replication = Find(id.ReplicationId());
     if (!replication) {
@@ -508,17 +520,19 @@ void TController::UpdateLag(const TWorkerId& id, TDuration lag) {
     }
 }
 
-void TController::UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats) {
-    auto replication = Find(id.ReplicationId());
-    if (!replication) {
-        return;
-    }
-
-    auto* target = replication->FindTarget(id.TargetId());
+void TController::UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status) {
+    auto* target = FindTarget(id);
     if (!target) {
         return;
     }
+    target->WorkerStatusChanged(id.WorkerId(), status, AppData()->Counters);
+}
 
+void TController::UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats) {
+    auto* target = FindTarget(id);
+    if (!target) {
+        return;
+    }
     target->UpdateStats(id.WorkerId(), stats, AppData()->Counters);
 }
 

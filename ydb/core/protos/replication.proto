@@ -117,7 +117,6 @@ message TReplicationConfig {
         optional TTarget Target = 1;
         optional TBatchingSettings Batching = 2;
         optional string RunAsUser = 3;
-        optional uint64 CountersLevel = 4;
     }
 
     message TMetricsConfig {
@@ -133,6 +132,7 @@ message TReplicationConfig {
     optional TConnectionParams SrcConnectionParams = 1;
     optional TConsistencySettings ConsistencySettings = 7;
     optional TMetricsConfig MetricsConfig = 9;
+    optional TReplicationLocationConfig Location = 10;
 
     // targets to be replicated
     // Currently, only OLTP tables are supported.
@@ -190,8 +190,17 @@ message TOperationId {
     optional uint32 PartId = 2;
 }
 
+message TReplicationLocationConfig {
+    optional string YdbDatabaseId = 1;
+    optional string Path = 2;
+    optional string YcCloudId = 3;
+    optional string YcFolderId = 4;
+    optional string MonitoringProjectId = 5;
+}
+
 message TEvCreateReplication {
     optional NKikimrProto.TPathID PathId = 1;
+    optional TReplicationLocationConfig Location = 5;
     optional TOperationId OperationId = 2;
     optional TReplicationConfig Config = 3;
     optional string Database = 4;
@@ -211,6 +220,7 @@ message TEvCreateReplicationResult {
 
 message TEvAlterReplication {
     optional NKikimrProto.TPathID PathId = 1;
+    optional TReplicationLocationConfig Location = 5;
     optional TOperationId OperationId = 2;
     optional TReplicationState SwitchState = 3;
     optional TReplicationConfig Config = 4;
@@ -317,7 +327,7 @@ message TRunWorkerCommand {
     optional TConsistencySettings ConsistencySettings = 3;
     optional string Database = 5;
     optional TReplicationConfig.TMetricsConfig.EMetricsLevel MetricsLevel = 6;
-    optional string ReplicationName = 7;
+    optional TReplicationLocationConfig ReplicationLocation = 7;
 }
 
 message TEvRunWorker {
@@ -343,17 +353,19 @@ message TWorkerStats {
     enum EStatsKeys {
         READ_TIME = 1;
         DECOMPRESS_ELAPSED_CPU = 2;
-        PROCESSING_ELAPSED_CPU = 3;
-        WRITE_TIME = 4;
-        READ_BYTES = 5;
-        READ_MESSAGES = 6;
-        WRITE_BYTES = 7;
-        WRITE_ROWS = 8;
-        READ_PARTITION = 9;
-        READ_OFFSET = 10;
-        RESTARTS_COUNT = 11;
-        WRITE_ERRORS = 12;
-        WORK_OPERATION = 13;
+        PROCESSING_TIME = 3;
+        PROCESSING_ELAPSED_CPU = 4;
+        WRITE_TIME = 5;
+        READ_BYTES = 6;
+        READ_MESSAGES = 7;
+        WRITE_BYTES = 8;
+        WRITE_ROWS = 9;
+        READ_PARTITION = 10;
+        READ_OFFSET = 11;
+        READ_ERRORS = 12;
+        PROCESSING_ERRORS = 13;
+        WRITE_ERRORS = 14;
+        WORK_OPERATION = 15;
     };
 
     message TWorkerStatItem {

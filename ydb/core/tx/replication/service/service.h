@@ -125,6 +125,7 @@ struct TEvService {
             version.ToProto(Record.MutableVersion());
         }
     };
+
 };
 
 namespace NService {

@@ -9,7 +9,7 @@
 #include "hive_schema.h"
 #include "hive_log.h"
 #include "monitoring.h"
-#include "tx__set_down.cpp"
+#include "tx__set_down.h"
 
 namespace NKikimr {
 namespace NHive {

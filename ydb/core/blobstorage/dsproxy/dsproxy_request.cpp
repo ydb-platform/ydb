@@ -245,7 +245,7 @@ namespace NKikimr {
                     .Mon = Mon,
                     .Source = ev->Sender,
                     .Cookie = ev->Cookie,
-                    .Now = TActivationContext::Now(),
+                    .Now = TActivationContext::Monotonic(),
                     .StoragePoolCounters = StoragePoolCounters,
                     .RestartCounter = ev->Get()->RestartCounter,
                     .Event = ev->Get(),

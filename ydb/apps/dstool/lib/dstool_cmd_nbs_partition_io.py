@@ -1,6 +1,5 @@
 import ydb.apps.dstool.lib.common as common
 import ydb.public.api.protos.draft.ydb_nbs_pb2 as nbs
-import ydb.core.nbs.cloud.blockstore.public.api.protos.io_pb2 as nbs_io
 
 
 description = 'Send IO to NBS 2.0 partition'
@@ -28,17 +27,15 @@ def do(args):
 
 
 def do_write(args):
-    blocks = nbs_io.TIOVector(Buffers=[args.data.encode()])
-    req_data = nbs_io.TWriteBlocksRequest(DiskId=args.id, StartIndex=args.start_index, Blocks=blocks)
-    request = nbs.WriteBlocksRequest(request=req_data)
+    blocks = nbs.IOVector(Buffers=[args.data.encode()])
+    request = nbs.WriteBlocksRequest(DiskId=args.id, StartIndex=args.start_index, Blocks=blocks)
     response = common.invoke_nbs_request('WriteBlocks', request)
 
     common.print_nbs_request_result(args, request, response)
 
 
 def do_read(args):
-    req_data = nbs_io.TReadBlocksRequest(DiskId=args.id, StartIndex=args.start_index, BlocksCount=args.blocks_count)
-    request = nbs.ReadBlocksRequest(request=req_data)
+    request = nbs.ReadBlocksRequest(DiskId=args.id, StartIndex=args.start_index, BlocksCount=args.blocks_count)
     response = common.invoke_nbs_request('ReadBlocks', request)
 
     common.print_nbs_request_result(args, request, response)

@@ -9,14 +9,14 @@
 namespace NKikimr::NGRpcService {
 
 using TEvCreatePartitionRequest =
-    TGrpcRequestOperationCall<NYdb::NBS::NProto::CreatePartitionRequest,
-        NYdb::NBS::NProto::CreatePartitionResponse>;
+    TGrpcRequestOperationCall<Ydb::Nbs::CreatePartitionRequest,
+        Ydb::Nbs::CreatePartitionResponse>;
 using TEvDeletePartitionRequest =
-    TGrpcRequestOperationCall<NYdb::NBS::NProto::DeletePartitionRequest,
-        NYdb::NBS::NProto::DeletePartitionResponse>;
+    TGrpcRequestOperationCall<Ydb::Nbs::DeletePartitionRequest,
+        Ydb::Nbs::DeletePartitionResponse>;
 using TEvListPartitionsRequest =
-    TGrpcRequestOperationCall<NYdb::NBS::NProto::ListPartitionsRequest,
-        NYdb::NBS::NProto::ListPartitionsResponse>;
+    TGrpcRequestOperationCall<Ydb::Nbs::ListPartitionsRequest,
+        Ydb::Nbs::ListPartitionsResponse>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -39,7 +39,7 @@ public:
             "Grpc service: created partition actor with id: %s",
             partition_actor_id.ToString().data());
 
-        NYdb::NBS::NProto::CreatePartitionResult result;
+        Ydb::Nbs::CreatePartitionResult result;
         result.SetTabletId(partition_actor_id.ToString());
         ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
     }
@@ -76,7 +76,7 @@ public:
             "Grpc service: sent poison event to partition actor with id: %s",
             tabletId.ToString().data());
 
-        NYdb::NBS::NProto::DeletePartitionResult result;
+        Ydb::Nbs::DeletePartitionResult result;
         result.SetTabletId(tabletIdStr);
         ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
     }

@@ -10,11 +10,11 @@ namespace NKikimr::NGRpcService {
 
 
 using TEvOpWriteBlocksRequest =
-    TGrpcRequestOperationCall<NYdb::NBS::NProto::WriteBlocksRequest,
-        NYdb::NBS::NProto::WriteBlocksResponse>;
+    TGrpcRequestOperationCall<Ydb::Nbs::WriteBlocksRequest,
+        Ydb::Nbs::WriteBlocksResponse>;
 using TEvOpReadBlocksRequest =
-    TGrpcRequestOperationCall<NYdb::NBS::NProto::ReadBlocksRequest,
-        NYdb::NBS::NProto::ReadBlocksResponse>;
+    TGrpcRequestOperationCall<Ydb::Nbs::ReadBlocksRequest,
+        Ydb::Nbs::ReadBlocksResponse>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -31,16 +31,23 @@ public:
 
         Become(&TThis::StateWork);
 
-        auto req = GetProtoRequest()->Getrequest();
-        auto diskIdStr = req.GetDiskId();
+        auto protoRequest = GetProtoRequest();
+        auto diskIdStr = protoRequest->GetDiskId();
 
         // For now diskIdStr == partition actor id
         NActors::TActorId tabletId;
         tabletId.Parse(diskIdStr.data(), diskIdStr.size());
 
         // Construct WriteBlocks request event from the protobuf request
-        auto callContext = MakeIntrusive<NYdb::NBS::TCallContext>();
-        auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>(callContext, req);
+        auto request = std::make_unique<NYdb::NBS::TEvService::TEvWriteBlocksRequest>();
+        request->Record.SetDiskId(protoRequest->GetDiskId());
+        request->Record.SetStartIndex(protoRequest->GetStartIndex());
+
+        const auto& srcBlocks = protoRequest->GetBlocks();
+        auto* dstBlocks = request->Record.MutableBlocks();
+        for (const auto& buffer : srcBlocks.GetBuffers()) {
+            dstBlocks->AddBuffers(buffer);
+        }
 
         // Send event to partition actor
         ctx.Send(new IEventHandle(tabletId, ctx.SelfID, request.release()));
@@ -78,16 +85,18 @@ public:
 
         Become(&TThis::StateWork);
 
-        auto req = GetProtoRequest()->Getrequest();
-        auto diskIdStr = req.GetDiskId();
+        auto protoRequest = GetProtoRequest();
+        auto diskIdStr = protoRequest->GetDiskId();
 
         // For now diskIdStr == partition actor id
         NActors::TActorId tabletId;
         tabletId.Parse(diskIdStr.data(), diskIdStr.size());
 
         // Construct ReadBlocks request event from the protobuf request
-        auto callContext = MakeIntrusive<NYdb::NBS::TCallContext>();
-        auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>(callContext, req);
+        auto request = std::make_unique<NYdb::NBS::TEvService::TEvReadBlocksRequest>();
+        request->Record.SetDiskId(protoRequest->GetDiskId());
+        request->Record.SetStartIndex(protoRequest->GetStartIndex());
+        request->Record.SetBlocksCount(protoRequest->GetBlocksCount());
 
         // Send event to partition actor
         ctx.Send(new IEventHandle(tabletId, ctx.SelfID, request.release()));
@@ -108,7 +117,16 @@ private:
         LOG_DEBUG(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
             "Grpc service: received ReadBlocksResponse from partition: %s",
             ev->Sender.ToString().data());
-        ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record, ActorContext());
+
+        // Convert from NYdb::NBS::NProto::TReadBlocksResponse to Ydb::Nbs::ReadBlocksResult
+        Ydb::Nbs::ReadBlocksResult result;
+        const auto& srcBlocks = ev->Get()->Record.GetBlocks();
+        auto* dstBlocks = result.mutable_blocks();
+        for (const auto& buffer : srcBlocks.GetBuffers()) {
+            dstBlocks->add_buffers(buffer);
+        }
+
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ActorContext());
     }
 };
 

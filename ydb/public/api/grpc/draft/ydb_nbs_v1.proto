@@ -11,20 +11,20 @@ import "ydb/public/api/protos/draft/ydb_nbs.proto";
 // Service for managing nbs 2.0
 service NbsService {
     // Create NBS partition
-    rpc CreatePartition(NYdb.NBS.NProto.CreatePartitionRequest) returns (NYdb.NBS.NProto.CreatePartitionResponse);
+    rpc CreatePartition(Ydb.Nbs.CreatePartitionRequest) returns (Ydb.Nbs.CreatePartitionResponse);
 
     // Delete NBS partition
-    rpc DeletePartition(NYdb.NBS.NProto.DeletePartitionRequest) returns (NYdb.NBS.NProto.DeletePartitionResponse);
+    rpc DeletePartition(Ydb.Nbs.DeletePartitionRequest) returns (Ydb.Nbs.DeletePartitionResponse);
 
     // List NBS partitions
-    rpc ListPartitions(NYdb.NBS.NProto.ListPartitionsRequest) returns (NYdb.NBS.NProto.ListPartitionsResponse);
+    rpc ListPartitions(Ydb.Nbs.ListPartitionsRequest) returns (Ydb.Nbs.ListPartitionsResponse);
 
 
     //
     // Block I/O.
     //
 
-    rpc ReadBlocks(NYdb.NBS.NProto.ReadBlocksRequest) returns (NYdb.NBS.NProto.ReadBlocksResponse);
+    rpc ReadBlocks(Ydb.Nbs.ReadBlocksRequest) returns (Ydb.Nbs.ReadBlocksResponse);
 
-    rpc WriteBlocks(NYdb.NBS.NProto.WriteBlocksRequest) returns (NYdb.NBS.NProto.WriteBlocksResponse);
+    rpc WriteBlocks(Ydb.Nbs.WriteBlocksRequest) returns (Ydb.Nbs.WriteBlocksResponse);
 }

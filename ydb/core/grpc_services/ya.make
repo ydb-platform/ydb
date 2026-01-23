@@ -137,6 +137,7 @@ PEERDIR(
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
     ydb/core/kqp/common
+    ydb/core/kqp/opt
     ydb/core/nbs/cloud/blockstore/libs/service
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct
     ydb/core/nbs/cloud/blockstore/public/api/protos

@@ -87,6 +87,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForReplication)
     FEATURE_FLAG_SETTER(EnableAccessToIndexImplTables)
     FEATURE_FLAG_SETTER(EnableIndexMaterialization)
+    FEATURE_FLAG_SETTER(EnableTopicsSqlIoOperations)
 
     #undef FEATURE_FLAG_SETTER
 };

@@ -852,7 +852,9 @@ private:
         while (PendingRpcResponses) {
             SendSessionEventFail();
         }
-        Send(RpcActor, new TLocalRpcCtx::TEvNotifiedWhenDone(success));
+        if (RpcActor) {
+            Send(RpcActor, new TLocalRpcCtx::TEvNotifiedWhenDone(success));
+        }
     }
 
     void CloseSession(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues = {}) {

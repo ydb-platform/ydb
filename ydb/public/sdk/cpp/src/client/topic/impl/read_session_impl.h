@@ -242,7 +242,7 @@ public:
     void PlanDecompressionTasks(double averageCompressionRatio,
                                 TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream);
 
-    void OnDestroyReadSession();
+    void ClearParents();
 
     bool IsReady() const {
         return SourceDataNotProcessed == 0;

@@ -234,7 +234,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
 template <bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::TDecompressionQueueItem::OnDestroyReadSession()
 {
-    BatchInfo->OnDestroyReadSession();
+    BatchInfo->ClearParents();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2875,8 +2875,11 @@ void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
 }
 
 template <bool UseMigrationProtocol>
-void TDataDecompressionInfo<UseMigrationProtocol>::OnDestroyReadSession()
+void TDataDecompressionInfo<UseMigrationProtocol>::ClearParents()
 {
+    // Break circular references: TDataDecompressionInfo owns Tasks deque,
+    // and each task has a Parent shared_ptr back to the TDataDecompressionInfo.
+    // Clear these Parent pointers so the info can be destroyed.
     for (auto& task : Tasks) {
         task.ClearParent();
     }
@@ -3226,6 +3229,12 @@ void TDeferredActions<UseMigrationProtocol>::DeferSignalWaiter(TWaiter&& waiter)
 template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos)
 {
+    for (auto& info : infos) {
+        if (info) {
+            info->ClearParents();
+        }
+    }
+
     DecompressionInfos = std::move(infos);
 }
 

@@ -157,4 +157,4 @@ DROP STREAMING QUERY query_example
 ## См. также
 
 * [{#T}](../../concepts/streaming-query.md)
-* [{#T}](../../dev/streaming-query-formats.md)
+* [{#T}](../../dev/streaming-query/streaming-query-formats.md)

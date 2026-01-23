@@ -162,7 +162,7 @@ namespace NKikimr::NPDisk {
                 } else if (Buffer.size() < sizeof(TMetadataHeader)) {
                     req->ErrorReason = "buffer is too small to hold TMetadataHeader";
                 } else {
-                    TPDiskStreamCypher cypher(PDisk->Cfg->EnableMetadataEncryption);
+                    TPDiskStreamCypher cypher(PDisk->Cfg->EnableFormatEncryption);
                     cypher.SetKey(Format.DataKey);
 
                     auto *header = reinterpret_cast<TMetadataHeader*>(Buffer.GetDataMut());
@@ -227,7 +227,7 @@ namespace NKikimr::NPDisk {
                         reinterpret_cast<ui8*>(Payload.GetDataMut()),
                         MainKey,
                         Format,
-                        PDisk->Cfg->EnableMetadataEncryption);
+                        PDisk->Cfg->EnableFormatEncryption);
                 }
 
                 STLOGX(*PDisk->PCtx->ActorSystem, PRI_DEBUG, BS_PDISK, BPD01, "TCompletionWriteUnformattedMetadata::IssueQuery",

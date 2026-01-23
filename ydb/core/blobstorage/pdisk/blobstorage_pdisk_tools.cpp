@@ -94,7 +94,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
     cfg->SectorMap = options.SectorMap;
     // Disable encryption for SectorMap
     cfg->EnableSectorEncryption = options.EnableSectorEncryption.value_or(!cfg->SectorMap);
-    cfg->EnableMetadataEncryption = options.EnableMetadataEncryption;
+    cfg->EnableFormatEncryption = options.EnableFormatEncryption;
     cfg->PlainDataChunks = options.PlainDataChunks;
 
     if (!isBlockDevice && !cfg->UseSpdkNvmeDriver && !options.SectorMap) {

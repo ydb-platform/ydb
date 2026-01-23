@@ -382,7 +382,7 @@ public:
                 magicDataSize,
                 MainKey,
                 PCtx->PDiskLogPrefix,
-                Cfg->EnableMetadataEncryption);
+                Cfg->EnableFormatEncryption);
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TPushUnformattedMetadataSector>(format,
                 !Cfg->MetadataOnly));
             if (Cfg->MetadataOnly) {
@@ -451,7 +451,7 @@ public:
                         options.EnableSmallDiskOptimization = cfg->FeatureFlags.GetEnableSmallDiskOptimization();
                         options.Metadata = metadata;
                         options.PlainDataChunks = cfg->PlainDataChunks;
-                        options.EnableMetadataEncryption = cfg->EnableMetadataEncryption;
+                        options.EnableFormatEncryption = cfg->EnableFormatEncryption;
                         options.EnableSectorEncryption = cfg->EnableSectorEncryption;
 
                         try {

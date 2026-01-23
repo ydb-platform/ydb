@@ -53,9 +53,9 @@ public:
     // this pointer doesn't own the object (only Runtime does)
     NWilson::TFakeWilsonUploader *WilsonUploader = new NWilson::TFakeWilsonUploader;
 
-    void DoFormatPDisk(ui64 guid, bool enableMetadataEncryption = true, std::optional<bool> enableSectorEncryption = std::nullopt) {
+    void DoFormatPDisk(ui64 guid, bool enableFormatEncryption = true, std::optional<bool> enableSectorEncryption = std::nullopt) {
         FormatPDiskForTest(TestCtx.Path, guid, Settings.ChunkSize, Settings.DiskSize,
-            false, TestCtx.SectorMap, Settings.SmallDisk, Settings.PlainDataChunks, enableMetadataEncryption,
+            false, TestCtx.SectorMap, Settings.SmallDisk, Settings.PlainDataChunks, enableFormatEncryption,
             enableSectorEncryption, Settings.RandomizeMagic);
     }
 
@@ -146,7 +146,7 @@ public:
 
         if (reformat) {
             DoFormatPDisk(TestCtx.PDiskGuid + static_cast<ui64>(Settings.IsBad),
-                cfg->EnableMetadataEncryption, cfg->EnableSectorEncryption);
+                cfg->EnableFormatEncryption, cfg->EnableSectorEncryption);
         }
 
         if (Settings.UsePDiskMock) {

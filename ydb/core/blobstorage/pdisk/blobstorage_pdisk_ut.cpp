@@ -635,7 +635,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         {
             auto cfg = testCtx.GetPDiskConfig();
             cfg->EnableSectorEncryption = false;
-            cfg->EnableMetadataEncryption = false;
+            cfg->EnableFormatEncryption = false;
             testCtx.UpdateConfigRecreatePDisk(cfg, true);
         }
 
@@ -681,7 +681,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         auto cfg = testCtx.GetPDiskConfig();
         cfg->SectorMap = testCtx.TestCtx.SectorMap;
         cfg->EnableSectorEncryption = false;
-        cfg->EnableMetadataEncryption = encryptMetadata;
+        cfg->EnableFormatEncryption = encryptMetadata;
         cfg->ReadOnly = false;
         cfg->NonceRandNum = 13;
         testCtx.UpdateConfigRecreatePDisk(cfg, true);
@@ -761,7 +761,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         auto cfg = testCtx.GetPDiskConfig();
         cfg->SectorMap = testCtx.TestCtx.SectorMap;
         cfg->EnableSectorEncryption = false;
-        cfg->EnableMetadataEncryption = encryptMetadata;
+        cfg->EnableFormatEncryption = encryptMetadata;
         cfg->ReadOnly = false;
         cfg->NonceRandNum = 13;
         testCtx.UpdateConfigRecreatePDisk(cfg, true);

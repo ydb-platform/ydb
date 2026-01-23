@@ -139,7 +139,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
     ui32 mainKeySize = mainKey.Keys.size();
 
     for (ui32 k = 0; k < mainKeySize; ++k) {
-        TPDiskStreamCypher cypher(Cfg->EnableMetadataEncryption);
+        TPDiskStreamCypher cypher(Cfg->EnableFormatEncryption);
         cypher.SetKey(mainKey.Keys[k]);
 
         ui32 lastGoodIdx = (ui32)-1;
@@ -228,7 +228,7 @@ bool TPDisk::IsFormatMagicValid(ui8 *magicData8, ui32 magicDataSize, const TMain
         magicDataSize,
         mainKey,
         PCtx->PDiskLogPrefix,
-        Cfg->EnableMetadataEncryption);
+        Cfg->EnableFormatEncryption);
     return format.has_value();
 }
 
@@ -1743,7 +1743,7 @@ void TPDisk::WriteApplyFormatRecord(TDiskFormat format, const TKey &mainKey) {
 
         // Encrypt chunk0 format record using mainKey
         ui64 nonce = 1;
-        bool encrypt = Cfg->EnableMetadataEncryption;
+        bool encrypt = Cfg->EnableFormatEncryption;
         TSysLogWriter formatWriter(Mon, *BlockDevice.Get(), Format, nonce, mainKey, BufferPool.Get(),
                 0, ReplicationFactor, Format.MagicFormatChunk, 0, nullptr, 0, nullptr, PCtx,
                 &DriveModel, encrypt);
@@ -1775,7 +1775,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     alignas(16) TDiskFormat format;
     format.Clear();
     format.SetPlainDataChunks(plainDataChunks);
-    format.SetEncryptFormat(Cfg->EnableMetadataEncryption);
+    format.SetEncryptFormat(Cfg->EnableFormatEncryption);
     format.DiskSize = diskSizeBytes;
     format.SectorSize = sectorSizeBytes;
     ui64 erasureFlags = FormatFlagErasureEncodeUserLog;
@@ -1785,7 +1785,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     format.ChunkKey = chunkKey;
     format.LogKey = logKey;
     format.SysLogKey = sysLogKey;
-    bool randomizeMagic = !Cfg->EnableMetadataEncryption || !Cfg->EnableSectorEncryption || plainDataChunks;
+    bool randomizeMagic = !Cfg->EnableFormatEncryption || !Cfg->EnableSectorEncryption || plainDataChunks;
 #ifdef DISABLE_PDISK_ENCRYPTION
     randomizeMagic = true;
 #endif

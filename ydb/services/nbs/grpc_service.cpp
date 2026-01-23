@@ -23,7 +23,7 @@ void TNbsGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLo
 }
 
 void TNbsGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    using namespace NYdb::NBS::NProto;
+    using namespace Ydb::Nbs;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
 #ifdef SETUP_NBS_METHOD

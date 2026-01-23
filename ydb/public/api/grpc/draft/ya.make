@@ -28,7 +28,6 @@ SRCS(
 
 PEERDIR(
     ydb/public/api/protos
-    ydb/core/nbs/cloud/blockstore/public/api/protos
 )
 
 EXCLUDE_TAGS(GO_PROTO)

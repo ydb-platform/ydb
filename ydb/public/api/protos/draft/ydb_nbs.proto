@@ -1,13 +1,12 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-package NYdb.NBS.NProto;
+package Ydb.Nbs;
 
 option java_package = "com.yandex.ydb.nbs.proto";
 option java_outer_classname = "NbsProtos";
 option java_multiple_files = true;
 
-import "ydb/core/nbs/cloud/blockstore/public/api/protos/io.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 
 
@@ -69,31 +68,58 @@ message ListPartitionsResult {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Blocks read request/response.
+// I/O vector message.
 
-message ReadBlocksRequest
-{
-    Ydb.Operations.OperationParams operation_params = 1;
-
-    TReadBlocksRequest request = 2;
+message IOVector {
+    // I/O buffers.
+    repeated bytes Buffers = 1;
 }
 
-message ReadBlocksResponse
-{
+////////////////////////////////////////////////////////////////////////////////
+// Blocks read request/response.
+
+message ReadBlocksRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Label of volume to read from.
+    string DiskId = 2;
+
+    // Start block index.
+    uint64 StartIndex = 3;
+
+    // Number of blocks to read.
+    uint32 BlocksCount = 4;
+}
+
+message ReadBlocksResponse {
     Ydb.Operations.Operation operation = 1;
+}
+
+message ReadBlocksResult
+{
+    // Requested blocks.
+    IOVector Blocks = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Blocks write request/response.
 
-message WriteBlocksRequest
-{
+message WriteBlocksRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
-    TWriteBlocksRequest request = 2;
+    // Label of volume to write to.
+    string DiskId = 2;
+
+    // Start block index.
+    uint64 StartIndex = 3;
+
+    // Blocks to write.
+    IOVector Blocks = 4;
 }
 
-message WriteBlocksResponse
-{
+message WriteBlocksResponse {
     Ydb.Operations.Operation operation = 1;
+}
+
+message WriteBlocksResult {
 }

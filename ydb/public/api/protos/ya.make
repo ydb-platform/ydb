@@ -4,8 +4,6 @@ PROTOC_FATAL_WARNINGS()
 MAVEN_GROUP_ID(com.yandex.ydb)
 
 PEERDIR(
-    ydb/core/nbs/cloud/blockstore/public/api/protos
-    ydb/core/nbs/cloud/storage/core/protos
     ydb/public/api/protos/annotations
 )
 

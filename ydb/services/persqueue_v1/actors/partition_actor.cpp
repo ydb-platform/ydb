@@ -82,6 +82,7 @@ TPartitionActor::TPartitionActor(
 
 void TPartitionActor::MakeCommit(const TActorContext& ctx) {
     ui64 offset = ClientReadOffset;
+
     if (CommitsDisabled || NotCommitedToFinishParents.size() != 0 || CommitsInfly.size() >= MAX_COMMITS_INFLY)
         return;
 

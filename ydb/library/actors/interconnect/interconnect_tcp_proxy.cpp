@@ -330,7 +330,7 @@ namespace NActors {
 
         TEvHandshakeDone *msg = ev->Get();
 
-        bool runPendingRdmaHandshakeTimer = false;
+        bool runDelayedRdmaHandshakeTimer = false;
 
         // Terminate handshake actor working in opposite direction, if set up.
         if (ev->Sender == IncomingHandshakeActor) {
@@ -340,7 +340,7 @@ namespace NActors {
         } else if (ev->Sender == OutgoingHandshakeActor) {
             LOG_INFO_IC("ICP20", "outgoing handshake succeeded");
             if (auto rdmaDisabled = ev->Get()->RdmaHanshakeResult.GetDisabled()) {
-                runPendingRdmaHandshakeTimer = rdmaDisabled->PendingHandshake;
+                runDelayedRdmaHandshakeTimer = rdmaDisabled->RunDelayedHandshake;
             }
             DropIncomingHandshake();
             DropOutgoingHandshake(false);
@@ -395,10 +395,10 @@ namespace NActors {
         /* Forward all held events */
         ProcessPendingSessionEvents();
 
-        if (runPendingRdmaHandshakeTimer && !PendingRdmaHandshakeTimeout) {
+        if (runDelayedRdmaHandshakeTimer && !DelayedRdmaHandshakeTimeout) {
             LOG_INFO_IC("ICP29", "run pending rdma handshake for session: %s", SessionID.ToString().data());
-            PendingRdmaHandshakeTimeout = TDuration::Seconds(5);
-            TActivationContext::Schedule(PendingRdmaHandshakeTimeout, new IEventHandle(EvRdmaPendingHandshake, 0, SelfId(),
+            DelayedRdmaHandshakeTimeout = TDuration::Seconds(5);
+            TActivationContext::Schedule(DelayedRdmaHandshakeTimeout, new IEventHandle(EvRdmaPendingHandshake, 0, SelfId(),
                         {}, nullptr, 0));
         }
     }
@@ -632,13 +632,14 @@ namespace NActors {
         InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev);
     }
 
-    void TInterconnectProxyTCP::HandleRdmaPendingHandshake() {
+    void TInterconnectProxyTCP::HandleRdmaDelayedHandshake() {
         if (CurrentStateFunc() == &TThis::StateWork) {
             // There is a chance that session was promouted to use RDMA without us.
             if (!InvokeOtherActor(*Session, &TInterconnectSessionTCP::IsRdmaInUse)) {
                 HandleClosePeerSocket("closed connection by rdma pending handshake");
             }
         }
+        DelayedRdmaHandshakeTimeout = TDuration();
     }
 
     void TInterconnectProxyTCP::GenerateHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {

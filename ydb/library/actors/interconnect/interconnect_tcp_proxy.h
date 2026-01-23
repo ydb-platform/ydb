@@ -135,7 +135,7 @@ namespace NActors {
                 cFunc(EvPassAwayIfNeeded, HandlePassAwayIfNeeded)                               \
                 hFunc(TEvSubscribeForConnection, Handle);                                       \
                 hFunc(TEvReportConnection, Handle);                                             \
-                cFunc(EvRdmaPendingHandshake, HandleRdmaPendingHandshake)                       \
+                cFunc(EvRdmaPendingHandshake, HandleRdmaDelayedHandshake)                       \
                 default:                                                                        \
                     Y_ABORT("unexpected event Type# 0x%08" PRIx32, type);                       \
             }                                                                                   \
@@ -406,7 +406,7 @@ namespace NActors {
         void ScheduleCleanupEventQueue();
         void HandleCleanupEventQueue();
         void CleanupEventQueue();
-        void HandleRdmaPendingHandshake();
+        void HandleRdmaDelayedHandshake();
 
         // hold all events before connection is established
         struct TPendingSessionEvent {
@@ -537,7 +537,7 @@ namespace NActors {
 
         THolder<TProgramInfo> RemoteProgramInfo;
         NInterconnect::TSecureSocketContext::TPtr SecureContext;
-        TDuration PendingRdmaHandshakeTimeout;
+        TDuration DelayedRdmaHandshakeTimeout;
 
         void Handle(TEvGetSecureSocket::TPtr ev) {
             auto socket = MakeIntrusive<NInterconnect::TSecureSocket>(*ev->Get()->Socket, SecureContext);

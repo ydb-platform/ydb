@@ -122,8 +122,9 @@ namespace NActors {
             NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
             NInterconnect::NRdma::ICq::TPtr RdmaCq;
         };
+
         struct TDisabled {
-            bool PendingHandshake;
+            bool RunDelayedHandshake;
         };
 
         TRdmaHandshakeResult(NInterconnect::NRdma::TQueuePair::TPtr qp,
@@ -131,15 +132,19 @@ namespace NActors {
         {
             Result.emplace<TOk>(qp, cq);
         }
+
         explicit TRdmaHandshakeResult(TDisabled disabled) {
-            Result.emplace<TDisabled>(disabled.PendingHandshake);
+            Result.emplace<TDisabled>(disabled.RunDelayedHandshake);
         }
+
         bool IsOk() const noexcept {
             return std::holds_alternative<TOk>(Result);
         }
+
         TOk* GetOk() noexcept {
             return std::get_if<TOk>(&Result);
         }
+
         TDisabled* GetDisabled() noexcept {
             return std::get_if<TDisabled>(&Result);
         }

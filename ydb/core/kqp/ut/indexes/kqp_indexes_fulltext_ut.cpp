@@ -3490,6 +3490,27 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextContainsAndNgram, Edge, Covered) {
 
     {
         TString query = R"sql(
+            SELECT `Key`, FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "renaissance")
+            ORDER BY `Key`;
+
+            SELECT `Key` FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextContains(`Text`, "Heisenberg Werner")
+            ORDER BY `Key`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1u]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[2u]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    {
+        TString query = R"sql(
             -- {are, ren, ena} can be found separately in "Area Renaissance" but it's not correct result
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FulltextContains(`Text`, "arena")

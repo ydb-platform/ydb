@@ -2740,16 +2740,7 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         }
     }
 
-    for(const auto& column : fullTextSource.GetQuerySettings().GetColumns()) {
-        auto* protoColumn = settings->MutableQuerySettings()->AddColumns();
-        protoColumn->SetId(column.GetId());
-        auto columnIt = stageInfo.Meta.TableConstInfo->Columns.find(column.GetName());
-        ParseColumnToProto(column.GetName(), columnIt, protoColumn);
-        protoColumn->SetName(column.GetName());
-        if (columnIt->second.NotNull) {
-            protoColumn->SetNotNull(true);
-        }
-    }
+    settings->MutableQuerySettings()->MutableColumns()->CopyFrom(fullTextSource.GetQuerySettings().GetColumns());
 
     for(const auto& indexTable : fullTextSource.GetIndexTables()) {
         auto* indexTableProto = settings->AddIndexTables();

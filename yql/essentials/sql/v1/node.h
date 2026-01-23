@@ -1245,7 +1245,8 @@ struct TIndexDescription {
         GlobalAsync,
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
-        GlobalFulltext
+        GlobalFulltextPlain,
+        GlobalFulltextRelevance
     };
 
     struct TIndexSetting {

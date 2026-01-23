@@ -267,7 +267,8 @@ struct TReadMatch {
             const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Cast().Table().Path());
             YQL_ENSURE(tableDesc.Metadata);
             auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Cast().Index().Value());
-            if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
+            if (indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance) {
                 return {};
             }
 
@@ -282,7 +283,8 @@ struct TReadMatch {
             const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Cast().Table().Path());
             YQL_ENSURE(tableDesc.Metadata);
             auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Cast().Index().Value());
-            if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
+            if (indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance) {
                 return {};
             }
 
@@ -320,7 +322,8 @@ struct TReadMatch {
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
         YQL_ENSURE(tableDesc.Metadata);
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
-        if (indexDesc->Type != TIndexDescription::EType::GlobalFulltext) {
+        if (indexDesc->Type != TIndexDescription::EType::GlobalFulltextPlain
+            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance) {
             return {};
         }
 

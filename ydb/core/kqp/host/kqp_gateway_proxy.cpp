@@ -920,7 +920,8 @@ public:
                             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                                 *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
-                            case TIndexDescription::EType::GlobalFulltext:
+                            case TIndexDescription::EType::GlobalFulltextPlain:
+                            case TIndexDescription::EType::GlobalFulltextRelevance:
                                 *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                         }

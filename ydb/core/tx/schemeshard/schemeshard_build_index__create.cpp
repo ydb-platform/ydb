@@ -270,15 +270,30 @@ private:
             }
             break;
         }
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex: {
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex: {
             if (!Self->EnableFulltextIndex) {
                 explain = "Fulltext index support is disabled";
                 return false;
             }
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain;
             NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
-            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_index().fulltext_settings();
+            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_plain_index().fulltext_settings();
+            if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {
+                return false;
+            }
+            buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
+            break;
+        }
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex: {
+            if (!Self->EnableFulltextIndex) {
+                explain = "Fulltext index support is disabled";
+                return false;
+            }
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance;
+            NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
+            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
             if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {
                 return false;
             }

@@ -336,11 +336,27 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     }
                     break;
                 }
-                case EIndexType::GlobalFulltext: {
+                case EIndexType::GlobalFulltextPlain: {
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::FulltextIndexSettings expected;
                     expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
+                    auto column = expected.add_columns();
+                    column->set_column("Value");
+                    column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+                    column->mutable_analyzers()->set_use_filter_lowercase(true);
+                    column->mutable_analyzers()->set_use_filter_length(true);
+                    column->mutable_analyzers()->set_filter_length_max(42);
+                    if (!google::protobuf::util::MessageDifferencer::Equals(settings, expected)) {
+                        continue;
+                    }
+                    break;
+                }
+                case EIndexType::GlobalFulltextRelevance: {
+                    Ydb::Table::FulltextIndexSettings settings;
+                    std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
+                    Ydb::Table::FulltextIndexSettings expected;
+                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                     auto column = expected.add_columns();
                     column->set_column("Value");
                     column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -746,8 +762,10 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
             return NYdb::NTable::EIndexType::GlobalUnique;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-            return NYdb::NTable::EIndexType::GlobalFulltext;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+            return NYdb::NTable::EIndexType::GlobalFulltextPlain;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
         default:
             UNIT_FAIL("No conversion to API for this index type");
             return NYdb::NTable::EIndexType::Unknown;
@@ -803,15 +821,28 @@ void TestRestoreTableWithIndex(
                     );)", "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW");
             }
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             query = fmt::format(R"(CREATE TABLE `{table}` (
                 Key Uint32,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),
-                INDEX {index} GLOBAL USING fulltext
+                INDEX {index} GLOBAL USING fulltext_plain
                     ON (Value)
-                    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
+                    WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
+                ) WITH (
+                    STORE = {store}
+                );)", "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW");
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            query = fmt::format(R"(CREATE TABLE `{table}` (
+                Key Uint32,
+                Group Uint32,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX {index} GLOBAL USING fulltext_relevance
+                    ON (Value)
+                    WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
                 ) WITH (
                     STORE = {store}
                 );)", "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW");
@@ -3184,7 +3215,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
-            case EIndexTypeGlobalFulltext:
+            case EIndexTypeGlobalFulltextPlain:
+            case EIndexTypeGlobalFulltextRelevance:
                 return TestTableWithIndexBackupRestore(IsOlap, Value);
             case EIndexTypeInvalid:
                 break; // not applicable
@@ -4410,7 +4442,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
-            case EIndexTypeGlobalFulltext:
+            case EIndexTypeGlobalFulltextPlain:
+            case EIndexTypeGlobalFulltextRelevance:
                 TestTableWithIndexBackupRestore(IsOlap, Value);
                 break;
             case EIndexTypeInvalid:

@@ -172,19 +172,19 @@ IncludeCategories:
     Priority:        19
     SortPriority:    0
     CaseSensitive:   false
-  - Regex:           '^<cloud/blockstore.*\.h>'
+  - Regex:           '^<ydb/core/nbs/cloud/blockstore.*\.h>'
     Priority:        20
     SortPriority:    0
     CaseSensitive:   false
-  - Regex:           '^<cloud/filestore.*\.h>'
+  - Regex:           '^<ydb/core/nbs/cloud/storage.*\.h>'
     Priority:        21
     SortPriority:    0
     CaseSensitive:   false
-  - Regex:           '^<cloud/storage.*\.h>'
+  - Regex:           '^<ydb/core.*\.h>'
     Priority:        22
     SortPriority:    0
     CaseSensitive:   false
-  - Regex:           '^<cloud/contrib.*\.h>'
+  - Regex:           '^<ydb/library.*\.h>'
     Priority:        23
     SortPriority:    0
     CaseSensitive:   false

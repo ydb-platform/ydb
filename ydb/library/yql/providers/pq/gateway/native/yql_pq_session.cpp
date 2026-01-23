@@ -181,10 +181,11 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
 
                 try {
                     const auto& response = f.GetValue();
-                    if (!response.IsSuccess()) {
+                    if (response.IsSuccess()) {
+                        info.PartitionsCount = response.GetTopicDescription().GetTotalPartitionsCount();
+                    } else {
                         setError(response.GetIssues().ToString());
                     }
-                    info.PartitionsCount = response.GetTopicDescription().GetTotalPartitionsCount();
                 } catch (...) {
                     setError(FormatCurrentException());
                 }

@@ -150,6 +150,10 @@ private:
             return TInstant::Now() - *EmptySince > IdleTimeout;
         }
 
+        bool IsQueueEmpty() {
+            return QueueSize == 0;
+        }
+
         bool AddToQueue(ui64 delta) {
             bool idle = EmptySince.has_value();
             if (idle) {

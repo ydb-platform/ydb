@@ -606,9 +606,10 @@ void TKeyedWriteSession::RunMainWorker() {
         std::unique_lock lock(GlobalLock);
         if (didWrite) {
             PendingMessages.pop_front();
-            if (writeSession->AddToQueue(1)) {
+            if (writeSession->IsQueueEmpty()) {
                 IdlerSessions.erase(writeSession);
             }
+            writeSession->AddToQueue(1);
         }
 
         if (PendingMessages.empty() || !didWrite) {

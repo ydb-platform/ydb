@@ -14,12 +14,25 @@
 #include <yql/essentials/minikql/mkql_node_printer.h>
 #include <arrow/array/data.h>
 #include <arrow/datum.h>
+#include <arrow/util/bitmap.h>
+#include <arrow/util/bitmap_ops.h>
+#include <arrow/util/bit_util.h>
 
 #include <util/generic/vector.h>
 
 namespace NKikimr::NMiniKQL {
 
 namespace {
+
+
+std::shared_ptr<arrow::Buffer> CopyBitmap(arrow::MemoryPool* pool, const std::shared_ptr<arrow::Buffer>& bitmap, int64_t offset, int64_t len) {
+    std::shared_ptr<arrow::Buffer> result = bitmap;
+    if (bitmap && offset != 0) {
+        result = ARROW_RESULT(arrow::AllocateBitmap(len, pool));
+        arrow::internal::CopyBitmap(bitmap->data(), offset, len, result->mutable_data(), 0);
+    }
+    return result;
+}
 
 template<typename Buffer = NYql::NUdf::TResizeableBuffer>
 std::unique_ptr<arrow::Buffer> MakeBufferWithSize(int size, arrow::MemoryPool* pool){
@@ -35,7 +48,7 @@ struct IColumnDataExtractor {
 
     // For reading (Pack): returns const pointers to existing data
     virtual TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) = 0;
-    virtual TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array) = 0;
+    virtual TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& spareBuffers) = 0;
     
     // For writing (Unpack): returns mutable pointers to new buffers
     virtual TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) = 0;
@@ -60,43 +73,54 @@ public:
         , Type_(type)
     {}
 
-TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() == 2);
-    const auto& buf = array->buffers[1];
-    return { buf ? buf->data() : nullptr };
-}
-
-TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() > 0);
-    const auto& buf = array->buffers[0];
-    return { buf ? buf->data() : nullptr };
-}
-
-
     // TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
     //     MKQL_ENSURE(array->buffers.size() == 2, Sprintf("Got %i buffers instead of 2", array->buffers.size())); // todo: better assertions in whole file
     //     return {array->GetValues<ui8>(1)};
     // }
 
+    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& spareBuffers) override {
+        Y_ENSURE(array->buffers.size() > 0);
+
+		const auto& bitmap = array->buffers[0];
+		if (!bitmap) {
+			return { nullptr, nullptr };
+		}
+
+		const int64_t offset = array->offset;
+		const int64_t len    = array->length;
+
+		auto result = CopyBitmap(Pool_, bitmap, offset, len);
+
+		// если был offset != 0 — result != bitmap и мы обязаны продлить его жизнь
+		if (result != bitmap) {
+			spareBuffers.push_back(result);
+		}
+
+		return { result ? result->data() : nullptr, nullptr };
+    }
 
     // TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
     //     Y_ENSURE(array->buffers.size() == 2);
 
     //     return {array->GetMutableValues<ui8>(1)};
     // }
-TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() == 2);
-    auto& buf = array->buffers[1];
-    return { buf ? buf->mutable_data() : nullptr };
-}
 
-TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() > 0);
-    auto& buf = array->buffers[0];
-    return { buf ? buf->mutable_data() : nullptr };
-}
+	TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
+		MKQL_ENSURE(array->buffers.size() == 2, Sprintf("Got %i buffers instead of 2", array->buffers.size()));
+		return { reinterpret_cast<const ui8*>(array->GetValues<TLayout>(1)) };
+	}
+
+	TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
+		Y_ENSURE(array->buffers.size() == 2);
+		return { reinterpret_cast<ui8*>(array->GetMutableValues<TLayout>(1)) };
+	}
 
 
+    TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
+        Y_ENSURE(array->buffers.size() > 0);
+
+        return {array->GetMutableValues<ui8>(0)};
+    }
 
     ui32 GetElementSize() override {
         return sizeof(TLayout);
@@ -158,31 +182,37 @@ public:
     //     return {array->GetValues<ui8>(1)};
     // }
 
+    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>&) override {
+        Y_ENSURE(array->buffers.size() > 0);
+
+        return {array->GetValues<ui8>(0)};
+    }
+
+	TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
+		Y_ENSURE(array->buffers.size() == 2);
+		Y_ENSURE(array->child_data.empty());
+		return { reinterpret_cast<const ui8*>(array->GetValues<NUdf::TUnboxedValue>(1)) };
+	}
+
+	TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
+		Y_ENSURE(array->buffers.size() == 2);
+		Y_ENSURE(array->child_data.empty());
+		return { reinterpret_cast<ui8*>(array->GetMutableValues<NUdf::TUnboxedValue>(1)) };
+	}
 
 
-TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() == 2);
-    auto& buf = array->buffers[1];
-    return { buf ? buf->mutable_data() : nullptr };
-}
+    // TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
+    //     Y_ENSURE(array->buffers.size() == 2);
+    //     Y_ENSURE(array->child_data.empty());
 
-TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() > 0);
-    auto& buf = array->buffers[0];
-    return { buf ? buf->mutable_data() : nullptr };
-}
+    //     return {array->GetMutableValues<ui8>(1)};
+    // }
 
-TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() == 2);
-    const auto& buf = array->buffers[1];
-    return { buf ? buf->data() : nullptr };
-}
+    TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
+        Y_ENSURE(array->buffers.size() > 0);
 
-TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() > 0);
-    const auto& buf = array->buffers[0];
-    return { buf ? buf->data() : nullptr };
-}
+        return {array->GetMutableValues<ui8>(0)};
+    }
 
     ui32 GetElementSize() override {
         return sizeof(NUdf::TUnboxedValue);
@@ -235,25 +265,18 @@ public:
         Y_UNUSED(pool, type);
     }
 
-TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() == 1);
-    const auto& buf = array->buffers[0];
-    return { buf ? buf->data() : nullptr };
-}
+    TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
+        return {array->GetValues<ui8>(0)};
+    }
 
-TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() == 1);
-    auto& buf = array->buffers[0];
-    return { buf ? buf->mutable_data() : nullptr };
-}
-
-
-
-    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array) override {
+    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>&) override {
         Y_UNUSED(array);
         return {nullptr};
     }
 
+    TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
+        return {array->GetMutableValues<ui8>(0)};
+    }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
         Y_UNUSED(array);
@@ -299,15 +322,30 @@ public:
     {}
 
 TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() == 3);
-    const auto& offsets = array->buffers[1];
-    const auto& data    = array->buffers[2];
-    return {
-        offsets ? offsets->data() : nullptr,
-        data    ? data->data()    : nullptr
-    };
+    MKQL_ENSURE(array->buffers.size() == 3, Sprintf("Got %i instead", array->buffers.size()));
+    Y_ENSURE(array->child_data.empty());
+
+    // IMPORTANT:
+    // offsets must be offset-adjusted in units of TOffset, not bytes.
+    const auto* offsets = reinterpret_cast<const ui8*>(array->GetValues<TOffset>(1));
+
+    // IMPORTANT:
+    // values buffer must NOT be offset-adjusted by array->offset at all.
+    // take raw base pointer.
+    const auto* values = array->buffers[2] ? array->buffers[2]->data() : nullptr;
+
+    return {offsets, values};
 }
 
+TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
+    Y_ENSURE(array->buffers.size() == 3);
+    Y_ENSURE(array->child_data.empty());
+
+    auto* offsets = reinterpret_cast<ui8*>(array->GetMutableValues<TOffset>(1));
+    auto* values = array->buffers[2] ? array->buffers[2]->mutable_data() : nullptr;
+
+    return {offsets, values};
+}
 
 
     // TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
@@ -317,26 +355,29 @@ TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array)
     //     return {array->GetValues<ui8>(1), array->GetValues<ui8>(2)};
     // }
 
-TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array) override {
-    const auto& buf = array->buffers[0];
-    return { buf ? buf->data() : nullptr, nullptr };
-}
+	TVector<const ui8*> GetNullBitmapConst(
+		std::shared_ptr<arrow::ArrayData> array,
+		TVector<std::shared_ptr<arrow::Buffer>>& spareBuffers) override
+	{
+		Y_ENSURE(array->buffers.size() > 0);
 
-TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
-    Y_ENSURE(array->buffers.size() == 3);
-    auto& offsets = array->buffers[1];
-    auto& data    = array->buffers[2];
-    return {
-        offsets ? offsets->mutable_data() : nullptr,
-        data    ? data->mutable_data()    : nullptr
-    };
-}
+		const auto& bitmap = array->buffers[0];
+		if (!bitmap) {
+			return { nullptr, nullptr };
+		}
 
-TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
-    auto& buf = array->buffers[0];
-    return { buf ? buf->mutable_data() : nullptr, nullptr };
-}
+		const int64_t offset = array->offset;
+		const int64_t len    = array->length;
 
+		auto result = CopyBitmap(Pool_, bitmap, offset, len);
+
+		// если был offset != 0 — result != bitmap и мы обязаны продлить его жизнь
+		if (result != bitmap) {
+			spareBuffers.push_back(result);
+		}
+
+		return { result ? result->data() : nullptr, nullptr };
+	}
 
     // TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
     //     Y_ENSURE(array->buffers.size() == 3);
@@ -345,6 +386,11 @@ TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
     //     return {array->GetMutableValues<ui8>(1), array->GetMutableValues<ui8>(2)};
     // }
 
+    TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
+        Y_ENSURE(array->buffers.size() > 0);
+
+        return {array->GetMutableValues<ui8>(0), nullptr};
+    }
 
     ui32 GetElementSize() override {
         return 16; // for now threshold for variable sized types is 16 bytes
@@ -419,14 +465,14 @@ public:
         return childrenData;
     }
 
-    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array) override {
+    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& spareBuffers) override {
         Y_ENSURE(array->buffers.size() == 1);
 
         TVector<const ui8*> childrenData;
         Y_ENSURE(array->child_data.size() == Children_.size());
 
         for (size_t i = 0; i < Children_.size(); i++) {
-            auto data = Children_[i]->GetNullBitmapConst(array->child_data[i]);
+            auto data = Children_[i]->GetNullBitmapConst(array->child_data[i], spareBuffers);
             childrenData.insert(childrenData.end(), data.begin(), data.end());
         }
 
@@ -546,10 +592,10 @@ public:
         return Inner_->GetColumnsDataConst(array->child_data[0]);
     }
 
-    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array) override {
+    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& spareBuffers) override {
         Y_ENSURE(array->buffers.size() > 0);
 
-        return Inner_->GetNullBitmapConst(array);
+        return Inner_->GetNullBitmapConst(array, spareBuffers);
     }
 
     TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
@@ -661,8 +707,10 @@ struct TColumnDataExtractorTraits {
 
 // ------------------------------------------------------------
 
+
+
 class TBlockLayoutConverter : public IBlockLayoutConverter {
-    auto GetColumns_(const TVector<arrow::Datum>& columns) {
+    auto GetColumns_(const TVector<arrow::Datum>& columns, TVector<std::shared_ptr<arrow::Buffer>>& spareBuffers) {
         Y_ENSURE(columns.size() == Extractors_.size());
 
         std::fill(IsBitmapNull_.begin(), IsBitmapNull_.end(), false);
@@ -675,7 +723,7 @@ class TBlockLayoutConverter : public IBlockLayoutConverter {
             auto data = Extractors_[i]->GetColumnsDataConst(column.array());
             columnsData.insert(columnsData.end(), data.begin(), data.end());
 
-            auto nullBitmap = Extractors_[i]->GetNullBitmapConst(column.array());
+            auto nullBitmap = Extractors_[i]->GetNullBitmapConst(column.array(), spareBuffers);
             columnsNullBitmap.insert(columnsNullBitmap.end(), nullBitmap.begin(), nullBitmap.end());
             if (nullBitmap.front() == nullptr) {
                 IsBitmapNull_[i] = true;
@@ -724,17 +772,18 @@ public:
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);
     }
 
-    void DebugPrint(const TVector<arrow::Datum>& columns) const {
+    void DebugPrint(const TVector<arrow::Datum>& columns, TVector<std::shared_ptr<arrow::Buffer>>& spareBuffers) const {
         TStringBuilder sb;
         sb << "\t\t===(" << (const void*)this << ")===\n";
         sb << DebugPrintStr();
-        sb << DebugPrintSoAMapping_(columns);
+        sb << DebugPrintSoAMapping_(columns, spareBuffers);
         Cerr << sb;
     }
 
     void Pack(const TVector<arrow::Datum>& columns, TPackResult& packed) override {
-        auto [columnsData, columnsNullBitmap] = GetColumns_(columns);
-		DebugPrint(columns);
+		TVector<std::shared_ptr<arrow::Buffer>> spareBuffers;
+        auto [columnsData, columnsNullBitmap] = GetColumns_(columns, spareBuffers);
+		DebugPrint(columns, spareBuffers);
 
         auto& packedTuples = packed.PackedTuples;
         auto& overflow = packed.Overflow;
@@ -746,37 +795,22 @@ public:
         auto newSize = (TupleLayout_->TotalRowSize) * nTuples;
         packedTuples.resize(newSize, 0);
 
-		auto start = columns.front().array()->offset;
-
-		for (size_t i = 1; i < columns.size(); ++i) {
-			auto a = columns[i].array();
-			Y_ENSURE(a->length == tuplesToPack, "Different lengths across columns");
-			Y_ENSURE(a->offset == start, "Different offsets across columns");
-		}
-
         TupleLayout_->Pack(
             columnsData.data(), columnsNullBitmap.data(),
-            packedTuples.data() + currentSize, overflow, start, tuplesToPack);
+            packedTuples.data() + currentSize, overflow, 0, tuplesToPack);
     }
 
     void BucketPack(const TVector<arrow::Datum>& columns, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) override {
-        auto [columnsData, columnsNullBitmap] = GetColumns_(columns);
+		TVector<std::shared_ptr<arrow::Buffer>> spareBuffers;
+        auto [columnsData, columnsNullBitmap] = GetColumns_(columns, spareBuffers);
         auto tuplesToPack = columns.front().array()->length;
 
         const auto reses = TPaddedPtr(&packs[0].PackedTuples, packs.Step());
         const auto overflows = TPaddedPtr(&packs[0].Overflow, packs.Step());
 
-		auto start = columns.front().array()->offset;
-
-		for (size_t i = 1; i < columns.size(); ++i) {
-			auto a = columns[i].array();
-			Y_ENSURE(a->length == tuplesToPack, "Different lengths across columns");
-			Y_ENSURE(a->offset == start, "Different offsets across columns");
-		}
-
         TupleLayout_->BucketPack(
             columnsData.data(), columnsNullBitmap.data(),
-            reses, overflows, start, tuplesToPack, bucketsLogNum);
+            reses, overflows, 0, tuplesToPack, bucketsLogNum);
 
         for (ui32 bucket = 0; bucket < (1u << bucketsLogNum); ++bucket) {
             auto& pack = packs[bucket];
@@ -827,7 +861,7 @@ public:
         return (idx < v.size()) ? (const void*)v[idx] : (const void*)nullptr;
     }
 
-    TString DebugPrintSoAMapping_(const TVector<arrow::Datum>& columns) const {
+    TString DebugPrintSoAMapping_(const TVector<arrow::Datum>& columns, TVector<std::shared_ptr<arrow::Buffer>>& spareBuffers) const {
         TStringBuilder sb;
         Y_ENSURE(columns.size() == Extractors_.size());
 
@@ -841,7 +875,7 @@ public:
             auto data = Extractors_[i]->GetColumnsDataConst(column.array());
             columnsData.insert(columnsData.end(), data.begin(), data.end());
 
-            auto nulls = Extractors_[i]->GetNullBitmapConst(column.array());
+            auto nulls = Extractors_[i]->GetNullBitmapConst(column.array(), spareBuffers);
             columnsNullBitmap.insert(columnsNullBitmap.end(), nulls.begin(), nulls.end());
         }
 
@@ -849,7 +883,7 @@ public:
         sb << "columnsData.size=" << columnsData.size()
              << " columnsNullBitmap.size=" << columnsNullBitmap.size() << "\n";
 
-		auto start = columns.front().array()->offset;
+        auto start = columns.front().array()->offset;
 
         sb << "Initial columns offsets:\n";
 

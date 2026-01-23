@@ -1056,8 +1056,6 @@ bool TKqpQueryCache::Insert(
 
     auto ts = TInstant::Now();
 
-    Cerr << "[QueryCache] INSERT cacheSize=" << Index.size() + 1 << Endl;
-
     if (!isPerStatementExecution) {
         InsertQuery(compileResult);
     }
@@ -1075,7 +1073,6 @@ bool TKqpQueryCache::Insert(
     IncBytes(item->Value.CompileResult->PreparedQuery->ByteSize());
 
     if (removedItem) {
-        Cerr << "[QueryCache] EVICTED cacheSize=" << Index.size() << Endl;
         DecBytes(removedItem->Value.CompileResult->PreparedQuery->ByteSize());
 
         Snapshot.Erase(removedItem->Value.CompileResult->Uid);
@@ -1222,8 +1219,6 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
             if (compileResult->Query->UserSid == userSid) {
                 counters->ReportQueryCacheHit(dbCounters, true);
 
-                Cerr << "[QueryCache] HIT cacheSize=" << SizeImpl() << Endl;
-
                 LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache by uid"
                     << ", sender: " << sender
                     << ", queryUid: " << *uid);
@@ -1238,7 +1233,6 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
             }
         }
 
-        Cerr << "[QueryCache] MISS cacheSize=" << SizeImpl() << Endl;
         return nullptr;
     }
 
@@ -1260,16 +1254,12 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     if (compileResult) {
         counters->ReportQueryCacheHit(dbCounters, true);
 
-        Cerr << "[QueryCache] HIT cacheSize=" << SizeImpl() << Endl;
-
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache from query text"
             << ", sender: " << sender
             << ", queryUid: " << compileResult->Uid);
 
         return compileResult;
     }
-
-    Cerr << "[QueryCache] MISS cacheSize=" << SizeImpl() << Endl;
 
     // note, we don't report cache miss, because it's up to caller to decide what to do:
     // in particular, session actor will go to the compile service, which will actually report the miss.

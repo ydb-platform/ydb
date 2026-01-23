@@ -268,15 +268,8 @@ private:
             if (Counters) {
                 Counters->WarmupQueriesCompiled->Inc();
             }
-            LOG_D("Query compiled, total: " << EntriesLoaded 
-                  << ", pending: " << PendingCompilations
-                  << ", remaining: " << QueriesToCompile.size());
         } else {
             EntriesFailed++;
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-            LOG_D("Query" <<  "compile failed: " << issues.ToString()
-                  << ", failed total: " << EntriesFailed);
         }
 
         StartCompilations();

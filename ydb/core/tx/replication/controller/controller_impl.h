@@ -119,8 +119,10 @@ private:
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
+    TReplication::ITarget* FindTarget(const TWorkerId& id) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
     void UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats);
+    void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus  status);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
     void ProcessDropStreamQueue(const TActorContext& ctx);
 

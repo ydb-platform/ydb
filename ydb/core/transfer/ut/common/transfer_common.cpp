@@ -873,7 +873,7 @@ void ProcessingTargetTable(const std::string& tableType) {
                 STORE = %s
             );
         )");
-    
+
     testCase.ExecuteDDL(Sprintf(R"(
             CREATE TABLE `%s_1` (
                 Key Uint64 NOT NULL,
@@ -1095,7 +1095,7 @@ void DropColumn(const std::string& tableType)
                 ];
             };
         )");
-    
+
     testCase.Write({"Message-1"});
     testCase.CheckResult({{
         _C("Message", TString("Message-1"))

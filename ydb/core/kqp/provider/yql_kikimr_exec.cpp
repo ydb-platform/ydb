@@ -1144,7 +1144,7 @@ namespace {
                 }
                 dstSettings.DirectoryPath = value;
             } else if (name == "metrics_level") {
-                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                auto value = to_lower(ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()));
                 if (value.empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                         TStringBuilder() << name << " must be not empty"));
@@ -1160,7 +1160,7 @@ namespace {
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                         TStringBuilder() << name << " value is invalid: " << value << ". Expected one of "
-                                         << JoinSeq(", ", GetEnumAllNames<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>())
+                                         << GetEnumAllNames<TReplicationSettingsBase::TMetricsSettings::EMetricsLevel>()
                     ));
                     return false;
                 }

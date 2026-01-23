@@ -20,18 +20,6 @@
 
 namespace NKikimr::NReplication::NController {
 
-TString MakeReplicationName(const NKikimrReplication::TReplicationConfig& config) {
-    // ToDo: need to get an object path from SS here
-    if (!config.HasTransferSpecific()) { //currently only know how to make transfer's name
-        return TString{};
-    }
-    if (!config.GetTransferSpecific().GetTarget().HasDstPath()) {
-        return TString{};
-    }
-
-    return TStringBuilder() << config.GetTransferSpecific().GetTarget().GetSrcPath() << "--" << config.GetTransferSpecific().GetTarget().GetDstPath();
-}
-
 class TReplication::TImpl: public TLagProvider {
     friend class TReplication;
 
@@ -115,6 +103,10 @@ class TReplication::TImpl: public TLagProvider {
         }
     }
 
+    void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {
+        Config.MutableLocation()->CopyFrom(location);
+    }
+
 public:
     template <typename T, typename D>
     explicit TImpl(ui64 id, const TPathId& pathId, T&& config, D&& database)
@@ -122,7 +114,6 @@ public:
         , PathId(pathId)
         , Config(std::forward<T>(config))
         , Database(std::forward<D>(database))
-        , Name(MakeReplicationName(Config))
     {
     }
 
@@ -288,7 +279,6 @@ public:
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
         KeepResourceId(Config, config);
         Config = config;
-        Name = MakeReplicationName(Config);
     }
 
     void ResetCredentials(const TActorContext& ctx) {
@@ -331,7 +321,6 @@ private:
     TActorId YdbProxy;
     TActorId TenantResolver; // TODO: Remove in next major release
     TActorId TargetDiscoverer;
-    TString Name;
 
 }; // TImpl
 
@@ -518,9 +507,14 @@ const TMaybe<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
 }
 
-const TString& TReplication::GetName() const {
-    return Impl->Name;
+void TReplication::SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {
+    Impl->SetLocation(location);
 }
+
+const NKikimrReplication::TReplicationLocationConfig& TReplication::GetLocation() const {
+    return Impl->Config.GetLocation();
+}
+
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrReplication::TReplicationConfig::TargetCase, stream, value) {

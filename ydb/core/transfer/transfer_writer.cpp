@@ -192,6 +192,8 @@ private:
         }
 
         if (!result->ProgramHolder) {
+            Stats.ProcessingErrors++;
+            SendStats(EWorkerOperation::NONE);
             return LogCritAndLeave(TStringBuilder() << "Compilation failed: " << result->Issues.ToOneLineString());
         }
 
@@ -267,7 +269,6 @@ private:
         if (!LastWriteTime) {
             LastWriteTime = TInstant::Now();
         }
-
         for (auto& message : records) {
             TMessage input {
                 .PartitionId = partitionId,
@@ -334,6 +335,7 @@ private:
         }
 
         if (ProcessingError) {
+            SendStats(EWorkerOperation::NONE);
             LogCritAndLeave(*ProcessingError);
         } else {
             PollSent = true;
@@ -343,6 +345,7 @@ private:
 
     void TryFlush() {
         if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval && TableState->Flush()) {
+            SendStats(EWorkerOperation::WRITE);
             LastWriteTime.reset();
             WakeupScheduled = false;
             Become(&TThis::StateWrite);
@@ -369,14 +372,15 @@ private:
             << ": worker# " << Worker
             << " status# " << ev->Get()->Status
             << " issues# " << ev->Get()->Issues.ToOneLineString());
-        SendStats(EWorkerOperation::NONE);
 
         const auto status = ev->Get()->Status;
         const auto& error = ev->Get()->Issues.ToOneLineString();
 
         if (status != Ydb::StatusIds::SUCCESS && error && !ProcessingError) {
             ProcessingError = error;
+            Stats.WriteErrors++;
         }
+        SendStats(EWorkerOperation::NONE);
 
         if (ProcessingError) {
             return LogCritAndLeave(*ProcessingError);
@@ -407,6 +411,7 @@ private:
                 WakeupScheduled = false;
                 break;
             case ETag::RetryFlush:
+                SendStats(EWorkerOperation::WRITE);
                 TableState->Flush();
                 break;
             case ETag::LeaveOnBatchSizeExceed:
@@ -544,6 +549,7 @@ private:
         ui64 BytesWritten = 0;
         ui64 RowsWritten = 0;
         ui64 WriteErrors = 0;
+        ui64 ProcessingErrors = 0;
     };
     TStatsHolder Stats;
 
@@ -552,9 +558,11 @@ private:
         if (dumpTo != nullptr) {
             if (Stats.Operation == EWorkerOperation::PROCESS) {
                 dumpTo->ProcessingCpu = TDuration::Seconds(GetElapsedTicksAsSeconds() - Stats.StartCpuSec);
-            } else {
+                dumpTo->ProcessingTime = Now() - Stats.StartTime;
+            } else if (Stats.Operation == EWorkerOperation::WRITE){
                 dumpTo->WriteDuration = Now() - Stats.StartTime;
             }
+            dumpTo->ProcessingErrors = Stats.ProcessingErrors;
             dumpTo->WriteErrors = Stats.WriteErrors;
             dumpTo->WriteBytes = Stats.BytesWritten;
             dumpTo->WriteRows = Stats.RowsWritten;
@@ -563,11 +571,13 @@ private:
             Stats.WriteErrors = 0;
         }
         Stats.StartCpuSec = GetElapsedTicksAsSeconds();
+        Stats.StartTime = Now();
         Stats.Operation = newState;
     }
 
     void SendStats(EWorkerOperation newCurrentOperation) {
         auto* event = TEvWorker::TEvStatus::FromOperation(Stats.Operation);
+        event->DetailedStats->WriterStats = std::make_unique<TTransferWriteStats>();
         ResetStats(newCurrentOperation, event->DetailedStats->WriterStats.get());
         Send(Worker, event);
     }

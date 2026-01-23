@@ -11,6 +11,12 @@ TTargetTableBase::TTargetTableBase(TReplication* replication, ETargetKind finalK
 {
 }
 
+void TTargetTableBase::WorkerStatusChanged(ui64, ui64, NMonitoring::TDynamicCounterPtr) {
+}
+
+void TTargetTableBase::UpdateStats(ui64, const NKikimrReplication::TWorkerStats&, NMonitoring::TDynamicCounterPtr) {
+}
+
 const TReplication::ITargetStats* TTargetTableBase::GetStats() const {
     return nullptr;
 }

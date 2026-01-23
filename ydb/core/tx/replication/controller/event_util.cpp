@@ -21,7 +21,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         replication->GetConfig().GetTransferSpecific().GetBatching(),
         replication->GetDatabase(),
         replication->GetConfig().GetMetricsConfig().GetLevel(),
-        replication->GetName());
+        replication->GetLocation());
 }
 
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
@@ -37,7 +37,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const NKikimrReplication::TBatchingSettings& batchingSettings,
         const TString& database,
         NKikimrReplication::TReplicationConfig::TMetricsConfig::EMetricsLevel metricsLevel,
-        const TString& replicationName)
+        const NKikimrReplication::TReplicationLocationConfig& replicationLocation)
 {
     auto ev = MakeHolder<TEvService::TEvRunWorker>();
     auto& record = ev->Record;
@@ -53,9 +53,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     if (metricsLevel) {
         command.SetMetricsLevel(metricsLevel);
     }
-    if (replicationName) {
-        command.SetReplicationName(replicationName);
-    }
+    command.MutableReplicationLocation()->CopyFrom(replicationLocation);
 
     auto& readerSettings = *command.MutableRemoteTopicReader();
     readerSettings.MutableConnectionParams()->CopyFrom(connectionParams);

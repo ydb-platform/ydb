@@ -35,30 +35,43 @@ class TSessionInfo {
         TMetricsConfig::EMetricsLevel MetricsLevel;
         TRowVersion Heartbeat = TRowVersion::Min();
 
-        explicit TWorkerInfo(const TActorId& actorId, const TString& replicationName, TMetricsConfig::EMetricsLevel metricsLevel, ui64 workerId)
+        explicit TWorkerInfo(const TActorId& actorId, const NKikimrReplication::TReplicationLocationConfig& location, TMetricsConfig::EMetricsLevel metricsLevel,
+                             ui64 workerId, NMonitoring::TDynamicCounterPtr& countersRoot)
             : ActorId(actorId)
             , MetricsLevel(metricsLevel)
-            , ReplicationName(replicationName)
+            , Location(location)
             , WorkerId(workerId)
         {
             StartTime = Now();
+            EnsureCounters(countersRoot);
+            if (WorkerCounters) {
+                WorkerCounters->Uptime->Set(0);
+                WorkerCounters->Restarts->Add(1);
+            }
         }
 
         operator TActorId() const {
             return ActorId;
         }
         void EnsureCounters(NMonitoring::TDynamicCounterPtr& countersRoot) {
-            if (MetricsLevel != TMetricsConfig::LEVEL_DETAILED || !ReplicationName)
+            if (MetricsLevel != TMetricsConfig::LEVEL_DETAILED || Location.GetPath().empty())
                 return;
 
+            auto subgroup = countersRoot->GetSubgroup("transfer_id", Location.GetPath())
+                                ->GetSubgroup("database_id", Location.GetYdbDatabaseId())
+                                ->GetSubgroup("folder_id", Location.GetYcFolderId())
+                                ->GetSubgroup("cloud_id", Location.GetYcCloudId())
+                                ->GetSubgroup("monitoring_project_id", Location.GetMonitoringProjectId());
+
             if (!WorkerCounters) {
-                WorkerCounters.ConstructInPlace(countersRoot->GetSubgroup("counters", "transfer_detailed"), ReplicationName, WorkerId);
+                WorkerCounters.ConstructInPlace(subgroup->GetSubgroup("counters", "transfer_detailed"), WorkerId);
             }
 
             if (!HostCounters) {
-                HostCounters.ConstructInPlace(countersRoot->GetSubgroup("counters", "transfer_detailed"), ReplicationName);
+                HostCounters.ConstructInPlace(subgroup->GetSubgroup("counters", "transfer_detailed"));
             }
         }
+
         void ApplyStats(const TWorkerDetailedStats& stats) {
             if (stats.ReaderStats) {
                 HostCounters->DecompressCpu->Add(stats.ReaderStats->DecompressCpu.MicroSeconds());
@@ -69,19 +82,20 @@ class TSessionInfo {
             if (stats.WriterStats) {
                 HostCounters->ProcessCpu->Add(stats.WriterStats->ProcessingCpu.MicroSeconds());
                 WorkerCounters->ProcessCpu->Add(stats.WriterStats->ProcessingCpu.MicroSeconds());
+                WorkerCounters->ProcessingTime->Add(stats.WriterStats->ProcessingTime.MilliSeconds());
                 WorkerCounters->WriteTime->Add(stats.WriterStats->WriteDuration.MilliSeconds());
                 WorkerCounters->WriteRows->Add(stats.WriterStats->WriteRows);
                 WorkerCounters->WriteBytes->Add(stats.WriterStats->WriteBytes);
                 WorkerCounters->WriteErrors->Add(stats.WriterStats->WriteErrors);
             }
-            
-            WorkerCounters->Restarts->Add(stats.RestartsCount);
+            WorkerCounters->Uptime->Set((Now() - StartTime).MilliSeconds());
         }
 
     private:
         struct TWorkerCounters {
             NMonitoring::TDynamicCounterPtr WorkerCounters;
             NMonitoring::TDynamicCounters::TCounterPtr ReadTime;
+            NMonitoring::TDynamicCounters::TCounterPtr ProcessingTime;
             NMonitoring::TDynamicCounters::TCounterPtr WriteTime;
             NMonitoring::TDynamicCounters::TCounterPtr DecompressCpu;
             NMonitoring::TDynamicCounters::TCounterPtr ProcessCpu;
@@ -91,18 +105,18 @@ class TSessionInfo {
             NMonitoring::TDynamicCounters::TCounterPtr Uptime;
             NMonitoring::TDynamicCounters::TCounterPtr Restarts;
 
-            TWorkerCounters(NMonitoring::TDynamicCounterPtr subgroup, const TString& replicationName, ui64 workerId)
-                : WorkerCounters(subgroup->GetSubgroup("host", "")->GetSubgroup("transfer_id", replicationName)
-                                         ->GetSubgroup("worker", ToString(workerId)))
-                , ReadTime(WorkerCounters->GetCounter("transfer.read.duration_milliseconds", true))
-                , WriteTime(WorkerCounters->GetCounter("transfer.write.duration_milliseconds", true))
-                , DecompressCpu(WorkerCounters->GetCounter("transfer.decompress.cpu_elapsed_microseconds", true))
-                , ProcessCpu(WorkerCounters->GetCounter("transfer.process.cpu_elapsed_microseconds", true))
-                , WriteRows(WorkerCounters->GetCounter("transfer.write_rows", true))
-                , WriteBytes(WorkerCounters->GetCounter("transfer.write_bytes", true))
-                , WriteErrors(WorkerCounters->GetCounter("transfer.write_errors", true))
-                , Uptime(WorkerCounters->GetCounter("transfer.worker_uptime_milliseconds", false))
-                , Restarts(WorkerCounters->GetCounter("transfer.worker_restarts", true))
+            TWorkerCounters(NMonitoring::TDynamicCounterPtr subgroup, ui64 workerId)
+                : WorkerCounters(subgroup->GetSubgroup("host", "")->GetSubgroup("worker", ToString(workerId)))
+                , ReadTime(WorkerCounters->GetExpiringNamedCounter("name", "transfer.read.duration_milliseconds", true))
+                , ProcessingTime(WorkerCounters->GetExpiringNamedCounter("name", "transfer.processing.duration_milliseconds", true))
+                , WriteTime(WorkerCounters->GetExpiringNamedCounter("name", "transfer.write.duration_milliseconds", true))
+                , DecompressCpu(WorkerCounters->GetExpiringNamedCounter("name", "transfer.decompress.cpu_elapsed_microseconds", true))
+                , ProcessCpu(WorkerCounters->GetExpiringNamedCounter("name", "transfer.process.cpu_elapsed_microseconds", true))
+                , WriteRows(WorkerCounters->GetExpiringNamedCounter("name", "transfer.write_rows", true))
+                , WriteBytes(WorkerCounters->GetExpiringNamedCounter("name", "transfer.write_bytes", true))
+                , WriteErrors(WorkerCounters->GetNamedCounter("name", "transfer.write_errors", true))
+                , Uptime(WorkerCounters->GetExpiringNamedCounter("name", "transfer.worker_uptime_milliseconds", false))
+                , Restarts(WorkerCounters->GetNamedCounter("name", "transfer.worker_restarts", true))
             {
             }
         };
@@ -112,25 +126,26 @@ class TSessionInfo {
             NMonitoring::TDynamicCounters::TCounterPtr DecompressCpu;
             NMonitoring::TDynamicCounters::TCounterPtr ProcessCpu;
 
-            THostCounters(NMonitoring::TDynamicCounterPtr subgroup, const TString& replicationName)
-                : HostCounters(subgroup->GetSubgroup("transfer_id", replicationName))
-                , DecompressCpu(HostCounters->GetCounter("transfer.decompress.cpu_elapsed_microseconds", true))
-                , ProcessCpu(HostCounters->GetCounter("transfer.process.cpu_elapsed_microseconds", true))
+            THostCounters(NMonitoring::TDynamicCounterPtr subgroup)
+                : HostCounters(subgroup)
+                , DecompressCpu(HostCounters->GetExpiringNamedCounter("name", "transfer.decompress.cpu_elapsed_microseconds", true))
+                , ProcessCpu(HostCounters->GetExpiringNamedCounter("name", "transfer.process.cpu_elapsed_microseconds", true))
             {
             }
         };
 
         TMaybe<TWorkerCounters> WorkerCounters;
         TMaybe<THostCounters> HostCounters;
-        const TString ReplicationName;
+        const NKikimrReplication::TReplicationLocationConfig Location;
         ui64 WorkerId;
         TInstant StartTime;
     };
 
 public:
-    explicit TSessionInfo(const TActorId& actorId)
+    explicit TSessionInfo(const TActorId& actorId, ui64 controllerTabletId)
         : ActorId(actorId)
         , Generation(0)
+        , ControllerTabletId(controllerTabletId)
     {
     }
 
@@ -188,11 +203,17 @@ public:
         return it->second;
     }
 
-    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId, const TString& replicationName,
+    TActorId RegisterWorker(IActorOps* ops, const TWorkerId& id, IActor* actor, ui32 poolId, const NKikimrReplication::TReplicationLocationConfig& replicationLocation,
                             TMetricsConfig::EMetricsLevel metricsLevel)
     {
         auto res = Workers.emplace(id, TWorkerInfo{ops->Register(actor, TMailboxType::HTSwap, poolId),
-                                                                              replicationName, metricsLevel, id.WorkerId()});
+                                                   replicationLocation, metricsLevel, id.WorkerId(), AppData()->Counters});
+        if (metricsLevel == TMetricsConfig::LEVEL_DETAILED) {
+            PendingStatsValues[id];
+        }
+        if (PendingStatsValues.size() == 1) {
+            ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(ControllerTabletId, 0));
+        }
         Y_ABORT_UNLESS(res.second);
         res.first->second.MetricsLevel = metricsLevel;
 
@@ -211,6 +232,10 @@ public:
         SendWorkerStatus(ops, id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
 
         ActorIdToWorkerId.erase(it->second);
+        PendingStatsValues.erase(id);
+        if (PendingStatsValues.empty()) {
+            ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(0, ControllerTabletId));
+        }
         Workers.erase(it);
     }
 
@@ -223,6 +248,11 @@ public:
         SendWorkerStatus(ops, it->second, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED, std::forward<Args>(args)...);
 
         Workers.erase(it->second);
+
+        PendingStatsValues.erase(it->second);
+        if (PendingStatsValues.empty()) {
+            ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(0, ControllerTabletId));
+        }
         ActorIdToWorkerId.erase(it);
     }
 
@@ -231,32 +261,48 @@ public:
         ops->Send(ActorId, new TEvService::TEvWorkerStatus(id, std::forward<Args>(args)...));
     }
 
-    void SendWorkerStats(IActorOps* ops, const TWorkerId& id, std::unique_ptr<TWorkerDetailedStats>&& stats) {
-        auto iter = Workers.find(id);
-        if (iter.IsEnd()) {
-            return;
-        }
-        TVector<std::pair<ui64, i64>> statsValues;
-        if (stats->ReaderStats) {
-            statsValues.emplace_back(NKikimrReplication::TWorkerStats::READ_TIME, stats->ReaderStats->ReadTime.MilliSeconds());
-            statsValues.emplace_back(NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU, stats->ReaderStats->DecompressCpu.MicroSeconds());
-            statsValues.emplace_back(NKikimrReplication::TWorkerStats::READ_MESSAGES, stats->ReaderStats->Messages);
-            statsValues.emplace_back(NKikimrReplication::TWorkerStats::READ_BYTES, stats->ReaderStats->Bytes);
-            if (stats->ReaderStats->Partition != -1) {
-                statsValues.emplace_back(NKikimrReplication::TWorkerStats::READ_PARTITION, stats->ReaderStats->Partition);
-                statsValues.emplace_back(NKikimrReplication::TWorkerStats::READ_OFFSET, stats->ReaderStats->Offset);
-            }
-        } else if (stats->WriterStats) {
-            statsValues.emplace_back(NKikimrReplication::TWorkerStats::WRITE_TIME, stats->WriterStats->ProcessingCpu.MicroSeconds());
-            statsValues.emplace_back(NKikimrReplication::TWorkerStats::PROCESSING_ELAPSED_CPU, stats->WriterStats->WriteDuration.MilliSeconds());
-            statsValues.emplace_back(NKikimrReplication::TWorkerStats::WRITE_ERRORS, stats->WriterStats->WriteErrors);
-        }
-
-        statsValues.emplace_back(NKikimrReplication::TWorkerStats::WORK_OPERATION, static_cast<ui64>(stats->CurrentOperation));
-        statsValues.emplace_back(NKikimrReplication::TWorkerStats::RESTARTS_COUNT, stats->RestartsCount);
+    void ApplyWorkerStats(const TWorkerId& id, const std::unique_ptr<TWorkerDetailedStats>& stats) {
         UpdateWorkerMetrics(id, *stats);
-        auto* ev = new TEvService::TEvWorkerStatus(id, iter->second.StartTime, std::move(statsValues));
-        ops->Send(ActorId, ev);
+        auto& statsValues = PendingStatsValues[id];
+        if (stats->ReaderStats) {
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_TIME)] += stats->ReaderStats->ReadTime.MilliSeconds();
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU)] += stats->ReaderStats->DecompressCpu.MicroSeconds();
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_MESSAGES)] += stats->ReaderStats->Messages;
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_BYTES)] += stats->ReaderStats->Bytes;
+            if (stats->ReaderStats->Partition != -1) {
+                statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_PARTITION)] = stats->ReaderStats->Partition;
+                statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_OFFSET)] = stats->ReaderStats->Offset;
+            }
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_ERRORS)] += stats->ReaderStats->Errors;
+        }
+        if (stats->WriterStats) {
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WRITE_TIME)] += stats->WriterStats->WriteDuration.MilliSeconds();
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WRITE_BYTES)] += stats->WriterStats->WriteBytes;
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WRITE_ROWS)] += stats->WriterStats->WriteRows;
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::PROCESSING_ELAPSED_CPU)] += stats->WriterStats->ProcessingCpu.MicroSeconds();
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::PROCESSING_TIME)] += stats->WriterStats->ProcessingTime.MilliSeconds();
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::PROCESSING_ERRORS)] += stats->WriterStats->ProcessingErrors;
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WRITE_ERRORS)] += stats->WriterStats->WriteErrors;
+        }
+        if (stats->CurrentOperation.has_value()) {
+            statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WORK_OPERATION)] = static_cast<ui64>(*stats->CurrentOperation);
+        }
+    }
+
+    void SendWorkersStats(IActorOps* ops) {
+        for (auto& [id, values] : PendingStatsValues) {
+
+            auto workerIter = Workers.find(id);
+            Y_ABORT_UNLESS(!workerIter.IsEnd());
+            workerIter->second.ApplyStats({}); // Update timestamps;
+            TVector<std::pair<ui64, i64>> valuePairs;
+            for (const auto& [key, value] : values) {
+                valuePairs.emplace_back(key, value);
+            }
+            auto* ev = new TEvService::TEvWorkerStatus(id, workerIter->second.StartTime, std::move(valuePairs));
+            ops->Send(ActorId, ev);
+            values.clear();
+        }
     }
 
     void SendWorkerDataEnd(IActorOps* ops, const TWorkerId& id, ui64 partitionId,
@@ -280,9 +326,7 @@ public:
     void UpdateWorkerMetrics(const TWorkerId& id, const TWorkerDetailedStats& stats) {
         auto it = Workers.find(id);
         Y_ABORT_UNLESS(it != Workers.end());
-
-        if (it->second.MetricsLevel == TMetricsConfig::LEVEL_DETAILED && it->second.ReplicationName) {
-            it->second.EnsureCounters(AppData()->Counters);
+        if (it->second.MetricsLevel == TMetricsConfig::LEVEL_DETAILED && !it->second.Location.GetPath().empty()) {
             it->second.ApplyStats(stats);
         }
     }
@@ -373,7 +417,6 @@ public:
         ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
     }
 
-
     void Shutdown(IActorOps* ops) const {
         for (const auto& [_, actorId] : Workers) {
             ops->Send(actorId, new TEvents::TEvPoison());
@@ -396,8 +439,10 @@ private:
 private:
     TActorId ActorId;
     ui64 Generation;
+    ui64 ControllerTabletId;
     THashMap<TWorkerId, TWorkerInfo> Workers;
     THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
+    THashMap<TWorkerId, TMap<ui64, i64>> PendingStatsValues;
 
     TMap<TRowVersion, ui64> TxIds;
     TMap<TRowVersion, THashSet<TActorId>> PendingTxId;
@@ -493,7 +538,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
-            it = Sessions.emplace(controller.GetTabletId(), ev->Sender).first;
+            it = Sessions.emplace(controller.GetTabletId(), TSessionInfo{ev->Sender, controller.GetTabletId()}).first;
         }
 
         auto& session = it->second;
@@ -552,7 +597,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
                 .Path(settings.GetTopicPath())
                 .AppendPartitionIds(settings.GetTopicPartitionId())
             );
-        if (reportStats) {
+        if (AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
             topicReaderSettings.Decompress(false);
         }
 
@@ -657,14 +702,13 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         } else {
             Y_ABORT("Unsupported");
         }
-
         const auto actorId = session.RegisterWorker(this, id,
             CreateWorker(
                 SelfId(),
                 ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit, reportStats),
                 std::move(writerFn)),
             poolId,
-            cmd.GetReplicationName(),
+            cmd.GetReplicationLocation(),
             cmd.GetMetricsLevel()
         );
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
@@ -789,6 +833,30 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             std::move(ev->Get()->AdjacentPartitionsIds), std::move(ev->Get()->ChildPartitionsIds));
     }
 
+    void Handle(TEvWorker::TEvStatsWakeup::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+        if (ev->Get()->SessionToAdd) {
+            SessionsToWake.insert(ev->Get()->SessionToAdd);
+        } else if (ev->Get()->SessionToRemove) {
+            SessionsToWake.erase(ev->Get()->SessionToRemove);
+        } else {
+            StatsWakeupScheduled = false;
+        }
+        if (!SessionsToWake.empty() && !StatsWakeupScheduled) {
+            Schedule(StatsWakeupInterval, new TEvWorker::TEvStatsWakeup());
+            StatsWakeupScheduled = true;
+        }
+        if (!LastStatsUpdate || LastStatsUpdate + StatsWakeupInterval <= Now()) {
+            for (auto sessionId : SessionsToWake) {
+                auto sessionIter = Sessions.find(sessionId);
+                if (sessionIter != Sessions.end()) {
+                    sessionIter->second.SendWorkersStats(this);
+                }
+            }
+            LastStatsUpdate = Now();
+        }
+    }
+
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());
 
@@ -816,7 +884,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         if (session && session->HasWorker(ev->Sender)) {
             const auto& workerId = session->GetWorkerId(ev->Sender);
             if (ev->Get()->DetailedStats) {
-                session->SendWorkerStats(this, workerId, std::move(ev->Get()->DetailedStats));
+                session->ApplyWorkerStats(workerId, std::move(ev->Get()->DetailedStats));
             } else {
                 session->SendWorkerStatus(this, workerId, ev->Get()->Lag);
             }
@@ -890,6 +958,7 @@ public:
             hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(TEvService::TEvHeartbeat, Handle);
             hFunc(TEvWorker::TEvDataEnd, Handle);
+            hFunc(TEvWorker::TEvStatsWakeup, Handle)
             hFunc(TEvWorker::TEvGone, Handle);
             hFunc(TEvWorker::TEvStatus, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -918,7 +987,13 @@ private:
 
     THashMap<TYdbProxyKey, TActorId, TYdbProxyKeyHash> YdbProxies;
     THashMap<TActorId, ui64> WorkerActorIdToSession;
+
     mutable TMaybe<TActorId> CompilationService;
+
+    bool StatsWakeupScheduled = false;
+    TInstant LastStatsUpdate = TInstant::Zero();
+    constexpr const static TDuration StatsWakeupInterval = TDuration::Seconds(1);
+    THashSet<ui64> SessionsToWake;
 
 }; // TReplicationService
 

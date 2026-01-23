@@ -23,10 +23,9 @@ enum class EWorkerOperation {
 };
 
 struct TWorkerDetailedStats {
-    EWorkerOperation CurrentOperation;
+    std::optional<EWorkerOperation> CurrentOperation;
     std::unique_ptr<TTransferReadStats> ReaderStats;
     std::unique_ptr<TTransferWriteStats> WriterStats;
-    ui64 RestartsCount = 0;
 };
 
 
@@ -44,6 +43,7 @@ struct TEvWorker {
         EvDataEnd,
         EvCommit,
         EvTerminateWriter,
+        EvStatsWakeup,
         EvEnd,
     };
 
@@ -116,6 +116,13 @@ struct TEvWorker {
 
         explicit TEvTerminateWriter(ui64 partitionId);
         TString ToString() const override;
+    };
+
+    struct TEvStatsWakeup: public TEventLocal<TEvStatsWakeup, EvStatsWakeup> {
+        ui64 SessionToAdd = 0;
+        ui64 SessionToRemove = 0;
+        TEvStatsWakeup() = default;
+        TEvStatsWakeup(ui64 sessionToAdd, ui64 sessionToRemove);
     };
 };
 

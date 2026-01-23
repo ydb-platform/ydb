@@ -12,7 +12,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 
+#include <library/cpp/http/io/stream.h>
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
+#include <util/network/socket.h>
 
 using namespace NYdb;
 using namespace NYdb::NQuery;
@@ -233,6 +236,114 @@ inline TMessage _withAttributes(std::map<std::string, std::string>&& attributes)
     };
 }
 
+struct TMetricInfo {
+    THashMap<TString, TString> Labels;
+    ui64 Value;
+};
+
+struct TTransferMetrics {
+    THashMap<TString, TMetricInfo> AggregatedMetrics;
+    THashMap<TString, TVector<TMetricInfo>> DetailedMetrics;
+};
+
+class TMetricsValidator {
+public:
+    using TValidator = std::function<void (const TTransferMetrics&)>;
+    using TValueValidator = std::function<TString (const TVector<TMetricInfo>&)>;
+
+private:
+    TVector<TValidator> Validators;
+    const TVector<TString> MustHaveLabels = {"transfer_id", "database_id", "folder_id", "cloud_id", "monitoring_project_id"};
+
+    auto GetMetricInfo(const TTransferMetrics& metrics, bool fromDetailed, const TString& name) const {
+        TMaybe<TVector<TMetricInfo>> result;
+        if (fromDetailed) {
+            auto iter = metrics.DetailedMetrics.find(name);
+            if (iter != metrics.DetailedMetrics.end()) {
+                result = iter->second;
+            }
+        }
+        else {
+            auto iter = metrics.AggregatedMetrics.find(name);
+            if (iter != metrics.AggregatedMetrics.end()) {
+                result = {iter->second};
+            }
+        }
+        if (!result) {
+            return result;
+        }
+        for (const auto& metricInfo : *result) {
+            for (const auto& label : MustHaveLabels) {
+                auto labelIter = metricInfo.Labels.find(label);
+                UNIT_ASSERT_C(!labelIter.IsEnd(), TStringBuilder() << "Metric " << name << " must have label " << label);
+                if (label == "transfer_id") {
+                    UNIT_ASSERT_C(!labelIter->second.empty(), TStringBuilder() << "Metric's " << name << " label " << label << " must not be empty");
+                }
+            }
+        }
+        return result;
+    }
+
+public:
+    TMetricsValidator& HasTransferMetrics() {
+        Validators.emplace_back(
+            [](const TTransferMetrics& metrics) {
+                if (metrics.AggregatedMetrics.size() > 0){
+                    return TString{};
+                }
+                return TString{"Transfer metrics is empty"};
+            });
+        return *this;
+    }
+
+    TMetricsValidator& HasDetailedMetrics() {
+        Validators.emplace_back(
+            [](const TTransferMetrics& metrics) {
+                if (metrics.DetailedMetrics.size() > 0) {
+                    return TString{};
+                }
+                return TString{"Transfer detailed metrics is empty"};
+            });
+        return *this;
+    }
+
+    TMetricsValidator& HasTransferSensor(const TString& name,
+                                         TValueValidator valueValidator = [](const auto&) -> TString { return {}; }) {
+        Validators.emplace_back(
+            [=](const TTransferMetrics& metrics) -> void {
+                auto metric = GetMetricInfo(metrics, false, name);
+                UNIT_ASSERT_C(metric, TStringBuilder() << "Transfer sensor " << name << " not found");
+                auto error = valueValidator(*metric);
+                UNIT_ASSERT_C(error.empty(), TStringBuilder() << "Error checking sensor: " << name << ": " << error);
+            });
+        return *this;
+    };
+
+    TMetricsValidator& HasDetailedSensor(const TString& name,
+                                         TValueValidator valueValidator = [](const auto&) -> TString { return {}; })
+    {
+        Validators.emplace_back(
+            [=](const TTransferMetrics& metrics) -> void {
+                auto metricsList = GetMetricInfo(metrics, true, name);
+                UNIT_ASSERT_C(metricsList, TStringBuilder() << "Detailed sensor " << name << " not found");
+                auto error = valueValidator(*metricsList);
+                UNIT_ASSERT_C(error.empty(), TStringBuilder() << "Error checking sensor: " << name << ": " << error);
+            });
+        return *this;
+    };
+
+    TMetricsValidator& AddValidator(TValidator&& validator) {
+        Validators.emplace_back(std::move(validator));
+        return *this;
+    }
+
+    void Validate(const TTransferMetrics& metrics) const {
+        for (const auto& validator : Validators) {
+            validator(metrics);
+        }
+    }
+};
+
 using TExpectations = TVector<TVector<std::pair<TString, std::shared_ptr<IChecker>>>>;
 
 struct TConfig {
@@ -241,6 +352,7 @@ struct TConfig {
     const TVector<TMessage> Messages;
     const TExpectations Expectations;
     const TVector<TString> AlterLambdas;
+    const TMaybe<TMetricsValidator> MetricsValidator;
 };
 
 struct MainTestCase {
@@ -446,6 +558,7 @@ struct MainTestCase {
         std::optional<std::string> Username;
         std::optional<std::string> UserSecret;
         std::optional<std::string> Directory;
+        ui64 MetricsLevel = 0;
 
         CreateTransferSettings() {};
 
@@ -526,6 +639,16 @@ struct MainTestCase {
         }
         if (settings.Directory) {
             options.push_back(TStringBuilder() <<  "DIRECTORY = '" << *settings.Directory << "'");
+        }
+        switch (settings.MetricsLevel) {
+            case 2:
+                options.push_back("METRICS_LEVEL = 'OBJECT'");
+                break;
+            case 3:
+                options.push_back("METRICS_LEVEL = 'DETAILED'");
+                break;
+            default:
+                break;
         }
 
         std::string topicName = settings.TopicName.value_or(TopicName);
@@ -634,10 +757,10 @@ struct MainTestCase {
         )", TransferName.data()));
     }
 
-    auto DescribeTransfer() {
+    auto DescribeTransfer(bool includeStats = false) {
         TReplicationClient client(Driver);
 
-        return client.DescribeTransfer(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName).ExtractValueSync();
+        return client.DescribeTransfer(TString("/") + GetEnv("YDB_DATABASE") + "/" + TransferName, includeStats).ExtractValueSync();
     }
 
     auto DescribeConsumer(const std::string& consumerName) {
@@ -710,7 +833,7 @@ struct MainTestCase {
             if (expected == result.GetState()) {
                 return result;
             }
-    
+
             UNIT_ASSERT_C(i, "Unable to wait replication state. Expected: " << expected << ", actual: " << result.GetState());
             Sleep(TDuration::Seconds(1));
         }
@@ -810,7 +933,7 @@ struct MainTestCase {
             TResultSet r{Ydb::ResultSet()};
             return {-1, NYdb::TProtoAccessor::GetProto(r)};
         }
-    
+
         const auto proto = NYdb::TProtoAccessor::GetProto(res.GetResultSet(0));
         return {proto.rowsSize(), proto};
     }
@@ -818,7 +941,7 @@ struct MainTestCase {
     void CheckResult(const std::string& tableName, const TExpectations& expectations) {
         for (size_t attempt = 20; attempt--; ) {
             auto res = DoRead(tableName, expectations);
-            Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
+            Cerr << "Attempt=" << attempt << " count=" << res.first <<", expectations: " << expectations.size() << Endl << Flush;
             if (res.first == (ssize_t)expectations.size()) {
                 const Ydb::ResultSet& proto = res.second;
                 for (size_t i = 0; i < expectations.size(); ++i) {
@@ -851,12 +974,12 @@ struct MainTestCase {
             if (expected == result.GetState()) {
                 return result;
             }
-    
+
             std::string issues;
             if (result.GetState() == TTransferDescription::EState::Error) {
                 issues = result.GetErrorState().GetIssues().ToOneLineString();
             }
-    
+
             UNIT_ASSERT_C(i, "Unable to wait transfer state. Expected: " << expected << ", actual: " << result.GetState() << ", " << issues);
             Sleep(TDuration::Seconds(1));
         }
@@ -871,8 +994,7 @@ struct MainTestCase {
         UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
     }
 
-    void Run(const TConfig& config, const CreateTransferSettings settings = {}) {
-
+    void MakeTest(const TConfig& config, const CreateTransferSettings settings = {}) {
         CreateTable(config.TableDDL);
         CreateTopic();
 
@@ -901,9 +1023,69 @@ struct MainTestCase {
 
         CheckResult(config.Expectations);
 
+        if (config.MetricsValidator) {
+            auto metrics = GetMetrics();
+            config.MetricsValidator->Validate(metrics);
+        }
+    }
+    void MakeCleanup() {
         DropTransfer();
         DropTable();
         DropTopic();
+    }
+
+    void Run(const TConfig& config, const CreateTransferSettings settings = {}) {
+        MakeTest(config, settings);
+        MakeCleanup();
+    }
+
+    TTransferMetrics GetMetrics() {
+        TTransferMetrics result;
+        TNetworkAddress addr("localhost", FromString<ui16>(GetEnv("YDB_MON_PORT")));
+        TSocket s(addr);
+        SendMinimalHttpRequest(s, "localhost", "/counters/json");
+        TSocketInput si(s);
+        THttpInput input(&si);
+        TString firstLine = input.FirstLine();
+        const auto httpCode = ParseHttpRetCode(firstLine);
+        UNIT_ASSERT_VALUES_EQUAL(httpCode, 200u);
+        NJson::TJsonValue value;
+        bool res = NJson::ReadJsonTree(&input, &value);
+        auto arr = value.GetMap().at("sensors").GetArray();
+        NJson::TJsonValue transfer, detailed;
+        TSet<TString> counterTypes;
+
+        auto GetLabelsSet = [](const auto& labels) {
+            THashMap<TString, TString> result;
+            for (const auto& [key, value] : labels) {
+                result.emplace(key, value.GetString());
+            }
+            return result;
+        };
+        for (const auto& item : arr) {
+            const auto& topLevel = item.GetMap();
+            const auto& labels = topLevel.at("labels").GetMap();
+            auto iter = labels.find("counters");
+            if (iter.IsEnd()) {
+                continue;
+            }
+            const auto& counterType = iter->second.GetString();
+            iter = labels.find("name");
+            if (iter.IsEnd()) {
+                continue;
+            }
+            auto& counterName = iter->second.GetString();
+            if (counterType == "transfer") {
+                result.AggregatedMetrics[counterName] = TMetricInfo{GetLabelsSet(labels), topLevel.at("value").GetUInteger()};
+                Cerr << "Add transfer counter " << counterName << ", value: " << topLevel.at("value").GetUInteger() << Endl << Flush;
+            } else if (counterType == "transfer_detailed") {
+                result.DetailedMetrics[counterName].emplace_back(TMetricInfo{GetLabelsSet(labels), topLevel.at("value").GetUInteger()});
+                Cerr << "Add transfer_detailed counter " << counterName << ", value: " << topLevel.at("value").GetUInteger() << Endl << Flush;
+            }
+        }
+        UNIT_ASSERT(res);
+
+        return result;
     }
 
     const std::string TableType;

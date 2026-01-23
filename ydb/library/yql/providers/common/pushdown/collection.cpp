@@ -404,7 +404,7 @@ public:
             return true;
         }
         if (Settings.IsEnabled(EFlag::PredicateAsExpression)) {
-            TPredicateNode predicate(node);
+            TPredicateNode predicate;
             MarkupPredicates(node, predicate, true);
             return predicate.CanBePushed;
         }

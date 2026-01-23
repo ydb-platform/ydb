@@ -60,14 +60,12 @@
 
 Для этого нужно:
 
-* Загрузить презентацию в pdf - формате в [репозиторий](https://github.com/ydb-platform/ydb-presentations).
+- Загрузить презентацию в pdf - формате в [репозиторий](https://github.com/ydb-platform/ydb-presentations).
 
-* Извлечь ссылку на слайды:
+- Извлечь ссылку на слайды:
 
 ![](../../contributor/documentation/_assets/presentation-reference.png)
 
 Получится ссылка `2025/ru/infra_source_craft/presentation.pdf`.
 
-* Добавить в начало этой ссылки `https://presentations.ydb.tech/`.
-
-
+- Добавить в начало этой ссылки `https://presentations.ydb.tech/`.

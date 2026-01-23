@@ -53,7 +53,7 @@ There's an alternate syntax to specify the list of imported objects, supported f
 
 ### Export result {#result}
 
-If successful, the `import s3` command prints summary information about the enqueued operation to import data from S3 in the format specified in the `--format` option. The import itself is performed by the server asynchronously. The summary shows the operation ID that you can use later to check the operation status and perform actions on it:
+If successful, the `import s3` command prints summary information about the enqueued operation to import data from S3, in the format specified in the `--format` option. The import itself is performed by the server asynchronously. The summary shows the operation ID that you can use later to check the operation status and perform actions on it:
 
 - In the default `pretty` mode, the operation ID is displayed in the id field with semigraphics formatting:
 

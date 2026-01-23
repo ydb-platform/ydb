@@ -4425,8 +4425,11 @@ namespace {
         };
 
         checkIndex();
-        TruncateTable(db);
-        checkIndex();
+
+        for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
+            TruncateTable(db);
+            checkIndex();
+        }
     }
 }; // anonymouys namespace
 

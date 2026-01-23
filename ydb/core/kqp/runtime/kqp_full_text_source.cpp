@@ -1060,6 +1060,30 @@ public:
             resultColumnIds.push_back(column.GetId());
         }
 
+        if (searchColumnIdx == -1) {
+            for(const auto& column: settings->GetQuerySettings().GetColumns()) {
+                bool needPostfilter = false;
+                if (column.GetName() == searchColumnName) {
+                    for(const auto& analyzer : settings->GetIndexDescription().GetSettings().columns()) {
+                        if (analyzer.column() == column.GetName()) {
+                            if (analyzer.analyzers().use_filter_ngram() || analyzer.analyzers().use_filter_edge_ngram()) {
+                                needPostfilter = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (needPostfilter) {
+                    mainTableCovered = false;
+                    resultColumnTypes.push_back(
+                        NScheme::TypeInfoFromProto(column.GetTypeId(), column.GetTypeInfo()));
+                    searchColumnIdx = resultColumnIds.size();
+                    resultColumnIds.push_back(column.GetId());
+                }
+            }
+        }
+
         return MakeIntrusive<TMainTableReader>(counters, FromProto(settings->GetTable()),
             snapshot, logPrefix, keyColumnTypes, resultColumnTypes, resultColumnIds, resultCellIndices, mainTableCovered, searchColumnIdx);
     }
@@ -1193,7 +1217,7 @@ private:
 
         for(const auto& column : Settings->GetQuerySettings().GetColumns()) {
 
-            for(const auto& analyzer : IndexDescription.GetSettings().columns()) {
+            for(const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
 
                 if (analyzer.column() == column.GetName()) {
                     size_t wordIndex = 0;

@@ -83,7 +83,7 @@ public:
 
 		const auto& bitmap = array->buffers[0];
 		if (!bitmap) {
-			return { nullptr, nullptr };
+			return { nullptr };
 		}
 
 		const int64_t offset = array->offset;
@@ -96,7 +96,7 @@ public:
 			spareBuffers.push_back(result);
 		}
 
-		return { result ? result->data() : nullptr, nullptr };
+		return { result ? result->data() : nullptr };
     }
 
     // TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
@@ -187,7 +187,7 @@ public:
 
 		const auto& bitmap = array->buffers[0];
 		if (!bitmap) {
-			return { nullptr, nullptr };
+			return { nullptr };
 		}
 
 		const int64_t offset = array->offset;
@@ -200,7 +200,7 @@ public:
 			spareBuffers.push_back(result);
 		}
 
-		return { result ? result->data() : nullptr, nullptr };
+		return { result ? result->data() : nullptr };
     }
 
 	TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {

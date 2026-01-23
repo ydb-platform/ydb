@@ -5,4 +5,6 @@
 ../../core                  \
 ../../library               \
 ../../public                \
-../../services
+../../services              \
+cloud                       \
+scripts

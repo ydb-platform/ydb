@@ -383,6 +383,16 @@ const TTypeAnnotationNode* IOperator::GetIUType(const TInfoUnit& iu) {
     return structType->FindItemType(iu.GetFullName());
 }
 
+void IOperator::ReplaceChild(std::shared_ptr<IOperator> oldChild, std::shared_ptr<IOperator> newChild) {
+    for (size_t i=0; i<Children.size(); i++) {
+        if (Children[i] == oldChild) {
+            Children[i] = newChild;
+            return;
+        }
+    }
+    Y_ENSURE(false, "Did not find a child to replace");
+}
+
 /**
  * EmptySource operator methods
  */
@@ -509,6 +519,30 @@ TInfoUnit TMapElement::GetRename() const {
 
 void TMapElement::SetExpression(TExprNode::TPtr expr) {
     ElementHolder = expr;
+}
+
+bool TMapElement::IsSingleCallable(THashSet<TString> allowedCallables) {
+    if (IsExpression()) {
+        auto expr = GetExpression();
+        Y_ENSURE(expr->IsLambda());
+        auto body = expr->Child(1);
+        if (body->IsCallable(allowedCallables) && body->ChildrenSize() == 1 && body->Child(0)->IsCallable("Member")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TVector<TInfoUnit> TMapElement::InputIUs() {
+    TVector<TInfoUnit> result;
+
+    if (IsRename()) {
+        result.push_back(GetRename());
+    } else {
+        auto expr = GetExpression();
+        GetAllMembers(expr, result);
+    }
+    return result;
 }
 
 /**
@@ -673,6 +707,33 @@ TString TOpMap::ToString(TExprContext& ctx) {
     if (Project) {
         res << " Project";
     }
+    return res;
+}
+
+/**
+ * OpAddDependencies methods
+ */
+TOpAddDependencies::TOpAddDependencies(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& columns, const TVector<const TTypeAnnotationNode*>& types) :
+    IUnaryOperator(EOperator::AddDependencies, pos, input), Dependencies(columns), Types(types) {}
+
+TVector<TInfoUnit> TOpAddDependencies::GetOutputIUs() {
+    auto ius = GetInput()->GetOutputIUs();
+    ius.insert(ius.end(), Dependencies.begin(), Dependencies.end());
+    return ius;
+}
+
+TString TOpAddDependencies::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    
+    auto res = TStringBuilder();
+    res << "Correlated [";
+    for (size_t i=0; i<Dependencies.size(); i++) {
+        res << Dependencies[i].GetFullName();
+        if (i!=Dependencies.size()-1) {
+            res << ",";
+        }
+    }
+    res << "]";
     return res;
 }
 
@@ -847,9 +908,19 @@ TOpJoin::TOpJoin(std::shared_ptr<IOperator> leftInput, std::shared_ptr<IOperator
     : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys) {}
 
 TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
-    auto res = GetLeftInput()->GetOutputIUs();
+    TVector<TInfoUnit> res;
+
+    auto leftInputIUs = GetLeftInput()->GetOutputIUs();
     auto rightInputIUs = GetRightInput()->GetOutputIUs();
 
+    if (JoinKind == "LeftOnly" || JoinKind == "LeftSemi") {
+        rightInputIUs = {};
+    }
+    if (JoinKind == "RightOnly" || JoinKind == "RightSemi") {
+        leftInputIUs = {};
+    }
+
+    res.insert(res.end(), leftInputIUs.begin(), leftInputIUs.end());
     res.insert(res.end(), rightInputIUs.begin(), rightInputIUs.end());
     return res;
 }

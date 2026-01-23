@@ -233,7 +233,22 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext& ctx) {
+TStatus ComputeTypes(std::shared_ptr<TOpAddDependencies> addDeps, TRBOContext& ctx) {
+    const TTypeAnnotationNode* inputType = addDeps->GetInput()->Type;
+    auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto resStructItemTypes = structType->GetItems();
+
+    for (size_t i=0; i<addDeps->Dependencies.size(); i++) {
+        resStructItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(addDeps->Dependencies[i].GetFullName(), addDeps->Types[i]));
+    }
+
+    auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resStructItemTypes);
+    const TTypeAnnotationNode* resultAnn = ctx.ExprCtx.MakeType<TListExprType>(resultItemType);
+    addDeps->Type = resultAnn;
+    return TStatus::Ok;
+}
+
+TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
     Y_UNUSED(ctx);
     auto leftInputType = unionAll->GetLeftInput()->Type;
     // TODO: Add sanity checks.
@@ -285,18 +300,25 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
 }
 
 TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext& ctx) {
-    // FIXME: This works correctly only for inner joins, other join types 
     auto leftInputType = join->GetLeftInput()->Type;
     auto rightInputType = join->GetRightInput()->Type;
 
     auto leftItemType = leftInputType->Cast<TListExprType>()->GetItemType();
     auto rightItemType = rightInputType->Cast<TListExprType>()->GetItemType();
 
-    TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
+    TVector<const TItemExprType*> structItemTypes;
+    TVector<const TItemExprType*> leftItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
+    TVector<const TItemExprType*> rightItemTypes = rightItemType->Cast<TStructExprType>()->GetItems();
 
-    for (const auto* item : rightItemType->Cast<TStructExprType>()->GetItems()){
-        structItemTypes.push_back(item);
+    if (join->JoinKind == "LeftOnly" || join->JoinKind == "LeftSemi") {
+        rightItemTypes = {};
     }
+    if (join->JoinKind == "RightOnly" || join->JoinKind == "RightSemi") {
+        leftItemTypes = {};
+    }
+
+    structItemTypes.insert(structItemTypes.end(), leftItemTypes.begin(), leftItemTypes.end());
+    structItemTypes.insert(structItemTypes.end(), rightItemTypes.begin(), rightItemTypes.end());
 
     auto resultStructType = ctx.ExprCtx.MakeType<TStructExprType>(structItemTypes);
     const TTypeAnnotationNode* resultAnn = ctx.ExprCtx.MakeType<TListExprType>(resultStructType);
@@ -345,6 +367,9 @@ TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx, TPlanProp
     }
     else if(MatchOperator<TOpMap>(op)) {
         return ComputeTypes(CastOperator<TOpMap>(op), ctx);
+    }
+    else if(MatchOperator<TOpAddDependencies>(op)) {
+        return ComputeTypes(CastOperator<TOpAddDependencies>(op), ctx);
     }
     else if(MatchOperator<TOpJoin>(op)) {
         return ComputeTypes(CastOperator<TOpJoin>(op), ctx);

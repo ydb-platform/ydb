@@ -119,25 +119,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildGraceJoinCore(TExprNode::TPtr leftInp
 
     auto leftIUs = Join->GetLeftInput()->GetOutputIUs();
     auto rightIUs = Join->GetRightInput()->GetOutputIUs();
-    const bool leftSideOnly = (Join->JoinKind == "LeftSemi" || Join->JoinKind == "LeftOnly");
-
-    if (leftSideOnly) {
-        rightIUs.clear();
-        for (const auto& [left, right] : Join->JoinKeys) {
-            rightIUs.push_back(right);
-        }
-    }
-
-    const auto leftTupleSize = leftIUs.size();
-    for (size_t i = 0; i < leftIUs.size(); i++) {
-        leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
-        leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
-    }
-
-    for (size_t i = 0; i < rightIUs.size(); i++) {
-        rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
-        rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i + leftTupleSize).Done());
-    }
+    const bool rightSideEmpty = (Join->JoinKind == "LeftSemi" || Join->JoinKind == "LeftOnly");
 
     for (const auto& joinKey : Join->JoinKeys) {
         const auto leftIdx = std::distance(leftIUs.begin(), std::find(leftIUs.begin(), leftIUs.end(), joinKey.first));
@@ -150,6 +132,19 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildGraceJoinCore(TExprNode::TPtr leftInp
         rightKeyColumnNames.push_back(Build<TCoAtom>(Ctx, Pos).Value(joinKey.second.GetFullName()).Done());
     }
 
+    const auto leftTupleSize = leftIUs.size();
+    for (size_t i = 0; i < leftIUs.size(); i++) {
+        leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
+        leftRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
+    }
+
+    if (!rightSideEmpty) {
+        for (size_t i = 0; i < rightIUs.size(); i++) {
+            rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i).Done());
+            rightRenames.push_back(Build<TCoAtom>(Ctx, Pos).Value(i + leftTupleSize).Done());
+        }
+    }
+
     // Convert to wide flow
     // clang-format off
     leftInput = Build<TCoToFlow>(Ctx, Pos)
@@ -157,7 +152,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildGraceJoinCore(TExprNode::TPtr leftInp
     .Done().Ptr();
     // clang-forat on
 
-    leftInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(leftInput, Join->GetLeftInput()->GetOutputIUs(), Ctx);
+    leftInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(leftInput, leftIUs, Ctx);
 
     // clang-format off
     rightInput = Build<TCoToFlow>(Ctx, Pos)

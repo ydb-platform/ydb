@@ -73,8 +73,10 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
                     if (iter.Parent) {
                         iter.Parent->Children[iter.ChildIndex] = op;
-                    } else {
+                    } else if (!iter.SubplanIU) {
                         root.SetInput(op);
+                    } else {
+                        root.PlanProps.Subplans.Replace(*iter.SubplanIU, op);
                     }
 
                     if (needToLog && rule->LogRule) {

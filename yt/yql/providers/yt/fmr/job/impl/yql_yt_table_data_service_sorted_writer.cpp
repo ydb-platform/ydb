@@ -15,8 +15,8 @@ TFmrTableDataServiceSortedWriter::TFmrTableDataServiceSortedWriter(
     const TFmrWriterSettings& settings,
     TSortingColumns keyColumns
 )
-    : TFmrTableDataServiceBaseWriter(tableId, partId, tableDataService, columnGroupSpec, settings),
-    KeyColumns_(std::move(keyColumns))
+    : TFmrTableDataServiceBaseWriter(tableId, partId, tableDataService, columnGroupSpec, settings)
+    , KeyColumns_(std::move(keyColumns))
 {
 }
 
@@ -83,20 +83,20 @@ TSortedChunkStats TFmrTableDataServiceSortedWriter::GetSortedChunkStats(TStringB
     auto sortOrders = KeyColumns_.SortOrders;
     TBinaryYsonComparator comparator(currentYsonContent, sortOrders);
 
-    auto upBoundIt = chunkIndexes[chunkIndexes.size() - 1];
-    auto downBoundIt = chunkIndexes[0];
+    auto upBoundaryIndexes = chunkIndexes.back();
+    auto downBoundaryIndexes = chunkIndexes.front();
 
-    NYT::TNode upBoundRow = GetKeyRowByIndexes(currentYsonContent, upBoundIt);
-    NYT::TNode downBoundRow = GetKeyRowByIndexes(currentYsonContent, downBoundIt);
-    return {.IsSorted = true, .FirstRowKeys = downBoundRow};
+    NYT::TNode upBoundaryKeys = GetKeyRowByIndexes(currentYsonContent, upBoundaryIndexes);
+    NYT::TNode downBoundaryKeys = GetKeyRowByIndexes(currentYsonContent, downBoundaryIndexes);
+    return {.IsSorted = true, .FirstRowKeys = downBoundaryKeys, .LastRowKeys = upBoundaryKeys};
 }
 
 void TFmrTableDataServiceSortedWriter::CheckIsSorted(TStringBuf currentYsonContent, const TVector<TRowIndexMarkup>& chunkIndexes) const {
     TBinaryYsonComparator comparator(currentYsonContent, KeyColumns_.SortOrders);
     for (ui64 i = 0; i < chunkIndexes.size() - 1; ++i) {
-        const auto& FirstRowKeys = chunkIndexes[i];
-        const auto& secondRow = chunkIndexes[i + 1];
-        if (comparator.CompareRows(FirstRowKeys, secondRow) > 0) {
+        const auto& curRowKeys = chunkIndexes[i];
+        const auto& nextRowKeys = chunkIndexes[i + 1];
+        if (comparator.CompareRows(curRowKeys, nextRowKeys) > 0) {
             ythrow yexception() << "Data is not sorted";
         }
     }

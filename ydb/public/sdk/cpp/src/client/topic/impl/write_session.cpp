@@ -150,11 +150,14 @@ TKeyedWriteSession::TKeyedWriteSession(
     ClosePromise = NThreading::NewPromise();
     CloseFuture = ClosePromise.GetFuture();
 
+    auto notReadyPromise = NThreading::NewPromise();
+    NotReadyFuture = notReadyPromise.GetFuture();
+
     Futures.reserve(Partitions.size());
     // Initialize per-partition futures to a valid, non-ready future to avoid TFutures being uninitialized
     // (NThreading::WaitAny throws on uninitialized futures).
     for (size_t i = 0; i < Partitions.size(); ++i) {
-        Futures.push_back(CloseFuture);
+        Futures.push_back(NotReadyFuture);
     }
 
     EventsProcessedPromise = NThreading::NewPromise();
@@ -207,10 +210,10 @@ void TKeyedWriteSession::RunEventLoop(ui64 partition, WrappedWriteSessionPtr wra
         }
 
         if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
-            HandleAcksEvent(partition, std::move(*acksEvent));
-            if (wrappedSession->RemoveFromQueue(1)) {
+            if (wrappedSession->RemoveFromQueue(acksEvent->Acks.size())) {
                 IdlerSessions.insert(wrappedSession);
             }
+            HandleAcksEvent(partition, std::move(*acksEvent));
             continue;
         }
     }
@@ -354,18 +357,16 @@ TKeyedWriteSession::~TKeyedWriteSession() {
     }
 }
 
-void TKeyedWriteSession::DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout, bool alreadyClosed) {
+void TKeyedWriteSession::DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout) {
     if (it == SessionsIndex.end() || !it->second) {
         return;
     }
 
-    if (!alreadyClosed) {
-        it->second->Session->Close(closeTimeout);
-    }
+    Y_ABORT_UNLESS(it->second->Session->Close(closeTimeout), "There are still messages in flight");
 
     auto partition = it->second->Partition;
     ReadyFutures.erase(partition);
-    Futures[partition] = CloseFuture;
+    Futures[partition] = NotReadyFuture;
     it = SessionsIndex.erase(it);
 }
 
@@ -391,7 +392,7 @@ void TKeyedWriteSession::TransferEventsToOutputQueue() {
 
     auto buildOutputAckEvent = [](std::deque<TWriteSessionEvent::TWriteAck>& acksQueue) -> TWriteSessionEvent::TAcksEvent {
         TWriteSessionEvent::TAcksEvent ackEvent;
-        auto ack = acksQueue.front();
+        auto ack = std::move(acksQueue.front());
         ackEvent.Acks.push_back(std::move(ack));
         acksQueue.pop_front();
         return ackEvent;
@@ -530,17 +531,19 @@ TDuration TKeyedWriteSession::GetCloseTimeout() {
 }
 
 void TKeyedWriteSession::WaitForEvents() {
-    if (Closed.load()) {
+    std::vector<NThreading::TFuture<void>> futures;
+
+    auto partitionsWaitFuture = NThreading::WaitAny(Futures);
+    futures.push_back(partitionsWaitFuture);
+    futures.push_back(MessagesNotEmptyFuture);
+
+    if (!Closed.load()) {
+        futures.push_back(CloseFuture);
+        NThreading::WaitAny(futures).Wait();
         return;
     }
 
-    auto partitionsWaitFuture = NThreading::WaitAny(Futures);
-
-    std::vector<NThreading::TFuture<void>> futures;
-    futures.push_back(partitionsWaitFuture);
-    futures.push_back(MessagesNotEmptyFuture);
-    futures.push_back(CloseFuture);
-    NThreading::WaitAny(futures).Wait();
+    NThreading::WaitAny(futures).Wait(GetCloseTimeout());
 }
 
 void TKeyedWriteSession::CleanIdleSessions() {
@@ -557,7 +560,6 @@ void TKeyedWriteSession::CleanIdleSessions() {
 void TKeyedWriteSession::HandleReadyFutures(std::unique_lock<std::mutex>& lock) {
     while (!ReadyFutures.empty()) {
         auto idx = *ReadyFutures.begin();
-        Y_ABORT_UNLESS(Futures[idx].IsReady(), "Future is not ready");
         RunEventLoop(idx, GetWriteSession(idx));
 
         ReadyFutures.erase(idx);
@@ -836,11 +838,8 @@ bool TSimpleBlockingKeyedWriteSession::Write(const std::string& key, TWriteMessa
 }
 
 bool TSimpleBlockingKeyedWriteSession::Close(TDuration closeTimeout) {
-    {
-        std::lock_guard lock(Lock);
-        Closed.store(true);
-        ClosePromise.TrySetValue();
-    }
+    Closed.store(true);
+    ClosePromise.TrySetValue();
     return Writer->Close(closeTimeout);
 }
 

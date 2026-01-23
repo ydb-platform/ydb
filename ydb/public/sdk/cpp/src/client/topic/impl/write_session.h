@@ -222,7 +222,7 @@ private:
     WrappedWriteSessionPtr CreateWriteSession(ui64 partition);
 
     using TSessionsIndexIterator = std::unordered_map<ui64, WrappedWriteSessionPtr>::iterator;
-    void DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout, bool alreadyClosed = false);
+    void DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout);
 
     void SaveMessage(TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
 
@@ -310,6 +310,7 @@ private:
     NThreading::TFuture<void> CloseFuture;
     NThreading::TPromise<void> EventsProcessedPromise;
     NThreading::TFuture<void> EventsProcessedFuture;
+    NThreading::TFuture<void> NotReadyFuture;
 
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;

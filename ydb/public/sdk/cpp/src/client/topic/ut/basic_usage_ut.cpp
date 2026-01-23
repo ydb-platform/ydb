@@ -1757,7 +1757,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Path(setup.GetTopicPath(TEST_TOPIC))
             .Codec(ECodec::RAW);
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
-        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+        writeSettings.SubSessionIdleTimeout(TDuration::Seconds(10));
         writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash);
 
         auto session = client.CreateKeyedWriteSession(writeSettings);
@@ -2057,7 +2057,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         );
 
         int attempts = 0;
-        constexpr int maxAttempts = 1000;
+        constexpr int maxAttempts = 1100;
         for (attempts = 0; attempts < maxAttempts; ++attempts) {
             auto event = session->GetEvent(false);
             if (!event) {

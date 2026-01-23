@@ -255,7 +255,7 @@ class QuerySession(BaseQuerySession):
                 first_resp_timeout,
             )
             if first_response.status != issues.StatusCode.SUCCESS:
-                raise RuntimeError("Failed to attach session")
+                issues._process_response(first_response)
         except Exception as e:
             self._state.reset()
             status_stream.cancel()

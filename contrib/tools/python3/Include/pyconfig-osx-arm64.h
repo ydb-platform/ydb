@@ -665,7 +665,7 @@
 #define HAVE_LCHOWN 1
 
 /* Define to 1 if you want to build _blake2 module with libb2 */
-/* #undef HAVE_LIBB2 */
+#define HAVE_LIBB2 1
 
 /* Define to 1 if you have the `db' library (-ldb). */
 /* #undef HAVE_LIBDB */

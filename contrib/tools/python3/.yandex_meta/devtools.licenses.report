@@ -725,30 +725,6 @@ BELONGS Lib/ya.make
     Files with this license:
         Lib/unittest/__init__.py [31:44]
 
-KEEP     CC0-1.0              9acbfdb8c004d28a6620ba4aa67f3711
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: CC0-1.0
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
-    Files with this license:
-        Modules/_blake2/impl/blake2-config.h [6:11]
-        Modules/_blake2/impl/blake2-impl.h [6:11]
-        Modules/_blake2/impl/blake2.h [6:11]
-        Modules/_blake2/impl/blake2b-load-sse2.h [6:11]
-        Modules/_blake2/impl/blake2b-load-sse41.h [6:11]
-        Modules/_blake2/impl/blake2b-ref.c [6:11]
-        Modules/_blake2/impl/blake2b-round.h [6:11]
-        Modules/_blake2/impl/blake2b.c [6:11]
-        Modules/_blake2/impl/blake2s-load-sse2.h [6:11]
-        Modules/_blake2/impl/blake2s-load-sse41.h [6:11]
-        Modules/_blake2/impl/blake2s-load-xop.h [6:11]
-        Modules/_blake2/impl/blake2s-ref.c [6:11]
-        Modules/_blake2/impl/blake2s-round.h [6:11]
-        Modules/_blake2/impl/blake2s.c [6:11]
-
 KEEP     MIT                  9d03f9747582b3f6d6cd610546c7c68b
 BELONGS Lib/ya.make
     Note: matched license text is too long. Read it in the source files.

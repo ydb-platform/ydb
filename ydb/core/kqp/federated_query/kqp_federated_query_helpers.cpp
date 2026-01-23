@@ -7,7 +7,7 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
-#include <ydb/core/kqp/federated_query/local_pq_client/local_topic_client_factory.h>
+#include <ydb/core/local_proxy/local_pq_client/local_topic_client_factory.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>

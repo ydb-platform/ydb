@@ -7,7 +7,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/fq/libs/db_id_async_resolver_impl
-    ydb/core/kqp/federated_query/local_pq_client
+    ydb/core/local_proxy/local_pq_client
     ydb/core/protos
     ydb/library/logger
     ydb/library/yql/providers/common/http_gateway
@@ -33,7 +33,6 @@ END()
 
 RECURSE(
     actors
-    local_pq_client
 )
 
 RECURSE_FOR_TESTS(

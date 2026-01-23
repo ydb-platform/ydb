@@ -4389,21 +4389,39 @@ namespace {
         auto checkIndex = [&](){
             UpsertTexts(db);
             auto index = ReadIndex(db);
-            CompareYson(R"([
-                [[100u];"animals"];
-                [[100u];"cats"];
-                [[200u];"cats"];
-                [[300u];"cats"];
-                [[100u];"chase"];
-                [[200u];"chase"];
-                [[200u];"dogs"];
-                [[400u];"dogs"];
-                [[400u];"foxes"];
-                [[300u];"love"];
-                [[400u];"love"];
-                [[100u];"small"];
-                [[200u];"small"]
-            ])", NYdb::FormatResultSetYson(index));
+            if (useFulltextRelevance) {
+                CompareYson(R"([
+                    [[100u];1u;"animals"];
+                    [[100u];1u;"cats"];
+                    [[200u];1u;"cats"];
+                    [[300u];2u;"cats"];
+                    [[100u];1u;"chase"];
+                    [[200u];1u;"chase"];
+                    [[200u];1u;"dogs"];
+                    [[400u];1u;"dogs"];
+                    [[400u];1u;"foxes"];
+                    [[300u];1u;"love"];
+                    [[400u];1u;"love"];
+                    [[100u];1u;"small"];
+                    [[200u];1u;"small"]
+                ])", NYdb::FormatResultSetYson(index));
+            } else {
+                CompareYson(R"([
+                    [[100u];"animals"];
+                    [[100u];"cats"];
+                    [[200u];"cats"];
+                    [[300u];"cats"];
+                    [[100u];"chase"];
+                    [[200u];"chase"];
+                    [[200u];"dogs"];
+                    [[400u];"dogs"];
+                    [[400u];"foxes"];
+                    [[300u];"love"];
+                    [[400u];"love"];
+                    [[100u];"small"];
+                    [[200u];"small"]
+                ])", NYdb::FormatResultSetYson(index));
+            }
         };
 
         checkIndex();

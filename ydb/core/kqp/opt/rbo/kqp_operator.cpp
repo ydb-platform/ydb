@@ -475,7 +475,7 @@ TMapElement::TMapElement(const TInfoUnit& elementName, TExprNode::TPtr expr)
 
 TMapElement::TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename)
     : ElementName(elementName)
-    ,ElementHolder(rename) {
+    , ElementHolder(rename) {
 }
 
 TMapElement::TMapElement(const TInfoUnit& elementName, const std::variant<TInfoUnit, TExprNode::TPtr>& elementHolder)

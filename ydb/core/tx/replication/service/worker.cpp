@@ -123,6 +123,12 @@ TString TEvWorker::TEvTerminateWriter::ToString() const {
     << " }";
 }
 
+TEvWorker::TEvStatsWakeup::TEvStatsWakeup(ui64 sessionToAdd, ui64 sessionToRemove)
+    : SessionToAdd(sessionToAdd)
+    , SessionToRemove(sessionToRemove)
+{
+}
+
 class TWorker: public TActorBootstrapped<TWorker> {
     class TActorInfo {
         std::function<IActor*(void)> CreateFn;
@@ -305,21 +311,16 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
         ev->Sender = SelfId();
         Send(ev->Forward(Parent));
-        // ToDo: Update host and worker counters
     }
 
     TEvWorker::TEvStatus* MakeEvStatusFromReaderStats(std::unique_ptr<TWorkerDetailedStats>&& stats) const {
         Y_ENSURE(stats->ReaderStats);
         auto* ev = TEvWorker::TEvStatus::FromOperation(EWorkerOperation::NONE);
         ev->DetailedStats->ReaderStats = std::move(stats->ReaderStats);
-        ev->DetailedStats->RestartsCount = RestartsCount;
-        RestartsCount = 0;
         return ev;
     }
 
     void MaybeRecreateActor(TEvWorker::TEvGone::TPtr& ev, TActorInfo& info) {
-        StartTime = Now();
-        RestartsCount++;
         switch (ev->Get()->Status) {
         case TEvWorker::TEvGone::UNAVAILABLE:
             if (info.GetCreateAttempt() < MaxAttempts) {
@@ -434,7 +435,6 @@ private:
     THolder<TEvWorker::TEvTerminateWriter> TerminateWriter;
     TDuration Lag;
     TInstant StartTime = TInstant::Zero();
-    mutable ui64 RestartsCount = 0;
 };
 
 IActor* CreateWorker(

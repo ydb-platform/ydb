@@ -15,6 +15,7 @@
 
 namespace NKikimrReplication {
     class TReplicationConfig;
+    class TReplicationLocationConfig;
     class TWorkerStats;
     class TEvDescribeReplicationResult;
 }
@@ -109,6 +110,7 @@ public:
         virtual const TMaybe<TDuration> GetLag() const = 0;
 
         virtual void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats, NMonitoring::TDynamicCounterPtr counters) = 0;
+        virtual void WorkerStatusChanged(ui64 workerId, ui64 status, NMonitoring::TDynamicCounterPtr counters) = 0;
         virtual const ITargetStats* GetStats() const = 0;
 
         virtual void Progress(const TActorContext& ctx) = 0;
@@ -150,6 +152,7 @@ public:
     const TActorId& GetYdbProxy() const;
     ui64 GetSchemeShardId() const;
     void SetConfig(NKikimrReplication::TReplicationConfig&& config);
+    void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location);
     void ResetCredentials(const TActorContext& ctx);
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
     void SetState(EState state, TString issue = {});
@@ -158,7 +161,7 @@ public:
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
     const TMaybe<TDuration> GetLag() const;
-    const TString& GetName() const;
+    const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;

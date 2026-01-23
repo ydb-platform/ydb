@@ -2,6 +2,7 @@
 
 #include "target_with_stream.h"
 #include <library/cpp/sliding_window/sliding_window.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/service/worker.h>
 
@@ -19,7 +20,7 @@ class TTransferStats : public TReplication::ITargetStats {
         }
     };
 
-    struct TWorkserStats {
+    struct TWorkerStats {
         NKikimrReplication::EWorkOperation Operation;
         TInstant LastChange = TInstant::Zero();
         ui32 ReadOffset;
@@ -39,7 +40,7 @@ class TTransferStats : public TReplication::ITargetStats {
 public:
     void FillToProto(NKikimrReplication::TEvDescribeReplicationResult& destination, bool includeDetailed) const override;
 
-    THashMap<ui64, TWorkserStats> WorkersStats;
+    THashMap<ui64, TWorkerStats> WorkersStats;
     TMultiSlidingWindow ReadBytes;
     TMultiSlidingWindow ReadMessages;
     TMultiSlidingWindow WriteBytes;
@@ -82,7 +83,10 @@ public: struct TTransferConfig: public TConfigBase {
     void Shutdown(const TActorContext& ctx) override;
 
     TString GetStreamPath() const override;
+    void EnsureCounters(NMonitoring::TDynamicCounterPtr counters);
+
     void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats, NMonitoring::TDynamicCounterPtr counters) override;
+    void WorkerStatusChanged(ui64 workerId, ui64 status, NMonitoring::TDynamicCounterPtr counters) override;
     const TReplication::ITargetStats* GetStats() const override;
     void RemoveWorker(ui64 id) override;
 
@@ -91,36 +95,44 @@ private:
         NMonitoring::TDynamicCounterPtr AggeregatedCounters;
 
         NMonitoring::TDynamicCounters::TCounterPtr ReadTime;
+        NMonitoring::TDynamicCounters::TCounterPtr ProcessingTime;
         NMonitoring::TDynamicCounters::TCounterPtr WriteTime;
         NMonitoring::TDynamicCounters::TCounterPtr DecompressionCpuTime;
         NMonitoring::TDynamicCounters::TCounterPtr ProcessingCpuTime;
         NMonitoring::TDynamicCounters::TCounterPtr WriteBytes;
         NMonitoring::TDynamicCounters::TCounterPtr WriteRows;
+        NMonitoring::TDynamicCounters::TCounterPtr ProcessingErrors;
         NMonitoring::TDynamicCounters::TCounterPtr WriteErrors;
         NMonitoring::TDynamicCounters::TCounterPtr MinWorkerUptime;
         NMonitoring::TDynamicCounters::TCounterPtr Restarts;
 
-        TCounters(NMonitoring::TDynamicCounterPtr counters, const TString& transferId)
+        TCounters(NMonitoring::TDynamicCounterPtr counters, const NKikimrReplication::TReplicationLocationConfig& location)
             : AggeregatedCounters(counters->GetSubgroup("counters", "transfer")->GetSubgroup("host", "")
-                                          ->GetSubgroup("transfer_id", transferId))
-            , ReadTime(AggeregatedCounters->GetCounter("transfer.read.duration_milliseconds", true))
-            , WriteTime(AggeregatedCounters->GetCounter("transfer.write.duration_milliseconds", true))
-            , DecompressionCpuTime(AggeregatedCounters->GetCounter("transfer.decompress.cpu_elapsed_microseconds", true))
-            , ProcessingCpuTime(AggeregatedCounters->GetCounter("transfer.process.cpu_elapsed_microseconds", true))
-            , WriteBytes(AggeregatedCounters->GetCounter("transfer.write_bytes", true))
-            , WriteRows(AggeregatedCounters->GetCounter("transfer.write_rows", true))
-            , WriteErrors(AggeregatedCounters->GetCounter("transfer.write_errors", true))
-            , MinWorkerUptime(AggeregatedCounters->GetCounter("transfer.worker_uptime_milliseconds_min", false))
-            , Restarts(AggeregatedCounters->GetCounter("transfer.worker_restarts", true))
+                                  ->GetSubgroup("transfer_id", location.GetPath())
+                                  ->GetSubgroup("database_id", location.GetYdbDatabaseId())
+                                  ->GetSubgroup("folder_id", location.GetYcFolderId())
+                                  ->GetSubgroup("cloud_id", location.GetYcCloudId())
+                                  ->GetSubgroup("monitoring_project_id", location.GetMonitoringProjectId()))
+            , ReadTime(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.read.duration_milliseconds", true))
+            , ProcessingTime(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.process.duration_milliseconds", true))
+            , WriteTime(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.write.duration_milliseconds", true))
+            , DecompressionCpuTime(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.decompress.cpu_elapsed_microseconds", true))
+            , ProcessingCpuTime(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.process.cpu_elapsed_microseconds", true))
+            , WriteBytes(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.write_bytes", true))
+            , WriteRows(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.write_rows", true))
+            , ProcessingErrors(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.processing_errors", true))
+            , WriteErrors(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.write_errors", true))
+            , MinWorkerUptime(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.worker_uptime_milliseconds_min", false))
+            , Restarts(AggeregatedCounters->GetExpiringNamedCounter("name", "transfer.worker_restarts", true))
         {
         }
     };
-    
+
     TMaybe<TCounters> Counters;
 
     TActorId StreamConsumerRemover;
     std::unique_ptr<TTransferStats> Stats;
     ui64 MetricsLevel = 0;
-    TString Name;
+    NKikimrReplication::TReplicationLocationConfig Location;
 };
 }

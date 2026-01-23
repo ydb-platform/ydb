@@ -269,7 +269,7 @@ public:
     TAsyncDescribeReplicationResult DescribeReplication(const std::string& path,
         const TDescribeReplicationSettings& settings = TDescribeReplicationSettings());
 
-    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path);
+    TAsyncDescribeTransferResult DescribeTransfer(const std::string& path, bool includeStats = false);
 
 private:
     std::shared_ptr<TImpl> Impl_;

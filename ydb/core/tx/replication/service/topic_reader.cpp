@@ -3,6 +3,7 @@
 #include "transfer_reader_stats.h"
 #include "worker.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/transfer/transfer_writer.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -35,9 +36,6 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             << ": worker# " << Worker);
 
         Y_ABORT_UNLESS(!ReadSession);
-        if (Settings.ReportStats_) {
-            Y_ABORT_UNLESS(!Settings.GetBase().Decompress_);
-        }
         Send(YdbProxy, new TEvYdbProxy::TEvCreateTopicReaderRequest(Settings));
     }
 
@@ -65,58 +63,78 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         Send(ReadSession, new TEvYdbProxy::TEvReadTopicRequest(settings));
         if (Settings.ReportStats_) {
             SendOperationChange(EWorkerOperation::READ);
-            Requests.emplace_back(Now(), GetElapsedTicksAsSeconds());
         }
+        ReadQueue.emplace_back(Now());
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
-        ui64 maxOffset = 0;
-        ui64 totalSize = 0;
         LOG_D("Handle " << ev->Get()->ToString());
 
-        auto& result = ev->Get()->Result;
-        TVector<TTopicMessage> records(::Reserve(result.Messages.size()));
-        auto readDoneTime = Now();
-        auto readDoneElapsed = GetElapsedTicksAsSeconds();
-        bool descompressRequired = false;
-        for (auto& msg : result.Messages) {
+        Y_ABORT_UNLESS(!ReadQueue.empty());
+        TResponseDataTrancker req{GetElapsedTicksAsSeconds(), Now() - ReadQueue.front().ReadStartTime, ev};
+        if (AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
+            DecompressQueue.emplace_back(std::move(req));
+            Schedule(TDuration::Zero(), new TEvents::TEvWakeup(DecompressWakeupTag));
+        } else {
+            ResponseQueue.emplace_back(std::move(req));
+            ProcessData();
+        }
+        ReadQueue.pop_front();
+    }
+
+    void DecompressData() {
+        Y_ABORT_UNLESS(!DecompressQueue.empty());
+        auto& requestData = DecompressQueue.front();
+        auto& readResult = requestData.DataEv->Get()->Result;
+        for (auto& msg : readResult.Messages) {
             bool compressed = (msg.GetCodec() != NYdb::NTopic::ECodec::RAW);
-            if (!Settings.ReportStats_) {
-                Y_ABORT_UNLESS(!compressed);
-            }
-            if (compressed) {
-                if (!descompressRequired) {
+            if (compressed && AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
+                if (!requestData.DecompressionDone && Settings.ReportStats_) {
                     SendOperationChange(EWorkerOperation::DECOMPRESS);
                 }
-                descompressRequired = true;
-                Decompress(msg);
+                requestData.DecompressionDone = true;
+                DecompressMessage(msg);
             }
-            maxOffset = msg.GetOffset();
-            totalSize += msg.GetData().size();
-            records.push_back(std::move(msg));
         }
-        auto* event = new TEvWorker::TEvData(result.PartitionId, ToString(result.PartitionId), std::move(records));
-
-        if (Settings.ReportStats_) {
-            Y_ABORT_UNLESS(!Requests.empty());
-            auto request = Requests.front();
-            Requests.pop_front();
-
-            event->Stats = std::make_unique<TWorkerDetailedStats>(EWorkerOperation::NONE, std::make_unique<TTransferReadStats>(),
-                    nullptr);
-            event->Stats->ReaderStats->ReadTime = readDoneTime - request.StartTime;
-            event->Stats->ReaderStats->DecompressCpu = descompressRequired ? TDuration::Seconds(readDoneElapsed - GetElapsedTicksAsSeconds()) : TDuration::Zero();
-            event->Stats->ReaderStats->Partition = result.PartitionId;
-            event->Stats->ReaderStats->Offset = maxOffset;
-            event->Stats->ReaderStats->Messages = result.Messages.size();
-            event->Stats->ReaderStats->Bytes = totalSize;
-        }
-        Send(Worker, event);
+        ResponseQueue.emplace_back(std::move(requestData));
+        DecompressQueue.pop_front();
+        Schedule(TDuration::Zero(), new TEvents::TEvWakeup(DecompressionDoneWakeupTag));
     }
-    void Decompress(TTopicMessage& message) {
+
+    void DecompressMessage(TTopicMessage& message) {
         const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(message.GetCodec()));
         auto decompressed = codecImpl->Decompress(message.GetData());
         message.GetData() = std::move(decompressed);
+    }
+
+    void ProcessData() {
+        Y_ABORT_UNLESS(!ResponseQueue.empty());
+        ui64 totalSize = 0;
+
+        auto& response = ResponseQueue.front();
+        auto& result = response.DataEv->Get()->Result;
+        TVector<TTopicMessage> records(::Reserve(result.Messages.size()));
+        auto msgCount = result.Messages.size();
+        ui64 maxOffset = result.Messages.back().GetOffset();
+        for (auto& msg : result.Messages) {
+            totalSize += msg.GetData().size();
+        }
+        auto* event = new TEvWorker::TEvData(result.PartitionId, ToString(result.PartitionId), std::move(result.Messages));
+
+        if (Settings.ReportStats_) {
+            event->Stats = std::make_unique<TWorkerDetailedStats>(EWorkerOperation::NONE, std::make_unique<TTransferReadStats>(),
+                    nullptr);
+            event->Stats->ReaderStats->ReadTime = response.ReadDuration;
+            event->Stats->ReaderStats->DecompressCpu = response.DecompressionDone
+                        ? TDuration::Seconds(GetElapsedTicksAsSeconds() - response.StartCpuUsageSec)
+                        : TDuration::Zero();
+            event->Stats->ReaderStats->Partition = result.PartitionId;
+            event->Stats->ReaderStats->Offset = maxOffset;
+            event->Stats->ReaderStats->Messages = msgCount;
+            event->Stats->ReaderStats->Bytes = totalSize;
+        }
+        ResponseQueue.pop_front();
+        Send(Worker, event);
     }
 
     void Handle(TEvYdbProxy::TEvEndTopicPartition::TPtr& ev) {
@@ -168,13 +186,28 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-
+        if (Settings.ReportStats_) {
+            SendError();
+        }
         switch (ev->Get()->Result.GetStatus()) {
         case NYdb::EStatus::SCHEME_ERROR:
         case NYdb::EStatus::BAD_REQUEST:
             return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         default:
             return Leave(TEvWorker::TEvGone::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
+        }
+    }
+
+    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        switch (ev->Get()->Tag) {
+            case DecompressWakeupTag:
+                DecompressData();
+                break;
+            case DecompressionDoneWakeupTag:
+                ProcessData();
+                break;
+            default:
+                LOG_W("Handle Wakeup with unexpected tag" << ev->Get()->Tag);
         }
     }
 
@@ -203,6 +236,13 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         Send(Worker, TEvWorker::TEvStatus::FromOperation(currentOperation));
     }
 
+    void SendError() {
+        auto* ev = TEvWorker::TEvStatus::FromOperation(EWorkerOperation::NONE);
+        ev->DetailedStats->ReaderStats = std::make_unique<TTransferReadStats>();
+        ev->DetailedStats->ReaderStats->Errors = 1;
+        Send(Worker, ev);
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::REPLICATION_REMOTE_TOPIC_READER;
@@ -229,18 +269,26 @@ public:
             hFunc(TEvYdbProxy::TEvStartTopicReadingSession, Handle);
             hFunc(TEvYdbProxy::TEvEndTopicPartition, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
+            hFunc(TEvents::TEvWakeup, HandleWakeup);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
 private:
-    struct TRequestTracker {
-        TInstant StartTime;
-        double StartCpuUsageSec;
+    struct TReadRequestDataTracker {
+        TInstant ReadStartTime;
     };
 
+    struct TResponseDataTrancker {
+        double StartCpuUsageSec;
+        TDuration ReadDuration;
+        TEvYdbProxy::TEvReadTopicResponse::TPtr DataEv;
+        bool DecompressionDone = false;
+    };
+
+
     const TActorId YdbProxy;
-    const TEvYdbProxy::TTopicReaderSettings Settings;
+    TEvYdbProxy::TTopicReaderSettings Settings;
     mutable TMaybe<TString> LogPrefix;
 
     TActorId Worker;
@@ -250,7 +298,12 @@ private:
 
     bool CreatingReadSessionInProgress = false;
     bool StoppingInProgress = false;
-    TDeque<TRequestTracker> Requests;
+    TDeque<TReadRequestDataTracker> ReadQueue;
+    TDeque<TResponseDataTrancker> DecompressQueue;
+    TDeque<TResponseDataTrancker> ResponseQueue;
+
+    constexpr const static ui64 DecompressWakeupTag = 1;
+    constexpr const static ui64 DecompressionDoneWakeupTag = 2;
 }; // TRemoteTopicReader
 
 IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts) {

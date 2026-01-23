@@ -161,23 +161,7 @@ private:
     }
 
     static void Convert(NKikimrReplication::TEvDescribeReplicationResult& record, Replication::DescribeTransferResult& result) {
-<<<<<<< HEAD
         FillTransferDescription(result, record);
-=======
-        ConvertConnectionParams(record.GetConnectionParams(), *result.mutable_connection_params());
-        ConvertState(*record.MutableState(), result);
-        if (record.HasStats()&& record.GetStats().HasTransfer()) {
-            result.mutable_stats()->CopyFrom(record.GetStats().GetTransfer());
-        }
-
-        const auto& transferSpecific = record.GetTransferSpecific();
-        result.set_source_path(transferSpecific.GetTarget().GetSrcPath());
-        result.set_destination_path(transferSpecific.GetTarget().GetDstPath());
-        result.set_consumer_name(transferSpecific.GetTarget().GetConsumerName());
-        result.set_transformation_lambda(transferSpecific.GetTarget().GetTransformLambda());
-        result.mutable_batch_settings()->set_size_bytes(transferSpecific.GetBatching().GetBatchSizeBytes());
-        result.mutable_batch_settings()->mutable_flush_interval()->set_seconds(transferSpecific.GetBatching().GetFlushIntervalMilliSeconds() / 1000);
->>>>>>> ca26d076cb3 (Functional, w/o tests)
     }
 
     static void BuildRequest(const Replication::DescribeReplicationRequest* from, NKikimrReplication::TEvDescribeReplication& to) {

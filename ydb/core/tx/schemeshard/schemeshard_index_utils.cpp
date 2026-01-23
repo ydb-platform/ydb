@@ -1,3 +1,4 @@
+#include "schemeshard_info_types.h"
 #include "schemeshard_index_utils.h"
 
 #include <ydb/core/base/table_index.h>
@@ -6,9 +7,11 @@
 namespace NKikimr {
 namespace NTableIndex {
 
-void GetIndexObjectCount(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc, ui32& indexTableCount, ui32& sequenceCount, ui32& indexTableShards) {
-    indexTableCount = 1;
-    sequenceCount = 0;
+TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc) {
+    TIndexObjectCounts res;
+    res.IndexTableCount = 1;
+    res.SequenceCount = 0;
+    res.IndexTableShards = 0;
     switch (GetIndexType(indexDesc)) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -16,30 +19,31 @@ void GetIndexObjectCount(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
             const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
-            indexTableCount = (prefixVectorIndex ? 3 : 2);
-            sequenceCount = (prefixVectorIndex ? 1 : 0);
+            res.IndexTableCount = (prefixVectorIndex ? 3 : 2);
+            res.SequenceCount = (prefixVectorIndex ? 1 : 0);
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
-            indexTableCount = 1;
+            res.IndexTableCount = 1;
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
-            indexTableCount = 4;
+            res.IndexTableCount = 4;
             break;
         }
         default:
             Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDesc.GetType()));
             break;
     }
-    if (indexDesc.IndexImplTableDescriptionsSize() == indexTableCount) {
-        indexTableShards = 0;
+    if (indexDesc.IndexImplTableDescriptionsSize() == res.IndexTableCount) {
         for (const auto& indexTableDesc: indexDesc.GetIndexImplTableDescriptions()) {
-            indexTableShards += TTableInfo::ShardsToCreate(indexTableDesc);
+            auto implShards = NSchemeShard::TTableInfo::ShardsToCreate(indexTableDesc);
+            res.IndexTableShards += implShards;
         }
     } else {
-        indexTableShards = indexTableCount;
+        res.IndexTableShards = res.IndexTableCount;
     }
+    return res;
 }
 
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription &tableDescr) {

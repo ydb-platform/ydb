@@ -170,15 +170,15 @@ public:
                 const auto checks = indexPath.Check();
 
                 // Tables are actually created in schemeshard__operation_create_build_index so limits are rechecked there too
-                ui32 indexTableCount = 0, indexSequenceCount = 0, indexTableShards = 0;
-                NTableIndex::GetIndexObjectCount(indexDesc, indexTableCount, indexSequenceCount, indexTableShards);
-                if (indexSequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
-                    ++indexTableShards;
+                auto counts = NTableIndex::GetIndexObjectCounts(indexDesc);
+                if (counts.SequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
+                    ++counts.IndexTableShards;
                 }
 
-                checks.PathsLimit(1 + indexTableCount + indexSequenceCount);
+                checks.PathsLimit(1 + counts.IndexTableCount + counts.SequenceCount);
                 if (!request.GetInternal()) {
-                    checks.ShardsLimit(indexTableShards);
+                    checks
+                        .ShardsLimit(counts.IndexTableShards);
                 }
 
                 if (!checks) {

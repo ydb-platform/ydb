@@ -82,15 +82,14 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
-    ui32 indexTableCount = 0, sequenceCount = 0, indexTableShards = 0;
-    GetIndexObjectCount(indexDesc, indexTableCount, sequenceCount, indexTableShards);
+    auto counts = GetIndexObjectCounts(indexDesc);
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
     auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
     auto domainInfo = table.DomainInfo();
 
-    if (sequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
-        ++indexTableShards;
+    if (counts.SequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
+        ++counts.IndexTableShards;
     }
 
     const auto index = table.Child(indexDesc.GetName());
@@ -112,12 +111,12 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         checks
             .IsValidLeafName(context.UserToken.Get())
-            .PathsLimit(1 + indexTableCount + sequenceCount)
+            .PathsLimit(1 + counts.IndexTableCount + counts.SequenceCount)
             .DirChildrenLimit();
 
         if (!tx.GetInternal()) {
             checks
-                .ShardsLimit(indexTableShards);
+                .ShardsLimit(counts.IndexTableShards);
         }
 
         if (!checks) {

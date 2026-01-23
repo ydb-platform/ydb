@@ -27,9 +27,9 @@
 /* pure SSE2 implementation is very slow, so only use the more optimized SSSE3+
  * https://bugs.python.org/issue31834 */
 #if defined(__SSSE3__) || defined(__SSE4_1__) || defined(__AVX__) || defined(__XOP__)
-#include "impl/blake2b.c"
+#error #include "impl/blake2b.c"
 #else
-#include "impl/blake2b-ref.c"
+#error #include "impl/blake2b-ref.c"
 #endif
 #endif // !HAVE_LIBB2
 

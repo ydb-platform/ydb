@@ -169,6 +169,11 @@ extern "C" {
   BLAKE2_API int blake2sp( uint8_t *out, const void *in, const void *key, size_t outlen, size_t inlen, size_t keylen );
   BLAKE2_API int blake2bp( uint8_t *out, const void *in, const void *key, size_t outlen, size_t inlen, size_t keylen );
 
+  static inline int blake2( uint8_t *out, const void *in, const void *key, size_t outlen, size_t inlen, size_t keylen )
+  {
+    return blake2b( out, in, key, outlen, inlen, keylen );
+  }
+
 #if defined(__cplusplus)
 }
 #endif

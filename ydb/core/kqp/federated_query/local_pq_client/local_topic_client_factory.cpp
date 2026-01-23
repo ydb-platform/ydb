@@ -28,5 +28,3 @@ NYql::IPqLocalClientFactory::TPtr CreateLocalTopicClientFactory(const TLocalTopi
 }
 
 } // namespace NKikimr::NKqp
-
-

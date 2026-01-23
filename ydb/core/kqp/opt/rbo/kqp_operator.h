@@ -402,7 +402,7 @@ class IOperator {
     virtual TString ToString(TExprContext& ctx) = 0;
 
     bool IsSingleConsumer() { return Parents.size() <= 1; }
-    const TTypeAnnotationNode * GetTypeAnn() { return Type; }
+    const TTypeAnnotationNode* GetTypeAnn() { return Type; }
 
     const EOperator Kind;
     TPhysicalOpProps Props;

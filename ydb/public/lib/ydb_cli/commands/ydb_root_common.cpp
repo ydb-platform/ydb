@@ -616,7 +616,12 @@ void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
                 Password = envPassword.GetRef();
             }
         }
-        if (passwordResult->GetValueSource() != EOptionValueSource::DefaultValue && userResult->GetValueSource() == EOptionValueSource::DefaultValue) { // Both from command line or both from env
+        if (passwordResult->GetValueSource() != EOptionValueSource::DefaultValue && userResult->GetValueSource() == EOptionValueSource::DefaultValue) { // Password provided without user (user has default value)
+            if (passwordResult->GetValueSource() == EOptionValueSource::EnvironmentVariable) {
+                Password.reset();
+                PasswordFile.clear();
+                return;
+            }
             MisuseErrors.push_back("User password was provided without user name");
             return;
         }

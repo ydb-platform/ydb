@@ -733,6 +733,27 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             "--password-file", explicitPasswordFile,
             "scheme", "ls",
         });
+
+        // password-file without user is not allowed
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        });
+
+        // password from env without user is ignored
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "env-password"},
+        });
     }
 
     Y_UNIT_TEST_F(StaticCredentialsProfileActivePasswordFile, TCliTestFixture) {

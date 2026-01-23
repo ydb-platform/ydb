@@ -68,7 +68,7 @@ FROM
 WITH (
     FORMAT = csv_with_names,
     SCHEMA = (
-        Year Int32 NOT NULL, 
+        Year Int32 NOT NULL,
         Manufacturer String NOT NULL,
         Model String NOT NULL,
         Price Double NOT NULL
@@ -313,7 +313,7 @@ LIMIT 1
 Пример запроса:
 
 ```yql
-$input = SELECT 
+$input = SELECT
     Yson::ConvertTo(
         Data, Struct<
             update: Struct<volume: Uint64>,

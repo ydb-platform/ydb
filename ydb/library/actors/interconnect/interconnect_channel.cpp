@@ -494,7 +494,10 @@ namespace NActors {
         Y_ABORT_UNLESS(rdmaCreds->SerializePartialToArray(ptr, credsSerializedSize));
         ptr += credsSerializedSize;
         WriteUnaligned<ui32>(ptr, checkSum);
-        OutputQueueSize -= event.EventSerializedSize;
+
+        if (lastPart) {
+            OutputQueueSize -= event.EventSerializedSize;
+        }
 
         task.Write<false>(buffer, partSize);
 

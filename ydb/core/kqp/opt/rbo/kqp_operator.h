@@ -542,11 +542,12 @@ class TOpProject : public IUnaryOperator {
 
 struct TOpAggregationTraits {
     TOpAggregationTraits() = default;
-    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction)
-        : OriginalColName(originalColName), AggFunction(aggFunction) {}
+    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction, const TInfoUnit& resultColName)
+        : OriginalColName(originalColName), AggFunction(aggFunction), ResultColName(resultColName) {}
 
     TInfoUnit OriginalColName;
     TString AggFunction;
+    TInfoUnit ResultColName;
 };
 
 class TOpAggregate: public IUnaryOperator {

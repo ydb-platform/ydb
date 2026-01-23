@@ -1050,7 +1050,8 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     TStringBuilder strBuilder;
     strBuilder << "Aggregate [";
     for (ui32 i = 0; i < AggregationTraitsList.size(); ++i) {
-        strBuilder << AggregationTraitsList[i].AggFunction << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ")";
+        strBuilder << AggregationTraitsList[i].AggFunction << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ") as "
+                   << AggregationTraitsList[i].ResultColName.GetFullName();
         if (i + 1 != AggregationTraitsList.size()) {
             strBuilder << ", ";
         }
@@ -1063,7 +1064,7 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
             strBuilder << ", ";
         }
     }
-    strBuilder << "]]";
+    strBuilder << "]] ";
     if (AggregationPhase == EAggregationPhase::Intermediate) {
         strBuilder << "Initial";
     } else {

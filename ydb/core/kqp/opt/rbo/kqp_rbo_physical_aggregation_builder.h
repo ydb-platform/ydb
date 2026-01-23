@@ -11,21 +11,20 @@ using namespace NKikimr::NKqp;
 class TPhysicalAggregationBuilder {
     // Internal representation of physical aggregation traits.
     struct TPhysicalAggregationTraits {
-        TPhysicalAggregationTraits(const TString& inputColName, const TTypeAnnotationNode* inputItemType, const TString& aggFieldName,
-                                   const TTypeAnnotationNode* outputItemType, const TString& aggFunc, const TString& stateFieldName)
-            : InputColName(inputColName)
-            , InputItemType(inputItemType)
-            , AggFieldName(aggFieldName)
-            , OutputItemType(outputItemType)
+        TPhysicalAggregationTraits(const TString& aggFieldName, const TString stateFieldName, const TString& aggFunc, const TTypeAnnotationNode* inputItemType,
+                                   const TTypeAnnotationNode* outputItemType)
+            : AggFieldName(aggFieldName)
+            , StateFieldName(stateFieldName)
             , AggFunc(aggFunc)
-            , StateFieldName(stateFieldName) {
+            , InputItemType(inputItemType)
+            , OutputItemType(outputItemType) {
         }
-        TString InputColName;
-        const TTypeAnnotationNode* InputItemType;
+
         TString AggFieldName;
-        const TTypeAnnotationNode* OutputItemType;
-        TString AggFunc;
         TString StateFieldName;
+        TString AggFunc;
+        const TTypeAnnotationNode* InputItemType;
+        const TTypeAnnotationNode* OutputItemType;
     };
 
 public:
@@ -113,9 +112,10 @@ private:
     // Helpers.
     TString GetTypeToSafeCastForSumAggregation(const TTypeAnnotationNode* itemType);
     TVector<TString> GetInputColumns(const TVector<TOpAggregationTraits>& aggregationTraitsList, const TVector<TInfoUnit>& keyColumns);
-    void GetPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TOpAggregationTraits>& aggregationTraitsList,
-                                      TVector<TString>& inputFields, TVector<TPhysicalAggregationTraits>& aggTraits, THashMap<TString, TString>& projectionMap,
-                                      const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* outputType);
+    void BuildPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TString>& keyColumns,
+                                        const TVector<TOpAggregationTraits>& aggregationTraitsList, TVector<TString>& inputFields,
+                                        TVector<TPhysicalAggregationTraits>& aggTraits, THashMap<TString, TString>& projectionMap,
+                                        const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* outputType);
     TVector<TString> GetKeyFields(const TVector<TInfoUnit>& keyColumns);
 
     // Helpers for scalar aggregation.

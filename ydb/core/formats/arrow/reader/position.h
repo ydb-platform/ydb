@@ -478,10 +478,7 @@ public:
 
     std::partial_ordering Compare(const TSortableBatchPosition& item) const {
         Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
-        AFL_VERIFY(item.Sorting->GetColumns().size() == Sorting->GetColumns().size())
-            ("item.Sorting->GetColumns().size()", item.Sorting->GetColumns().size())
-            ("Sorting->GetColumns().size()!", Sorting->GetColumns().size())
-            ;
+        Y_ABORT_UNLESS(item.Sorting->GetColumns().size() == Sorting->GetColumns().size());
         const auto directResult = Sorting->Compare(Position, *item.Sorting, item.GetPosition());
         return ApplyOptionalReverseForCompareResult(directResult);
     }

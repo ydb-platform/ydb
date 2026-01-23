@@ -576,7 +576,7 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
 
         start = TAppData::TimeProvider->Now();
 
-        auto& intervals = spg->GetPortionsIntervalTreeVerified();
+        const auto& intervals = spg->GetPortionsIntervalTreeVerified();
         if (pkRangesFilter.IsEmpty()) {
             intervals.EachIntersection(NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeLeftInf(),
                                         NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeRightInf(), collector);

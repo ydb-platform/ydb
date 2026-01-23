@@ -70,7 +70,7 @@ public:
         return !Object;
     }
 
-    const auto& GetSortableBatchPosition() const {
+    const NArrow::NMerger::TSortableBatchPosition& GetSortableBatchPosition() const {
         AFL_VERIFY(Object);
         return Object->Batch;
     }

@@ -96,7 +96,7 @@ public:
         if (lhs.GetKey() < rhs.GetKey()) {
             return -1;
         }
-        if (lhs.GetKey() > rhs.GetKey()) { // ??
+        if (lhs.GetKey() > rhs.GetKey()) {
             return 1;
         }
         return TBorderModeTraits::CompareEqualPoint(lhs.GetMode(), rhs.GetMode());

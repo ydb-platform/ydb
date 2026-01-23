@@ -182,10 +182,25 @@ public:
     //     return {array->GetValues<ui8>(1)};
     // }
 
-    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>&) override {
-        Y_ENSURE(array->buffers.size() > 0);
+    TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& spareBuffers) override {
+		Y_ENSURE(array->buffers.size() > 0);
 
-        return {array->GetValues<ui8>(0)};
+		const auto& bitmap = array->buffers[0];
+		if (!bitmap) {
+			return { nullptr, nullptr };
+		}
+
+		const int64_t offset = array->offset;
+		const int64_t len    = array->length;
+
+		auto result = CopyBitmap(Pool_, bitmap, offset, len);
+
+		// если был offset != 0 — result != bitmap и мы обязаны продлить его жизнь
+		if (result != bitmap) {
+			spareBuffers.push_back(result);
+		}
+
+		return { result ? result->data() : nullptr, nullptr };
     }
 
 	TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {

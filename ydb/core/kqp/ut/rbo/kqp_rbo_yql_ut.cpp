@@ -1058,12 +1058,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto session2 = db.CreateSession().GetValueSync().GetSession();
 
         std::vector<std::string> queries = {
-            /*
             R"(
                 PRAGMA YqlSelect = 'force';
-                SELECT bar.id FROM `/Root/bar` as bar where bar.id == (SELECT max(foo.id) FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.name == lastname);
+                SELECT bar.id FROM `/Root/bar` as bar where bar.id == (SELECT max(foo.id) FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.name == lastname AND foo.id==1);
             )",
-            */
              R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT bar.id FROM `/Root/bar` as bar where EXISTS (SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.name == lastname AND foo.id==1);

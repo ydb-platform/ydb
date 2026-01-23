@@ -718,7 +718,7 @@ TOpAddDependencies::TOpAddDependencies(std::shared_ptr<IOperator> input, TPositi
 
 TVector<TInfoUnit> TOpAddDependencies::GetOutputIUs() {
     auto ius = GetInput()->GetOutputIUs();
-    ius.insert(ius.begin(), Dependencies.begin(), Dependencies.end());
+    ius.insert(ius.end(), Dependencies.begin(), Dependencies.end());
     return ius;
 }
 

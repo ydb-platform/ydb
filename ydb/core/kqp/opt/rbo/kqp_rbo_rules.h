@@ -16,7 +16,7 @@ namespace NKqp {
 
  class TRemoveIdenityMapRule : public ISimplifiedRule {
   public:
-    TRemoveIdenityMapRule() : ISimplifiedRule("Remove identity map", ERuleProperties::RequireParents, true) {}
+    TRemoveIdenityMapRule() : ISimplifiedRule("Remove identity map", ERuleProperties::RequireParents) {}
 
     virtual std::shared_ptr<IOperator> SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -41,7 +41,7 @@ class TExtractJoinExpressionsRule : public IRule {
 
  class TPullUpCorrelatedFilterRule : public IRule {
   public:
-    TPullUpCorrelatedFilterRule() : IRule("Pull up correlated filter", ERuleProperties::RequireParents, true) {}
+    TPullUpCorrelatedFilterRule() : IRule("Pull up correlated filter", ERuleProperties::RequireParents) {}
 
     virtual bool MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
  };

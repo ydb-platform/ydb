@@ -83,7 +83,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     ui32 indexTableCount = 0, sequenceCount = 0, indexTableShards = 0;
-    TTableInfo::GetIndexObjectCount(indexDesc, indexTableCount, sequenceCount, indexTableShards);
+    GetIndexObjectCount(indexDesc, indexTableCount, sequenceCount, indexTableShards);
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
     auto tableInfo = context.SS->Tables.at(table.Base()->PathId);

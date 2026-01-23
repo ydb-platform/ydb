@@ -46,7 +46,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     ui32 totalIndexShards = 0;
     for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
         ui32 indexTableCount = 0, indexSequenceCount = 0, indexTableShards = 0;
-        TTableInfo::GetIndexObjectCount(indexDesc, indexTableCount, indexSequenceCount, indexTableShards);
+        GetIndexObjectCount(indexDesc, indexTableCount, indexSequenceCount, indexTableShards);
         totalIndexTables += indexTableCount;
         totalSequences += indexSequenceCount;
         totalIndexShards += indexTableShards;

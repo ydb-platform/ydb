@@ -171,7 +171,7 @@ public:
 
                 // Tables are actually created in schemeshard__operation_create_build_index so limits are rechecked there too
                 ui32 indexTableCount = 0, indexSequenceCount = 0, indexTableShards = 0;
-                TTableInfo::GetIndexObjectCount(indexDesc, indexTableCount, indexSequenceCount, indexTableShards);
+                NTableIndex::GetIndexObjectCount(indexDesc, indexTableCount, indexSequenceCount, indexTableShards);
                 if (indexSequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
                     ++indexTableShards;
                 }

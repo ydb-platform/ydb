@@ -171,7 +171,16 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                 mapsTo.push_back(col);
             }
             for (const auto& trait : agg->AggregationTraitsList) {
+                // FIXME: We break the rename chain in aggregate right now, need to figure out whether this is
+                // the correct thing to do
                 mapsTo.push_back(trait.OriginalColName);
+
+                //auto from = trait.OriginalColName;
+                //auto to = trait.ResultColName;
+                //mapsTo.push_back(to);
+                //if (to != from) {
+                //    mapsFrom[to] = from;
+                //}
             }
         }
 
@@ -333,7 +342,7 @@ void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
         }
 
         // If we have anything but the map operator, apply the stop list to the mapping
-        if (it.Current->Kind != EOperator::Map) {
+        if (it.Current->Kind != EOperator::Map && it.Current->Kind != EOperator::Aggregate) {
             for (auto s : scopedStopList) {
                 if (scopedRenameMap.contains(s)) {
                     scopedRenameMap.erase(s);

@@ -500,7 +500,7 @@ private:
 
 class TChannelPool {
 public:
-    TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, bool tcpNoDelay, const TDuration& expireTime = TDuration::Minutes(6));
+    TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime = TDuration::Minutes(6), bool tcpNoDelay = true);
     //Allows to CreateStub from TStubsHolder under lock
     //The callback will be called just during GetStubsHolderLocked call
     void GetStubsHolderLocked(const std::string& channelId, const TGRpcClientConfig& config, std::function<void(TStubsHolder&)> cb);

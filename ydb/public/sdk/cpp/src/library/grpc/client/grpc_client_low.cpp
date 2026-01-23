@@ -93,8 +93,8 @@ private:
     static int Compare(grpc_socket_mutator* a, grpc_socket_mutator* b) {
         const auto* selfA = Cast(a);
         const auto* selfB = Cast(b);
-        auto tupleA = std::make_tuple(selfA->Idle_, selfA->Count_, selfA->Interval_, selfA->TcpNoDelay_);
-        auto tupleB = std::make_tuple(selfB->Idle_, selfB->Count_, selfB->Interval_, selfB->TcpNoDelay_);
+        auto tupleA = std::make_tuple(selfA->IsKeepAliveEnabled_, selfA->Idle_, selfA->Count_, selfA->Interval_, selfA->TcpNoDelay_);
+        auto tupleB = std::make_tuple(selfB->IsKeepAliveEnabled_, selfB->Idle_, selfB->Count_, selfB->Interval_, selfB->TcpNoDelay_);
         return tupleA < tupleB ? -1 : tupleA > tupleB ? 1 : 0;
     }
     static void Destroy(grpc_socket_mutator* mutator) {
@@ -145,7 +145,7 @@ void TGRpcRequestProcessorCommon::GetInitialMetadata(std::unordered_multimap<std
     }
 }
 
-TChannelPool::TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, bool tcpNoDelay, const TDuration& expireTime)
+TChannelPool::TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime, bool tcpNoDelay)
     : TcpKeepAliveSettings_(tcpKeepAliveSettings)
     , TcpNoDelay_(tcpNoDelay)
     , ExpireTime_(expireTime)

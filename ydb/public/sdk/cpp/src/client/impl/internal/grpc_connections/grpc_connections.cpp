@@ -166,7 +166,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , TcpNoDelay_(params->GetTcpNoDelay())
     , SocketIdleTimeout_(TDeadline::SafeDurationCast(params->GetSocketIdleTimeout()))
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    , ChannelPool_(TcpKeepAliveSettings_, TcpNoDelay_, params->GetSocketIdleTimeout())
+    , ChannelPool_(TcpKeepAliveSettings_, params->GetSocketIdleTimeout(), TcpNoDelay_)
 #endif
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())

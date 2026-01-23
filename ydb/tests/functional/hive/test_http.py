@@ -22,7 +22,7 @@ class TestHiveHttpInterface(object):
         params = {'TabletID': 72057594037968897, 'page': 'SetDown', 'node': 7, 'down': 1}
 
         get_request = requests.get(url, params=params)
-        assert 400 <= get_request.status_code < 500
+        assert get_request.status_code == 400
 
         post_request = requests.post(url, data=params)
-        assert 200 <= post_request.status_code < 300
+        assert post_request.status_code == 200

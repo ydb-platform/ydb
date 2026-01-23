@@ -3133,6 +3133,8 @@ namespace Tests {
             case NMon::RemoteBinaryInfoRes:
                 res = handle->Get<NMon::TEvRemoteBinaryInfoRes>()->Blob;
                 break;
+            default:
+                Y_FAIL("unreachable");
         }
         Cerr << res << Endl;
         return res;

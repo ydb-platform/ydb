@@ -1,6 +1,6 @@
 # Форматы данных потоковых запросов при чтении/записи топиков
 
-В данном разделе описываются форматы данных, поддерживаемые в {{ydb-full-name}} при чтении из топиков, и список поддерживаемых [YQL типов](../yql/reference/types/index.md) для каждого формата данных.
+В данном разделе описываются форматы данных, поддерживаемые в {{ydb-full-name}} при чтении из топиков, и список поддерживаемых [YQL типов](../../yql/reference/types/index.md) для каждого формата данных.
 
 ## Поддерживаемые форматы данных {#formats}
 
@@ -42,7 +42,7 @@ FROM
     ...
 ```
 
-Описание функций вы можете найти в документации: [TableRow](../yql/reference/builtins/basic#tablerow), [Yson::From](../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../yql/reference/builtins/basic#unwrap), [ToBytes](../yql/reference/builtins/basic#to-from-bytes).
+Описание функций вы можете найти в документации: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
 
 ## Форматы при чтении данных {#read_formats}
 
@@ -149,7 +149,7 @@ LIMIT 1
 
 ### Формат json_each_row {#json_each_row}
 
-Данный формат основан на [JSON-представлении](https://ru.wikipedia.org/wiki/JSON) данных. В этом формате внутри каждого сообщения в топике должен находиться объект в корректном JSON-представлении. Такой формат используется при передаче данных через потоковые системы, например, Apache Kafka или [Топики {{ydb-full-name}}](../concepts/datamodel/topic.md).
+Данный формат основан на [JSON-представлении](https://ru.wikipedia.org/wiki/JSON) данных. В этом формате внутри каждого сообщения в топике должен находиться объект в корректном JSON-представлении. Такой формат используется при передаче данных через потоковые системы, например, Apache Kafka или [Топики {{ydb-full-name}}](../../concepts/datamodel/topic.md).
 Несколько отдельных JSON в одном сообщении не поддерживается; JSON-список также не поддерживается.
 
 Пример данных (в одном сообщении):
@@ -238,7 +238,7 @@ LIMIT 1
 
 ### Формат raw {#raw}
 
-Данный формат позволяет считывать содержимое сообщений как есть, в "сыром" виде. Считанные таким образом данные можно обработать средствами [YQL](../yql/reference/udf/list/string). Cхема по умолчанию: `SCHEMA(Data String)`.
+Данный формат позволяет считывать содержимое сообщений как есть, в "сыром" виде. Считанные таким образом данные можно обработать средствами [YQL](../../yql/reference/udf/list/string). Cхема по умолчанию: `SCHEMA(Data String)`.
 
 Пример запроса:
 
@@ -304,7 +304,7 @@ LIMIT 1
 
 ### Парсинг JSON библиотекой Yson {#json_yson}
 
-Пример данных (формат [Change Data Capture](../concepts/cdc.md)):
+Пример данных (формат [Change Data Capture](../../concepts/cdc.md)):
 
 ```json
 {"update":{"volume":10,"product":"bWlsaw=="},"key":[6],"ts":[1765192622420,18446744073709551615]}

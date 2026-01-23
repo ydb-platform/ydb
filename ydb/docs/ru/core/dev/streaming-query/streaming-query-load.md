@@ -4,7 +4,7 @@
 
 В потоковых запросах возможно присоединение к потоку данных из S3 с помощью конструкции `JOIN`. При этом поток обязательно должен находиться в левой части джойна. Механизм имеет ограничения, т.к. правая часть джойна полностью помещается в оперативную память процесса.
 
-Обогащение данных (S3) возможно через [внешние источники данных](../concepts/federated_query/s3/external_data_source.md).
+Обогащение данных (S3) возможно через [внешние источники данных](../../concepts/federated_query/s3/external_data_source.md).
 
 Подготовка источников данных:
 
@@ -79,7 +79,7 @@ END DO
 
 ## Запись в таблицы {#table-write}
 
-Запись результата в таблицу {{ ydb-short-name }} возможна с помощью [UPSERT INTO](../yql/reference/syntax/upsert_into).
+Запись результата в таблицу {{ ydb-short-name }} возможна с помощью [UPSERT INTO](../../yql/reference/syntax/upsert_into).
 
 ```yql
 CREATE STREAMING QUERY query_with_table_write AS
@@ -105,5 +105,10 @@ WITH (
 END DO
 ```
 
-[INSERT INTO](../yql/reference/syntax/insert_into) не поддерживается.
-Запись в таблицы {{ ydb-short-name }}, находящихся во внешних БД, не поддерживается.
+{% note alert %}
+
+Не поддерживаются:
+* команда [INSERT INTO](../../yql/reference/syntax/insert_into);
+* Запись в таблицы {{ ydb-short-name }}, находящихся во внешних БД
+
+{% endnote %}

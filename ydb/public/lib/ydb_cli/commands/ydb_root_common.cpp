@@ -322,10 +322,10 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         auto userParser = [this](const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly) -> bool {
             Y_UNUSED(isFileName);
             Y_UNUSED(errors);
-            TString user;
-            if (authData["user"]) {
-                user = authData["user"].as<TString>();
+            if (!authData["user"]) {
+                return false;
             }
+            TString user = authData["user"].as<TString>();
             if (value) {
                 *value = user;
             }
@@ -593,17 +593,53 @@ void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
         return;
     }
 
+    const TOptionParseResult* userResult = ParseResult->FindResult("user");
+    const TOptionParseResult* passwordResult = ParseResult->FindResult("password-file");
+    // Handle explicit --password-file without any user before auth method is chosen.
+    // Example: "ydb --password-file pwd.txt scheme ls" should fail even if
+    // static-credentials wasn't selected as the auth method.
+    if (passwordResult) {
+        const EOptionValueSource passwordSource = passwordResult->GetValueSource();
+        const bool hasUser =
+            userResult && userResult->GetValueSource() != EOptionValueSource::DefaultValue;
+        if (passwordSource == EOptionValueSource::Explicit && !hasUser) {
+            MisuseErrors.push_back("User password was provided without user name");
+            return;
+        }
+        if (passwordSource == EOptionValueSource::EnvironmentVariable && !hasUser) {
+            // Ignore YDB_PASSWORD without any user, even if static-credentials isn't selected.
+            Password.reset();
+            PasswordFile.clear();
+        }
+    }
+
     if (ParseResult->GetChosenAuthMethod() != "static-credentials") {
         return;
     }
 
-    const TOptionParseResult* userResult = ParseResult->FindResult("user");
-    const TOptionParseResult* passwordResult = ParseResult->FindResult("password-file");
-    if (passwordResult && userResult) {
-        if (passwordResult->GetValueSource() != EOptionValueSource::DefaultValue && userResult->GetValueSource() == EOptionValueSource::DefaultValue) { // Both from command line or both from env
-            MisuseErrors.push_back("User password was provided without user name");
-            return;
+    if (passwordResult) {
+        const EOptionValueSource passwordSource = passwordResult->GetValueSource();
+        const EOptionValueSource userSource = userResult
+            ? userResult->GetValueSource()
+            : EOptionValueSource::DefaultValue;
+        // Ignore profile password if user comes from a different source.
+        const bool ignoreExplicitProfilePassword =
+            passwordSource == EOptionValueSource::ExplicitProfile &&
+            userSource != EOptionValueSource::ExplicitProfile;
+        const bool ignoreActiveProfilePassword =
+            passwordSource == EOptionValueSource::ActiveProfile &&
+            userSource != EOptionValueSource::ActiveProfile;
+        if (ignoreExplicitProfilePassword || ignoreActiveProfilePassword) {
+            Password.reset();
+            PasswordFile.clear();
+            if (TMaybe<TString> envPassword = TryGetEnv("YDB_PASSWORD")) {
+                Password = envPassword.GetRef();
+            }
         }
+    }
+
+    if (!MisuseErrors.empty()) {
+        return;
     }
 
     if (UserName.empty()) {

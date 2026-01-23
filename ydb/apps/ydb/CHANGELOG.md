@@ -10,6 +10,7 @@
 * Added the `--include-index-data` option to the `ydb export s3` command, enabling index data export.
 * Added the `--index-population-mode` option to the `ydb import s3` command, allowing selection of the index population mode (e.g. build or import).
 * Added unified time interval format support across CLI commands. Options accepting time durations now support explicit time units (e.g., `5s`, `2m`, `1h`) while maintaining backward compatibility with plain numbers interpreted using their original default units.
+* Fixed static credentials parsing to avoid using a profile password when the username comes from another source.
 
 ## 2.28.0 ##
 

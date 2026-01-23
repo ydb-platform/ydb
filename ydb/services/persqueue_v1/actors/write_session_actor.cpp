@@ -1547,8 +1547,9 @@ void TWriteSessionActor<UseMigrationProtocol>::LogSession(const TActorContext& c
     }
     LOG_INFO_S(
             ctx, NKikimrServices::PQ_WRITE_PROXY,
-            "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie << " userAgent=\"" << UserAgent
-                                      << "\" ip=" << PeerName << " proto=" << ProtoName << " "
+            "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie 
+                                      << " userAgent=\"" << UserAgent
+                                      << "\" ip=" << PeerName << " proto=" << ProtoName
                                       << " user=" << (Token ? Token->GetUserSID() : "-")
                                       << " topic=" << topic_path
                                       << " durationSec=" << (ctx.Now() - StartTime).Seconds()

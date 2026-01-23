@@ -1818,7 +1818,19 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             maxSeqNo = std::max(maxSeqNo, ack);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C(ackedSeqNos.size(), count, TStringBuilder() << "ackedSeqNos.size()=" << ackedSeqNos.size() << " count=" << count << " maxSeqNo=" << maxSeqNo);
+        std::unordered_set<ui64> missedSeqNos;
+        for (size_t i = 0; i < count; ++i) {
+            if (!ackedSeqNos.contains(i + 1)) {
+                missedSeqNos.insert(i + 1);
+            }
+        }
+
+        TStringBuilder missedSeqNosSb;
+        for (const auto& seqNo : missedSeqNos) {
+            missedSeqNosSb << seqNo << " ";
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ackedSeqNos.size(), count, TStringBuilder() << "ackedSeqNos.size()=" << ackedSeqNos.size() << " count=" << count << " maxSeqNo=" << maxSeqNo << " missedSeqNos=" << missedSeqNosSb.c_str());
         UNIT_ASSERT_VALUES_EQUAL(ackOrder.size(), count);
         for (ui64 i = 0; i < count; ++i) {
             UNIT_ASSERT_C(

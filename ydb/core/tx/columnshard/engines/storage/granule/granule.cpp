@@ -24,8 +24,11 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     Portions.emplace(info->GetPortionId(), info);
     OnAfterChangePortion(info, nullptr);
 
-    Intervals.AddRange(GranuleInternal::TPortionIntervalTree::TOwnedRange(GranuleInternal::TRowView(info, true), true,
-        GranuleInternal::TRowView(info, false), true), info);
+    if (IntervalTree) {
+        IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
+            PortionIntervalTree::TPositionView(info, true), true,
+            PortionIntervalTree::TPositionView(info, false), true), info);
+    }
 }
 
 void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& info) {
@@ -41,7 +44,9 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     } else {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
     }
-    Intervals.RemoveRanges(it->second);
+    if (IntervalTree) {
+        IntervalTree->RemoveRanges(it->second);
+    }
     DataAccessorsManager->RemovePortion(it->second);
     OnBeforeChangePortion(it->second);
     Portions.erase(it);
@@ -149,6 +154,9 @@ TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage&
     ResetAccessorsManager(versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor(), mmContext);
     AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex, StoragesManager);
+    if (HasAppData() && AppData()->ColumnShardConfig.GetEnableIntervalTreeForMetadataSelect()) {
+        IntervalTree = std::make_unique<PortionIntervalTree::TPortionIntervalTree>();
+    }
 }
 
 void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion) {
@@ -168,8 +176,11 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
     } else {
         auto portionId = portion->GetPortionId();
         AFL_VERIFY(Portions.emplace(portionId, portion).second);
-        Intervals.AddRange(GranuleInternal::TPortionIntervalTree::TOwnedRange(GranuleInternal::TRowView(portion, true), true,
-            GranuleInternal::TRowView(portion, false), true), portion);
+        if (IntervalTree) {
+            IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
+                PortionIntervalTree::TPositionView(portion, true), true,
+                PortionIntervalTree::TPositionView(portion, false), true), portion);
+        }
     }
 }
 

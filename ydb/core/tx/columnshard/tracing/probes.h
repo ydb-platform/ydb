@@ -30,7 +30,7 @@ namespace NKikimr::NColumnShard  {
     PROBE(ColumnEngineForLogsSelect, \
         GROUPS("Read"), \
         TYPES(TString, ui64, ui64, ui64, ui64, ui64), \
-        NAMES("pathId", "timeOfIntervalTreeSearchMs", "timeOfCompactedIsUsedMs", "totalPortionsCount", "totalFilteredPortionsCount", "totalResultSize")) \
+        NAMES("pathId", "timeOfInsertedSelectMs", "timeOfCompactedSelectMs", "totalPortionsCount", "totalFilteredPortionsCount", "totalResultSize")) \
 
 LWTRACE_DECLARE_PROVIDER(YDB_CS)
 

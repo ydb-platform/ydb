@@ -474,6 +474,7 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
 
     const bool calculateProbe = LWPROBE_ENABLED(ColumnEngineForLogsSelect);
     TInstant start;
+    TDuration timeOfInsertedIsUsed;
     ui64 totalPortionsCount = 0;
     ui64 totalFilteredPortionsCount = 0;
     for (const auto& [writeId, portion] : spg->GetInsertedPortions()) {
@@ -489,44 +490,11 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
             continue;
         }
 
-        bool takePortion = pkRangesFilter.IsUsed(*portion);
-
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
-        if (takePortion) {
-            AFL_VERIFY(nonconflicting != conflicting)("nonconflicting", nonconflicting);
-            out.emplace_back(portion, nonconflicting);
-        }
-    }
-
-    std::unordered_map<ui64, TSelectedPortionInfo> out2;
-    for (auto o : out) {
-        out2.emplace(o.GetPortion()->GetPortionId(), o);
-    }
-
-    TDuration timeOfCompactedIsUsed{};
-    for (const auto& [_, portion] : spg->GetPortions()) {
-        ++totalPortionsCount;
-        if (portion->IsRemovedFor(snapshot)) {
-            continue;
-        }
-
-        auto nonconflicting = portion->IsVisible(snapshot, true);
-        auto conflicting = !nonconflicting;
-
-        // take compacted portions only if all the records are visible in the snapshot
-        if (conflicting && portion->GetPortionType() == EPortionType::Compacted) {
-            continue;
-        }
-
-        if (nonconflicting && !withNonconflicting || conflicting && !withConflicting) {
-            continue;
-        }
-
         bool takePortion;
         if (calculateProbe) {
             start = TAppData::TimeProvider->Now();
             takePortion = pkRangesFilter.IsUsed(*portion);
-            timeOfCompactedIsUsed += TAppData::TimeProvider->Now() - start;
+            timeOfInsertedIsUsed += TAppData::TimeProvider->Now() - start;
             if (!takePortion) {
                 ++totalFilteredPortionsCount;
             }
@@ -541,99 +509,108 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
         }
     }
 
-    const auto collector = [&](const GranuleInternal::TPortionIntervalTree::TRange& /*interval*/,
-                            const std::shared_ptr<TPortionInfo>& portion) -> bool {
-        // AFL_VERIFY(intersectingPortions.insert(portion->GetPortionId()).second);
+    TDuration timeOfCompactedIsUsed{};
 
-        if (portion->IsRemovedFor(snapshot)) {
+    if (!spg->HasPortionsIntervalTree()) {
+        for (const auto& [_, portion] : spg->GetPortions()) {
+            ++totalPortionsCount;
+            if (portion->IsRemovedFor(snapshot)) {
+                continue;
+            }
+
+            auto nonconflicting = portion->IsVisible(snapshot, true);
+            auto conflicting = !nonconflicting;
+
+            // take compacted portions only if all the records are visible in the snapshot
+            if (conflicting && portion->GetPortionType() == EPortionType::Compacted) {
+                continue;
+            }
+
+            if (nonconflicting && !withNonconflicting || conflicting && !withConflicting) {
+                continue;
+            }
+
+            bool takePortion;
+            if (calculateProbe) {
+                start = TAppData::TimeProvider->Now();
+                takePortion = pkRangesFilter.IsUsed(*portion);
+                timeOfCompactedIsUsed += TAppData::TimeProvider->Now() - start;
+                if (!takePortion) {
+                    ++totalFilteredPortionsCount;
+                }
+            } else {
+                takePortion = pkRangesFilter.IsUsed(*portion);
+            }
+
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", takePortion ? "portion_selected" : "portion_skipped")("pathId", pathId)("portion", portion->DebugString());
+            if (takePortion) {
+                AFL_VERIFY(nonconflicting != conflicting)("nonconflicting", nonconflicting);
+                out.emplace_back(portion, nonconflicting);
+            }
+        }
+    } else {
+        std::unordered_map<ui64, TSelectedPortionInfo> selectedPortionsMap;
+
+        const auto collector = [&](const PortionIntervalTree::TPortionIntervalTree::TRange& /*interval*/,
+                                const std::shared_ptr<TPortionInfo>& portion) -> bool {
+            if (portion->IsRemovedFor(snapshot)) {
+                return true;
+            }
+
+            auto nonconflicting = portion->IsVisible(snapshot, true);
+            auto conflicting = !nonconflicting;
+
+            // take compacted portions only if all the records are visible in the snapshot
+            if (conflicting && portion->GetPortionType() == EPortionType::Compacted) {
+                return true;
+            }
+
+            if (nonconflicting && !withNonconflicting || conflicting && !withConflicting) {
+                return true;
+            }
+
+            selectedPortionsMap.emplace(portion->GetPortionId(), TSelectedPortionInfo(portion, nonconflicting));
+
             return true;
+        };
+
+        start = TAppData::TimeProvider->Now();
+
+        auto& intervals = spg->GetPortionsIntervalTreeVerified();
+        if (pkRangesFilter.IsEmpty()) {
+            intervals.EachIntersection(NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeLeftInf(),
+                                        NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeRightInf(), collector);
         }
 
-        auto nonconflicting = portion->IsVisible(snapshot, true);
-        auto conflicting = !nonconflicting;
+        for (auto& filter : pkRangesFilter) {
+            const auto& from = filter.GetPredicateFrom();
+            const auto& to = filter.GetPredicateTo();
 
-        // take compacted portions only if all the records are visible in the snapshot
-        if (conflicting && portion->GetPortionType() == EPortionType::Compacted) {
-            return true;
+            const auto& leftBorder = from.IsAll() ? NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeLeftInf() :
+                                                    NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeLeft(
+                                                        PortionIntervalTree::TPositionView(&from.GetSortableBatchPosition()), from.IsInclude());
+            const auto& rightBorder = to.IsAll() ? NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeRightInf() :
+                                                    NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeRight(
+                                                    PortionIntervalTree::TPositionView(&to.GetSortableBatchPosition()), to.IsInclude());
+
+            intervals.EachIntersection(leftBorder, rightBorder, collector);
         }
 
-        if (nonconflicting && !withNonconflicting || conflicting && !withConflicting) {
-            return true;
+        totalPortionsCount += selectedPortionsMap.size();
+        totalFilteredPortionsCount += intervals.Size() - selectedPortionsMap.size();
+        out.reserve(out.size() + selectedPortionsMap.size());
+        for (auto&& [_, pi] : selectedPortionsMap) {
+            out.emplace_back(std::move(pi));
         }
 
-        out2.emplace(portion->GetPortionId(), TSelectedPortionInfo(portion, nonconflicting));
-
-        return true;
-    };
-
-    auto& intervals = spg->GetPortionsIntervals();
-    if (pkRangesFilter.IsEmpty()) {
-        intervals.EachIntersection(NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeLeftInf(),
-                                   NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeRightInf(), collector);
+        timeOfCompactedIsUsed += TAppData::TimeProvider->Now() - start;
     }
-
-    TDuration timeOfIntervalTreeIsUsed;
-    start = TAppData::TimeProvider->Now();
-    for (auto& filter : pkRangesFilter) {
-        const auto& from = filter.GetPredicateFrom();
-        const auto& to = filter.GetPredicateTo();
-
-        const auto& leftBorder = from.IsAll() ? NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeLeftInf() :
-                                                NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeLeft(GranuleInternal::TRowView(&from.GetSortableBatchPosition()), from.IsInclude());
-        const auto& rightBorder = to.IsAll() ? NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeRightInf() :
-                                               NRangeTreap::TBorder<GranuleInternal::TRowView>::MakeRight(GranuleInternal::TRowView(&to.GetSortableBatchPosition()), to.IsInclude());
-
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD TColumnEngineForLogs::Select filter")
-            ("from", from.DebugString())("to", to.DebugString());
-
-        intervals.EachIntersection(leftBorder, rightBorder, collector);
-    }
-    timeOfIntervalTreeIsUsed += TAppData::TimeProvider->Now() - start;
-
-    bool allOk = true;
-    if (out.size() != out2.size()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "!!VLAD TColumnEngineForLogs::Select portions count are not equal")
-            ("out.size()", out.size())("out2.size()", out2.size())
-            ("intervals.Size()", intervals.Size())
-            ("spg->GetPortions().size()", spg->GetPortions().size());
-        allOk = false;
-    }
-
-    for (const auto& p : out) {
-        auto found = out2.find(p.GetPortion()->GetPortionId());
-        if (found == out2.end() || p.GetPortion() != found->second.GetPortion() || p.GetIsVisible() != found->second.GetIsVisible()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "!!VLAD TColumnEngineForLogs::Select portions are not equal")
-                ("p.GetPortion()->GetPortionId()", p.GetPortion()->GetPortionId())
-                ("p.GetIsVisible()", p.GetIsVisible())
-                ("p.GetPortion()", (long long int)(p.GetPortion().get()))
-                ("found->second.GetPortion()->GetPortionId()", found == out2.end() ? 0 : found->second.GetPortion()->GetPortionId())
-                ("found->second.GetIsVisible()", found == out2.end() ? 0 : found->second.GetIsVisible())
-                ("found->second.GetPortion()", found == out2.end() ? 0 : (long long int)(found->second.GetPortion().get()))
-                ;
-            allOk = false;
-            break;
-        }
-    }
-
-    if (allOk) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!VLAD TColumnEngineForLogs::Select are equal")
-            ("out.size()", out.size())("out2.size()", out2.size());
-    }
-
-    start = TAppData::TimeProvider->Now();
-    std::vector<TSelectedPortionInfo> res;
-    res.reserve(out2.size());
-
-    for (auto&& [_, pi] : out2) {
-        res.emplace_back(std::move(pi));
-    }
-    timeOfIntervalTreeIsUsed += TAppData::TimeProvider->Now() - start;
 
     if (calculateProbe) {
-        LWPROBE(ColumnEngineForLogsSelect, pathId.DebugString(), timeOfIntervalTreeIsUsed.MilliSeconds(), timeOfCompactedIsUsed.MilliSeconds(), totalPortionsCount, totalFilteredPortionsCount, out.size());
+        LWPROBE(ColumnEngineForLogsSelect, pathId.DebugString(), timeOfInsertedIsUsed.MilliSeconds(), timeOfCompactedIsUsed.MilliSeconds(), totalPortionsCount, totalFilteredPortionsCount, out.size());
     }
 
-    return res;
+    return out;
 }
 
 bool TColumnEngineForLogs::StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction) {

@@ -1,4 +1,6 @@
 #pragma once
+
+#include "portion_interval_tree.h"
 #include "portions_index.h"
 
 #include <ydb/core/base/appdata.h>
@@ -13,112 +15,11 @@
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/index/index.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-#include <ydb/library/range_treap/range_treap.h>
 
 namespace NKikimr::NOlap {
 
 namespace NLoading {
 class TPortionsLoadContext;
-}
-
-namespace GranuleInternal {
-
-struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::shared_ptr<TPortionInfo>> {
-    struct TValueHash {
-        ui64 operator()(const std::shared_ptr<TPortionInfo>& value) const {
-            return THash<TPortionAddress>()(value->GetAddress());
-        }
-    };
-
-    static bool Less(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {
-        return a->GetAddress() < b->GetAddress();
-    }
-
-    static bool Equal(const std::shared_ptr<TPortionInfo>& a, const std::shared_ptr<TPortionInfo>& b) noexcept {
-        return a->GetAddress() == b->GetAddress();
-    }
-};
-
-class TRowView {
-    using TState = std::variant<std::monostate,
-        std::shared_ptr<TPortionInfo>,
-        std::shared_ptr<TPortionInfo>,
-        const NArrow::NMerger::TSortableBatchPosition*>;
-
-    TState State;
-
-public:
-    explicit TRowView(const NArrow::NMerger::TSortableBatchPosition* sortableBatchPosition)
-        : State(sortableBatchPosition) {}
-
-    TRowView(std::shared_ptr<TPortionInfo> portionInfo, bool isLeft)
-        : State(isLeft ? TState(std::in_place_index<1>, portionInfo) : TState(std::in_place_index<2>, portionInfo)) {}
-
-    TRowView() = default;
-
-    NArrow::NMerger::TSortableBatchPosition GetSortableBatchPosition() const {
-        if (auto val = std::get_if<1>(&State); val) {
-            return (*val)->IndexKeyStart().BuildSortablePosition();
-        } else if (auto val = std::get_if<2>(&State); val) {
-            return (*val)->IndexKeyEnd().BuildSortablePosition();
-        } else if (auto val = std::get_if<3>(&State); val) {
-            return **val;
-        } else {
-            AFL_VERIFY(false)("error", "invalid type in TRowView variant for GetSortableBatchPosition");
-        }
-    }
-
-    std::partial_ordering Compare(const TRowView& rhs) const {
-        if ((State.index() == 3 || rhs.State.index() == 3) && State.index() != rhs.State.index()) {
-            return GetSortableBatchPosition().ComparePartial(rhs.GetSortableBatchPosition());
-        }
-
-        if (auto val = std::get_if<1>(&State); val) {
-            return (*val)->IndexKeyStart().CompareNotNull(rhs.State.index() == 1
-                                                          ? std::get<1>(rhs.State)->IndexKeyStart()
-                                                          : std::get<2>(rhs.State)->IndexKeyEnd());
-        } else if (auto val = std::get_if<2>(&State); val) {
-            return (*val)->IndexKeyEnd().CompareNotNull(rhs.State.index() == 1
-                                                        ? std::get<1>(rhs.State)->IndexKeyStart()
-                                                        : std::get<2>(rhs.State)->IndexKeyEnd());
-        } else if (auto val = std::get_if<3>(&State); val) {
-            return (*val)->ComparePartial(*std::get<3>(rhs.State));
-        } else {
-            AFL_VERIFY(false)("error", "invalid type in TRowView variant for GetSortableBatchPosition");
-        }
-    }
-};
-
-class TSimpleRowViewBorderComparator {
-    using TBorder = NRangeTreap::TBorder<TRowView>;
-
-public:
-    static int Compare(const TBorder& lhs, const TBorder& rhs) {
-        if (lhs.GetMode() == NRangeTreap::EBorderMode::LeftInf || rhs.GetMode() == NRangeTreap::EBorderMode::RightInf) {
-            return lhs.GetMode() == rhs.GetMode() ? 0 : -1;
-        } else if (lhs.GetMode() == NRangeTreap::EBorderMode::RightInf || rhs.GetMode() == NRangeTreap::EBorderMode::LeftInf) {
-            return lhs.GetMode() == rhs.GetMode() ? 0 : 1;
-        }
-
-        auto comp = lhs.GetKey().Compare(rhs.GetKey());
-        if (comp == std::partial_ordering::less) {
-            return -1;
-        } else if (comp == std::partial_ordering::greater) {
-            return 1;
-        }
-
-        return NRangeTreap::TBorderModeTraits::CompareEqualPoint(lhs.GetMode(), rhs.GetMode());
-    }
-
-    static void ValidateKey(const TRowView& /*key*/) {
-        // Do nothing
-    }
-};
-
-using TPortionIntervalTree =
-    NRangeTreap::TRangeTreap<TRowView, std::shared_ptr<TPortionInfo>,
-                             TRowView, TPortionIntervalTreeValueTraits,
-                             TSimpleRowViewBorderComparator>;
 }
 
 class TGranulesStorage;
@@ -224,7 +125,7 @@ private:
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
     THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
-    GranuleInternal::TPortionIntervalTree Intervals;
+    std::unique_ptr<PortionIntervalTree::TPortionIntervalTree> IntervalTree;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
     void RebuildAdditiveMetrics() const;
@@ -464,8 +365,13 @@ public:
         return Portions;
     }
 
-    const auto& GetPortionsIntervals() const {
-        return Intervals;
+    bool HasPortionsIntervalTree() const {
+        return static_cast<bool>(IntervalTree);
+    }
+
+    const PortionIntervalTree::TPortionIntervalTree& GetPortionsIntervalTreeVerified() const {
+        AFL_VERIFY(HasPortionsIntervalTree());
+        return *IntervalTree;
     }
 
     const THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>>& GetInsertedPortions() const {

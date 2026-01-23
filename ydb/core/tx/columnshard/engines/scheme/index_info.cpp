@@ -176,15 +176,19 @@ std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 colu
 std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldVerified(const ui32 columnId) const {
     auto result = GetColumnFieldOptional(columnId);
     AFL_VERIFY(!!result)("column_id", columnId);
+
     return result;
 }
 
 std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>& columnIds) const {
     AFL_VERIFY(columnIds.size());
+
     std::vector<std::shared_ptr<arrow::Field>> fields;
+    fields.reserve(columnIds.size());
     for (auto&& i : columnIds) {
         fields.emplace_back(GetColumnFieldVerified(i));
     }
+
     return std::make_shared<arrow::Schema>(fields);
 }
 

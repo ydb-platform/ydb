@@ -185,6 +185,16 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }
     }
     AFL_VERIFY(readMetadataRange);
+    {
+        const auto& idxInfo = readMetadataRange->GetResultSchema()->GetIndexInfo();
+        if (!request.GetColumnTags().empty()) {
+            for (auto&& colId : request.GetColumnTags()) {
+                if (!idxInfo.HasColumnId(colId)) {
+                    return SendError("requested column not found in schema", ::ToString(colId), ctx);
+                }
+            }
+        }
+    }
     readMetadataRange->OnBeforeStartReading(*Self);
 
     TStringBuilder detailedInfo;

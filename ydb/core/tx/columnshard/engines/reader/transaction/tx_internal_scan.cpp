@@ -86,6 +86,14 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
             }
             Self->Counters.GetScanCounters().OnReadMetadata((TAppData::TimeProvider->Now() - buildReadMetadataStart));
             readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
+            if (!request.GetColumnIds().empty()) {
+                const auto& idxInfo = readMetadataRange->GetResultSchema()->GetIndexInfo();
+                for (auto&& colId : request.GetColumnIds()) {
+                    if (!idxInfo.HasColumnId(colId)) {
+                        return SendError("requested column not found in schema", ::ToString(colId), ctx);
+                    }
+                }
+            }
         }
 
         if (AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {

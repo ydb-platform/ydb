@@ -45,6 +45,9 @@ THashMap<ui64, NKikimrPQ::TTransaction> CollectTransactions(const TVector<NKikim
                 txId = tx.GetTxId();
                 current = 0;
                 expected = GetPartitionsCount(tx);
+                if (tx.GetState() == NKikimrPQ::TTransaction::CALCULATED) {
+                    tx.SetState(NKikimrPQ::TTransaction::PLANNED);
+                }
             } else {
                 // не может быть бесхозных субтранзакций
                 AFL_ENSURE(txId.Defined() && (*txId == tx.GetTxId()));

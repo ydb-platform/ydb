@@ -1864,10 +1864,23 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
         env.TestWaitNotification(runtime, txId);
 
+        Ydb::Table::GlobalIndexSettings shardingProto;
+        shardingProto.set_uniform_partitions(2);
+        auto sharding = NYdb::NTable::TGlobalIndexSettings::FromProto(shardingProto);
         lowLimits.MaxPaths = curPaths+3;
-        lowLimits.MaxShards = curShards+2;
+        lowLimits.MaxShards = curShards+4;
+        lowLimits.MaxShardsInPath = 1;
         SetSchemeshardSchemaLimits(runtime, lowLimits);
-        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"embedding"});
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "idx_global", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {sharding, sharding}
+        }, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxShardsInPath = 2;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "idx_global", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {sharding, sharding}
+        });
         env.TestWaitNotification(runtime, txId);
     }
 

@@ -521,7 +521,7 @@ void TMapElement::SetExpression(TExprNode::TPtr expr) {
     ElementHolder = expr;
 }
 
-bool TMapElement::IsSingleCallable(THashSet<TString> allowedCallables) {
+bool TMapElement::IsSingleCallable(THashSet<TString> allowedCallables) const {
     if (IsExpression()) {
         auto expr = GetExpression();
         Y_ENSURE(expr->IsLambda());
@@ -533,7 +533,7 @@ bool TMapElement::IsSingleCallable(THashSet<TString> allowedCallables) {
     return false;
 }
 
-TVector<TInfoUnit> TMapElement::InputIUs() {
+TVector<TInfoUnit> TMapElement::InputIUs() const {
     TVector<TInfoUnit> result;
 
     if (IsRename()) {

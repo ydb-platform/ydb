@@ -504,8 +504,8 @@ public:
     TInfoUnit GetElementName() const;
     bool IsExpression() const;
     bool IsRename() const;
-    bool IsSingleCallable(THashSet<TString> allowedCallables);
-    TVector<TInfoUnit> InputIUs();
+    bool IsSingleCallable(THashSet<TString> allowedCallables) const;
+    TVector<TInfoUnit> InputIUs() const;
     TExprNode::TPtr GetExpression() const;
     TExprNode::TPtr& GetExpression();
     TInfoUnit GetRename() const;

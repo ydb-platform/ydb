@@ -101,14 +101,14 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
     } else {
         TVector<TExprNode::TPtr> newConjuncts;
 
-        for (auto f : filters) {
+        for (const auto & f : filters) {
             auto body = ReplaceArg(f.FilterBody, arg.Ptr(), ctx);
             if (pgSyntax && !f.FromPg) {
                 body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
             }
             newConjuncts.push_back(ReplaceArg(body, arg.Ptr(), ctx));
         }
-        for (auto c : conjuncts) {
+        for (const auto & c : conjuncts) {
             auto body = ReplaceArg(c.ConjunctExpr, arg.Ptr(), ctx);
             if (pgSyntax) {
                 body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
@@ -310,7 +310,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     TVector<TJoinConditionInfo> remainderSubset;
     THashSet<TInfoUnit, TInfoUnit::THashFunction> correlated;
 
-    for (auto jc : conjInfo.JoinConditions) {
+    for (const auto & jc : conjInfo.JoinConditions) {
         if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), jc.LeftIU) != deps->Dependencies.end()) {
             dependentSubset.push_back(jc);
             correlated.insert(jc.RightIU);
@@ -343,8 +343,8 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
         auto map = CastOperator<TOpMap>(input);
 
         // Stop if we compute something from one of the dependent columns, except for Just
-        for (auto mapEl : map->MapElements) {
-            for (auto iu : mapEl.InputIUs()) {
+        for (const auto & mapEl : map->MapElements) {
+            for (const auto & iu : mapEl.InputIUs()) {
                 if (correlated.contains(iu)) {
                     if (!mapEl.IsRename() && !mapEl.IsSingleCallable({"Just"})) {
                         return false;
@@ -357,7 +357,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 
         // Add all dependend columns to projecting map output
         auto mapOutput = map->GetOutputIUs();
-        for (auto iu : correlated) {
+        for (const auto & iu : correlated) {
             if (std::find(mapOutput.begin(), mapOutput.end(), iu) == mapOutput.end()) {
                 addToMap.push_back(iu);
             }
@@ -365,7 +365,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 
         // First we add needed columns to the map, if its a projection map
         if (!addToMap.empty() && map->Project) {
-            for (auto add : addToMap) {
+            for (const auto & add : addToMap) {
                 map->MapElements.push_back(TMapElement(add, add));
             }
         }
@@ -381,7 +381,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
         auto aggregate = CastOperator<TOpAggregate>(input);
 
         // Add all missing dependent columns to the group by list
-        for (auto corr : correlated) {
+        for (const auto & corr : correlated) {
             if (std::find(aggregate->KeyColumns.begin(), aggregate->KeyColumns.end(), corr) == aggregate->KeyColumns.end()) {
                 aggregate->KeyColumns.push_back(corr);
             }
@@ -558,7 +558,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
         auto conjInfo = filter->GetConjunctInfo(props);
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
-        for (auto cj : conjInfo.JoinConditions) {
+        for (const auto & cj : conjInfo.JoinConditions) {
             if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.LeftIU) != addDeps->Dependencies.end()) {
                 joinKeys.push_back(std::make_pair(cj.LeftIU, cj.RightIU));
             } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.RightIU) != addDeps->Dependencies.end()) {
@@ -679,7 +679,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
 
         auto conjInfo = filter->GetConjunctInfo(props);
 
-        for (auto cj : conjInfo.JoinConditions) {
+        for (const auto & cj : conjInfo.JoinConditions) {
             if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.LeftIU) != addDeps->Dependencies.end()) {
                 extraJoinKeys.push_back(std::make_pair(cj.LeftIU, cj.RightIU));
             } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.RightIU) != addDeps->Dependencies.end()) {

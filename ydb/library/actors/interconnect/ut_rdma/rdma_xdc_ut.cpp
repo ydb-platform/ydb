@@ -42,9 +42,21 @@ public:
 
 class TSendActor: public TActorBootstrapped<TSendActor> {
 public:
-    TSendActor(TActorId recipient, IEventBase* ev)
+    struct TExtCtx {
+        std::atomic<bool> Undelivered = false;
+        bool WhaitForUndelivered(ui32 maxAttempt) {
+            while (Undelivered.load(std::memory_order_relaxed) == false && maxAttempt) {
+                Sleep(TDuration::MilliSeconds(1000));
+                maxAttempt--;
+            }
+            return Undelivered.load(std::memory_order_relaxed);
+        }
+    };
+
+    TSendActor(TActorId recipient, IEventBase* ev, std::shared_ptr<TExtCtx> ctx = nullptr)
         : Recipient(recipient)
         , Event(ev)
+        , Ctx(ctx)
     {}
 
     void Bootstrap() {
@@ -53,7 +65,9 @@ public:
     }
 
     void HandleUndelivered() {
-        Undelivered = true;
+        if (Ctx) {
+            Ctx->Undelivered.store(true);
+        }
     }
 
     STATEFN(StateResolve) {
@@ -63,11 +77,10 @@ public:
         }
     }
 
-public:
-    bool Undelivered = false;
 private:
     TActorId Recipient;
     IEventBase* Event;
+    std::shared_ptr<TExtCtx> Ctx;
 };
 
 class TReceiveActor: public TActorBootstrapped<TReceiveActor> {
@@ -93,7 +106,11 @@ public:
             Sleep(TDuration::MilliSeconds(1000));
             maxAttempt--;
         }
-        return ReceivedEvents.load(std::memory_order_relaxed) == expected;
+        auto recieved = ReceivedEvents.load(std::memory_order_relaxed);
+        if (recieved != expected) {
+            Cerr << "recieved != expected " << recieved << " " << expected << Endl;
+        }
+        return recieved == expected;
     }
 private:
     std::function<void(TEvTestSerialization::TPtr)> Check;
@@ -425,6 +442,111 @@ TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
     UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
 }
 
+TEST_F(XdcRdmaTest, RestoreRdmaSession) {
+    const NInterconnect::NRdma::TMemPoolSettings settings {
+        .SizeLimitMb = 256
+    };
+    auto pool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, TTestICCluster::Flags::EMPTY,
+        TDuration::Minutes(9999)); //Disable dead peer detection to parallel activity
+
+    std::vector<NInterconnect::NRdma::TMemRegionPtr> regions;
+
+    // Create reciever
+    ui32 index = 0;
+    auto recieverPtr = new TReceiveActor([&index](TEvTestSerialization::TPtr ev) {
+        Cerr << "Blob ID: " << ev->Get()->Record.GetBlobID() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), index++);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "hello world");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), 5000u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(5000, 'X'));
+    });
+    const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
+
+    Sleep(TDuration::MilliSeconds(1000));
+
+    // Send one packet to establish session
+    {
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto* ev = MakeTestEvent(0, memPool.get());
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+
+        UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
+    }
+
+    // Allocate all rdma memory to trigger an error during the next transmissions
+    for (size_t i = 0; i < 7; i++) {
+        regions.emplace_back(pool->Alloc(32u << 20, 0));
+    }
+
+    // Send more
+    {
+        auto extCtx = std::make_shared<TSendActor::TExtCtx>();
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto* ev = MakeTestEvent(1, memPool.get());
+        auto senderPtr = new TSendActor(receiver, ev, extCtx);
+        cluster.RegisterActor(senderPtr, 2);
+        // Undelivered because we can't allocate memory on the reciever side
+        UNIT_ASSERT(extCtx->WhaitForUndelivered(10));
+    }
+
+    // The event was not delivered
+    UNIT_ASSERT(recieverPtr->WhaitForRecieve(1, 20));
+
+    // Session is going to be recreated without rdma
+    // but pending handshake timer are triggered (we can't check it directly in this ut(()
+    TString lastRdmaStatus;
+    for (size_t i = 0; i < 10; i++) {
+        lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
+        if (lastRdmaStatus == "Off") {
+            break;
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(lastRdmaStatus, "Off");
+    lastRdmaStatus.clear();
+
+    // Send one more time (will be delivered through TCP)
+    {
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto* ev = MakeTestEvent(1, memPool.get());
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+    }
+    UNIT_ASSERT(recieverPtr->WhaitForRecieve(2, 20));
+    // Free memory
+    regions.clear();
+    // Whait for the pending hendshake timer
+    Sleep(TDuration::MilliSeconds(5000));
+
+    for (size_t i = 0; i < 5; i++) {
+        try {
+            lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
+        } catch (const TPatternNotFound&) {
+            // retry case if the session was not created yiet
+            Sleep(TDuration::Seconds(1));
+            continue;
+        }
+        if (lastRdmaStatus == "On") {
+            break;
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+
+    {
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto* ev = MakeTestEvent(2, memPool.get());
+        auto senderPtr = new TSendActor(receiver, ev);
+        cluster.RegisterActor(senderPtr, 2);
+    }
+    UNIT_ASSERT(recieverPtr->WhaitForRecieve(3, 20));
+    lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
+    UNIT_ASSERT_VALUES_EQUAL(lastRdmaStatus, "On | SoftwareChecksum");
+}
+
 TEST_P(XdcRdmaTestCqMode, SendMix) {
     TTestICCluster::Flags flags = TTestICCluster::EMPTY;
     if (GetParam() == NInterconnect::NRdma::ECqMode::POLLING) {
@@ -495,11 +617,15 @@ INSTANTIATE_TEST_SUITE_P(
         NInterconnect::NRdma::ECqMode::EVENT
     ),
     [](const testing::TestParamInfo<NInterconnect::NRdma::ECqMode>& info) {
+        const NInterconnect::NRdma::TMemPoolSettings settings {
+            .SizeLimitMb = 256
+        };
+        NInterconnect::NRdma::CreateSlotMemPool(nullptr, settings);
         switch (info.param) {
             case NInterconnect::NRdma::ECqMode::POLLING:
                 return "POLLING";
             case NInterconnect::NRdma::ECqMode::EVENT:
-                return "EVENT"; 
+                return "EVENT";
         }
     }
 );

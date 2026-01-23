@@ -14,6 +14,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
@@ -81,6 +82,10 @@ bool IsCreateExternalDataSourceQuery(const TString& query) {
     return query.Contains("CREATE EXTERNAL DATA SOURCE");
 }
 
+bool IsCreateExternalTableQuery(const TString& query) {
+    return query.Contains("CREATE EXTERNAL TABLE");
+}
+
 bool RewriteCreateQuery(
     TString& query,
     const TString& dbRestoreRoot,
@@ -95,6 +100,8 @@ bool RewriteCreateQuery(
         return NYdb::NDump::RewriteCreateTransferQuery(query, dbRestoreRoot, dbPath, issues);
     } else if (IsCreateExternalDataSourceQuery(query)) {
         return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
+    } else if (IsCreateExternalTableQuery(query)) {
+        return NYdb::NDump::RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues);
     }
 
     issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);
@@ -103,6 +110,23 @@ bool RewriteCreateQuery(
 
 TString GetDatabase(TSchemeShard& ss) {
     return CanonizePath(ss.RootPathElements);
+}
+
+bool ShouldDelayQueryExecutionOnError(
+    const NKikimrSchemeOp::TModifyScheme& preparedQuery,
+    NKikimrScheme::EStatus status)
+{
+    switch (preparedQuery.GetOperationType()) {
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer:
+            return status == NKikimrScheme::StatusNotAvailable;
+        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
+            return IsIn({
+                NKikimrScheme::StatusPathDoesNotExist,
+                NKikimrScheme::StatusSchemeError,
+            }, status);
+        default:
+            return false;
+    }
 }
 
 }
@@ -1463,9 +1487,13 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
-        if (record.GetStatus() == NKikimrScheme::StatusNotAvailable) {
-            // Query compiled, but execution was unsuccessful
-            return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
+        if (IsCreatedByQuery(item)) {
+            // As for created by query objects query must be compiled to execute
+            Y_ABORT_UNLESS(item.PreparedCreationQuery);
+
+            if (ShouldDelayQueryExecutionOnError(*item.PreparedCreationQuery, record.GetStatus())) {
+                return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
+            }
         }
 
         if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
@@ -1477,6 +1505,9 @@ private:
             )) {
                 if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
+                } else if (item.State == EState::CreateSchemeObject) {
+                    // In case dependency object is being created
+                    return DelayObjectCreation(importInfo, itemIdx, db, record.GetReason(), ctx);
                 } else if (item.State == EState::Transferring) {
                     txId = GetActiveRestoreTxId(*importInfo, itemIdx);
                 } else if (item.State == EState::CreateChangefeed) {
@@ -1485,7 +1516,6 @@ private:
                     } else {
                         txId = GetActiveCreateConsumerTxId(*importInfo, itemIdx);
                     }
-
                 }
             }
 

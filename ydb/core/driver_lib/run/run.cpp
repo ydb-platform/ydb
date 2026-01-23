@@ -257,8 +257,6 @@ public:
             Start();
         } else {
             Schedule(WarmupTimeout, new TEvWarmupTimeout());
-            Cerr << "[GRpcServersManager] Waiting for warmup to complete (timeout: "
-                 << WarmupTimeout.Seconds() << "s) before starting gRPC servers" << Endl;
         }
     }
 
@@ -282,19 +280,15 @@ public:
         CheckAndExecuteStop();
     }
 
-    void HandleWarmupComplete(NKqp::TEvKqpWarmupComplete::TPtr& ev) {
+    void HandleWarmupComplete(NKqp::TEvKqpWarmupComplete::TPtr&) {
         if (!WarmupReceived) {
             WarmupReceived = true;
-            auto* msg = ev->Get();
-            Cerr << "[GRpcServersManager] Warmup completed (success: " << msg->Success 
-                 << ", loaded: " << msg->EntriesLoaded << "), starting gRPC servers" << Endl;
             Start();
         }
     }
 
     void HandleWarmupTimeout() {
         if (!WarmupReceived) {
-            Cerr << "[GRpcServersManager] Warmup timeout reached, starting gRPC servers anyway" << Endl;
             Start();
         }
     }

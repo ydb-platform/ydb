@@ -12,7 +12,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::State>().Key(TSchemeIds::LastReassign).Update<Schema::State::StringValue>(Self->LastReassign);
+        db.Table<Schema::State>().Key(TSchemeIds::LastReassignStatus).Update<Schema::State::StringValue>(Self->LastReassignStatus);
         return true;
     }
 
@@ -66,8 +66,11 @@ public:
     }
 
     TString GetDescription() const override {
-        auto progress = 100 * (NextReassign - Operations.begin()) / Operations.size();
-        return TStringBuilder() << "Reassign(" << Description << "): " << progress << "%";
+        double progress = 0;
+        if (!Operations.empty()) {
+            progress = 100.0 * (NextReassign - Operations.begin()) / Operations.size();
+        }
+        return TStringBuilder() << "Reassign(" << Description << "): " << Sprintf("%.2f", progress) << "%";
     }
 
     TSubActorId GetId() const override {
@@ -80,7 +83,7 @@ public:
                 Response["total"] = TabletsDone;
                 Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Response, false)));
             }
-            Hive->LastReassign = TStringBuilder() << "Last actor reassign: " << Description << " at " << TActivationContext::Now();
+            Hive->LastReassignStatus = TStringBuilder() << "Last actor reassign: " << Description << " at " << TActivationContext::Now();
             Hive->Execute(new TTxUpdateLastReassign(Hive));
             return PassAway();
         }
@@ -101,10 +104,6 @@ public:
             tablet->ActorsToNotifyOnRestart.push_back(SelfId());
             ++ReassignInFlight;
             switch (tablet->State) {
-                default: {
-                    Send(Hive->SelfId(), operation.ToEvent());
-                    break;
-                }
                 case ETabletState::BlockStorage: {
                     TSideEffects sideEffects;
                     sideEffects.Reset(SelfId());
@@ -114,6 +113,10 @@ public:
                 }
                 case ETabletState::GroupAssignment: {
                     tablet->InitiateAssignTabletGroups();
+                    break;
+                }
+                default: {
+                    Send(Hive->SelfId(), operation.ToEvent());
                     break;
                 }
             }

@@ -2167,9 +2167,6 @@ public:
     }
 
     void HandleExecute(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
-        if (!ExecuterId) {
-            return;
-        }
         TlsActivationContext->Send(ev->Forward(ExecuterId));
     }
 

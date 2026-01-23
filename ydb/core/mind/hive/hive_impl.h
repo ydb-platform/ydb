@@ -484,7 +484,7 @@ protected:
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
     std::unordered_map<TDataCenterId, TDataCenterInfo> DataCenters;
     std::unordered_set<TNodeId> ConnectedNodes;
-    TString LastReassign;
+    TString LastReassignStatus;
     ui32 ReassignsRunning = 0;
 
     // normalized to be sorted list of unique values

@@ -1,6 +1,8 @@
-#include <library/cpp/json/json_writer.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include "hive_impl.h"
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+
+#include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NHive {
 
@@ -18,15 +20,18 @@ public:
     }
 };
 
-class TReassignTabletsActor : public TActorBootstrapped<TReassignTabletsActor>, public ISubActor {
+class TReassignTabletsActor
+    : public TActorBootstrapped<TReassignTabletsActor>
+    , public ISubActor
+{
 public:
-    TActorId Source;
-    std::vector<TReassignOperation> Operations;
-    std::vector<TReassignOperation>::iterator NextReassign;
+    const TActorId Source;
+    const std::vector<TReassignOperation> Operations;
+    std::vector<TReassignOperation>::const_iterator NextReassign;
     ui32 ReassignInFlight = 0;
-    ui32 MaxInFlight = 1;
+    const ui32 MaxInFlight;
     NJson::TJsonValue Response;
-    TString Description;
+    const TString Description;
     ui64 TabletsDone = 0;
     THive* Hive;
 
@@ -46,6 +51,7 @@ public:
     TReassignTabletsActor(std::vector<TReassignOperation> operations, THive* hive)
         : Operations(std::move(operations))
         , NextReassign(Operations.begin())
+        , MaxInFlight(1)
         , Hive(hive)
     {}
 

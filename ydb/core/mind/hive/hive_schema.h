@@ -38,7 +38,7 @@ struct TSchemeIds {
         TabletKickCooldownPeriod,
         ResourceOvercommitment,
         TabletOwnersSynced,
-        LastReassign,
+        LastReassignStatus,
     };
 };
 

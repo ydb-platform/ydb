@@ -147,6 +147,7 @@ public:
         table->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, path.Base()->PathId, table);
 
+        // This check means that the table being processed is the main one.
         if (!path.Parent()->IsTableIndex()) {
             NTableIndexVersion::SyncChildIndexVersions(
                 path.Base(), table, table->AlterVersion,

@@ -4367,78 +4367,87 @@ Y_UNIT_TEST(ExplainFulltextIndexScanQuery) {
     UNIT_ASSERT_VALUES_EQUAL(opProps.at("Index").GetStringSafe(), "fulltext_idx");
 }
 
-namespace {
-    void TestAddIndexWithTruncate(bool useFulltextRelevance) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableFulltextIndex(true);
-        featureFlags.SetEnableTruncateTable(true);
-
-        auto kikimr = Kikimr(std::move(featureFlags));
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        auto db = kikimr.GetQueryClient();
-
-        CreateTexts(db);
-
-        if (useFulltextRelevance) {
-            AddIndex(db, "fulltext_relevance");
-        } else {
-            AddIndex(db);
-        }
-
-        auto checkIndex = [&](){
-            UpsertTexts(db);
-            auto index = ReadIndex(db);
-            if (useFulltextRelevance) {
-                CompareYson(R"([
-                    [[100u];1u;"animals"];
-                    [[100u];1u;"cats"];
-                    [[200u];1u;"cats"];
-                    [[300u];2u;"cats"];
-                    [[100u];1u;"chase"];
-                    [[200u];1u;"chase"];
-                    [[200u];1u;"dogs"];
-                    [[400u];1u;"dogs"];
-                    [[400u];1u;"foxes"];
-                    [[300u];1u;"love"];
-                    [[400u];1u;"love"];
-                    [[100u];1u;"small"];
-                    [[200u];1u;"small"]
-                ])", NYdb::FormatResultSetYson(index));
-            } else {
-                CompareYson(R"([
-                    [[100u];"animals"];
-                    [[100u];"cats"];
-                    [[200u];"cats"];
-                    [[300u];"cats"];
-                    [[100u];"chase"];
-                    [[200u];"chase"];
-                    [[200u];"dogs"];
-                    [[400u];"dogs"];
-                    [[400u];"foxes"];
-                    [[300u];"love"];
-                    [[400u];"love"];
-                    [[100u];"small"];
-                    [[200u];"small"]
-                ])", NYdb::FormatResultSetYson(index));
-            }
-        };
-
-        checkIndex();
-
-        for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
-            TruncateTable(db);
-            checkIndex();
-        }
-    }
-}; // anonymouys namespace
-
 Y_UNIT_TEST(AddFullTextFlatIndexWithTruncate) {
-    TestAddIndexWithTruncate(false);
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableTruncateTable(true);
+
+    auto kikimr = Kikimr(std::move(featureFlags));
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    AddIndex(db);
+
+    auto verifyIndexWorksCorrectly = [&](){
+        UpsertTexts(db);
+        auto index = ReadIndex(db);
+        CompareYson(R"([
+            [[100u];"animals"];
+            [[100u];"cats"];
+            [[200u];"cats"];
+            [[300u];"cats"];
+            [[100u];"chase"];
+            [[200u];"chase"];
+            [[200u];"dogs"];
+            [[400u];"dogs"];
+            [[400u];"foxes"];
+            [[300u];"love"];
+            [[400u];"love"];
+            [[100u];"small"];
+            [[200u];"small"]
+        ])", NYdb::FormatResultSetYson(index));
+    };
+
+    verifyIndexWorksCorrectly();
+
+    for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
+        TruncateTable(db);
+        verifyIndexWorksCorrectly();
+    }
 }
 
 Y_UNIT_TEST(AddFullTextRelevanceIndexWithTruncate) {
-    TestAddIndexWithTruncate(true);
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableTruncateTable(true);
+
+    auto kikimr = Kikimr(std::move(featureFlags));
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    AddIndex(db, "fulltext_relevance");
+
+    auto verifyIndexWorksCorrectly = [&](){
+        UpsertTexts(db);
+        auto index = ReadIndex(db);
+        CompareYson(R"([
+            [[100u];1u;"animals"];
+            [[100u];1u;"cats"];
+            [[200u];1u;"cats"];
+            [[300u];2u;"cats"];
+            [[100u];1u;"chase"];
+            [[200u];1u;"chase"];
+            [[200u];1u;"dogs"];
+            [[400u];1u;"dogs"];
+            [[400u];1u;"foxes"];
+            [[300u];1u;"love"];
+            [[400u];1u;"love"];
+            [[100u];1u;"small"];
+            [[200u];1u;"small"]
+        ])", NYdb::FormatResultSetYson(index));
+    };
+
+    verifyIndexWorksCorrectly();
+
+    for (size_t tryIndex = 0; tryIndex < 5; ++tryIndex) {
+        TruncateTable(db);
+        verifyIndexWorksCorrectly();
+    }
+
 }
 
 }

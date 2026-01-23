@@ -412,6 +412,64 @@ Y_UNIT_TEST_TWIN(AddIndexWithRelevance, Covered) {
     ])", NYdb::FormatResultSetYson(index));
 }
 
+Y_UNIT_TEST(AddIndexWithRelevanceSettings) {
+    auto kikimr = Kikimr();
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertTexts(db);
+
+    auto tableClient = kikimr.GetTableClient();
+    auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+    {
+        Ydb::Table::FulltextIndexSettings fulltextSettings;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+            layout: FLAT_RELEVANCE
+            columns {
+                column: "Text"
+                analyzers {
+                    tokenizer: STANDARD
+                    use_filter_lowercase: true
+                }
+            }
+        )", &fulltextSettings));
+        Ydb::Table::GlobalIndexSettings wordSettings;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+            partition_at_keys {
+                split_points {
+                    type { tuple_type {
+                        elements { optional_type { item { type_id: STRING } } }
+                    } }
+                    value {
+                        items { bytes_value: "love" }
+                    }
+                }
+            }
+        )", &wordSettings));
+        Ydb::Table::GlobalIndexSettings emptySettings;
+        TVector<NYdb::NTable::TGlobalIndexSettings> partitionSettings;
+        partitionSettings.emplace_back(NYdb::NTable::TGlobalIndexSettings::FromProto(wordSettings));
+        partitionSettings.emplace_back(NYdb::NTable::TGlobalIndexSettings::FromProto(emptySettings));
+        partitionSettings.emplace_back(NYdb::NTable::TGlobalIndexSettings::FromProto(emptySettings));
+        partitionSettings.emplace_back(NYdb::NTable::TGlobalIndexSettings::FromProto(wordSettings));
+
+        auto addIndex = TAlterTableSettings()
+            .AppendAddIndexes(NYdb::NTable::TIndexDescription(
+                "fulltext_idx",
+                EIndexType::GlobalFulltextRelevance,
+                {"Text"},
+                {},
+                partitionSettings,
+                NYdb::NTable::TFulltextIndexSettings::FromProto(fulltextSettings)
+            ));
+        auto result = session.AlterTable("/Root/Texts", addIndex).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+}
+
 Y_UNIT_TEST(InsertRow) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();

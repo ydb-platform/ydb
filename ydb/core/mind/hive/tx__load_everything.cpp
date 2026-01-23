@@ -96,7 +96,7 @@ public:
                 return false;
             }
             while (!stateRowset.EndOfSet()) {
-                if (stateRowset.HaveValue<Schema::State::Value>()) {
+                if (stateRowset.HaveValue<Schema::State::Value>() || stateRowset.HaveValue<Schema::State::StringValue>()) {
                     switch (stateRowset.GetKey()) {
                     case TSchemeIds::State::DatabaseVersion:
                         break;

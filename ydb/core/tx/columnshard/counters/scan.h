@@ -34,8 +34,7 @@ public:
         , ResultsReady(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Results/Ready"))
         , RequestedResourcesMemory(std::make_shared<NOlap::TMemoryAggregation>(moduleId, "InFlight/Resources/Requested"))
         , ScanDuration(TBase::GetValueAutoAggregationsClient("ScanDuration"))
-        , BlobsWaitingDuration(TBase::GetValueAutoAggregationsClient("BlobsWaitingDuration"))
-    {
+        , BlobsWaitingDuration(TBase::GetValueAutoAggregationsClient("BlobsWaitingDuration")) {
     }
 
     std::shared_ptr<NOlap::TMemoryAggregation> GetRequestedResourcesMemory() const {
@@ -110,8 +109,7 @@ public:
 
     public:
         TScanIntervalStateGuard(const std::shared_ptr<TScanIntervalState>& baseCounters)
-            : BaseCounters(baseCounters)
-        {
+            : BaseCounters(baseCounters) {
             BaseCounters->Add(Status);
         }
 
@@ -349,8 +347,7 @@ public:
     }
 
     TCounterGuard(const std::shared_ptr<TAtomicCounter>& counter)
-        : Counter(counter)
-    {
+        : Counter(counter) {
         AFL_VERIFY(Counter);
         Counter->Inc();
     }
@@ -363,14 +360,11 @@ public:
 
 class TConcreteScanCounters: public TScanCounters {
 public:
-    struct TPerStepCounters {
-        std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds =
-            std::make_shared<TAtomicCounter>();   // time step was executing in conveyor
-        std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds =
-            std::make_shared<TAtomicCounter>();   // time spent not in same step before next step(for example in deduplication)
-        std::shared_ptr<TAtomicCounter> RawBytesRead = std::make_shared<TAtomicCounter>();   // From BS, S3, previous step
+    struct TPerStepCounters{
+        std::shared_ptr<TAtomicCounter> ExecutionDurationMicroSeconds = std::make_shared<TAtomicCounter>(); // time step was executing in conveyor
+        std::shared_ptr<TAtomicCounter> WaitDurationMicroSeconds = std::make_shared<TAtomicCounter>(); // time spent not in same step before next step(for example in deduplication)
+        std::shared_ptr<TAtomicCounter> RawBytesRead = std::make_shared<TAtomicCounter>(); // From BS, S3, previous step
     };
-
 private:
     using TBase = TScanCounters;
     std::shared_ptr<TAtomicCounter> FetchAccessorsCount = std::make_shared<TAtomicCounter>();
@@ -388,7 +382,6 @@ private:
     std::shared_ptr<TAtomicCounter> AccessorsForConstructionGuard = std::make_shared<TAtomicCounter>();
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
-
 public:
     using TStepName = TString;
     NColumnShard::TThreadSafeValue<THashMap<TString, TPerStepCounters>> StepExecutionDurations;
@@ -410,28 +403,29 @@ public:
         }
     }
 
-    TVector<NKqp::TCurrentNamedPerStepScanCounters> GetCurrentScanCounters() const {
+    TVector<NKqp::TPerStepCounters> GetCurrentScanCounters() const {
         auto lock = StepExecutionDurations.ReadGuard();
-        TVector<NKqp::TCurrentNamedPerStepScanCounters> timesPerStep;
-        for (auto& kv : lock.Value) {
-            NKqp::TCurrentPerStepScanCounters stats;
+        TVector<NKqp::TPerStepCounters> timesPerStep;
+        for (auto& kv: lock.Value) {
+            NKqp::TPerStepCounters stats;
+            stats.StepName = kv.first;
             stats.IntegralExecutionDuration = TDuration::MicroSeconds(kv.second.ExecutionDurationMicroSeconds->Val());
             stats.IntegralWaitDuration = TDuration::MicroSeconds(kv.second.WaitDurationMicroSeconds->Val());
             stats.IntegralRawBytesRead = kv.second.RawBytesRead->Val();
-            timesPerStep.emplace_back(kv.first, stats);
+            timesPerStep.emplace_back(stats);
         }
-        Sort(timesPerStep, [](const auto& l, const auto& r) {
+        Sort(timesPerStep, [](const auto& l,const auto& r ){
             return l.StepName < r.StepName;
         });
         return timesPerStep;
     }
 
     TPerStepCounters CountersForStep(TStringBuf stepName) const {
-        auto* counterIfExists = [&] {
+        auto* counterIfExists = [&]{
             auto lock = StepExecutionDurations.ReadGuard();
             return lock.Value.FindPtr(stepName);
         }();
-        if (counterIfExists) [[likely]] {
+        if  (counterIfExists) [[likely]] {
             return *counterIfExists;
         }
         auto lock = StepExecutionDurations.WriteGuard();
@@ -472,6 +466,7 @@ public:
     TCounterGuard GetAccessorsForConstructionGuard() const {
         return TCounterGuard(AccessorsForConstructionGuard);
     }
+
 
     TCounterGuard GetResultsForReplyGuard() const {
         return TCounterGuard(ResultsForReplyGuard);

@@ -8,8 +8,9 @@ TString FormatDurationAsMilliseconds(TDuration duration) {
     return TStringBuilder() << duration.MicroSeconds() / 1000.0 << "ms";
 }
 
-TString TCurrentPerStepScanCounters::DebugString() const {
-    return TStringBuilder() << "ExecutionDuration:" << FormatDurationAsMilliseconds(IntegralExecutionDuration) << ";"
+TString TPerStepCounters::DebugString() const {
+    return TStringBuilder() << "StepName: " << StepName << ";"
+                            << "ExecutionDuration:" << FormatDurationAsMilliseconds(IntegralExecutionDuration) << ";"
                             << "WaitDuration:" << FormatDurationAsMilliseconds(IntegralWaitDuration) << ";"
                             << "RawBytesRead:" << IntegralRawBytesRead << ";";
 }

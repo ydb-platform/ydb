@@ -1016,14 +1016,18 @@ TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
     // We assume that aggregation returns column is order [keys, states]
     TVector<TInfoUnit> outputIU = KeyColumns;
     for (const auto& aggTraits : AggregationTraitsList) {
-        outputIU.push_back(aggTraits.OriginalColName);
+        outputIU.push_back(aggTraits.ResultColName);
     }
     return outputIU;
 }
 
 TVector<TInfoUnit> TOpAggregate::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
-    return GetOutputIUs();
+    TVector<TInfoUnit> usedIUs = KeyColumns;
+    for (const auto& aggTraits : AggregationTraitsList) {
+        usedIUs.push_back(aggTraits.OriginalColName);
+    }
+    return usedIUs;
 }
 
 void TOpAggregate::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -1036,10 +1040,12 @@ void TOpAggregate::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THa
             column = renameMap.at(column);
         }
     }
-
     for (auto& trait : AggregationTraitsList) {
-        if (renameMap.contains(trait.OriginalColName)) {
+        if (renameMap.contains(trait.OriginalColName) && !stopList.contains(trait.OriginalColName)) {
             trait.OriginalColName = renameMap.at(trait.OriginalColName);
+        }
+        if (renameMap.contains(trait.ResultColName)) {
+            trait.ResultColName = renameMap.at(trait.ResultColName);
         }
     }
 }

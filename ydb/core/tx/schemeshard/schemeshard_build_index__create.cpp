@@ -122,13 +122,7 @@ public:
                     // Even an cluster admin or the system inself will not be able to force a reserved name for this index.
                     // If that will become an issue at some point, then a real userToken should be passed here.
                     .IsValidLeafName(/*userToken*/ nullptr)
-                    .PathsLimit(2) // index and impl-table
                     .DirChildrenLimit();
-
-                if (!request.GetInternal()) {
-                    checks
-                        .ShardsLimit(1); // impl-table
-                }
 
                 if (!checks) {
                     return Reply(checks.GetStatus(), checks.GetError());
@@ -170,6 +164,26 @@ public:
                                           domainInfo->GetSchemeLimits(),
                                           explain)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, explain);
+            }
+
+            {
+                const auto checks = indexPath.Check();
+
+                // Tables are actually created in schemeshard__operation_create_build_index so limits are rechecked there too
+                ui32 indexTableCount = 0, indexSequenceCount = 0, indexTableShards = 0;
+                TTableInfo::GetIndexObjectCount(indexDesc, indexTableCount, indexSequenceCount, indexTableShards);
+                if (indexSequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
+                    ++indexTableShards;
+                }
+
+                checks.PathsLimit(1 + indexTableCount + indexSequenceCount);
+                if (!request.GetInternal()) {
+                    checks.ShardsLimit(indexTableShards);
+                }
+
+                if (!checks) {
+                    return Reply(checks.GetStatus(), checks.GetError());
+                }
             }
         } else if (settings.has_column_build_operation()) {
             if (!Self->EnableAddColumsWithDefaults) {

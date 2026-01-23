@@ -116,7 +116,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         if (!tx.GetInternal()) {
             checks
-                .ShardsLimit(counts.IndexTableShards);
+                .ShardsLimit(counts.IndexTableShards)
+                .PathShardsLimit(counts.ShardsPerPath);
         }
 
         if (!checks) {

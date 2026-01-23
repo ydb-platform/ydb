@@ -47,9 +47,15 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         totalCounts.IndexTableCount += counts.IndexTableCount;
         totalCounts.SequenceCount += counts.SequenceCount;
         totalCounts.IndexTableShards += counts.IndexTableShards;
+        if (totalCounts.ShardsPerPath < counts.ShardsPerPath) {
+            totalCounts.ShardsPerPath = counts.ShardsPerPath;
+        }
     }
 
     ui32 baseShards = TTableInfo::ShardsToCreate(baseTableDescription);
+    if (totalCounts.ShardsPerPath < baseShards) {
+        totalCounts.ShardsPerPath = baseShards;
+    }
     ui32 shardsToCreate = baseShards + totalCounts.IndexTableShards;
     ui32 pathToCreate = 1 + indexCount + totalCounts.IndexTableCount + totalCounts.SequenceCount;
 
@@ -94,6 +100,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     << " domain path id: " << baseTablePath.GetPathIdForDomain()
                     << " domain path: " << TPath::Init(baseTablePath.GetPathIdForDomain(), context.SS).PathString()
                     << " shardsToCreate: " << shardsToCreate
+                    << " shardsPerPath: " << totalCounts.ShardsPerPath
                     << " GetShardsInside: " << domainInfo->GetShardsInside()
                     << " MaxShards: " << domainInfo->GetSchemeLimits().MaxShards);
 
@@ -111,7 +118,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
         if (!tx.GetInternal()) {
             checks
-                .PathShardsLimit(baseShards)
+                .PathShardsLimit(totalCounts.ShardsPerPath)
                 .ShardsLimit(shardsToCreate);
         }
 

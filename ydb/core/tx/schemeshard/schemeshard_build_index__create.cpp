@@ -178,7 +178,8 @@ public:
                 checks.PathsLimit(1 + counts.IndexTableCount + counts.SequenceCount);
                 if (!request.GetInternal()) {
                     checks
-                        .ShardsLimit(counts.IndexTableShards);
+                        .ShardsLimit(counts.IndexTableShards)
+                        .PathShardsLimit(counts.ShardsPerPath);
                 }
 
                 if (!checks) {

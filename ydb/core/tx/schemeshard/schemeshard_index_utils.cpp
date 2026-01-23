@@ -12,6 +12,7 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
     res.IndexTableCount = 1;
     res.SequenceCount = 0;
     res.IndexTableShards = 0;
+    res.ShardsPerPath = 1;
     switch (GetIndexType(indexDesc)) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -39,6 +40,9 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
         for (const auto& indexTableDesc: indexDesc.GetIndexImplTableDescriptions()) {
             auto implShards = NSchemeShard::TTableInfo::ShardsToCreate(indexTableDesc);
             res.IndexTableShards += implShards;
+            if (res.ShardsPerPath < implShards) {
+                res.ShardsPerPath = implShards;
+            }
         }
     } else {
         res.IndexTableShards = res.IndexTableCount;

@@ -20,6 +20,7 @@ struct TIndexObjectCounts {
     ui32 IndexTableCount = 0;
     ui32 SequenceCount = 0;
     ui32 IndexTableShards = 0;
+    ui32 ShardsPerPath = 0;
 };
 
 TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);

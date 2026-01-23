@@ -59,6 +59,7 @@ void TTreeElement::UpdateTopDown(ELeafFairShare fairShareMode) {
     if (!IsLeaf()) {
         ui64 totalWeightedDemand = 0;
         std::vector<ui64> weightedDemand;
+        ui64 undistributedFairShare = FairShare;
 
         weightedDemand.resize(ChildrenSize());
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t i) {
@@ -87,6 +88,31 @@ void TTreeElement::UpdateTopDown(ELeafFairShare fairShareMode) {
             if (auto originalQuery = query->Origin.lock()) {
                 originalQuery->SetSnapshot(query->shared_from_this());
             }
+        });
+        ForEachChild<TTreeElement>([&](TTreeElement* child, size_t i) {
+            if (totalWeightedDemand > 0) {
+                // TODO: distribute the resources lost cause of integer division.
+                ui64 givenFairShare = weightedDemand.at(i) * FairShare / totalWeightedDemand;
+                child->FairShare = givenFairShare;
+                undistributedFairShare -= givenFairShare;
+            } else {
+                child->FairShare = 0;
+            }
+
+            if (i != 0) {
+                child->UpdateTopDown(allowFairShareOverlimit);
+            }
+        });
+        ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
+            if (totalWeightedDemand > 0) {
+                // give all undistributed fair-share to the first child
+                child->FairShare += undistributedFairShare;
+            } else {
+                child->FairShare = 0;
+            }
+
+            child->UpdateTopDown(allowFairShareOverlimit);
+            return true;
         });
     }
     // FIFO variant (when children are queries)

@@ -1343,8 +1343,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     it->second.PartitionsLocked.Inc();
     it->second.PartitionsInfly.Inc();
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign"
-        << ": record# " << record);
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX
+        << " user=" << (Token ? Token->GetUserSID() : "-")
+        << " topic=" << converter->GetPrintableString()
+        << " assign: record# " << record);
 
     ctx.Send(actorId, new TEvPQProxy::TEvLockPartition(0, {}, false, false));
 }

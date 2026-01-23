@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/expr_nodes
     ydb/library/yql/providers/dq/mkql
     ydb/library/yql/providers/dq/opt
+    ydb/library/yql/providers/pq/watermark_settings
 )
 
 SRCS(

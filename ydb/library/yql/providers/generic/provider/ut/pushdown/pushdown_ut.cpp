@@ -223,8 +223,7 @@ public:
                 .Ptr();
         ::google::protobuf::Any settings;
         TString sourceType;
-        IDqIntegration::TSourceWatermarksSettings watermarksSettings;
-        dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType, 1, ctx, watermarksSettings);
+        dqIntegration->FillSourceSettings(*dqSourceNode, settings, sourceType, 1, ctx);
         UNIT_ASSERT_STRINGS_EQUAL(sourceType, "PostgreSqlGeneric");
         UNIT_ASSERT(settings.Is<Generic::TSource>());
         settings.UnpackTo(DqSourceSettings_);

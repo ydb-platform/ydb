@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/mkql/dqs_mkql_compiler.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
+#include <ydb/library/yql/providers/pq/watermark_settings/watermark_settings.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
@@ -447,10 +448,11 @@ namespace NYql::NDqs {
             _MaxDataSizePerJob = Max(_MaxDataSizePerJob, dqIntegration->Partition(*read, parts, &clusterName, ExprContext, settings));
             TMaybe<::google::protobuf::Any> sourceSettings;
             TString sourceType;
-            IDqIntegration::TSourceWatermarksSettings sourceWatermarksSettings;
+            TMaybe<NPq::TSourceWatermarksSettings> sourceWatermarksSettings;
             if (dqSource) {
                 sourceSettings.ConstructInPlace();
-                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions, ExprContext, sourceWatermarksSettings);
+                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions, ExprContext);
+                sourceWatermarksSettings = ::NPq::GetSourceWatermarkSettings(sourceType, *sourceSettings);
                 YQL_ENSURE(!sourceSettings->type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
                 YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
             }
@@ -461,9 +463,9 @@ namespace NYql::NDqs {
                 if (dqSource) {
                     task.Inputs[dqSourceInputIndex].SourceSettings = sourceSettings;
                     task.Inputs[dqSourceInputIndex].SourceType = sourceType;
-                    if (sourceWatermarksSettings.Enabled) {
+                    if (sourceWatermarksSettings) {
                         task.Inputs[dqSourceInputIndex].WatermarksMode = NYql::NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT;
-                        task.Inputs[dqSourceInputIndex].WatermarksIdleTimeoutUs = sourceWatermarksSettings.IdleTimeoutUs;
+                        task.Inputs[dqSourceInputIndex].WatermarksIdleTimeoutUs = sourceWatermarksSettings->IdleTimeoutUs;
                     }
                 }
             }

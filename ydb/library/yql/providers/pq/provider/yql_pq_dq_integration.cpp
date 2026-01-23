@@ -181,13 +181,7 @@ public:
         }
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxPartitions, TExprContext& ctx) override {
-        Y_DEBUG_ABORT("Shound not have been called");
-        TSourceWatermarksSettings watermarksSettings;
-        FillSourceSettings(node, protoSettings, sourceType, maxPartitions, ctx, watermarksSettings);
-    }
-
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext& ctx, TSourceWatermarksSettings& watermarksSettings) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t /*maxPartitions*/, TExprContext& ctx) override {
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto settings = maybeDqSource.Cast().Settings();
             if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
@@ -247,7 +241,6 @@ public:
                         srcDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
                     } else if (name == WatermarksEnableSetting) {
                         srcDesc.MutableWatermarks()->SetEnabled(true);
-                        watermarksSettings.Enabled = true;
                     } else if (name == WatermarksGranularityUsSetting) {
                         srcDesc.MutableWatermarks()->SetGranularityUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksLateArrivalDelayUsSetting) {
@@ -255,7 +248,6 @@ public:
                     } else if (name == WatermarksIdleTimeoutUsSetting) {
                         auto idleTimeoutUs = FromString<ui64>(Value(setting));
                         srcDesc.MutableWatermarks()->SetIdleTimeoutUs(idleTimeoutUs);
-                        watermarksSettings.IdleTimeoutUs = idleTimeoutUs;
                     } else if (name == WatermarksIdlePartitionsSetting) {
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     } else if (name == SkipJsonErrors) {

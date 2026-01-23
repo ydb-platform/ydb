@@ -11,9 +11,9 @@ struct TCurrentPerStepScanCounters {
     TString DebugString() const;
 };
 
-struct TPerStepCountersAndStepName {
+struct TCurrentNamedPerStepScanCounters {
     TString StepName;
     TCurrentPerStepScanCounters Counters;
 };
 
-}
+}   // namespace NKikimr::NKqp

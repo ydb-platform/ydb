@@ -27,10 +27,10 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         }
         const NColumnShard::TConcreteScanCounters& counters = source->GetContext()->GetCommonContext()->GetCounters();
         if (StepEndIfStepIsAsync.has_value()) {
-            // previous operation was async 
+            // previous step was asynchronous; measure how long we waited since it finished
             auto waitDuration = TMonotonic::Now() - *StepEndIfStepIsAsync;
-            if (CurrentStepIdx == 0 ) {
-                return TConclusionStatus::Fail("internal error: 0'th step has predecessor?");
+            if (CurrentStepIdx == 0) {
+                return TConclusionStatus::Fail("Internal error: step 0 should not have a predecessor");
             }
             counters.CountersForStep(Script->GetStep(CurrentStepIdx - 1)->GetName()).WaitDurationMicroSeconds->Add(waitDuration.MicroSeconds());
         }
@@ -45,8 +45,6 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
         const auto executionTime = TMonotonic::Now() - startInstant;
 
-
-
         counters.CountersForStep(step->GetName()).ExecutionDurationMicroSeconds->Add(executionTime.MicroSeconds());
         counters.AddExecutionDuration(executionTime);
 
@@ -60,7 +58,7 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             StepEndIfStepIsAsync.emplace(TMonotonic::Now());
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
             return false;
-        }else{
+        } else {
             StepEndIfStepIsAsync = std::nullopt;
         }
         StepStartInstant = TMonotonic::Now();

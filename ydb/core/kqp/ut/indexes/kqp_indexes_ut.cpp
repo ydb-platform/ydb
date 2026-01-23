@@ -6240,7 +6240,47 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
-}
 
+    Y_UNIT_TEST(UniqueIndexNotNullColumns) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestUpdateUniqIndexNotNull` (
+                    id Int64,
+                    val1 Int64 NOT NULL,
+                    val2 Int64 NOT NULL,
+                    PRIMARY KEY(id),
+                    INDEX idx GLOBAL UNIQUE SYNC ON (val1, val2)
+                );
+
+                CREATE TABLE `/Root/TestInsertIndexNotNullDefault` (
+                    Key Uint64,
+                    Index1 Int32 NOT NULL DEFAULT 1,
+                    PRIMARY KEY (Key),
+                    INDEX Index GLOBAL ON (Index1)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                UPDATE `/Root/TestUpdateUniqIndexNotNull` SET val1 = 3;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                INSERT INTO `/Root/TestInsertIndexNotNullDefault` (Key) VALUES (1);
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+}
 }
 }

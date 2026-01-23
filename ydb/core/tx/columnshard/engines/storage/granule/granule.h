@@ -365,12 +365,12 @@ public:
         return Portions;
     }
 
-    bool HasPortionsIntervalTree() const {
+    bool HasPortionIntervalTree() const {
         return static_cast<bool>(IntervalTree);
     }
 
-    const PortionIntervalTree::TPortionIntervalTree& GetPortionsIntervalTreeVerified() const {
-        AFL_VERIFY(HasPortionsIntervalTree());
+    const PortionIntervalTree::TPortionIntervalTree& GetPortionIntervalTreeVerified() const {
+        AFL_VERIFY(HasPortionIntervalTree());
         return *IntervalTree;
     }
 

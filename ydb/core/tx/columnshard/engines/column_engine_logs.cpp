@@ -511,7 +511,7 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
 
     TDuration timeOfCompactedIsUsed{};
 
-    if (!spg->HasPortionsIntervalTree()) {
+    if (!spg->HasPortionIntervalTree()) {
         for (const auto& [_, portion] : spg->GetPortions()) {
             ++totalPortionsCount;
             if (portion->IsRemovedFor(snapshot)) {
@@ -576,7 +576,7 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
 
         start = TAppData::TimeProvider->Now();
 
-        const auto& intervals = spg->GetPortionsIntervalTreeVerified();
+        const auto& intervals = spg->GetPortionIntervalTreeVerified();
         if (pkRangesFilter.IsEmpty()) {
             intervals.EachIntersection(NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeLeftInf(),
                                         NRangeTreap::TBorder<PortionIntervalTree::TPositionView>::MakeRightInf(), collector);

@@ -248,6 +248,31 @@ def test_kill_tablet_using_developer_ui(ydb_cluster):
     return capture_audit.canonize()
 
 
+def test_table_content_for_tablet_using_developer_ui(ydb_cluster):
+    # List tablets
+    list_response = http_helpers.get_tablets_request(ydb_cluster, TOKEN)
+    assert list_response.status_code == 200, list_response.content
+    ss_tablet_id = http_helpers.extract_tablet_id(list_response.content, 'SCHEMESHARD')
+    assert ss_tablet_id
+    list_response = http_helpers.get_tablets_request(ydb_cluster, OTHER_TOKEN)
+    assert list_response.status_code == 403, list_response.content
+
+    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
+    # Get schemeshard content for a table
+    with capture_audit:
+        paths_table_id = 1
+        secrets_table_id = 127  # this is a sensitive column
+        for table_id in (paths_table_id, secrets_table_id):
+            # The first request must write UNAUTHORIZED to audit log
+            table_content_for_tablet_response = http_helpers.get_table_content_for_tablet_request(ydb_cluster, ss_tablet_id, table_id, OTHER_TOKEN)
+            table_content_for_tablet_response.status_code == 403, table_content_for_tablet_response.content
+
+            # The second request is done from valid user
+            table_content_for_tablet_response = http_helpers.get_table_content_for_tablet_request(ydb_cluster, ss_tablet_id, table_id, TOKEN)
+            assert table_content_for_tablet_response.status_code == 200, table_content_for_tablet_response.content
+    return capture_audit.canonize()
+
+
 def test_dml_through_http(ydb_cluster):
     capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
     with capture_audit:

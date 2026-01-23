@@ -261,11 +261,11 @@ def test_table_content_for_tablet_using_developer_ui(ydb_cluster):
     # Get schemeshard content for a table
     with capture_audit:
         paths_table_id = 1
-        secrets_table_id = 127  # this is a sensitive column
+        secrets_table_id = 127  # table ID for a table containing `IsSensitive` column
         for table_id in (paths_table_id, secrets_table_id):
             # The first request must write UNAUTHORIZED to audit log
             table_content_for_tablet_response = http_helpers.get_table_content_for_tablet_request(ydb_cluster, ss_tablet_id, table_id, OTHER_TOKEN)
-            table_content_for_tablet_response.status_code == 403, table_content_for_tablet_response.content
+            assert table_content_for_tablet_response.status_code == 403, table_content_for_tablet_response.content
 
             # The second request is done from valid user
             table_content_for_tablet_response = http_helpers.get_table_content_for_tablet_request(ydb_cluster, ss_tablet_id, table_id, TOKEN)

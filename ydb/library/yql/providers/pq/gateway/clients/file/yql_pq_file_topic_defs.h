@@ -19,4 +19,11 @@ struct TDummyTopic {
 
 using TClusterNPath = std::pair<TString, TString>;
 
+struct TFileTopicClientSettings {
+    TString Database;
+    bool SkipDatabasePrefix = false;
+};
+
+TString SkipDatabasePrefix(const TString& path, const TString& database);
+
 } // namespace NYql

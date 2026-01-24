@@ -420,8 +420,16 @@ TString SvgRect(ui32 x, ui32 y, ui32 w, ui32 h, const TString& cssClass) {
     return SvgRect(x, y, w, ToString(h), cssClass);
 }
 
-TString SvgText(ui32 x, ui32 y, const TString& cssClass, const TString& text) {
+TString SvgText(const TString& x, const TString& y, const TString& cssClass, const TString& text) {
     return TStringBuilder() << "<text x='" << x << "' y='" << y << "' class='" << cssClass << "'>" << text << "</text>" << Endl;
+}
+
+TString SvgText(ui32 x, const TString& y, const TString& cssClass, const TString& text) {
+    return SvgText(ToString(x), y, cssClass, text);
+}
+
+TString SvgText(ui32 x, ui32 y, const TString& cssClass, const TString& text) {
+    return SvgText(ToString(x), ToString(y), cssClass, text);
 }
 
 TString SvgTextS(ui32 x, ui32 y, const TString& text) {
@@ -1450,8 +1458,9 @@ void TPlan::MarkStageIndent(ui32 indent, ui32& offsetY, std::shared_ptr<TStage> 
         (   (stage->EgressBytes != nullptr) + (stage->OutputBytes != nullptr)
             + 2 /* MEM, CPU */
             + stage->Connections.size() + stage->BuiltInIngress
-        ) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y,
-        stage->Operators.size() * (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y) * 2 - INTERNAL_GAP_Y + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT));
+        ),
+        stage->Operators.size()
+    ) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y;
 
     stage->Height = height;
     stage->IndentY = stage->OffsetY + GAP_Y + height;
@@ -2027,21 +2036,21 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 totalTime += s->WaitOutputTime->Details.Sum;
             }
 
-            auto activeY0 = s->OffsetY + offsetY;
-            auto activeY1 = activeY0 + s->Height;
+            ui32 activePercentsMin = 0;
+            ui32 activePercentsMax = 100;
 
             if (s->WaitInputTime) {
                 if (totalTime) {
-                    auto height = s->WaitInputTime->Details.Sum * s->Height / totalTime;
-                    activeY1 -= height;
+                    auto heightPercents = s->WaitInputTime->Details.Sum * 100 / totalTime;
+                    activePercentsMax -= heightPercents;
                 s->_Builder
                     << "<g><title>";
                     FormatTooltip(s->_Builder, "Wait Input Time", s->WaitInputTime.get(), FormatUsage, totalTime);
                 s->_Builder
                     << "</title>" << Endl
-                    << "  <rect x='" << Config.TaskLeft << "' y='" << s->OffsetY + offsetY + s->Height - height
-                    << "' width='" << Config.TaskWidth << "' height='" << height
-                    << "' stroke-width='0' fill='" << Config.Palette.InputLight << "'/>" << Endl
+                    << "  <rect x='" << Config.TaskLeft << "' y='" << activePercentsMax
+                    << "%' width='" << Config.TaskWidth << "' height='" << heightPercents
+                    << "%' stroke-width='0' fill='" << Config.Palette.InputLight << "'/>" << Endl
                     << "</g>" << Endl;
                 }
                 if(!s->WaitInputTime->History.Deriv.empty()) {
@@ -2087,16 +2096,14 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 
             if (s->WaitOutputTime) {
                 if (totalTime) {
-                    auto height = s->WaitOutputTime->Details.Sum * s->Height / totalTime;
-                    activeY0 += height;
+                    auto heightPercents = s->WaitOutputTime->Details.Sum * s->Height / totalTime;
+                    activePercentsMin += heightPercents;
                 s->_Builder
                     << "<g><title>";
                     FormatTooltip(s->_Builder, "Wait Output Time", s->WaitOutputTime.get(), FormatUsage, totalTime);
                 s->_Builder
                     << "</title>" << Endl
-                    << "  <rect x='" << Config.TaskLeft << "' y='" << s->OffsetY + offsetY
-                    << "' width='" << Config.TaskWidth << "' height='" << height
-                    << "' stroke-width='0' fill='" << Config.Palette.OutputLight << "'/>" << Endl
+                    << "  <rect x='" << Config.TaskLeft << "' y='0%' stroke-width='0' fill='" << Config.Palette.OutputLight << "'/>" << Endl
                     << "</g>" << Endl;
                 }
                 if (!s->WaitOutputTime->History.Deriv.empty()) {
@@ -2104,13 +2111,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 }
             }
 
-            if (activeY1 > activeY0 && s->InputThroughput) {
+            if (activePercentsMax > activePercentsMin && s->InputThroughput) {
                 auto opacity = s->InputThroughput->Details.Sum / static_cast<double>(s->InputThroughput->Summary->Max * 2);
                 s->_Builder
                 << "<g><title>Input Throughput " << FormatInteger(s->InputThroughput->Details.Sum) << "/s</title>" << Endl
-                << "  <rect x='" << Config.TaskLeft << "' y='" << activeY0
-                << "' width='" << Config.TaskWidth << "' height='" << activeY1 - activeY0
-                << "' stroke-width='0' fill='" << Config.Palette.CpuLight << "' opacity='" << opacity  << "'/>" << Endl
+                << "  <rect x='" << Config.TaskLeft << "' y='" << activePercentsMin
+                << "%' width='" << Config.TaskWidth << "' height='" << activePercentsMax - activePercentsMin
+                << "%' stroke-width='0' fill='" << Config.Palette.CpuLight << "' opacity='" << opacity  << "'/>" << Endl
                 << "</g>" << Endl;
             }
 
@@ -2135,7 +2142,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
             }
             s->_Builder
-            << "  " << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, s->Height / 2 + INTERNAL_TEXT_HEIGHT / 2, ToString(s->Tasks))
+            << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
             << "</g>" << Endl;
         } else {
             s->_Builder
@@ -2148,7 +2155,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 << " stroke-width='" << Config.TaskWidth / 4 << "' stroke='" << Config.Palette.StageText << "' stroke-dasharray='1,1' />" << Endl;
             }
             s->_Builder
-            << "  " << SvgTextE(Config.TaskLeft + Config.TaskWidth - 2, s->Height / 2 + INTERNAL_TEXT_HEIGHT / 2, ToString(s->Tasks))
+            << "  " << SvgText(Config.TaskLeft + Config.TaskWidth - 2, "50%", "textc", ToString(s->Tasks))
             << "</g>" << Endl;
         }
 
@@ -2634,6 +2641,7 @@ TString TPlanVisualizer::PrintSvg() {
         << "  .texts { text-anchor:start; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  .textm { text-anchor:middle; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  .texte { text-anchor:end; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
+        << "  .textc { text-anchor:end; dominant-baseline:middle; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  circle.stage { stroke:" << Config.Palette.StageMain << "; stroke-width:1; fill:" << Config.Palette.StageClone << "; }" << Endl
         << "  line.opdiv { stroke-width:1; stroke:" << Config.Palette.StageGrid << "; stroke-dasharray:1,2; }" << Endl
         << "  text.clipped { clip-path:url(#clipTextPath); }" << Endl

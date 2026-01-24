@@ -165,6 +165,11 @@ public:
     const TDuration& GetMaxReadTimeLag() const;
     const TDuration& GetMaxWriteTimeLag() const;
     const TDuration& GetMaxCommittedTimeLag() const;
+    
+    // Bytes read statistics
+    uint64_t GetBytesReadPerMinute() const;
+    uint64_t GetBytesReadPerHour() const;
+    uint64_t GetBytesReadPerDay() const;
 
 private:
     uint64_t CommittedOffset_;
@@ -175,6 +180,9 @@ private:
     TDuration MaxReadTimeLag_;
     TDuration MaxWriteTimeLag_;
     TDuration MaxCommittedTimeLag_;
+    uint64_t BytesReadPerMinute_ = 0;
+    uint64_t BytesReadPerHour_ = 0;
+    uint64_t BytesReadPerDay_ = 0;
 };
 
 // Topic partition location

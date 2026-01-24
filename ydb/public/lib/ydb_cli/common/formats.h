@@ -34,6 +34,8 @@ enum class EMessagingFormat {
 
     JsonStreamConcat /* "json-stream-concat" */,
     JsonArray /* "json-array" */,
+    Csv /* "csv" */,
+    Tsv /* "tsv" */,
 };
 
 // EFramingFormat to be used in operations related to structured data

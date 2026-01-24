@@ -305,7 +305,7 @@ const TTypeAnnotationNode* GetReadTableRowTypeFullText(TExprContext& ctx, const 
 
     TVector<const TItemExprType*> resultItems;
     for (auto item : select) {
-        if (item.Value() == "_yql_full_text_relevance") {
+        if (item.Value() == NTableIndex::NFulltext::FullTextRelevanceColumn) {
             auto itemType = ctx.MakeType<TItemExprType>(TString(item.Value()), ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Double));
             resultItems.push_back(itemType);
             YQL_ENSURE(itemType->Validate(select.Pos(), ctx));

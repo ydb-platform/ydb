@@ -70,7 +70,7 @@ protected:
             , Hash(0)
         {
         }
-        TPSLStorageImpl(const ui64 hash)
+        explicit TPSLStorageImpl(const ui64 hash)
             : Distance(0)
             , Hash(hash)
         {
@@ -85,7 +85,7 @@ public:
             : Distance(-1)
         {
         }
-        TPSLStorageImpl(const ui64 /*hash*/)
+        explicit TPSLStorageImpl(const ui64 /*hash*/)
             : Distance(0)
         {
         }

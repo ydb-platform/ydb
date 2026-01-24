@@ -99,6 +99,7 @@ message TTableStats {
 message TSortedChunkStats {
     bool IsSorted = 1;
     string FirstRowKeys = 2;
+    string LastRowKeys = 3;
 }
 
 message TChunkStats {

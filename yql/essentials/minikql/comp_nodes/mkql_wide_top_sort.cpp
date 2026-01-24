@@ -25,14 +25,14 @@ struct TKeyInfo {
 };
 
 struct TRuntimeKeyInfo {
-    TRuntimeKeyInfo(const TKeyInfo& keyInfo)
+    explicit TRuntimeKeyInfo(const TKeyInfo& keyInfo)
         : Slot(keyInfo.Slot)
         , IsOptional(keyInfo.IsOptional)
         , Compare(keyInfo.Compare.Get())
     {
         if (keyInfo.PresortType) {
-            LeftPacker = keyInfo.PresortType;
-            RightPacker = keyInfo.PresortType;
+            LeftPacker = TGenericPresortEncoder(keyInfo.PresortType);
+            RightPacker = TGenericPresortEncoder(keyInfo.PresortType);
         }
     }
 
@@ -44,7 +44,7 @@ struct TRuntimeKeyInfo {
 };
 
 struct TMyValueCompare {
-    TMyValueCompare(const std::vector<TKeyInfo>& keys)
+    explicit TMyValueCompare(const std::vector<TKeyInfo>& keys)
         : Keys(keys.cbegin(), keys.cend())
     {
     }

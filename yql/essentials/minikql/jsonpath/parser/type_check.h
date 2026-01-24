@@ -6,7 +6,7 @@ namespace NYql::NJsonPath {
 
 class TJsonPathTypeChecker: public IAstNodeVisitor {
 public:
-    TJsonPathTypeChecker(TIssues& Issues);
+    explicit TJsonPathTypeChecker(TIssues& Issues);
 
     void VisitRoot(const TRootNode& node) override;
 

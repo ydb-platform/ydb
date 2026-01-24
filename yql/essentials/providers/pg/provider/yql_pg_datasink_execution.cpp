@@ -15,7 +15,7 @@ using namespace NNodes;
 
 class TPgDataSinkExecTransformer: public TExecTransformerBase {
 public:
-    TPgDataSinkExecTransformer(TPgState::TPtr state)
+    explicit TPgDataSinkExecTransformer(TPgState::TPtr state)
         : State_(state)
     {
         AddHandler({TCoCommit::CallableName()}, RequireFirst(), Pass());

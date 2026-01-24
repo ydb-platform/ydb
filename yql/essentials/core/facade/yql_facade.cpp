@@ -75,7 +75,7 @@ const TString StartTimeLabel = "StartTime";
 
 class TUrlLoader: public IUrlLoader {
 public:
-    TUrlLoader(TFileStoragePtr storage)
+    explicit TUrlLoader(TFileStoragePtr storage)
         : Storage_(storage)
     {
     }

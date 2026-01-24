@@ -252,7 +252,7 @@ struct TPySecureParam {
     PyObject_HEAD;
     TPyCastContext::TPtr CastCtx;
 
-    TPySecureParam(const TPyCastContext::TPtr& castCtx)
+    explicit TPySecureParam(const TPyCastContext::TPtr& castCtx)
         : CastCtx(castCtx)
     {
     }

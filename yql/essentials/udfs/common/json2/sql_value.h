@@ -114,7 +114,7 @@ public:
         Error = 1
     };
 
-    TSqlValue(TSourcePosition pos)
+    explicit TSqlValue(TSourcePosition pos)
         : Pos_(pos)
     {
     }

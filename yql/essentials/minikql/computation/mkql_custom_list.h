@@ -7,7 +7,7 @@ namespace NMiniKQL {
 
 class TCustomListValue: public TComputationValue<TCustomListValue> {
 public:
-    TCustomListValue(TMemoryUsageInfo* memInfo)
+    explicit TCustomListValue(TMemoryUsageInfo* memInfo)
         : TComputationValue(memInfo)
         , Length(Length_)
         , HasItems(HasItems_)

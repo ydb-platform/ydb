@@ -30,7 +30,7 @@ class TMkqlCallableCompilerBase;
 
 class TFallbackError: public yexception {
 public:
-    TFallbackError(TIssuePtr issue = {})
+    explicit TFallbackError(TIssuePtr issue = {})
         : Issue_(std::move(issue))
     {
     }

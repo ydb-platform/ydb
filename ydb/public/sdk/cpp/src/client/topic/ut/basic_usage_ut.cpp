@@ -1624,13 +1624,19 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             Y_ABORT("Unreachable");
         };
 
+        auto seqNo = 1;
         for (ui64 i = 0; i < count0; ++i) {
             auto token = getReadyToken(TDuration::Seconds(30));
-            session->Write(std::move(token), key0, TWriteMessage("msg0"));
+
+            TWriteMessage msg("msg0");
+            msg.SeqNo(seqNo++);
+            session->Write(std::move(token), key0, std::move(msg));
         }
         for (ui64 i = 0; i < count1; ++i) {
             auto token = getReadyToken(TDuration::Seconds(30));
-            session->Write(std::move(token), key1, TWriteMessage("msg1"));
+            TWriteMessage msg("msg1");
+            msg.SeqNo(seqNo++);
+            session->Write(std::move(token), key1, std::move(msg));
         }
 
         UNIT_ASSERT(session->Close(TDuration::Seconds(10)));
@@ -1685,8 +1691,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.ProducerIdPrefix(CreateGuidAsString());
         writeSettings.PartitionChooserStrategy(TKeyedWriteSessionSettings::EPartitionChooserStrategy::Bound);
         writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
-        writeSettings.PartitioningKeyHasher([](const std::string& key) -> std::string {
-            return key;
+        writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
+            return std::string{key};
         });
 
         auto session = publicClient.CreateKeyedWriteSession(writeSettings);
@@ -2087,7 +2093,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(attempts < maxAttempts);
     }
-
+    
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 
 } // namespace

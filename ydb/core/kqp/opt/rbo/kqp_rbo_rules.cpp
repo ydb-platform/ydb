@@ -71,14 +71,24 @@ TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
     return TExprNode::TPtr();
 }
 
-TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> conjuncts, TExprContext &ctx, bool pgSyntax) {
+TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> filters, TVector<TJoinConditionInfo> conjuncts, TExprContext &ctx, bool pgSyntax) {
     auto arg = Build<TCoArgument>(ctx, pos).Name("lambda_arg").Done();
     TExprNode::TPtr lambda;
 
-    if (conjuncts.size() == 1) {
-        auto filterInfo = conjuncts[0];
-        auto body = ReplaceArg(filterInfo.FilterBody, arg.Ptr(), ctx);
-        if (pgSyntax && !filterInfo.FromPg) {
+    if (filters.size() + conjuncts.size() == 1) {
+        TExprNode::TPtr body;
+        bool fromPg = false;
+
+        if (filters.empty()) {
+            body = conjuncts[0].ConjunctExpr;
+            fromPg = false;            
+        } else {
+            body = filters[0].FilterBody;
+            fromPg = filters[0].FromPg;
+        }
+
+        body = ReplaceArg(body, arg.Ptr(), ctx);
+        if (pgSyntax && !fromPg) {
             body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
         }
 
@@ -91,9 +101,16 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
     } else {
         TVector<TExprNode::TPtr> newConjuncts;
 
-        for (auto c : conjuncts) {
-            auto body = ReplaceArg(c.FilterBody, arg.Ptr(), ctx);
-            if (pgSyntax && !c.FromPg) {
+        for (const auto & f : filters) {
+            auto body = ReplaceArg(f.FilterBody, arg.Ptr(), ctx);
+            if (pgSyntax && !f.FromPg) {
+                body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
+            }
+            newConjuncts.push_back(ReplaceArg(body, arg.Ptr(), ctx));
+        }
+        for (const auto & c : conjuncts) {
+            auto body = ReplaceArg(c.ConjunctExpr, arg.Ptr(), ctx);
+            if (pgSyntax) {
                 body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
             }
             newConjuncts.push_back(ReplaceArg(body, arg.Ptr(), ctx));
@@ -293,7 +310,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     TVector<TJoinConditionInfo> remainderSubset;
     THashSet<TInfoUnit, TInfoUnit::THashFunction> correlated;
 
-    for (auto jc : conjInfo.JoinConditions) {
+    for (const auto & jc : conjInfo.JoinConditions) {
         if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), jc.LeftIU) != deps->Dependencies.end()) {
             dependentSubset.push_back(jc);
             correlated.insert(jc.RightIU);
@@ -316,33 +333,18 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     std::shared_ptr<IOperator> remainingFilter = deps->GetInput();
     if (!conjInfo.Filters.empty() || !remainderSubset.empty()) {
 
-        TVector<TExprNode::TPtr> args;
-        for (auto f : conjInfo.Filters) {
-            args.push_back(f.FilterBody);
-        }
-        for (auto jc : remainderSubset) {
-            args.push_back(jc.ConjunctExpr);
-        }
-        auto conj = Build<TCoAnd>(ctx.ExprCtx, remainingFilter->Pos)
-            .Add(args)
-            .Done().Ptr();
-
-        auto lambda_arg = Build<TCoArgument>(ctx.ExprCtx, remainingFilter->Pos).Name("arg").Done().Ptr();
-
-        auto lambda = Build<TCoLambda>(ctx.ExprCtx, remainingFilter->Pos)
-            .Args({lambda_arg})
-            .Body(ReplaceArg(conj, lambda_arg, ctx.ExprCtx))
-            .Done().Ptr();
-
+        auto lambda = BuildFilterLambdaFromConjuncts(deps->Pos, conjInfo.Filters, remainderSubset, ctx.ExprCtx, props.PgSyntax);
         remainingFilter = std::make_shared<TOpFilter>(deps->GetInput(), remainingFilter->Pos, lambda);
     }
+
+    auto newFilterLambda = BuildFilterLambdaFromConjuncts(filter->Pos, {}, dependentSubset, ctx.ExprCtx, props.PgSyntax);
 
     if (input->Kind == EOperator::Map) {
         auto map = CastOperator<TOpMap>(input);
 
         // Stop if we compute something from one of the dependent columns, except for Just
-        for (auto mapEl : map->MapElements) {
-            for (auto iu : mapEl.InputIUs()) {
+        for (const auto & mapEl : map->MapElements) {
+            for (const auto & iu : mapEl.InputIUs()) {
                 if (correlated.contains(iu)) {
                     if (!mapEl.IsRename() && !mapEl.IsSingleCallable({"Just"})) {
                         return false;
@@ -355,7 +357,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 
         // Add all dependend columns to projecting map output
         auto mapOutput = map->GetOutputIUs();
-        for (auto iu : correlated) {
+        for (const auto & iu : correlated) {
             if (std::find(mapOutput.begin(), mapOutput.end(), iu) == mapOutput.end()) {
                 addToMap.push_back(iu);
             }
@@ -363,11 +365,12 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
 
         // First we add needed columns to the map, if its a projection map
         if (!addToMap.empty() && map->Project) {
-            for (auto add : addToMap) {
+            for (const auto & add : addToMap) {
                 map->MapElements.push_back(TMapElement(add, add));
             }
         }
 
+        filter->FilterLambda = newFilterLambda;
         map->SetInput(remainingFilter);
         deps->SetInput(map);
         input = filter;
@@ -378,12 +381,13 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
         auto aggregate = CastOperator<TOpAggregate>(input);
 
         // Add all missing dependent columns to the group by list
-        for (auto corr : correlated) {
+        for (const auto & corr : correlated) {
             if (std::find(aggregate->KeyColumns.begin(), aggregate->KeyColumns.end(), corr) == aggregate->KeyColumns.end()) {
                 aggregate->KeyColumns.push_back(corr);
             }
         }
 
+        filter->FilterLambda = newFilterLambda;
         aggregate->SetInput(remainingFilter);
         deps->SetInput(aggregate);
         input = filter;
@@ -554,7 +558,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
         auto conjInfo = filter->GetConjunctInfo(props);
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
-        for (auto cj : conjInfo.JoinConditions) {
+        for (const auto & cj : conjInfo.JoinConditions) {
             if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.LeftIU) != addDeps->Dependencies.end()) {
                 joinKeys.push_back(std::make_pair(cj.LeftIU, cj.RightIU));
             } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.RightIU) != addDeps->Dependencies.end()) {
@@ -675,7 +679,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
 
         auto conjInfo = filter->GetConjunctInfo(props);
 
-        for (auto cj : conjInfo.JoinConditions) {
+        for (const auto & cj : conjInfo.JoinConditions) {
             if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.LeftIU) != addDeps->Dependencies.end()) {
                 extraJoinKeys.push_back(std::make_pair(cj.LeftIU, cj.RightIU));
             } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.RightIU) != addDeps->Dependencies.end()) {
@@ -970,7 +974,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
     auto rightInput = join->GetRightInput();
 
     if (pushLeft.size()) {
-        auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Pos, pushLeft, ctx.ExprCtx, props.PgSyntax);
+        auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Pos, pushLeft, {}, ctx.ExprCtx, props.PgSyntax);
         leftInput = std::make_shared<TOpFilter>(leftInput, input->Pos, leftLambda);
     }
 
@@ -985,14 +989,14 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
                 }
             }
             if (predicatesForRightSide.size()) {
-                auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx, props.PgSyntax);
+                auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, {}, ctx.ExprCtx, props.PgSyntax);
                 rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
                 join->JoinKind = "Inner";
             } else {
                 return input;
             }
         } else {
-            auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx, props.PgSyntax);
+            auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, {}, ctx.ExprCtx, props.PgSyntax);
             rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
         }
     }
@@ -1005,7 +1009,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
     join->SetRightInput(rightInput);
 
     if (topLevelPreds.size()) {
-        auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Pos, topLevelPreds, ctx.ExprCtx, props.PgSyntax);
+        auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Pos, topLevelPreds, {}, ctx.ExprCtx, props.PgSyntax);
         output =  std::make_shared<TOpFilter>(join, input->Pos, topFilterLambda);
     } else {
         output = join;

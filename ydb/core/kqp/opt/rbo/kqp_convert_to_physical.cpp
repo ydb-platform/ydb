@@ -4,6 +4,7 @@
 #include "kqp_rbo_physical_aggregation_builder.h"
 #include "kqp_rbo_physical_map_builder.h"
 #include "kqp_rbo_physical_join_builder.h"
+#include "kqp_rbo_physical_filter_builder.h"
 
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -261,7 +262,7 @@ TExprNode::TPtr BuildMap(TExprNode::TPtr input, TExprNode::TPtr arg, TVector<TEx
 namespace NKikimr {
 namespace NKqp {
 
-TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
+TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
 
     THashMap<int, TExprNode::TPtr> stages;
@@ -374,62 +375,16 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx) {
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Read " << opStageId;
         } else if (op->Kind == EOperator::Filter) {
+            auto filter = CastOperator<TOpFilter>(op);
+
             if (!currentStageBody) {
                 auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *op->Children[0]->Props.StageId);
                 stageArgs[opStageId].push_back(stageArg);
                 currentStageBody = stageInput;
             }
 
-            auto filter = CastOperator<TOpFilter>(op);
-
-            auto filterLambda = TCoLambda(filter->FilterLambda);
-            auto filterBody = filterLambda.Body();
-            auto filterArg = filterLambda.Args().Arg(0);
-            auto mapArg = Build<TCoArgument>(ctx, op->Pos).Name("arg").Done().Ptr();
-
-            // FIXME: Eliminate this for YQL pipeline.
-            auto newFilterBody = ctx.Builder(op->Pos).Callable("FromPg").Add(0, filterBody.Ptr()).Seal().Build();
-
-            TVector<TExprBase> items;
-            for (const auto& iu : op->GetOutputIUs()) {
-                auto memberName = iu.GetFullName();
-                // clang-format off
-                auto tuple = Build<TCoNameValueTuple>(ctx, op->Pos)
-                    .Name().Build(memberName)
-                    .Value<TCoMember>()
-                        .Struct(mapArg)
-                        .Name().Build(memberName)
-                    .Build()
-                .Done();
-                // clang-format on
-                items.push_back(tuple);
-            }
-
-            // clang-format off
-            currentStageBody = Build<TCoMap>(ctx, op->Pos)
-                .Input<TCoFilter>()
-                    .Input(TExprBase(currentStageBody))
-                    .Lambda<TCoLambda>()
-                        .Args({"filter_arg"})
-                        .Body<TCoCoalesce>()
-                            .Predicate<TExprApplier>()
-                                .Apply(TExprBase(newFilterBody))
-                                .With(filterArg, "filter_arg")
-                            .Build()
-                            .Value<TCoBool>()
-                                .Literal().Build("false")
-                                .Build()
-                            .Build()
-                        .Build()
-                    .Build()
-                .Lambda<TCoLambda>()
-                    .Args({mapArg})
-                    .Body<TCoAsStruct>()
-                        .Add(items)
-                    .Build()
-                .Build()
-            .Done().Ptr();
-            // clang-format on
+            TPhysicalFilterBuilder phyFilterBuilder(filter, ctx, op->Pos);
+            currentStageBody = phyFilterBuilder.BuildPhysicalFilter(currentStageBody);
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;

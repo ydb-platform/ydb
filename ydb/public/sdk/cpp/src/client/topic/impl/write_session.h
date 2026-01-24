@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/system/thread.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/write_session_impl.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
@@ -69,46 +70,15 @@ class TKeyedWriteSession : public IKeyedWriteSession,
 private:
     using WriteSessionPtr = std::shared_ptr<IWriteSession>;
 
-    struct TPartitionBound {
-        using TSelf = TPartitionBound;
-
-        FLUENT_SETTING(std::optional<std::string>, Value);
-
-        bool operator<(const TPartitionBound& other) const {
-            return !Value_.has_value() || (other.Value_.has_value() && *Value_ < *other.Value_);
-        }
-
-        bool operator<(const std::string& key) const {
-            return Value_.has_value() && *Value_ < key;
-        }
-
-        bool operator>(const std::string& key) const {  
-            return Value_.has_value() && *Value_ > key;
-        }
-    };
-
     struct TPartitionInfo {
         using TSelf = TPartitionInfo;
 
-        bool InRange(const std::string& key) const {
-            if (FromBound_ > key)
-                return false;
-            if (ToBound_ < key)
-                return false;
-            return true;
-        }
+        bool InRange(const std::string_view key) const;
+        bool operator<(const std::string_view key) const;
 
-        bool operator==(const TPartitionInfo& other) const {
-            return PartitionId_ == other.PartitionId_;
-        }
-
-        bool operator<(const std::string& key) const {
-            return FromBound_ < key;
-        }
-
-        FLUENT_SETTING(TPartitionBound, FromBound);
-        FLUENT_SETTING(TPartitionBound, ToBound);
-        FLUENT_SETTING(ui64, PartitionId);
+        FLUENT_SETTING(std::string, FromBound);
+        FLUENT_SETTING(std::optional<std::string>, ToBound);
+        FLUENT_SETTING(ui32, PartitionId);
     };
 
     struct TMessageInfo {
@@ -119,102 +89,47 @@ private:
         {}
 
         TWriteMessage Message;
-        ui64 Partition;
+        ui32 Partition;
         TTransactionBase* Tx;
     };
 
-    void WaitForEvents();
-
-    void WaitSomeAction(std::unique_lock<std::mutex>& lock);
-
-private:
     struct WriteSessionWrapper {
         WriteSessionPtr Session;
-        ui64 Partition;
+        ui32 Partition;
         TDuration IdleTimeout;
         std::optional<TInstant> EmptySince;
         ui64 QueueSize = 0;
 
-        WriteSessionWrapper(WriteSessionPtr session, ui64 partition, TDuration idleTimeout)
-            : Session(std::move(session))
-            , Partition(partition)
-            , IdleTimeout(idleTimeout)
-            , QueueSize(0)
-        {}
+        WriteSessionWrapper(WriteSessionPtr session, ui64 partition, TDuration idleTimeout);
 
-        bool IsExpired() {
-            if (!EmptySince) {
-                return false;
-            }
-
-            return TInstant::Now() - *EmptySince > IdleTimeout;
-        }
-
-        bool IsQueueEmpty() {
-            return QueueSize == 0;
-        }
-
-        bool AddToQueue(ui64 delta) {
-            bool idle = EmptySince.has_value();
-            if (idle) {
-                EmptySince = std::nullopt;
-            }
-            QueueSize += delta;
-            return idle;
-        }
-
-        bool RemoveFromQueue(ui64 delta) {
-            QueueSize -= delta;
-            if (QueueSize == 0) {
-                EmptySince = TInstant::Now();
-            }
-            return EmptySince.has_value();
-        }
-
-        bool Less(const std::shared_ptr<WriteSessionWrapper>& other) {
-            if (!EmptySince.has_value() && !other->EmptySince.has_value()) {
-                return Partition < other->Partition;
-            }
-
-            if (EmptySince.has_value() && !other->EmptySince.has_value()) {
-                return true;
-            }
-
-            if (!EmptySince.has_value() && other->EmptySince.has_value()) {
-                return false;
-            }
-
-            if (*EmptySince == *other->EmptySince) {
-                return Partition < other->Partition;
-            }
-
-            return *EmptySince < *other->EmptySince;
-        }
+        bool IsExpired() const;
+        bool IsQueueEmpty() const;
+        bool AddToQueue(ui64 delta);
+        bool RemoveFromQueue(ui64 delta);
+        bool Less(const std::shared_ptr<WriteSessionWrapper>& other);
 
         struct Comparator {
-            bool operator()(const std::shared_ptr<WriteSessionWrapper>& first, const std::shared_ptr<WriteSessionWrapper>& second) const {
-                return first->Less(second);
-            }
+            bool operator()(const std::shared_ptr<WriteSessionWrapper>& first, const std::shared_ptr<WriteSessionWrapper>& second) const;
         };
     };
 
     using WrappedWriteSessionPtr = std::shared_ptr<WriteSessionWrapper>;
 
     struct IPartitionChooser {
-        virtual ui64 ChoosePartition(const std::string& key) = 0;
+        virtual ui32 ChoosePartition(const std::string_view key) = 0;
         virtual ~IPartitionChooser() = default;
     };
 
     struct TBoundPartitionChooser : public IPartitionChooser {
         TBoundPartitionChooser(TKeyedWriteSession* session);
-        ui64 ChoosePartition(const std::string& key) override;
+        ui32 ChoosePartition(const std::string_view key) override;
     private:
         TKeyedWriteSession* Session;
     };
 
     struct THashPartitionChooser : public IPartitionChooser {
         THashPartitionChooser(TKeyedWriteSession* session);
-        ui64 ChoosePartition(const std::string& key) override;
+        ui32 ChoosePartition(const std::string_view key) override;
     private:
         TKeyedWriteSession* Session;
     };
@@ -231,6 +146,8 @@ private:
     void SaveMessage(TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
 
     void RunMainWorker();
+
+    static void* RunMainWorkerThread(void* arg);
 
     std::optional<TContinuationToken> GetContinuationToken(ui64 partition);
 
@@ -261,6 +178,10 @@ private:
     void HandleReadyFutures(std::unique_lock<std::mutex>& lock);
 
     bool IsQueueEmpty();
+
+    void WaitForEvents();
+
+    void WaitSomeAction(std::unique_lock<std::mutex>& lock);
     
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -286,7 +207,7 @@ public:
     ~TKeyedWriteSession();
 
 private:
-    std::thread MainWorker;
+    TThread MainWorker;
 
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     std::shared_ptr<TTopicClient::TImpl> Client;
@@ -300,7 +221,7 @@ private:
     std::set<WrappedWriteSessionPtr, WriteSessionWrapper::Comparator> IdlerSessions;
     std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
     std::unordered_map<ui64, std::deque<TContinuationToken>> ContinuationTokens;
-    std::map<TPartitionBound, ui64> PartitionsIndex;
+    std::map<std::string, ui64> PartitionsIndex;
 
     TKeyedWriteSessionSettings Settings;
     std::unordered_map<ui64, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
@@ -314,6 +235,7 @@ private:
     NThreading::TFuture<void> CloseFuture;
     NThreading::TPromise<void> EventsProcessedPromise;
     NThreading::TFuture<void> EventsProcessedFuture;
+    NThreading::TPromise<void> NotReadyPromise;
     NThreading::TFuture<void> NotReadyFuture;
 
     std::mutex GlobalLock;
@@ -323,7 +245,7 @@ private:
 
     size_t MemoryUsage;
 
-    std::function<std::string(const std::string& key)> PartitioningKeyHasher;
+    std::function<std::string(const std::string_view key)> PartitioningKeyHasher;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -365,11 +287,11 @@ private:
 
 class TSimpleBlockingKeyedWriteSession : public ISimpleBlockingKeyedWriteSession {
 private:
-    std::optional<TContinuationToken> GetContinuationToken(const TDuration& timeout);
+    std::optional<TContinuationToken> GetContinuationToken(TDuration timeout);
 
     void HandleAcksEvent(const TWriteSessionEvent::TAcksEvent& acksEvent);
 
-    bool WaitForAck(ui64 seqNo, const TDuration& timeout);
+    bool WaitForAck(ui64 seqNo, TDuration timeout);
 
     template<typename F>
     bool Wait(const TDuration& timeout, F&& stopFunc);
@@ -385,7 +307,7 @@ public:
 
 
     bool Write(const std::string& key, TWriteMessage&& message, TTransactionBase* tx = nullptr,
-        const TDuration& blockTimeout = TDuration::Max()) override;
+        TDuration blockTimeout = TDuration::Max()) override;
 
     bool Close(TDuration closeTimeout = TDuration::Max()) override;
 

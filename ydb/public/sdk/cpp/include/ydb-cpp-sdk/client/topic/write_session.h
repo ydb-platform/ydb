@@ -11,7 +11,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <util/generic/size_literals.h>
-#include <library/cpp/digest/md5/md5.h>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -156,10 +155,6 @@ struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
     TKeyedWriteSessionSettings() = default;
     TKeyedWriteSessionSettings(const TKeyedWriteSessionSettings&) = default;
     TKeyedWriteSessionSettings(TKeyedWriteSessionSettings&&) = default;
-    TKeyedWriteSessionSettings(const std::string& path, const std::string& producerId) {
-        Path(path);
-        ProducerId(producerId);
-    }
 
     TKeyedWriteSessionSettings& operator=(const TKeyedWriteSessionSettings&) = default;
     TKeyedWriteSessionSettings& operator=(TKeyedWriteSessionSettings&&) = default;
@@ -171,13 +166,16 @@ struct TKeyedWriteSessionSettings : public TWriteSessionSettings {
     FLUENT_SETTING_DEFAULT(EPartitionChooserStrategy, PartitionChooserStrategy, EPartitionChooserStrategy::Bound);
 
     //! Hasher function.
-    FLUENT_SETTING_DEFAULT(std::function<std::string(const std::string& key)>, PartitioningKeyHasher, [](const std::string& key) -> std::string {
-        return MD5::Calc(key);
+    FLUENT_SETTING_DEFAULT(std::function<std::string(const std::string_view key)>, PartitioningKeyHasher, [](const std::string_view key) -> std::string {
+        return std::string{key};
     });
 
     //! ProducerId prefix to use.
     //! ProducerId is generated as ProducerIdPrefix + partition id.
     FLUENT_SETTING(std::string, ProducerIdPrefix);
+
+private:
+    using TWriteSessionSettings::ProducerId;
 };
 
 //! Contains the message to write and all the options.
@@ -232,7 +230,7 @@ public:
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.
-class ISimpleBlockingWriteSession : public TThrRefBase {
+class ISimpleBlockingWriteSession {
 public:
     //! Write single message. Blocks for up to blockTimeout if inflight is full or memoryUsage is exceeded;
     //! return - true if write succeeded, false if message was not enqueued for write within blockTimeout.
@@ -313,7 +311,7 @@ public:
 };
 
 //! Keyed write session.
-class IKeyedWriteSession : public TThrRefBase {
+class IKeyedWriteSession {
 public:
     //! Write single message.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
@@ -342,12 +340,7 @@ public:
     //! Write single message.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
     virtual bool Write(const std::string& key, TWriteMessage&& message, TTransactionBase* tx = nullptr,
-        const TDuration& blockTimeout = TDuration::Max()) = 0;
-
-    //! Write single message that is already coded by codec.
-    //! continuationToken - a token earlier provided to client with ReadyToAccept event.
-    // virtual bool WriteEncoded(const std::string& key, TWriteMessage&& params, TTransactionBase* tx = nullptr,
-    //     const TDuration& blockTimeout = TDuration::Max()) = 0;
+        TDuration blockTimeout = TDuration::Max()) = 0;
 
     //! Wait for all writes to complete (no more that closeTimeout()), then close.
     //! Return true if all writes were completed and acked, false if timeout was reached and some writes were aborted.

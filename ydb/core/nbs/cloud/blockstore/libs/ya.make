@@ -1,0 +1,5 @@
+RECURSE(
+    kikimr
+    service
+    storage
+)

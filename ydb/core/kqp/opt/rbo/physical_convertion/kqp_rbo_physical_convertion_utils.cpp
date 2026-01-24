@@ -1,4 +1,3 @@
-#include "kqp_rbo.h"
 #include "kqp_rbo_physical_convertion_utils.h"
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>

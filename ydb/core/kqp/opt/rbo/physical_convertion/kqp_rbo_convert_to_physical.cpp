@@ -1,4 +1,4 @@
-#include "kqp_rbo.h"
+#include "kqp_rbo_physical_op_builder.h"
 #include "kqp_rbo_physical_convertion_utils.h"
 #include "kqp_rbo_physical_sort_builder.h"
 #include "kqp_rbo_physical_aggregation_builder.h"
@@ -6,6 +6,7 @@
 #include "kqp_rbo_physical_join_builder.h"
 #include "kqp_rbo_physical_filter_builder.h"
 
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
@@ -241,22 +242,6 @@ TExprNode::TPtr BuildPhysicalQuery(TOpRoot& root, TVector<TExprNode::TPtr>&& phy
     .Done().Ptr();
     // clang-format on
 }
-
-template <typename T>
-TExprNode::TPtr BuildMap(TExprNode::TPtr input, TExprNode::TPtr arg, TVector<TExprBase>&& items, TExprContext &ctx, TPositionHandle pos) {
-    // clang-format off
-    return Build<T>(ctx, pos)
-        .Input(input)
-        .template Lambda<TCoLambda>()
-            .Args({arg})
-            .template Body<TCoAsStruct>()
-                .Add(items)
-            .Build()
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-}
-
 } // namespace
 
 namespace NKikimr {
@@ -383,8 +368,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                 currentStageBody = stageInput;
             }
 
-            TPhysicalFilterBuilder phyFilterBuilder(filter, ctx, op->Pos);
-            currentStageBody = phyFilterBuilder.BuildPhysicalFilter(currentStageBody);
+            currentStageBody = Build<TPhysicalFilterBuilder>(filter, ctx, op->Pos, currentStageBody);
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
@@ -398,8 +382,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                 currentStageBody = stageInput;
             }
 
-            TPhysicalMapBuilder phyMapBuilder(map, ctx, op->Pos);
-            currentStageBody = phyMapBuilder.BuildPhysicalMap(currentStageBody);
+            currentStageBody = Build<TPhysicalMapBuilder>(map, ctx, op->Pos, currentStageBody);
 
             if (NPhysicalConvertionUtils::IsMultiConsumerHandlerNeeded(op)) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);
@@ -435,8 +418,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
                 currentStageBody = stageInput;
             }
 
-            TPhysicalSortBuilder physicalSortBuilder(sort, ctx, op->Pos);
-            currentStageBody = physicalSortBuilder.BuildPhysicalSort(currentStageBody);
+            currentStageBody = Build<TPhysicalSortBuilder>(sort, ctx, op->Pos, currentStageBody);
+
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Sort " << opStageId;
@@ -448,8 +431,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *join->GetRightInput()->Props.StageId);
             stageArgs[opStageId].push_back(rightArg);
 
-            TPhysicalJoinBuilder joinBuilder(join, ctx, op->Pos);
-            currentStageBody = joinBuilder.BuildPhysicalJoin(leftInput, rightInput);
+            currentStageBody = Build<TPhysicalJoinBuilder>(join, ctx, op->Pos, leftInput, rightInput);
+
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Join " << opStageId;
@@ -489,8 +472,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *aggregate->GetInput()->Props.StageId);
             stageArgs[opStageId].push_back(stageArg);
 
-            TPhysicalAggregationBuilder aggregationBuilder(aggregate, ctx, op->Pos);
-            currentStageBody = aggregationBuilder.BuildPhysicalAggregation(stageInput);
+            currentStageBody = Build<TPhysicalAggregationBuilder>(aggregate, ctx, op->Pos, stageInput);
+
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
         } else {

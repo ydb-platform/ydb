@@ -1,5 +1,5 @@
 #pragma once
-#include "kqp_rbo.h"
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -69,7 +69,7 @@ TExprNode::TPtr BuildNarrowMapForWideInput(TExprNode::TPtr input, const TVector<
 }
 
 template <typename T>
-TExprNode::TPtr BuildNarrowMapForWideInput(TExprNode::TPtr input, const TVector<T>& inputs, THashMap<ui32, TString> renameMap, TExprContext& ctx) {
+TExprNode::TPtr BuildNarrowMapForWideInput(TExprNode::TPtr input, const TVector<T>& inputs, const THashMap<ui32, TString>& renameMap, TExprContext& ctx) {
     // clang-format off
     return ctx.Builder(input->Pos())
         .Callable("NarrowMap")

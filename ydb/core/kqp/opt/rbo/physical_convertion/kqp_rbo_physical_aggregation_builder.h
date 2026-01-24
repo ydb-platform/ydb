@@ -1,5 +1,5 @@
 #pragma once
-#include "kqp_rbo.h"
+#include "kqp_rbo_physical_op_builder.h"
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -8,7 +8,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 // This class represents a physical builder for OpAggregate, it emits a physical aggreation based on a given OpAggregate.
-class TPhysicalAggregationBuilder {
+class TPhysicalAggregationBuilder : public TPhysicalUnaryOpBuilder {
     // Internal representation of physical aggregation traits.
     struct TPhysicalAggregationTraits {
         TPhysicalAggregationTraits(const TString& aggFieldName, const TString stateFieldName, const TString& aggFunc, const TTypeAnnotationNode* inputItemType,
@@ -28,22 +28,12 @@ class TPhysicalAggregationBuilder {
     };
 
 public:
-    TPhysicalAggregationBuilder(std::shared_ptr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos, bool needToPackWideLambdas = false)
-        : Aggregate(aggregate)
-        , Ctx(ctx)
-        , Pos(pos)
-        , NeedToPackWideLambdas(needToPackWideLambdas) {
+    TPhysicalAggregationBuilder(std::shared_ptr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos)
+        : TPhysicalUnaryOpBuilder(ctx, pos)
+        , Aggregate(aggregate) {
     }
 
-    TPhysicalAggregationBuilder() = delete;
-    TPhysicalAggregationBuilder(const TPhysicalAggregationBuilder&) = delete;
-    TPhysicalAggregationBuilder& operator=(const TPhysicalAggregationBuilder&) = delete;
-    TPhysicalAggregationBuilder(const TPhysicalAggregationBuilder&&) = delete;
-    TPhysicalAggregationBuilder& operator=(const TPhysicalAggregationBuilder&&) = delete;
-    ~TPhysicalAggregationBuilder() = default;
-
-    // This function builds a physical aggregation with given input.
-    TExprNode::TPtr BuildPhysicalAggregation(TExprNode::TPtr input);
+    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
 
 private:
     // Following functions creates a 4 lambdas for physical aggregation:
@@ -124,9 +114,8 @@ private:
                                       const THashMap<TString, TString>& projectionMap);
 
     std::shared_ptr<TOpAggregate> Aggregate;
-    TExprContext& Ctx;
-    TPositionHandle Pos;
-    bool NeedToPackWideLambdas{false};
+    static constexpr bool NeedToPackWideLambdas{true};
+
     // This Map represents a simple physical aggregation functions.
     const THashMap<TString, TString> AggregationFunctionToAggregationCallable{{"sum", "AggrAdd"}, {"min", "AggrMin"}, {"max", "AggrMax"}};
     // The name of the physical aggregation.

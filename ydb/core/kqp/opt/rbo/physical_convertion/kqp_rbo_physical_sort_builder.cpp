@@ -90,7 +90,7 @@ TVector<TExprNode::TPtr> TPhysicalSortBuilder::BuildSortKeysForWideSort(const TV
     return sortKeys;
 }
 
-TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalSort(TExprNode::TPtr input) {
+TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     const auto inputs = Sort->GetInput()->GetOutputIUs();
     const auto& sortElements = Sort->SortElements;
     // clang-format off

@@ -219,6 +219,9 @@ private:
 
 class TKesusResourcesUploader : public TExportFilesUploader<TKesusResourcesUploader> {
     void CreatePipe() {
+        if (KesusPipeClient) {
+            return; // Already open
+        }
         NTabletPipe::TClientConfig cfg;
         cfg.RetryPolicy = {
             .RetryLimitCount = 3u
@@ -388,8 +391,8 @@ IActor* CreateKesusResourcesUploader(
     ui64 exportId, ui32 itemIdx,
     const Ydb::Export::ExportToS3Settings &settings,
     TMaybe<NBackup::TEncryptionIV> iv,
-    const bool enableChecksums
-) {
+    const bool enableChecksums)
+{
     return new TKesusResourcesUploader(kesusTabletId, replyTo, exportId, itemIdx, settings, iv, enableChecksums);
 }
 
@@ -444,10 +447,11 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
             return Finish(false, "cannot infer permissions");
         }
 
-        if (describeResult.GetPathDescription().GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeKesus) {
+        const auto& desc = describeResult.GetPathDescription();
+        if (desc.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeKesus) {
             // Upload resources before to store them in metadata
-            Y_ABORT_UNLESS(describeResult.GetPathDescription().HasKesus());
-            StartUploadKesusResources(describeResult.GetPathDescription().GetKesus().GetKesusTabletId());
+            Y_ABORT_UNLESS(desc.HasKesus());
+            StartUploadKesusResources(desc.GetKesus().GetKesusTabletId());
         } else {
             StartUploadFiles();
         }
@@ -474,7 +478,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
             << ", error: " << record->Error);
 
         if (!record->Success) {
-            return RetryResourceUploadOrFail(record->Error);
+            return RetryResourcesUploadOrFail(record->Error);
         }
 
         // Fill metadata with rate limiter resources
@@ -499,14 +503,14 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         StartUploadFiles();
     }
 
-    void RetryResourceUploadOrFail(const TString& error) {
-        LOG_D("RetryResourceUploadOrFail"
+    void RetryResourcesUploadOrFail(const TString& error) {
+        LOG_D("RetryResourcesUploadOrFail"
             << ", self: " << SelfId()
-            << ", attempts " << ResourceUploadAttempts + 1
+            << ", attempts " << KesusResourcesUploadAttempts + 1
             << ", max attempts" << GetSettings().number_of_retries()
             << ", error " << error);
 
-        if (++ResourceUploadAttempts >= MaxResourceUploadAttempts) {
+        if (++KesusResourcesUploadAttempts >= MaxKesusResourcesUploadAttempts) {
             return Finish(false, error);
         }
 
@@ -650,8 +654,8 @@ private:
     TString Metadata;
 
     TActorId KesusResourcesUploader;
-    ui32 ResourceUploadAttempts = 0;
-    ui32 MaxResourceUploadAttempts = 10;
+    ui32 KesusResourcesUploadAttempts = 0;
+    ui32 MaxKesusResourcesUploadAttempts = 10;
 }; // TSchemeUploader
 
 class TExportMetadataUploader: public TExportFilesUploader<TExportMetadataUploader> {

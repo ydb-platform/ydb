@@ -359,7 +359,6 @@ PEERDIR(
     library/cpp/yt/string
     library/cpp/yt/yson
     library/cpp/yt/yson_string
-    library/cpp/ytalloc/api
 
     yt/yt/build
 

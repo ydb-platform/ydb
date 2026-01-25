@@ -1741,7 +1741,7 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
         auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie, false);
         NKikimrClient::TResponse& resp = *response->Response;
         resp.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
-        resp.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
+        resp.SetErrorCode(NPersQueue::NErrorCode::STALE_LEADER);
         ctx.Send(TabletActorId, response.Release());
         return;
     }

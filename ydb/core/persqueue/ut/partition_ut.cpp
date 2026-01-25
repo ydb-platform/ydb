@@ -36,6 +36,8 @@ struct TConfigParams {
     ui64 Version = 0;
     TVector<TCreateConsumerParams> Consumers;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS;
+    TMaybe<NKikimrPQ::ETopicPartitionStatus> PartitionStatus;
+    ui32 PartitionIdForStatus = 1;
 };
 
 struct TCreatePartitionParams {
@@ -763,17 +765,24 @@ void TPartitionFixture::SendConfigResponse(const TConfigParams& config)
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadResult();
-    if (config.Consumers.empty()) {
+    if (config.Consumers.empty() && !config.PartitionStatus) {
         read->SetStatus(NKikimrProto::NODATA);
     } else {
         read->SetStatus(NKikimrProto::OK);
 
         TString out;
-        Y_ABORT_UNLESS(MakeConfig(config.Version,
-                            config.Consumers,
-                            1,
-                            config.MeteringMode).SerializeToString(&out));
-
+        if (config.PartitionStatus) {
+            auto cfg = NHelpers::MakeConfig(config.Version, config.Consumers, 1, config.MeteringMode);
+            auto* p = cfg.AddPartitions();
+            p->SetPartitionId(config.PartitionIdForStatus);
+            p->SetStatus(*config.PartitionStatus);
+            Y_ABORT_UNLESS(cfg.SerializeToString(&out));
+        } else {
+            Y_ABORT_UNLESS(MakeConfig(config.Version,
+                                config.Consumers,
+                                1,
+                                config.MeteringMode).SerializeToString(&out));
+        }
         read->SetValue(out);
     }
 
@@ -2763,6 +2772,31 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoError, TPartitionFixture) {
         UNIT_ASSERT(event != nullptr);
     }
 } // GetPartitionWriteInfoErrors
+
+Y_UNIT_TEST_F(GetMaxSeqNo_CheckPartitionActive_Inactive_ReturnsStaleLeader, TPartitionFixture) {
+    CreatePartition({
+        .Partition = TPartitionId{1},
+        .Config = {
+            .Version = 0,
+            .Consumers = {{.Consumer = "c", .Generation = 1, .Step = 1}},
+            .PartitionStatus = NKikimrPQ::ETopicPartitionStatus::Inactive,
+            .PartitionIdForStatus = 1,
+        },
+    });
+
+    const ui64 cookie = 123;
+    TVector<TString> sourceIds = {"src"};
+    auto ev = MakeHolder<TEvPQ::TEvGetMaxSeqNoRequest>(cookie, sourceIds, true);
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, ev.Release()));
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(5));
+    UNIT_ASSERT_C(response != nullptr, "Expected TEvProxyResponse");
+    UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
+    UNIT_ASSERT(response->Response->HasStatus());
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(response->Response->GetStatus()), static_cast<int>(NMsgBusProxy::MSTATUS_ERROR));
+    UNIT_ASSERT(response->Response->HasErrorCode());
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(response->Response->GetErrorCode()), static_cast<int>(NPersQueue::NErrorCode::STALE_LEADER));
+}
 
 Y_UNIT_TEST_F(ShadowPartitionCounters, TPartitionFixture) {
     ShadowPartitionCountersTest(false);

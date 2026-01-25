@@ -613,7 +613,7 @@ namespace NLastGetoptFork {
                 I;
 
                 for (auto& opt : unorderedOpts) {
-                    if (opt->HasArg_ == EHasArg::NO_ARGUMENT || opt->IsHidden()) {
+                    if (opt->IsHidden()) {
                         continue;
                     }
 
@@ -630,29 +630,43 @@ namespace NLastGetoptFork {
                     line << ")";
                     {
                         I;
-                        L << "if [[ ${cword} == " << level + 1 << " ]] ; then";
-                        {
-                            I;
-                            if (opt->Completer_ != nullptr) {
-                                opt->Completer_->GenerateBash(out);
-                            } else {
-                                L << ": # no-op: no completer for option";
+                        if (opt->HasArg_ == EHasArg::NO_ARGUMENT) {
+                            // pop option from words
+                            L << "cword=$((cword-1))";
+                            L << "words=(\"${words[@]:0:" << level << "}\" \"${words[@]:" << level + 1 << "}\")";
+                            L << "continue";
+                        } else if (opt->HasArg_ == EHasArg::REQUIRED_ARGUMENT) {
+                            L << "if [[ ${cword} == " << level + 1 << " ]] ; then";
+                            {
+                                I;
+                                if (opt->Completer_ != nullptr) {
+                                    opt->Completer_->GenerateBash(out);
+                                } else {
+                                    L << ": # no-op: no completer for option";
+                                }
                             }
-                        }
-                        L << "else";
-                        {
-                            I;
-                            if (opt->HasArg_ == EHasArg::NO_ARGUMENT) {
-                                // pop option from words
-                                L << "cword=$((cword-1))";
-                                L << "words=(\"${words[@]:0:" << level << "}\" \"${words[@]:" << level + 1 << "}\")";
-                                L << "continue";
-                            } else if (opt->HasArg_ == EHasArg::REQUIRED_ARGUMENT) {
+                            L << "else";
+                            {
+                                I;
                                 // pop option and its argument from words
                                 L << "cword=$((cword-2))";
                                 L << "words=(\"${words[@]:0:" << level << "}\" \"${words[@]:" << level + 2 << "}\")";
                                 L << "continue";                                
+                            }          
+                            L << "fi";                      
                             } else if (opt->HasArg_ == EHasArg::OPTIONAL_ARGUMENT) {
+                            L << "if [[ ${cword} == " << level + 1 << " ]] ; then";
+                            {
+                                I;
+                                if (opt->Completer_ != nullptr) {
+                                    opt->Completer_->GenerateBash(out);
+                                } else {
+                                    L << ": # no-op: no completer for option";
+                                }
+                            }
+                            L << "else";
+                            {
+                                I;
                                 // check if option has argument set -- so that we know how many words to skip
                                 L << "args=0";
                                 auto& line = L << "opts='@(";
@@ -717,11 +731,11 @@ namespace NLastGetoptFork {
                                     L << "continue";
                                 }
                                 L << "fi";
-                            }
                         }
                         L << "fi";
-                        L << ";;";
                     }
+                    }
+                    L << ";;";
                 }
 
                 for (auto& mode : modes) {

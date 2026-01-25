@@ -1668,7 +1668,7 @@ void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, NWilson::TT
     ids.reserve(cmd.SourceIdSize());
     for (ui32 i = 0; i < cmd.SourceIdSize(); ++i)
         ids.push_back(cmd.GetSourceId(i));
-    THolder<TEvPQ::TEvGetMaxSeqNoRequest> event = MakeHolder<TEvPQ::TEvGetMaxSeqNoRequest>(responseCookie, ids);
+    THolder<TEvPQ::TEvGetMaxSeqNoRequest> event = MakeHolder<TEvPQ::TEvGetMaxSeqNoRequest>(responseCookie, ids, cmd.HasCheckPartitionActive() ? cmd.GetCheckPartitionActive() : false);
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 

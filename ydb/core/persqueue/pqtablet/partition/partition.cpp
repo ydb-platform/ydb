@@ -1737,6 +1737,15 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Get()->CheckPartitionIsActive && !IsActive()) {
+        auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie, false);
+        NKikimrClient::TResponse& resp = *response->Response;
+        resp.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
+        resp.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
+        ctx.Send(TabletActorId, response.Release());
+        return;
+    }
+
     auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie, false);
     NKikimrClient::TResponse& resp = *response->Response;
 

@@ -111,6 +111,7 @@ message TPersQueuePartitionRequest {
 
     message TCmdGetMaxSeqNo {
         repeated bytes SourceId = 2; //list of sourceIds to request
+        optional bool CheckPartitionActive = 3; //check partition is active to avoid invalid seqno due to stale leaders
     }
 
     message TCmdGetOwnership { // get write ownership for partition

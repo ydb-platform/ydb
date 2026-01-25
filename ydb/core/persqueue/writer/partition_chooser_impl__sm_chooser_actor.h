@@ -158,7 +158,7 @@ private:
         }
 
         TThis::PartitionHelper.Open(oldNode->TabletId, ctx);
-        TThis::PartitionHelper.SendMaxSeqNoRequest(oldNode->Id, TThis::SourceId, ctx);
+        TThis::PartitionHelper.SendMaxSeqNoRequest(oldNode->Id, TThis::SourceId, ctx, true);
     }
 
     void HandleMaxSeqNo(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {

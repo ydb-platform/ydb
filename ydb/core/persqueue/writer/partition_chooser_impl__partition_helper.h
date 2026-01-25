@@ -43,11 +43,12 @@ public:
         NTabletPipe::SendData(ctx, Pipe, ev.Release(), 0, NWilson::TTraceId(TraceId));
     }
 
-    void SendMaxSeqNoRequest(ui32 partitionId, const TString& sourceId, const TActorContext& ctx) {
+    void SendMaxSeqNoRequest(ui32 partitionId, const TString& sourceId, const TActorContext& ctx, bool checkPartitionIsActive = false) {
         auto ev = MakeRequest(partitionId, Pipe);
 
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetMaxSeqNo();
         cmd.AddSourceId(NSourceIdEncoding::EncodeSimple(sourceId));
+        cmd.SetCheckPartitionActive(checkPartitionIsActive);
 
         NTabletPipe::SendData(ctx, Pipe, ev.Release(), 0, NWilson::TTraceId(TraceId));
     }

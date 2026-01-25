@@ -175,6 +175,18 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
                     << " aborting because it cannot acquire locks");
 
+                // Log victim detection for TLI
+                TMaybe<ui64> victimQueryTraceId;
+                if (auto* lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId).Get()) {
+                    ui64 queryTraceId = lock->GetQueryTraceId();
+                    if (queryTraceId != 0) {
+                        victimQueryTraceId = queryTraceId;
+                    }
+                }
+                NDataIntegrity::LogVictimDetected(ctx, tabletId, "KQP data transaction was a victim of broken locks",
+                                                  victimQueryTraceId,
+                                                  op->QueryTraceId() ? TMaybe<ui64>(op->QueryTraceId()) : Nothing());
+
                 op->SetAbortedFlag();
                 BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
                 op->Result()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
@@ -229,6 +241,33 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             : KqpValidateLocks(tabletId, sysLocks, kqpLocks, useGenericReadSets, inReadSets);
 
         if (!validated) {
+            // Log victim detection for TLI
+            TMaybe<ui64> victimQueryTraceId;
+            // Try to get QueryTraceId from the lock using guardLocks.LockTxId
+            if (guardLocks.LockTxId) {
+                if (auto* lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId).Get()) {
+                    ui64 queryTraceId = lock->GetQueryTraceId();
+                    if (queryTraceId != 0) {
+                        victimQueryTraceId = queryTraceId;
+                    }
+                }
+            }
+            // If not found, try using the LockId from brokenLocks
+            if (!victimQueryTraceId && !brokenLocks.empty()) {
+                for (const auto& brokenLock : brokenLocks) {
+                    if (auto* lock = DataShard.SysLocksTable().GetRawLock(brokenLock.GetLockId()).Get()) {
+                        ui64 queryTraceId = lock->GetQueryTraceId();
+                        if (queryTraceId != 0) {
+                            victimQueryTraceId = queryTraceId;
+                            break;
+                        }
+                    }
+                }
+            }
+            NDataIntegrity::LogVictimDetected(ctx, tabletId, "KQP data transaction was a victim of broken locks",
+                                              victimQueryTraceId,
+                                              op->QueryTraceId() ? TMaybe<ui64>(op->QueryTraceId()) : Nothing());
+
             tx->Result() = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(
                 NKikimrTxDataShard::TX_KIND_DATA,
                 tabletId,
@@ -244,7 +283,9 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             KqpEraseLocks(tabletId, kqpLocks, sysLocks);
             auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
             tx->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
-            NDataIntegrity::LogLocksBroken(ctx, tabletId, "KQP data transaction aborted, broke other transaction locks during cleanup", locksBrokenByTx, txId);
+            auto victimQueryTraceIds = sysLocks.ExtractQueryTraceIds(locksBrokenByTx);
+            NDataIntegrity::LogLocksBroken(ctx, tabletId, "KQP data transaction aborted, broke other transaction locks during cleanup", locksBrokenByTx,
+                                           Nothing(), victimQueryTraceIds);
             DataShard.SubscribeNewLocks(ctx);
 
             if (auto status = ensureAbortOutReadSets()) {
@@ -292,6 +333,20 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         if (!result && computeCtx.HadInconsistentReads()) {
             LOG_T("Operation " << *op << " (execute_kqp_data_tx) at " << tabletId
                 << " detected inconsistent reads and is going to abort");
+
+            // Log victim detection for TLI
+            TMaybe<ui64> victimQueryTraceId;
+            if (guardLocks.LockTxId) {
+                if (auto* lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId).Get()) {
+                    ui64 queryTraceId = lock->GetQueryTraceId();
+                    if (queryTraceId != 0) {
+                        victimQueryTraceId = queryTraceId;
+                    }
+                }
+            }
+            NDataIntegrity::LogVictimDetected(ctx, tabletId, "KQP data transaction was a victim of broken locks",
+                                              victimQueryTraceId,
+                                              op->QueryTraceId() ? TMaybe<ui64>(op->QueryTraceId()) : Nothing());
 
             allocGuard.Release();
 
@@ -502,7 +557,9 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
 void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx) {
     auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
-    NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "KQP data transaction broke other locks", locksBrokenByTx, op->GetTxId());
+    auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByTx);
+    NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "KQP data transaction broke other locks", locksBrokenByTx,
+                                   op->QueryTraceId(), victimQueryTraceIds);
 
     // Set the count of locks broken by this transaction
     op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());

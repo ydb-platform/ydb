@@ -318,6 +318,9 @@ public:
         record.SetLockMode(!isUniqueCheck
             ? Settings.LockMode
             : NKikimrDataEvents::OPTIMISTIC);
+        if (Settings.QueryTraceId) {
+            record.SetQueryTraceId(Settings.QueryTraceId);
+        }
 
         AFL_ENSURE(!failOnUniqueCheck || isUniqueCheck);
 

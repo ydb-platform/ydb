@@ -525,9 +525,9 @@ public:
 
     virtual ~TValidatedTx() = default;
 
-    enum class EType { 
+    enum class EType {
         DataTx,
-        WriteTx 
+        WriteTx
     };
 
 public:
@@ -768,6 +768,7 @@ public:
     }
     virtual ui64 LockTxId() const { return 0; }
     virtual ui32 LockNodeId() const { return 0; }
+    virtual ui64 QueryTraceId() const { return 0; }
     virtual bool HasLockedWrites() const { return false; }
 
     ////////////////////////////////////////
@@ -991,7 +992,7 @@ public:
 public:
     // Orbit used for tracking operation progress
     NLWTrace::TOrbit Orbit;
-    
+
     NWilson::TSpan OperationSpan;
 };
 

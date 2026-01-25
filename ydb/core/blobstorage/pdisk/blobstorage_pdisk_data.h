@@ -880,7 +880,7 @@ struct TDiskFormat {
         }
     }
 
-    void Clear() {
+    void Clear(bool enableFormatEncryption) {
         Version = PDISK_FORMAT_VERSION;
         DiskSize = 0;
         Guid = 0;
@@ -900,8 +900,11 @@ struct TDiskFormat {
             FormatFlagErasureEncodeSysLog |
             FormatFlagErasureEncodeFormat |
             FormatFlagErasureEncodeNextChunkReference |
-            FormatFlagEncryptFormat |
             FormatFlagEncryptData;
+
+        if (enableFormatEncryption) {
+            FormatFlags |= FormatFlagEncryptFormat;
+        }
 
         Hash = 0;
 
@@ -910,7 +913,7 @@ struct TDiskFormat {
     }
 
     void UpgradeFrom(const TDiskFormat &format) {
-        Clear();
+        Clear(IsEncryptFormat());
         // Upgrade from version 2
         TimestampUs = 0;
         // Fill the flags according to actual Version2 settings

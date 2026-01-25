@@ -166,7 +166,7 @@ YARD_UNIT_TEST(TestChunkReadRandomOffset) {
         TTestContext tc(true);
         constexpr ui32 sectorPayload = 4064;
         NPDisk::TDiskFormat format;
-        format.Clear();
+        format.Clear(true);
         UNIT_ASSERT(sectorPayload == format.SectorPayloadSize());
         constexpr ui32 sizeWithHalfOfBlockSize = sectorPayload * 512 - sectorPayload / 2;
         Run<TTestChunkReadRandomOffset<sizeWithHalfOfBlockSize, 217, 20>>(&tc, 1, 8 << 20, false);

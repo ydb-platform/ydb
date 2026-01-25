@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             settings.EnableSectorEncryption = encryption;
             TActorTestContext testCtx(settings);
 
-            TVDiskMock vdisk(&testCtx);
+            TVDiskMock vdisk(&testCtx, true);
             vdisk.InitFull();
 
             for (ui32 i = 0; i < 1000; ++i) {
@@ -979,6 +979,113 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
     Y_UNIT_TEST(AfterObliterateDontReuseOldChunkDataNoEncryption) {
         AfterObliterateDontReuseOldChunkData(false);
+    }
+
+    void ShouldSwitchEncryptionOnOffWithoutReformatting(bool initialEncryption) {
+        const TString expectedLogData = PrepareData(12346);
+        const TString writeData = PrepareData(4096);
+
+        TVector<ui32> chunkIds;
+        size_t expectedLogCount = 0;
+
+        // we start with a default settings, i.e. sector encryption is on
+        TActorTestContext::TSettings settings{};
+        settings.UseSectorMap = true;
+        settings.InitiallyZeroed = true;
+        settings.ChunkSize = NPDisk::SmallDiskMaximumChunkSize;
+        settings.DiskSize = (ui64)settings.ChunkSize * 50;
+        settings.SmallDisk = true;
+        settings.PlainDataChunks = false;
+        settings.EnableSectorEncryption = initialEncryption;
+
+        TActorTestContext testCtx(settings);
+
+        // our checker function
+        auto verifyVdiskData = [&](TVDiskMock& vdisk, size_t expectedCount) {
+            // Re-init to reset HasReadTheWholeLog before verification reads.
+            vdisk.Init();
+            // sanity log read
+            size_t foundExpectedCount = 0;
+            const ui64 logRecordsRead = vdisk.ReadLog(false, [&](const NPDisk::TLogRecord& rec) {
+                if (rec.Data.size() == expectedLogData.size()) {
+                    const TString data = TRcBuf(rec.Data).ExtractUnderlyingContainerOrCopy<TString>();
+                    if (data == expectedLogData) {
+                        ++foundExpectedCount;
+                    }
+                }
+            });
+            UNIT_ASSERT(logRecordsRead > 0);
+            UNIT_ASSERT_VALUES_EQUAL(foundExpectedCount, expectedCount);
+
+            // sanity check read chunkdata
+            for (ui32 chunkIdx = 0; chunkIdx < chunkIds.size(); ++chunkIdx) {
+                const auto readRes = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
+                    new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunkIds[chunkIdx], 0, writeData.size(), 0, nullptr),
+                    std::nullopt);
+
+                if (readRes->Status == NKikimrProto::OK) {
+                    UNIT_ASSERT(readRes->Data.IsReadable(0, writeData.size()));
+                    UNIT_ASSERT_VALUES_EQUAL(writeData, readRes->Data.ToString());
+                }
+            }
+        };
+
+        auto doWritesAndCheck = [&]() {
+            TVDiskMock vdisk(&testCtx, true);
+            vdisk.InitFull();
+            vdisk.SendEvLogSync(12346);
+            expectedLogCount = 1;
+
+            vdisk.ReserveChunk();
+            vdisk.CommitReservedChunks();
+
+            UNIT_ASSERT_VALUES_EQUAL(vdisk.Chunks[EChunkState::COMMITTED].size(), 1UL);
+            chunkIds.assign(vdisk.Chunks[EChunkState::COMMITTED].begin(), vdisk.Chunks[EChunkState::COMMITTED].end());
+            vdisk.SendEvLogSync();
+
+            auto lastChunkId = chunkIds.back();
+
+            testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
+                    new NPDisk::TEvChunkWrite(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        lastChunkId, 0, new NPDisk::TEvChunkWrite::TAlignedParts(TString(writeData)), nullptr, false, 0),
+                    NKikimrProto::OK);
+
+            verifyVdiskData(vdisk, expectedLogCount);
+        };
+
+        auto restartPDisk = [&](bool enableSectorEncryption) {
+            auto cfg = testCtx.GetPDiskConfig();
+            cfg->EnableSectorEncryption = enableSectorEncryption;
+            testCtx.RestartPDiskSync();
+        };
+
+        // encryption is on
+        doWritesAndCheck();
+
+        // off
+        restartPDisk(false);
+        doWritesAndCheck();
+
+        // on
+        restartPDisk(true);
+        doWritesAndCheck();
+
+        // off
+        restartPDisk(false);
+        doWritesAndCheck();
+
+        // on
+        restartPDisk(true);
+        doWritesAndCheck();
+    }
+
+    Y_UNIT_TEST(SectorEncryptionOnOffEncryptedInitially) {
+        ShouldSwitchEncryptionOnOffWithoutReformatting(true);
+    }
+
+    Y_UNIT_TEST(SectorEncryptionOnOffNonEncryptedInitially) {
+        ShouldSwitchEncryptionOnOffWithoutReformatting(false);
     }
 
     Y_UNIT_TEST(PDiskOwnerSlayRace) {

@@ -290,10 +290,15 @@ struct TVDiskMock {
 
     TMap<EChunkState, TSet<TChunkIdx>> Chunks;
 
-    TVDiskMock(TActorTestContext *testCtx)
+    TVDiskMock(TActorTestContext *testCtx, bool dynamicGroup = false)
         : TestCtx(testCtx)
-        , VDiskID(Idx.fetch_add(1), 1, 0, 0, 0)
+        , VDiskID(MakeGroupId(dynamicGroup), 1, 0, 0, 0)
     {}
+
+    static ui32 MakeGroupId(bool dynamicGroup) {
+        const ui32 baseId = static_cast<ui32>(Idx.fetch_add(1));
+        return dynamicGroup ? (baseId | 0x80000000u) : baseId;
+    }
 
     TLsnSeg GetLsnSeg() {
         ++LastUsedLsn;

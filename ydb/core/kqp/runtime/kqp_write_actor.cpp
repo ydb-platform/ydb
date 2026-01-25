@@ -962,6 +962,15 @@ public:
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
+            
+            // Store the broken lock's QueryTraceId for TLI logging
+            if (!ev->Get()->Record.GetTxLocks().empty()) {
+                const auto& brokenLock = ev->Get()->Record.GetTxLocks(0);
+                if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
+                    TxManager->SetBrokenLockQueryTraceId(brokenLock.GetQueryTraceId());
+                }
+            }
+            
             RuntimeError(
                 NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
@@ -1034,6 +1043,10 @@ public:
                 if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
                     UpdateStats(ev->Get()->Record.GetTxStats());
                     YQL_ENSURE(TxManager->BrokenLocks());
+                    // Store the broken lock's QueryTraceId for TLI logging
+                    if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
+                        TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
+                    }
                     NYql::TIssues issues;
                     issues.AddIssue(*TxManager->GetLockIssue());
                     RuntimeError(
@@ -3477,9 +3490,30 @@ public:
             actor->FlushBuffers();
         });
 
+        // Debug: Log TxManager state
+        Cerr << "BufferActor Commit: NeedCommit()=" << TxManager->NeedCommit()
+             << ", BrokenLocks()=" << TxManager->BrokenLocks()
+             << ", GetBrokenLockQueryTraceId()=" << (TxManager->GetBrokenLockQueryTraceId() ? *TxManager->GetBrokenLockQueryTraceId() : 0)
+             << ", TxManager ptr=" << TxManager.get() << Endl;
+
         if (!TxManager->NeedCommit()) {
             Rollback(std::move(traceId), /* waitForResult */ true);
         } else if (TxManager->BrokenLocks()) {
+            // Log victim TLI event for InvisibleRowSkips and other broken lock scenarios
+            if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+                auto brokenQueryTraceId = TxManager->GetBrokenLockQueryTraceId();
+                TMaybe<ui64> victimQueryTraceId = brokenQueryTraceId 
+                    ? MakeMaybe(*brokenQueryTraceId)
+                    : Nothing();
+                NDataIntegrity::LogTli("SessionActor", "Commit was a victim of broken locks",
+                                       TString(), // queryText - not available here
+                                       Nothing(), // breakerQueryTraceId
+                                       victimQueryTraceId,
+                                       TString(), // allQueryTexts - not available here
+                                       TlsActivationContext->AsActorContext(),
+                                       Nothing(), // victimQueryTraceId field for breaker
+                                       TString()); // victimQueryText
+            }
             NYql::TIssues issues;
             issues.AddIssue(*TxManager->GetLockIssue());
             ReplyError(
@@ -4426,6 +4460,15 @@ public:
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
+            
+            // Store the broken lock's QueryTraceId for TLI logging
+            if (!ev->Get()->Record.GetTxLocks().empty()) {
+                const auto& brokenLock = ev->Get()->Record.GetTxLocks(0);
+                if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
+                    TxManager->SetBrokenLockQueryTraceId(brokenLock.GetQueryTraceId());
+                }
+            }
+            
             ReplyError(
                 NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,

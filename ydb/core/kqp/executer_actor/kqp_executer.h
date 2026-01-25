@@ -33,6 +33,7 @@ struct TEvKqpExecuter {
         IKqpGateway::TKqpSnapshot Snapshot;
         std::optional<NYql::TKikimrPathId> BrokenLockPathId;
         std::optional<ui64> BrokenLockShardId;
+        std::optional<ui64> BrokenLockQueryTraceId;
 
         ui64 ResultRowsCount = 0;
         ui64 ResultRowsBytes = 0;

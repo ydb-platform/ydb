@@ -267,7 +267,14 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
         auto lock = sysLocks.GetLock(lockKey);
         if (lock.Generation != lockProto.GetGeneration() || lock.Counter != lockProto.GetCounter()) {
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "ValidateLocks: broken lock " << lockProto.GetLockId() << " expected " << lockProto.GetGeneration() << ":" << lockProto.GetCounter() << " found " << lock.Generation << ":" << lock.Counter);
-            brokenLocks.push_back(lockProto);
+            auto& brokenLock = brokenLocks.emplace_back(lockProto);
+            // Try to get QueryTraceId from the actual lock in the system
+            if (auto rawLock = sysLocks.GetRawLock(lockProto.GetLockId())) {
+                ui64 queryTraceId = rawLock->GetQueryTraceId();
+                if (queryTraceId != 0) {
+                    brokenLock.SetQueryTraceId(queryTraceId);
+                }
+            }
         }
     }
 

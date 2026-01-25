@@ -4,7 +4,16 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
+#include <type_traits>
+
 namespace NKikimr::NLocks {
+
+// Type trait to detect if Schema::Locks has QueryTraceId column
+template<typename, typename = void>
+struct THasQueryTraceId : std::false_type {};
+
+template<typename T>
+struct THasQueryTraceId<T, std::void_t<typename T::QueryTraceId>> : std::true_type {};
 
 template<class TShard, class TSchemaDescription>
 class TShardLocksDb : public NKikimr::NDataShard::ILocksDb {
@@ -116,13 +125,23 @@ public:
     void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0, ui64 queryTraceId = 0) override {
         using Schema = TSchemaDescription;
         NIceDb::TNiceDb db(DB);
-        db.Table<typename Schema::Locks>().Key(lockId).Update(
-            NIceDb::TUpdate<typename Schema::Locks::LockNodeId>(lockNodeId),
-            NIceDb::TUpdate<typename Schema::Locks::Generation>(generation),
-            NIceDb::TUpdate<typename Schema::Locks::Counter>(counter),
-            NIceDb::TUpdate<typename Schema::Locks::CreateTimestamp>(createTs),
-            NIceDb::TUpdate<typename Schema::Locks::Flags>(flags),
-            NIceDb::TUpdate<typename Schema::Locks::QueryTraceId>(queryTraceId));
+        if constexpr (THasQueryTraceId<typename Schema::Locks>::value) {
+            db.Table<typename Schema::Locks>().Key(lockId).Update(
+                NIceDb::TUpdate<typename Schema::Locks::LockNodeId>(lockNodeId),
+                NIceDb::TUpdate<typename Schema::Locks::Generation>(generation),
+                NIceDb::TUpdate<typename Schema::Locks::Counter>(counter),
+                NIceDb::TUpdate<typename Schema::Locks::CreateTimestamp>(createTs),
+                NIceDb::TUpdate<typename Schema::Locks::Flags>(flags),
+                NIceDb::TUpdate<typename Schema::Locks::QueryTraceId>(queryTraceId));
+        } else {
+            Y_UNUSED(queryTraceId);
+            db.Table<typename Schema::Locks>().Key(lockId).Update(
+                NIceDb::TUpdate<typename Schema::Locks::LockNodeId>(lockNodeId),
+                NIceDb::TUpdate<typename Schema::Locks::Generation>(generation),
+                NIceDb::TUpdate<typename Schema::Locks::Counter>(counter),
+                NIceDb::TUpdate<typename Schema::Locks::CreateTimestamp>(createTs),
+                NIceDb::TUpdate<typename Schema::Locks::Flags>(flags));
+        }
         HasChanges_ = true;
     }
 

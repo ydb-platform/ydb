@@ -74,6 +74,16 @@ public:
         return QueryTexts.front().second;
     }
 
+    // Get query text by QueryTraceId
+    TString GetQueryTextByTraceId(ui64 queryTraceId) const {
+        for (const auto& [traceId, queryText] : QueryTexts) {
+            if (traceId == queryTraceId) {
+                return queryText;
+            }
+        }
+        return "";
+    }
+
     // Clear all query texts and QueryTraceIds
     void Clear() {
         QueryTexts.clear();

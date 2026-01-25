@@ -1425,6 +1425,10 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                         : NKikimrDataEvents::OPTIMISTIC);
             }
 
+            if (GetMeta().QueryTraceId && !isTableImmutable) {
+                input.Meta.StreamLookupSettings->SetQueryTraceId(GetMeta().QueryTraceId);
+            }
+
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
         } else if (input.Meta.SequencerSettings) {
             transformProto->MutableSettings()->PackFrom(*input.Meta.SequencerSettings);
@@ -1443,6 +1447,10 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
 
             if (GetMeta().LockMode) {
                 input.Meta.VectorResolveSettings->SetLockMode(*GetMeta().LockMode);
+            }
+
+            if (GetMeta().QueryTraceId) {
+                input.Meta.VectorResolveSettings->SetQueryTraceId(GetMeta().QueryTraceId);
             }
 
             transformProto->MutableSettings()->PackFrom(*input.Meta.VectorResolveSettings);
@@ -2549,6 +2557,9 @@ void TKqpTasksGraph::FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSour
     if (const auto& lockTxId = GetMeta().LockTxId) {
         settings.SetLockTxId(*lockTxId);
         settings.SetLockNodeId(GetMeta().ExecuterId.NodeId());
+    }
+    if (GetMeta().QueryTraceId) {
+        settings.SetQueryTraceId(GetMeta().QueryTraceId);
     }
 }
 

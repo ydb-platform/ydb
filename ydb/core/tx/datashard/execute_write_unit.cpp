@@ -46,7 +46,9 @@ public:
 
         auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
         writeResult.Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
-        NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Write transaction broke other locks", locksBrokenByTx, writeOp->GetTxId());
+        auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByTx);
+        NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Write transaction broke other locks", locksBrokenByTx,
+                                       writeOp->QueryTraceId(), victimQueryTraceIds);
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
         for (const auto& lock : locks) {
             if (lock.IsError()) {
@@ -160,7 +162,7 @@ public:
         return EExecutionStatus::Restart;
     }
 
-    bool OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+    bool OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, ui64 lockTxId, TTransactionContext& txc, const TActorContext& ctx) {
         if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) {
             return false;
         }
@@ -169,6 +171,19 @@ public:
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
             writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Read conflict with concurrent transaction.");
             writeOp.GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
+            // Get victim's QueryTraceId from the lock (the original query that acquired the lock)
+            TMaybe<ui64> victimQueryTraceId;
+            if (lockTxId) {
+                if (auto* lock = DataShard.SysLocksTable().GetRawLock(lockTxId).Get()) {
+                    ui64 queryTraceId = lock->GetQueryTraceId();
+                    if (queryTraceId != 0) {
+                        victimQueryTraceId = queryTraceId;
+                    }
+                }
+            }
+            NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
+                                              victimQueryTraceId,
+                                              writeOp.QueryTraceId() ? TMaybe<ui64>(writeOp.QueryTraceId()) : Nothing());
         } else {
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with existing key.");
             writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Conflict with existing key.");
@@ -389,6 +404,17 @@ public:
                     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because it cannot acquire locks");
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because it cannot acquire locks");
                     writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
+                    // Get victim's QueryTraceId from the lock (the original query that acquired the lock)
+                    TMaybe<ui64> victimQueryTraceId;
+                    if (auto* lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId).Get()) {
+                        ui64 queryTraceId = lock->GetQueryTraceId();
+                        if (queryTraceId != 0) {
+                            victimQueryTraceId = queryTraceId;
+                        }
+                    }
+                    NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
+                                                      victimQueryTraceId,
+                                                      writeOp->QueryTraceId() ? TMaybe<ui64>(writeOp->QueryTraceId()) : Nothing());
                     return EExecutionStatus::Executed;
                 };
 
@@ -441,6 +467,21 @@ public:
                 writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because locks are not valid");
                 writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(brokenLocks.size());
 
+                // Extract victim QueryTraceId from the broken lock
+                TMaybe<ui64> victimQueryTraceId;
+                for (const auto& brokenLock : brokenLocks) {
+                    if (auto* lock = sysLocks.GetRawLock(brokenLock.GetLockId()).Get()) {
+                        ui64 queryTraceId = lock->GetQueryTraceId();
+                        if (queryTraceId != 0) {
+                            victimQueryTraceId = queryTraceId;
+                            break;
+                        }
+                    }
+                }
+                NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
+                                                  victimQueryTraceId,
+                                                  writeOp->QueryTraceId() ? TMaybe<ui64>(writeOp->QueryTraceId()) : Nothing());
+
                 for (auto& brokenLock : brokenLocks) {
                     writeOp->GetWriteResult()->Record.MutableTxLocks()->Add()->Swap(&brokenLock);
                 }
@@ -448,7 +489,9 @@ public:
                 KqpEraseLocks(tabletId, kqpLocks, sysLocks);
                 auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
                 writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
-                NDataIntegrity::LogLocksBroken(ctx, tabletId, "Write transaction aborted, broke other transaction locks during cleanup", locksBrokenByTx, txId);
+                auto victimQueryTraceIds = sysLocks.ExtractQueryTraceIds(locksBrokenByTx);
+                NDataIntegrity::LogLocksBroken(ctx, tabletId, "Write transaction aborted, broke other transaction locks during cleanup", locksBrokenByTx,
+                                               writeOp->QueryTraceId(), victimQueryTraceIds);
                 DataShard.SubscribeNewLocks(ctx);
 
                 if (auto status = ensureAbortOutReadSets()) {
@@ -599,7 +642,7 @@ public:
             writeOp->ReleaseTxData(txc);
             return EExecutionStatus::Executed;
         } catch (const TUniqueConstrainException&) {
-            if (!OnUniqueConstrainException(userDb, *writeOp, txc, ctx)) {
+            if (!OnUniqueConstrainException(userDb, *writeOp, guardLocks.LockTxId, txc, ctx)) {
                 return EExecutionStatus::Continue;
             }
 
@@ -621,6 +664,19 @@ public:
 
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Write conflict with concurrent transaction.");
+            // Get victim's QueryTraceId from the lock (the original query that acquired the lock)
+            TMaybe<ui64> victimQueryTraceId;
+            if (guardLocks.LockTxId) {
+                if (auto* lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId).Get()) {
+                    ui64 queryTraceId = lock->GetQueryTraceId();
+                    if (queryTraceId != 0) {
+                        victimQueryTraceId = queryTraceId;
+                    }
+                }
+            }
+            NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
+                                              victimQueryTraceId,
+                                              writeOp->QueryTraceId() ? TMaybe<ui64>(writeOp->QueryTraceId()) : Nothing());
 
             ResetChanges(userDb, txc);
 

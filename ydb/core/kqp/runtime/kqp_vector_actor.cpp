@@ -297,6 +297,9 @@ private:
         if (Settings.HasLockNodeId()) {
             src->SetLockNodeId(Settings.GetLockNodeId());
         }
+        if (Settings.HasQueryTraceId()) {
+            src->SetQueryTraceId(Settings.GetQueryTraceId());
+        }
 
         // Level table key is parent+id
         auto ui64Type = NScheme::ProtoColumnTypeFromTypeInfoMod(NScheme::TTypeInfo(NScheme::NTypeIds::Uint64), "");

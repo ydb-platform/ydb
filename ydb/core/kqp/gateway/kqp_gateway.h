@@ -166,6 +166,7 @@ public:
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
         TString UserTraceId;
+        ui64 QueryTraceId = 0;
 
         NTopic::TTopicOperations TopicOperations;
 

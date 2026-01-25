@@ -10,6 +10,7 @@ struct TKqpBufferWriterSettings {
     TActorId SessionActorId;
     IKqpTransactionManagerPtr TxManager;
     NWilson::TTraceId TraceId;
+    ui64 QueryTraceId = 0;
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;

@@ -259,14 +259,36 @@ public:
         return TString();
     }
 
+    ui64 GenerateTraceQueryId() {
+        // Generate Snowflake-style QueryTraceId
+        // Format: 34 bits timestamp (ms) | 16 bits node id | 14 bits sequence
+        // 34 bits timestamp in milliseconds (~198.8 days)
+        // 16 bits node id (64k nodes)
+        // 14 bits sequence per ms (16k IDs/ms/node)
+        auto now = TAppData::TimeProvider->Now();
+        ui64 timestampMs = now.MilliSeconds();
+        ui64 nodeId = SelfId().NodeId();
+        ui64 sequence = QueryId;
+
+        // Mask to fit into allocated bits
+        ui64 queryTraceId =
+            ((timestampMs & 0x3FFFFFFFFULL) << 30) |
+            ((nodeId & 0xFFFFULL) << 14) |
+            (sequence & 0x3FFFULL);
+
+        return queryTraceId;
+    }
+
     void MakeNewQueryState(TEvKqp::TEvQueryRequest::TPtr& ev) {
         ++QueryId;
         YQL_ENSURE(!QueryState);
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
         ev->Get()->SetClientLostAction(selfId, as);
+
+        auto queryTraceId = GenerateTraceQueryId();
         QueryState = std::make_shared<TKqpQueryState>(
-            ev, QueryId, Settings.Database, Settings.ApplicationName, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
+            ev, QueryId, queryTraceId, Settings.Database, Settings.ApplicationName, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
             Settings.TableService, Settings.QueryService, SessionId, AppData()->MonotonicTimeProvider->Now(), Settings.MutableExecuterConfig->RuntimeParameterSizeLimit.load());
         if (QueryState->UserRequestContext->TraceId.empty()) {
             QueryState->UserRequestContext->TraceId = UlidGen.Next().ToString();
@@ -930,7 +952,7 @@ public:
 
         Become(&TKqpSessionActor::ExecuteState);
 
-        QueryState->TxCtx->OnBeginQuery(QueryState->ExtractQueryText());
+        QueryState->TxCtx->OnBeginQuery(QueryState->QueryTraceId, QueryState->ExtractQueryText());
 
         if (!CheckScriptExecutionState()) {
             co_return;
@@ -1055,7 +1077,7 @@ public:
 
         QueryState->QueryData = std::make_shared<TQueryData>(QueryState->TxCtx->TxAlloc);
         QueryState->TxCtx->SetIsolationLevel(settings);
-        QueryState->TxCtx->OnBeginQuery(QueryState->ExtractQueryText());
+        QueryState->TxCtx->OnBeginQuery(QueryState->QueryTraceId, QueryState->ExtractQueryText());
 
         if (QueryState->TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW
                 && !Settings.TableService.GetEnableSnapshotIsolationRW()) {
@@ -1890,6 +1912,7 @@ public:
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        request.QueryTraceId = QueryState ? QueryState->QueryTraceId : 0;
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
         request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
@@ -1935,6 +1958,7 @@ public:
                 .SessionActorId = SelfId(),
                 .TxManager = txCtx->TxManager,
                 .TraceId = request.TraceId.GetTraceId(),
+                .QueryTraceId = QueryState->QueryTraceId,
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
                 .Alloc = std::move(alloc),
@@ -2034,6 +2058,7 @@ public:
             .ShardIdToTableInfo = txCtx->ShardIdToTableInfo,
             .WriteBufferInitialMemoryLimit = writeBufferInitialMemoryLimit,
             .WriteBufferMemoryLimit = writeBufferMemoryLimit,
+            .QueryTraceId = QueryState ? QueryState->QueryTraceId : 0,
         };
 
         auto executerActor = CreateKqpPartitionedExecuter(std::move(settings), ChannelService);
@@ -2215,7 +2240,7 @@ public:
             // For commit operations that break locks, report them (both successful and aborted)
             const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
                                        QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
-            
+
             const TString& message = isCommitAction
                 ? "Commit had broken other locks"
                 : "Query had broken other locks";
@@ -2224,8 +2249,13 @@ public:
             const TString combinedQueryText = QueryState->TxCtx->QueryTextCollector.Empty()
                 ? QueryState->ExtractQueryText()
                 : QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
-            
-            NDataIntegrity::LogTli("SessionActor", message, combinedQueryText, TlsActivationContext->AsActorContext());
+
+            const TString queryText = QueryState->ExtractQueryText();
+            const TString queryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
+
+            NDataIntegrity::LogTli("SessionActor", message, queryText,
+                                   QueryState->QueryTraceId, Nothing(), queryTexts,
+                                   TlsActivationContext->AsActorContext());
         }
 
         if (QueryState->TxCtx->TxManager) {
@@ -2254,12 +2284,66 @@ public:
                 case Ydb::StatusIds::ABORTED: {
                     if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
                         YQL_ENSURE(!issues.Empty());
-                    } else if (ev->BrokenLockPathId) {
+
+                        // Log victim TLI event
+                        if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+                            const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
+                                                       QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
+
+                            const TString& message = isCommitAction
+                                ? "Commit was a victim of broken locks"
+                                : "Query was a victim of broken locks";
+
+                            const TString queryText = QueryState->ExtractQueryText();
+                            const TString queryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
+
+                            // For victim: log the first query's QueryTraceId (that acquired the lock) as VictimQueryTraceId
+                            // and current query's QueryTraceId as CurrentQueryTraceId
+                            TMaybe<ui64> victimQueryTraceId;
+                            TString victimQueryText;
+                            if (QueryState->TxCtx->QueryTextCollector.GetQueryCount() > 1) {
+                                // In a multi-query transaction, the first query typically acquired the locks
+                                // We use the first QueryTraceId and text from the transaction
+                                victimQueryTraceId = QueryState->TxCtx->QueryTextCollector.GetFirstQueryTraceId();
+                                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
+                            }
+
+                            NDataIntegrity::LogTli("SessionActor", message, queryText,
+                                                   Nothing(), victimQueryTraceId, queryTexts,
+                                                   TlsActivationContext->AsActorContext(), Nothing(), victimQueryText);
+                        }
+                    } else if (ev->BrokenLockPathId || ev->BrokenLockShardId) {
                         YQL_ENSURE(!QueryState->TxCtx->TxManager);
-                        issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
-                    } else if (ev->BrokenLockShardId) {
-                        YQL_ENSURE(!QueryState->TxCtx->TxManager);
-                        issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId));
+                        if (ev->BrokenLockPathId) {
+                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
+                        } else {
+                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId));
+                        }
+
+                        // Log victim TLI event for UseSink=false path
+                        if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+                            const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
+                                                       QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
+
+                            const TString& message = isCommitAction
+                                ? "Commit was a victim of broken locks"
+                                : "Query was a victim of broken locks";
+
+                            const TString queryText = QueryState->ExtractQueryText();
+                            const TString queryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
+
+                            // For victim: log the first query's QueryTraceId (that acquired the lock) as VictimQueryTraceId
+                            TMaybe<ui64> victimQueryTraceId;
+                            TString victimQueryText;
+                            if (QueryState->TxCtx->QueryTextCollector.GetQueryCount() > 1) {
+                                victimQueryTraceId = QueryState->TxCtx->QueryTextCollector.GetFirstQueryTraceId();
+                                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
+                            }
+
+                            NDataIntegrity::LogTli("SessionActor", message, queryText,
+                                                   Nothing(), victimQueryTraceId, queryTexts,
+                                                   TlsActivationContext->AsActorContext(), Nothing(), victimQueryText);
+                        }
                     }
                     break;
                 }

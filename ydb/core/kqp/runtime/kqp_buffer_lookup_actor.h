@@ -58,6 +58,7 @@ struct TKqpBufferTableLookupSettings {
     ui64 LockTxId;
     ui64 LockNodeId;
     NKikimrDataEvents::ELockMode LockMode;
+    ui64 QueryTraceId = 0;
     std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
 
     IKqpTransactionManagerPtr TxManager;

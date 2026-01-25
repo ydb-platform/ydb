@@ -128,6 +128,7 @@ message TEvWrite {
 
     optional ELockMode LockMode = 10;
     optional uint64 TimeoutSeconds = 11;
+    optional uint64 QueryTraceId = 12;
 }
 
 message TEvWriteResult {

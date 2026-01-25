@@ -38,6 +38,7 @@ public:
         ui64 Counter;
         ui64 CreateTs;
         ui64 Flags;
+        ui64 QueryTraceId = 0;
 
         TVector<TLockRange> Ranges;
         TVector<ui64> Conflicts;
@@ -60,7 +61,7 @@ public:
     virtual bool MayAddLock(ui64 lockId) = 0;
 
     // Persist adding/removing a lock info
-    virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
+    virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0, ui64 queryTraceId = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
@@ -341,6 +342,8 @@ public:
 
     ui64 GetLockId() const { return LockId; }
     ui32 GetLockNodeId() const { return LockNodeId; }
+    ui64 GetQueryTraceId() const { return QueryTraceId; }
+    void SetQueryTraceId(ui64 queryTraceId) { QueryTraceId = queryTraceId; }
 
     TInstant GetCreationTime() const { return CreationTime; }
 
@@ -431,6 +434,7 @@ private:
     ui64 Counter;
     TInstant CreationTime;
     ELockFlags Flags = ELockFlags::None;
+    ui64 QueryTraceId = 0;
     THashSet<TPathId> ReadTables;
     THashSet<TPathId> WriteTables;
     TVector<TPointKey> Points;
@@ -733,6 +737,7 @@ private:
 struct TLocksUpdate {
     ui64 LockTxId = 0;
     ui32 LockNodeId = 0;
+    ui64 QueryTraceId = 0;
     TLockInfo::TPtr Lock;
 
     TStackVec<TPointKey, 4> PointLocks;
@@ -907,6 +912,7 @@ public:
 
     std::pair<TVector<TLock>, TVector<ui64>> ApplyLocks();
     ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
+    TVector<ui64> ExtractQueryTraceIds(const TVector<ui64>& lockIds) const;
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(ui64 lockId);
     void EraseLock(const TArrayRef<const TCell>& syslockKey);

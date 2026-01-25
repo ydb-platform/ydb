@@ -674,17 +674,11 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         settings.ChunkSize = NPDisk::SmallDiskMaximumChunkSize;
         settings.DiskSize = (ui64)settings.ChunkSize * 50;
         settings.SmallDisk = true;
+        settings.EnableFormatEncryption = encryptFormat;
+        settings.EnableSectorEncryption = false;
+        settings.NonceRandNum = 13;
 
         TActorTestContext testCtx(settings);
-
-        // enable or disable encryption and restart with formatting
-        auto cfg = testCtx.GetPDiskConfig();
-        cfg->SectorMap = testCtx.TestCtx.SectorMap;
-        cfg->EnableSectorEncryption = false;
-        cfg->EnableFormatEncryption = encryptFormat;
-        cfg->ReadOnly = false;
-        cfg->NonceRandNum = 13;
-        testCtx.UpdateConfigRecreatePDisk(cfg, true);
 
         {
             TVDiskMock vdisk(&testCtx);
@@ -727,7 +721,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             });
 
             const ui64 initialNonce = 1;
-            ui64 nonceDelta = nonceLogDiff + 1 + *cfg->NonceRandNum % nonceLogDiff;
+            ui64 nonceDelta = nonceLogDiff + 1 + *settings.NonceRandNum % nonceLogDiff;
             ui64 expectedNonce = initialNonce + nonceDelta + 1;
             UNIT_ASSERT_VALUES_EQUAL(nonceLog, expectedNonce);
         }
@@ -754,17 +748,11 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         settings.DiskSize = (ui64)settings.ChunkSize * 50;
         settings.SmallDisk = true;
         settings.PlainDataChunks = false;
+        settings.EnableFormatEncryption = encryptFormat;
+        settings.EnableSectorEncryption = false;
+        settings.NonceRandNum = 13;
 
         TActorTestContext testCtx(settings);
-
-        // enable or disable encryption and restart with formatting
-        auto cfg = testCtx.GetPDiskConfig();
-        cfg->SectorMap = testCtx.TestCtx.SectorMap;
-        cfg->EnableSectorEncryption = false;
-        cfg->EnableFormatEncryption = encryptFormat;
-        cfg->ReadOnly = false;
-        cfg->NonceRandNum = 13;
-        testCtx.UpdateConfigRecreatePDisk(cfg, true);
 
         {
             TVDiskMock vdisk(&testCtx);

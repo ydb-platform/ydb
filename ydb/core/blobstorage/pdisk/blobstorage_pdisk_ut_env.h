@@ -35,7 +35,10 @@ public:
         bool ReadOnly = false;
         bool InitiallyZeroed = false; // Only for sector map. Zero first 1MiB on start.
         bool PlainDataChunks = false;
+        std::optional<bool> EnableFormatEncryption;
+        std::optional<bool> EnableSectorEncryption;
         std::optional<bool> RandomizeMagic = std::nullopt;
+        std::optional<ui64> NonceRandNum = std::nullopt;
         bool UseRdmaAllocator = false;
     };
 
@@ -77,8 +80,18 @@ public:
             TestCtx.SectorMap->ZeroInit(1_MB / NPDisk::NSectorMap::SECTOR_SIZE);
         }
 
+        // not set by user, keep old behaviour
+        if (!Settings.EnableSectorEncryption.has_value()) {
+            Settings.EnableSectorEncryption = !TestCtx.SectorMap;
+        }
+
+        // here old behaviour is to always encrypt format
+        if (!Settings.EnableFormatEncryption.has_value()) {
+            Settings.EnableFormatEncryption = true;
+        }
+
         if (!Settings.ReadOnly && !Settings.InitiallyZeroed) {
-            DoFormatPDisk(formatGuid);
+            DoFormatPDisk(formatGuid, *Settings.EnableFormatEncryption, *Settings.EnableSectorEncryption);
         }
 
         ui64 pDiskCategory = 0;
@@ -87,12 +100,15 @@ public:
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->ChunkSize = Settings.ChunkSize;
         pDiskConfig->SectorMap = TestCtx.SectorMap;
-        pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
+        pDiskConfig->EnableSectorEncryption = *Settings.EnableSectorEncryption;
+        pDiskConfig->EnableFormatEncryption = *Settings.EnableFormatEncryption;
         pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(Settings.SmallDisk);
         pDiskConfig->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
         pDiskConfig->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
         pDiskConfig->ReadOnly = Settings.ReadOnly;
         pDiskConfig->PlainDataChunks = Settings.PlainDataChunks;
+        pDiskConfig->NonceRandNum = Settings.NonceRandNum;
+
         return pDiskConfig;
     }
 

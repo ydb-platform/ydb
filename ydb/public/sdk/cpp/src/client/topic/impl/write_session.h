@@ -93,27 +93,44 @@ private:
         TTransactionBase* Tx;
     };
 
+    struct TIdleSession;
+
     struct WriteSessionWrapper {
         WriteSessionPtr Session;
         ui32 Partition;
-        TDuration IdleTimeout;
-        std::optional<TInstant> EmptySince;
         ui64 QueueSize = 0;
+        std::shared_ptr<TIdleSession> IdleSession = nullptr;
 
-        WriteSessionWrapper(WriteSessionPtr session, ui64 partition, TDuration idleTimeout);
+        WriteSessionWrapper(WriteSessionPtr session, ui64 partition);
 
-        bool IsExpired() const;
         bool IsQueueEmpty() const;
         bool AddToQueue(ui64 delta);
         bool RemoveFromQueue(ui64 delta);
-        bool Less(const std::shared_ptr<WriteSessionWrapper>& other);
-
-        struct Comparator {
-            bool operator()(const std::shared_ptr<WriteSessionWrapper>& first, const std::shared_ptr<WriteSessionWrapper>& second) const;
-        };
     };
 
     using WrappedWriteSessionPtr = std::shared_ptr<WriteSessionWrapper>;
+
+    struct TIdleSession {
+        TIdleSession(WriteSessionWrapper* session, TInstant emptySince, TDuration idleTimeout)
+            :Session(session)
+            , EmptySince(emptySince)
+            , IdleTimeout(idleTimeout)
+        {}
+
+        WriteSessionWrapper* Session;
+        const TInstant EmptySince;
+        const TDuration IdleTimeout;
+
+        bool Less(const std::shared_ptr<TIdleSession>& other) const;
+
+        bool IsExpired() const;
+
+        struct Comparator {
+            bool operator()(const std::shared_ptr<TIdleSession>& first, const std::shared_ptr<TIdleSession>& second) const;
+        };
+    };
+
+    using IdleSessionPtr = std::shared_ptr<TIdleSession>;
 
     struct IPartitionChooser {
         virtual ui32 ChoosePartition(const std::string_view key) = 0;
@@ -141,7 +158,7 @@ private:
     WrappedWriteSessionPtr CreateWriteSession(ui64 partition);
 
     using TSessionsIndexIterator = std::unordered_map<ui64, WrappedWriteSessionPtr>::iterator;
-    void DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout);
+    void DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout, bool mustBeEmpty = true);
 
     void SaveMessage(TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
 
@@ -218,7 +235,7 @@ private:
     std::unordered_set<size_t> ReadyFutures;
     std::unique_ptr<IPartitionChooser> PartitionChooser;
 
-    std::set<WrappedWriteSessionPtr, WriteSessionWrapper::Comparator> IdlerSessions;
+    std::set<IdleSessionPtr, TIdleSession::Comparator> IdlerSessions;
     std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
     std::unordered_map<ui64, std::deque<TContinuationToken>> ContinuationTokens;
     std::map<std::string, ui64> PartitionsIndex;

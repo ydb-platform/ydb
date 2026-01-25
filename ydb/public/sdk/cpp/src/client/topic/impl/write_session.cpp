@@ -113,61 +113,47 @@ bool TKeyedWriteSession::TPartitionInfo::operator<(const std::string_view key) c
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // WriteSessionWrapper
 
-TKeyedWriteSession::WriteSessionWrapper::WriteSessionWrapper(WriteSessionPtr session, ui64 partition, TDuration idleTimeout)
+TKeyedWriteSession::WriteSessionWrapper::WriteSessionWrapper(WriteSessionPtr session, ui64 partition)
     : Session(std::move(session))
     , Partition(static_cast<ui32>(partition))
-    , IdleTimeout(idleTimeout)
     , QueueSize(0)
 {}
-
-bool TKeyedWriteSession::WriteSessionWrapper::IsExpired() const {
-    if (!EmptySince) {
-        return false;
-    }
-    return TInstant::Now() - *EmptySince > IdleTimeout;
-}
 
 bool TKeyedWriteSession::WriteSessionWrapper::IsQueueEmpty() const {
     return QueueSize == 0;
 }
 
 bool TKeyedWriteSession::WriteSessionWrapper::AddToQueue(ui64 delta) {
-    bool idle = EmptySince.has_value();
-    if (idle) {
-        EmptySince = std::nullopt;
-    }
+    bool idle = QueueSize == 0;
     QueueSize += delta;
     return idle;
 }
 
 bool TKeyedWriteSession::WriteSessionWrapper::RemoveFromQueue(ui64 delta) {
+    Y_ABORT_UNLESS(QueueSize >= delta, "RemoveFromQueue: underflow");
     QueueSize -= delta;
-    if (QueueSize == 0) {
-        EmptySince = TInstant::Now();
-    }
-    return EmptySince.has_value();
+    return QueueSize == 0;
 }
 
-bool TKeyedWriteSession::WriteSessionWrapper::Less(const std::shared_ptr<WriteSessionWrapper>& other) {
-    if (!EmptySince.has_value() && !other->EmptySince.has_value()) {
-        return Partition < other->Partition;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TIdleSession
+
+bool TKeyedWriteSession::TIdleSession::Less(const std::shared_ptr<TIdleSession>& other) const {
+    if (EmptySince == other->EmptySince) {
+        return Session->Partition < other->Session->Partition;
     }
-    if (EmptySince.has_value() && !other->EmptySince.has_value()) {
-        return true;
-    }
-    if (!EmptySince.has_value() && other->EmptySince.has_value()) {
-        return false;
-    }
-    if (*EmptySince == *other->EmptySince) {
-        return Partition < other->Partition;
-    }
-    return *EmptySince < *other->EmptySince;
+
+    return EmptySince < other->EmptySince;
 }
 
-bool TKeyedWriteSession::WriteSessionWrapper::Comparator::operator()(
-    const std::shared_ptr<WriteSessionWrapper>& first,
-    const std::shared_ptr<WriteSessionWrapper>& second) const {
+bool TKeyedWriteSession::TIdleSession::Comparator::operator()(
+    const std::shared_ptr<TIdleSession>& first,
+    const std::shared_ptr<TIdleSession>& second) const {
     return first->Less(second);
+}
+
+bool TKeyedWriteSession::TIdleSession::IsExpired() const {
+    return TInstant::Now() - EmptySince > IdleTimeout;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -224,6 +210,7 @@ TKeyedWriteSession::TKeyedWriteSession(
             }
             break;
         case TKeyedWriteSessionSettings::EPartitionChooserStrategy::Hash:
+            Y_ABORT_UNLESS(!Partitions.empty(), "KeyedWriteSession with Hash partition chooser requires at least one active partition");
             PartitionChooser = std::make_unique<THashPartitionChooser>(this);
             break;
     }
@@ -266,8 +253,7 @@ TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::CreateWriteSessio
         .MaxMemoryUsage(std::numeric_limits<ui64>::max());
     auto writeSession = std::make_shared<WriteSessionWrapper>(
         Client->CreateWriteSession(alteredSettings),
-        partition,
-        Settings.SubSessionIdleTimeout_);
+        partition);
 
     SessionsIndex.emplace(partition, writeSession);
 
@@ -294,7 +280,10 @@ void TKeyedWriteSession::RunEventLoop(ui64 partition, WrappedWriteSessionPtr wra
 
         if (auto acksEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
             if (wrappedSession->RemoveFromQueue(acksEvent->Acks.size())) {
-                IdlerSessions.insert(wrappedSession);
+                Y_ABORT_UNLESS(!wrappedSession->IdleSession, "IdleSession is already set");
+                auto idleSessionPtr = std::make_shared<TIdleSession>(wrappedSession.get(), TInstant::Now(), Settings.SubSessionIdleTimeout_);
+                IdlerSessions.insert(idleSessionPtr);
+                wrappedSession->IdleSession = idleSessionPtr;
             }
             HandleAcksEvent(partition, std::move(*acksEvent));
             continue;
@@ -318,11 +307,6 @@ void TKeyedWriteSession::SubscribeToPartition(ui64 partition) {
 TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::GetWriteSession(ui64 partition) {
     auto sessionIter = SessionsIndex.find(partition);
     if (sessionIter == SessionsIndex.end()) {
-        return CreateWriteSession(partition);
-    }
-
-    if (sessionIter->second->IsExpired()) {
-        DestroyWriteSession(sessionIter, TDuration::Zero());
         return CreateWriteSession(partition);
     }
 
@@ -440,12 +424,12 @@ TKeyedWriteSession::~TKeyedWriteSession() {
     }
 }
 
-void TKeyedWriteSession::DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout) {
+void TKeyedWriteSession::DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout, bool mustBeEmpty) {
     if (it == SessionsIndex.end() || !it->second) {
         return;
     }
 
-    Y_ABORT_UNLESS(it->second->Session->Close(closeTimeout), "There are still messages in flight");
+    Y_ABORT_UNLESS(!mustBeEmpty || it->second->Session->Close(closeTimeout), "There are still messages in flight");
 
     auto partition = it->second->Partition;
     ReadyFutures.erase(partition);
@@ -637,7 +621,7 @@ void TKeyedWriteSession::CleanIdleSessions() {
             break;
         }
 
-        auto sessionIter = SessionsIndex.find((*it)->Partition);
+        auto sessionIter = SessionsIndex.find((*it)->Session->Partition);
         DestroyWriteSession(sessionIter, TDuration::Zero());
     }
 }
@@ -695,10 +679,10 @@ void TKeyedWriteSession::RunMainWorker() {
         std::unique_lock lock(GlobalLock);
         if (didWrite) {
             PendingMessages.pop_front();
-            if (writeSession->IsQueueEmpty()) {
-                IdlerSessions.erase(writeSession);
+            if (writeSession->AddToQueue(1) && writeSession->IdleSession) {
+                IdlerSessions.erase(writeSession->IdleSession);
+                writeSession->IdleSession.reset();
             }
-            writeSession->AddToQueue(1);
         }
 
         if (PendingMessages.empty() || !didWrite) {
@@ -718,7 +702,7 @@ void TKeyedWriteSession::RunMainWorker() {
     auto closeTimeout = GetCloseTimeout();
     auto sessionsToClose = SessionsIndex.size();
     for (auto it = SessionsIndex.begin(); it != SessionsIndex.end();) {
-        DestroyWriteSession(it, closeTimeout / sessionsToClose);
+        DestroyWriteSession(it, closeTimeout / sessionsToClose, false);
     }
 
     // Add SessionClosedEvent only if needed

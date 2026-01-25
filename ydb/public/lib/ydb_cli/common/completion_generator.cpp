@@ -764,83 +764,10 @@ namespace NLastGetoptFork {
                         }
 
                         L << ";;";
-                    }
-                }
-
-                L << "*)";
-                {
-                    I;
-
-                    L << "args=0";
-                    auto& line = L << "opts='@(";
-                    TStringBuf sep = "";
-                    for (auto& opt : unorderedOpts) {
-                        if (opt->HasArg_ == EHasArg::NO_ARGUMENT || opt->IsHidden()) {
-                            continue;
-                        }
-                        for (auto& shortName : opt->GetShortNames()) {
-                            line << sep << "-" << B(TStringBuf(&shortName, 1));
-                            sep = "|";
-                        }
-                        for (auto& longName: opt->GetLongNames()) {
-                            line << sep << "--" << B(longName);
-                            sep = "|";
-                        }
-                    }
-                    line << ")'";
-                    L << "for (( i=" << level << "; i < cword; i++ )); do";
-                    {
-                        I;
-                        L << "if [[ ${words[i]} != -* && ${words[i-1]} != $opts ]]; then";
-                        {
-                            I;
-                            L << "(( args++ ))";
-                        }
-                        L << "fi";
-                    }
-                    L << "done";
-                    L;
-
-                    auto argSpecs = opts.GetFreeArgSpecs();
-                    size_t numFreeArgs = opts.GetFreeArgsMax();
-                    bool unlimitedArgs = false;
-                    if (numFreeArgs == TOpts::UNLIMITED_ARGS) {
-                        numFreeArgs = argSpecs.empty() ? 0 : (argSpecs.rbegin()->first + 1);
-                        unlimitedArgs = true;
-                    }
-
-                    L << "case ${args} in";
-                    {
-                        I;
-
-                        for (size_t i = 0; i < numFreeArgs; ++i) {
-                            L << i << ")";
-                            {
-                                I;
-                                auto& spec = argSpecs[i];
-                                if (spec.Completer_ != nullptr) {
-                                    spec.Completer_->GenerateBash(out);
-                                }
-                                L << ";;";
-                            }
-                        }
-                        if (unlimitedArgs) {
-                            L << "*)";
-                            {
-                                I;
-                                auto& spec = opts.GetTrailingArgSpec();
-                                if (spec.Completer_ != nullptr) {
-                                    spec.Completer_->GenerateBash(out);
-                                }
-                                L << ";;";
-                            }
                         }
                     }
                     L << "esac";
-                    L << ";;";
                 }
-            }
-            L << "esac";
         }
         L << "fi";
     }

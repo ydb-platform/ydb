@@ -197,7 +197,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildGraceJoinCore(TExprNode::TPtr leftInp
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) {
+TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) {
     const auto joinKind = to_lower(Join->JoinKind);
     if (joinKind == "cross") {
         return BuildCrossJoin(leftInput, rightInput);

@@ -1,10 +1,10 @@
-#include <yql/essentials/core/yql_expr_optimize.h>
 #include "kqp_rbo_physical_filter_builder.h"
+#include <yql/essentials/core/yql_expr_optimize.h>
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalFilter(TExprNode::TPtr input) {
+TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     const auto inputColumns = Filter->GetInput()->GetOutputIUs();
 
     // clang-format off

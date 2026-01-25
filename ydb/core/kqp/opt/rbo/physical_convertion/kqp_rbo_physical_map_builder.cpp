@@ -1,10 +1,10 @@
-#include <yql/essentials/core/yql_expr_optimize.h>
 #include "kqp_rbo_physical_map_builder.h"
+#include <yql/essentials/core/yql_expr_optimize.h>
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalMap(TExprNode::TPtr input) {
+TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     const auto inputColumns = Map->GetInput()->GetOutputIUs();
 
     // clang-format off

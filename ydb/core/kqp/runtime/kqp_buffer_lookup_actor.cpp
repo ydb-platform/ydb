@@ -418,6 +418,13 @@ public:
         if (!record.GetBrokenTxLocks().empty()) {
             BrokenLocksCount += record.GetBrokenTxLocks().size();
             Settings.TxManager->SetError(shardId);
+            // Store the broken lock's QueryTraceId for TLI logging
+            for (const auto& brokenLock : record.GetBrokenTxLocks()) {
+                if (brokenLock.HasQueryTraceId() && brokenLock.GetQueryTraceId() != 0) {
+                    Settings.TxManager->SetBrokenLockQueryTraceId(brokenLock.GetQueryTraceId());
+                    break;
+                }
+            }
             RuntimeError(
                 NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
@@ -429,6 +436,10 @@ public:
         for (const auto& lock : record.GetTxLocks()) {
             if (!Settings.TxManager->AddLock(shardId, lock)) {
                 YQL_ENSURE(Settings.TxManager->BrokenLocks());
+                // Store the broken lock's QueryTraceId for TLI logging
+                if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
+                    Settings.TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
+                }
                 NYql::TIssues issues;
                 issues.AddIssue(*Settings.TxManager->GetLockIssue());
                 RuntimeError(

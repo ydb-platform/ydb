@@ -2297,13 +2297,21 @@ public:
                             const TString queryText = QueryState->ExtractQueryText();
                             const TString queryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
 
-                            // For victim: log the first query's QueryTraceId (that acquired the lock) as VictimQueryTraceId
-                            // and current query's QueryTraceId as CurrentQueryTraceId
+                            // For victim: use the broken lock's QueryTraceId from DataShard if available
+                            // This is the QueryTraceId of the specific query that acquired the lock that was broken
                             TMaybe<ui64> victimQueryTraceId;
                             TString victimQueryText;
-                            if (QueryState->TxCtx->QueryTextCollector.GetQueryCount() > 1) {
-                                // In a multi-query transaction, the first query typically acquired the locks
-                                // We use the first QueryTraceId and text from the transaction
+                            
+                            // First try to get QueryTraceId from TxManager (set by write actor for UseSink path)
+                            if (auto txManagerQueryTraceId = QueryState->TxCtx->TxManager->GetBrokenLockQueryTraceId()) {
+                                victimQueryTraceId = *txManagerQueryTraceId;
+                                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(*txManagerQueryTraceId);
+                            } else if (ev->BrokenLockQueryTraceId) {
+                                // Use the QueryTraceId from the broken lock (from DataShard response)
+                                victimQueryTraceId = *ev->BrokenLockQueryTraceId;
+                                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(*ev->BrokenLockQueryTraceId);
+                            } else if (QueryState->TxCtx->QueryTextCollector.GetQueryCount() > 0) {
+                                // Fallback: use the first query's QueryTraceId
                                 victimQueryTraceId = QueryState->TxCtx->QueryTextCollector.GetFirstQueryTraceId();
                                 victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
                             }
@@ -2332,10 +2340,16 @@ public:
                             const TString queryText = QueryState->ExtractQueryText();
                             const TString queryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
 
-                            // For victim: log the first query's QueryTraceId (that acquired the lock) as VictimQueryTraceId
+                            // For victim: use the broken lock's QueryTraceId from DataShard if available
                             TMaybe<ui64> victimQueryTraceId;
                             TString victimQueryText;
-                            if (QueryState->TxCtx->QueryTextCollector.GetQueryCount() > 1) {
+                            if (ev->BrokenLockQueryTraceId) {
+                                // Use the QueryTraceId from the broken lock (from DataShard)
+                                victimQueryTraceId = *ev->BrokenLockQueryTraceId;
+                                // Find the corresponding query text
+                                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(*ev->BrokenLockQueryTraceId);
+                            } else if (QueryState->TxCtx->QueryTextCollector.GetQueryCount() > 0) {
+                                // Fallback: use the first query's QueryTraceId
                                 victimQueryTraceId = QueryState->TxCtx->QueryTextCollector.GetFirstQueryTraceId();
                                 victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
                             }

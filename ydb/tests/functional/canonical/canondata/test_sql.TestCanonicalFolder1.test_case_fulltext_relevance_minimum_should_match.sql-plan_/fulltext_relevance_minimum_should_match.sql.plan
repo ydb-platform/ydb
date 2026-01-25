@@ -39,7 +39,7 @@
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "argument._yql_full_text_relevance"
+                                                "TopSortBy": "argument.__ydb_full_text_relevance"
                                             }
                                         ],
                                         "PlanNodeId": 2,
@@ -48,15 +48,17 @@
                                                 "Node Type": "ReadFullTextIndex",
                                                 "Operators": [
                                                     {
-                                                        "Columns": "Key, Text, _yql_full_text_relevance",
+                                                        "Columns": "Key, Text, __ydb_full_text_relevance",
                                                         "Index": "fulltext_relevance_idx",
                                                         "Inputs": [],
                                                         "MinimumShouldMatch": "\"1\"",
+                                                        "MinimumShouldMatchExplained": "1",
                                                         "Name": "ReadFullTextIndex",
                                                         "Query": "\"cats dogs\"",
                                                         "QueryColumns": "Text",
                                                         "QueryMode": "\"or\"",
                                                         "RelevanceQuery": "True",
+                                                        "SearchTerms": "cats, dogs",
                                                         "Table": "/local/base_fulltext_relevance_minimum_should_match_sql_plan/FullTextTable"
                                                     }
                                                 ],
@@ -66,7 +68,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "_yql_full_text_relevance (Desc)"
+                                    "__ydb_full_text_relevance (Desc)"
                                 ]
                             }
                         ]

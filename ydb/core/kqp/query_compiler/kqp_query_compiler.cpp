@@ -281,7 +281,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
     for (const auto& columnName : columns) {
         auto column = tableMeta.Columns.FindPtr(columnName);
         if (!column) {
-            if (columnName == "_yql_full_text_relevance") {
+            if (columnName == NTableIndex::NFulltext::FullTextRelevanceColumn) {
                 continue;
             }
 
@@ -344,7 +344,7 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
         }
 
 
-        if (columnName == "_yql_full_text_relevance") {
+        if (columnName == NTableIndex::NFulltext::FullTextRelevanceColumn) {
             auto& columnProto = *opProto.AddColumns();
             // columnProto.SetId(columnId);
             columnProto.SetName(columnName);
@@ -1387,7 +1387,7 @@ private:
             for (auto item : type->GetItems()) {
                 auto* columnProto = fullTextProto.AddColumns();
                 columnProto->SetName(TString(item->GetName()));
-                if (item->GetName() == "_yql_full_text_relevance") {
+                if (item->GetName() == NTableIndex::NFulltext::FullTextRelevanceColumn) {
                     continue;
                 }
 

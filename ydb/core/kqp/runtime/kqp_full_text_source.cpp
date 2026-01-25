@@ -270,88 +270,6 @@ public:
     }
 };
 
-enum class EQueryMode {
-    And,
-    Or
-};
-
-
-class TValidationException : public yexception {
-};
-
-static EQueryMode QueryModeFromString(const TString& mode) {
-    if (mode.empty()) {
-        return EQueryMode::And;
-    } else if (to_lower(mode) == "and") {
-        return EQueryMode::And;
-    } else if (to_lower(mode) == "or") {
-        return EQueryMode::Or;
-    } else {
-        throw TValidationException() << "Unsupported query mode: `" << EscapeC(mode) << "`. Should be `and` or `or`";
-    }
-}
-
-
-ui32 NormalizeMinimumShouldMatch(i32 wordsCount, i32 minimumShouldMatch) {
-    // NOTE
-    // as per lucene documentation, minimum should match should be at least 1
-    // and at most the number of words in the query
-    if (minimumShouldMatch <= 0) {
-        return 1;
-    }
-    if (minimumShouldMatch > wordsCount) {
-        return wordsCount;
-    }
-
-    return minimumShouldMatch;
-}
-
-ui32 MinimumShouldMatchFromString(i32 wordsCount, EQueryMode queryMode, const TString& minimumShouldMatch) {
-    if (minimumShouldMatch.empty()) {
-        if (queryMode == EQueryMode::And) {
-            return wordsCount;
-        } else {
-            // at least one word should be matched
-            return 1;
-        }
-    } else {
-        if (queryMode != EQueryMode::Or) {
-            throw TValidationException() << "MinimumShouldMatch is not supported for AND query mode";
-        }
-
-        if (minimumShouldMatch.EndsWith("%")) {
-            i32 intValue;
-            if (!TryFromString<i32>(minimumShouldMatch.substr(0, minimumShouldMatch.size() - 1), intValue)) {
-                throw TValidationException() << "MinimumShouldMatch is incorrect. Invalid percentage: `" << EscapeC(minimumShouldMatch) << "`. Should be a number";
-            }
-            if (intValue <= 0) {
-                throw TValidationException() << "MinimumShouldMatch is incorrect. Invalid percentage: `" << EscapeC(minimumShouldMatch) << "`. Should be positive";
-            }
-            if (intValue > 100) {
-                throw TValidationException() << "MinimumShouldMatch is incorrect. Invalid percentage: `" << EscapeC(minimumShouldMatch) << "`. Should be less than or equal to 100";
-            }
-
-            return NormalizeMinimumShouldMatch(wordsCount, (i32)(std::floor(static_cast<double>(wordsCount) * intValue / 100.0 + EPSILON) + EPSILON));
-        }
-
-        i32 intValue;
-        if (!TryFromString<i32>(minimumShouldMatch, intValue)) {
-            throw TValidationException() << "MinimumShouldMatch is incorrect. Invalid value: `" << EscapeC(minimumShouldMatch) << "`. Should be a number";
-        }
-
-        if (intValue <= -wordsCount) {
-            return 1;
-        } if (intValue > wordsCount) {
-            return wordsCount;
-        }
-
-        if (intValue < 0) {
-            return NormalizeMinimumShouldMatch(wordsCount, wordsCount + intValue);
-        }
-
-        return NormalizeMinimumShouldMatch(wordsCount, intValue);
-    }
-}
 
 class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
     const ui64 DocCount = 0;
@@ -365,15 +283,15 @@ class TQueryCtx : public TAtomicRefCount<TQueryCtx> {
 
 public:
     TQueryCtx(size_t wordCount, ui64 totalDocLength, ui64 docCount,
-        const TString& queryMode,
-        const TString& minimumShouldMatch,
+        EQueryMode queryMode,
+        ui32 minimumShouldMatch,
         const TVector<std::pair<i32, NScheme::TTypeInfo>> resultCellIndices)
         : DocCount(docCount)
         , AvgDL(docCount > 0 ? static_cast<double>(totalDocLength) / docCount : 1.0)
         , IDFValues(wordCount, 0.0)
         , ResultCellIndices(resultCellIndices)
-        , QueryMode(QueryModeFromString(queryMode))
-        , MinimumShouldMatch(MinimumShouldMatchFromString(wordCount, QueryMode, minimumShouldMatch))
+        , QueryMode(queryMode)
+        , MinimumShouldMatch(minimumShouldMatch)
     {
     }
 
@@ -1039,7 +957,7 @@ public:
         bool mainTableCovered = true;
         for(i32 i = 0; i < settings->GetColumns().size(); i++) {
             const auto& column = settings->GetColumns(i);
-            if (column.GetName() == "_yql_full_text_relevance") {
+            if (column.GetName() == FullTextRelevanceColumn) {
                 resultCellIndices.emplace_back(RELEVANCE_COLUMN_MARKER, NScheme::TTypeInfo());
                 continue;
             }
@@ -1286,8 +1204,21 @@ private:
     }
 
     void StartWordReads() {
+        TString explain;
+        EQueryMode queryMode = QueryModeFromString(Settings->GetQueryMode(), explain);
+        if (!explain.empty()) {
+            RuntimeError(explain, NYql::NDqProto::StatusIds::BAD_REQUEST);
+            return;
+        }
+
+        ui32 minimumShouldMatch = MinimumShouldMatchFromString(Words.size(), queryMode, Settings->GetMinimumShouldMatch(), explain);
+        if (!explain.empty()) {
+            RuntimeError(explain, NYql::NDqProto::StatusIds::BAD_REQUEST);
+            return;
+        }
+
         QueryCtx = MakeIntrusive<TQueryCtx>(
-            Words.size(), SumDocLength, DocCount, Settings->GetQueryMode(), Settings->GetMinimumShouldMatch(), ResultCellIndices);
+            Words.size(), SumDocLength, DocCount, queryMode, minimumShouldMatch, ResultCellIndices);
 
         if (Settings->HasBFactor() && Settings->GetBFactor() > EPSILON) {
             QueryCtx->SetBFactor(Settings->GetBFactor());
@@ -1503,9 +1434,6 @@ public:
             if (exception) {
                 std::rethrow_exception(exception);
             }
-        } catch (const TValidationException& ex) {
-            RuntimeError(ex.what(), NYql::NDqProto::StatusIds::BAD_REQUEST);
-            return true;
         } catch (const std::exception& ex) {
             RuntimeError(ex.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return true;

@@ -50,10 +50,11 @@ public:
         TMaybe<TTxId> Id;
     };
 
-    TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database, const TMaybe<TString>& applicationName,
+    TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, ui64 queryTraceId, const TString& database, const TMaybe<TString>& applicationName,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt, i32 runtimeParameterSizeLimit)
         : QueryId(queryId)
+        , QueryTraceId(queryTraceId)
         , Database(database)
         , ApplicationName(applicationName)
         , Cluster(cluster)
@@ -123,6 +124,7 @@ public:
     // this counter may be used as a cookie by a session actor to reject events
     // with cookie less than current QueryId.
     ui64 QueryId = 0;
+    ui64 QueryTraceId = 0;
     TString Database;
     TMaybe<TString> ApplicationName;
     TString Cluster;

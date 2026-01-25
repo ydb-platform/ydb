@@ -7,6 +7,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/log.h>
+#include <util/string/escape.h>
 
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -15,15 +16,15 @@
 namespace NKikimr {
 namespace NDataIntegrity {
 
-// Class for collecting and managing query texts for TLI logging
+// Class for collecting and managing query texts and QueryTraceIds for TLI logging
 class TQueryTextCollector {
 public:
-    // Add query text to the collection while avoiding duplicates and limiting size
-    void AddQueryText(const TString& queryText) {
+    // Add query text and QueryTraceId to the collection while avoiding duplicates and limiting size
+    void AddQueryText(ui64 queryTraceId, const TString& queryText) {
         if (!queryText.empty() && IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             // Only add if it's different from the previous query to avoid duplicates
-            if (QueryTexts.empty() || QueryTexts.back() != queryText) {
-                QueryTexts.push_back(queryText);
+            if (QueryTexts.empty() || QueryTexts.back().second != queryText) {
+                QueryTexts.push_back({queryTraceId, queryText});
                 // Keep only the last N queries to prevent unbounded memory growth
                 constexpr size_t MAX_QUERY_TEXTS = 100;
                 while (QueryTexts.size() > MAX_QUERY_TEXTS) {
@@ -40,10 +41,10 @@ public:
         }
 
         TStringBuilder builder;
-        builder << std::accumulate(QueryTexts.begin() + 1, QueryTexts.end(), QueryTexts[0],
-            [](const TString& acc, const TString& query) {
-                return acc + "; " + query;
-            });
+        builder << "[ ";
+        for (size_t i = 0; i < QueryTexts.size(); ++i)
+            builder << "QueryTraceId: " << QueryTexts[i].first << ", QueryText: "<< QueryTexts[i].second << "; ";
+        builder << "]";
         return builder;
     }
 
@@ -52,13 +53,34 @@ public:
         return QueryTexts.empty();
     }
 
-    // Clear all query texts
+    // Get the number of queries
+    size_t GetQueryCount() const {
+        return QueryTexts.size();
+    }
+
+    // Get the first QueryTraceId (typically from the query that acquired locks)
+    TMaybe<ui64> GetFirstQueryTraceId() const {
+        if (QueryTexts.empty() || QueryTexts.front().first == 0) {
+            return Nothing();
+        }
+        return QueryTexts.front().first;
+    }
+
+    // Get the first query text (typically the victim query that acquired locks)
+    TString GetFirstQueryText() const {
+        if (QueryTexts.empty()) {
+            return "";
+        }
+        return QueryTexts.front().second;
+    }
+
+    // Clear all query texts and QueryTraceIds
     void Clear() {
         QueryTexts.clear();
     }
 
 private:
-    std::deque<TString> QueryTexts;
+    std::deque<std::pair<ui64, TString>> QueryTexts;
 };
 
 inline void LogQueryTextImpl(TStringStream& ss, const TString& queryText, bool hashed) {
@@ -165,7 +187,11 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
     LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
 }
 
-inline void LogTli(const TString& component, const TString& message, const TString& queryText, const TActorContext& ctx) {
+inline void LogTli(const TString& component, const TString& message, const TString& queryText,
+                   TMaybe<ui64> breakerQueryTraceId, TMaybe<ui64> victimQueryTraceId,
+                   const TString& queryTexts, const TActorContext& ctx,
+                   TMaybe<ui64> currentQueryTraceId = Nothing(),
+                   const TString& victimQueryText = "") {
     if (!IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
         return;
     }
@@ -174,7 +200,26 @@ inline void LogTli(const TString& component, const TString& message, const TStri
     LogKeyValue("Component", component, ss);
     LogKeyValue("Message", message, ss);
 
+    if (breakerQueryTraceId) {
+        LogKeyValue("BreakerQueryTraceId", ToString(*breakerQueryTraceId), ss);
+    } else if (victimQueryTraceId) {
+        LogKeyValue("VictimQueryTraceId", ToString(*victimQueryTraceId), ss);
+    }
+
+    if (currentQueryTraceId) {
+        LogKeyValue("CurrentQueryTraceId", ToString(*currentQueryTraceId), ss);
+    }
+
+    // For victim logs, log the original victim query text separately
+    if (!victimQueryText.empty()) {
+        LogKeyValue("VictimQueryText", EscapeC(victimQueryText), ss);
+    }
+
     LogQueryTextTli(ss, queryText);
+
+    if (!queryTexts.empty()) {
+        LogKeyValue("AllQueryTexts", EscapeC(queryTexts), ss);
+    }
 
     LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
 }

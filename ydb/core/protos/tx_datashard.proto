@@ -232,6 +232,9 @@ message TKqpTransaction {
 
     // When true datashard will exchange a generic TReadSetData with other shards
     optional bool UseGenericReadSets = 7 [default = false];
+
+    // Globally unique query trace ID for TLI log linkage
+    optional uint64 QueryTraceId = 8;
 }
 
 message TEvKqpInputActorResultInfo {
@@ -280,6 +283,9 @@ message TKqpReadRangesSourceSettings {
 
     // Vector top-K pushdown for brute force vector search
     optional NKikimrKqp.TReadVectorTopK VectorTopK = 26;
+
+    // Globally unique query trace ID for TLI log linkage
+    optional uint64 QueryTraceId = 27;
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -320,6 +326,9 @@ message TKqpVectorResolveSettings {
     // Parameters for finding overlapping clusters (multiple clusters per row)
     optional uint32 OverlapClusters = 18;
     optional double OverlapRatio = 19;
+
+    // Globally unique query trace ID for TLI log linkage
+    optional uint64 QueryTraceId = 20;
 }
 
 message TKqpTaskInfo {
@@ -2052,6 +2061,9 @@ message TEvKqpScan {
     optional NKikimrDataEvents.ELockMode LockMode = 28;
     optional double CpuGroupThreadsLimit = 29;
     optional string CpuGroupName = 30;
+
+    // Globally unique query trace ID for TLI log linkage
+    optional uint64 QueryTraceId = 31;
 }
 
 message TEvCompactTable {
@@ -2241,6 +2253,9 @@ message TEvRead {
     optional NKikimrDataEvents.ELockMode LockMode = 904;
 
     optional NKikimrKqp.TReadVectorTopK VectorTopK = 905;
+
+    // Globally unique query trace ID for TLI log linkage
+    optional uint64 QueryTraceId = 906;
 }
 
 message TReadContinuationToken {

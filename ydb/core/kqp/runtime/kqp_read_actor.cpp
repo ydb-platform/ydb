@@ -884,6 +884,10 @@ public:
             record.SetLockNodeId(Settings->GetLockNodeId());
         }
 
+        if (Settings->HasQueryTraceId()) {
+            record.SetQueryTraceId(Settings->GetQueryTraceId());
+        }
+
         if (Settings->HasVectorTopK()) {
             *record.MutableVectorTopK() = Settings->GetVectorTopK();
         }

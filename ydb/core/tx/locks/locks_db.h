@@ -113,7 +113,7 @@ public:
         return true;
     }
 
-    void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) override {
+    void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0, ui64 queryTraceId = 0) override {
         using Schema = TSchemaDescription;
         NIceDb::TNiceDb db(DB);
         db.Table<typename Schema::Locks>().Key(lockId).Update(
@@ -121,7 +121,8 @@ public:
             NIceDb::TUpdate<typename Schema::Locks::Generation>(generation),
             NIceDb::TUpdate<typename Schema::Locks::Counter>(counter),
             NIceDb::TUpdate<typename Schema::Locks::CreateTimestamp>(createTs),
-            NIceDb::TUpdate<typename Schema::Locks::Flags>(flags));
+            NIceDb::TUpdate<typename Schema::Locks::Flags>(flags),
+            NIceDb::TUpdate<typename Schema::Locks::QueryTraceId>(queryTraceId));
         HasChanges_ = true;
     }
 

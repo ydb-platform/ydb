@@ -4,6 +4,7 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -128,7 +129,8 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
 
 // Unified function that logs lock breaking events to both integrity trails and TLI systems
 inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletId, TStringBuf message,
-                           const TVector<ui64>& brokenLocks, TMaybe<ui64> txId = Nothing()) {
+                           const TVector<ui64>& brokenLocks, TMaybe<ui64> breakerQueryTraceId = Nothing(),
+                           const TVector<ui64>& victimQueryTraceIds = {}) {
     if (brokenLocks.empty()) {
         return;
     }
@@ -143,18 +145,74 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
     // Build message body once (everything except Component and Type)
     TStringStream bodySs;
     LogKeyValue("TabletId", ToString(tabletId), bodySs);
-    if (txId) {
-        LogKeyValue("PhyTxId", ToString(*txId), bodySs);
-    }
     LogKeyValue("Message", message, bodySs);
-    bodySs << "BrokenLocks: [";
-    for (size_t i = 0; i < brokenLocks.size(); ++i) {
-        bodySs << brokenLocks[i];
-        if (i + 1 < brokenLocks.size()) {
-            bodySs << " ";
+    TString messageBody = bodySs.Str();
+
+    // Log to TLI service
+    if (tliEnabled) {
+        TStringStream ss;
+        LogKeyValue("Component", "DataShard", ss);
+        if (breakerQueryTraceId) {
+            LogKeyValue("QueryTraceId", ToString(*breakerQueryTraceId), ss);
+            LogKeyValue("BreakerQueryTraceId", ToString(*breakerQueryTraceId), ss);
         }
+        if (!victimQueryTraceIds.empty()) {
+            ss << "VictimQueryTraceIds: [";
+            for (size_t i = 0; i < victimQueryTraceIds.size(); ++i) {
+                ss << victimQueryTraceIds[i];
+                if (i + 1 < victimQueryTraceIds.size()) {
+                    ss << " ";
+                }
+            }
+            ss << "], ";
+        }
+
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
     }
-    bodySs << "]";
+
+    // Log to DATA_INTEGRITY service (with BrokenLocks)
+    if (integrityEnabled) {
+        TStringStream ss;
+        LogKeyValue("Component", "DataShard", ss);
+        LogKeyValue("Type", "Locks", ss);
+        ss << "BrokenLocks: [";
+        for (size_t i = 0; i < brokenLocks.size(); ++i) {
+            ss << brokenLocks[i];
+            if (i + 1 < brokenLocks.size()) {
+                ss << " ";
+            }
+        }
+        ss << "]";
+        ss << messageBody;
+        LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
+    }
+
+}
+
+// Log victim detection in DataShard (when a transaction detects its locks were broken)
+inline void LogVictimDetected(const NActors::TActorContext& ctx, const ui64 tabletId, TStringBuf message,
+                              TMaybe<ui64> victimQueryTraceId = Nothing(),
+                              TMaybe<ui64> currentQueryTraceId = Nothing()) {
+    // Check if logging is enabled before formatting (performance optimization)
+    const bool tliEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::TLI);
+    const bool integrityEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY);
+    if (!tliEnabled && !integrityEnabled) {
+        return;
+    }
+
+    // Build message body once (everything except Component and Type)
+    TStringStream bodySs;
+    LogKeyValue("TabletId", ToString(tabletId), bodySs);
+    if (victimQueryTraceId) {
+        // QueryTraceId = VictimQueryTraceId for victim logs
+        LogKeyValue("QueryTraceId", ToString(*victimQueryTraceId), bodySs);
+        LogKeyValue("VictimQueryTraceId", ToString(*victimQueryTraceId), bodySs);
+    }
+    if (currentQueryTraceId) {
+        LogKeyValue("CurrentQueryTraceId", ToString(*currentQueryTraceId), bodySs);
+    }
+    LogKeyValue("Message", message, bodySs, /*last*/ true);
     TString messageBody = bodySs.Str();
 
     // Log to TLI service
@@ -173,7 +231,6 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
         ss << messageBody;
         LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, ss.Str());
     }
-
 }
 
 template <typename TxResult>

@@ -843,6 +843,7 @@ message TKqpTableSinkSettings {
     optional bool IsIndexImplTable = 21;
     optional string Database = 22;
     repeated uint32 DefaultColumnsIds = 23;
+    optional uint64 QueryTraceId = 24;
 }
 
 message TReadVectorTopK {
@@ -874,6 +875,7 @@ message TKqpStreamLookupSettings {
     optional NKqpProto.EIsolationLevel IsolationLevel = 17 [default = ISOLATION_LEVEL_UNDEFINED];
     optional string Database = 18;
     optional TReadVectorTopK VectorTopK = 19;
+    optional uint64 QueryTraceId = 20;
 }
 
 message TKqpFullTextSourceSettings {

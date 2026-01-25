@@ -221,10 +221,10 @@ public:
         LastAccessTime = TInstant::Now();
     }
 
-    void OnBeginQuery(const TString& queryText = "") {
+    void OnBeginQuery(ui64 queryTraceId, const TString& queryText) {
         ++QueriesCount;
         BeginQueryTime = TInstant::Now();
-        QueryTextCollector.AddQueryText(queryText);
+        QueryTextCollector.AddQueryText(queryTraceId, queryText);
     }
 
     void OnEndQuery() {

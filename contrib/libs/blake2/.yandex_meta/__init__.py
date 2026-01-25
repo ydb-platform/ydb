@@ -42,5 +42,8 @@ blake2 = NixProject(
     inclink={
         "include": ["src/blake2.h"],
     },
+    platform_dispatchers=[
+        "src/config.h",
+    ],
     post_install=post_install,
 )

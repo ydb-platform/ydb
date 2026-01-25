@@ -320,10 +320,6 @@ SRCS(
     json/helpers.cpp
     json/json_parser.cpp
     json/json_writer.cpp
-
-    ytalloc/bindings.cpp
-    ytalloc/config.cpp
-    ytalloc/statistics_producer.cpp
 )
 
 IF (OS_LINUX)

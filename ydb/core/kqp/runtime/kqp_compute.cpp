@@ -163,7 +163,6 @@ public:
                 auto it = state.AllRowsAreNull.find(cookie.RowSeqNo);
                 Y_ENSURE(it != state.AllRowsAreNull.end());
                 bool allRowsAreNull = it->second;
-                state.AllRowsAreNull.erase(it);
 
                 if (isNull) {
                     //
@@ -185,9 +184,12 @@ public:
             }
 
             if (cookie.FirstRow) {
-                state.AllRowsAreNull[cookie.RowSeqNo] = isNull;
+                auto [_, inserted] = state.AllRowsAreNull.emplace(cookie.RowSeqNo, isNull);
+                Y_ENSURE(inserted, "Row seq no already exists");
             } else {
-                state.AllRowsAreNull[cookie.RowSeqNo] &= isNull;
+                auto it = state.AllRowsAreNull.find(cookie.RowSeqNo);
+                Y_ENSURE(it != state.AllRowsAreNull.end(), "Row seq no not found");
+                it->second &= isNull;
             }
 
             return isNull;

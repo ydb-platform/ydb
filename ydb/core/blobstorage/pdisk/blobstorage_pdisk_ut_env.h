@@ -472,5 +472,5 @@ private:
     }
 };
 
-void TestChunkWriteReleaseRun();
+void TestChunkWriteReleaseRun(bool encryption);
 }

@@ -6,6 +6,6 @@
 
 namespace NYql {
 
-ITopicClient::TPtr CreateFileTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics);
+ITopicClient::TPtr CreateFileTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings);
 
 } // namespace NYql

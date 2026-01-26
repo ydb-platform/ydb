@@ -216,6 +216,7 @@ public:
     {
         Y_VALIDATE(Database, "Missing database");
         Y_VALIDATE(Counters, "Missing counters");
+        Y_VALIDATE(MaxMemoryUsage > 0, "MaxMemoryUsage must be positive");
     }
 
     void Bootstrap() {
@@ -614,6 +615,9 @@ private:
                 std::move(partitionSession)
             ), messagesSize);
         }
+
+        // If after decompression data size less than compressed, request new data from server
+        ContinueReading();
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::CommitOffsetResponse& message) {
@@ -745,8 +749,8 @@ private:
             return;
         }
 
-        RpcResponses.push(message);
-        LOG_T("Added session event: " << static_cast<i64>(message.client_message_case()));
+        RpcResponses.push(std::move(message));
+        LOG_T("Added session event: " << static_cast<i64>(RpcResponses.back().client_message_case()));
 
         if (RpcActor) {
             SendSessionEvents();            
@@ -791,7 +795,7 @@ private:
 
     template <typename TEvent>
     void AddOutgoingEvent(TEvent&& event, i64 internalSize = 0) {
-        OutgoingEvents.emplace(std::move(event), sizeof(TEvent) + internalSize);
+        OutgoingEvents.emplace(std::move(event), static_cast<i64>(sizeof(TEvent)) + internalSize);
         Counters->MessagesInflight->Inc();
 
         const auto size = OutgoingEvents.back().Size;
@@ -991,14 +995,15 @@ public:
         i64 totalSize = 0;
         while (!Events.empty() && result.size() < maxCount && static_cast<size_t>(totalSize) < maxByteSize) {
             auto& event = Events.front();
-            result.emplace_back(std::move(event.Event));
             totalSize += event.Size;
 
-            if (std::holds_alternative<TSessionClosedEvent>(result.back())) {
+            if (std::holds_alternative<TSessionClosedEvent>(event.Event)) {
                 // Skip all events after session closed event
+                result.emplace_back(event.Event);
                 break;
             }
 
+            result.emplace_back(std::move(event.Event));
             Events.pop();
         }
 
@@ -1017,11 +1022,11 @@ public:
     }
 
     std::optional<TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) final {
-        const auto& events = GetEvents(block, 1, maxByteSize);
+        auto events = GetEvents(block, 1, maxByteSize);
         if (events.empty()) {
             return std::nullopt;
         }
-        return events[0];
+        return std::move(events[0]);
     }
 
     std::optional<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) final {
@@ -1100,6 +1105,7 @@ private:
         EventFuture.reset();
 
         for (auto& event : events) {
+            Y_VALIDATE(event.Size >= 0, "Event size must be non negative");
             Events.emplace(std::move(event));
 
             if (std::holds_alternative<TSessionClosedEvent>(Events.back().Event)) {

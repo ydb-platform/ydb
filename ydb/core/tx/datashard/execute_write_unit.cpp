@@ -47,8 +47,10 @@ public:
         auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
         writeResult.Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
         auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByTx);
-        NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Write transaction broke other locks", locksBrokenByTx,
-                                       writeOp->QueryTraceId(), victimQueryTraceIds);
+        if (!victimQueryTraceIds.empty()) {
+            NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Write transaction broke other locks", locksBrokenByTx,
+                writeOp->QueryTraceId(), victimQueryTraceIds);
+        }
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
         for (const auto& lock : locks) {
             if (lock.IsError()) {

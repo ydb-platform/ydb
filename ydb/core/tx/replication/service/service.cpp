@@ -211,9 +211,11 @@ public:
         if (metricsLevel == TMetricsConfig::LEVEL_DETAILED) {
             PendingStatsValues[id];
         }
+
         if (PendingStatsValues.size() == 1) {
             ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(ControllerTabletId, 0));
         }
+
         Y_ABORT_UNLESS(res.second);
         res.first->second.MetricsLevel = metricsLevel;
 
@@ -236,6 +238,7 @@ public:
         if (PendingStatsValues.empty()) {
             ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(0, ControllerTabletId));
         }
+
         Workers.erase(it);
     }
 
@@ -253,6 +256,7 @@ public:
         if (PendingStatsValues.empty()) {
             ops->Schedule(TDuration::Zero(), new TEvWorker::TEvStatsWakeup(0, ControllerTabletId));
         }
+
         ActorIdToWorkerId.erase(it);
     }
 
@@ -269,12 +273,15 @@ public:
             statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::DECOMPRESS_ELAPSED_CPU)] += stats->ReaderStats->DecompressCpu.MicroSeconds();
             statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_MESSAGES)] += stats->ReaderStats->Messages;
             statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_BYTES)] += stats->ReaderStats->Bytes;
+
             if (stats->ReaderStats->Partition != -1) {
                 statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_PARTITION)] = stats->ReaderStats->Partition;
                 statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_OFFSET)] = stats->ReaderStats->Offset;
             }
+
             statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::READ_ERRORS)] += stats->ReaderStats->Errors;
         }
+
         if (stats->WriterStats) {
             statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WRITE_TIME)] += stats->WriterStats->WriteDuration.MilliSeconds();
             statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WRITE_BYTES)] += stats->WriterStats->WriteBytes;
@@ -284,6 +291,7 @@ public:
             statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::PROCESSING_ERRORS)] += stats->WriterStats->ProcessingErrors;
             statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WRITE_ERRORS)] += stats->WriterStats->WriteErrors;
         }
+
         if (stats->CurrentOperation.has_value()) {
             statsValues[static_cast<ui64>(NKikimrReplication::TWorkerStats::WORK_OPERATION)] = static_cast<ui64>(*stats->CurrentOperation);
         }
@@ -291,14 +299,15 @@ public:
 
     void SendWorkersStats(IActorOps* ops) {
         for (auto& [id, values] : PendingStatsValues) {
-
             auto workerIter = Workers.find(id);
             Y_ABORT_UNLESS(!workerIter.IsEnd());
             workerIter->second.ApplyStats({}); // Update timestamps;
             TVector<std::pair<ui64, i64>> valuePairs;
+
             for (const auto& [key, value] : values) {
                 valuePairs.emplace_back(key, value);
             }
+
             auto* ev = new TEvService::TEvWorkerStatus(id, workerIter->second.StartTime, std::move(valuePairs));
             ops->Send(ActorId, ev);
             values.clear();

@@ -235,8 +235,6 @@ private:
     std::string TransformationLambda_;
     std::string ConsumerName_;
     TBatchingSettings BatchingSettings_;
-    // TTransferStats Stats_;
-    //Ydb::Replication::DescribeTransferResult_Stats Stats_;
 
     std::variant<
         TRunningState,

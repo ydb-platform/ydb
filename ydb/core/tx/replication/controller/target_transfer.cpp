@@ -278,6 +278,7 @@ void TTransferStats::FillToProto(NKikimrReplication::TEvDescribeReplicationResul
                     dstWorker.set_state(Ydb::Replication::DescribeTransferResult_Stats::STATE_WRITE);
                     break;
             }
+
             dstWorker.set_partition_id(workerStats.Partition);
             dstWorker.set_read_offset(workerStats.ReadOffset);
             dstWorker.mutable_uptime()->set_seconds((Now() - workerStats.StartTime).Seconds());

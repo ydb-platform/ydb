@@ -137,7 +137,7 @@ void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bo
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        
+
         auto resultSet = result.GetResultSet(0);
         TResultSetParser parser(resultSet);
         UNIT_ASSERT(parser.TryNextRow());
@@ -10251,7 +10251,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 const auto result = repl.DescribeTransfer("/Root/transfer").ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 Sleep(TDuration::Seconds(1));
-                //Cerr << "Got describe: " << result.GetStats().DebugString() << Endl;
             }
         }
     }

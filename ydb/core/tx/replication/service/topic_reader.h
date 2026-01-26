@@ -6,4 +6,4 @@ namespace NKikimr::NReplication::NService {
 
 IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts);
 
-} // namespace NKikimr::NReplication::NService}
+}

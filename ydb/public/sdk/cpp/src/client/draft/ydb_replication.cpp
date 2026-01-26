@@ -367,6 +367,7 @@ public:
         if (includeStats) {
             settings.IncludeStats(includeStats);
         }
+
         auto request = MakeOperationRequest<DescribeTransferRequest>(settings);
         request.set_path(TStringType{path});
         request.set_include_stats(includeStats);

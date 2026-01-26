@@ -121,17 +121,8 @@ static void CheckFixed(const std::shared_ptr<arrow::ArrayData>& before,
             continue;
         }
 
-        // TODO: Is required?
-        if constexpr (std::is_same_v<T, double>) {
-            UNIT_ASSERT_VALUES_EQUAL_C(lhs.Get<double>(), rhs.Get<double>(),
-                                       "Value mismatch at i=" << i);
-        } else if constexpr (std::is_same_v<T, bool>) {
-            UNIT_ASSERT_VALUES_EQUAL_C(lhs.Get<bool>(), rhs.Get<bool>(),
-                                       "Value mismatch at i=" << i);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(lhs.Get<T>(), rhs.Get<T>(),
-                                       "Value mismatch at i=" << i);
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(lhs.Get<T>(), rhs.Get<T>(),
+                                   "Value mismatch at i=" << i);
     }
 }
 

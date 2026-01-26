@@ -42,6 +42,9 @@ public:
     // Will return true, if local watermark inside this input channel was moved forward.
     bool NotifyInChannelWatermarkReceived(ui64 inputId, TInstant watermark, TInstant systemTime = TInstant::Now());
 
+    using TNotifyHandler = std::function<void()>;
+    void SetNotifyHandler(TNotifyHandler notifyHandler);
+
     // Will return true, if pending watermark completed.
     bool NotifyWatermarkWasSent(TInstant watermark);
 
@@ -54,8 +57,8 @@ public:
     // Return watermark that was generated after input idleness processing
     TMaybe<TInstant> HandleIdleness(TInstant systemTime);
 
-    // Return idleness check that should be scheduled or Nothing()
-    [[nodiscard]] TMaybe<TInstant> PrepareIdlenessCheck();
+    [[nodiscard]] TMaybe<TInstant> GetNextIdlenessCheckAt() const;
+    [[nodiscard]] bool AddScheduledIdlenessCheck(TInstant notifyTime);
     // Return true if idleness check should be performed
     [[nodiscard]] bool ProcessIdlenessCheck(TInstant notifyTime);
 
@@ -76,6 +79,7 @@ private:
 
     TMaybe<TInstant> PendingWatermark;
     TMaybe<TInstant> MaxWatermark;
+    TNotifyHandler NotifyHandler;
 };
 
 } // namespace NYql::NDq

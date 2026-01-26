@@ -26,6 +26,7 @@ class TDqComputeActorWatermarks
 {
 public:
     explicit TDqComputeActorWatermarks(const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters = {});
+    TDqComputeActorWatermarks(const TDqComputeActorWatermarks& parent, bool);
 
     void RegisterAsyncInput(ui64 inputId, TDuration idleTimeout = TDuration::Max(), TInstant systemTime = TInstant::Now());
     void RegisterInputChannel(ui64 inputId, TDuration idleTimeout = TDuration::Max(), TInstant systemTime = TInstant::Now());

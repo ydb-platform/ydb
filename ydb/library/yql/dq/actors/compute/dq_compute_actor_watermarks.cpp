@@ -25,6 +25,12 @@ TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix, c
 {
 }
 
+TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TDqComputeActorWatermarks& parent, bool)
+    : LogPrefix(parent.LogPrefix)
+    , Impl(parent.Impl, true)
+{
+}
+
 void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId, TDuration idleTimeout, TInstant systemTime) {
     RegisterInput(inputId, true, idleTimeout, systemTime);
 }

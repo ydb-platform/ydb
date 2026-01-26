@@ -24,8 +24,8 @@ class TestYdsBase(object):
 
         if create_output:
             self.output_topic = prefix + "_output"
-            create_stream(self.output_topic, partitions_count=partitions_count)
-            create_read_rule(self.output_topic, self.consumer_name)
+            create_stream(self.output_topic, partitions_count=partitions_count, default_endpoint=endpoint)
+            create_read_rule(self.output_topic, self.consumer_name, default_endpoint=endpoint)
 
     def write_stream(self, data, topic_path=None, partition_key=None, endpoint=None):
         database, fqdn = self.__unwrap_endpoint(endpoint)

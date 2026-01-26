@@ -41,9 +41,14 @@ public:
         }
 
         TStringBuilder builder;
-        builder << "[ ";
-        for (size_t i = 0; i < QueryTexts.size(); ++i)
-            builder << "QueryTraceId: " << QueryTexts[i].first << ", QueryText: "<< QueryTexts[i].second << "; ";
+        builder << "[";
+        for (size_t i = 0; i < QueryTexts.size(); ++i) {
+            if (i > 0) {
+                builder << " | ";
+            }
+            builder << "QueryTraceId=" << QueryTexts[i].first
+                << " QueryText=" << QueryTexts[i].second;
+        }
         builder << "]";
         return builder;
     }
@@ -120,8 +125,13 @@ inline void LogQueryText(TStringStream& ss, const TString& queryText) {
     LogQueryTextImpl(ss, queryText, config.GetQueryTextLogMode() == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED);
 }
 
-inline void LogQueryTextTli(TStringStream& ss, const TString& queryText) {
+inline void LogQueryTextTli(TStringStream& ss, const TString& queryText, bool isCommitAction) {
     const auto& config = AppData()->LogTliConfig;
+    if (isCommitAction && queryText.empty()) {
+        LogKeyValue("QueryText", "Commit", ss);
+        return;
+    }
+
     LogQueryTextImpl(ss, queryText, config.GetQueryTextLogMode() == NKikimrProto::TLogTliConfig_ELogMode_HASHED);
 }
 
@@ -189,7 +199,7 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("TxId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty", ss);
         LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
-        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, /*last*/ true);
+        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, true);
 
         return ss.Str();
     };
@@ -200,6 +210,7 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
 inline void LogTli(const TString& component, const TString& message, const TString& queryText,
                    TMaybe<ui64> breakerQueryTraceId, TMaybe<ui64> victimQueryTraceId,
                    const TString& queryTexts, const TActorContext& ctx,
+                   bool isCommitAction,
                    TMaybe<ui64> currentQueryTraceId = Nothing(),
                    const TString& victimQueryText = "") {
     if (!IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
@@ -225,11 +236,9 @@ inline void LogTli(const TString& component, const TString& message, const TStri
         LogKeyValue("VictimQueryText", EscapeC(victimQueryText), ss);
     }
 
-    LogQueryTextTli(ss, queryText);
+    LogQueryTextTli(ss, queryText, isCommitAction);
 
-    if (!queryTexts.empty()) {
-        LogKeyValue("AllQueryTexts", EscapeC(queryTexts), ss);
-    }
+    LogKeyValue("AllQueryTexts", EscapeC(queryTexts), ss, true);
 
     LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
 }
@@ -333,7 +342,7 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
         }
         locksDebugStr << "]";
 
-        LogKeyValue("Locks", locksDebugStr, ss);
+        LogKeyValue("Locks", locksDebugStr, ss, true);
 
         return ss.Str();
     };
@@ -352,7 +361,7 @@ inline void LogIntegrityTrails(const TString& txType, ui64 txId, TMaybe<ui64> sh
             LogKeyValue("ShardId", ToString(*shardId), ss);
         }
 
-        LogKeyValue("Type", type, ss, /*last*/ true);
+        LogKeyValue("Type", type, ss, true);
 
         return ss.Str();
     };

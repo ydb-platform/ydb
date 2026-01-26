@@ -145,7 +145,7 @@ inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletI
     // Build message body once (everything except Component and Type)
     TStringStream bodySs;
     LogKeyValue("TabletId", ToString(tabletId), bodySs);
-    LogKeyValue("Message", message, bodySs);
+    LogKeyValue("Message", message, bodySs, true);
     TString messageBody = bodySs.Str();
 
     // Log to TLI service
@@ -244,7 +244,7 @@ inline void LogIntegrityTrailsFinish(const NActors::TActorContext& ctx, const ui
         LogKeyValue("Type", "Finished", ss);
         LogKeyValue("TabletId", ToString(tabletId), ss);
         LogKeyValue("PhyTxId", ToString(txId), ss);
-        LogKeyValue("Status", statusString, ss);
+        LogKeyValue("Status", statusString, ss, true);
 
         return ss.Str();
     };

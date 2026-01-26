@@ -1,6 +1,5 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
-#include "datashard_integrity_trails.h"
 #include "datashard_read_operation.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
@@ -2636,23 +2635,6 @@ private:
             }
 
             if (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult()) {
-                // Log victim event before breaking own locks
-                // For InvisibleRowSkips, the victim is the current transaction whose lock will be broken
-                // Get the victim's QueryTraceId from the current lock before it's broken
-                TMaybe<ui64> victimQueryTraceId;
-                if (auto rawLock = sysLocks.GetRawLock(state.LockId)) {
-                    ui64 queryTraceId = rawLock->GetQueryTraceId();
-                    if (queryTraceId != 0) {
-                        victimQueryTraceId = queryTraceId;
-                    }
-                }
-                // Fall back to state.QueryTraceId if no QueryTraceId found in lock
-                if (!victimQueryTraceId && state.QueryTraceId) {
-                    victimQueryTraceId = state.QueryTraceId;
-                }
-                NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(), "Read transaction was a victim of broken locks",
-                                                  victimQueryTraceId,
-                                                  state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
                 sysLocks.BreakSetLocks();
             }
 
@@ -2660,39 +2642,13 @@ private:
 
         case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
             if (Reader->HadInconsistentResult()) {
-                // Log victim event before breaking own locks
-                TMaybe<ui64> victimQueryTraceId;
-                if (auto rawLock = sysLocks.GetRawLock(state.LockId)) {
-                    ui64 queryTraceId = rawLock->GetQueryTraceId();
-                    if (queryTraceId != 0) {
-                        victimQueryTraceId = queryTraceId;
-                    }
-                }
-                if (!victimQueryTraceId && state.QueryTraceId) {
-                    victimQueryTraceId = state.QueryTraceId;
-                }
-                NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(), "Read transaction was a victim of broken locks",
-                                                  victimQueryTraceId,
-                                                  state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
                 sysLocks.BreakSetLocks();
             }
 
             break;
         }
 
-        auto [locks, locksBrokenByRead] = sysLocks.ApplyLocks();
-        auto victimQueryTraceIds = sysLocks.ExtractQueryTraceIds(locksBrokenByRead);
-        
-        // If locks were broken by this read (other transaction's locks), log them
-        if (!locksBrokenByRead.empty()) {
-            TMaybe<ui64> victimQueryTraceId = victimQueryTraceIds.empty() ? Nothing() : MakeMaybe(victimQueryTraceIds.front());
-            NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(), "Read transaction was a victim of broken locks",
-                                              victimQueryTraceId,
-                                              state.QueryTraceId ? TMaybe<ui64>(state.QueryTraceId) : Nothing());
-        }
-        
-        NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Read operation detected inconsistent data and broke lock", locksBrokenByRead,
-                                       Nothing(), victimQueryTraceIds);
+        auto [locks, _] = sysLocks.ApplyLocks();
 
         for (auto& lock : locks) {
             NKikimrDataEvents::TLock* addLock;
@@ -2710,16 +2666,6 @@ private:
             addLock->SetPathId(lock.PathId);
             if (lock.HasWrites) {
                 addLock->SetHasWrites(true);
-            }
-            
-            // For broken locks, set the QueryTraceId from the original lock
-            if (lock.IsError()) {
-                if (auto rawLock = sysLocks.GetRawLock(lock.LockId)) {
-                    ui64 queryTraceId = rawLock->GetQueryTraceId();
-                    if (queryTraceId != 0) {
-                        addLock->SetQueryTraceId(queryTraceId);
-                    }
-                }
             }
 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
@@ -3313,12 +3259,8 @@ public:
 
             bool isBroken = state.Lock->IsBroken();
             if (!isBroken && MustBreakLock(state)) {
-                ui64 lockIdToBreak = state.Lock->GetLockId();
-                sysLocks.BreakLock(lockIdToBreak);
-                auto [_, locksBroken] = sysLocks.ApplyLocks();
-                auto victimQueryTraceIds = sysLocks.ExtractQueryTraceIds(locksBroken);
-                NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Read continuation detected inconsistent data and broke locks", locksBroken,
-                                               Nothing(), victimQueryTraceIds);
+                sysLocks.BreakLock(state.Lock->GetLockId());
+                sysLocks.ApplyLocks();
                 Y_ENSURE(state.Lock->IsBroken());
                 isBroken = true;
             }

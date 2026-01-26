@@ -17,11 +17,20 @@ namespace NKikimr {
 namespace NDataIntegrity {
 
 // Class for collecting and managing query texts and QueryTraceIds for TLI logging
+// and victim stats attribution (LocksBrokenAsVictim)
 class TQueryTextCollector {
 public:
     // Add query text and QueryTraceId to the collection while avoiding duplicates and limiting size
+    // The first query text is always stored for victim stats attribution
+    // Subsequent query texts are only stored when TLI logging is enabled (for detailed logging)
     void AddQueryText(ui64 queryTraceId, const TString& queryText) {
-        if (!queryText.empty() && IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+        if (queryText.empty()) {
+            return;
+        }
+
+        // Always store the first query (needed for victim stats attribution)
+        // For subsequent queries, only store if TLI logging is enabled
+        if (QueryTexts.empty() || IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             // Only add if it's different from the previous query to avoid duplicates
             if (QueryTexts.empty() || QueryTexts.back().second != queryText) {
                 QueryTexts.push_back({queryTraceId, queryText});

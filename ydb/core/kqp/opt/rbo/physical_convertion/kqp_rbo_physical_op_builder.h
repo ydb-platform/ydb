@@ -26,6 +26,15 @@ protected:
     TPositionHandle Pos;
 };
 
+class TPhysicalNullaryOpBuilder: public TPhysicalOpBuilder {
+public:
+    TPhysicalNullaryOpBuilder(TExprContext& ctx, TPositionHandle pos)
+        : TPhysicalOpBuilder(ctx, pos) {
+    }
+
+    virtual TExprNode::TPtr BuildPhysicalOp() = 0;
+};
+
 class TPhysicalUnaryOpBuilder: public TPhysicalOpBuilder {
 public:
     TPhysicalUnaryOpBuilder(TExprContext& ctx, TPositionHandle pos)

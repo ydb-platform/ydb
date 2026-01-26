@@ -3,6 +3,7 @@
 #include "rpc_export_base.h"
 #include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
+#include "rpc_fs_path_validation.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>
@@ -568,6 +569,21 @@ public:
             if (!settings.base_path().StartsWith("/")) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
                     "base_path must be an absolute path");
+            }
+
+            TString error;
+            if (!ValidateFsPath(settings.base_path(), "base_path", error)) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
+            }
+
+            for (const auto& item : TTraits::GetItems(settings)) {
+                if (!TTraits::GetDestination(item).empty()) {
+                    if (!ValidateFsPath(TTraits::GetDestination(item),
+                                       TStringBuilder() << "destination_path for item \"" << item.source_path() << "\"",
+                                       error)) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
+                    }
+                }
             }
         }
 

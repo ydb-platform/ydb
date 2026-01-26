@@ -3,6 +3,7 @@
 #include "rpc_import_base.h"
 #include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
+#include "rpc_fs_path_validation.h"
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
@@ -141,9 +142,23 @@ public:
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
                     "base_path must be an absolute path");
             }
+
+            TString error;
+            if (!ValidateFsPath(settings.base_path(), "base_path", error)) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
+            }
+
             for (const auto& item : settings.items()) {
                 if (item.destination_path().empty() && item.source_path().empty()) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty item is not allowed");
+                }
+
+                if (!item.source_path().empty()) {
+                    if (!ValidateFsPath(item.source_path(),
+                                       TStringBuilder() << "source_path for item to \"" << item.destination_path() << "\"",
+                                       error)) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
+                    }
                 }
             }
         }

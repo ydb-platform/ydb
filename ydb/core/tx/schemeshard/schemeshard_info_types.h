@@ -762,8 +762,6 @@ public:
         }
     }
 
-    static void GetIndexObjectCount(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc, ui32& indexTableCount, ui32& sequenceCount, ui32& indexTableShards);
-
     void ResetDescriptionCache();
     TVector<ui32> FillDescriptionCache(TPathElement::TPtr pathInfo);
 

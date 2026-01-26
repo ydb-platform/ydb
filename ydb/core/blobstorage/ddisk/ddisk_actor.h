@@ -20,7 +20,7 @@ namespace NKikimr::NDDisk {
         struct THasSelectorField {
             template<typename T> static constexpr auto check(T*) -> typename std::is_same<
                 std::decay_t<decltype(std::declval<T>().GetSelector())>,
-                NKikimrBlobStorage::TDDiskBlockSelector
+                NKikimrBlobStorage::NDDisk::TBlockSelector
             >::type;
 
             template<typename> static constexpr std::false_type check(...);
@@ -32,7 +32,7 @@ namespace NKikimr::NDDisk {
         struct THasWriteInstructionField {
             template<typename T> static constexpr auto check(T*) -> typename std::is_same<
                 std::decay_t<decltype(std::declval<T>().GetWriteInstruction())>,
-                NKikimrBlobStorage::TDDiskWriteInstruction
+                NKikimrBlobStorage::NDDisk::TWriteInstruction
             >::type;
 
             template<typename> static constexpr std::false_type check(...);
@@ -150,8 +150,8 @@ namespace NKikimr::NDDisk {
         };
         THashMap<ui64, TConnectionInfo> Connections;
 
-        void Handle(TEvDDiskConnect::TPtr ev);
-        void Handle(TEvDDiskDisconnect::TPtr ev);
+        void Handle(TEvConnect::TPtr ev);
+        void Handle(TEvDisconnect::TPtr ev);
 
         // validate query credentials against registered connections
         bool ValidateConnection(const IEventHandle& ev, const TQueryCredentials& creds) const;
@@ -167,7 +167,7 @@ namespace NKikimr::NDDisk {
             const TQueryCredentials creds(record.GetCredentials());
             if (!ValidateConnection(ev, creds)) {
                 SendReply(ev, std::make_unique<typename TEvent::TResult>(
-                    NKikimrBlobStorage::TDDiskReplyStatus::SESSION_MISMATCH));
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::SESSION_MISMATCH));
                 return false;
             }
 
@@ -177,7 +177,7 @@ namespace NKikimr::NDDisk {
                 const TBlockSelector selector(record.GetSelector());
                 if (selector.OffsetInBytes % BlockSize || selector.Size % BlockSize || !selector.Size) {
                     SendReply(ev, std::make_unique<typename TEvent::TResult>(
-                        NKikimrBlobStorage::TDDiskReplyStatus::INCORRECT_REQUEST,
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                         "offset and must must be multiple of block size and size must be nonzero"));
                     return false;
                 }
@@ -191,7 +191,7 @@ namespace NKikimr::NDDisk {
                     }
                     if (size != selector.Size) {
                         SendReply(ev, std::make_unique<typename TEvent::TResult>(
-                            NKikimrBlobStorage::TDDiskReplyStatus::INCORRECT_REQUEST,
+                            NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                             "declared data size must match actually sent one"));
                         return false;
                     }
@@ -208,8 +208,8 @@ namespace NKikimr::NDDisk {
         THashMap<TString, size_t> BlockRefCount;
         THashMap<std::tuple<ui64, ui64, ui32>, const TString*> Blocks;
 
-        void Handle(TEvDDiskWrite::TPtr ev);
-        void Handle(TEvDDiskRead::TPtr ev);
+        void Handle(TEvWrite::TPtr ev);
+        void Handle(TEvRead::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Persistent buffer services
@@ -236,12 +236,12 @@ namespace NKikimr::NDDisk {
         ui64 NextWriteCookie = 1;
         THashMap<ui64, TWriteInFlight> WritesInFlight;
 
-        void Handle(TEvDDiskWritePersistentBuffer::TPtr ev);
-        void Handle(TEvDDiskReadPersistentBuffer::TPtr ev);
-        void Handle(TEvDDiskFlushPersistentBuffer::TPtr ev);
-        void Handle(TEvDDiskWriteResult::TPtr ev);
+        void Handle(TEvWritePersistentBuffer::TPtr ev);
+        void Handle(TEvReadPersistentBuffer::TPtr ev);
+        void Handle(TEvFlushPersistentBuffer::TPtr ev);
+        void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
-        void Handle(TEvDDiskListPersistentBuffer::TPtr ev);
+        void Handle(TEvListPersistentBuffer::TPtr ev);
         void HandleWriteInFlight(ui64 cookie, const std::function<std::unique_ptr<IEventBase>()>& factory);
     };
 

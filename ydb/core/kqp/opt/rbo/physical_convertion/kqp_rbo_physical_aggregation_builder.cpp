@@ -529,7 +529,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildAvgAggregationFinishState(TExp
 // This lambda returns are keys for following aggregation.
 // It has arguments in the following orders - inputs.
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildKeyExtractorLambda(const TVector<TString>& keyFields, const TVector<TString>& inputColumns) {
-    if constexpr (NeedToPackWideLambdas) {
+    if constexpr (DebugPackWideLambdasToStruct) {
         return BuildKeyExtractorLambdaPacked(keyFields, inputColumns);
     }
 
@@ -659,7 +659,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildInitHandlerLambdaPacked(const 
 // It has arguments in the following order - keys, inputs.
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildInitHandlerLambda(const TVector<TString>& keyFields, const TVector<TString>& inputFields,
                                                                     const TVector<TPhysicalAggregationTraits>& aggTraitsList) {
-    if constexpr (NeedToPackWideLambdas) {
+    if constexpr (DebugPackWideLambdasToStruct) {
         return BuildInitHandlerLambdaPacked(keyFields, inputFields, aggTraitsList);
     }
 
@@ -803,7 +803,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambdaPacked(cons
 // It has arguments in the following order - keys, inputs, states.
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVector<TString>& keyFields, const TVector<TString>& inputFields,
                                                                       const TVector<TPhysicalAggregationTraits>& aggTraitsList) {
-    if constexpr (NeedToPackWideLambdas) {
+    if constexpr (DebugPackWideLambdasToStruct) {
         return BuildUpdateHandlerLambdaPacked(keyFields, inputFields, aggTraitsList);
     }
 
@@ -952,7 +952,7 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildFinishHandlerLambdaPacked(cons
 // It has arguments in the following order - keys, states.
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildFinishHandlerLambda(const TVector<TString>& keyFields,
                                                                       const TVector<TPhysicalAggregationTraits>& aggTraitsList, bool distinctAll) {
-    if constexpr (NeedToPackWideLambdas) {
+    if constexpr (DebugPackWideLambdasToStruct) {
         return BuildFinishHandlerLambdaPacked(keyFields, aggTraitsList, distinctAll);
     }
 

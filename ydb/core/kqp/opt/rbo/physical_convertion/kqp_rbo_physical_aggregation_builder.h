@@ -114,7 +114,7 @@ private:
                                       const THashMap<TString, TString>& projectionMap);
 
     std::shared_ptr<TOpAggregate> Aggregate;
-    static constexpr bool NeedToPackWideLambdas{true};
+    static constexpr bool DebugPackWideLambdasToStruct{false};
 
     // This Map represents a simple physical aggregation functions.
     const THashMap<TString, TString> AggregationFunctionToAggregationCallable{{"sum", "AggrAdd"}, {"min", "AggrMin"}, {"max", "AggrMax"}};

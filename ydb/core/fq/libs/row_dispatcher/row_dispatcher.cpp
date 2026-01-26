@@ -231,8 +231,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         class TRetryState {
             public:
                 TRetryState(TDuration timeout)
-                    : Timeout(timeout) {
-                };
+                    : Timeout(timeout)
+                {}
                 TDuration GetNextDelay() {
                     constexpr TDuration MaxDelay = TDuration::Seconds(10);
                     constexpr TDuration MinDelay = TDuration::MilliSeconds(100); // from second retry

@@ -3630,7 +3630,7 @@ WITH (
     }
   
     Y_UNIT_TEST(TopicExportWithAllFields) {
-        EnvOptions().EnablePermissionsExport(true);
+        EnvOptions().EnablePermissionsExport(true).EnablePqBilling(true);
         Env();
         ui64 txId = 100;
         TString topicProto = R"(

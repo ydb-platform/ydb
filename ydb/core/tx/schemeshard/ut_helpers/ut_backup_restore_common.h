@@ -95,7 +95,7 @@ public:
         google::protobuf::TextFormat::ParseFromString(str, &proto);
 
         return ::google::protobuf::util::MessageDifferencer::Equals(PublicProto, proto);
-    } 
+    }
 
 protected:
     TPublicProto PublicProto;
@@ -103,9 +103,9 @@ protected:
 
 class TFileDescriber {
 public:
-    TFileDescriber(const TFsPath& dir, const TFsPath& name) 
+    TFileDescriber(const TFsPath& dir, const TFsPath& name)
         : Dir(dir)
-        , Path(dir / name) 
+        , Path(dir / name)
     {}
 
     const TString& GetDir() const {
@@ -121,25 +121,25 @@ protected:
     const TFsPath Path;
 };
 
-class TPermissions 
+class TPermissions
     : public TPublicProtoDescriber<Ydb::Scheme::ModifyPermissionsRequest>
     , public TFileDescriber
 {
 public:
-    TPermissions(const TString& dir) 
+    TPermissions(const TString& dir)
         : TFileDescriber(dir, "permissions.pb")
     {
         google::protobuf::TextFormat::ParseFromString(
             R"(actions {
                 change_owner: "root@builtin"
-            })", 
+            })",
             &PublicProto
         );
     }
 };
 
 template <typename TPrivateProto, typename TPublicProto>
-class TObjectDescriber 
+class TObjectDescriber
     : public TPrivateProtoDescriber<TPrivateProto>
     , public TPublicProtoDescriber<TPublicProto>
 {
@@ -172,7 +172,7 @@ public:
     }
 
     TXxportRequest(const char* type, const TVector<TString>& items, ui16 port)
-        : TXxportRequest(type, items) 
+        : TXxportRequest(type, items)
     {
         Request = Sprintf(Request.c_str(), port);
     }
@@ -202,26 +202,26 @@ private:
 };
 
 class TExportRequest
-    : public TXxportRequest 
+    : public TXxportRequest
 {
 public:
     TExportRequest(ui16 port, const TVector<TString>& items)
         : TXxportRequest("ExportToS3", items, port)
     {}
-    
+
     TExportRequest(const TVector<TString>& items)
         : TXxportRequest("ExportToS3", items)
     {}
 };
 
-class TImportRequest 
+class TImportRequest
     : public TXxportRequest
 {
 public:
     TImportRequest(ui16 port, const TVector<TString>& items)
         : TXxportRequest("ImportFromS3", items, port)
     {}
-    
+
     TImportRequest(const TVector<TString>& items)
         : TXxportRequest("ImportFromS3", items)
     {}
@@ -229,11 +229,11 @@ public:
 
 template <typename TPrivateProto, typename TPublicProto>
 class TSchemeObjectDescriber
-    : public TObjectDescriber<TPrivateProto, TPublicProto> 
+    : public TObjectDescriber<TPrivateProto, TPublicProto>
     , public TFileDescriber
 {
 public:
-    TSchemeObjectDescriber(const TString& dir, const TString& name) 
+    TSchemeObjectDescriber(const TString& dir, const TString& name)
         : TFileDescriber(dir, name)
         , Permissions(dir)
     {
@@ -242,11 +242,11 @@ public:
         ExportRequest = NDescUT::TExportRequest({GetExportRequestItem()}).GetRequest();
         ImportRequest = NDescUT::TImportRequest({GetImportRequestItem()}).GetRequest();
     }
-    
+
     const TPermissions& GetPermissions() const {
         return Permissions;
     }
-    
+
     const TString& GetExportRequestItem() const {
         return ExportRequestItem;
     }
@@ -274,7 +274,7 @@ public:
     const TString& GetImportRequest() const {
         return ImportRequest;
     }
-                  
+
 protected:
     const TPermissions Permissions;
     TString ExportRequestItem;
@@ -303,18 +303,18 @@ private:
 };
 
 class TSimpleTopic
-    : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription, Ydb::Topic::CreateTopicRequest> 
+    : public TSchemeObjectDescriber<NKikimrSchemeOp::TPersQueueGroupDescription, Ydb::Topic::CreateTopicRequest>
 {
 private:
-    class TSimpleConsumer 
-        : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer, Ydb::Topic::Consumer> 
+    class TSimpleConsumer
+        : public TObjectDescriber<NKikimrPQ::TPQTabletConfig::TConsumer, Ydb::Topic::Consumer>
     {
     public:
         TSimpleConsumer(ui64 number, bool important = false) {
             google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerPrivate, number), &PrivateProto);
             google::protobuf::TextFormat::ParseFromString(Sprintf(ConsumerPublic, number), &PublicProto);
             PrivateProto.SetImportant(important);
-            if (important) 
+            if (important)
                 PublicProto.set_important(important);
             PrivateProto.SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
             PublicProto.mutable_streaming_consumer_type();
@@ -337,7 +337,7 @@ private:
     };
 
 public:
-    TSimpleTopic(ui64 number, ui64 countConsumers = 0) 
+    TSimpleTopic(ui64 number, ui64 countConsumers = 0)
         : TSchemeObjectDescriber(Sprintf("/Topic_%d", number), "create_topic.pb")
     {
         google::protobuf::TextFormat::ParseFromString(Sprintf(TopicPrivate, number), &PrivateProto);
@@ -397,6 +397,22 @@ private:
         }
         partition_write_speed_bytes_per_second: 50000000
         partition_write_burst_bytes: 50000000
+        attributes {
+            key: "_allow_unauthenticated_read"
+            value: "true"
+        }
+        attributes {
+            key: "_allow_unauthenticated_write"
+            value: "true"
+        }
+        attributes {
+            key: "_message_group_seqno_retention_period_ms"
+            value: "1382400000"
+        }
+        attributes {
+            key: "_partitions_per_tablet"
+            value: "1"
+        }
     )";
 };
 

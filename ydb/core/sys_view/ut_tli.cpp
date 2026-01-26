@@ -135,7 +135,7 @@ public:
     {
         TLockStats stats;
 
-        for (size_t iter = 0; iter < 30 && (!stats.FoundBreaker || !stats.FoundVictim); ++iter) {
+        for (size_t iter = 0; iter < 10 && (!stats.FoundBreaker || !stats.FoundVictim); ++iter) {
             auto it = Client_.StreamExecuteScanQuery(Sprintf(R"(
                 SELECT QueryText, LocksBrokenAsBreaker, LocksBrokenAsVictim
                 FROM `/Root/Tenant1/.sys/query_metrics_one_minute`

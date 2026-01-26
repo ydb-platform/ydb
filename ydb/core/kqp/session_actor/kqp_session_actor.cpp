@@ -1446,13 +1446,80 @@ public:
             ? !!txCtx.TxManager->GetLockIssue()
             : txCtx.Locks.Broken();
 
+        // Helper to get victim query info (QueryTraceId and QueryText)
+        auto getVictimQueryInfo = [&txCtx]() -> std::pair<TMaybe<ui64>, TString> {
+            TMaybe<ui64> victimQueryTraceId;
+            TString victimQueryText;
+
+            // Get victim info from TxManager or QueryTextCollector
+            if (txCtx.TxManager) {
+                auto brokenLockQueryTraceId = txCtx.TxManager->GetBrokenLockQueryTraceId();
+                if (brokenLockQueryTraceId) {
+                    victimQueryTraceId = *brokenLockQueryTraceId;
+                    victimQueryText = txCtx.QueryTextCollector.GetQueryTextByTraceId(*brokenLockQueryTraceId);
+                }
+            }
+            if (!victimQueryTraceId && txCtx.QueryTextCollector.GetQueryCount() > 0) {
+                victimQueryTraceId = txCtx.QueryTextCollector.GetFirstQueryTraceId();
+                victimQueryText = txCtx.QueryTextCollector.GetFirstQueryText();
+            }
+
+            return {victimQueryTraceId, victimQueryText};
+        };
+
+        // Helper to log victim TLI when locks are broken
+        auto logVictimTliIfBroken = [this, &txCtx, &getVictimQueryInfo]() {
+            if (!IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+                return;
+            }
+
+            auto [victimQueryTraceId, victimQueryText] = getVictimQueryInfo();
+
+            const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
+                                       QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
+
+            NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+                .Component = "SessionActor",
+                .Message = isCommitAction ? "Commit was a victim of broken locks" : "Query was a victim of broken locks",
+                .QueryText = QueryState->ExtractQueryText(),
+                .QueryTexts = txCtx.QueryTextCollector.CombineQueryTexts(),
+                .TraceId = TraceId(),
+                .VictimQueryTraceId = victimQueryTraceId,
+                .CurrentQueryTraceId = QueryState->QueryTraceId,
+                .VictimQueryText = victimQueryText,
+                .IsCommitAction = isCommitAction,
+            }, TlsActivationContext->AsActorContext());
+        };
+
+        // Helper to send victim stats for the query that acquired locks
+        auto sendVictimStats = [this, &txCtx, &getVictimQueryInfo]() {
+            auto [victimQueryTraceId, victimQueryText] = getVictimQueryInfo();
+            Y_UNUSED(victimQueryTraceId);
+
+            // Get the count of broken locks
+            const ui64 brokenLocksCount = txCtx.TxManager
+                ? txCtx.TxManager->GetBrokenLocksCount()
+                : txCtx.Locks.Size();
+
+            // Send victim stats for the victim query
+            SendVictimStats(
+                TlsActivationContext->AsActorContext(),
+                brokenLocksCount,
+                victimQueryText,
+                QueryState->GetDatabase());
+        };
+
         if (!txCtx.DeferredEffects.Empty() && broken) {
+            logVictimTliIfBroken();
+            sendVictimStats();
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
                 MessageFromIssues(std::vector<TIssue>{txCtx.TxManager ? *txCtx.TxManager->GetLockIssue() : txCtx.Locks.GetIssue()}));
             return false;
         }
 
         if (tx && tx->GetHasEffects() && broken) {
+            logVictimTliIfBroken();
+            sendVictimStats();
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
                 MessageFromIssues(std::vector<TIssue>{txCtx.TxManager ? *txCtx.TxManager->GetLockIssue() : txCtx.Locks.GetIssue()}));
             return false;
@@ -2274,7 +2341,7 @@ public:
             IssuesFromMessage(response->GetIssues(), issues);
 
             // Helper lambda to get victim query info
-            auto getVictimQueryInfo = [this, &ev](std::optional<ui64> txManagerQueryTraceId) 
+            auto getVictimQueryInfo = [this, &ev](std::optional<ui64> txManagerQueryTraceId)
                 -> std::pair<TMaybe<ui64>, TString> {
                 TMaybe<ui64> victimQueryTraceId;
                 TString victimQueryText;

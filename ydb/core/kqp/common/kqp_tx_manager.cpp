@@ -304,6 +304,18 @@ public:
         return LocksIssue.has_value() && !(HasSnapshot() && IsReadOnly());
     }
 
+    ui64 GetBrokenLocksCount() const override {
+        ui64 count = 0;
+        for (const auto& [shardId, shardInfo] : ShardsInfo) {
+            for (const auto& [key, lockInfo] : shardInfo.Locks) {
+                if (lockInfo.Invalidated || lockInfo.LocksAcquireFailure) {
+                    ++count;
+                }
+            }
+        }
+        return count;
+    }
+
     const std::optional<NYql::TIssue>& GetLockIssue() const override {
         return LocksIssue;
     }

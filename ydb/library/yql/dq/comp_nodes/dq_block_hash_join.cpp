@@ -235,7 +235,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             }   
             bool rememberNullBitmaps = !(Kind == EJoinKind::Left && side == ESide::Build);
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool, rememberNullBitmaps);
-            layouts.SelectSide(side)->DebugPrint();
+            // layouts.SelectSide(side)->DebugPrint();
 
         }
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_, std::move(layouts), Meta_.get());
@@ -434,15 +434,15 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     }
 
 
-  std::ostringstream os;
-  os << "[MISHA BHJ renames]" << rawKind << std::endl;
-  os << "\tLEFT:\n\t";
-  for (auto x : leftRenames)
-    os << x << " ";
-  os << "\n\tRIGHT:\n\t";
-  for (auto x : rightRenames)
-    os << x << " ";
-  std::cerr << os.str() << std::endl;
+  // std::ostringstream os;
+  // os << "[MISHA BHJ renames]" << rawKind << std::endl;
+  // os << "\tLEFT:\n\t";
+  // for (auto x : leftRenames)
+  //   os << x << " ";
+  // os << "\n\tRIGHT:\n\t";
+  // for (auto x : rightRenames)
+  //   os << x << " ";
+  // std::cerr << os.str() << std::endl;
     using enum EJoinKind;
     if (joinKind == Inner) {
         return new TBlockHashJoinWrapper<Inner>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});

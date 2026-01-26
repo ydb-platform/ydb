@@ -798,7 +798,7 @@ public:
     void Pack(const TVector<arrow::Datum>& columns, TPackResult& packed) override {
 		TVector<std::shared_ptr<arrow::Buffer>> spareBuffers;
         auto [columnsData, columnsNullBitmap] = GetColumns_(columns, spareBuffers);
-		DebugPrint(columns, spareBuffers);
+		// DebugPrint(columns, spareBuffers);
 
         auto& packedTuples = packed.PackedTuples;
         auto& overflow = packed.Overflow;

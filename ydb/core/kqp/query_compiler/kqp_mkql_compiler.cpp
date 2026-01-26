@@ -481,19 +481,19 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             auto leftRenames = extractRenames(node.Child(5));
             auto rightRenames = extractRenames(node.Child(6));
 
-            std::ostringstream os;
-            os << "[MISHA][BHJ][compiler]";
-            os << "\n\tLEFT:\n\t";
-            for (const auto& [from, to] : leftRenames) {
-                os << from << " -> " << to << " ";
-            }
-            os << "\n\tRIGHT:\n\t";
-            for (const auto& [from, to] : rightRenames) {
-                os << from << " -> " << to << " ";
-            }
-            os << "\n";
+            // std::ostringstream os;
+            // os << "[MISHA][BHJ][compiler]";
+            // os << "\n\tLEFT:\n\t";
+            // for (const auto& [from, to] : leftRenames) {
+            //     os << from << " -> " << to << " ";
+            // }
+            // os << "\n\tRIGHT:\n\t";
+            // for (const auto& [from, to] : rightRenames) {
+            //     os << from << " -> " << to << " ";
+            // }
+            // os << "\n";
 
-            std::cerr << os.str() << std::endl;
+            // std::cerr << os.str() << std::endl;
 
             
 

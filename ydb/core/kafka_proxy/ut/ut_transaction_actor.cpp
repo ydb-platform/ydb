@@ -71,6 +71,7 @@ namespace {
                 } else {
                     record.SetYdbStatus(Ydb::StatusIds::ABORTED);
                 }
+                response->Record = record;
                 return response;
             }
 
@@ -252,6 +253,20 @@ namespace {
                 return Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
             }
 
+            THolder<NKafka::TEvKafka::TEvResponse> SendAddOffsetsToTxnRequest(const TString& consumerName, ui64 correlationId = 0) {
+                auto message = std::make_shared<NKafka::TAddOffsetsToTxnRequestData>();
+                message->TransactionalId = TransactionalId;
+                message->ProducerId = ProducerId;
+                message->ProducerEpoch = ProducerEpoch;
+                message->GroupId = consumerName;
+
+                auto event = MakeHolder<NKafka::TEvKafka::TEvAddOffsetsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddOffsetsToTxnRequestData>({}, message), Ctx->Edge, Database, Database);
+
+                Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+
+                return Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            }
+
             THolder<NKafka::TEvKafka::TEvResponse> SendTxnOffsetCommitRequest(const TCommitRequest& commitRequest, ui64 correlationId = 0) {
                 auto message = std::make_shared<NKafka::TTxnOffsetCommitRequestData>();
                 message->TransactionalId = TransactionalId;
@@ -320,12 +335,13 @@ namespace {
 
             void MatchQueryRequest(const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request, const TQueryRequestMatcher& matcher) {
                 UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetTxControl().begin_tx().has_serializable_read_write(), false);
-                UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetAction(), NKikimrKqp::QUERY_ACTION_TOPIC);
                 UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetKafkaApiOperations().GetProducerId(), ProducerId);
                 UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetKafkaApiOperations().GetProducerEpoch(), ProducerEpoch);
-
-                MatchPartitionsInTxn(request, matcher);
-                MatchOffsetsInTxn(request, matcher);
+                if (request->Record.GetRequest().GetAction() != NKikimrKqp::QUERY_ACTION_COMMIT_TX) {
+                    UNIT_ASSERT_VALUES_EQUAL(request->Record.GetRequest().GetAction(), NKikimrKqp::QUERY_ACTION_TOPIC);
+                    MatchPartitionsInTxn(request, matcher);
+                    MatchOffsetsInTxn(request, matcher);
+                }
             }
 
         private:
@@ -421,6 +437,35 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(message.Results[1].Results.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(message.Results[1].Results[0].PartitionIndex, 0);
             UNIT_ASSERT_EQUAL(message.Results[1].Results[0].ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+        }
+
+        Y_UNIT_TEST(ReadOnlyTxn_shouldReturnSuccess) {
+            TVector<TTopicPartitions> topics = {{"topic1", {0, 1}}, {"topic2", {0}}};
+            ui64 correlationId = 123;
+            TString consumerName = "my-consumer";
+
+            auto response = SendAddOffsetsToTxnRequest(consumerName, correlationId);
+
+            UNIT_ASSERT(response != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_EQUAL(response->Response->ApiKey(), NKafka::EApiKey::ADD_OFFSETS_TO_TXN);
+            const auto& message = static_cast<const NKafka::TAddOffsetsToTxnResponseData&>(*response->Response);
+            UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, correlationId);
+            UNIT_ASSERT_VALUES_EQUAL(message.ErrorCode,  NKafka::EKafkaErrors::NONE_ERROR);
+
+            i32 consumerGeneration = 0;
+            std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>> partitionOffsetsToCommitByTopic;
+            partitionOffsetsToCommitByTopic["topic1"] = {{0, 10}, {1, 5}};
+            partitionOffsetsToCommitByTopic["topic2"] = {{0, 0}};
+            std::unordered_map<TString, i32> consumerGenerationByNameToReturnFromKqp;
+            consumerGenerationByNameToReturnFromKqp[consumerName] = consumerGeneration;
+            DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch, consumerGenerationByNameToReturnFromKqp);
+
+            auto response1 = SendTxnOffsetCommitRequest({consumerName, consumerGeneration, partitionOffsetsToCommitByTopic});
+            UNIT_ASSERT_EQUAL(response1->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
+
+            auto response2 = SendEndTxnRequest(true);
+            UNIT_ASSERT_EQUAL(response2->ErrorCode, NKafka::EKafkaErrors::NONE_ERROR);
         }
 
         Y_UNIT_TEST(OnDoubleAddPartitionsWithSamePartitionsAndEndTxn_shouldSendTxnToKqpKafkaOperationsWithOnceSpecifiedPartitions) {

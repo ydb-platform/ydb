@@ -467,4 +467,97 @@ bool TFederatedWriteSessionImpl::Close(TDuration timeout) {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TSimpleBlockingFederatedWriteSession
+
+TSimpleBlockingFederatedWriteSession::TSimpleBlockingFederatedWriteSession(
+        const TFederatedWriteSessionSettings& settings,
+        std::shared_ptr<TGRpcConnectionsImpl> connections,
+        const TFederatedTopicClientSettings& clientSettings,
+        std::shared_ptr<TFederatedDbObserver> observer,
+        std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> codecs,
+        IExecutor::TPtr subsessionHandlersExecutor
+) {
+    TFederatedWriteSessionSettings subSettings = settings;
+    subSettings.EventHandlers_.AcksHandler({});
+    subSettings.EventHandlers_.ReadyToAcceptHandler({});
+    subSettings.EventHandlers_.SessionClosedHandler({});
+    subSettings.EventHandlers_.CommonHandler({});
+
+    Writer = std::make_shared<TFederatedWriteSession>(
+        subSettings, std::move(connections), clientSettings, std::move(observer), std::move(codecs), std::move(subsessionHandlersExecutor));
+    Writer->Start();
+}
+
+uint64_t TSimpleBlockingFederatedWriteSession::GetInitSeqNo() {
+    return Writer->GetInitSeqNo().GetValueSync();
+}
+
+bool TSimpleBlockingFederatedWriteSession::Write(
+        std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp, const TDuration& blockTimeout
+) {
+    auto message = NTopic::TWriteMessage(std::move(data))
+        .SeqNo(seqNo)
+        .CreateTimestamp(createTimestamp);
+    return Write(std::move(message), nullptr, blockTimeout);
+}
+
+bool TSimpleBlockingFederatedWriteSession::Write(
+        NTopic::TWriteMessage&& message, TTransactionBase* tx, const TDuration& blockTimeout
+) {
+    if (tx) {
+        ythrow yexception() << "transactions are not supported";
+    }
+    auto continuationToken = WaitForToken(blockTimeout);
+    if (continuationToken.has_value()) {
+        Writer->Write(std::move(*continuationToken), std::move(message));
+        return true;
+    }
+    return false;
+}
+
+std::optional<NTopic::TContinuationToken> TSimpleBlockingFederatedWriteSession::WaitForToken(const TDuration& timeout) {
+    TInstant startTime = TInstant::Now();
+    TDuration remainingTime = timeout;
+
+    std::optional<NTopic::TContinuationToken> token = std::nullopt;
+
+    while (IsAlive() && remainingTime > TDuration::Zero()) {
+        Writer->WaitEvent().Wait(remainingTime);
+
+        for (auto event : Writer->GetEvents(false, std::nullopt)) {
+            if (auto* readyEvent = std::get_if<NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                Y_ABORT_UNLESS(!token.has_value());
+                token = std::move(readyEvent->ContinuationToken);
+            } else if (std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
+                // discard
+            } else if (std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                Closed.store(true);
+                return std::nullopt;
+            }
+        }
+
+        if (token.has_value()) {
+            return token;
+        }
+
+        remainingTime = timeout - (TInstant::Now() - startTime);
+    }
+
+    return std::nullopt;
+}
+
+NTopic::TWriterCounters::TPtr TSimpleBlockingFederatedWriteSession::GetCounters() {
+    return Writer->GetCounters();
+}
+
+bool TSimpleBlockingFederatedWriteSession::IsAlive() const {
+    return !Closed.load();
+}
+
+bool TSimpleBlockingFederatedWriteSession::Close(TDuration closeTimeout) {
+    Closed.store(true);
+    return Writer->Close(std::move(closeTimeout));
+}
+
 }  // namespace NYdb::NFederatedTopic

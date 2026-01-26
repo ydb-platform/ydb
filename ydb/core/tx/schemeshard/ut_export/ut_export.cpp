@@ -3891,7 +3891,6 @@ WITH (
         UNIT_ASSERT_C(HasS3File(permissionsPath), "Permissions file should exist");
     }
 
-
     Y_UNIT_TEST(ExternalDataSourceAuthNone) {
         TString scheme = R"(
             Name: "DataSource"

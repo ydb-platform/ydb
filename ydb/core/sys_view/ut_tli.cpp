@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
             "UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"Victim\") /* victim-commit */");
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        auto stats = h.WaitForLockStats("breaker-write", "victim-commit", "same-key");
+        auto stats = h.WaitForLockStats("breaker-write", "victim-read", "same-key");
         UNIT_ASSERT_C(stats.FoundBreaker, "Breaker not found in metrics");
         UNIT_ASSERT_C(stats.FoundVictim, "Victim not found in metrics");
         UNIT_ASSERT_VALUES_EQUAL(stats.BreakerCount, 1u);
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
             "UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (2u, \"VictimWrite\") /* victim-w2 */");
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        auto stats = h.WaitForLockStats("breaker-w1", "victim-w2", "diff-keys");
+        auto stats = h.WaitForLockStats("breaker-w1", "victim-r1", "diff-keys");
         UNIT_ASSERT_C(stats.FoundBreaker, "Breaker not found");
         UNIT_ASSERT_C(stats.FoundVictim, "Victim not found");
         UNIT_ASSERT_VALUES_EQUAL(stats.BreakerCount, 1u);
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
             "UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"Victim\") /* victim-wmulti */");
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        auto stats = h.WaitForLockStats("breaker-wmulti", "victim-wmulti", "multi");
+        auto stats = h.WaitForLockStats("breaker-wmulti", "victim-rmulti", "multi");
         UNIT_ASSERT_C(stats.FoundBreaker, "Breaker not found");
         UNIT_ASSERT_C(stats.FoundVictim, "Victim not found");
         UNIT_ASSERT_GE(stats.BreakerCount, 1u);
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
             "UPSERT INTO `/Root/Tenant1/TableB` (Key, Value) VALUES (1u, \"DstVal\") /* victim-w */");
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        auto stats = h.WaitForLockStats("breaker-w", "victim-w", "cross");
+        auto stats = h.WaitForLockStats("breaker-w", "victim-r", "cross");
         UNIT_ASSERT_C(stats.FoundBreaker, "Breaker not found");
         UNIT_ASSERT_C(stats.FoundVictim, "Victim not found");
         UNIT_ASSERT_VALUES_EQUAL(stats.BreakerCount, 1u);
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(TransactionLockInvalidation) {
             "UPSERT INTO `/Root/Tenant1/Table` (Key, Value) VALUES (1u, \"VictimVal\") /* victim-w */");
         UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        auto stats = h.WaitForLockStats("breaker-w", "victim-read2", "invisible-skips");
+        auto stats = h.WaitForLockStats("breaker-w", "victim-read1", "invisible-skips");
         UNIT_ASSERT_C(stats.FoundBreaker, "Breaker not found");
         UNIT_ASSERT_C(stats.FoundVictim, "Victim not found");
         UNIT_ASSERT_VALUES_EQUAL(stats.BreakerCount, 1u);

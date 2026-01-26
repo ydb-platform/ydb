@@ -250,7 +250,7 @@ namespace {
             "(Query|Commit) had broken other locks",
             "(Query|Commit) was a victim of broken locks",
             useSink ? "Write transaction broke other locks" : "KQP data transaction broke other locks",
-            useSink ? "Write transaction was a victim of broken locks" : "KQP data transaction was a victim of broken locks",
+            useSink ? "(Write|Read) transaction was a victim of broken locks" : "(KQP data|Read) transaction was a victim of broken locks",
         };
     }
 
@@ -621,6 +621,37 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         VerifyTliLogsAndAssert(ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
     }
 
+    // Test: InvisibleRowSkips - victim reads at snapshot V1, breaker commits at V2, victim reads again
+    Y_UNIT_TEST_QUAD(InvisibleRowSkips, LogEnabled, UseSink) {
+        TStringStream ss;
+        TTliTestContext ctx(LogEnabled, UseSink, ss);
+        ctx.CreateTable("/Root/Tenant1/TableSkips");
+        ctx.SeedTable("/Root/Tenant1/TableSkips", {{1, "Initial"}});
+
+        const TString victimRead1Text = "SELECT * FROM `/Root/Tenant1/TableSkips` WHERE Key = 1u /* victim-read1 */";
+        const TString breakerQueryText = "UPSERT INTO `/Root/Tenant1/TableSkips` (Key, Value) VALUES (1u, \"BreakerV2\")";
+        const TString victimRead2Text = "SELECT * FROM `/Root/Tenant1/TableSkips` WHERE Key = 1u /* victim-read2 */";
+        const TString victimCommitText = "UPSERT INTO `/Root/Tenant1/TableSkips` (Key, Value) VALUES (1u, \"VictimVal\")";
+
+        // Victim reads key 1 at snapshot V1 - establishes lock
+        auto victimTx = BeginReadTx(ctx.VictimSession, victimRead1Text);
+
+        // Breaker writes to key 1 at V2 > V1, breaking victim's lock
+        ctx.ExecuteQuery(breakerQueryText);
+
+        // Victim reads key 1 AGAIN - triggers InvisibleRowSkips detection
+        {
+            auto result = ctx.VictimSession.ExecuteDataQuery(victimRead2Text, TTxControl::Tx(victimTx)).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+            victimTx = *result.GetTransaction();
+        }
+
+        // Victim tries to commit -> aborted because lock was broken
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteVictimCommit(ctx.VictimSession, victimTx, victimCommitText), EStatus::ABORTED);
+
+        // InvisibleRowSkips: DataShard now emits a victim log during read detection
+        VerifyTliLogsAndAssert(ss, LogEnabled, UseSink, breakerQueryText, victimRead1Text);
+    }
 }
 
 } // namespace NKqp

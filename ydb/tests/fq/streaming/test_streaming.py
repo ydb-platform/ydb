@@ -76,7 +76,7 @@ class TestStreamingInYdb(StreamingTestBase):
         result_sets1 = future1.result()
         result_sets2 = future2.result()
         assert result_sets1[0].rows[0]['time'] == b'lunch time'
-        assert result_sets2[0].rows[0]['time'] == b'lunch time'        
+        assert result_sets2[0].rows[0]['time'] == b'lunch time'
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_restart_query(self, kikimr, entity_name, local_topics):

@@ -2237,25 +2237,18 @@ public:
         QueryState->QueryStats.LocksBrokenAsVictim += ev->LocksBrokenAsVictim;
 
         if (ev->LocksBrokenAsBreaker > 0 && IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
-            // For commit operations that break locks, report them (both successful and aborted)
             const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
                                        QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
 
-            const TString& message = isCommitAction
-                ? "Commit had broken other locks"
-                : "Query had broken other locks";
-
-            // Use the query text collector from the transaction context
-            const TString combinedQueryText = QueryState->TxCtx->QueryTextCollector.Empty()
-                ? QueryState->ExtractQueryText()
-                : QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
-
-            const TString queryText = QueryState->ExtractQueryText();
-            const TString queryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
-
-            NDataIntegrity::LogTli("SessionActor", message, queryText,
-                                   QueryState->QueryTraceId, Nothing(), queryTexts,
-                                   TlsActivationContext->AsActorContext(), isCommitAction);
+            NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+                .Component = "SessionActor",
+                .Message = isCommitAction ? "Commit had broken other locks" : "Query had broken other locks",
+                .QueryText = QueryState->ExtractQueryText(),
+                .QueryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts(),
+                .TraceId = TraceId(),
+                .BreakerQueryTraceId = QueryState->QueryTraceId,
+                .IsCommitAction = isCommitAction,
+            }, TlsActivationContext->AsActorContext());
         }
 
         if (QueryState->TxCtx->TxManager) {
@@ -2279,46 +2272,49 @@ public:
             TIssues issues;
             IssuesFromMessage(response->GetIssues(), issues);
 
+            // Helper lambda to log victim TLI events (avoids code duplication)
+            auto logVictimTli = [this, &ev](std::optional<ui64> txManagerQueryTraceId) {
+                if (!IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+                    return;
+                }
+
+                const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
+                                           QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
+
+                TMaybe<ui64> victimQueryTraceId;
+                TString victimQueryText;
+
+                // Try sources in priority order: TxManager > DataShard response > first query
+                if (txManagerQueryTraceId) {
+                    victimQueryTraceId = *txManagerQueryTraceId;
+                    victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(*txManagerQueryTraceId);
+                } else if (ev->BrokenLockQueryTraceId) {
+                    victimQueryTraceId = *ev->BrokenLockQueryTraceId;
+                    victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(*ev->BrokenLockQueryTraceId);
+                } else if (QueryState->TxCtx->QueryTextCollector.GetQueryCount() > 0) {
+                    victimQueryTraceId = QueryState->TxCtx->QueryTextCollector.GetFirstQueryTraceId();
+                    victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
+                }
+
+                NDataIntegrity::LogTli(NDataIntegrity::TTliLogParams{
+                    .Component = "SessionActor",
+                    .Message = isCommitAction ? "Commit was a victim of broken locks" : "Query was a victim of broken locks",
+                    .QueryText = QueryState->ExtractQueryText(),
+                    .QueryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts(),
+                    .TraceId = TraceId(),
+                    .VictimQueryTraceId = victimQueryTraceId,
+                    .CurrentQueryTraceId = QueryState->QueryTraceId,  // Current query being aborted
+                    .VictimQueryText = victimQueryText,
+                    .IsCommitAction = isCommitAction,
+                }, TlsActivationContext->AsActorContext());
+            };
+
             // Invalidate query cache on scheme/internal errors
             switch (status) {
                 case Ydb::StatusIds::ABORTED: {
                     if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
                         YQL_ENSURE(!issues.Empty());
-
-                        // Log victim TLI event
-                        if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
-                            const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
-                                                       QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
-
-                            const TString& message = isCommitAction
-                                ? "Commit was a victim of broken locks"
-                                : "Query was a victim of broken locks";
-
-                            const TString queryText = QueryState->ExtractQueryText();
-                            const TString queryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
-
-                            // For victim: use the broken lock's QueryTraceId from DataShard if available
-                            // This is the QueryTraceId of the specific query that acquired the lock that was broken
-                            TMaybe<ui64> victimQueryTraceId;
-                            TString victimQueryText;
-
-                            // First try to get QueryTraceId from TxManager (set by write actor for UseSink path)
-                            if (auto txManagerQueryTraceId = QueryState->TxCtx->TxManager->GetBrokenLockQueryTraceId()) {
-                                victimQueryTraceId = *txManagerQueryTraceId;
-                                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(*txManagerQueryTraceId);
-                            } else if (ev->BrokenLockQueryTraceId) {
-                                // Use the QueryTraceId from the broken lock (from DataShard response)
-                                victimQueryTraceId = *ev->BrokenLockQueryTraceId;
-                                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(*ev->BrokenLockQueryTraceId);
-                            } else if (QueryState->TxCtx->QueryTextCollector.GetQueryCount() > 0) {
-                                // Fallback: use the first query's QueryTraceId
-                                victimQueryTraceId = QueryState->TxCtx->QueryTextCollector.GetFirstQueryTraceId();
-                                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
-                            }
-
-                            NDataIntegrity::LogTli("SessionActor", message, queryText, Nothing(), victimQueryTraceId, queryTexts,
-                                                   TlsActivationContext->AsActorContext(), isCommitAction, Nothing(), victimQueryText);
-                        }
+                        logVictimTli(QueryState->TxCtx->TxManager->GetBrokenLockQueryTraceId());
                     } else if (ev->BrokenLockPathId || ev->BrokenLockShardId) {
                         YQL_ENSURE(!QueryState->TxCtx->TxManager);
                         if (ev->BrokenLockPathId) {
@@ -2326,36 +2322,7 @@ public:
                         } else {
                             issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId));
                         }
-
-                        // Log victim TLI event for UseSink=false path
-                        if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
-                            const bool isCommitAction = QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_COMMIT_TX ||
-                                                       QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED;
-
-                            const TString& message = isCommitAction
-                                ? "Commit was a victim of broken locks"
-                                : "Query was a victim of broken locks";
-
-                            const TString queryText = QueryState->ExtractQueryText();
-                            const TString queryTexts = QueryState->TxCtx->QueryTextCollector.CombineQueryTexts();
-
-                            // For victim: use the broken lock's QueryTraceId from DataShard if available
-                            TMaybe<ui64> victimQueryTraceId;
-                            TString victimQueryText;
-                            if (ev->BrokenLockQueryTraceId) {
-                                // Use the QueryTraceId from the broken lock (from DataShard)
-                                victimQueryTraceId = *ev->BrokenLockQueryTraceId;
-                                // Find the corresponding query text
-                                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextByTraceId(*ev->BrokenLockQueryTraceId);
-                            } else if (QueryState->TxCtx->QueryTextCollector.GetQueryCount() > 0) {
-                                // Fallback: use the first query's QueryTraceId
-                                victimQueryTraceId = QueryState->TxCtx->QueryTextCollector.GetFirstQueryTraceId();
-                                victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
-                            }
-
-                            NDataIntegrity::LogTli("SessionActor", message, queryText, Nothing(), victimQueryTraceId, queryTexts,
-                                                   TlsActivationContext->AsActorContext(), isCommitAction, Nothing(), victimQueryText);
-                        }
+                        logVictimTli(std::nullopt);
                     }
                     break;
                 }

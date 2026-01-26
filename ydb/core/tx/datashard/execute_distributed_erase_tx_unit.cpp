@@ -113,9 +113,11 @@ public:
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         auto [_, locksBrokenByErase] = DataShard.SysLocksTable().ApplyLocks();
-        auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByErase);
-        NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Distributed erase transaction broke locks on erased rows", locksBrokenByErase,
-                                       Nothing(), victimQueryTraceIds);
+        if (!locksBrokenByErase.empty()) {
+            auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByErase);
+            NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Distributed erase transaction broke locks on erased rows", locksBrokenByErase,
+                                           Nothing(), victimQueryTraceIds);
+        }
         DataShard.SubscribeNewLocks(ctx);
         Pipeline.AddCommittingOp(op);
 

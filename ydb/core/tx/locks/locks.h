@@ -913,6 +913,7 @@ public:
     std::pair<TVector<TLock>, TVector<ui64>> ApplyLocks();
     ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
     TVector<ui64> ExtractQueryTraceIds(const TVector<ui64>& lockIds) const;
+    TMaybe<ui64> GetQueryTraceIdForLock(ui64 lockTxId) const;
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(ui64 lockId);
     void EraseLock(const TArrayRef<const TCell>& syslockKey);

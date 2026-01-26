@@ -962,7 +962,7 @@ public:
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            
+
             // Store the broken lock's QueryTraceId for TLI logging
             if (!ev->Get()->Record.GetTxLocks().empty()) {
                 const auto& brokenLock = ev->Get()->Record.GetTxLocks(0);
@@ -970,7 +970,7 @@ public:
                     TxManager->SetBrokenLockQueryTraceId(brokenLock.GetQueryTraceId());
                 }
             }
-            
+
             RuntimeError(
                 NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
@@ -4439,7 +4439,7 @@ public:
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            
+
             // Store the broken lock's QueryTraceId for TLI logging
             if (!ev->Get()->Record.GetTxLocks().empty()) {
                 const auto& brokenLock = ev->Get()->Record.GetTxLocks(0);
@@ -4447,7 +4447,7 @@ public:
                     TxManager->SetBrokenLockQueryTraceId(brokenLock.GetQueryTraceId());
                 }
             }
-            
+
             ReplyError(
                 NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,

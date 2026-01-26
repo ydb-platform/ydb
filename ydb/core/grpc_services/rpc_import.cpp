@@ -138,11 +138,12 @@ public:
         }
 
         if constexpr (IsFsImport) {
+#ifdef _unix_
             if (!settings.base_path().StartsWith("/")) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
                     "base_path must be an absolute path");
             }
-
+#endif
             TString error;
             if (!ValidateFsPath(settings.base_path(), "base_path", error)) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);

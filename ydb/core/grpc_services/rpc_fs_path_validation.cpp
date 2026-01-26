@@ -1,34 +1,52 @@
 #include "rpc_fs_path_validation.h"
 
+#include <util/folder/pathsplit.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
+#include <util/system/platform.h>
 
 namespace NKikimr {
 namespace NGRpcService {
-
 namespace {
 
-bool ValidatePathComponents(const TString& path, char separator, const TString& pathDescription,
-                           const TString& separatorName, TString& error) {
-    TVector<TStringBuf> components;
-    TStringBuf pathBuf(path);
-    while (pathBuf) {
-        TStringBuf component = pathBuf.NextTok(separator);
+template <typename TTraits>
+bool ValidatePathComponentsRaw(const TString& path, const TString& pathDescription, TString& error) {
+    if (path.empty()) {
+        return true;
+    }
+
+    size_t pos = 0;
+    while (pos < path.size()) {
+        // Skip separators
+        while (pos < path.size() && TTraits::IsPathSep(path[pos])) {
+            ++pos;
+        }
+
+        if (pos >= path.size()) {
+            break;
+        }
+
+        // Find component end
+        const size_t start = pos;
+        while (pos < path.size() && !TTraits::IsPathSep(path[pos])) {
+            ++pos;
+        }
+
+        const TStringBuf component(path.data() + start, pos - start);
+
         if (component.empty()) {
             continue;
         }
 
-        // Check for parent directory references
         if (component == "..") {
-            error = TStringBuilder() << pathDescription << " contains " << separatorName
-                                     << " path traversal sequence (..)";
+            error = TStringBuilder() << pathDescription
+                                     << " contains path traversal sequence (..)";
             return false;
         }
 
-        // Check for current directory references
         if (component == ".") {
-            error = TStringBuilder() << pathDescription << " contains " << separatorName
-                                     << " current directory reference (.)";
+            error = TStringBuilder() << pathDescription
+                                     << " contains current directory reference (.)";
             return false;
         }
     }
@@ -37,14 +55,6 @@ bool ValidatePathComponents(const TString& path, char separator, const TString& 
 }
 
 } // anonymous namespace
-
-bool ValidateUnixPath(const TString& path, const TString& pathDescription, TString& error) {
-    return ValidatePathComponents(path, '/', pathDescription, "Unix-style", error);
-}
-
-bool ValidateWindowsPath(const TString& path, const TString& pathDescription, TString& error) {
-    return ValidatePathComponents(path, '\\', pathDescription, "Windows-style", error);
-}
 
 bool ValidateFsPath(const TString& path, const TString& pathDescription, TString& error) {
     if (path.empty()) {
@@ -57,28 +67,16 @@ bool ValidateFsPath(const TString& path, const TString& pathDescription, TString
         return false;
     }
 
-    // Detect path separator types
-    const bool hasUnixSeparator = path.Contains('/');
-    const bool hasWindowsSeparator = path.Contains('\\');
-
-    // Reject mixed path separators
-    if (hasUnixSeparator && hasWindowsSeparator) {
+#ifdef _win_
+    return ValidatePathComponentsRaw<TPathSplitTraitsWindows>(path, pathDescription, error);
+#else
+    if (path.Contains('\\')) {
         error = TStringBuilder() << pathDescription
-                                 << " contains mixed path separators (both / and \\)";
+                                 << " contains invalid path separator backslash (\\)";
         return false;
     }
-
-    if (hasUnixSeparator) {
-        if (!ValidateUnixPath(path, pathDescription, error)) {
-            return false;
-        }
-    } else if (hasWindowsSeparator) {
-        if (!ValidateWindowsPath(path, pathDescription, error)) {
-            return false;
-        }
-    }
-
-    return true;
+    return ValidatePathComponentsRaw<TPathSplitTraitsUnix>(path, pathDescription, error);
+#endif
 }
 
 } // namespace NGRpcService

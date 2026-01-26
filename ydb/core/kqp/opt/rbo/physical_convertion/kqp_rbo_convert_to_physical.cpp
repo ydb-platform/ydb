@@ -5,6 +5,7 @@
 #include "kqp_rbo_physical_map_builder.h"
 #include "kqp_rbo_physical_join_builder.h"
 #include "kqp_rbo_physical_filter_builder.h"
+#include "kqp_rbo_physical_source_builder.h"
 
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -283,78 +284,9 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted Empty Source " << opStageId;
         } else if (op->Kind == EOperator::Source) {
-            auto opSource = CastOperator<TOpRead>(op);
+            auto opRead = CastOperator<TOpRead>(op);
 
-            auto source = ctx.NewCallable(op->Pos, "DataSource", {ctx.NewAtom(op->Pos, "KqpReadRangesSource")});
-            TVector<TExprNode::TPtr> columns;
-            for (const auto& c : opSource->Columns) {
-                columns.push_back(ctx.NewAtom(op->Pos, c));
-            }
-
-            switch (opSource->GetTableStorageType()) {
-                case NYql::EStorageType::RowStorage: {
-                    // clang-format off
-                    currentStageBody = Build<TDqSource>(ctx, op->Pos)
-                        .DataSource(source)
-                        .Settings<TKqpReadRangesSourceSettings>()
-                            .Table(opSource->TableCallable)
-                            .Columns().Add(columns).Build()
-                            .Settings<TCoNameValueTupleList>().Build()
-                            .RangesExpr<TCoVoid>().Build()
-                            .ExplainPrompt<TCoNameValueTupleList>().Build()
-                        .Build()
-                    .Done().Ptr();
-                    // clang-format on
-                    break;
-                }
-                case NYql::EStorageType::ColumnStorage: {
-                    // clang-format off
-                    auto processLambda = Build<TCoLambda>(ctx, op->Pos)
-                        .Args({"arg"})
-                        .Body("arg")
-                    .Done().Ptr();
-                    // clang-format on
-
-                    if (opSource->OlapFilterLambda) {
-                        processLambda = opSource->OlapFilterLambda;
-                    }
-
-                    // clang-format off
-                    auto olapRead = Build<TKqpBlockReadOlapTableRanges>(ctx, op->Pos)
-                        .Table(opSource->TableCallable)
-                        .Ranges<TCoVoid>().Build()
-                        .Columns().Add(columns).Build()
-                        .Settings<TCoNameValueTupleList>().Build()
-                        .ExplainPrompt<TCoNameValueTupleList>().Build()
-                        .Process(processLambda)
-                    .Done().Ptr();
-
-                    auto flowNonBlockRead = Build<TCoToFlow>(ctx, op->Pos)
-                        .Input<TCoWideFromBlocks>()
-                            .Input<TCoFromFlow>()
-                                .Input(olapRead)
-                            .Build()
-                        .Build()
-                    .Done().Ptr();
-                    // clang-format on
-
-                    auto narrowMap = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(flowNonBlockRead, opSource->Columns, ctx);
-
-                    // clang-format off
-                    currentStageBody = Build<TCoFromFlow>(ctx, op->Pos)
-                        .Input(narrowMap)
-                    .Done().Ptr();
-                    // clang-format on
-
-                    if (NPhysicalConvertionUtils::IsMultiConsumerHandlerNeeded(op)) {
-                        currentStageBody =
-                            NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, op->Props.NumOfConsumers.value(), ctx, op->Pos);
-                    }
-                    break;
-                }
-                default:
-                    Y_ENSURE(false, "Unsupported table source type");
-            }
+            currentStageBody = Build<TPhysicalSourceBuilder>(opRead, ctx, op->Pos);
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;

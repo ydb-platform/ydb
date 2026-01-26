@@ -223,7 +223,7 @@ public:
 
                 bool sharedReading = false;
                 bool skipErrors = false;
-                bool streamingTopicRead = !State_->FiniteTopicsReadByDefault;
+                bool streamingTopicRead = State_->StreamingTopicsReadByDefault;
                 TString format;
                 size_t const settingsCount = topicSource.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {

@@ -214,7 +214,7 @@ public:
             settings.Add(std::move(skipJsonErrors));
         }
 
-        bool streamingTopicReadEnabled = !State_->FiniteTopicsReadByDefault;
+        bool streamingTopicReadEnabled = State_->StreamingTopicsReadByDefault;
         if (auto streamingTopicRead = topicKeyParser.GetStreamingTopicRead()) {
             if (const auto parseResult = topicKeyParser.ParseStreamingTopicRead(*streamingTopicRead, ctx)) {
                 streamingTopicReadEnabled = *parseResult;

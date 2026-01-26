@@ -1922,6 +1922,7 @@ private:
         auto state = MakeIntrusive<TPqState>(sessionId);
         state->SupportRtmrMode = false;
         state->AllowTransparentSystemColumns = false;
+        state->StreamingTopicsReadByDefault = false;
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -1931,13 +1932,11 @@ private:
         state->Gateway->OpenSession(sessionId, "username");
 
         if (const auto requestContext = SessionCtx->GetUserRequestContext()) {
-            state->FiniteTopicsReadByDefault = !requestContext->IsStreamingQuery;
+            state->StreamingTopicsReadByDefault = requestContext->IsStreamingQuery;
 
             if (const auto disposition = requestContext->StreamingDisposition) {
                 state->Disposition = *disposition;
             }
-        } else {
-            state->FiniteTopicsReadByDefault = true;
         }
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));

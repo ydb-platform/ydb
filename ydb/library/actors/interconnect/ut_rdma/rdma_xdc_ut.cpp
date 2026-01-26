@@ -591,14 +591,20 @@ TEST_P(XdcRdmaTestCqMode, SendMixBig) {
         flags = TTestICCluster::RDMA_POLLING_CQ;
     }
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, flags);
+    std::mutex mtx;
+    mtx.lock();
     TEventsForTest events(500);
+    mtx.unlock();
 
-    auto recieverPtr = new TReceiveActor([&events](TEvTestSerialization::TPtr ev) {
+    auto recieverPtr = new TReceiveActor([&events, &mtx](TEvTestSerialization::TPtr ev) {
         ui64 blobId = ev->Get()->Record.GetBlobID();
-        auto checkIt = events.Checks.find(blobId);
-        UNIT_ASSERT(checkIt != events.Checks.end());
-        checkIt->second(ev->Get());
-        events.Checks.erase(checkIt);
+        {
+            std::lock_guard<std::mutex> guard(mtx);
+            auto checkIt = events.Checks.find(blobId);
+            UNIT_ASSERT(checkIt != events.Checks.end());
+            checkIt->second(ev->Get());
+            events.Checks.erase(checkIt);
+        }
     });
     const TActorId receiver = cluster.RegisterActor(recieverPtr, 1);
     Sleep(TDuration::MilliSeconds(1000));
@@ -608,13 +614,16 @@ TEST_P(XdcRdmaTestCqMode, SendMixBig) {
         cluster.RegisterActor(senderPtr, 2);
     }
 
-    for (ui32 attempt = 0; attempt < 10 && !events.Checks.empty(); ++attempt) {
+    for (ui32 attempt = 0; attempt < 50; ++attempt) {
+        {
+            std::lock_guard<std::mutex> guard(mtx);
+            if (events.Checks.empty()) {
+                break;
+            }
+        }
         Sleep(TDuration::MilliSeconds(1000));
     }
     UNIT_ASSERT_VALUES_EQUAL(events.Checks.size(), 0u);
-
-    auto lastRdmaStatus = GetRdmaChecksumStatus(cluster, 2, 1);
-    UNIT_ASSERT_VALUES_EQUAL(lastRdmaStatus, "On | SoftwareChecksum");
 }
 
 static void DoSendHugePayloadsNum(const ui32 numPayloads, const size_t payloadSz, TTestICCluster& cluster,

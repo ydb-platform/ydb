@@ -69,6 +69,16 @@ code workspace/workspace.code-workspace
     ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 1000 --pool ddp1
     ```
 
+3) Write some data:
+    ```
+    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition io --start_index 0 --type write --data "vnfjkdnsfvjdfknsjknsdkjnvnjk" --id "[1:7599782149963481987:2733]"
+    ```
+
+4) Read some data:
+    ```
+    ./ydb-dstool -d -e grpc://localhost:2135 nbs partition io --type read --blocks_count 1 --start_index 0 --id "[1:7600018021929343002:2699]"
+    ```
+
 3) Grep logs:
     ```
     cd /home/barkovbg/ydb_bg/ydb/tests/tools/local_cluster/.ydbd_working_dir/local_cluster

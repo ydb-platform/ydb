@@ -27,7 +27,7 @@ namespace NKikimr::NDDisk {
             }
         };
 
-        STRICT_STFUNC_BODY(
+        STFUNC_BODY(
             hFunc(TEvConnect, handleQuery)
             hFunc(TEvDisconnect, handleQuery)
             hFunc(TEvWrite, handleQuery)
@@ -51,6 +51,8 @@ namespace NKikimr::NDDisk {
             hFunc(NPDisk::TEvChunkReadResult, Handle)
 
             cFunc(TEvents::TSystem::Poison, PassAway)
+            // cFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, PassAway)
+            ,Y_DEBUG_ABORT_UNLESS(true, "unexpected message type %s 0x%08" PRIx32, ev->GetTypeName().c_str(), etype);
         )
     }
 

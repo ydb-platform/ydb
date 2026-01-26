@@ -3,9 +3,7 @@
 
 namespace NYdb::NBS::NStorage::NPartitionDirect {
 
-using namespace NActors;
 using namespace NYdb::NBS;
-using namespace NKikimr;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -53,13 +51,18 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const TActorContext& ctx)
 {
-    auto* res = ev->Get();
-    if (res->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
+    const auto* msg = ev->Get();
+
+    LOG_DEBUG(ctx, NKikimrServices::NBS_PARTITION,
+        "HandleControllerAllocateDDiskBlockGroupResult record is: %s",
+        msg->Record.DebugString().data());
+
+    if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
         LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
             "Responses size: %d",
-            res->Record.GetResponses().size());
-        Y_ABORT_UNLESS(res->Record.GetResponses().size() == 1);
-        const auto& response = res->Record.GetResponses()[0];
+            msg->Record.GetResponses().size());
+        Y_ABORT_UNLESS(msg->Record.GetResponses().size() == 1);
+        const auto& response = msg->Record.GetResponses()[0];
         LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
             "DirectBlockGroupId: %d",
             response.GetDirectBlockGroupId());
@@ -73,7 +76,7 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         TVector<NBsController::TDDiskId> persistentBufferDDiskIds;
         for (const auto& node : response.GetNodes()) {
             ddiskIds.emplace_back(node.GetDDiskId());
-            // persistentBufferDDiskIds.emplace_back(node.GetPersistentBufferDDiskId());
+            persistentBufferDDiskIds.emplace_back(node.GetPersistentBufferDDiskId());
         }
 
         DirectBlockGroup = std::make_unique<TDirectBlockGroup>(
@@ -85,32 +88,12 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         DirectBlockGroup->EstablishConnections(ctx);
     } else {
         LOG_ERROR(ctx, NKikimrServices::NBS_PARTITION,
-            "ControllerAllocateDDiskBlockGroupResult finished with error: %s, reason: %s",
-            res->Record.GetStatus(),
-            res->Record.GetErrorReason().data());
+            "HandleControllerAllocateDDiskBlockGroupResult finished with error: %d, reason: %s",
+            msg->Record.GetStatus(),
+            msg->Record.GetErrorReason().data());
     }
 
     NTabletPipe::CloseClient(ctx, BSControllerPipeClient);
-}
-
-void TPartitionActor::HandleWriteBlocksRequest(
-    const TEvService::TEvWriteBlocksRequest::TPtr& ev,
-    const NActors::TActorContext& ctx)
-{
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-                "Handle WriteBlocks request event: " << ev->ToString());
-
-    DirectBlockGroup->HandleWriteBlocksRequest(ev, ctx);
-}
-
-void TPartitionActor::HandleReadBlocksRequest(
-    const TEvService::TEvReadBlocksRequest::TPtr& ev,
-    const NActors::TActorContext& ctx)
-{
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,
-                "Handle ReadBlocks request event: " << ev->ToString());
-
-    DirectBlockGroup->HandleReadBlocksRequest(ev, ctx);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -118,24 +101,38 @@ void TPartitionActor::HandleReadBlocksRequest(
 // Forward events to DirectBlockGroup
 
 void TPartitionActor::HandleDDiskConnectResult(
-    const NDDisk::TEvDDiskConnectResult::TPtr& ev,
+    const NDDisk::TEvConnectResult::TPtr& ev,
     const TActorContext& ctx)
 {
     DirectBlockGroup->HandleDDiskConnectResult(ev, ctx);
 }
 
-void TPartitionActor::HandleDDiskWriteResult(
-    const NDDisk::TEvDDiskWriteResult::TPtr& ev,
-    const TActorContext& ctx)
+void TPartitionActor::HandleWriteBlocksRequest(
+    const TEvService::TEvWriteBlocksRequest::TPtr& ev,
+    const NActors::TActorContext& ctx)
 {
-    DirectBlockGroup->HandleDDiskWriteResult(ev, ctx);
+    DirectBlockGroup->HandleWriteBlocksRequest(ev, ctx);
 }
 
-void TPartitionActor::HandleDDiskReadResult(
-    const NDDisk::TEvDDiskReadResult::TPtr& ev,
+void TPartitionActor::HandlePersistentBufferWriteResult(
+    const NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
     const TActorContext& ctx)
 {
-    DirectBlockGroup->HandleDDiskReadResult(ev, ctx);
+    DirectBlockGroup->HandlePersistentBufferWriteResult(ev, ctx);
+}
+
+void TPartitionActor::HandleReadBlocksRequest(
+    const TEvService::TEvReadBlocksRequest::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    DirectBlockGroup->HandleReadBlocksRequest(ev, ctx);
+}
+
+void TPartitionActor::HandlePersistentBufferReadResult(
+    const NDDisk::TEvReadPersistentBufferResult::TPtr& ev,
+    const TActorContext& ctx)
+{
+    DirectBlockGroup->HandlePersistentBufferReadResult(ev, ctx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -150,13 +147,15 @@ STFUNC(TPartitionActor::StateWork)
     switch (ev->GetTypeRewrite()) {
         cFunc(TEvents::TEvPoison::EventType, PassAway);
         HFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult, HandleControllerAllocateDDiskBlockGroupResult);
-        HFunc(TEvService::TEvWriteBlocksRequest, HandleWriteBlocksRequest);
-        HFunc(TEvService::TEvReadBlocksRequest, HandleReadBlocksRequest);
         
         // Forward events to DirectBlockGroup
-        HFunc(NDDisk::TEvDDiskConnectResult, HandleDDiskConnectResult);
-        HFunc(NDDisk::TEvDDiskWriteResult, HandleDDiskWriteResult);
-        HFunc(NDDisk::TEvDDiskReadResult, HandleDDiskReadResult);
+        HFunc(NDDisk::TEvConnectResult, HandleDDiskConnectResult);
+
+        HFunc(TEvService::TEvWriteBlocksRequest, HandleWriteBlocksRequest);
+        HFunc(NDDisk::TEvWritePersistentBufferResult, HandlePersistentBufferWriteResult);
+
+        HFunc(TEvService::TEvReadBlocksRequest, HandleReadBlocksRequest);
+        HFunc(NDDisk::TEvReadPersistentBufferResult, HandlePersistentBufferReadResult);
 
         default:
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::NBS_PARTITION,

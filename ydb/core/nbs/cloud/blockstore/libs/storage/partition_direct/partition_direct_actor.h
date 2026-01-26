@@ -1,15 +1,15 @@
 #pragma once
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
+
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/direct_block_group/direct_block_group.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
 
 namespace NYdb::NBS::NStorage::NPartitionDirect {
 
 using namespace NActors;
-using namespace NKikimr;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,23 +39,23 @@ private:
         
     void HandleWriteBlocksRequest(
         const TEvService::TEvWriteBlocksRequest::TPtr& ev,
-        const NActors::TActorContext& ctx);
+        const TActorContext& ctx);
 
     void HandleReadBlocksRequest(
         const TEvService::TEvReadBlocksRequest::TPtr& ev,
-        const NActors::TActorContext& ctx);
+        const TActorContext& ctx);
 
     // Forward events to DirectBlockGroup
     void HandleDDiskConnectResult(
-        const NDDisk::TEvDDiskConnectResult::TPtr& ev,
+        const NDDisk::TEvConnectResult::TPtr& ev,
         const TActorContext& ctx);
 
-    void HandleDDiskWriteResult(
-        const NDDisk::TEvDDiskWriteResult::TPtr& ev,
+    void HandlePersistentBufferWriteResult(
+        const NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
         const TActorContext& ctx);
 
-    void HandleDDiskReadResult(
-        const NDDisk::TEvDDiskReadResult::TPtr& ev,
+    void HandlePersistentBufferReadResult(
+        const NDDisk::TEvReadPersistentBufferResult::TPtr& ev,
         const TActorContext& ctx);
 };
 

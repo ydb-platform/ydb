@@ -6,8 +6,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/core
     ydb/core/mind/bscontroller
+    ydb/core/nbs/cloud/blockstore/libs/storage/api
+    ydb/library/actors/core
 )
 
 END()

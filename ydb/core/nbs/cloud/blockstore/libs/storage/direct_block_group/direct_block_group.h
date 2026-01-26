@@ -9,7 +9,6 @@ namespace NYdb::NBS::NStorage::NPartitionDirect {
 
 using namespace NKikimr;
 using namespace NKikimr::NBsController;
-using namespace NKikimr::NDDisk;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -19,10 +18,10 @@ private:
     struct TDDiskConnection
     {
         TDDiskId DDiskId;
-        TQueryCredentials Credentials;
+        NDDisk::TQueryCredentials Credentials;
 
         TDDiskConnection(const TDDiskId& ddiskId,
-                         const TQueryCredentials& credentials)
+                         const NDDisk::TQueryCredentials& credentials)
             : DDiskId(ddiskId)
             , Credentials(credentials)
         {}
@@ -38,7 +37,6 @@ private:
     TVector<TDDiskConnection> PersistentBufferConnections;
 
     ui64 RequestId = 0;
-    std::list<std::shared_ptr<IRequest>> Requests;
     std::unordered_map<ui64, std::shared_ptr<IRequest>> RequestById;
 
 public:
@@ -48,7 +46,7 @@ public:
 
     void EstablishConnections(const TActorContext& ctx);
 
-    void HandleDDiskConnectResult(const NDDisk::TEvDDiskConnectResult::TPtr& ev,
+    void HandleDDiskConnectResult(const NDDisk::TEvConnectResult::TPtr& ev,
                                   const TActorContext& ctx);
 
     void HandleWriteBlocksRequest(
@@ -59,17 +57,17 @@ public:
         const TActorContext& ctx,
         const std::shared_ptr<TWriteRequest>& request);
 
-    void HandleDDiskWriteResult(const NDDisk::TEvDDiskWriteResult::TPtr& ev,
+    void HandlePersistentBufferWriteResult(const NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
                                 const TActorContext& ctx);
 
     void HandleReadBlocksRequest(
         const TEvService::TEvReadBlocksRequest::TPtr& ev,
         const TActorContext& ctx);
 
-    void SendReadRequestsToDDisk(const TActorContext& ctx,
+    void SendReadRequestsToPersistentBuffer(const TActorContext& ctx,
                                  const std::shared_ptr<TReadRequest>& request);
 
-    void HandleDDiskReadResult(const NDDisk::TEvDDiskReadResult::TPtr& ev,
+    void HandlePersistentBufferReadResult(const NDDisk::TEvReadPersistentBufferResult::TPtr& ev,
                                const TActorContext& ctx);
 };
 

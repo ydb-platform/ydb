@@ -206,38 +206,58 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
     LOG_DEBUG_S(ctx, NKikimrServices::DATA_INTEGRITY, log(traceId, response));
 }
 
-inline void LogTli(const TString& component, const TString& message, const TString& queryText,
-                   TMaybe<ui64> breakerQueryTraceId, TMaybe<ui64> victimQueryTraceId,
-                   const TString& queryTexts, const TActorContext& ctx,
-                   bool isCommitAction,
-                   TMaybe<ui64> currentQueryTraceId = Nothing(),
-                   const TString& victimQueryText = "") {
+// Structured parameters for TLI logging to improve readability
+struct TTliLogParams {
+    TString Component;
+    TString Message;
+    TString QueryText;
+    TString QueryTexts;
+    TString TraceId;
+    TMaybe<ui64> BreakerQueryTraceId;
+    TMaybe<ui64> VictimQueryTraceId;
+    TMaybe<ui64> CurrentQueryTraceId;
+    TString VictimQueryText;
+    bool IsCommitAction = false;
+};
+
+inline void LogTli(const TTliLogParams& params, const TActorContext& ctx) {
     if (!IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
         return;
     }
 
     TStringStream ss;
-    LogKeyValue("Component", component, ss);
-    LogKeyValue("Message", message, ss);
+    LogKeyValue("Component", params.Component, ss);
+    LogKeyValue("Message", params.Message, ss);
+    LogKeyValue("TraceId", params.TraceId, ss);
 
-    if (breakerQueryTraceId) {
-        LogKeyValue("BreakerQueryTraceId", ToString(*breakerQueryTraceId), ss);
-    } else if (victimQueryTraceId) {
-        LogKeyValue("VictimQueryTraceId", ToString(*victimQueryTraceId), ss);
+    // Determine if this is a breaker or victim log based on which TraceId is set
+    const bool isBreaker = params.BreakerQueryTraceId.Defined();
+
+    if (isBreaker) {
+        LogKeyValue("BreakerQueryTraceId", ToString(*params.BreakerQueryTraceId), ss);
+    } else if (params.VictimQueryTraceId) {
+        LogKeyValue("VictimQueryTraceId", ToString(*params.VictimQueryTraceId), ss);
     }
 
-    if (currentQueryTraceId) {
-        LogKeyValue("CurrentQueryTraceId", ToString(*currentQueryTraceId), ss);
+    if (params.CurrentQueryTraceId) {
+        LogKeyValue("CurrentQueryTraceId", ToString(*params.CurrentQueryTraceId), ss);
     }
 
     // For victim logs, log the original victim query text separately
-    if (!victimQueryText.empty()) {
-        LogKeyValue("VictimQueryText", EscapeC(victimQueryText), ss);
+    if (!params.VictimQueryText.empty()) {
+        LogKeyValue("VictimQueryText", EscapeC(params.VictimQueryText), ss);
     }
 
-    LogQueryTextTli(ss, queryText, isCommitAction);
-
-    LogKeyValue("AllQueryTexts", EscapeC(queryTexts), ss, true);
+    // Use appropriate field names based on breaker vs victim
+    if (isBreaker) {
+        LogQueryTextTli(ss, params.QueryText, params.IsCommitAction);
+        // For breaker, rename to BreakerQueryTexts but keep content as AllQueryTexts for compatibility
+        LogKeyValue("BreakerQueryTexts", EscapeC(params.QueryTexts), ss, true);
+    } else {
+        LogQueryTextTli(ss, params.QueryText, params.IsCommitAction);
+        // For victim, use VictimQueryTexts
+        LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss, true);
+    }
 
     LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());
 }

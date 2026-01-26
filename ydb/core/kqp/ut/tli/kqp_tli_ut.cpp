@@ -88,9 +88,13 @@ namespace {
                 continue;
             }
             TString result = record.substr(allPos + 11);
-            const size_t allQueryTextsPos = result.find(", AllQueryTexts:");
-            if (allQueryTextsPos != TString::npos) {
-                result = result.substr(0, allQueryTextsPos);
+            // Stop at BreakerQueryTexts or VictimQueryTexts field
+            size_t endPos = result.find(", BreakerQueryTexts:");
+            if (endPos == TString::npos) {
+                endPos = result.find(", VictimQueryTexts:");
+            }
+            if (endPos != TString::npos) {
+                result = result.substr(0, endPos);
             }
             return UnescapeC(result);
         }
@@ -118,22 +122,32 @@ namespace {
         return std::nullopt;
     }
 
-    std::optional<TString> ExtractAllQueryTexts(const TString& logs, const TString& messagePattern) {
+    // Extract query texts field (BreakerQueryTexts or VictimQueryTexts based on context)
+    std::optional<TString> ExtractQueryTextsField(const TString& logs, const TString& messagePattern, const TString& fieldName) {
         for (const auto& record : ExtractTliRecords(logs)) {
             if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            const size_t allPos = record.find("AllQueryTexts: ");
+            const TString prefix = fieldName + ": ";
+            const size_t allPos = record.find(prefix);
             if (allPos == TString::npos) {
                 continue;
             }
-            TString result = record.substr(allPos + 15);
+            TString result = record.substr(allPos + prefix.size());
             if (result.EndsWith(",")) {
                 result.pop_back();
             }
             return UnescapeC(result);
         }
         return std::nullopt;
+    }
+
+    std::optional<TString> ExtractBreakerQueryTexts(const TString& logs, const TString& messagePattern) {
+        return ExtractQueryTextsField(logs, messagePattern, "BreakerQueryTexts");
+    }
+
+    std::optional<TString> ExtractVictimQueryTexts(const TString& logs, const TString& messagePattern) {
+        return ExtractQueryTextsField(logs, messagePattern, "VictimQueryTexts");
     }
 
     std::optional<ui64> ExtractNumericField(const TString& record, const TString& fieldName) {
@@ -243,8 +257,8 @@ namespace {
     // ==================== Extracted TLI data struct ====================
 
     struct TExtractedTliData {
-        std::optional<TString> BreakerAllQueryTexts;
-        std::optional<TString> VictimAllQueryTexts;
+        std::optional<TString> BreakerQueryTexts;
+        std::optional<TString> VictimQueryTexts;
         std::optional<TString> BreakerQueryText;
         std::optional<TString> VictimQueryText;
         std::optional<ui64> BreakerSessionQueryTraceId;
@@ -263,8 +277,8 @@ namespace {
 
     TExtractedTliData ExtractAllTliData(const TString& logs, const TTliLogPatterns& patterns) {
         TExtractedTliData data;
-        data.BreakerAllQueryTexts = ExtractAllQueryTexts(logs, patterns.BreakerSessionActorMessagePattern);
-        data.VictimAllQueryTexts = ExtractAllQueryTexts(logs, patterns.VictimSessionActorMessagePattern);
+        data.BreakerQueryTexts = ExtractBreakerQueryTexts(logs, patterns.BreakerSessionActorMessagePattern);
+        data.VictimQueryTexts = ExtractVictimQueryTexts(logs, patterns.VictimSessionActorMessagePattern);
         data.BreakerQueryText = ExtractQueryText(logs, patterns.BreakerSessionActorMessagePattern);
         data.VictimQueryText = ExtractVictimQueryText(logs, patterns.VictimSessionActorMessagePattern);
         data.BreakerSessionQueryTraceId = ExtractQueryTraceId(logs, "SessionActor", patterns.BreakerSessionActorMessagePattern);
@@ -326,17 +340,17 @@ namespace {
         }
 
         // Query text assertions
-        UNIT_ASSERT_C(data.BreakerAllQueryTexts && data.BreakerAllQueryTexts->Contains(breakerQueryText),
-            "breaker SessionActor AllQueryTexts should contain breaker query");
-        UNIT_ASSERT_C(data.VictimAllQueryTexts && data.VictimAllQueryTexts->Contains(victimQueryText),
-            "victim SessionActor AllQueryTexts should contain victim query");
+        UNIT_ASSERT_C(data.BreakerQueryTexts && data.BreakerQueryTexts->Contains(breakerQueryText),
+            "breaker SessionActor BreakerQueryTexts should contain breaker query");
+        UNIT_ASSERT_C(data.VictimQueryTexts && data.VictimQueryTexts->Contains(victimQueryText),
+            "victim SessionActor VictimQueryTexts should contain victim query");
         UNIT_ASSERT_C(!data.BreakerQueryText || *data.BreakerQueryText == breakerQueryText || *data.BreakerQueryText == "Commit",
             "breaker SessionActor QueryText should match breaker query or be Commit: " << *data.BreakerQueryText);
         UNIT_ASSERT_VALUES_EQUAL_C(data.VictimQueryText, victimQueryText,
             "victim SessionActor QueryText should match victim query");
         if (victimExtraQueryText) {
-            UNIT_ASSERT_C(data.VictimAllQueryTexts->Contains(*victimExtraQueryText),
-                "AllQueryTexts should contain victim extra query");
+            UNIT_ASSERT_C(data.VictimQueryTexts->Contains(*victimExtraQueryText),
+                "VictimQueryTexts should contain victim extra query");
         }
     }
 

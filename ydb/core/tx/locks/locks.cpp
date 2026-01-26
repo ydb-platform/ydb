@@ -1278,6 +1278,15 @@ TVector<ui64> TSysLocks::ExtractQueryTraceIds(const TVector<ui64>& lockIds) cons
     return queryTraceIds;
 }
 
+TMaybe<ui64> TSysLocks::GetQueryTraceIdForLock(ui64 lockTxId) const {
+    if (auto* lock = Locker.FindLockPtr(lockTxId)) {
+        ui64 queryTraceId = lock->GetQueryTraceId();
+        if (queryTraceId != 0) {
+            return queryTraceId;
+        }
+    }
+    return Nothing();
+}
 
 TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
     ui64 lockTxId, tabletId;

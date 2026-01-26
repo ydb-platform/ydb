@@ -267,14 +267,17 @@ void TMvpTokenator::UpdateJwtToken(const NMvp::TJwtInfo* jwtInfo) {
             break;
         }
         case NMvp::nebius_v1: {
-            auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
-            auto encodedToken = jwt::create()
-                    .set_key_id(keyId)
-                    .set_issuer(serviceAccountId)
-                    .set_subject(serviceAccountId)
-                    .set_issued_at(now)
-                    .set_expires_at(expiresAt)
-                    .sign(algorithm);
+            auto encodedToken = jwtInfo->token();
+            if (encodedToken.empty()) {
+                auto algorithm = jwt::algorithm::rs256(jwtInfo->publickey(), jwtInfo->privatekey());
+                auto encodedToken = jwt::create()
+                        .set_key_id(keyId)
+                        .set_issuer(serviceAccountId)
+                        .set_subject(serviceAccountId)
+                        .set_issued_at(now)
+                        .set_expires_at(expiresAt)
+                        .sign(algorithm);
+            }
             nebius::iam::v1::ExchangeTokenRequest request;
             request.set_grant_type("urn:ietf:params:oauth:grant-type:token-exchange");
             request.set_requested_token_type("urn:ietf:params:oauth:token-type:access_token");

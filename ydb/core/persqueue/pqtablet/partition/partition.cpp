@@ -1157,10 +1157,6 @@ void TPartition::LogAndCollectError(NKikimrServices::EServiceKikimr service, con
 
 const TPartitionBlobEncoder& TPartition::GetBlobEncoder(ui64 offset) const
 {
-    //if ((offset >= CompactionBlobEncoder.EndOffset) && (offset < BlobEncoder.StartOffset)) {
-    //    offset = BlobEncoder.StartOffset;
-    //}
-
     if (BlobEncoder.DataKeysBody.empty()) {
         return CompactionBlobEncoder;
     }

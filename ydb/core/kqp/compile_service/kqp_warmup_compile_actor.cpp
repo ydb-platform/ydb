@@ -150,7 +150,7 @@ public:
     }
 
     void ScheduleComplete() {
-        // to ensure that the actor system is set up and ready to process income messages
+        // to ensure that the actor system is set up and ready to process incoming messages
         Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvDelayedComplete());
         Become(&TThis::StateWaitingComplete);
     }

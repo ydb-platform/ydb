@@ -157,6 +157,157 @@ bool TKeyedWriteSession::TIdleSession::IsExpired() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TSplittedPartitionInfo
+
+TKeyedWriteSession::TSplittedPartitionManager::TSplittedPartitionManager(TKeyedWriteSession* session, ui32 partitionId, ui64 partitionIdx)
+    : Session(session), PartitionId(partitionId), PartitionIdx(partitionIdx) {}
+
+void TKeyedWriteSession::TSplittedPartitionManager::DoStep() {
+    std::unique_lock lock(Lock);
+    auto self = weak_from_this();
+    switch (State) {
+        case EState::Init:
+            DescribeTopicFuture = Session->Client->DescribeTopic(Session->Settings.Path_, TDescribeTopicSettings());
+            lock.unlock();
+            DescribeTopicFuture.Subscribe([self](const NThreading::TFuture<TDescribeTopicResult>&) {
+                auto selfPtr = CheckAlive(self);
+                if (!selfPtr) {
+                    return;
+                }
+
+                std::lock_guard lock(selfPtr->Lock);
+                selfPtr->HandleDescribeResult();
+            });
+            lock.lock();
+            MoveTo(EState::PendingDescribe);
+            break;
+        case EState::GotDescribe:
+            LaunchGetMaxSeqNoFutures(lock);
+            MoveTo(EState::PendingMaxSeqNo);
+            break;
+        case EState::PendingDescribe:
+        case EState::PendingMaxSeqNo:
+        case EState::Done:
+            break;
+        case EState::GotMaxSeqNo:
+            if (!Session->ResendMessages(PartitionId, MaxSeqNo)) {
+                MoveTo(EState::Done);
+            }
+            break;
+    }
+}
+
+std::shared_ptr<TKeyedWriteSession::TSplittedPartitionManager> TKeyedWriteSession::TSplittedPartitionManager::CheckAlive(const std::weak_ptr<TSplittedPartitionManager>& self) {
+    auto selfPtr = self.lock();
+    if (!selfPtr) {
+        return nullptr;
+    }
+
+    if (selfPtr->Session->Closed.load()) {
+        return nullptr;
+    }
+
+    return selfPtr;
+}
+
+void TKeyedWriteSession::TSplittedPartitionManager::MoveTo(EState state) {
+    State = state;
+}
+
+void TKeyedWriteSession::TSplittedPartitionManager::UpdateMaxSeqNo(ui64 maxSeqNo) {
+    MaxSeqNo = std::max(MaxSeqNo, maxSeqNo);
+}
+
+bool TKeyedWriteSession::TSplittedPartitionManager::IsDone() {
+    std::lock_guard lock(Lock);
+    return State == EState::Done;
+}
+
+void TKeyedWriteSession::TSplittedPartitionManager::HandleDescribeResult() {
+    std::vector<ui32> newPartitions;
+    const auto& partitions = DescribeTopicFuture.GetValue().GetTopicDescription().GetPartitions();
+    for (const auto& partition : partitions) {
+        if (partition.GetPartitionId() != PartitionId) {
+            continue;
+        }
+        
+        std::copy(partition.GetChildPartitionIds().begin(), partition.GetChildPartitionIds().end(), std::back_inserter(newPartitions));
+        break;
+    }
+
+    std::lock_guard lock(Session->GlobalLock);
+    const auto& splittedPartition = Session->Partitions[PartitionIdx];
+    Session->PartitionsIndex.erase(splittedPartition.FromBound_);
+    for (const auto& newPartitionId : newPartitions) {
+        auto partitionDescribeInfo = std::find_if(partitions.begin(), partitions.end(), [newPartitionId](const auto& partition) {
+            return partition.GetPartitionId() == newPartitionId;
+        });
+        Y_ABORT_UNLESS(partitionDescribeInfo != partitions.end(), "Partition describe info not found");
+        Session->PartitionIdsMapping[newPartitionId] = Session->Partitions.size();
+        Session->PartitionsIndex[partitionDescribeInfo->GetFromBound().value_or("")] = Session->Partitions.size();
+        Session->Partitions.push_back(
+            TPartitionInfo()
+            .PartitionId(newPartitionId)
+            .FromBound(partitionDescribeInfo->GetFromBound().value_or(""))
+            .ToBound(partitionDescribeInfo->GetToBound()));
+    }
+    MoveTo(EState::GotDescribe);
+}
+
+void TKeyedWriteSession::TSplittedPartitionManager::LaunchGetMaxSeqNoFutures(std::unique_lock<std::mutex>& lock) {
+    Y_ABORT_UNLESS(DescribeTopicFuture.IsReady(), "DescribeTopicFuture is not ready yet");
+
+    std::unordered_map<ui32, ui32> partitionToParent;
+    const auto& partitions = DescribeTopicFuture.GetValue().GetTopicDescription().GetPartitions();
+    for (const auto& partition : partitions) {
+        auto parentPartitions = partition.GetParentPartitionIds();
+        if (parentPartitions.empty()) {
+            continue;
+        }
+
+        // we consider here that each partition has only one parent partition
+        partitionToParent[partition.GetPartitionId()] = parentPartitions.front();
+    }
+
+    std::vector<ui32> ancestors;
+    ui32 currentPartition = PartitionId;
+    while (true) {
+        ancestors.push_back(currentPartition);
+
+        auto parentPartition = partitionToParent.find(currentPartition);
+        if (parentPartition == partitionToParent.end()) {
+            break;
+        }
+        currentPartition = parentPartition->second;
+    }
+
+    NotReadyFutures = ancestors.size();
+    for (const auto& ancestor : ancestors) {
+        auto wrappedSession = Session->GetWriteSession(ancestor, false);
+        Y_ABORT_UNLESS(wrappedSession, "Write session not found");
+        WriteSessions.push_back(wrappedSession);
+
+        auto future = wrappedSession->Session->GetInitSeqNo();
+        lock.unlock();
+        auto self = weak_from_this();
+        future.Subscribe([self](const NThreading::TFuture<uint64_t>& result) {
+            auto selfPtr = CheckAlive(self);
+            if (!selfPtr) {
+                return;
+            }
+
+            std::lock_guard lock(selfPtr->Lock);
+            selfPtr->UpdateMaxSeqNo(result.GetValue());
+            if (--selfPtr->NotReadyFutures == 0) {
+                selfPtr->MoveTo(EState::GotMaxSeqNo);
+            }
+        });
+        lock.lock();
+        GetMaxSeqNoFutures.push_back(future);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TKeyedWriteSession
 
 TKeyedWriteSession::TKeyedWriteSession(
@@ -193,11 +344,14 @@ TKeyedWriteSession::TKeyedWriteSession(
             continue;
         }
 
+        auto partitionId = partition.GetPartitionId();
+        PartitionIdsMapping[partitionId] = Partitions.size();
         Partitions.push_back(
             TPartitionInfo()
-            .PartitionId(partition.GetPartitionId())
+            .PartitionId(partitionId)
             .FromBound(partition.GetFromBound().value_or(""))
             .ToBound(partition.GetToBound()));
+    
     }
 
     switch (partitionChooserStrategy) {
@@ -245,15 +399,19 @@ const std::vector<TKeyedWriteSession::TPartitionInfo>& TKeyedWriteSession::GetPa
     return Partitions;
 }
 
-TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::CreateWriteSession(ui64 partition) {
-    auto producerId = std::format("{}_{}", Settings.ProducerIdPrefix_, partition);
-    auto alteredSettings = Settings;
+TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::CreateWriteSession(ui64 partition, bool directToPartition) {
+    auto partitionId = Partitions[partition].PartitionId_;
+    auto producerId = GetProducerId(partitionId);
+    TWriteSessionSettings alteredSettings = Settings;
     alteredSettings
-        .DirectWriteToPartition(true)
-        .PartitionId(Partitions[partition].PartitionId_)
         .ProducerId(producerId)
         .MessageGroupId(producerId)
         .MaxMemoryUsage(std::numeric_limits<ui64>::max());
+
+    if (directToPartition) {    
+        alteredSettings.DirectWriteToPartition(true);
+        alteredSettings.PartitionId(partitionId);
+    }
     auto writeSession = std::make_shared<WriteSessionWrapper>(
         Client->CreateWriteSession(alteredSettings),
         partition);
@@ -272,7 +430,7 @@ void TKeyedWriteSession::RunEventLoop(ui64 partition, WrappedWriteSessionPtr wra
         }
 
         if (auto sessionClosedEvent = std::get_if<TSessionClosedEvent>(&*event); sessionClosedEvent) {
-            HandleSessionClosedEvent(std::move(*sessionClosedEvent));
+            HandleSessionClosedEvent(std::move(*sessionClosedEvent), partition);
             break;
         }
 
@@ -307,18 +465,23 @@ void TKeyedWriteSession::SubscribeToPartition(ui64 partition) {
     });
 }
 
-TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::GetWriteSession(ui64 partition) {
+TKeyedWriteSession::WrappedWriteSessionPtr TKeyedWriteSession::GetWriteSession(ui64 partition, bool directToPartition) {
     auto sessionIter = SessionsIndex.find(partition);
     if (sessionIter == SessionsIndex.end()) {
+        return CreateWriteSession(partition);
+    }
+
+    if (!directToPartition) {
+        DestroyWriteSession(sessionIter, TDuration::Zero(), false);
         return CreateWriteSession(partition);
     }
 
     return sessionIter->second;
 }
 
-void TKeyedWriteSession::SaveMessage(TWriteMessage&& message, ui64 partition, TTransactionBase* tx) {
+void TKeyedWriteSession::SaveMessage(const std::string& key, TWriteMessage&& message, ui64 partition, TTransactionBase* tx) {
     const bool wasEmpty = PendingMessages.empty();
-    PendingMessages.push_back(TMessageInfo(std::move(message), partition, tx));
+    PendingMessages.push_back(TMessageInfo(key, std::move(message), partition, tx));
 
     if (wasEmpty) {
         MessagesNotEmptyPromise.TrySetValue();
@@ -342,7 +505,7 @@ void TKeyedWriteSession::Write(TContinuationToken&&, const std::string& key, TWr
 
     MemoryUsage += message.Data.size();
     auto partition = PartitionChooser->ChoosePartition(key);
-    SaveMessage(std::move(message), partition, tx);
+    SaveMessage(key, std::move(message), partition, tx);
 
     if (IsMemoryUsageOK()) {
         AddReadyToAcceptEvent();
@@ -359,8 +522,13 @@ void TKeyedWriteSession::HandleReadyToAcceptEvent(ui64 partition, TWriteSessionE
     queueIt->second.push_back(std::move(event.ContinuationToken));
 }
 
-void TKeyedWriteSession::HandleSessionClosedEvent(TSessionClosedEvent&& event) {
+void TKeyedWriteSession::HandleSessionClosedEvent(TSessionClosedEvent&& event, ui64 partition) {
     if (event.IsSuccess()) {
+        return;
+    }
+
+    if (event.GetStatus() == EStatus::OVERLOADED) {
+        HandleAutoPartitioning(partition);
         return;
     }
 
@@ -667,6 +835,32 @@ void TKeyedWriteSession::HandleReadyFutures(std::unique_lock<std::mutex>& lock) 
     }
 }
 
+void TKeyedWriteSession::HandleSplittedPartitions() {
+    if (SplittedPartitions.empty()) {
+        return;
+    }
+
+    std::vector<ui64> toRemove;
+    for (const auto& [partition, splittedPartitionManager] : SplittedPartitions) {
+        if (splittedPartitionManager->IsDone()) {
+            toRemove.push_back(partition);
+            continue;
+        }
+
+        splittedPartitionManager->DoStep();
+    }
+
+    for (const auto& partition : toRemove) {
+        SplittedPartitions.erase(partition);
+    }
+}
+
+void TKeyedWriteSession::RemoveSplittedPartition(ui32 partitionId) {
+    auto partitionIt = PartitionIdsMapping.find(partitionId);
+    Y_ABORT_UNLESS(partitionIt != PartitionIdsMapping.end(), "Partition not found");
+    SplittedPartitions.erase(partitionIt->second);
+}
+
 void* TKeyedWriteSession::RunMainWorkerThread(void* arg) {
     auto session = static_cast<TKeyedWriteSession*>(arg);
     session->RunMainWorker();
@@ -678,6 +872,7 @@ void TKeyedWriteSession::RunMainWorker() {
         TMessageInfo* msgToSend = nullptr;
         bool didWrite = false;
 
+        HandleSplittedPartitions();
         {
             std::unique_lock lock(GlobalLock);
             HandleReadyFutures(lock);
@@ -740,29 +935,45 @@ void TKeyedWriteSession::RunMainWorker() {
 }
 
 void TKeyedWriteSession::HandleAutoPartitioning(ui64 partition) {
-    // TODO: implement full logic
-    TDescribeTopicSettings describeTopicSettings;
-    auto topicConfig = Client->DescribeTopic(Settings.Path_, describeTopicSettings).GetValueSync();
-    const auto& newPartitions = topicConfig.GetTopicDescription().GetPartitions();
-    auto partitionId = Partitions[partition].PartitionId_;
-    auto partitionInfo = std::find_if(newPartitions.begin(), newPartitions.end(), [partitionId](const auto& partitionInfo) {
-        return partitionInfo.GetPartitionId() == partitionId;
-    });
-    Y_ABORT_UNLESS(partitionInfo != newPartitions.end(), "Partition info not found");
+    auto splittedPartitionInfo = std::make_shared<TSplittedPartitionManager>(this, Partitions[partition].PartitionId_, partition);
+    SplittedPartitions.try_emplace(partition, splittedPartitionInfo);
+}
 
-    auto childrenPartitions = partitionInfo->GetChildPartitionIds();
-    for (const auto& partition : newPartitions) {
-        if (std::find(childrenPartitions.begin(), childrenPartitions.end(), partition.GetPartitionId()) == childrenPartitions.end()) {
+bool TKeyedWriteSession::ResendMessages(ui64 partition, ui64 afterSeqNo) {
+    auto indexQueue = InFlightMessagesIndex.find(partition);
+    Y_ABORT_UNLESS(indexQueue != InFlightMessagesIndex.end(), "Index queue not found");
+    for (auto it = indexQueue->second.begin(); it != indexQueue->second.end(); ++it) {
+        auto& message = **it;
+        Y_ABORT_UNLESS(message.Message.SeqNo_.has_value(), "SeqNo is not set");
+        if (*message.Message.SeqNo_ <= afterSeqNo || message.Resent) {
             continue;
         }
 
-        Partitions.push_back(
-            TPartitionInfo()
-            .PartitionId(partition.GetPartitionId())
-            .FromBound(partition.GetFromBound().value_or(""))
-            .ToBound(partition.GetToBound())
-        );
+        auto messageToResend = message;
+        if (!ResendMessage(std::move(messageToResend))) {
+            return false;
+        }
+
+        message.Resent = true;
     }
+
+    return true;
+}
+
+bool TKeyedWriteSession::ResendMessage(TMessageInfo&& message) {
+    auto partition = PartitionChooser->ChoosePartition(message.Key);
+    auto continuationToken = GetContinuationToken(partition);
+    if (continuationToken) {
+        auto writeSession = GetWriteSession(partition);
+        writeSession->Session->Write(std::move(*continuationToken), std::move(message.Message), message.Tx);
+        return true;
+    }
+
+    return false;
+}
+
+std::string TKeyedWriteSession::GetProducerId(ui64 partition) {
+    return std::format("{}_{}", Settings.ProducerIdPrefix_, partition);
 }
 
 TWriterCounters::TPtr TKeyedWriteSession::GetCounters() {

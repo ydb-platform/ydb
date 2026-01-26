@@ -82,15 +82,18 @@ private:
     };
 
     struct TMessageInfo {
-        TMessageInfo(TWriteMessage&& message, ui64 partition, TTransactionBase* tx)
-            :Message(std::move(message))
+        TMessageInfo(const std::string& key, TWriteMessage&& message, ui64 partition, TTransactionBase* tx)
+            :Key(key)
+            , Message(std::move(message))
             , Partition(partition)
             , Tx(tx)
         {}
 
+        std::string Key;
         TWriteMessage Message;
         ui32 Partition;
         TTransactionBase* Tx;
+        bool Resent = false;
     };
 
     struct TIdleSession;
@@ -151,16 +154,52 @@ private:
         TKeyedWriteSession* Session;
     };
 
-    WrappedWriteSessionPtr GetWriteSession(ui64 partition);
+    struct TSplittedPartitionManager : public std::enable_shared_from_this<TSplittedPartitionManager> {
+    private:
+        enum class EState {
+            Init,
+            PendingDescribe,
+            GotDescribe,
+            PendingMaxSeqNo,
+            GotMaxSeqNo,
+            Done,
+        };
+
+        void MoveTo(EState state);
+        void UpdateMaxSeqNo(uint64_t maxSeqNo);
+        void LaunchGetMaxSeqNoFutures(std::unique_lock<std::mutex>& lock);
+        void HandleDescribeResult();
+
+        static std::shared_ptr<TSplittedPartitionManager> CheckAlive(const std::weak_ptr<TSplittedPartitionManager>& self);
+
+    public:
+        TSplittedPartitionManager(TKeyedWriteSession* session, ui32 partitionId, ui64 partitionIdx);
+        void DoStep();
+        bool IsDone();
+            
+    private:
+        TKeyedWriteSession* Session;
+        NThreading::TFuture<TDescribeTopicResult> DescribeTopicFuture;
+        EState State = EState::Init;
+        ui32 PartitionId;
+        ui64 PartitionIdx;
+        ui64 MaxSeqNo = 0;
+        std::vector<WrappedWriteSessionPtr> WriteSessions;
+        std::vector<NThreading::TFuture<uint64_t>> GetMaxSeqNoFutures;
+        std::mutex Lock;
+        ui64 NotReadyFutures = 0;
+    };
+
+    WrappedWriteSessionPtr GetWriteSession(ui64 partition, bool directToPartition = true);
 
     void RunEventLoop(ui64 partition, WrappedWriteSessionPtr wrappedSession);
 
-    WrappedWriteSessionPtr CreateWriteSession(ui64 partition);
+    WrappedWriteSessionPtr CreateWriteSession(ui64 partition, bool directToPartition = true);
 
     using TSessionsIndexIterator = std::unordered_map<ui64, WrappedWriteSessionPtr>::iterator;
     void DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout, bool mustBeEmpty = true);
 
-    void SaveMessage(TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
+    void SaveMessage(const std::string& key, TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
 
     void RunMainWorker();
 
@@ -183,7 +222,7 @@ private:
 
     void HandleAcksEvent(ui64 partition, TWriteSessionEvent::TEvent&& event);
 
-    void HandleSessionClosedEvent(TSessionClosedEvent&& event);
+    void HandleSessionClosedEvent(TSessionClosedEvent&& event, ui64 partition);
 
     void HandleReadyToAcceptEvent(ui64 partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
 
@@ -203,8 +242,18 @@ private:
 
     void WaitSomeAction(std::unique_lock<std::mutex>& lock);
 
+    std::string GetProducerId(ui64 partition);
+
     void HandleAutoPartitioning(ui64 partition);
+
+    void HandleSplittedPartitions();
+
+    bool ResendMessages(ui64 partition, ui64 afterSeqNo);
+
+    void RemoveSplittedPartition(ui32 partitionId);
     
+    bool ResendMessage(TMessageInfo&& message);
+
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
@@ -236,6 +285,7 @@ private:
     TDbDriverStatePtr DbDriverState;
 
     std::vector<TPartitionInfo> Partitions;
+    std::unordered_map<ui32, ui32> PartitionIdsMapping;
     std::vector<NThreading::TFuture<void>> Futures;
     std::unordered_set<size_t> ReadyFutures;
     std::unique_ptr<IPartitionChooser> PartitionChooser;
@@ -260,6 +310,8 @@ private:
     NThreading::TFuture<void> EventsProcessedFuture;
     NThreading::TPromise<void> NotReadyPromise;
     NThreading::TFuture<void> NotReadyFuture;
+
+    std::unordered_map<ui64, std::shared_ptr<TSplittedPartitionManager>> SplittedPartitions;
 
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;

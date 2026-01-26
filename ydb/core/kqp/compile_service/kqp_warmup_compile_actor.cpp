@@ -52,19 +52,21 @@ struct TEvPrivate {
 
 class TFetchCacheActor : public TQueryBase {
 public:
-    TFetchCacheActor(const TString& database, ui32 selfNodeId, ui32 maxQueriesToLoad)
+    TFetchCacheActor(const TString& database, ui32 selfNodeId, ui32 maxQueriesToLoad, ui64 maxCompilationDurationMs)
         : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, database, true, true)
         , SelfNodeId(selfNodeId)
         , MaxQueriesToLoad(maxQueriesToLoad)
+        , MaxCompilationDurationMs(maxCompilationDurationMs)
     {}
 
     void OnRunQuery() override {
-        // fetch all the queries as the system user
         const auto limit = std::max<ui32>(1u, MaxQueriesToLoad);
         TString sql = TStringBuilder()
             << "SELECT Query, UserSID, SUM(AccessCount) AS AccessCount, MAX(CompilationDuration) AS CompilationDuration"
             << " FROM `" << Database << "/.sys/compile_cache_queries` "
             << "WHERE IsTruncated = false "
+            << "  AND AccessCount > 0 "
+            << "  AND CompilationDuration < " << MaxCompilationDurationMs << " "
             << "GROUP BY Query, UserSID "
             << "ORDER BY AccessCount DESC "
             << "LIMIT " << limit;
@@ -105,6 +107,7 @@ public:
 private:
     [[maybe_unused]] ui32 SelfNodeId;
     ui32 MaxQueriesToLoad;
+    ui64 MaxCompilationDurationMs;
     std::unique_ptr<TEvPrivate::TEvFetchCacheResult> Result = std::make_unique<TEvPrivate::TEvFetchCacheResult>(false);
 };
 
@@ -228,7 +231,8 @@ private:
 
     void StartFetch() {
         LOG_I("Spawning fetch cache actor");
-        Register(new TFetchCacheActor(Database, SelfId().NodeId(), Config.MaxQueriesToLoad));
+        const ui64 maxCompilationMs = Config.Deadline.MilliSeconds() / 2;
+        Register(new TFetchCacheActor(Database, SelfId().NodeId(), Config.MaxQueriesToLoad, maxCompilationMs));
         Become(&TThis::StateFetching);
     }
 
@@ -308,18 +312,9 @@ private:
     }
 
     void StartCompilations() {
-        const ui64 maxCompilationDurationMs = Config.Deadline.MilliSeconds() + 1000;
-
         while (PendingCompilations < MaxConcurrentCompilations && !QueriesToCompile.empty()) {
             auto query = std::move(QueriesToCompile.front());
             QueriesToCompile.pop_front();
-
-            if (query.CompilationDurationMs > maxCompilationDurationMs) {
-                LOG_D("Skipping query with too long compilation time: " << query.CompilationDurationMs 
-                      << "ms > " << maxCompilationDurationMs << "ms");
-                EntriesSkipped++;
-                continue;
-            }
 
             SendPrepareRequest(query);
             PendingCompilations++;
@@ -327,21 +322,21 @@ private:
 
         if (PendingCompilations == 0 && QueriesToCompile.empty()) {
             LOG_I("All compilations finished, loaded: " << EntriesLoaded 
-                  << ", failed: " << EntriesFailed << ", skipped: " << EntriesSkipped);
+                  << ", failed: " << EntriesFailed);
             Complete(true, TStringBuilder() << "Compiled " << EntriesLoaded << " queries");
         }
     }
 
     void HandleHardDeadline() {
         LOG_I("Hard deadline reached (waited too long for discovery), compiled: " << EntriesLoaded
-              << ", failed: " << EntriesFailed << ", skipped: " << EntriesSkipped
+              << ", failed: " << EntriesFailed
               << ", pending: " << PendingCompilations);
         Complete(false, "Hard deadline exceeded (discovery not ready in time)");
     }
 
     void HandleSoftDeadline() {
         LOG_I("Soft deadline reached, compiled: " << EntriesLoaded
-              << ", failed: " << EntriesFailed << ", skipped: " << EntriesSkipped
+              << ", failed: " << EntriesFailed
               << ", pending: " << PendingCompilations);
         Complete(false, "Warmup deadline exceeded");
     }
@@ -384,7 +379,6 @@ private:
     ui32 PendingCompilations = 0;
     ui32 EntriesLoaded = 0;
     ui32 EntriesFailed = 0;
-    ui32 EntriesSkipped = 0;
     ui32 MaxConcurrentCompilations = 1;
     bool Completed = false;
     TString SkipReason;

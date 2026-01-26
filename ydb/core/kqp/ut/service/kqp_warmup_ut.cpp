@@ -52,34 +52,140 @@ namespace {
         }
     }
 
+    TDataQueryResult ExecuteQueryWithCache(TKikimrRunner& kikimr, const TString& userSid, 
+                                           const TString& query, const TParams& params = TParams()) {
+        return kikimr.RunCall([&] {
+            TDriverConfig driverConfig;
+            driverConfig
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken(userSid + "@builtin");
+
+            auto driver = NYdb::TDriver(driverConfig);
+            auto db = NYdb::NTable::TTableClient(driver);
+
+            auto sessionResult = db.CreateSession().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), NYdb::EStatus::SUCCESS,
+                "Failed to create session for user " << userSid << ": " << sessionResult.GetIssues().ToString());
+            
+            auto session = sessionResult.GetSession();
+            TExecDataQuerySettings settings;
+            settings.KeepInQueryCache(true);
+            
+            if (params.Empty()) {
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            } else {
+                return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
+            }
+        });
+    }
+
     void FillCache(TKikimrRunner& kikimr, const TVector<TString>& userSids) {
         ui32 key = 0;
         for (const auto& userSid : userSids) {
-            TString query = TStringBuilder()
-                << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = " << key++ << ";";
+            // Query without parameters
+            TString queryNoParams = TStringBuilder()
+                << "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = " << key << ";";
 
-            auto result = kikimr.RunCall([&] {
-                TDriverConfig driverConfig;
-                driverConfig
-                    .SetEndpoint(kikimr.GetEndpoint())
-                    .SetDatabase("/Root")
-                    .SetAuthToken(userSid + "@builtin");
-
-                auto driver = NYdb::TDriver(driverConfig);
-                auto db = NYdb::NTable::TTableClient(driver);
-
-                auto sessionResult = db.CreateSession().GetValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), NYdb::EStatus::SUCCESS,
-                    "Failed to create session for user " << userSid << ": " << sessionResult.GetIssues().ToString());
-                
-                auto session = sessionResult.GetSession();
-                TExecDataQuerySettings settings;
-                settings.KeepInQueryCache(true);
-                return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
-            });
-            
+            auto result = ExecuteQueryWithCache(kikimr, userSid, queryNoParams);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, 
                 "Failed for user " << userSid << ": " << result.GetIssues().ToString());
+
+            // Query with single parameter
+            TString queryWithParam = "DECLARE $key AS Uint32; SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $key;";
+            
+            auto params = TParamsBuilder()
+                .AddParam("$key")
+                    .Uint32(key)
+                    .Build()
+                .Build();
+            
+            auto resultWithParam = ExecuteQueryWithCache(kikimr, userSid, queryWithParam, params);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultWithParam.GetStatus(), NYdb::EStatus::SUCCESS, 
+                "Failed parameterized query for user " << userSid << ": " << resultWithParam.GetIssues().ToString());
+
+            // Query with multiple parameters
+            TString queryMultiParams = "DECLARE $key AS Uint32; DECLARE $value AS String; "
+                "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $key OR Value = $value;";
+            
+            auto paramsMulti = TParamsBuilder()
+                .AddParam("$key")
+                    .Uint32(key)
+                    .Build()
+                .AddParam("$value")
+                    .String("Value" + ToString(key))
+                    .Build()
+                .Build();
+            
+            auto resultMultiParams = ExecuteQueryWithCache(kikimr, userSid, queryMultiParams, paramsMulti);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultMultiParams.GetStatus(), NYdb::EStatus::SUCCESS, 
+                "Failed multi-param query for user " << userSid << ": " << resultMultiParams.GetIssues().ToString());
+
+            // UPSERT query
+            TString queryUpsert = "DECLARE $key AS Uint32; DECLARE $value AS String; "
+                "UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES ($key, $value);";
+            
+            auto paramsUpsert = TParamsBuilder()
+                .AddParam("$key")
+                    .Uint32(key + 1000)
+                    .Build()
+                .AddParam("$value")
+                    .String("UpsertValue" + ToString(key))
+                    .Build()
+                .Build();
+            
+            auto resultUpsert = ExecuteQueryWithCache(kikimr, userSid, queryUpsert, paramsUpsert);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultUpsert.GetStatus(), NYdb::EStatus::SUCCESS, 
+                "Failed UPSERT query for user " << userSid << ": " << resultUpsert.GetIssues().ToString());
+
+            // UPDATE query
+            TString queryUpdate = "DECLARE $key AS Uint32; DECLARE $newValue AS String; "
+                "UPDATE `/Root/KeyValue` SET Value = $newValue WHERE Key = $key;";
+            
+            auto paramsUpdate = TParamsBuilder()
+                .AddParam("$key")
+                    .Uint32(key)
+                    .Build()
+                .AddParam("$newValue")
+                    .String("Updated" + ToString(key))
+                    .Build()
+                .Build();
+            
+            auto resultUpdate = ExecuteQueryWithCache(kikimr, userSid, queryUpdate, paramsUpdate);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultUpdate.GetStatus(), NYdb::EStatus::SUCCESS, 
+                "Failed UPDATE query for user " << userSid << ": " << resultUpdate.GetIssues().ToString());
+
+            // Query with Optional parameter
+            TString queryOptional = "DECLARE $key AS Uint32?; "
+                "SELECT Key, Value FROM `/Root/KeyValue` WHERE $key IS NULL OR Key = $key;";
+            
+            auto paramsOptional = TParamsBuilder()
+                .AddParam("$key")
+                    .OptionalUint32(key)
+                    .Build()
+                .Build();
+            
+            auto resultOptional = ExecuteQueryWithCache(kikimr, userSid, queryOptional, paramsOptional);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultOptional.GetStatus(), NYdb::EStatus::SUCCESS, 
+                "Failed Optional query for user " << userSid << ": " << resultOptional.GetIssues().ToString());
+
+            TString queryDiffTypes = "DECLARE $uint64Param AS Uint64; DECLARE $boolParam AS Bool; "
+                "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key < $uint64Param AND $boolParam;";
+            
+            auto paramsDiffTypes = TParamsBuilder()
+                .AddParam("$uint64Param")
+                    .Uint64(key + 100)
+                    .Build()
+                .AddParam("$boolParam")
+                    .Bool(true)
+                    .Build()
+                .Build();
+            
+            auto resultDiffTypes = ExecuteQueryWithCache(kikimr, userSid, queryDiffTypes, paramsDiffTypes);
+            UNIT_ASSERT_VALUES_EQUAL_C(resultDiffTypes.GetStatus(), NYdb::EStatus::SUCCESS, 
+                "Failed different types query for user " << userSid << ": " << resultDiffTypes.GetIssues().ToString());
+
+            key++;
         }
     }
 

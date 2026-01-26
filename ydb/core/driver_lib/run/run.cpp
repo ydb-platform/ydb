@@ -630,9 +630,9 @@ public:
 
     virtual void Initialize(NKikimr::TAppData* appData) override
     {
-        if (Config.GetTableServiceConfig().HasWarmupConfig() &&
-            Config.GetTableServiceConfig().GetWarmupConfig().GetEnabled()) {
-            auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetWarmupConfig());
+        if (Config.GetTableServiceConfig().HasCompileCacheWarmupConfig() &&
+            Config.GetTableServiceConfig().GetCompileCacheWarmupConfig().GetEnabled()) {
+            auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetCompileCacheWarmupConfig());
             appData->WarmupTimeout = warmupConfig.Deadline;
         }
     }

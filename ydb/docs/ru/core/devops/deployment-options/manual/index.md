@@ -6,4 +6,5 @@
 
 - [{#T}](initial-deployment.md)
 - [{#T}](../../../maintenance/manual/index.md)
+- [{#T}](../../backup-and-recovery/index.md)
 - [{#T}](../../../reference/embedded-ui/index.md)

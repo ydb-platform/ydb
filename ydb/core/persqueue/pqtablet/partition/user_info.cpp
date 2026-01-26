@@ -328,8 +328,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     const TString& dbId,
     const TString& dbPath,
     const bool isServerless,
-    const TString& folderId,
-    const TString& monitoringProjectId
+    const TString& folderId
 )
     : DCId(std::move(dcId))
     , TopicConverter(topicConverter)
@@ -340,7 +339,6 @@ TUsersInfoStorage::TUsersInfoStorage(
     , DbPath(dbPath)
     , IsServerless(isServerless)
     , FolderId(folderId)
-    , MonitoringProjectId(monitoringProjectId)
     , CurReadRuleGeneration(0)
 {
 }
@@ -457,8 +455,8 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
         auto s = counters
             ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
             ->GetSubgroup("host", "");
-        if (!MonitoringProjectId.empty()) {
-            s = s->GetSubgroup("monitoring_project_id", MonitoringProjectId);
+        if (const auto& id = Config.GetMonitoringProjectId(); !id.empty()) {
+            s = s->GetSubgroup("monitoring_project_id", id);
         }
         return s
             ->GetSubgroup("database", Config.GetYdbDatabasePath())
@@ -471,8 +469,8 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
         auto s = counters
             ->GetSubgroup("counters", "topics_per_partition")
             ->GetSubgroup("host", "cluster");
-        if (!MonitoringProjectId.empty()) {
-            s = s->GetSubgroup("monitoring_project_id", MonitoringProjectId);
+        if (const auto& id = Config.GetMonitoringProjectId(); !id.empty()) {
+            s = s->GetSubgroup("monitoring_project_id", id);
         }
         return s
             ->GetSubgroup("Account", TopicConverter->GetAccount())

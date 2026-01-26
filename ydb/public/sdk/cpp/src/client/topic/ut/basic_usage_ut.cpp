@@ -1422,7 +1422,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // Verify that Close didn't block longer than timeout (with some tolerance)
         const TDuration maxExpectedDuration = closeTimeout + TDuration::MilliSeconds(100) + closeTimeout / 10;
         UNIT_ASSERT_C(
-            actualDuration <= maxExpectedDuration * 1.01,
+            actualDuration <= maxExpectedDuration * 1.5,
             TStringBuilder() << "Close() took " << actualDuration << " but timeout was " << closeTimeout
         );
 

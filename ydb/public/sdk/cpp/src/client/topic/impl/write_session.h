@@ -174,6 +174,43 @@ private:
         std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
     };
 
+    struct TMessagesActor : TActor {
+        TMessagesActor(TKeyedWriteSession* session, std::shared_ptr<TSessionsActor> sessionsActor);
+        
+        void DoStep();
+        void AddMessage(const std::string& key, TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
+        void ResendMessages(ui64 partition, ui64 afterSeqNo);
+        void HandleAck();
+        void HandleContinuationToken(ui64 partition, TContinuationToken&& continuationToken);
+        bool IsMemoryUsageOK() const;
+        NThreading::TFuture<void> WaitNewMessages();
+        bool IsQueueEmpty() const;
+        bool HasInFlightMessages() const;
+        const TMessageInfo& GetFrontInFlightMessage() const;
+
+    private:
+        void PushInFlightMessage(ui64 partition, TMessageInfo&& message);
+        void PopInFlightMessage();
+        bool SendMessage(WrappedWriteSessionPtr wrappedSession, TMessageInfo&& message);
+        std::optional<TContinuationToken> GetContinuationToken(ui64 partition);
+
+        TKeyedWriteSession* Session;
+        std::weak_ptr<TSessionsActor> SessionsActor;
+
+        std::list<TMessageInfo> PendingMessages;
+        std::list<TMessageInfo> InFlightMessages;
+        std::unordered_map<ui64, std::list<std::list<TMessageInfo>::iterator>> InFlightMessagesIndex;
+
+        using InFlightMessagesIndexIter = std::list<std::list<TMessageInfo>::iterator>::iterator;
+        std::unordered_map<ui64, InFlightMessagesIndexIter> MessagesToResend;
+        std::unordered_map<ui64, std::deque<TContinuationToken>> ContinuationTokens;
+
+        NThreading::TPromise<void> MessagesNotEmptyPromise;
+        NThreading::TFuture<void> MessagesNotEmptyFuture;
+        
+        ui64 MemoryUsage = 0;
+    };
+
     struct TSplittedPartitionActor : std::enable_shared_from_this<TSplittedPartitionActor>, TActor {
     private:
         enum class EState {
@@ -193,7 +230,7 @@ private:
         static std::shared_ptr<TSplittedPartitionActor> CheckAlive(const std::weak_ptr<TSplittedPartitionActor>& self);
 
     public:
-        TSplittedPartitionActor(TKeyedWriteSession* session, ui32 partitionId, ui64 partitionIdx, std::shared_ptr<TSessionsActor> sessionsActor);
+        TSplittedPartitionActor(TKeyedWriteSession* session, ui32 partitionId, ui64 partitionIdx, std::shared_ptr<TSessionsActor> sessionsActor, std::shared_ptr<TMessagesActor> messagesActor);
         void DoStep();
         bool IsDone();
         void AddPartition(ui64 partition);
@@ -201,6 +238,7 @@ private:
     private:
         TKeyedWriteSession* Session;
         std::weak_ptr<TSessionsActor> SessionsActor;
+        std::weak_ptr<TMessagesActor> MessagesActor;
         NThreading::TFuture<TDescribeTopicResult> DescribeTopicFuture;
         EState State = EState::Init;
         ui32 PartitionId;
@@ -213,7 +251,7 @@ private:
     };
 
     struct TEventsActor : TActor {
-        TEventsActor(TKeyedWriteSession* session, std::shared_ptr<TSessionsActor> sessionsActor);
+        TEventsActor(TKeyedWriteSession* session, std::shared_ptr<TSessionsActor> sessionsActor, std::shared_ptr<TMessagesActor> messagesActor);
 
         void DoStep();
         TSessionClosedEvent GetCloseEvent();
@@ -230,6 +268,7 @@ private:
 
         TKeyedWriteSession* Session;
         std::weak_ptr<TSessionsActor> SessionsActor;
+        std::weak_ptr<TMessagesActor> MessagesActor;
 
         std::vector<NThreading::TFuture<void>> Futures;
         std::unordered_set<size_t> ReadyFutures;
@@ -240,32 +279,6 @@ private:
         NThreading::TPromise<void> NotReadyPromise;
 
         std::optional<TSessionClosedEvent> CloseEvent;
-    };
-
-    struct TMessagesActor : TActor {
-        TMessagesActor(TKeyedWriteSession* session, std::shared_ptr<TSessionsActor> sessionsActor);
-        
-        void DoStep();
-        void AddMessage(const std::string& key, TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
-        void ResendMessages(ui64 partition, ui64 afterSeqNo);
-        void HandleAck();
-        void HandleContinuationToken(ui64 partition, TContinuationToken&& continuationToken);
-        bool IsMemoryUsageOK() const;
-
-    private:
-        void PushInFlightMessage(ui64 partition, TMessageInfo&& message);
-        void PopInFlightMessage();
-        std::optional<TContinuationToken> GetContinuationToken(ui64 partition);
-
-        TKeyedWriteSession* Session;
-        std::weak_ptr<TSessionsActor> SessionsActor;
-
-        std::list<TMessageInfo> PendingMessages;
-        std::list<TMessageInfo> InFlightMessages;
-        std::unordered_map<ui64, std::list<std::list<TMessageInfo>::iterator>> InFlightMessagesIndex;
-        std::unordered_map<ui64, std::list<TMessageInfo>::iterator> MessagesToResend;
-        std::unordered_map<ui64, std::deque<TContinuationToken>> ContinuationTokens;
-        ui64 MemoryUsage = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -290,17 +303,9 @@ private:
         TKeyedWriteSession* Session;
     };
 
-    void SaveMessage(const std::string& key, TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
-
     void RunMainWorker();
 
     static void* RunMainWorkerThread(void* arg);
-
-    std::optional<TContinuationToken> GetContinuationToken(ui64 partition);
-
-    void PopInFlightMessage();
-
-    void PushInFlightMessage(ui64 partition, TMessageInfo&& message);
 
     void AddReadyToAcceptEvent();
 
@@ -308,15 +313,9 @@ private:
 
     void NonBlockingClose();
 
-    bool IsMemoryUsageOK() const;
-
     void SetCloseDeadline(const TDuration& closeTimeout);
 
     TDuration GetCloseTimeout();
-
-    void CleanIdleSessions();
-
-    bool IsQueueEmpty();
 
     void WaitSomeAction(std::unique_lock<std::mutex>& lock);
 
@@ -326,11 +325,7 @@ private:
 
     void RunSplittedPartitionActors();
 
-    bool ResendMessages(ui64 partition, ui64 afterSeqNo);
-
     void RemoveSplittedPartition(ui32 partitionId);
-    
-    bool ResendMessage(TMessageInfo&& message);
 
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -364,29 +359,15 @@ private:
 
     std::vector<TPartitionInfo> Partitions;
     std::unordered_map<ui32, ui32> PartitionIdsMapping;
-    std::vector<NThreading::TFuture<void>> Futures;
-    std::unordered_set<size_t> ReadyFutures;
-
-    std::set<IdleSessionPtr, TIdleSession::Comparator> IdlerSessions;
-    std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
-    std::unordered_map<ui64, std::deque<TContinuationToken>> ContinuationTokens;
     std::map<std::string, ui64> PartitionsIndex;
 
     TKeyedWriteSessionSettings Settings;
-    std::unordered_map<ui64, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
     std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
-    std::list<TMessageInfo> PendingMessages;
-    std::list<TMessageInfo> InFlightMessages;
-    std::unordered_map<ui64, std::list<std::list<TMessageInfo>::iterator>> InFlightMessagesIndex;
 
-    NThreading::TPromise<void> MessagesNotEmptyPromise;
-    NThreading::TFuture<void> MessagesNotEmptyFuture;
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;
     NThreading::TPromise<void> EventsProcessedPromise;
     NThreading::TFuture<void> EventsProcessedFuture;
-    NThreading::TPromise<void> NotReadyPromise;
-    NThreading::TFuture<void> NotReadyFuture;
 
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;
@@ -401,6 +382,7 @@ private:
     std::shared_ptr<TSessionsActor> SessionsActor;
     std::unordered_map<ui64, std::shared_ptr<TSplittedPartitionActor>> SplittedPartitionActors;
     std::unique_ptr<IPartitionChooserActor> PartitionChooserActor;
+    std::shared_ptr<TMessagesActor> MessagesActor;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

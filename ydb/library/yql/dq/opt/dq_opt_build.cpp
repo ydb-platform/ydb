@@ -100,24 +100,43 @@ void CollectArgsReplaces(const TDqStage& dqStage, TVector<TCoArgument>& newArgs,
 }
 
 struct TStageConsumersInfo {
+    struct TAsyncOutput {
+        TDqOutputAnnotationBase Output;
+        size_t OutputIndex; // Index in stage outputs list
+
+        bool operator ==(const TAsyncOutput& rhs) const {
+            return Output.Raw() == rhs.Output.Raw() && OutputIndex == rhs.OutputIndex;
+        }
+    };
+
+    using TInfo = std::variant<TAsyncOutput, TDqOutput>;
+
     ui32 ConsumersCount = 0;
-    std::vector<TMaybeNode<TDqOutput>> Consumers;
+    std::vector<std::optional<TInfo>> Consumers;
     bool HasDependantConsumers = false;
 };
 
 void MakeConsumerReplaces(
     const TDqStage& dqStage,
-    const std::vector<TDqOutput>& consumers,
+    const std::vector<TStageConsumersInfo::TInfo>& consumers,
     TNodeOnNodeOwnedMap& replaces,
     TExprContext& ctx)
 {
+    const auto getConsumerIndex = [](const TStageConsumersInfo::TInfo& consumer) {
+        if (std::holds_alternative<TDqOutput>(consumer)) {
+            return std::get<TDqOutput>(consumer).Index();
+        }
+        return std::get<TStageConsumersInfo::TAsyncOutput>(consumer).Output.Index();
+    };
+
     if (!dqStage.Program().Body().Maybe<TDqReplicate>()) {
-        for (ui32 i = 0; i < consumers.size(); ++i) {
+        for (const auto& consumer : consumers) {
             TVector<TCoArgument> newArgs;
             newArgs.reserve(dqStage.Inputs().Size());
             TNodeOnNodeOwnedMap argsMap;
             CollectArgsReplaces(dqStage, newArgs, argsMap, ctx);
-            auto newStage = Build<TDqStage>(ctx, dqStage.Pos())
+
+            auto newStageBuilder = Build<TDqStage>(ctx, dqStage.Pos())
                 .InitFrom(dqStage)
                 .Program()
                     .Args(newArgs)
@@ -127,27 +146,47 @@ void MakeConsumerReplaces(
                             .Args({"arg"})
                             .template Body<TCoGuess>()
                                 .Variant("arg")
-                                .Index(consumers[i].Index())
+                                .Index(getConsumerIndex(consumer))
                             .Build()
                         .Build()
                     .Build()
                     .Build()
-                .Settings(TDqStageSettings().BuildNode(ctx, dqStage.Pos()))
-                .Done().Ptr();
-            auto newOutput = Build<TDqOutput>(ctx, dqStage.Pos())
-                .Stage(newStage)
-                .Index().Build(0)
-                .Done().Ptr();
-            replaces.emplace(consumers[i].Raw(), newOutput);
+                .Settings(TDqStageSettings().BuildNode(ctx, dqStage.Pos()));
+
+            if (std::holds_alternative<TDqOutput>(consumer)) {
+                const auto newOutput = Build<TDqOutput>(ctx, dqStage.Pos())
+                    .Stage(newStageBuilder.Outputs(TMaybeNode<TDqStageOutputsList>{}).Done())
+                    .Index().Build(0)
+                    .Done().Ptr();
+                YQL_ENSURE(replaces.emplace(std::get<TDqOutput>(consumer).Raw(), newOutput).second);
+            } else {
+                const auto& info = std::get<TStageConsumersInfo::TAsyncOutput>(consumer);
+                const auto newStage = newStageBuilder
+                    .Outputs()
+                        .Add(info.Output)
+                        .Build()
+                    .Done().Ptr();
+
+                // DQ stage result replication in multiple sinks without TDqReplicate is not allowed
+                YQL_ENSURE(replaces.emplace(dqStage.Raw(), newStage).second, "Can not replicate multiple async outputs into different stages");
+            }
         }
         return;
     }
+
     auto replicate = dqStage.Program().Body().Cast<TDqReplicate>();
 
+    std::map<ui32, std::pair<TDqOutputAnnotationBase, size_t>> asyncOutputs; // Preserve same async outputs order in DQ stage after rebuild
     TVector<TExprBase> stageResults;
-    for (const auto& output : consumers) {
-        auto index = FromString<ui32>(output.Index().Value());
+    for (size_t i = 0; i < consumers.size(); ++i) {
+        const auto& output = consumers[i];
+        ui32 index = FromString(getConsumerIndex(output).Value());
         stageResults.push_back(replicate.Args().Get(index + 1));
+
+        if (std::holds_alternative<TStageConsumersInfo::TAsyncOutput>(output)) {
+            const auto& info = std::get<TStageConsumersInfo::TAsyncOutput>(output);
+            YQL_ENSURE(asyncOutputs.emplace(info.OutputIndex, std::pair(info.Output, i)).second);
+        }
     }
 
     YQL_ENSURE(!stageResults.empty());
@@ -171,23 +210,58 @@ void MakeConsumerReplaces(
     TNodeOnNodeOwnedMap argsMap;
     CollectArgsReplaces(dqStage, newArgs, argsMap, ctx);
 
-    auto newStage = Build<TDqStage>(ctx, dqStage.Pos())
+    auto newStageBuilder = Build<TDqStage>(ctx, dqStage.Pos())
         .Inputs(dqStage.Inputs())
         .Program<TCoLambda>()
             .Args(newArgs)
             .Body(ctx.ReplaceNodes(stageResult.Cast().Ptr(), argsMap))
             .Build()
-        .Settings(TDqStageSettings::New(dqStage).BuildNode(ctx, dqStage.Pos()))
-        .Outputs(dqStage.Outputs())
-        .Done();
+        .Settings(TDqStageSettings::New(dqStage).BuildNode(ctx, dqStage.Pos()));
+
+    TMaybeNode<TDqStage> newStage;
+    if (asyncOutputs.empty()) {
+        newStage = newStageBuilder.Done();
+    } else {
+        YQL_ENSURE(dqStage.Outputs());
+        YQL_ENSURE(dqStage.Outputs().Cast().Size() == asyncOutputs.size(), "Number of async outputs either should not change or become zero");
+
+        auto outputsBuilder = Build<TDqStageOutputsList>(ctx, dqStage.Pos());
+        for (const auto& [_, output] : asyncOutputs) {
+            if (const auto& transform = output.first.Maybe<TDqTransform>()) {
+                outputsBuilder.Add(Build<TDqTransform>(ctx, dqStage.Pos())
+                    .InitFrom(transform.Cast())
+                    .Index().Build(output.second)
+                    .Done()
+                );
+            } else if (const auto& sink = output.first.Maybe<TDqSink>()) {
+                outputsBuilder.Add(Build<TDqSink>(ctx, dqStage.Pos())
+                    .InitFrom(sink.Cast())
+                    .Index().Build(output.second)
+                    .Done()
+                );
+            } else {
+                YQL_ENSURE(false, "Unknown output type");
+            }
+        }
+
+        newStage = newStageBuilder.Outputs(outputsBuilder.Done()).Done();
+
+        // MakeConsumerReplaces should be called at most once with async outputs consumers
+        YQL_ENSURE(replaces.emplace(dqStage.Raw(), newStage.Cast().Ptr()).second, "Can not replicate multiple async outputs into different stages");
+    }
 
     for (ui32 i = 0; i < consumers.size(); ++i) {
+        const auto& consumer = consumers[i];
+        if (!std::holds_alternative<TDqOutput>(consumer)) {
+            continue;
+        }
+
         auto newOutput = Build<TDqOutput>(ctx, dqStage.Pos())
-            .Stage(newStage)
-            .Index().Build(ToString(i))
+            .Stage(newStage.Cast())
+            .Index().Build(i)
             .Done();
 
-        replaces.emplace(consumers[i].Raw(), newOutput.Ptr());
+        replaces.emplace(std::get<TDqOutput>(consumer).Raw(), newOutput.Ptr());
     }
 }
 
@@ -203,26 +277,39 @@ void MakeConsumerReplaces(
         return;
     }
 
-    if (info.HasDependantConsumers && !allowDependantConsumers) {
-        for (ui32 i = 0; i < info.Consumers.size(); ++i) {
-            if (info.Consumers[i]) {
-                MakeConsumerReplaces(dqStage, {info.Consumers[i].Cast()}, replaces, ctx);
-            }
-        }
-
+    const bool replicateOutputChannels = info.HasDependantConsumers && !allowDependantConsumers;
+    if (info.ConsumersCount == info.Consumers.size() && !replicateOutputChannels) {
         return;
     }
 
-    if (info.ConsumersCount == info.Consumers.size()) {
+    ui64 outputChannelsCount = 0;
+    std::vector<TStageConsumersInfo::TInfo> consumers;
+    consumers.reserve(info.ConsumersCount);
+    YQL_ENSURE(info.ConsumersCount > 0);
+
+    for (const auto& consumer : info.Consumers) {
+        if (!consumer) {
+            continue;
+        }
+
+        const bool isOutputChannel = std::holds_alternative<TDqOutput>(*consumer);
+        outputChannelsCount += isOutputChannel;
+
+        if (!replicateOutputChannels || !isOutputChannel || outputChannelsCount == 1) {
+            // If replicateOutputChannels=1, join all async outputs with first output channel
+            consumers.emplace_back(*consumer);
+        } else {
+            // Copy only DQ output channels after second one
+            MakeConsumerReplaces(dqStage, {*consumer}, replaces, ctx);
+        }
+    }
+
+    if (consumers.size() == info.Consumers.size()) {
+        // There is no consumers which should be replicated due to replicateOutputChannels=1
         return;
     }
 
-    std::vector<TDqOutput> consumers;
-    for (ui32 i = 0; i < info.Consumers.size(); ++i) {
-        if (info.Consumers[i]) {
-            consumers.push_back(info.Consumers[i].Cast());
-        }
-    }
+    YQL_ENSURE(!consumers.empty());
     MakeConsumerReplaces(dqStage, consumers, replaces, ctx);
 }
 
@@ -258,31 +345,51 @@ public:
         };
 
         TNodeMap<TStageConsumersInfo> consumersMap;
+        const auto addStageConsumer = [&consumersMap](const TDqStageBase& stage, ui32 index, TStageConsumersInfo::TInfo&& output) {
+            auto& info = consumersMap[stage.Raw()];
+
+            if (info.Consumers.empty()) {
+                info.Consumers.resize(GetStageOutputsCount(stage));
+            }
+
+            YQL_ENSURE(index <= info.Consumers.size());
+
+            if (const auto& consumer = info.Consumers[index]) {
+                YQL_ENSURE(consumer->index() == output.index());
+                if (std::holds_alternative<TDqOutput>(output)) {
+                    YQL_ENSURE(std::get<TDqOutput>(*consumer).Raw() == std::get<TDqOutput>(output).Raw());
+                } else {
+                    YQL_ENSURE(std::get<TStageConsumersInfo::TAsyncOutput>(*consumer) == std::get<TStageConsumersInfo::TAsyncOutput>(output));
+                }
+            } else {
+                info.Consumers[index] = std::move(output);
+                info.ConsumersCount++;
+            }
+        };
+
         for (const auto& root : queryRoots) {
             TNodeMap<ui32> stageUsages;
 
-            VisitExpr(root.Ptr(), filter, [&consumersMap, &stageUsages](const TExprNode::TPtr& node) {
+            VisitExpr(root.Ptr(), filter, [addStageConsumer, &stageUsages](const TExprNode::TPtr& node) {
                 if (auto maybeOutput = TMaybeNode<TDqOutput>(node)) {
                     auto output = maybeOutput.Cast();
-                    auto index = FromString<ui32>(output.Index().Value());
 
                     if (output.Stage().Maybe<TDqStage>()) {
-                        auto& info = consumersMap[output.Stage().Raw()];
-
-                        if (info.Consumers.empty()) {
-                            info.Consumers.resize(GetStageOutputsCount(output.Stage()));
-                        }
-
-                        YQL_ENSURE(index <= info.Consumers.size());
-
-                        if (info.Consumers[index]) {
-                            YQL_ENSURE(info.Consumers[index].Cast().Raw() == output.Raw());
-                        } else {
-                            info.Consumers[index] = output;
-                            info.ConsumersCount++;
-                        }
-
+                        addStageConsumer(output.Stage(), FromString<ui32>(output.Index().Value()), output);
                         stageUsages[output.Stage().Raw()]++;
+                    }
+                }
+
+                if (const auto maybeStage = TMaybeNode<TDqStage>(node)) {
+                    if (const auto stage = maybeStage.Cast(); const auto maybeOutputs = stage.Outputs()) {
+                        const auto outputs = maybeOutputs.Cast();
+                        for (size_t i = 0; i < outputs.Size(); ++i) {
+                            const auto output = outputs.Item(i);
+                            addStageConsumer(stage, FromString<ui32>(output.Index().Value()), TStageConsumersInfo::TAsyncOutput{
+                                .Output = output,
+                                .OutputIndex = i,
+                            });
+                        }
                     }
                 }
 

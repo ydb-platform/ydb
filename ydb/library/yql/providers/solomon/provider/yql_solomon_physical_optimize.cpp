@@ -147,13 +147,35 @@ public:
             .Done();
     }
 
-    TMaybeNode<TExprBase> SoInsert(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+    TMaybeNode<TExprBase> SoInsert(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
         const auto insert = node.Cast<TSoInsert>();
-        if (const auto stage = BuildSinkStage(insert.Pos(), insert.DataSink(), insert.Shard(), insert.Input(), ctx, getParents)) {
-            return *stage;
+        const auto input = insert.Input();
+        const auto maybeDqUnion = input.Maybe<TDqCnUnionAll>();
+        if (!maybeDqUnion) {
+            return node;
         }
 
-        return node;
+        const auto maybeStage = BuildSinkStage(insert.Pos(), insert.DataSink(), insert.Shard(), input, ctx, getParents);
+        if (!maybeStage) {
+            return node;
+        }
+
+        const auto newStage = *maybeStage;
+
+        YQL_ENSURE(newStage.Outputs());
+        if (const auto outputsCount = newStage.Outputs().Cast().Size(); outputsCount > 1) {
+            YQL_ENSURE(newStage.Program().Body().Maybe<TDqReplicate>(), "Can not push multiple async outputs into stage without TDqReplicate");
+        }
+
+        const auto dqUnionOutput = maybeDqUnion.Cast().Output();
+        optCtx.RemapNode(dqUnionOutput.Stage().Ref(), newStage.Ptr());
+
+        const auto dqResult = Build<TCoNth>(ctx, newStage.Pos())
+            .Tuple(newStage)
+            .Index(dqUnionOutput.Index())
+            .Done();
+
+        return ctx.NewList(dqResult.Pos(), {dqResult.Ptr()});
     }
 
 private:
@@ -188,7 +210,7 @@ private:
     TSolomonState::TPtr State_;
 };
 
-} // namespace
+} // anonymous namespace
 
 THolder<IGraphTransformer> CreateSoPhysicalOptProposalTransformer(TSolomonState::TPtr state) {
     return MakeHolder<TSoPhysicalOptProposalTransformer>(std::move(state));

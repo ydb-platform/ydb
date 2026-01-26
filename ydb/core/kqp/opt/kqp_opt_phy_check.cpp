@@ -102,15 +102,12 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer() {
                             }
                             usedOutputs.Set(outputIndex);
                         } else {
-                            // There can be also an effect with stage that has dq sinks
+                            // There can be also an effect(s) with stage that has dq sinks
                             // Check the following structure:
                             // TKqlQuery (tuple with 2 elems) - results and effects
                             auto stageParentsIt = parentsMap.find(stage.Raw());
                             YQL_ENSURE(stageParentsIt != parentsMap.end());
-                            if (stageParentsIt->second.size() != 1) {
-                                hasMultipleConsumers = true;
-                            } else {
-                                const TExprNode* effectNode = *stageParentsIt->second.begin();
+                            for (const TExprNode* effectNode : stageParentsIt->second) {
                                 auto effectParentIt = parentsMap.find(effectNode);
                                 YQL_ENSURE(effectParentIt != parentsMap.end());
                                 if (effectParentIt->second.size() != 1) {

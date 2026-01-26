@@ -3112,9 +3112,7 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
 }
 
 void TKqpTasksGraph::BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const {
-    if (stage.SinksSize() > 0) {
-        YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
-        const auto& sink = stage.GetSinks(0);
+    for (const auto& sink : stage.GetSinks()) {
         YQL_ENSURE(sink.GetOutputIndex() < task.Outputs.size());
 
         if (sink.HasInternalSink()) {
@@ -3340,22 +3338,21 @@ std::vector<std::pair<ui64, i64>> TKqpTasksGraph::BuildInternalSinksPriorityOrde
                 continue;
             }
 
-            YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
-            const auto& sink = stage.GetSinks(0);
+            for (const auto& sink : stage.GetSinks()) {
+                if (!sink.HasInternalSink()) {
+                    continue;
+                }
 
-            if (!sink.HasInternalSink()) {
-                continue;
-            }
+                const auto& intSink = sink.GetInternalSink();
 
-            const auto& intSink = sink.GetInternalSink();
-
-            AFL_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
-            if (!stageInfo.Meta.ResolvedSinkSettings) {
-                NKikimrKqp::TKqpTableSinkSettings settings;
-                YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                order.emplace_back(txIdx, settings.GetPriority());
-            } else {
-                order.emplace_back(txIdx, stageInfo.Meta.ResolvedSinkSettings->GetPriority());
+                AFL_ENSURE(intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
+                if (!stageInfo.Meta.ResolvedSinkSettings) {
+                    NKikimrKqp::TKqpTableSinkSettings settings;
+                    YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+                    order.emplace_back(txIdx, settings.GetPriority());
+                } else {
+                    order.emplace_back(txIdx, stageInfo.Meta.ResolvedSinkSettings->GetPriority());
+                }
             }
         }
     }

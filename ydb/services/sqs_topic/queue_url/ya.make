@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    consumer.cpp
     utils.cpp
 )
 

@@ -3,11 +3,13 @@
 #include "change_message_visibility.h"
 #include "error.h"
 #include "delete_message.h"
+#include "list_queues.h"
 #include "request.h"
 #include "receive_message.h"
 #include "send_message.h"
 #include "utils.h"
 
+#include <ydb/services/sqs_topic/queue_url/consumer.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
 
 #include <ydb/core/grpc_services/service_sqs_topic.h>
@@ -91,7 +93,7 @@ namespace NKikimr::NSqsTopic::V1 {
         const TRichQueueUrl queueUrl{
             .Database = this->Database,
             .TopicPath = this->TopicPath,
-            .Consumer = this->Consumer.empty() ? DEFAULT_SQS_CONSUMER : this->Consumer,
+            .Consumer = this->Consumer.empty() ? GetDefaultSqsConsumerName() : this->Consumer,
             .Fifo = AsciiHasSuffixIgnoreCase(this->Consumer, ".fifo"),
         };
 
@@ -140,7 +142,6 @@ namespace NKikimr::NGRpcService {
     DECLARE_RPC(GetQueueUrl);
     DECLARE_RPC_NI(CreateQueue);
     DECLARE_RPC_NI(GetQueueAttributes);
-    DECLARE_RPC_NI(ListQueues);
     DECLARE_RPC_NI(PurgeQueue);
     DECLARE_RPC_NI(DeleteQueue);
     DECLARE_RPC_NI(SetQueueAttributes);
@@ -148,6 +149,11 @@ namespace NKikimr::NGRpcService {
     DECLARE_RPC_NI(ListQueueTags);
     DECLARE_RPC_NI(TagQueue);
     DECLARE_RPC_NI(UntagQueue);
+
+    template <>
+    IActor* TEvSqsTopicListQueuesRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+        return CreateListQueuesActor(msg).release();
+    }
 
     template <>
     IActor* TEvSqsTopicSendMessageRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

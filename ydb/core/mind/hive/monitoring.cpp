@@ -2868,13 +2868,8 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-<<<<<<< HEAD
-        MaxMovements = FromStringWithDefault(ev->Get()->Cgi().Get("movements"), MaxMovements);
-=======
         auto cgi = GetParams(ev->Get());
         MaxMovements = FromStringWithDefault(cgi.Get("movements"), MaxMovements);
-        MaxInFlight = FromStringWithDefault(cgi.Get("inflight"), MaxInFlight);
->>>>>>> 83c1015b985 (hive: set http code 400 when replying with errors (#32535))
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
@@ -4162,86 +4157,6 @@ public:
     }
 };
 
-<<<<<<< HEAD
-=======
-
-class TTxMonEvent_SetDomain : public TTransactionBase<THive>, TLoggedMonTransaction {
-public:
-    TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
-    const TActorId Source;
-    TTabletId TabletId = 0;
-    TTabletId SchemeShard = 0;
-    TObjectId PathId = 0;
-    TTabletId OldSchemeShard = 0;
-    TObjectId OldPathId = 0;
-    bool Success = false;
-
-    TTxMonEvent_SetDomain(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
-        : TBase(hive)
-        , TLoggedMonTransaction(ev, hive)
-        , Event(ev->Release())
-        , Source(source)
-    {
-        auto cgi = GetParams(Event.Get());
-        TabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), TabletId);
-        SchemeShard = FromStringWithDefault<TTabletId>(cgi.Get("schemeshard"), SchemeShard);
-        PathId = FromStringWithDefault<TObjectId>(cgi.Get("pathid"), PathId);
-        OldSchemeShard = FromStringWithDefault<TTabletId>(cgi.Get("oldSchemeshard"), OldSchemeShard);
-        OldPathId = FromStringWithDefault<TObjectId>(cgi.Get("oldPathid"), OldPathId);
-    }
-
-    TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOMAIN; }
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
-            return true;
-        }
-        TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
-        TSubDomainKey newDomain(SchemeShard, PathId);
-        TSubDomainKey clientOldDomain(OldSchemeShard, OldPathId);
-        if (tablet != nullptr) {
-            NIceDb::TNiceDb db(txc.DB);
-            auto rowset = db.Table<Schema::Tablet>().Key(TabletId).Select<Schema::Tablet::ObjectDomain>();
-            if (!rowset.IsReady()) {
-                return false;
-            }
-            TSubDomainKey oldDomain(rowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
-            if (clientOldDomain && oldDomain != clientOldDomain) {
-                ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Old domain does not match, have " << oldDomain <<  ", provided " << clientOldDomain << "\"}"));
-                return true;
-            }
-            if (rowset.HaveValue<Schema::Tablet::ObjectDomain>() && (bool)oldDomain) {
-                if (oldDomain == newDomain) {
-                    ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"ALREADY\"}"));
-                    return true;
-                } else if (!clientOldDomain) {
-                    ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Domain already set to " << oldDomain << "\"}"));
-                    return true;
-                }
-            }
-            tablet->AssignDomains(newDomain, tablet->NodeFilter.AllowedDomains);
-            tablet->TabletStorageInfo->TenantPathId = tablet->GetTenant();
-            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ObjectDomain>(tablet->ObjectDomain);
-            NJson::TJsonValue jsonOperation;
-            jsonOperation["Tablet"] = TabletId;
-            jsonOperation["ObjectDomain"] = TStringBuilder() << newDomain;
-            WriteOperation(db, jsonOperation);
-            Success = true;
-        } else {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Tablet not found\"}"));
-        }
-        return true;
-    }
-
-    void Complete(const TActorContext& ctx) override {
-        if (Success) {
-            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"OK\"}"));
-        }
-    }
-};
-
->>>>>>> 83c1015b985 (hive: set http code 400 when replying with errors (#32535))
 class TUpdateResourcesActor : public TActorBootstrapped<TUpdateResourcesActor> {
 public:
     TActorId Source;

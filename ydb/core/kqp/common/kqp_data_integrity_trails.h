@@ -126,13 +126,12 @@ inline void LogQueryText(TStringStream& ss, const TString& queryText) {
 }
 
 inline void LogQueryTextTli(TStringStream& ss, const TString& queryText, bool isCommitAction) {
-    const auto& config = AppData()->LogTliConfig;
     if (isCommitAction && queryText.empty()) {
         LogKeyValue("QueryText", "Commit", ss);
         return;
     }
 
-    LogQueryTextImpl(ss, queryText, config.GetQueryTextLogMode() == NKikimrProto::TLogTliConfig_ELogMode_HASHED);
+    LogKeyValue("QueryText", EscapeC(queryText), ss);
 }
 
 inline bool ShouldBeLogged(NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type) {

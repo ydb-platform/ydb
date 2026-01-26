@@ -40,7 +40,6 @@ namespace NKikimrProto {
     class TKeyConfig;
     class TAuthConfig;
     class TDataIntegrityTrailsConfig;
-    class TLogTliConfig;
 
     namespace NFolderService {
         class TFolderServiceConfig;
@@ -267,7 +266,6 @@ struct TAppData {
     NKikimrConfig::TMemoryControllerConfig& MemoryControllerConfig;
     NKikimrReplication::TReplicationDefaults& ReplicationConfig;
     NKikimrProto::TDataIntegrityTrailsConfig& DataIntegrityTrailsConfig;
-    NKikimrProto::TLogTliConfig& LogTliConfig;
     NKikimrConfig::TDataErasureConfig& ShredConfig;
     NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;

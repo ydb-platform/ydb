@@ -98,34 +98,33 @@ private:
 
     struct TIdleSession;
 
-    struct WriteSessionWrapper {
+    struct TWriteSessionWrapper {
         WriteSessionPtr Session;
         const ui32 Partition;
         ui64 QueueSize = 0;
         std::shared_ptr<TIdleSession> IdleSession = nullptr;
 
-        WriteSessionWrapper(WriteSessionPtr session, ui64 partition);
+        TWriteSessionWrapper(WriteSessionPtr session, ui64 partition);
 
         bool IsQueueEmpty() const;
         bool AddToQueue(ui64 delta);
         bool RemoveFromQueue(ui64 delta);
     };
 
-    using WrappedWriteSessionPtr = std::shared_ptr<WriteSessionWrapper>;
+    using WrappedWriteSessionPtr = std::shared_ptr<TWriteSessionWrapper>;
 
     struct TIdleSession {
-        TIdleSession(WriteSessionWrapper* session, TInstant emptySince, TDuration idleTimeout)
+        TIdleSession(TWriteSessionWrapper* session, TInstant emptySince, TDuration idleTimeout)
             :Session(session)
             , EmptySince(emptySince)
             , IdleTimeout(idleTimeout)
         {}
 
-        const WriteSessionWrapper* Session;
+        const TWriteSessionWrapper* Session;
         const TInstant EmptySince;
         const TDuration IdleTimeout;
 
         bool Less(const std::shared_ptr<TIdleSession>& other) const;
-
         bool IsExpired() const;
 
         struct Comparator {
@@ -135,26 +134,47 @@ private:
 
     using IdleSessionPtr = std::shared_ptr<TIdleSession>;
 
-    struct IPartitionChooser {
-        virtual ui32 ChoosePartition(const std::string_view key) = 0;
-        virtual ~IPartitionChooser() = default;
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Actors
+
+    struct TActor {
+        template<typename T>
+        static std::shared_ptr<T> Get(std::weak_ptr<T> weakPtr) {
+            auto sharedPtr = weakPtr.lock();
+            Y_ABORT_UNLESS(sharedPtr, "Object is not alive");
+            return sharedPtr;
+        }
     };
 
-    struct TBoundPartitionChooser : public IPartitionChooser {
-        TBoundPartitionChooser(TKeyedWriteSession* session);
-        ui32 ChoosePartition(const std::string_view key) override;
+    struct TEventsActor;
+
+    struct TSessionsActor : TActor {
+        TSessionsActor(TKeyedWriteSession* session);
+        WrappedWriteSessionPtr GetWriteSession(ui64 partition, bool directToPartition = true);
+        void OnReadFromSession(WrappedWriteSessionPtr wrappedSession);
+        void OnWriteToSession(WrappedWriteSessionPtr wrappedSession);
+        void DoStep();
+        void Die(TDuration timeout = TDuration::Zero());
+        void SetEventsActor(std::shared_ptr<TEventsActor> eventsActor);
+    
     private:
+        void AddIdleSession(WrappedWriteSessionPtr wrappedSession, TInstant emptySince, TDuration idleTimeout);
+        void RemoveIdleSession(ui64 partition);
+        WrappedWriteSessionPtr CreateWriteSession(ui64 partition, bool directToPartition = true);
+        
+        using TSessionsIndexIterator = std::unordered_map<ui64, WrappedWriteSessionPtr>::iterator;
+        void DestroyWriteSession(TSessionsIndexIterator& it, TDuration closeTimeout, bool mustBeEmpty = true);
+
+        std::string GetProducerId(ui64 partitionId);
+
         TKeyedWriteSession* Session;
+        std::weak_ptr<TEventsActor> EventsActor;
+        std::set<IdleSessionPtr, TIdleSession::Comparator> IdlerSessions;
+        std::unordered_map<ui64, IdleSessionPtr> IdlerSessionsIndex;
+        std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
     };
 
-    struct THashPartitionChooser : public IPartitionChooser {
-        THashPartitionChooser(TKeyedWriteSession* session);
-        ui32 ChoosePartition(const std::string_view key) override;
-    private:
-        TKeyedWriteSession* Session;
-    };
-
-    struct TSplittedPartitionManager : public std::enable_shared_from_this<TSplittedPartitionManager> {
+    struct TSplittedPartitionActor : std::enable_shared_from_this<TSplittedPartitionActor>, TActor {
     private:
         enum class EState {
             Init,
@@ -170,15 +190,17 @@ private:
         void LaunchGetMaxSeqNoFutures(std::unique_lock<std::mutex>& lock);
         void HandleDescribeResult();
 
-        static std::shared_ptr<TSplittedPartitionManager> CheckAlive(const std::weak_ptr<TSplittedPartitionManager>& self);
+        static std::shared_ptr<TSplittedPartitionActor> CheckAlive(const std::weak_ptr<TSplittedPartitionActor>& self);
 
     public:
-        TSplittedPartitionManager(TKeyedWriteSession* session, ui32 partitionId, ui64 partitionIdx);
+        TSplittedPartitionActor(TKeyedWriteSession* session, ui32 partitionId, ui64 partitionIdx, std::shared_ptr<TSessionsActor> sessionsActor);
         void DoStep();
         bool IsDone();
+        void AddPartition(ui64 partition);
             
     private:
         TKeyedWriteSession* Session;
+        std::weak_ptr<TSessionsActor> SessionsActor;
         NThreading::TFuture<TDescribeTopicResult> DescribeTopicFuture;
         EState State = EState::Init;
         ui32 PartitionId;
@@ -190,14 +212,83 @@ private:
         ui64 NotReadyFutures = 0;
     };
 
-    WrappedWriteSessionPtr GetWriteSession(ui64 partition, bool directToPartition = true);
+    struct TEventsActor : TActor {
+        TEventsActor(TKeyedWriteSession* session, std::shared_ptr<TSessionsActor> sessionsActor);
 
-    void RunEventLoop(ui64 partition, WrappedWriteSessionPtr wrappedSession);
+        void DoStep();
+        TSessionClosedEvent GetCloseEvent();
+        void Wait();
+        void UnsubscribeFromPartition(ui64 partition);
+        void SubscribeToPartition(ui64 partition);
 
-    WrappedWriteSessionPtr CreateWriteSession(ui64 partition, bool directToPartition = true);
+    private:
+        void HandleSessionClosedEvent(TSessionClosedEvent&& event, ui64 partition);
+        void HandleReadyToAcceptEvent(ui64 partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
+        void HandleAcksEvent(ui64 partition, TWriteSessionEvent::TAcksEvent&& event);
+        void RunEventLoop(WrappedWriteSessionPtr wrappedSession, ui64 partition);
+        void TransferEventsToOutputQueue();
 
-    using TSessionsIndexIterator = std::unordered_map<ui64, WrappedWriteSessionPtr>::iterator;
-    void DestroyWriteSession(TSessionsIndexIterator& it, const TDuration& closeTimeout, bool mustBeEmpty = true);
+        TKeyedWriteSession* Session;
+        std::weak_ptr<TSessionsActor> SessionsActor;
+
+        std::vector<NThreading::TFuture<void>> Futures;
+        std::unordered_set<size_t> ReadyFutures;
+        std::unordered_map<ui64, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
+        std::mutex Lock;
+    
+        NThreading::TFuture<void> NotReadyFuture;
+        NThreading::TPromise<void> NotReadyPromise;
+
+        std::optional<TSessionClosedEvent> CloseEvent;
+    };
+
+    struct TMessagesActor : TActor {
+        TMessagesActor(TKeyedWriteSession* session, std::shared_ptr<TSessionsActor> sessionsActor);
+        
+        void DoStep();
+        void AddMessage(const std::string& key, TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
+        void ResendMessages(ui64 partition, ui64 afterSeqNo);
+        void HandleAck();
+        void HandleContinuationToken(ui64 partition, TContinuationToken&& continuationToken);
+        bool IsMemoryUsageOK() const;
+
+    private:
+        void PushInFlightMessage(ui64 partition, TMessageInfo&& message);
+        void PopInFlightMessage();
+        std::optional<TContinuationToken> GetContinuationToken(ui64 partition);
+
+        TKeyedWriteSession* Session;
+        std::weak_ptr<TSessionsActor> SessionsActor;
+
+        std::list<TMessageInfo> PendingMessages;
+        std::list<TMessageInfo> InFlightMessages;
+        std::unordered_map<ui64, std::list<std::list<TMessageInfo>::iterator>> InFlightMessagesIndex;
+        std::unordered_map<ui64, std::list<TMessageInfo>::iterator> MessagesToResend;
+        std::unordered_map<ui64, std::deque<TContinuationToken>> ContinuationTokens;
+        ui64 MemoryUsage = 0;
+    };
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Partition chooser
+
+    struct IPartitionChooserActor {
+        virtual ui32 ChoosePartition(const std::string_view key) = 0;
+        virtual ~IPartitionChooserActor() = default;
+    };
+
+    struct TBoundPartitionChooserActor : IPartitionChooserActor {
+        TBoundPartitionChooserActor(TKeyedWriteSession* session);
+        ui32 ChoosePartition(const std::string_view key) override;
+    private:
+        TKeyedWriteSession* Session;
+    };
+
+    struct THashPartitionChooserActor : IPartitionChooserActor {
+        THashPartitionChooserActor(TKeyedWriteSession* session);
+        ui32 ChoosePartition(const std::string_view key) override;
+    private:
+        TKeyedWriteSession* Session;
+    };
 
     void SaveMessage(const std::string& key, TWriteMessage&& message, ui64 partition, TTransactionBase* tx);
 
@@ -207,24 +298,15 @@ private:
 
     std::optional<TContinuationToken> GetContinuationToken(ui64 partition);
 
-    void TransferEventsToOutputQueue();
-
     void PopInFlightMessage();
-    void PushInFlightMessage(ui64 partition, TMessageInfo&& message);
 
-    void SubscribeToPartition(ui64 partition);
+    void PushInFlightMessage(ui64 partition, TMessageInfo&& message);
 
     void AddReadyToAcceptEvent();
 
     void AddSessionClosedEvent();
 
     void NonBlockingClose();
-
-    void HandleAcksEvent(ui64 partition, TWriteSessionEvent::TEvent&& event);
-
-    void HandleSessionClosedEvent(TSessionClosedEvent&& event, ui64 partition);
-
-    void HandleReadyToAcceptEvent(ui64 partition, TWriteSessionEvent::TReadyToAcceptEvent&& event);
 
     bool IsMemoryUsageOK() const;
 
@@ -234,11 +316,7 @@ private:
 
     void CleanIdleSessions();
 
-    void HandleReadyFutures(std::unique_lock<std::mutex>& lock);
-
     bool IsQueueEmpty();
-
-    void WaitForEvents();
 
     void WaitSomeAction(std::unique_lock<std::mutex>& lock);
 
@@ -246,7 +324,7 @@ private:
 
     void HandleAutoPartitioning(ui64 partition);
 
-    void HandleSplittedPartitions();
+    void RunSplittedPartitionActors();
 
     bool ResendMessages(ui64 partition, ui64 afterSeqNo);
 
@@ -288,7 +366,6 @@ private:
     std::unordered_map<ui32, ui32> PartitionIdsMapping;
     std::vector<NThreading::TFuture<void>> Futures;
     std::unordered_set<size_t> ReadyFutures;
-    std::unique_ptr<IPartitionChooser> PartitionChooser;
 
     std::set<IdleSessionPtr, TIdleSession::Comparator> IdlerSessions;
     std::unordered_map<ui64, WrappedWriteSessionPtr> SessionsIndex;
@@ -311,8 +388,6 @@ private:
     NThreading::TPromise<void> NotReadyPromise;
     NThreading::TFuture<void> NotReadyFuture;
 
-    std::unordered_map<ui64, std::shared_ptr<TSplittedPartitionManager>> SplittedPartitions;
-
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;
     TInstant CloseDeadline = TInstant::Max();
@@ -321,6 +396,11 @@ private:
     size_t MemoryUsage;
 
     std::function<std::string(const std::string_view key)> PartitioningKeyHasher;
+
+    std::shared_ptr<TEventsActor> EventsActor;
+    std::shared_ptr<TSessionsActor> SessionsActor;
+    std::unordered_map<ui64, std::shared_ptr<TSplittedPartitionActor>> SplittedPartitionActors;
+    std::unique_ptr<IPartitionChooserActor> PartitionChooserActor;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

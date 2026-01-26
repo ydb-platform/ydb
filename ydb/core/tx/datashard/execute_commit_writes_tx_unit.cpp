@@ -57,9 +57,11 @@ public:
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         auto [_, locksBrokenByCommit] = DataShard.SysLocksTable().ApplyLocks();
-        auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByCommit);
-        NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Commit writes transaction broke all table locks", locksBrokenByCommit,
-                                       Nothing(), victimQueryTraceIds);
+        if (!locksBrokenByCommit.empty()) {
+            auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByCommit);
+            NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Commit writes transaction broke all table locks", locksBrokenByCommit,
+                                           Nothing(), victimQueryTraceIds);
+        }
         DataShard.SubscribeNewLocks(ctx);
         Pipeline.AddCommittingOp(op);
 

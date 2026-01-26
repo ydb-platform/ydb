@@ -72,9 +72,11 @@ public:
         op->ChangeRecords() = std::move(tx->GetCollectedChanges());
 
         auto [_, locksBrokenByDirectTx] = DataShard.SysLocksTable().ApplyLocks();
-        auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByDirectTx);
-        NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Direct transaction (upload/erase) broke locks", locksBrokenByDirectTx,
-                                       Nothing(), victimQueryTraceIds);
+        if (!locksBrokenByDirectTx.empty()) {
+            auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByDirectTx);
+            NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Direct transaction (upload/erase) broke locks", locksBrokenByDirectTx,
+                                           Nothing(), victimQueryTraceIds);
+        }
         DataShard.SubscribeNewLocks(ctx);
         Pipeline.AddCommittingOp(op);
 

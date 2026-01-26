@@ -131,14 +131,18 @@ inline void LogIntegrityTrailsKeys(const NActors::TActorContext& ctx, const ui64
 inline void LogLocksBroken(const NActors::TActorContext& ctx, const ui64 tabletId, TStringBuf message,
                            const TVector<ui64>& brokenLocks, TMaybe<ui64> breakerQueryTraceId = Nothing(),
                            const TVector<ui64>& victimQueryTraceIds = {}) {
-    if (brokenLocks.empty()) {
-        return;
-    }
-
     // Check if logging is enabled before formatting (performance optimization)
     const bool tliEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::TLI);
     const bool integrityEnabled = IS_INFO_LOG_ENABLED(NKikimrServices::DATA_INTEGRITY);
     if (!tliEnabled && !integrityEnabled) {
+        return;
+    }
+
+    // Check if we have anything to log for each service before building message body
+    if (tliEnabled && victimQueryTraceIds.empty()) {
+        return;
+    }
+    if (integrityEnabled && brokenLocks.empty()) {
         return;
     }
 

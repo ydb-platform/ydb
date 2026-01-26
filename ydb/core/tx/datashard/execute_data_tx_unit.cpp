@@ -356,13 +356,13 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 }
 
 void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx) {
-auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
-op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
-auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByTx);
-if (!victimQueryTraceIds.empty()) {
-    NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Data transaction broke other locks", locksBrokenByTx,
-        op->QueryTraceId(), victimQueryTraceIds);
-}
+    auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
+    op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
+    if (!locksBrokenByTx.empty()) {
+        auto victimQueryTraceIds = DataShard.SysLocksTable().ExtractQueryTraceIds(locksBrokenByTx);
+        NDataIntegrity::LogLocksBroken(ctx, DataShard.TabletID(), "Data transaction broke other locks", locksBrokenByTx,
+            op->QueryTraceId(), victimQueryTraceIds);
+    }
 
     for (const auto& lock : locks) {
         if (lock.IsError()) {

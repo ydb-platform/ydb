@@ -979,7 +979,7 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
         ui32 dataChunkSizeSectors = Format.ChunkSize / Format.SectorSize;
         TChunkWriter writer(Mon, *BlockDevice.Get(), Format, state.CurrentNonce, Format.ChunkKey, BufferPool.Get(),
                 desiredSectorIdx, dataChunkSizeSectors, Format.MagicDataChunk, chunkIdx, nullptr, desiredSectorIdx,
-                nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption);
+                nullptr, PCtx, &DriveModel, Cfg->FeatureFlags.GetEnablePDiskDataEncryption());
 
         guard.Release();
         bool end = ChunkWritePieceEncrypted(evChunkWrite, writer, pieceSize);
@@ -1800,7 +1800,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     format.ChunkKey = chunkKey;
     format.LogKey = logKey;
     format.SysLogKey = sysLogKey;
-    bool randomizeMagic = !Cfg->EnableFormatAndMetadataEncryption || !Cfg->EnableSectorEncryption || plainDataChunks;
+    bool randomizeMagic = !Cfg->EnableFormatAndMetadataEncryption;
 #ifdef DISABLE_PDISK_ENCRYPTION
     randomizeMagic = true;
 #endif
@@ -1874,7 +1874,7 @@ void TPDisk::WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 user
     SysLogger.Reset(new TSysLogWriter(Mon, *BlockDevice.Get(), Format, SysLogRecord.Nonces.Value[NonceSysLog],
                 Format.SysLogKey, BufferPool.Get(), firstSectorIdx, endSectorIdx, Format.MagicSysLogChunk, 0,
                 nullptr, firstSectorIdx, nullptr, PCtx, &DriveModel,
-                Cfg->EnableSectorEncryption));
+                Cfg->FeatureFlags.GetEnablePDiskDataEncryption()));
 
     bool isFull = false;
     while (!isFull) {

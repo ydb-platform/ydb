@@ -452,7 +452,7 @@ public:
                         options.Metadata = metadata;
                         options.PlainDataChunks = cfg->PlainDataChunks;
                         options.EnableFormatAndMetadataEncryption = cfg->EnableFormatAndMetadataEncryption;
-                        options.EnableSectorEncryption = cfg->EnableSectorEncryption;
+                        options.EnableSectorEncryption = cfg->FeatureFlags.GetEnablePDiskDataEncryption();
 
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,

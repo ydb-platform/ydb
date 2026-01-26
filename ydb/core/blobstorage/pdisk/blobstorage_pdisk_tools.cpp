@@ -93,7 +93,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
                 TPDiskCategory(deviceType, 0).GetRaw()));
     cfg->SectorMap = options.SectorMap;
     // Disable encryption for SectorMap
-    cfg->EnableSectorEncryption = options.EnableSectorEncryption.value_or(!cfg->SectorMap);
+    cfg->FeatureFlags.SetEnablePDiskDataEncryption(options.EnableSectorEncryption.value_or(!cfg->SectorMap));
     cfg->EnableFormatAndMetadataEncryption = options.EnableFormatAndMetadataEncryption;
     cfg->PlainDataChunks = options.PlainDataChunks;
 

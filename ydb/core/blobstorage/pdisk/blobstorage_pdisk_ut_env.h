@@ -100,8 +100,8 @@ public:
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->ChunkSize = Settings.ChunkSize;
         pDiskConfig->SectorMap = TestCtx.SectorMap;
-        pDiskConfig->EnableSectorEncryption = *Settings.EnableSectorEncryption;
         pDiskConfig->EnableFormatAndMetadataEncryption = *Settings.EnableFormatAndMetadataEncryption;
+        pDiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(*Settings.EnableSectorEncryption);
         pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(Settings.SmallDisk);
         pDiskConfig->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
         pDiskConfig->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
@@ -162,7 +162,8 @@ public:
 
         if (reformat) {
             DoFormatPDisk(TestCtx.PDiskGuid + static_cast<ui64>(Settings.IsBad),
-                cfg->EnableFormatAndMetadataEncryption, cfg->EnableSectorEncryption);
+                cfg->EnableFormatAndMetadataEncryption, cfg->FeatureFlags.GetEnablePDiskDataEncryption()
+            );
         }
 
         if (Settings.UsePDiskMock) {

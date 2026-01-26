@@ -107,11 +107,7 @@ struct TPDiskConfig : public TThrRefBase {
     ui64 StartOwnerRound = 1ull;  // set only by warden
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // set only by warden
 
-    // Setting this flag to false breaks backward compatibility with versions,
-    // which doesn't support non encrypted chunks mixed with ecnrypted ones.
-    bool EnableSectorEncryption = true;
-
-    // EnableSectorEncryption is not the same as the DISABLE_PDISK_ENCRYPTION macro:
+    // EnablePDiskDataEncryption feature flag is not the same as the DISABLE_PDISK_ENCRYPTION macro:
     // unlike the macro, it does not disable metadata encryption.
     // Tests need a runtime way to emulate DISABLE_PDISK_ENCRYPTION.
     // Until runtime on/off encryption is fully supported, keep this hacky flag.
@@ -305,7 +301,7 @@ struct TPDiskConfig : public TThrRefBase {
         }
         str << " StartOwnerRound# " << StartOwnerRound << x;
         str << " SectorMap# " << (SectorMap ? "true" : "false") << x;
-        str << " EnableSectorEncryption # " << EnableSectorEncryption << x;
+        str << " EnableSectorEncryption # " << FeatureFlags.GetEnablePDiskDataEncryption() << x;
 
         str << " ChunkSize# " << ChunkSize << x;
         str << " SectorSize# " << SectorSize << x;

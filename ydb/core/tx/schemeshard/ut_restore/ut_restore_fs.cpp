@@ -560,5 +560,14 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         ui32 restoredRows = CountRows(runtime, "/MyRoot/RestoredTable");
         UNIT_ASSERT_VALUES_EQUAL(restoredRows, 5);
         UNIT_ASSERT_VALUES_EQUAL(restoredRows, originalRows);
+
+        // Step 8: Verify data content matches
+        ui64 schemeshardId = TTestTxConfig::SchemeShard;
+        TVector<TString> originalData = ReadShards(runtime, schemeshardId, "/MyRoot/OriginalTable");
+        TVector<TString> restoredData = ReadShards(runtime, schemeshardId, "/MyRoot/RestoredTable");
+        UNIT_ASSERT_VALUES_EQUAL(originalData.size(), restoredData.size());
+        for (size_t i = 0; i < originalData.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(originalData[i], restoredData[i]);
+        }
     }
 }

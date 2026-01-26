@@ -39,11 +39,17 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
     if (Position.index() == SortableBatchPosition || rhs.Position.index() == SortableBatchPosition) {
         return GetSortableBatchPosition().ComparePartial(rhs.GetSortableBatchPosition());
     } else if (auto val = std::get_if<StartSimpleRow>(&Position); val) {
-        return (*val)->IndexKeyStart().CompareNotNull(
-            rhs.Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(rhs.Position)->IndexKeyStart() : std::get<EndSimpleRow>(rhs.Position)->IndexKeyEnd());
+        const auto& lhsMeta = (*val)->GetMeta();
+        auto rhsIndexKeyView = rhs.Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewStart()
+                                                                      : std::get<EndSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewEnd();
+
+        return lhsMeta.IndexKeyViewStart().Compare(rhsIndexKeyView, lhsMeta.GetPkSchema()).GetResult();
     } else if (auto val = std::get_if<EndSimpleRow>(&Position); val) {
-        return (*val)->IndexKeyEnd().CompareNotNull(
-            rhs.Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(rhs.Position)->IndexKeyStart() : std::get<EndSimpleRow>(rhs.Position)->IndexKeyEnd());
+        const auto& lhsMeta = (*val)->GetMeta();
+        auto rhsIndexKeyView = rhs.Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewStart()
+                                                                      : std::get<EndSimpleRow>(rhs.Position)->GetMeta().IndexKeyViewEnd();
+
+        return lhsMeta.IndexKeyViewEnd().Compare(rhsIndexKeyView, lhsMeta.GetPkSchema()).GetResult();
     }
 
     AFL_VERIFY(false)("error", "invalid type in TPositionView variant for Compare")("type", Position.index());

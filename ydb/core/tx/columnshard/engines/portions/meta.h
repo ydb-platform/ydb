@@ -83,6 +83,10 @@ public:
 
     NArrow::TSimpleRow IndexKeyEnd() const;
 
+    NArrow::TSimpleRowViewV0 IndexKeyViewStart() const;
+    NArrow::TSimpleRowViewV0 IndexKeyViewEnd() const;
+    std::shared_ptr<arrow::Schema> GetPkSchema() const;
+
     void ResetCompactionLevel(const ui32 level);
 
     std::optional<TString> GetTierNameOptional() const;

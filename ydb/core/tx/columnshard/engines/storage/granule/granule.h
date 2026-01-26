@@ -366,7 +366,7 @@ public:
     }
 
     bool HasPortionIntervalTree() const {
-        return static_cast<bool>(IntervalTree);
+        return IntervalTree != nullptr;
     }
 
     const PortionIntervalTree::TPortionIntervalTree& GetPortionIntervalTreeVerified() const {

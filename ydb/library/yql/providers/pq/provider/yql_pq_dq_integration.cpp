@@ -433,6 +433,7 @@ public:
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
         }
 
+        bool streamingTopicReadEnabled = State_->StreamingTopicsReadByDefault;
         TMaybe<TString> watermarksLateEventsPolicy;
         TMaybe<ui64> watermarksGranularityMs;
         TMaybe<ui64> watermarksIdleTimeoutMs;
@@ -549,11 +550,17 @@ public:
                 watermarksIdleTimeoutMs = TDuration::MicroSeconds(out.Get<ui64>()).MilliSeconds();
             } else if ("streaming" == settingName) {
                 if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
+                    streamingTopicReadEnabled = *parseResult;
                     Add(props, StreamingTopicRead, ToString(*parseResult), pos, ctx);
                 } else {
                     return {};
                 }
             }
+        }
+
+        if (!streamingTopicReadEnabled) {
+            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
+            return nullptr;
         }
 
         if (wrSettings.WatermarksMode.GetOrElse("") == "default") {

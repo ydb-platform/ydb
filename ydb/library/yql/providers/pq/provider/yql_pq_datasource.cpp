@@ -214,19 +214,11 @@ public:
             settings.Add(std::move(skipJsonErrors));
         }
 
-        bool streamingTopicReadEnabled = State_->StreamingTopicsReadByDefault;
         if (auto streamingTopicRead = topicKeyParser.GetStreamingTopicRead()) {
-            if (const auto parseResult = topicKeyParser.ParseStreamingTopicRead(*streamingTopicRead, ctx)) {
-                streamingTopicReadEnabled = *parseResult;
-            } else {
+            if (!topicKeyParser.ParseStreamingTopicRead(*streamingTopicRead, ctx)) {
                 return nullptr;
             }
             settings.Add(std::move(streamingTopicRead));
-        }
-
-        if (!streamingTopicReadEnabled) {
-            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
-            return nullptr;
         }
 
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())

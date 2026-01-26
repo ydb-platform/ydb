@@ -3,6 +3,7 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
+#include <ydb/library/yql/dq/opt/dq_opt_build.h>
 
 using namespace NYql::NNodes;
 using namespace NKikimr;
@@ -10,12 +11,13 @@ using namespace NKikimr::NKqp;
 
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery() {
     auto phyStages = BuildPhysicalStageGraph();
-    auto phyStagesAfterPeephole = PeepHoleOptimizePhysicalStages(std::move(phyStages));
-    return BuildPhysicalQuery(std::move(phyStagesAfterPeephole));
+    phyStages = EnableWideChannelsPhysicalStages(std::move(phyStages));
+    phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
+    return BuildPhysicalQuery(std::move(phyStages));
 }
 
-TVector<std::pair<TExprNode::TPtr, TPositionHandle>> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
-    TVector<std::pair<TExprNode::TPtr, TPositionHandle>> phyStages;
+TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
+    TVector<TExprNode::TPtr> phyStages;
     Graph.TopologicalSort();
     const auto& stageIds = Graph.StageIds;
     const auto& stageInputIds = Graph.StageInputs;
@@ -40,7 +42,7 @@ TVector<std::pair<TExprNode::TPtr, TPositionHandle>> TPhysicalQueryBuilder::Buil
                 TExprNode::TPtr newStage;
                 auto dqConnection = connection->BuildConnection(inputStage, StagePos.at(inputStageId), newStage, ctx);
                 if (newStage) {
-                    phyStages.emplace_back(newStage, StagePos.at(inputStageId));
+                    phyStages.emplace_back(newStage);
                 }
                 YQL_CLOG(TRACE, CoreDq) << "Built connection: " << inputStageId << "->" << id << ", " << connection->Type;
                 inputConnections.push_back(dqConnection);
@@ -58,14 +60,16 @@ TVector<std::pair<TExprNode::TPtr, TPositionHandle>> TPhysicalQueryBuilder::Buil
                 stageInputArgs = StageArgs.at(id);
             }
 
-            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), ctx, StagePos.at(id));
-            phyStages.emplace_back(stage, StagePos.at(id));
+            stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages.at(id), NYql::NDq::TDqStageSettings().BuildNode(ctx, StagePos.at(id)), ctx,
+                                    StagePos.at(id));
+            phyStages.emplace_back(stage);
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
         }
 
         finalizedStages[id] = stage;
         YQL_CLOG(TRACE, CoreDq) << "Finalized stage " << id;
     }
+
     return phyStages;
 }
 
@@ -142,7 +146,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     // clang-format on
 }
 
-bool TPhysicalQueryBuilder::CanApplyPeepHole(TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) {
+bool TPhysicalQueryBuilder::CanApplyPeepHole(TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) const {
     auto blackList = [&](const TExprNode::TPtr& node) -> bool {
         if (node->IsCallable(callableNames)) {
             return true;
@@ -153,7 +157,8 @@ bool TPhysicalQueryBuilder::CanApplyPeepHole(TExprNode::TPtr input, const std::i
 }
 
 TExprNode::TPtr TPhysicalQueryBuilder::BuildDqPhyStage(const TVector<TExprNode::TPtr>& inputs, const TVector<TExprNode::TPtr>& args,
-                                                       TExprNode::TPtr physicalStageBody, TExprContext& ctx, TPositionHandle pos) {
+                                                       TExprNode::TPtr physicalStageBody, NNodes::TCoNameValueTupleList&& settings, TExprContext& ctx,
+                                                       TPositionHandle pos) const {
     // clang-format off
     return Build<TDqPhyStage>(ctx, pos)
         .Inputs()
@@ -163,15 +168,75 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildDqPhyStage(const TVector<TExprNode::
             .Args(args)
             .Body(physicalStageBody)
         .Build()
-        .Settings(NYql::NDq::TDqStageSettings::New().BuildNode(ctx, pos))
+        .Settings(settings)
     .Done().Ptr();
     // clang-format on
 }
 
+void TPhysicalQueryBuilder::TopologicalSort(TDqPhyStage& dqStage, TVector<TExprNode::TPtr>& result, THashSet<const TExprNode*>& visited) const {
+    visited.insert(dqStage.Raw());
+
+    for (const auto& item : dqStage.Inputs()) {
+        auto maybeConnection = item.Maybe<TDqConnection>();
+        // DataSource stage as input.
+        if (!maybeConnection) {
+            continue;
+        }
+
+        TDqPhyStage inputStage = maybeConnection.Cast().Output().Stage().Cast<TDqPhyStage>();
+        if (!visited.contains(inputStage.Raw())) {
+            TopologicalSort(inputStage, result, visited);
+        }
+    }
+
+    result.push_back(dqStage.Ptr());
+}
+
+void TPhysicalQueryBuilder::TopologicalSort(TDqPhyStage&& dqStage, TVector<TExprNode::TPtr>& result) const {
+    THashSet<const TExprNode*> visited;
+    TopologicalSort(dqStage, result, visited);
+}
+
 // This function assumes that stages already sorted in topological orders.
-TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(TVector<std::pair<TExprNode::TPtr, TPositionHandle>>&& physicalStages) {
+TVector<TExprNode::TPtr> TPhysicalQueryBuilder::EnableWideChannelsPhysicalStages(TVector<TExprNode::TPtr>&& physicalStages) {
     Y_ENSURE(physicalStages.size());
-    auto root = physicalStages.back().first;
+    auto root = physicalStages.back();
+    if (!root->GetTypeAnn()) {
+        TypeAnnotate(root);
+    }
+    auto& ctx = RBOCtx.ExprCtx;
+
+    TNodeOnNodeOwnedMap replaces;
+    TExprNode::TPtr rootStage;
+    for (auto& stage : physicalStages) {
+        auto dqPhyStage = TDqPhyStage(stage);
+        // clang-format off
+        auto newStage = Build<TDqPhyStage>(ctx, stage->Pos())
+            .Inputs(ctx.ReplaceNodes(dqPhyStage.Inputs().Ptr(), replaces))
+            .Program(dqPhyStage.Program())
+            .Settings(dqPhyStage.Settings())
+            .Outputs(dqPhyStage.Outputs())
+        .Done().Ptr();
+        // clang-format on
+
+        // After replace we have to run type annotation.
+        TypeAnnotate(newStage);
+
+        rootStage = NYql::NDq::RebuildStageInputsAsWide(TDqPhyStage(newStage), ctx).Ptr();
+        replaces[dqPhyStage.Raw()] = rootStage;
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Wide channels] " << KqpExprToPrettyString(TExprBase(rootStage), ctx);
+
+    TVector<TExprNode::TPtr> stagesTopSorted;
+    TopologicalSort(TDqPhyStage(rootStage), stagesTopSorted);
+    return stagesTopSorted;
+}
+
+// This function assumes that stages already sorted in topological orders.
+TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(TVector<TExprNode::TPtr>&& physicalStages) {
+    Y_ENSURE(physicalStages.size());
+    auto root = physicalStages.back();
     // Type is required to wrap stage lambda to `KqpProgram`
     if (!root->GetTypeAnn()) {
         TypeAnnotate(root);
@@ -180,12 +245,12 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
 
     TNodeOnNodeOwnedMap replaces;
     TVector<TExprNode::TPtr> newStages;
-    for (auto& [stage, pos] : physicalStages) {
+    for (auto& stage : physicalStages) {
         auto dqPhyStage = TDqPhyStage(stage);
         auto stageLambdaAfterPeephole = PeepHoleOptimizeStageLambda(dqPhyStage.Program().Ptr());
         Y_ENSURE(stageLambdaAfterPeephole);
         // clang-format off
-        auto newStage = Build<TDqPhyStage>(ctx, pos)
+        auto newStage = Build<TDqPhyStage>(ctx, stage->Pos())
             .Inputs(ctx.ReplaceNodes(dqPhyStage.Inputs().Ptr(), replaces))
             .Program(stageLambdaAfterPeephole)
             .Settings(dqPhyStage.Settings())
@@ -198,7 +263,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
     return newStages;
 }
 
-TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimizeStageLambda(TExprNode::TPtr stageLambda) {
+TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimizeStageLambda(TExprNode::TPtr stageLambda) const {
     auto lambda = TCoLambda(stageLambda);
     // Compute types of inputs to stage lambda
     TVector<const TTypeAnnotationNode*> argTypes;
@@ -228,11 +293,12 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimizeStageLambda(TExprNode::TP
     return TKqpProgram(newProgram).Lambda().Ptr();
 }
 
-void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr input) {
+void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
     RBOCtx.TypeAnnTransformer->Rewind();
+    TExprNode::TPtr output;
     IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
     do {
-        status = RBOCtx.TypeAnnTransformer->Transform(input, input, RBOCtx.ExprCtx);
+        status = RBOCtx.TypeAnnTransformer->Transform(input, output, RBOCtx.ExprCtx);
     } while (status == IGraphTransformer::TStatus::Repeat);
-    Y_ENSURE(status == IGraphTransformer::TStatus::Ok);
+    input = output;
 }

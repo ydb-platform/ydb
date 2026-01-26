@@ -186,6 +186,7 @@ TExprBase KqpRewriteGenerateIfInsert(TExprBase node, TExprContext& ctx, const TK
         .Table(insertOnConlictUpdate.Table())
         .Columns(insertOnConlictUpdate.Columns())
         .IsBatch(ctx.NewAtom(insertOnConlictUpdate.Pos(), "false"))
+        .DefaultColumns<TCoAtomList>().Build()
         .Settings(insertOnConlictUpdate.Settings())
         .ReturningColumns(insertOnConlictUpdate.ReturningColumns())
         .Done();

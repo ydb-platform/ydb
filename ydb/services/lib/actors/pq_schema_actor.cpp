@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/util/proto_duration.h>
 
@@ -695,6 +696,13 @@ namespace NKikimr::NGRpcProxy::V1 {
                 }
             } else if (pair.first == "_cleanup_policy") {
                 config->SetEnableCompactification(pair.second == "compact");
+            } else if (pair.first == "_timestamp_type") {
+                if (!pair.second || pair.second == NKafka::MESSAGE_TIMESTAMP_CREATE_TIME || pair.second == NKafka::MESSAGE_TIMESTAMP_LOG_APPEND) {
+                    config->SetTimestampType(pair.second ? pair.second :  NKafka::MESSAGE_TIMESTAMP_CREATE_TIME);
+                } else {
+                    error = TStringBuilder() << "Attribute " << pair.first << " is " << pair.second << ", which is an incorrect value.";
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
             } else {
                 error = TStringBuilder() << "Attribute " << pair.first << " is not supported";
                 return Ydb::StatusIds::BAD_REQUEST;
@@ -1215,7 +1223,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         } else {
             partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
         }
-
         if (local) {
             auto partSpeed = request.partition_write_speed_bytes_per_second();
             if (partSpeed == 0) {

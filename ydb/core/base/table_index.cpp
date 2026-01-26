@@ -1,7 +1,9 @@
 #include "table_index.h"
 
+#include <util/string/cast.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <util/string/escape.h>
 
 namespace NKikimr::NTableIndex {
 namespace {
@@ -45,6 +47,9 @@ const TString ImplTables[] = {
     NKMeans::PrefixTable,
     TString{NKMeans::PostingTable} + NKMeans::BuildSuffix0,
     TString{NKMeans::PostingTable} + NKMeans::BuildSuffix1,
+    NFulltext::DocsTable,
+    NFulltext::DictTable,
+    NFulltext::StatsTable,
 };
 
 constexpr std::string_view GlobalSecondaryImplTables[] = {
@@ -62,10 +67,10 @@ constexpr std::string_view PrefixedGlobalKMeansTreeImplTables[] = {
 };
 static_assert(std::is_sorted(std::begin(PrefixedGlobalKMeansTreeImplTables), std::end(PrefixedGlobalKMeansTreeImplTables)));
 
-constexpr std::string_view GlobalFulltextImplTables[] = {
+constexpr std::string_view GlobalFulltextPlainImplTables[] = {
     ImplTable,
 };
-static_assert(std::is_sorted(std::begin(GlobalFulltextImplTables), std::end(GlobalFulltextImplTables)));
+static_assert(std::is_sorted(std::begin(GlobalFulltextPlainImplTables), std::end(GlobalFulltextPlainImplTables)));
 
 constexpr std::string_view GlobalFulltextWithRelevanceImplTables[] = {
     NFulltext::DictTable,
@@ -82,7 +87,8 @@ bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             return true;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             return false;
         default:
             Y_ENSURE(false, InvalidIndexType(indexType));
@@ -99,7 +105,8 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
     auto takeKeyColumns = index.KeyColumns.size();
     if (!isSecondaryIndex) { // vector and fulltext indexes have special embedding and text key columns
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
-            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext);
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance);
         takeKeyColumns--;
     }
 
@@ -144,8 +151,10 @@ std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::Table
             return NKikimrSchemeOp::EIndexTypeGlobalUnique;
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
             return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalFulltext;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance;
         default:
             return std::nullopt;
     }
@@ -231,7 +240,8 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     } else {
         // Vector and fulltext indexes allow to add all columns both to index & data
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
-            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext);
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance);
     }
     if (const auto* broken = IsContains(index.DataColumns, tmp, true)) {
         explain = TStringBuilder()
@@ -248,7 +258,8 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             return true;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             return false;
         default:
             Y_DEBUG_ABORT_S(InvalidIndexType(indexType));
@@ -258,8 +269,7 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
 
 std::span<const std::string_view> GetImplTables(
         NKikimrSchemeOp::EIndexType indexType,
-        std::span<const TString> indexKeys,
-        std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout)
+        std::span<const TString> indexKeys)
 {
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -272,9 +282,10 @@ std::span<const std::string_view> GetImplTables(
             } else {
                 return PrefixedGlobalKMeansTreeImplTables;
             }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-            Y_ENSURE(layout);
-            return GetFulltextImplTables(*layout);
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+            return GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT);
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            return GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
         default:
             Y_ENSURE(false, InvalidIndexType(indexType));
     }
@@ -284,7 +295,7 @@ std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextInde
     if (layout == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
         return GlobalFulltextWithRelevanceImplTables;
     }
-    return GlobalFulltextImplTables;
+    return GlobalFulltextPlainImplTables;
 }
 
 bool IsImplTable(std::string_view tableName) {
@@ -295,6 +306,95 @@ bool IsBuildImplTable(std::string_view tableName) {
     // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
     return tableName.ends_with(NKMeans::BuildSuffix0)
         || tableName.ends_with(NKMeans::BuildSuffix1);
+}
+
+namespace NFulltext {
+
+namespace {
+
+constexpr double EPSILON = 1e-6;
+
+ui32 NormalizeMinimumShouldMatch(i32 wordsCount, i32 minimumShouldMatch) {
+    // NOTE
+    // as per lucene documentation, minimum should match should be at least 1
+    // and at most the number of words in the query
+    if (minimumShouldMatch <= 0) {
+        return 1;
+    }
+    if (minimumShouldMatch > wordsCount) {
+        return wordsCount;
+    }
+
+    return minimumShouldMatch;
+}
+
+}
+
+EQueryMode QueryModeFromString(const TString& mode, TString& explain) {
+    if (mode.empty()) {
+        return EQueryMode::And;
+    } else if (to_lower(mode) == "and") {
+        return EQueryMode::And;
+    } else if (to_lower(mode) == "or") {
+        return EQueryMode::Or;
+    } else {
+        explain = TStringBuilder() << "Unsupported query mode: `" << EscapeC(mode) << "`. Should be `and` or `or`";
+        return EQueryMode::Invalid;
+    }
+}
+
+ui32 MinimumShouldMatchFromString(i32 wordsCount, EQueryMode queryMode, const TString& minimumShouldMatch, TString& explain) {
+    if (minimumShouldMatch.empty()) {
+        if (queryMode == EQueryMode::And) {
+            return wordsCount;
+        } else {
+            // at least one word should be matched
+            return 1;
+        }
+    } else {
+        if (queryMode != EQueryMode::Or) {
+            explain = TStringBuilder() << "MinimumShouldMatch is not supported for AND query mode";
+            return 0;
+        }
+
+        if (minimumShouldMatch.EndsWith("%")) {
+            i32 intValue;
+            if (!TryFromString<i32>(minimumShouldMatch.substr(0, minimumShouldMatch.size() - 1), intValue)) {
+                explain = TStringBuilder() << "MinimumShouldMatch is incorrect. Invalid percentage: `" << EscapeC(minimumShouldMatch) << "`. Should be a number";
+                return 0;
+            }
+            if (intValue <= 0) {
+                explain = TStringBuilder() << "MinimumShouldMatch is incorrect. Invalid percentage: `" << EscapeC(minimumShouldMatch) << "`. Should be positive";
+                return 0;
+            }
+            if (intValue > 100) {
+                explain = TStringBuilder() << "MinimumShouldMatch is incorrect. Invalid percentage: `" << EscapeC(minimumShouldMatch) << "`. Should be less than or equal to 100";
+                return 0;
+            }
+
+            return NormalizeMinimumShouldMatch(wordsCount, (i32)(std::floor(static_cast<double>(wordsCount) * intValue / 100.0 + EPSILON) + EPSILON));
+        }
+
+        i32 intValue;
+        if (!TryFromString<i32>(minimumShouldMatch, intValue)) {
+            explain = TStringBuilder() << "MinimumShouldMatch is incorrect. Invalid value: `" << EscapeC(minimumShouldMatch) << "`. Should be a number";
+            return 0;
+        }
+
+        if (intValue <= -wordsCount) {
+            return 1;
+        } if (intValue > wordsCount) {
+            return wordsCount;
+        }
+
+        if (intValue < 0) {
+            return NormalizeMinimumShouldMatch(wordsCount, wordsCount + intValue);
+        }
+
+        return NormalizeMinimumShouldMatch(wordsCount, intValue);
+    }
+}
+
 }
 
 namespace NKMeans {

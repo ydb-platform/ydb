@@ -377,7 +377,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
     }
 
-    Y_UNIT_TEST(DistributedTxCommit) {
+    Y_UNIT_TEST_FLAG(DistributedTxCommit, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -394,7 +394,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        });
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
 
         UNIT_ASSERT(result.Timeout);
         UNIT_ASSERT_VALUES_EQUAL(count, expected);
@@ -456,7 +456,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 4));
     }
 
-    Y_UNIT_TEST(DistributedTxCommit_CheckSessionResetAfterCommit) {
+    Y_UNIT_TEST_FLAG(DistributedTxCommit_CheckSessionResetAfterCommit, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        });
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
 
         UNIT_ASSERT_VALUES_EQUAL_C(1, counters["message-0-1"], "Message must be read 1 times because reset commit to offset 3, but 0 message has been read " << counters["message-0-1"] << " times") ;
         UNIT_ASSERT_VALUES_EQUAL_C(2, counters["message-0-2"], "Message must be read 2 times because reset commit to offset 1, but 1 message has been read " << counters["message-0-2"] << " times") ;
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
     }
 
-    Y_UNIT_TEST(DistributedTxCommit_CheckOffsetCommitForDifferentCases) {
+    Y_UNIT_TEST_FLAG(DistributedTxCommit_CheckOffsetCommitForDifferentCases, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -555,10 +555,10 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        });
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
     }
 
-    Y_UNIT_TEST(DistributedTxCommit_Flat_CheckOffsetCommitForDifferentCases) {
+    Y_UNIT_TEST_FLAG(DistributedTxCommit_Flat_CheckOffsetCommitForDifferentCases, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareFlatTopic(setup);
 
@@ -615,10 +615,10 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
             }
 
             return true;
-        });
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
     }
 
-    Y_UNIT_TEST(DistributedTxCommit_LongReadSession) {
+    Y_UNIT_TEST_FLAG(DistributedTxCommit_LongReadSession, autoPartitioningSupport) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
@@ -627,7 +627,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
             messages.push_back(x);
             return true;
-        });
+        }, std::nullopt, TDuration::Seconds(5), autoPartitioningSupport);
 
         {
             Cerr << ">>>>> Alter topic" << Endl << Flush;
@@ -658,6 +658,100 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         Sleep(TDuration::Seconds(5));
 
         result.Reader->Close();
+    }
+
+    Y_UNIT_TEST_FLAG(CommitMessages_Continue, autoPartitioningSupport) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedTopic(setup);
+
+        auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 3);
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
+
+        status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 2, 1);
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
+
+        auto count = 0;
+        const auto expected = 25;
+
+        auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+            auto& messages = x.GetMessages();
+            for (size_t i = 0u; i < messages.size(); ++i) {
+                ++count;
+
+                setup.Write(TStringBuilder() << "message-new-" << count, 2);
+
+                auto& message = messages[i];
+                Cerr << "SESSION EVENT read message: " << count << " from partition: "
+                    << message.GetPartitionSession()->GetPartitionId() << Endl << Flush;
+                message.Commit();
+
+                if (count == expected) {
+                    return false;
+                }
+            }
+
+            return true;
+        }, std::nullopt, TDuration::Seconds(15), autoPartitioningSupport);
+
+        UNIT_ASSERT(!result.Timeout);
+        UNIT_ASSERT_VALUES_EQUAL(count, expected);
+
+        auto other = GetCommittedOffset(setup, 0)
+            + GetCommittedOffset(setup, 1)
+            + GetCommittedOffset(setup, 3)
+            + GetCommittedOffset(setup, 4);
+
+        UNIT_ASSERT_VALUES_EQUAL(4 + expected - other, GetCommittedOffset(setup, 2));
+    }
+
+    Y_UNIT_TEST_FLAG(CommitMessages_ReloadPQRB, autoPartitioningSupport) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        PrepareAutopartitionedTopic(setup);
+
+        auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 3);
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
+
+        status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 2, 1);
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::EStatus::SUCCESS, status.GetStatus());
+
+        bool reloaded = false;
+        bool firstMessage = true;
+
+        auto count = 0;
+
+        auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+            auto& messages = x.GetMessages();
+            for (size_t i = 0u; i < messages.size(); ++i) {
+                ++count;
+
+                setup.Write(TStringBuilder() << "message-new-" << count, 2);
+
+                auto& message = messages[i];
+                Cerr << "SESSION EVENT read message: " << count << " from partition: " << message.GetPartitionSession()->GetPartitionId() << Endl << Flush;
+                message.Commit();
+            }
+
+            if (!reloaded && x.GetPartitionSession()->GetPartitionId() == 2) {
+                if (firstMessage) {
+                    firstMessage = false;
+                    return true;
+                }
+
+                reloaded = true;
+                ReloadPQRBTablet(setup.GetRuntime(), TString{setup.GetDatabase()},
+                    TStringBuilder() << setup.GetDatabase() << "/" << TEST_TOPIC);
+            }
+
+            return true;
+        }, std::nullopt, TDuration::Seconds(10), autoPartitioningSupport);
+
+        UNIT_ASSERT(result.Timeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 1));
+        UNIT_ASSERT_LE(3, GetCommittedOffset(setup, 2));
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 3));
+        UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 4));
     }
 
 }

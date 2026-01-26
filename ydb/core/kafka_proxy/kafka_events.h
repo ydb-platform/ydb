@@ -18,6 +18,7 @@ struct TEvKafka {
     enum EEv {
         EvRequest = EventSpaceBegin(NKikimr::TKikimrEvents::TKikimrEvents::ES_KAFKA),
         EvProduceRequest,
+        EvAuthRequest,
         EvAuthResult,
         EvHandshakeResult,
         EvWakeup,
@@ -138,6 +139,17 @@ struct TEvKafka {
         const ui64 CorrelationId;
         const TApiMessage::TPtr Response;
         const EKafkaErrors ErrorCode;
+    };
+
+    struct TEvAuthRequest : public TEventLocal<TEvAuthRequest, EvAuthRequest> {
+        TEvAuthRequest(const ui64 correlationId, const TMessagePtr<TSaslAuthenticateRequestData>& request)
+            : CorrelationId(correlationId)
+            , Request(request)
+        {
+        }
+
+        ui64 CorrelationId;
+        const TMessagePtr<TSaslAuthenticateRequestData> Request;
     };
 
     struct TEvAuthResult : public TEventLocal<TEvAuthResult, EvAuthResult> {

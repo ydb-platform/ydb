@@ -75,6 +75,14 @@
             "uri": "file://test_canonical_requests.Test.test_essential/results.txt.8"
         }
     ],
+    "test_canonical_requests.Test.test_infer_pdisk_slot_count": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_infer_pdisk_slot_count/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_infer_pdisk_slot_count/results.txt.0"
+        }
+    ],
     "test_canonical_requests.Test.test_pdisk_set_status_inactive": [
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_set_status_inactive/results.txt"

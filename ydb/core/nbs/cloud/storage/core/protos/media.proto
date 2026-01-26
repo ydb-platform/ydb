@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package NYdb.NBS.NProto;
+
+option go_package = "github.com/ydb-platform/ydb/core/nbs/cloud/storage/core/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Disk/FS media kind
+
+enum EStorageMediaKind
+{
+    STORAGE_MEDIA_DEFAULT = 0;
+    STORAGE_MEDIA_SSD = 1;
+    STORAGE_MEDIA_HYBRID = 2;
+    STORAGE_MEDIA_HDD = 3;
+    STORAGE_MEDIA_SSD_NONREPLICATED = 4;
+    STORAGE_MEDIA_SSD_MIRROR2 = 5;
+    STORAGE_MEDIA_SSD_LOCAL = 6;
+    STORAGE_MEDIA_SSD_MIRROR3 = 7;
+    STORAGE_MEDIA_HDD_NONREPLICATED = 8;
+    STORAGE_MEDIA_HDD_LOCAL = 9;
+}

@@ -3545,6 +3545,55 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
         }
     }
+
+    Y_UNIT_TEST(ExecuteQueryWithReplicatedS3Write) {
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString externalTableName = "/Root/test_binding_resolve";
+        const TString bucket = "test_bucket_s3_replicate";
+        const TString object = "object/test_object";
+
+        CreateBucketWithObject(bucket, object, "test-data");
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE = "ObjectStorage",
+                    LOCATION = "{location}",
+                    AUTH_METHOD = "NONE"
+                );
+                CREATE EXTERNAL TABLE `{external_table}` (
+                    Data String NOT NULL
+                ) WITH (
+                    DATA_SOURCE = "{external_source}",
+                    LOCATION = "{object}",
+                    FORMAT = "raw"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName,
+                "location"_a = GetBucketLocation(bucket),
+                "object"_a = EscapeC(object)
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                INSERT INTO `{external_source}`.`test-1/` WITH (FORMAT = "csv_with_names")
+                SELECT * FROM `{external_table}`;
+
+                INSERT INTO `{external_source}`.`test-2/` WITH (FORMAT = "csv_with_names")
+                SELECT * FROM `{external_table}`;)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "test-data\"Data\"\n\"test-data\"\n\"Data\"\n\"test-data\"\n");
+    }
 }
 
 } // namespace NKikimr::NKqp

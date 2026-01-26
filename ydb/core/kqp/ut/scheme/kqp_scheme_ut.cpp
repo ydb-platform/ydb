@@ -1,4 +1,5 @@
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -7,22 +8,24 @@
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/kqp/workload_service/ut/common/kqp_workload_service_ut_common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/testlib/cs_helper.h>
+#include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/core/testlib/cs_helper.h>
-#include <ydb/core/testlib/common_helper.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
+
 #include <yql/essentials/types/uuid/uuid.h>
 #include <yql/essentials/types/binary_json/write.h>
-#include <ydb/core/tx/datashard/datashard.h>
 
+#include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/threading/local_executor/local_executor.h>
 
 #include <util/generic/serialized_enum.h>
@@ -64,7 +67,76 @@ void CreateSecret(const TString& secretName, const TString& secretValue, TSessio
     UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, queryResult.GetStatus(), queryResult.GetIssues().ToString());
 }
 
+void TestTruncateTable(const TString& tablePath, bool useQueryClient = false) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableTruncateTable(true);
+    TKikimrRunner kikimr(featureFlags);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    auto queryClient = kikimr.GetQueryClient();
+
+    {
+        TString query = Sprintf(R"(
+            CREATE TABLE %s (
+                k Uint32,
+                v String,
+                PRIMARY KEY(k)
+            );
+        )"
+        , tablePath.c_str());
+
+        auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    }
+
+    {
+        TString query = Sprintf(R"(
+            UPSERT INTO %s (k, v) VALUES
+                (1, "Hello1"),
+                (2, "Hello2"),
+                (3, "Hello3"),
+                (4, "Hello4");
+        )"
+        , tablePath.c_str());
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    }
+
+    {
+        TString query = Sprintf(R"(
+            TRUNCATE TABLE %s;
+        )"
+        , tablePath.c_str());
+
+        if (useQueryClient) {
+            auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        } else {
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    {
+        TString query = Sprintf(R"(
+            SELECT COUNT(*) FROM %s;
+        )"
+        , tablePath.c_str());
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        
+        auto resultSet = result.GetResultSet(0);
+        TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        auto count = parser.ColumnParser(0).GetUint64();
+        UNIT_ASSERT_VALUES_EQUAL(count, 0);
+    }
 }
+
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(UseUnauthorizedTable) {
@@ -2725,7 +2797,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     void AlterTableAddIndex(EIndexTypeSql type) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_DEBUG);
@@ -3046,7 +3117,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(AlterTableAlterVectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -3086,8 +3156,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST_TWIN(AlterIndexImplTable, VectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAccessToIndexImplTables(true);
-        if (VectorIndex)
-            featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -3905,7 +3973,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithVectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -3938,7 +4005,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCovered) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -3984,7 +4050,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCaseIncentive) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -4004,34 +4069,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST(CreateTableWithVectorIndexNoFeatureFlag) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(false);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
-        TKikimrRunner kikimr(settings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-        {
-            TString create_index_query = R"(
-                --!syntax_v1
-                CREATE TABLE `/Root/TestTable` (
-                    Key Uint64,
-                    Embedding String,
-                    Covered String,
-                    PRIMARY KEY (Key),
-                    INDEX vector_idx
-                        GLOBAL USING vector_kmeans_tree
-                        ON (Embedding)
-                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2)
-                );
-            )";
-            auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Vector index support is disabled");
         }
     }
 
@@ -4516,7 +4553,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithVectorIndexPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -4555,7 +4591,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithVectorIndexCoveredPublicApi) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -4596,7 +4631,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(AlterTableRenameVectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -4629,7 +4663,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(RenameTableWithVectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -5369,11 +5402,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(ModifySysViewDirPermissions) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableRealSystemViewPaths(true);
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
-        settings.SetFeatureFlags(featureFlags);
         settings.SetAuthToken("root@builtin");  // root@builtin becomes cluster admin
         TKikimrRunner kikimr(settings);
 
@@ -5467,11 +5497,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(ModifySysViewPermissions) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableRealSystemViewPaths(true);
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
-        settings.SetFeatureFlags(featureFlags);
         settings.SetAuthToken("root@builtin");  // root@builtin becomes cluster admin
         TKikimrRunner kikimr(settings);
 
@@ -12365,7 +12392,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE TABLE test_table (Key Int32 NOT NULL, PRIMARY KEY (Key));
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE,
-                    RESOURCE_POOL = "my_pool"
+                    RESOURCE_POOL = "my_pool",
+                    STREAMING_DISPOSITION = (
+                        TIME_AGO = "PT10S"
+                    ),
                 ) AS DO /*комментарий*/)" << "\r" << R"(BEGIN
 PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
 INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic
@@ -12373,9 +12403,12 @@ END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
+            NYql::NPq::NProto::StreamingDisposition disposition;
+            disposition.mutable_time_ago()->mutable_duration()->set_seconds(10);
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "my_pool"},
+                {"streaming_disposition", disposition.SerializeAsString()},
                 {"__query_text", "\nPRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\nINSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic\n"}
             });
         }
@@ -12398,9 +12431,12 @@ END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
+            NYql::NPq::NProto::StreamingDisposition disposition;
+            disposition.mutable_from_last_checkpoint()->set_force(true);
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"streaming_disposition", disposition.SerializeAsString()},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
@@ -12429,9 +12465,12 @@ END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
+            NYql::NPq::NProto::StreamingDisposition disposition;
+            disposition.mutable_from_last_checkpoint()->set_force(true);
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"streaming_disposition", disposition.SerializeAsString()},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
@@ -12441,7 +12480,7 @@ END DO)",
         auto db = kikimr.GetQueryClient();
 
         {
-            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"()
                 AS DO BEGIN
                     $x = 1;
                 END DO)",
@@ -12451,7 +12490,7 @@ END DO)",
         }
 
         {
-            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"()
                 AS DO BEGIN
                     INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
                     INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
@@ -12462,7 +12501,7 @@ END DO)",
         }
 
         {
-            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"()
                 AS DO BEGIN
                     INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
                     UPSERT INTO `MyFolder/MyTable` (Key) VALUES ("1");
@@ -12473,17 +12512,7 @@ END DO)",
         }
 
         {
-            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
-                AS DO BEGIN
-                    INSERT INTO MySource.MyTopic SELECT * FROM `MyFolder/MyTable`;
-                END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Reading from YDB tables is not supported now for streaming queries");
-        }
-
-        {
-            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"()
                 AS DO BEGIN
                     SELECT 42;
                 END DO)",
@@ -12493,7 +12522,7 @@ END DO)",
         }
 
         {
-            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"()
                 AS DO BEGIN
                     INSERT INTO `MyFolder/MyTable` (Key) VALUES ("1");
                 END DO)",
@@ -12503,7 +12532,7 @@ END DO)",
         }
 
         {
-            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"()
                 AS DO BEGIN
                     CREATE TABLE `MyFolder/OtherTable` (
                         Key Int32 NOT NULL,
@@ -12516,7 +12545,7 @@ END DO)",
         }
 
         {
-            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"()
                 AS DO BEGIN
                     INSERT INTO MyTable (Key) VALUES ("1")
                 END DO)",
@@ -12526,13 +12555,103 @@ END DO)",
         }
 
         {
-            const auto result = db.ExecuteQuery(TStringBuilder() << "$x = \"str\";" << prefix << R"(
+            const auto result = db.ExecuteQuery(TStringBuilder() << "$x = \"str\";" << prefix << R"()
                 AS DO BEGIN
                     INSERT INTO MySource.MyTopic SELECT Data || $x FROM MySource.MyTopic
                 END DO)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown name: $x");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(,
+                    RUN = TRUE,
+                    RUN = FALSE,
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Found duplicated parameter: RUN");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(,
+                    PROPERTY_A = (
+                        PROPERTY_B = C
+                    )
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: property_a.property_b");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(,
+                    STREAMING_DISPOSITION = SOME_VALUE
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid value for streaming_disposition: 'some_value'");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(,
+                    STREAMING_DISPOSITION = (
+                        FROM_TIME = "2025-05-04T11:30:34.336938Z",
+                        TIME_AGO = "PT1H",
+                    )
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid value for streaming_disposition: properties 'from_time' and 'time_ago' are mutually exclusive");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(,
+                    STREAMING_DISPOSITION = (
+                        FROM_TIME = "some_value"
+                    )
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid value for streaming_disposition: property 'from_time' is not a valid ISO 8601 timestamp: 'some_value'");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(,
+                    STREAMING_DISPOSITION = (
+                        TIME_AGO = "some_value"
+                    )
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid value for streaming_disposition: property 'time_ago' is not a valid ISO 8601 duration: 'some_value'");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(,
+                    STREAMING_DISPOSITION = (
+                        TIME_AGO = "PT1H",
+                        OTHER_PROPERTY = "some_value",
+                    )
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown streaming_disposition property: other_property");
         }
     }
 
@@ -12595,8 +12714,8 @@ END DO)",
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
         }
 
-        CheckStreamingQueryBodyValidation(*kikimr, "CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (RUN = FALSE) ");
-        CheckStreamingQueryBodyValidation(*kikimr, "CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (RUN = TRUE) ");
+        CheckStreamingQueryBodyValidation(*kikimr, "CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (RUN = FALSE ");
+        CheckStreamingQueryBodyValidation(*kikimr, "CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (RUN = TRUE ");
     }
 
     Y_UNIT_TEST(ParallelCreateStreamingQuery) {
@@ -12686,16 +12805,23 @@ END DO)",
         }
 
         {
-            const auto result = db.ExecuteQuery(R"(
+            const auto now = TInstant::Now();
+            const auto result = db.ExecuteQuery(TStringBuilder() << R"(
                 ALTER STREAMING QUERY `MyFolder/MyStreamingQuery` SET (
-                    RESOURCE_POOL = "other_pool"
+                    RESOURCE_POOL = "other_pool",
+                    STREAMING_DISPOSITION = (
+                        FROM_TIME = ")" << now.ToString() << R"("
+                    ),
                 );)",
                 NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
+            NYql::NPq::NProto::StreamingDisposition disposition;
+            *disposition.mutable_from_time()->mutable_timestamp() = NProtoInterop::CastToProto(now);
             CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
                 {"run", "false"},
                 {"resource_pool", "other_pool"},
+                {"streaming_disposition", disposition.SerializeAsString()},
                 {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
             });
         }
@@ -12770,8 +12896,8 @@ END DO)",
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
         }
 
-        CheckStreamingQueryBodyValidation(*kikimr, "ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (FORCE = TRUE, RUN = FALSE) ");
-        CheckStreamingQueryBodyValidation(*kikimr, "ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (FORCE = TRUE, RUN = TRUE) ");
+        CheckStreamingQueryBodyValidation(*kikimr, "ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (FORCE = TRUE, RUN = FALSE ");
+        CheckStreamingQueryBodyValidation(*kikimr, "ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (FORCE = TRUE, RUN = TRUE ");
     }
 
     Y_UNIT_TEST(ParallelAlterStreamingQuery) {
@@ -13417,6 +13543,22 @@ END DO)",
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(SimpleTruncateTableFullPathTableClient) {
+        TestTruncateTable("`/Root/TestTable`", false);
+    }
+
+    Y_UNIT_TEST(SimpleTruncateTableNameOnlyTableClient) {
+        TestTruncateTable("TestTable", false);
+    }
+
+    Y_UNIT_TEST(SimpleTruncateTableFullPathQueryClient) {
+        TestTruncateTable("`/Root/TestTable`", true);
+    }
+
+    Y_UNIT_TEST(SimpleTruncateTableNameOnlyQueryClient) {
+        TestTruncateTable("TestTable", true);
     }
 }
 
@@ -14977,43 +15119,6 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
             tableInserter.AddRow().Add(1).AddNull().Add(jsonString);
             tableInserter.AddRow().Add(2).Add(jsonString).Add(jsonBin);
             testHelper.BulkUpsert(testTable, tableInserter);
-        }
-    }
-
-    Y_UNIT_TEST(SimpleTruncateTable) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        {
-            auto result = session.ExecuteSchemeQuery(R"(
-                CREATE TABLE `/Root/TestTable` (
-                    k Uint32,
-                    v String,
-                    PRIMARY KEY(k)
-                );
-            )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            auto result = session.ExecuteDataQuery(R"(
-                UPSERT INTO `/Root/TestTable` (k, v) VALUES
-                    (1, "Hello1"),
-                    (2, "Hello2"),
-                    (3, "Hello3"),
-                    (4, "Hello4");
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        }
-
-        {
-            auto result = session.ExecuteSchemeQuery(R"(
-                TRUNCATE TABLE `/Root/TestTable`;
-            )").ExtractValueSync();
-
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: Truncate table not supported yet");
         }
     }
 }

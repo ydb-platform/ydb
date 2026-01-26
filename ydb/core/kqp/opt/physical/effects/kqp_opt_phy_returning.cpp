@@ -237,6 +237,7 @@ TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKq
             .Table(upsert.Table())
             .Columns(upsert.Columns())
             .IsBatch(upsert.IsBatch())
+            .DefaultColumns(upsert.DefaultColumns())
             .Settings(upsert.Settings())
             .ReturningColumns(upsert.ReturningColumns())
             .Done();

@@ -99,7 +99,7 @@ public:
     explicit TFiberMessageTagGuard(std::string messageTag);
 
     // For use with std::optional in tests.
-    TFiberMessageTagGuard(TFiberMessageTagGuard&& other);
+    TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noexcept;
     TFiberMessageTagGuard& operator=(TFiberMessageTagGuard&& other) = delete;
 
     ~TFiberMessageTagGuard();

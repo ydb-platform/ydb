@@ -163,6 +163,9 @@ namespace NKikimr::NBsController {
         auto &storagePools = StoragePools.Unshare();
         if (const auto [spIt, inserted] = storagePools.try_emplace(id, std::move(storagePool)); !inserted) {
             TStoragePoolInfo& cur = spIt->second;
+            if (cur.DDisk) {
+                throw TExError() << "can't invoke DefineStoragePool against DDisk pool";
+            }
             if (cur.SchemeshardId != storagePool.SchemeshardId || cur.PathItemId != storagePool.PathItemId) {
                 for (auto it = r.first; it != r.second; ++it) {
                     GroupContentChanged.insert(it->second);
@@ -208,6 +211,9 @@ namespace NKikimr::NBsController {
         // iterate through subset and add only requested entities
         const auto &storagePools = StoragePools.Get();
         for (auto it = storagePools.lower_bound(since); it != storagePools.end() && it->first <= till; ++it) {
+            if (it->second.DDisk) {
+                continue; // skip DDisk pool
+            }
             if ((!storagePoolIds || storagePoolIds.contains(it->first)) && (!nameSet || nameSet.contains(it->second.Name))) {
                 Serialize(status.AddStoragePool(), it->first, it->second);
             }
@@ -218,8 +224,11 @@ namespace NKikimr::NBsController {
         const TBoxStoragePoolId id(cmd.GetBoxId(), cmd.GetStoragePoolId());
         CheckGeneration(cmd, StoragePools.Get(), id);
         auto &storagePools = StoragePools.Unshare();
-        if (!storagePools.erase(id)) {
+        const auto it = storagePools.find(id);
+        if (it == storagePools.end()) {
             throw TExError() << "StoragePoolId# " << id << " not found";
+        } else if (it->second.DDisk) {
+            throw TExError() << "can't invoke DeleteStoragePool against DDisk pool";
         }
 
         auto &storagePoolGroups = StoragePoolGroups.Unshare();
@@ -238,7 +247,7 @@ namespace NKikimr::NBsController {
         storagePoolGroups.erase(range.first, range.second);
     }
 
-    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& /*cmd*/,TStatus& status) {
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& /*cmd*/, TStatus& status) {
         // first, scan through all existing groups that are not defined as a part of storage pools and check
         // their respective VDisks; as a first step, prepare set of groups inside storage pools
         THashSet<TGroupId> storagePoolGroups;
@@ -425,6 +434,10 @@ namespace NKikimr::NBsController {
         TStoragePoolInfo& origin = getPool(originId, cmd.GetOriginStoragePoolGeneration(), "origin");
         TStoragePoolInfo& target = getPool(targetId, cmd.GetTargetStoragePoolGeneration(), "target");
 
+        if (origin.DDisk || target.DDisk) {
+            throw TExError() << "can't move groups between DDisk pools";
+        }
+
         auto& storagePoolGroups = StoragePoolGroups.Unshare();
 
         // create a list of groups to be moved
@@ -471,6 +484,9 @@ namespace NKikimr::NBsController {
         const TBoxStoragePoolId poolId(cmd.GetBoxId(), cmd.GetStoragePoolId());
 
         if (auto it = storagePools.find(poolId); it != storagePools.end()) {
+            if (it->second.DDisk) {
+                throw TExError() << "can't invoke ChangeGroupSizeInUnits against DDisk pool";
+            }
             const ui64 nextGen = CheckGeneration(cmd, storagePools, poolId);
             it->second.Generation = nextGen;
         } else {
@@ -616,8 +632,6 @@ namespace NKikimr::NBsController {
                     x->SetDriveStatus(NKikimrBlobStorage::EDriveStatus::ACTIVE);
                     x->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
                     x->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE);
-                    x->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
-                    x->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
                     if (pdisk.PDiskMetrics) {
                         x->MutablePDiskMetrics()->CopyFrom(*pdisk.PDiskMetrics);
                         x->MutablePDiskMetrics()->ClearPDiskId();

@@ -45,6 +45,7 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/tasks
     ydb/library/yql/providers/common/http_gateway
+    ydb/library/yql/providers/pq/proto
     ydb/services/metadata/abstract
 )
 

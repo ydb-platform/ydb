@@ -1,5 +1,7 @@
 #include "sqs_workload_clean_scenario.h"
 
+#include <ydb/public/lib/ydb_cli/common/log.h>
+
 #include <aws/sqs/model/DeleteQueueRequest.h>
 #include <aws/sqs/model/GetQueueUrlRequest.h>
 
@@ -10,7 +12,7 @@ namespace NYdb::NConsoleClient {
             config, std::unique_ptr<TLogBackend>(
                         CreateLogBackend(
                             "cerr",
-                            TClientCommand::TConfig::VerbosityLevelToELogPriority(
+                            VerbosityLevelToELogPriority(
                                 config.VerbosityLevel))
                             .Release())));
 

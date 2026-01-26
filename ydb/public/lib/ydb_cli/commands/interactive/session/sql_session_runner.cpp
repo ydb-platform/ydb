@@ -2,6 +2,7 @@
 #include "session_runner_common.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/config_ui.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/ftxui.h>
@@ -74,8 +75,8 @@ class TSqlSessionRunner final : public TSessionRunnerBase, public TInterruptable
     };
 
 public:
-    TSqlSessionRunner(const TSqlSessionSettings& settings, const TInteractiveLogger& log)
-        : TBase(CreateSessionSettings(settings), log)
+    explicit TSqlSessionRunner(const TSqlSessionSettings& settings)
+        : TBase(CreateSessionSettings(settings))
         , QueryPlanPrinter(EDataFormat::Default)
         , ExplainRunner(settings.Driver)
         , ExecuteRunner(settings.Driver)
@@ -89,6 +90,14 @@ public:
             Cout << Endl;
             PrintFtxuiMessage(CreateHelpMessage(EnableAiInteractive), "YDB CLI Interactive Mode – Hotkeys and Special Commands", ftxui::Color::White);
             Cout << Endl;
+            return;
+        }
+
+        if (to_lower(line) == "/config") {
+            TConfigUI::TContext ctx{
+                .LineReader = LineReader,
+            };
+            TConfigUI::Run(ctx);
             return;
         }
 
@@ -175,6 +184,9 @@ private:
 
         elements.emplace_back(text(""));
         elements.emplace_back(CreateEntityName("Interactive Commands:"));
+        elements.emplace_back(CreateListItem(hbox({
+            CreateEntityName("/config"), text(": change interactive mode settings (hints, color theme, colors mode).")
+        })));
         PrintCommonInteractiveCommands(elements);
 
         return vbox(elements);
@@ -192,7 +204,7 @@ private:
             .Database = settings.Database,
             .Prompt = TStringBuilder() << TInteractiveConfigurationManager::ModeToString(TInteractiveConfigurationManager::EMode::YQL) << "> ",
             .HistoryFilePath = TFsPath(HomeDir) / ".ydb_history",
-            .AdditionalCommands = {"/help"},
+            .AdditionalCommands = {"/help", "/config"},
             .Placeholder = placeholder,
             .EnableSwitchMode = settings.EnableAiInteractive,
         };
@@ -239,8 +251,8 @@ private:
 
 } // anonymous namespace
 
-ISessionRunner::TPtr CreateSqlSessionRunner(const TSqlSessionSettings& settings, const TInteractiveLogger& log) {
-    return std::make_shared<TSqlSessionRunner>(settings, log);
+ISessionRunner::TPtr CreateSqlSessionRunner(const TSqlSessionSettings& settings) {
+    return std::make_shared<TSqlSessionRunner>(settings);
 }
 
 } // namespace NYdb::NConsoleClient

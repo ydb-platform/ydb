@@ -694,6 +694,11 @@ namespace {
             }
         }
 
+        void CheckPathWithChecksum(const TString& path) {
+            UNIT_ASSERT(HasS3File(path));
+            UNIT_ASSERT(HasS3File(path + ".sha256"));
+        }
+
         void TestReplication(const TString& scheme, const TString& expected) {
             auto options = TTestEnvOptions()
                 .InitYdbDriver(true);
@@ -719,13 +724,13 @@ namespace {
 
             TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-            UNIT_ASSERT(HasS3File("/Replication/create_async_replication.sql"));
+            CheckPathWithChecksum("/Replication/create_async_replication.sql");
             const auto content = GetS3FileContent("/Replication/create_async_replication.sql");
             UNIT_ASSERT_EQUAL_C(
                 content, expected,
                 TStringBuilder() << "\nExpected:\n\n" << expected << "\n\nActual:\n\n" << content);
 
-            UNIT_ASSERT(HasS3File("/Replication/permissions.pb"));
+            CheckPathWithChecksum("/Replication/permissions.pb");
             const auto permissions = GetS3FileContent("/Replication/permissions.pb");
             const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
             UNIT_ASSERT_EQUAL_C(
@@ -771,13 +776,13 @@ namespace {
 
             TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-            UNIT_ASSERT(HasS3File("/Transfer/create_transfer.sql"));
+            CheckPathWithChecksum("/Transfer/create_transfer.sql");
             const auto content = GetS3FileContent("/Transfer/create_transfer.sql");
             UNIT_ASSERT_EQUAL_C(
                 content, expected,
                 TStringBuilder() << "\nExpected:\n\n" << expected << "\n\nActual:\n\n" << content);
 
-            UNIT_ASSERT(HasS3File("/Transfer/permissions.pb"));
+            CheckPathWithChecksum("/Transfer/permissions.pb");
             const auto permissions = GetS3FileContent("/Transfer/permissions.pb");
             const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
             UNIT_ASSERT_EQUAL_C(
@@ -812,7 +817,7 @@ namespace {
 
             TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
-            UNIT_ASSERT(HasS3File("/DataSource/create_external_data_source.sql"));
+            CheckPathWithChecksum("/DataSource/create_external_data_source.sql");
             const auto content = GetS3FileContent("/DataSource/create_external_data_source.sql");
 
             TString expectedHeader = "-- database: \"/MyRoot\"\n"
@@ -835,8 +840,79 @@ namespace {
                 static_cast<long>(expectedProperties.size()) - 1,
                 "Properties count mismatch");
 
-            UNIT_ASSERT(HasS3File("/DataSource/permissions.pb"));
+            CheckPathWithChecksum("/DataSource/permissions.pb");
             const auto permissions = GetS3FileContent("/DataSource/permissions.pb");
+            const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
+            UNIT_ASSERT_EQUAL_C(
+                permissions, permissions_expected,
+                TStringBuilder() << "\nExpected:\n\n" << permissions_expected << "\n\nActual:\n\n" << permissions);
+        }
+
+        void TestExternalTable(
+            const TString& scheme,
+            const TString& expectedStartsWith,
+            const TVector<TString>& expectedProperties)
+        {
+            Env();
+            ui64 txId = 100;
+
+            const auto dataSourceScheme = R"(
+                Name: "DataSource"
+                SourceType: "ObjectStorage"
+                Location: "https://s3.cloud.net/bucket"
+                Auth {
+                    Aws {
+                        AwsAccessKeyIdSecretName: "id_secret",
+                        AwsSecretAccessKeySecretName: "access_secret"
+                        AwsRegion: "ru-central-1"
+                    }
+                }
+            )";
+
+            TestCreateExternalDataSource(Runtime(), ++txId, "/MyRoot", dataSourceScheme);
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TestCreateExternalTable(Runtime(), ++txId, "/MyRoot", scheme);
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TString request = Sprintf(R"(
+                ExportToS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items {
+                        source_path: "/MyRoot/ExternalTable"
+                        destination_prefix: "ExternalTable"
+                    }
+                }
+            )", S3Port());
+
+            TestExport(Runtime(), ++txId, "/MyRoot", request);
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            CheckPathWithChecksum("/ExternalTable/create_external_table.sql");
+            const auto content = GetS3FileContent("/ExternalTable/create_external_table.sql");
+
+            UNIT_ASSERT_C(content.find(expectedStartsWith) != TString::npos,
+                TStringBuilder() << "\nExpected query to start with:\n\n"
+                    << expectedStartsWith << "\n\nActual query:\n\n" << content);
+
+            // Check if all expected properties are presented
+            for (const auto& property : expectedProperties) {
+                UNIT_ASSERT_C(content.find(property) != TString::npos,
+                    TStringBuilder() << "Property not found:\n"
+                    << "\nExpected property:\n\n" << property << "\n\nActual query:\n\n" << content);
+            }
+
+            // Check if no other properties are presented
+            UNIT_ASSERT_EQUAL_C(
+                std::ranges::count(content, '='),
+                static_cast<long>(expectedProperties.size()),
+                TStringBuilder() << "Properties count mismatch: ");
+
+            CheckPathWithChecksum("/ExternalTable/permissions.pb");
+            const auto permissions = GetS3FileContent("/ExternalTable/permissions.pb");
             const auto permissions_expected = "actions {\n  change_owner: \"root@builtin\"\n}\n";
             UNIT_ASSERT_EQUAL_C(
                 permissions, permissions_expected,
@@ -2764,6 +2840,10 @@ attributes {
   key: "_message_group_seqno_retention_period_ms"
   value: "1382400000"
 }
+attributes {
+  key: "_timestamp_type"
+  value: "CreateTime"
+}
 )", i));
 
                 const auto* changefeedChecksum = S3Mock.GetData().FindPtr(changefeedDir + "/changefeed_description.pb.sha256");
@@ -3832,6 +3912,33 @@ WITH (
         };
 
         TestExternalDataSource(scheme, expectedProperties);
+    }
+
+    Y_UNIT_TEST(ExternalTable) {
+        TString scheme = R"(
+            Name: "ExternalTable"
+            SourceType: "General"
+            DataSourcePath: "/MyRoot/DataSource"
+            Location: "bucket"
+            Columns { Name: "key" Type: "Uint64" NotNull: true }
+            Columns { Name: "value1" Type: "Uint64" }
+            Columns { Name: "value2" Type: "Utf8" NotNull: true }
+        )";
+
+        TString expectedStartsWith = R"(-- database: "/MyRoot"
+-- backup root: "/MyRoot"
+CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
+      key Uint64 NOT NULL,
+    value1 Uint64?,
+    value2 Utf8 NOT NULL
+) WITH ()";
+
+        TVector<TString> expectedProperties = {
+            "DATA_SOURCE = '/MyRoot/DataSource'",
+            "LOCATION = 'bucket'"
+        };
+
+        TestExternalTable(scheme, expectedStartsWith, expectedProperties);
     }
 
 }

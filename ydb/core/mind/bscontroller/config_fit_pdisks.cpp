@@ -25,8 +25,6 @@ namespace NKikimr {
             bool ReadCentric = false;
             TPDiskCategory PDiskCategory = {};
             TString PDiskConfig;
-            ui64 InferPDiskSlotCountFromUnitSize = 0;
-            ui32 InferPDiskSlotCountMax = 0;
 
             TDiskId GetId() const {
                 return {NodeId, Path};
@@ -74,9 +72,7 @@ namespace NKikimr {
                 pdiskInfo->SharedWithOs != disk.SharedWithOs ||
                 pdiskInfo->ReadCentric != disk.ReadCentric ||
                 pdiskInfo->BoxId != disk.BoxId ||
-                pdiskInfo->PDiskConfig != disk.PDiskConfig ||
-                pdiskInfo->InferPDiskSlotCountFromUnitSize != disk.InferPDiskSlotCountFromUnitSize ||
-                pdiskInfo->InferPDiskSlotCountMax != disk.InferPDiskSlotCountMax)
+                pdiskInfo->PDiskConfig != disk.PDiskConfig)
             {
                 // update PDisk configuration
                 auto pdiskInfo = state.PDisks.FindForUpdate(pdiskId);
@@ -85,19 +81,21 @@ namespace NKikimr {
                 pdiskInfo->SharedWithOs = disk.SharedWithOs;
                 pdiskInfo->ReadCentric = disk.ReadCentric;
                 pdiskInfo->BoxId = disk.BoxId;
-                if (pdiskInfo->PDiskConfig != disk.PDiskConfig
-                        || pdiskInfo->InferPDiskSlotCountFromUnitSize != disk.InferPDiskSlotCountFromUnitSize
-                        || pdiskInfo->InferPDiskSlotCountMax != disk.InferPDiskSlotCountMax) {
+                if (pdiskInfo->PDiskConfig != disk.PDiskConfig) {
                     const std::optional<TBlobStorageController::TStaticPDiskInfo> staticPDisk = FindStaticPDisk(disk, state).transform(
                         [&](TPDiskId id) {return state.StaticPDisks.at(id);});
-                    if (staticPDisk && (staticPDisk->PDiskConfig != disk.PDiskConfig
-                            || staticPDisk->InferPDiskSlotCountFromUnitSize != disk.InferPDiskSlotCountFromUnitSize
-                            || staticPDisk->InferPDiskSlotCountMax != disk.InferPDiskSlotCountMax)) {
-                        throw TExError() << "PDiskConfig mismatch for static disk" << TErrorParams::NodeId(disk.NodeId) << TErrorParams::Path(disk.Path);
+                    if (staticPDisk && staticPDisk->PDiskConfig != disk.PDiskConfig) {
+                        throw TExError() << "PDiskConfig mismatch for static disk"
+                            << " Expected# {"
+                                << " PDiskConfig# { " << FormatPDiskConfig(staticPDisk->PDiskConfig) << " }"
+                            << " }"
+                            << " Provided# {"
+                                << " PDiskConfig# { " << FormatPDiskConfig(disk.PDiskConfig) << " }"
+                            << " }"
+                            << TErrorParams::NodeId(disk.NodeId)
+                            << TErrorParams::Path(disk.Path);
                     } else {
                         pdiskInfo->PDiskConfig = disk.PDiskConfig;
-                        pdiskInfo->InferPDiskSlotCountFromUnitSize = disk.InferPDiskSlotCountFromUnitSize;
-                        pdiskInfo->InferPDiskSlotCountMax = disk.InferPDiskSlotCountMax;
                     }
                 }
                 // run ExtractConfig as the very last step
@@ -190,8 +188,6 @@ namespace NKikimr {
                         disk.ReadCentric = driveInfo.ReadCentric;
                         disk.Serial = serial;
                         disk.SharedWithOs = driveInfo.SharedWithOs;
-                        disk.InferPDiskSlotCountFromUnitSize = driveInfo.InferPDiskSlotCountFromUnitSize;
-                        disk.InferPDiskSlotCountMax = driveInfo.InferPDiskSlotCountMax;
 
                         auto diskId = disk.GetId();
                         auto [_, inserted] = disks.try_emplace(diskId, std::move(disk));
@@ -347,9 +343,7 @@ namespace NKikimr {
                             NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE, NBsController::TPDiskMood::Normal,
                             disk.Serial, disk.LastSeenSerial, disk.LastSeenPath, staticSlotUsage,
                             true /* assume shred completed for this disk */,
-                            NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST,
-                            disk.InferPDiskSlotCountFromUnitSize,
-                            disk.InferPDiskSlotCountMax);
+                            NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
 
                     // Preserve metrics from static PDisk
                     if (staticMetrics) {

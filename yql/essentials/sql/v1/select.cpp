@@ -469,7 +469,7 @@ protected:
 
 class IRealSource: public ISource {
 protected:
-    IRealSource(TPosition pos)
+    explicit IRealSource(TPosition pos)
         : ISource(pos)
     {
     }
@@ -783,7 +783,7 @@ bool IsYqlSubqueryRef(const TNodePtr& source) {
 
 class TInvalidSubqueryRefNode: public ISource {
 public:
-    TInvalidSubqueryRefNode(TPosition pos)
+    explicit TInvalidSubqueryRefNode(TPosition pos)
         : ISource(pos)
         , Pos_(pos)
     {
@@ -3263,7 +3263,7 @@ TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake) {
 
 class TAnyColumnSource final: public ISource {
 public:
-    TAnyColumnSource(TPosition pos)
+    explicit TAnyColumnSource(TPosition pos)
         : ISource(pos)
     {
     }

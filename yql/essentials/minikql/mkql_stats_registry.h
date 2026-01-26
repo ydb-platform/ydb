@@ -113,7 +113,7 @@ IStatsRegistryPtr CreateDefaultStatsRegistry();
 
 class TStatTimerBase {
 public:
-    TStatTimerBase(const TStatKey& key)
+    explicit TStatTimerBase(const TStatKey& key)
         : Key_(key)
         , Total_(0)
         , Start_(0)
@@ -137,7 +137,7 @@ protected:
 
 class TStatTimer: public TStatTimerBase {
 public:
-    TStatTimer(const TStatKey& key)
+    explicit TStatTimer(const TStatKey& key)
         : TStatTimerBase(key)
     {
     }
@@ -153,7 +153,7 @@ public:
 
 class TSamplingStatTimer: public TStatTimerBase {
 public:
-    TSamplingStatTimer(const TStatKey& key, ui64 frequency = 100)
+    explicit TSamplingStatTimer(const TStatKey& key, ui64 frequency = 100)
         : TStatTimerBase(key)
         , Frequency_(frequency)
     {

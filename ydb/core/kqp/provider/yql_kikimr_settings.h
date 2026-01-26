@@ -66,6 +66,7 @@ public:
 
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
     NCommon::TConfSetting<bool, Static> UseDqHashAggregate;
+    NCommon::TConfSetting<bool, Static> DqHashOperatorsUseBlocks;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
     NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
@@ -84,6 +85,8 @@ public:
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationForAggregation;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
+    NCommon::TConfSetting<bool, Static> OptDisallowFuseJoins;
+    NCommon::TConfSetting<bool, Static> OptCreateStageForAggregation;
 
     // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
     NCommon::TConfSetting<TString, Static> CostBasedOptimization;
@@ -205,6 +208,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableOlapPushdownAggregate() const;
     bool GetUseDqHashCombine() const;
     bool GetUseDqHashAggregate() const;
+    bool GetDqHashOperatorsUseBlocks() const;
 };
 
 }

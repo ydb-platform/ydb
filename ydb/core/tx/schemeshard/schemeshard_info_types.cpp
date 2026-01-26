@@ -785,10 +785,12 @@ void TTableInfo::GetIndexObjectCount(const NKikimrSchemeOp::TIndexCreationConfig
             sequenceCount = (prefixVectorIndex ? 1 : 0);
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-            bool withRelevance = indexDesc.GetFulltextIndexDescription().GetSettings()
-                .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
-            indexTableCount = (withRelevance ? 4 : 1);
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+            indexTableCount = 1;
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+            indexTableCount = 4;
             break;
         }
         default:

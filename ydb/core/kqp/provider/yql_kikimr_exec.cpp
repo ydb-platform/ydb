@@ -1598,6 +1598,12 @@ public:
         }
 
         if (auto maybeTruncateTable = TMaybeNode<TKiTruncateTable>(input)) {
+            if (!SessionCtx->Config().FeatureFlags.GetEnableTruncateTable()) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                    TStringBuilder() << "TRUNCATE TABLE statement is disabled. Please contact your system administrator to enable it"));
+                return SyncError();
+            }
+
             auto requireStatus = RequireChild(*input, TKiExecDataQuery::idx_World);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -2104,19 +2110,21 @@ public:
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {
-                                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
-                                        TStringBuilder() << "Vector index support is disabled"));
-                                    return SyncError();
-                                }
                                 add_index->mutable_global_vector_kmeans_tree_index();
-                            } else if (type == "globalFulltext") {
+                            } else if (type == "globalFulltextPlain") {
                                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                                     ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                         TStringBuilder() << "Fulltext index support is disabled"));
                                     return SyncError();
                                 }
-                                add_index->mutable_global_fulltext_index();
+                                add_index->mutable_global_fulltext_plain_index();
+                            } else if (type == "globalFulltextRelevance") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Fulltext index support is disabled"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_global_fulltext_relevance_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -2149,9 +2157,14 @@ public:
                                 }
                             }
                         } else if (name == "indexSettings") {
-                            if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextIndex) {
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextPlainIndex) {
                                 // fulltext index has per-column analyzers settings, single value for now
-                                add_index->mutable_global_fulltext_index()->mutable_fulltext_settings()->add_columns()->set_column(
+                                add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings()->add_columns()->set_column(
+                                    add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
+                                );
+                            } else if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex) {
+                                // fulltext index has per-column analyzers settings, single value for now
+                                add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings()->add_columns()->set_column(
                                     add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
                                 );
                             }
@@ -2169,9 +2182,15 @@ public:
                                             name.StringValue(), value.StringValue(), error);
                                         break;
                                     }
-                                    case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
+                                    case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
                                         NKikimr::NFulltext::FillSetting(
-                                            *add_index->mutable_global_fulltext_index()->mutable_fulltext_settings(),
+                                            *add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings(),
+                                            name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
+                                    case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+                                        NKikimr::NFulltext::FillSetting(
+                                            *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
                                             name.StringValue(), value.StringValue(), error);
                                         break;
                                     }
@@ -2216,9 +2235,21 @@ public:
                             }
                             break;
                         }
-                        case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
+                        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
+                            // Set layout based on index type
+                            add_index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
                             TString error;
-                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_index().fulltext_settings(), error)) {
+                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_plain_index().fulltext_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+                            // Set layout based on index type
+                            add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings()->set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
+                            TString error;
+                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_relevance_index().fulltext_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
                                 return SyncError();
                             }

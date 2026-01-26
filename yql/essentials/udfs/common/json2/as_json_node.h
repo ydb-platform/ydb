@@ -16,7 +16,7 @@ using namespace NDom;
 template <typename TSource>
 class TAsJsonNode: public TBoxedValue {
 public:
-    TAsJsonNode(TSourcePosition pos)
+    explicit TAsJsonNode(TSourcePosition pos)
         : Pos_(pos)
     {
     }

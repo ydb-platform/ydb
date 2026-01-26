@@ -70,10 +70,17 @@ using TASessionClosedEvent = std::conditional_t<UseMigrationProtocol,
     NYdb::NPersQueue::TSessionClosedEvent,
     NYdb::NTopic::TSessionClosedEvent>;
 
+struct TMigrationPartitionStream: public NYdb::NPersQueue::TPartitionStream {
+    virtual void Commit(uint64_t startOffset, uint64_t endOffset) = 0;
+    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) = 0;
+    virtual void ConfirmDestroy() = 0;
+    virtual void ConfirmEnd(std::span<const uint32_t> childIds) = 0;
+};
+
 template <bool UseMigrationProtocol>
 using TAPartitionStream = std::conditional_t<UseMigrationProtocol,
-    NYdb::NPersQueue::TPartitionStream,
-    NYdb::NTopic::TPartitionSession>;
+    TMigrationPartitionStream,
+    NYdb::NTopic::TPartitionSessionControl>;
 
 template <bool UseMigrationProtocol>
 using TAReadSessionEvent = std::conditional_t<UseMigrationProtocol,
@@ -684,12 +691,12 @@ public:
         TAPartitionStream<false>::LastDirectReadId = id;
     }
 
-    void Commit(ui64 startOffset, ui64 endOffset) /*override*/;
+    void Commit(uint64_t startOffset, uint64_t endOffset) override;
     void RequestStatus() override;
 
-    void ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset);
-    void ConfirmDestroy();
-    void ConfirmEnd(const std::vector<ui32>& childIds);
+    void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) override;
+    void ConfirmDestroy() override;
+    void ConfirmEnd(std::span<const uint32_t> childIds) override;
 
     void StopReading() /*override*/;
     void ResumeReading() /*override*/;
@@ -1163,7 +1170,7 @@ public:
     void Start();
     void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, std::optional<ui64> readOffset, std::optional<ui64> commitOffset);
     void ConfirmPartitionStreamDestroy(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
-    void ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds);
+    void ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, std::span<const ui32> childIds);
     void RequestPartitionStreamStatus(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
     void Commit(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, ui64 startOffset, ui64 endOffset);
 

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.148.8)
+VERSION(6.150.0)
 
 LICENSE(MPL-2.0)
 
@@ -119,6 +119,7 @@ PY_SRCS(
     hypothesis/strategies/_internal/utils.py
     hypothesis/utils/__init__.py
     hypothesis/utils/conventions.py
+    hypothesis/utils/deprecation.py
     hypothesis/utils/dynamicvariables.py
     hypothesis/utils/terminal.py
     hypothesis/utils/threading.py

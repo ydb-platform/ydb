@@ -576,6 +576,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"ListFromRange", &TProgramBuilder::ListFromRange},
 
         {"PreserveStream", &TProgramBuilder::PreserveStream},
+        {"WinFramesCollector", &TProgramBuilder::WinFramesCollector},
 
         {"BlockIf", &TProgramBuilder::BlockIf},
     });
@@ -760,6 +761,23 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return ctx.ProgramBuilder.WideLastCombinerWithSpilling(flow, keyExtractor, init, update, finish);
         }
         return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
+    });
+
+    AddCallable("WinFrame", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto queue = MkqlBuildExpr(*node.Child(0), ctx);
+        auto handle = MkqlBuildExpr(*node.Child(1), ctx);
+        auto isIncremental = MkqlBuildExpr(*node.Child(2), ctx);
+        auto isRange = MkqlBuildExpr(*node.Child(3), ctx);
+        auto isSingleElement = MkqlBuildExpr(*node.Child(4), ctx);
+        const auto& args = GetArgumentsFrom<5U>(node, ctx);
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
+        return ctx.ProgramBuilder.WinFrame(queue,
+                                           handle,
+                                           isIncremental,
+                                           isRange,
+                                           isSingleElement,
+                                           args,
+                                           returnType);
     });
 
     AddCallable("WideChopper", [](const TExprNode& node, TMkqlBuildContext& ctx) {

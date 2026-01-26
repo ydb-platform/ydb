@@ -178,6 +178,9 @@ struct TReplicationReaderConfig
     //! Enable fetching blocks from peers suggested by seeds.
     bool FetchFromPeers;
 
+    //! Enable fetching node descriptors from seeds.
+    bool FetchNodeDescriptors;
+
     //! Timeout after which a node forgets about the peer.
     //! Only makes sense if the reader is equipped with peer descriptor.
     TDuration PeerExpirationTimeout;

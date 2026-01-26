@@ -345,7 +345,7 @@ std::optional<std::map<std::string, TType>> TYqlParamParser::GetParamTypes(const
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
 
-    auto lexer = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true);
+    auto lexer = MakeLexer(lexers, /* ansi = */ false);
 
     TVector<NSQLTranslation::TParsedToken> tokens;
     NYql::TIssues issues;
@@ -357,19 +357,19 @@ std::optional<std::map<std::string, TType>> TYqlParamParser::GetParamTypes(const
     EParseState state = EParseState::Start;
     TString paramName;
 
-    for (size_t i = 0; i < tokens.size(); ++i) {      
+    for (size_t i = 0; i < tokens.size(); ++i) {
         if (tokens[i].Name == "WS") {
             continue;
         }
 
         if (state == EParseState::Start) {
             if (ToLower(tokens[i].Content) != "declare") {
-                continue;   
+                continue;
             }
 
             state = EParseState::Declare;
         } else if (state == EParseState::Declare) {
-            if (tokens[i].Content != "$") { 
+            if (tokens[i].Content != "$") {
                 return std::nullopt;
             }
 

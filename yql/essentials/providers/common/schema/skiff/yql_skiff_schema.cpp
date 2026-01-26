@@ -14,7 +14,7 @@ namespace NCommon {
 struct TSkiffTypeLoader {
     typedef NYT::TNode TType;
 
-    TSkiffTypeLoader(ui64 nativeYTTypesFlags)
+    explicit TSkiffTypeLoader(ui64 nativeYTTypesFlags)
         : NativeYTTypesFlags(nativeYTTypesFlags)
     {
     }

@@ -14,9 +14,9 @@
 
 import json
 import os
+from unittest import mock
 import warnings
 
-import mock
 import pytest  # type: ignore
 
 from google.auth import _default
@@ -155,9 +155,11 @@ IMPERSONATED_SERVICE_ACCOUNT_SERVICE_ACCOUNT_SOURCE_FILE = os.path.join(
     DATA_DIR, "impersonated_service_account_service_account_source.json"
 )
 
-IMPERSONATED_SERVICE_ACCOUNT_EXTERNAL_ACCOUNT_AUTHORIZED_USER_SOURCE_FILE = os.path.join(
-    DATA_DIR,
-    "impersonated_service_account_external_account_authorized_user_source.json",
+IMPERSONATED_SERVICE_ACCOUNT_EXTERNAL_ACCOUNT_AUTHORIZED_USER_SOURCE_FILE = (
+    os.path.join(
+        DATA_DIR,
+        "impersonated_service_account_external_account_authorized_user_source.json",
+    )
 )
 
 EXTERNAL_ACCOUNT_AUTHORIZED_USER_FILE = os.path.join(

@@ -149,7 +149,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
 
     Y_UNIT_TEST(BelongsToSubgroupBenchmark) {
         auto erasures = {TBlobStorageGroupType::ErasureNone,
-                TBlobStorageGroupType::ErasureMirror3,
                 TBlobStorageGroupType::Erasure4Plus2Block,
                 TBlobStorageGroupType::ErasureMirror3of4};
         for (auto erasure : erasures) {
@@ -207,10 +206,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
     }
 
     Y_UNIT_TEST(BasicChecks) {
-        for (auto erasure : {TBlobStorageGroupType::ErasureNone, TBlobStorageGroupType::ErasureMirror3,
-                TBlobStorageGroupType::Erasure3Plus1Block,
-                TBlobStorageGroupType::Erasure4Plus2Block, TBlobStorageGroupType::Erasure3Plus2Block,
-                TBlobStorageGroupType::ErasureMirror3Plus2}) {
+        for (auto erasure : {TBlobStorageGroupType::ErasureNone, TBlobStorageGroupType::Erasure4Plus2Block}) {
             auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(erasure, 3U, 8U, 1U);
             const ui32 blobSubgroupSize = groupInfo->Type.BlobSubgroupSize();
             TOriginalBlobStorageGroupInfo orig(blobSubgroupSize, *groupInfo);
@@ -225,7 +221,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
     }
 
     Y_UNIT_TEST(CheckCorrectBehaviourWithHashOverlow) {
-        auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(TErasureType::ErasureMirror3, 1U, 5U, 1U);
+        auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(TErasureType::Erasure4Plus2Block, 1U, 8U, 1U);
         const ui32 blobSubgroupSize = groupInfo->Type.BlobSubgroupSize();
         TOriginalBlobStorageGroupInfo orig(blobSubgroupSize, *groupInfo);
         TLogoBlobID id(4550843067551373890, 2564314201, 2840555155, 59, 0, 2230444);
@@ -233,7 +229,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
     }
 
     Y_UNIT_TEST(Mirror3dcMapper) {
-        auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3, 3U, 5U, 4U);
+        auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3dc, 3U, 5U, 4U);
 
         std::unique_ptr<IBlobToDiskMapper> mapper{IBlobToDiskMapper::CreateMirror3dcMapper(&groupInfo->GetTopology())};
 

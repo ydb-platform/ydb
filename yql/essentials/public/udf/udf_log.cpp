@@ -40,7 +40,7 @@ public:
 
 class TSynchronizedLogger: public ILogger {
 public:
-    TSynchronizedLogger(const TLoggerPtr& inner)
+    explicit TSynchronizedLogger(const TLoggerPtr& inner)
         : Inner_(inner)
     {
     }

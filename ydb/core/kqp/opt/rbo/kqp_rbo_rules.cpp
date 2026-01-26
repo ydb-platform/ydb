@@ -71,14 +71,24 @@ TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
     return TExprNode::TPtr();
 }
 
-TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> conjuncts, TExprContext &ctx, bool pgSyntax) {
+TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> filters, TVector<TJoinConditionInfo> conjuncts, TExprContext &ctx, bool pgSyntax) {
     auto arg = Build<TCoArgument>(ctx, pos).Name("lambda_arg").Done();
     TExprNode::TPtr lambda;
 
-    if (conjuncts.size() == 1) {
-        auto filterInfo = conjuncts[0];
-        auto body = ReplaceArg(filterInfo.FilterBody, arg.Ptr(), ctx);
-        if (pgSyntax && !filterInfo.FromPg) {
+    if (filters.size() + conjuncts.size() == 1) {
+        TExprNode::TPtr body;
+        bool fromPg = false;
+
+        if (filters.empty()) {
+            body = conjuncts[0].ConjunctExpr;
+            fromPg = false;            
+        } else {
+            body = filters[0].FilterBody;
+            fromPg = filters[0].FromPg;
+        }
+
+        body = ReplaceArg(body, arg.Ptr(), ctx);
+        if (pgSyntax && !fromPg) {
             body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
         }
 
@@ -91,9 +101,16 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
     } else {
         TVector<TExprNode::TPtr> newConjuncts;
 
-        for (auto c : conjuncts) {
-            auto body = ReplaceArg(c.FilterBody, arg.Ptr(), ctx);
-            if (pgSyntax && !c.FromPg) {
+        for (const auto & f : filters) {
+            auto body = ReplaceArg(f.FilterBody, arg.Ptr(), ctx);
+            if (pgSyntax && !f.FromPg) {
+                body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
+            }
+            newConjuncts.push_back(ReplaceArg(body, arg.Ptr(), ctx));
+        }
+        for (const auto & c : conjuncts) {
+            auto body = ReplaceArg(c.ConjunctExpr, arg.Ptr(), ctx);
+            if (pgSyntax) {
                 body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
             }
             newConjuncts.push_back(ReplaceArg(body, arg.Ptr(), ctx));
@@ -260,6 +277,128 @@ std::shared_ptr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const std:
     return map->GetInput();
 }
 
+// Pull up correlated filter inside a subplan
+// We match the parent of the filter, currently we support only Map and Aggregate
+
+bool TPullUpCorrelatedFilterRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+    
+    if (input->Kind != EOperator::Map && input->Kind != EOperator::Aggregate) {
+        return false;
+    }
+
+    auto unaryOp = CastOperator<IUnaryOperator>(input);
+
+    if (unaryOp->GetInput()->Kind != EOperator::Filter || !unaryOp->GetInput()->IsSingleConsumer()) {
+        return false;
+    }
+
+    auto filter = CastOperator<TOpFilter>(unaryOp->GetInput());
+
+    if (filter->GetInput()->Kind != EOperator::AddDependencies || !filter->GetInput()->IsSingleConsumer()) {
+        return false;
+    }
+
+    auto deps = CastOperator<TOpAddDependencies>(filter->GetInput());
+
+    auto conjInfo = filter->GetConjunctInfo(props);
+    if (conjInfo.JoinConditions.empty()) {
+        return false;
+    }
+
+    // Select a subset of join conditions that cover all dependencies
+    TVector<TJoinConditionInfo> dependentSubset;
+    TVector<TJoinConditionInfo> remainderSubset;
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> correlated;
+
+    for (const auto & jc : conjInfo.JoinConditions) {
+        if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), jc.LeftIU) != deps->Dependencies.end()) {
+            dependentSubset.push_back(jc);
+            correlated.insert(jc.RightIU);
+        }
+        else if (std::find(deps->Dependencies.begin(), deps->Dependencies.end(), jc.RightIU) != deps->Dependencies.end()) {
+            dependentSubset.push_back(jc);
+            correlated.insert(jc.LeftIU);
+        } else {
+            remainderSubset.push_back(jc);
+        }
+    }
+
+    // Make sure all dependencies are covered in this filter
+    // FIXME: This is a current limitation
+    if (correlated.size() != deps->Dependencies.size()) {
+        return false;
+    }
+
+    // Split the predicate into a remaining and new part with only dependent conditions
+    std::shared_ptr<IOperator> remainingFilter = deps->GetInput();
+    if (!conjInfo.Filters.empty() || !remainderSubset.empty()) {
+
+        auto lambda = BuildFilterLambdaFromConjuncts(deps->Pos, conjInfo.Filters, remainderSubset, ctx.ExprCtx, props.PgSyntax);
+        remainingFilter = std::make_shared<TOpFilter>(deps->GetInput(), remainingFilter->Pos, lambda);
+    }
+
+    auto newFilterLambda = BuildFilterLambdaFromConjuncts(filter->Pos, {}, dependentSubset, ctx.ExprCtx, props.PgSyntax);
+
+    if (input->Kind == EOperator::Map) {
+        auto map = CastOperator<TOpMap>(input);
+
+        // Stop if we compute something from one of the dependent columns, except for Just
+        for (const auto & mapEl : map->MapElements) {
+            for (const auto & iu : mapEl.InputIUs()) {
+                if (correlated.contains(iu)) {
+                    if (!mapEl.IsRename() && !mapEl.IsSingleCallable({"Just"})) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        TVector<TInfoUnit> addToMap;
+
+        // Add all dependend columns to projecting map output
+        auto mapOutput = map->GetOutputIUs();
+        for (const auto & iu : correlated) {
+            if (std::find(mapOutput.begin(), mapOutput.end(), iu) == mapOutput.end()) {
+                addToMap.push_back(iu);
+            }
+        }
+
+        // First we add needed columns to the map, if its a projection map
+        if (!addToMap.empty() && map->Project) {
+            for (const auto & add : addToMap) {
+                map->MapElements.push_back(TMapElement(add, add));
+            }
+        }
+
+        filter->FilterLambda = newFilterLambda;
+        map->SetInput(remainingFilter);
+        deps->SetInput(map);
+        input = filter;
+
+        return true;
+
+    } else if (input->Kind == EOperator::Aggregate) {
+        auto aggregate = CastOperator<TOpAggregate>(input);
+
+        // Add all missing dependent columns to the group by list
+        for (const auto & corr : correlated) {
+            if (std::find(aggregate->KeyColumns.begin(), aggregate->KeyColumns.end(), corr) == aggregate->KeyColumns.end()) {
+                aggregate->KeyColumns.push_back(corr);
+            }
+        }
+
+        filter->FilterLambda = newFilterLambda;
+        aggregate->SetInput(remainingFilter);
+        deps->SetInput(aggregate);
+        input = filter;
+
+        return true;
+    } else {
+        return false;
+    }
+
+}
+
 // Currently we only extract simple expressions where there is only one variable on either side
 
 bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
@@ -380,7 +519,10 @@ bool TExtractJoinExpressionsRule::MatchAndApply(std::shared_ptr<IOperator> &inpu
     return false;
 }
 
-// Rewrite a single scalar subplan into a cross-join
+// Rewrite a single scalar subplan into a cross-join for uncorrelated queries
+// or into a left join for correlated (assuming at most one tuple in the output of each subquery)
+// FIXME: Need to do correct general case decorellation in the future
+
 bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     auto subplanIUs = input->GetSubplanIUs(props);
     TVector<TInfoUnit> scalarIUs;
@@ -406,36 +548,68 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
 
     auto child = unaryOp->GetInput();
 
-    auto emptySource = std::make_shared<TOpEmptySource>(subplan->Pos);
+    // Check whether this is a correlated subplan with filter pushed up
+    // FIXME: if the filter got stuck we will crash later in the optimizer
+    if (subplan->Kind == EOperator::Filter && CastOperator<TOpFilter>(subplan)->GetInput()->Kind == EOperator::AddDependencies) {
+        auto filter = CastOperator<TOpFilter>(subplan);
+        auto addDeps = CastOperator<TOpAddDependencies>(filter->GetInput());
+        auto uncorrSubplan = addDeps->GetInput();
 
-    // FIXME: This works only for postgres types, because they are null-compatible
-    // For YQL types we will need to handle optionality
-    auto nullExpr = ctx.ExprCtx.NewCallable(subplan->Pos, "Nothing", {ExpandType(subplan->Pos, *subplanResType, ctx.ExprCtx)});
+        auto conjInfo = filter->GetConjunctInfo(props);
+        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
-    // clang-format off
-    auto mapLambda = Build<TCoLambda>(ctx.ExprCtx, subplan->Pos)
-        .Args({"arg"})
-        .Body(nullExpr)
-    .Done().Ptr();
-    // clang-format on
+        for (const auto & cj : conjInfo.JoinConditions) {
+            if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.LeftIU) != addDeps->Dependencies.end()) {
+                joinKeys.push_back(std::make_pair(cj.LeftIU, cj.RightIU));
+            } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.RightIU) != addDeps->Dependencies.end()) {
+                joinKeys.push_back(std::make_pair(cj.RightIU, cj.LeftIU));
+            } else {
+                Y_ENSURE(false, "Correlated filter missing join condition");
+            }   
+        }
 
-    TVector<TMapElement> mapElements;
-    mapElements.emplace_back(scalarIU, mapLambda);
-    auto map = std::make_shared<TOpMap>(emptySource, subplan->Pos, mapElements, true);
+        auto leftJoin = std::make_shared<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys);
 
-    TVector<TMapElement> renameElements;
-    renameElements.emplace_back(scalarIU, subplanResIU);
-    auto rename = std::make_shared<TOpMap>(subplan, subplan->Pos, renameElements, true);
-    rename->Props.EnsureAtMostOne = true;
+        TVector<TMapElement> renameElements;
+        renameElements.emplace_back(scalarIU, subplanResIU);
+        auto rename = std::make_shared<TOpMap>(leftJoin, subplan->Pos, renameElements, false);
+        unaryOp->SetInput(rename);
+    }
 
-    auto unionAll = std::make_shared<TOpUnionAll>(rename, map, subplan->Pos, true);
+    // Otherwise we assume an uncorrelated supbplan
+    // Here we don't assume at most one tuple from the subplan
+    else {
+        auto emptySource = std::make_shared<TOpEmptySource>(subplan->Pos);
 
-    auto limitExpr = ctx.ExprCtx.NewCallable(subplan->Pos, "Uint64", {ctx.ExprCtx.NewAtom(subplan->Pos, "1")});
-    auto limit = std::make_shared<TOpLimit>(unionAll, subplan->Pos, limitExpr);
+        // FIXME: This works only for postgres types, because they are null-compatible
+        // For YQL types we will need to handle optionality
+        auto nullExpr = ctx.ExprCtx.NewCallable(subplan->Pos, "Nothing", {ExpandType(subplan->Pos, *subplanResType, ctx.ExprCtx)});
 
-    TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-    auto cross = std::make_shared<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
-    unaryOp->SetInput(cross);
+        // clang-format off
+        auto mapLambda = Build<TCoLambda>(ctx.ExprCtx, subplan->Pos)
+            .Args({"arg"})
+            .Body(nullExpr)
+        .Done().Ptr();
+        // clang-format on
+
+        TVector<TMapElement> mapElements;
+        mapElements.emplace_back(scalarIU, mapLambda);
+        auto map = std::make_shared<TOpMap>(emptySource, subplan->Pos, mapElements, true);
+
+        TVector<TMapElement> renameElements;
+        renameElements.emplace_back(scalarIU, subplanResIU);
+        auto rename = std::make_shared<TOpMap>(subplan, subplan->Pos, renameElements, true);
+        rename->Props.EnsureAtMostOne = true;
+
+        auto unionAll = std::make_shared<TOpUnionAll>(rename, map, subplan->Pos, true);
+
+        auto limitExpr = ctx.ExprCtx.NewCallable(subplan->Pos, "Uint64", {ctx.ExprCtx.NewAtom(subplan->Pos, "1")});
+        auto limit = std::make_shared<TOpLimit>(unionAll, subplan->Pos, limitExpr);
+    
+        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        auto cross = std::make_shared<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);
+        unaryOp->SetInput(cross);
+    }
 
     props.Subplans.Remove(scalarIU);
 
@@ -468,7 +642,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     // Find the first conjunct that is a simple in or exists subplan
     bool negated = false;
     TInfoUnit iu;
-    TSubplanEntry subplan;
+    TSubplanEntry subplanEntry;
     size_t conjunctIdx;
 
     for (conjunctIdx = 0; conjunctIdx < conjuncts.size(); conjunctIdx++) {
@@ -482,8 +656,8 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
             auto name = TString(maybeSubplan->Child(1)->Content());
             iu = TInfoUnit(name);
             if (props.Subplans.PlanMap.contains(iu)) {
-                subplan = props.Subplans.PlanMap.at(iu);
-                if (subplan.Type == ESubplanType::IN_SUBPLAN || subplan.Type == ESubplanType::EXISTS) {
+                subplanEntry = props.Subplans.PlanMap.at(iu);
+                if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || subplanEntry.Type == ESubplanType::EXISTS) {
                     break;
                 }
             }
@@ -495,31 +669,50 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
     }
 
     std::shared_ptr<IOperator> join;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> extraJoinKeys;
+    std::shared_ptr<IOperator> uncorrSubplan = subplanEntry.Plan;
+
+    if (subplanEntry.Plan->Kind == EOperator::Filter && CastOperator<TOpFilter>(subplanEntry.Plan)->GetInput()->Kind == EOperator::AddDependencies) {
+        auto filter = CastOperator<TOpFilter>(subplanEntry.Plan);
+        auto addDeps = CastOperator<TOpAddDependencies>(filter->GetInput());
+        uncorrSubplan = addDeps->GetInput();
+
+        auto conjInfo = filter->GetConjunctInfo(props);
+
+        for (const auto & cj : conjInfo.JoinConditions) {
+            if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.LeftIU) != addDeps->Dependencies.end()) {
+                extraJoinKeys.push_back(std::make_pair(cj.LeftIU, cj.RightIU));
+            } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.RightIU) != addDeps->Dependencies.end()) {
+                extraJoinKeys.push_back(std::make_pair(cj.RightIU, cj.LeftIU));
+            } else {
+                Y_ENSURE(false, "Correlated filter missing join condition");
+            }   
+        }
+    }
 
     // We build a semi-join or a left-only join when processing IN subplan
-    if (subplan.Type == ESubplanType::IN_SUBPLAN) {
+    if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || !extraJoinKeys.empty()) {
         auto leftJoinInput = filter->GetInput();
         auto joinKind = negated ? "LeftOnly" : "LeftSemi";
 
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
-        auto planIUs = subplan.Plan->GetOutputIUs();
-        YQL_CLOG(TRACE, CoreDq) << "In tuple size: " << subplan.Tuple.size() << ", subplan tuple size: " << planIUs.size();
+        auto planIUs = uncorrSubplan->GetOutputIUs();
 
-        Y_ENSURE(subplan.Tuple.size() == planIUs.size());
-
-        for (size_t i = 0; i < planIUs.size(); i++) {
-            joinKeys.push_back(std::make_pair(subplan.Tuple[i], planIUs[i]));
+        for (size_t i = 0; i < subplanEntry.Tuple.size(); i++) {
+            joinKeys.push_back(std::make_pair(subplanEntry.Tuple[i], planIUs[i]));
         }
 
-        join = std::make_shared<TOpJoin>(leftJoinInput, subplan.Plan, input->Pos, joinKind, joinKeys);
+        joinKeys.insert(joinKeys.begin(), extraJoinKeys.begin(), extraJoinKeys.end());
+
+        join = std::make_shared<TOpJoin>(leftJoinInput, uncorrSubplan, input->Pos, joinKind, joinKeys);
         conjuncts.erase(conjuncts.begin() + conjunctIdx);
     }
     // EXISTS and NOT EXISTS
     else {
         auto one = ctx.ExprCtx.NewCallable(filter->Pos, "Uint64", {ctx.ExprCtx.NewAtom(filter->Pos, "1")});
         auto zero = ctx.ExprCtx.NewCallable(filter->Pos, "Uint64", {ctx.ExprCtx.NewAtom(filter->Pos, "0")});
-        auto limit = std::make_shared<TOpLimit>(subplan.Plan, filter->Pos, one);
+        auto limit = std::make_shared<TOpLimit>(uncorrSubplan, filter->Pos, one);
         auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
         TVector<TMapElement> countMapElements;
 
@@ -532,7 +725,7 @@ std::shared_ptr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply
 
         countMapElements.emplace_back(countResult, zeroLambda);
         auto countMap = std::make_shared<TOpMap>(limit, filter->Pos, countMapElements, true);
-        TOpAggregationTraits aggFunction(countResult, "count");
+        TOpAggregationTraits aggFunction(countResult, "count", countResult);
         TVector<TOpAggregationTraits> aggs = {aggFunction};
         TVector<TInfoUnit> keyColumns;
 
@@ -781,7 +974,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
     auto rightInput = join->GetRightInput();
 
     if (pushLeft.size()) {
-        auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Pos, pushLeft, ctx.ExprCtx, props.PgSyntax);
+        auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Pos, pushLeft, {}, ctx.ExprCtx, props.PgSyntax);
         leftInput = std::make_shared<TOpFilter>(leftInput, input->Pos, leftLambda);
     }
 
@@ -796,14 +989,14 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
                 }
             }
             if (predicatesForRightSide.size()) {
-                auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx, props.PgSyntax);
+                auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, {}, ctx.ExprCtx, props.PgSyntax);
                 rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
                 join->JoinKind = "Inner";
             } else {
                 return input;
             }
         } else {
-            auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx, props.PgSyntax);
+            auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, {}, ctx.ExprCtx, props.PgSyntax);
             rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
         }
     }
@@ -816,7 +1009,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
     join->SetRightInput(rightInput);
 
     if (topLevelPreds.size()) {
-        auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Pos, topLevelPreds, ctx.ExprCtx, props.PgSyntax);
+        auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Pos, topLevelPreds, {}, ctx.ExprCtx, props.PgSyntax);
         output =  std::make_shared<TOpFilter>(join, input->Pos, topFilterLambda);
     } else {
         output = join;

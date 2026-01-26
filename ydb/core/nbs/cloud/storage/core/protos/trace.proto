@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/storage/core/protos/media.proto";
+import "library/cpp/lwtrace/protos/lwtrace.proto";
+
+package NYdb.NBS.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/storage/core/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Message trace information.
+
+message TTraceInfo
+{
+    // Timestamp of remote trace start.
+    uint64 RequestStartTime = 1;
+
+    // Timestamp of remote trace completion.
+    uint64 RequestEndTime = 2;
+
+    // serialized lwtrace probes.
+    // NLWTrace.TTraceResponse LWTrace = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// The tracks of the requests whose processing time in ms exceeds
+// corresponding values have a chance to be logged.
+
+message TLWTraceThreshold
+{
+    // Default threshold of this mediaKind.
+    optional uint32 Default = 1;
+
+    // Mapping from requestTypes to thresholds.
+    map<string, uint32> ByRequestType = 2;
+
+    // Storage media kind.
+    NYdb.NBS.NProto.EStorageMediaKind MediaKind = 3;
+
+    // Default threshold increment per 1KiB of the request size.
+    optional uint32 PerSizeUnit = 4;
+};

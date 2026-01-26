@@ -395,6 +395,9 @@ public:
         Finished = true;
     }
 
+    void Flush() override {
+    }
+
     TChunkedBuffer FinishPackAndCheckSize() {
         TChunkedBuffer result = Packer.Finish();
         if (!IsLocalChannel && result.Size() > ChunkSizeLimit) {

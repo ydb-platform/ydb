@@ -1040,6 +1040,13 @@ void TShardKeyRanges::SerializeTo(NKikimrTxDataShard::TKqpReadRangesSourceSettin
     }
 }
 
+void TShardKeyRanges::ParseFrom(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& proto) {
+    Ranges.reserve(proto.KeyRangesSize());
+    for (const auto& range : proto.GetKeyRanges()) {
+        Ranges.emplace_back(TSerializedTableRange(range));
+    }
+}
+
 std::pair<const TSerializedCellVec*, bool> TShardKeyRanges::GetRightBorder() const {
     if (FullRange) {
         return !FullRange->Point ? std::make_pair(&FullRange->To, true) : std::make_pair(&FullRange->From, true);
@@ -1387,14 +1394,13 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                     input.Meta.SourceSettings->SetUseFollowers(GetMeta().UseFollowers || isTableImmutable);
                 }
 
-                if (serializeAsyncIoSettings) {
-                    inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SourceSettings);
-                }
-
                 if (isTableImmutable) {
                     input.Meta.SourceSettings->SetAllowInconsistentReads(true);
                 }
 
+                if (serializeAsyncIoSettings) {
+                    inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SourceSettings);
+                }
             } else if (input.Meta.FullTextSourceSettings) {
 
                 if (snapshot.IsValid()) {
@@ -1564,7 +1570,7 @@ void TKqpTasksGraph::PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& resu
         resultTask.SetTxId(task.StageId.TxId);
 
         auto* taskInfo = resultTask.MutableDqTask();
-        SerializeTaskToProto(task, taskInfo, false);
+        SerializeTaskToProto(task, taskInfo, /* serializeAsyncIoSettings */ true);
 
         taskInfo->ClearProgram();
         taskInfo->ClearSecureParams();
@@ -1588,6 +1594,33 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
         };
     };
 
+    const auto restoreDqInputTransform = [this, restoreDqTransform](const NDqProto::TTaskInput& protoInfo, NKikimr::NKqp::TTaskInputMeta& meta) -> TMaybe<TTransform> {
+        auto info = restoreDqTransform(protoInfo);
+        if (!info) {
+            return Nothing();
+        }
+
+        const auto& settings = protoInfo.GetTransform().GetSettings();
+        if (settings.Is<NKikimrKqp::TKqpStreamLookupSettings>()) {
+            auto transformSettings = meta.StreamLookupSettings = GetMeta().Allocate<NKikimrKqp::TKqpStreamLookupSettings>();
+            YQL_ENSURE(settings.UnpackTo(transformSettings), "Failed to parse stream lookup settings");
+            transformSettings->ClearSnapshot();
+            transformSettings->ClearLockTxId();
+            transformSettings->ClearLockNodeId();
+        } else if (settings.Is<NKikimrKqp::TKqpSequencerSettings>()) {
+            auto transformSettings = meta.SequencerSettings = GetMeta().Allocate<NKikimrKqp::TKqpSequencerSettings>();
+            YQL_ENSURE(settings.UnpackTo(transformSettings), "Failed to parse sequencer settings");
+        } else if (settings.Is<NKikimrTxDataShard::TKqpVectorResolveSettings>()) {
+            auto transformSettings = meta.VectorResolveSettings = GetMeta().Allocate<NKikimrTxDataShard::TKqpVectorResolveSettings>();
+            YQL_ENSURE(settings.UnpackTo(transformSettings), "Failed to parse vector resolve settings");
+            transformSettings->ClearSnapshot();
+            transformSettings->ClearLockTxId();
+            transformSettings->ClearLockNodeId();
+        }
+
+        return info;
+    };
+
     std::map<ui64, TChannel> channels;
     const auto restoreDqChannel = [&channels](ui64 txId, const NYql::NDqProto::TChannel& protoInfo) -> TChannel& {
         const auto [it, inserted] = channels.emplace(protoInfo.GetId(), TChannel());
@@ -1600,6 +1633,8 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
             channel.DstStageId = TStageId(txId, protoInfo.GetDstStageId());
             channel.DstTask = protoInfo.GetDstTaskId();
             channel.InMemory = protoInfo.GetInMemory();
+            channel.CheckpointingMode = protoInfo.GetCheckpointingMode();
+            channel.WatermarksMode = protoInfo.GetWatermarksMode();
         }
 
         return channel;
@@ -1616,14 +1651,71 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
         auto& stageInfo = GetStageInfo(stageId);
         auto& newTask = AddTask(stageInfo, TTaskType::RESTORED);
         YQL_ENSURE(taskInfo.GetId() == newTask.Id);
+        newTask.SetUseLlvm(taskInfo.GetUseLlvm());
         newTask.Meta.TaskParams.insert(taskInfo.GetTaskParams().begin(), taskInfo.GetTaskParams().end());
         newTask.Meta.ReadRanges.assign(taskInfo.GetReadRanges().begin(), taskInfo.GetReadRanges().end());
         newTask.Meta.Type = TTaskMeta::TTaskType::Compute;
+        newTask.Meta.ExecuterId = GetMeta().ExecuterId;
+
+        if (taskInfo.HasMetaId()) {
+            newTask.SetMetaId(taskInfo.GetMetaId());
+        }
+
+        if (taskInfo.HasMeta()) {
+            NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
+            YQL_ENSURE(taskInfo.GetMeta().UnpackTo(&meta), "Failed to parse task meta");
+
+            newTask.Meta.ScanTask = true;
+
+            if (meta.HasEnableShardsSequentialScan()) {
+                newTask.Meta.SetEnableShardsSequentialScan(meta.GetEnableShardsSequentialScan());
+            }
+
+            auto& readInfo = newTask.Meta.ReadInfo;
+            readInfo.SetSorting(static_cast<ERequestSorting>(meta.GetOptionalSorting()));
+            readInfo.ItemsLimit = meta.GetItemsLimit();
+            readInfo.GroupByColumnNames.assign(meta.GetGroupByColumnNames().begin(), meta.GetGroupByColumnNames().end());
+            readInfo.OlapProgram.Program = meta.GetOlapProgram().GetProgram();
+
+            readInfo.ResultColumnsTypes.reserve(meta.ResultColumnsSize());
+            for (const auto& column : meta.GetResultColumns()) {
+                readInfo.ResultColumnsTypes.emplace_back(NScheme::TypeInfoModFromProtoColumnType(column.GetType(), &column.GetTypeInfo()).TypeInfo);
+            }
+
+            switch (meta.GetReadType()) {
+                case NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::ROWS:
+                    readInfo.ReadType = TTaskMeta::TReadInfo::EReadType::Rows;
+                    break;
+                case NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::BLOCKS:
+                    readInfo.ReadType = TTaskMeta::TReadInfo::EReadType::Blocks;
+                    break;
+                default:
+                    YQL_ENSURE(false, "Unknown read type");
+            }
+
+            TVector<TTaskMeta::TColumn> columns;
+            columns.reserve(meta.ColumnsSize());
+            for (const auto& columnProto : meta.GetColumns()) {
+                auto& column = columns.emplace_back();
+                column.Id = columnProto.GetId();
+                column.Type = NScheme::TypeInfoModFromProtoColumnType(columnProto.GetType(), &columnProto.GetTypeInfo()).TypeInfo;
+                column.Name = columnProto.GetName();
+            }
+
+            auto& reads = newTask.Meta.Reads.emplace();
+            reads.reserve(meta.ReadsSize());
+            for (const auto& readProto : meta.GetReads()) {
+                auto& read = reads.emplace_back();
+                read.Columns = columns;
+                read.ShardId = readProto.GetShardId();
+                read.Ranges.ParseFrom(readProto);
+            }
+        }
 
         for (size_t inputIdx = 0; inputIdx < taskInfo.InputsSize(); ++inputIdx) {
             const auto& inputInfo = taskInfo.GetInputs(inputIdx);
             auto& newInput = newTask.Inputs[inputIdx];
-            newInput.Transform = restoreDqTransform(inputInfo);
+            newInput.Transform = restoreDqInputTransform(inputInfo, newInput.Meta);
 
             switch (inputInfo.GetTypeCase()) {
                 case NDqProto::TTaskInput::kMerge: {
@@ -1643,8 +1735,21 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
 
                     const auto& sourceInfo = inputInfo.GetSource();
                     newInput.SourceType = sourceInfo.GetType();
+                    newInput.WatermarksMode = sourceInfo.GetWatermarksMode();
                     if (sourceInfo.HasSettings()) {
-                        newInput.SourceSettings = sourceInfo.GetSettings();
+                        const auto& settings = sourceInfo.GetSettings();
+                        if (settings.Is<NKikimrTxDataShard::TKqpReadRangesSourceSettings>()) {
+                            auto sourceSettings = newInput.Meta.SourceSettings = GetMeta().Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
+                            YQL_ENSURE(settings.UnpackTo(sourceSettings), "Failed to parse source settings");
+                            FillScanTaskLockTxId(*sourceSettings);
+                            sourceSettings->ClearSnapshot();
+                        } else if (settings.Is<NKikimrKqp::TKqpFullTextSourceSettings>()) {
+                            auto sourceSettings = newInput.Meta.FullTextSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpFullTextSourceSettings>();
+                            YQL_ENSURE(settings.UnpackTo(sourceSettings), "Failed to parse full text source settings");
+                            sourceSettings->ClearSnapshot();
+                        } else {
+                            newInput.SourceSettings = sourceInfo.GetSettings();
+                        }
                     }
                     break;
                 }
@@ -1675,7 +1780,10 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                     break;
                 }
                 case NDqProto::TTaskOutput::kRangePartition: {
-                    YQL_ENSURE(false, "Range partition output type is not supported for restore");
+                    newOutput.Type = TKqpTaskOutputType::ShardRangePartition;
+
+                    const auto& rangeInfo = outputInfo.GetRangePartition();
+                    newOutput.KeyColumns.assign(rangeInfo.GetKeyColumns().begin(), rangeInfo.GetKeyColumns().end());
                     break;
                 }
                 case NDqProto::TTaskOutput::kHashPartition: {
@@ -2632,16 +2740,7 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         }
     }
 
-    for(const auto& column : fullTextSource.GetQuerySettings().GetColumns()) {
-        auto* protoColumn = settings->MutableQuerySettings()->AddColumns();
-        protoColumn->SetId(column.GetId());
-        auto columnIt = stageInfo.Meta.TableConstInfo->Columns.find(column.GetName());
-        ParseColumnToProto(column.GetName(), columnIt, protoColumn);
-        protoColumn->SetName(column.GetName());
-        if (columnIt->second.NotNull) {
-            protoColumn->SetNotNull(true);
-        }
-    }
+    settings->MutableQuerySettings()->MutableColumns()->CopyFrom(fullTextSource.GetQuerySettings().GetColumns());
 
     for(const auto& indexTable : fullTextSource.GetIndexTables()) {
         auto* indexTableProto = settings->AddIndexTables();
@@ -2655,6 +2754,13 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
     if (GetMeta().Snapshot.IsValid()) {
         settings->MutableSnapshot()->SetStep(GetMeta().Snapshot.Step);
         settings->MutableSnapshot()->SetTxId(GetMeta().Snapshot.TxId);
+    }
+}
+
+void TKqpTasksGraph::FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings) {
+    if (const auto& lockTxId = GetMeta().LockTxId) {
+        settings.SetLockTxId(*lockTxId);
+        settings.SetLockNodeId(GetMeta().ExecuterId.NodeId());
     }
 }
 
@@ -2796,11 +2902,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             out.SetLimit((ui32)ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui64>());
         }
 
-        auto& lockTxId = GetMeta().LockTxId;
-        if (lockTxId) {
-            settings->SetLockTxId(*lockTxId);
-            settings->SetLockNodeId(GetMeta().ExecuterId.NodeId());
-        }
+        FillScanTaskLockTxId(*settings);
 
         if (GetMeta().LockMode) {
             settings->SetLockMode(*GetMeta().LockMode);

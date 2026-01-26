@@ -722,6 +722,11 @@ TNode SerializeParamsForReadTablePartition(const TString& cookie, const TTablePa
     TNode node;
     node["cookie"] = cookie;
     SerializeSuppressableAccessTrackingOptions(&node, options);
+    node["control_attributes"] = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("enable_row_index").Value(options.ControlAttributes_.EnableRowIndex_)
+            .Item("enable_range_index").Value(options.ControlAttributes_.EnableRangeIndex_)
+        .EndMap();
     return node;
 }
 

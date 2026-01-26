@@ -178,6 +178,7 @@ struct TTableStats {
 struct TSortedChunkStats {
     bool IsSorted = false;
     NYT::TNode FirstRowKeys;
+    NYT::TNode LastRowKeys;
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);

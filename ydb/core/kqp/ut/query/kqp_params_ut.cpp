@@ -1469,32 +1469,24 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
 
             auto query = prepareResult.GetQuery();
-            auto params = query.GetParamsBuilder()
-                .AddParam("$x")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .AddParam("$y")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .Build();
+            Ydb::Type type;
+            type.set_empty_list_type(google::protobuf::NULL_VALUE);
+            std::map<std::string, TType> typeInfo = {{"$x", TType(type)}, {"$y", TType(type)}};
+            auto params = NYdb::TParamsBuilder(typeInfo).Build();
 
             auto result = query.Execute(
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 std::move(params)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "type mismatch, expected: Type (List) { List item type: { Type (Data), schemeType: Uint32, schemeTypeId: 2 } } , actual: Type (EmptyList)");
         }
 
         // Test with ExecuteDataQuery directly
         {
-            auto params = db.GetParamsBuilder()
-                .AddParam("$x")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .AddParam("$y")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .Build();
+            Ydb::Type type;
+            type.set_empty_list_type(google::protobuf::NULL_VALUE);
+            std::map<std::string, TType> typeInfo = {{"$x", TType(type)}, {"$y", TType(type)}};
+            auto params = NYdb::TParamsBuilder(typeInfo).Build();
 
             auto result = session.ExecuteDataQuery(Q1_(R"(
                 DECLARE $x AS List<Uint32>;
@@ -1504,32 +1496,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 UNION ALL
                 SELECT * FROM `/Root/Test` WHERE Group IN $y;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
-        }
-
-        // Test with non-empty list to ensure normal lists still work
-        {
-            auto params = db.GetParamsBuilder()
-                .AddParam("$x")
-                    .BeginList()
-                    .AddListItem().Uint32(1)
-                    .EndList()
-                    .Build()
-                .AddParam("$y")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .Build();
-
-            auto result = session.ExecuteDataQuery(Q1_(R"(
-                DECLARE $x AS List<Uint32>;
-                DECLARE $y AS List<Uint32>;
-
-                SELECT * FROM `/Root/Test` WHERE Group IN $x
-                UNION ALL
-                SELECT * FROM `/Root/Test` WHERE Group IN $y;
-            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "type mismatch, expected: Type (List) { List item type: { Type (Data), schemeType: Uint32, schemeTypeId: 2 } } , actual: Type (EmptyList)");
         }
     }
 
@@ -1537,18 +1505,13 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         // Test that EmptyList can be passed for List<?> parameters in ExecuteQuery
         TKikimrRunner kikimr;
         auto queryClient = kikimr.GetQueryClient();
-        auto tableClient = kikimr.GetTableClient();
 
         // Test with ExecuteQuery
         {
-            auto params = tableClient.GetParamsBuilder()
-                .AddParam("$x")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .AddParam("$y")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .Build();
+            Ydb::Type type;
+            type.set_empty_list_type(google::protobuf::NULL_VALUE);
+            std::map<std::string, TType> typeInfo = {{"$x", TType(type)}, {"$y", TType(type)}};
+            auto params = NYdb::TParamsBuilder(typeInfo).Build();
 
             auto result = queryClient.ExecuteQuery(Q1_(R"(
                 DECLARE $x AS List<Uint32>;
@@ -1558,33 +1521,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 UNION ALL
                 SELECT * FROM `/Root/Test` WHERE Group IN $y;
             )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
-        }
-
-        // Test with non-empty list to ensure normal lists still work
-        {
-            auto params = tableClient.GetParamsBuilder()
-                .AddParam("$x")
-                    .BeginList()
-                    .AddListItem().Uint32(1)
-                    .EndList()
-                    .Build()
-                .AddParam("$y")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .Build();
-
-            auto result = queryClient.ExecuteQuery(Q1_(R"(
-                DECLARE $x AS List<Uint32>;
-                DECLARE $y AS List<Uint32>;
-
-                SELECT * FROM `/Root/Test` WHERE Group IN $x
-                UNION ALL
-                SELECT * FROM `/Root/Test` WHERE Group IN $y;
-            )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "type mismatch, expected: Type (List) { List item type: { Type (Data), schemeType: Uint32, schemeTypeId: 2 } } , actual: Type (EmptyList)");
         }
     }
 

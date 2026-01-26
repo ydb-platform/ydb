@@ -10,7 +10,7 @@ struct TCodeLineException: public yexception {
     mutable TString Message;
     ui32 Code;
 
-    TCodeLineException(ui32 code);
+    explicit TCodeLineException(ui32 code);
 
     TCodeLineException(const TSourceLocation& sl, const TCodeLineException& t);
 

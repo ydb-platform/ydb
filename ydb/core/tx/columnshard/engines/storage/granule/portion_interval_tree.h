@@ -29,16 +29,24 @@ struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::sh
 
 
 class TPositionView {
-    enum EPositionType { Infinity = 0, LeftSimpleRow = 1, RightSimpleRow = 2, SortableBatchPosition = 3 };
+    enum EPositionType { Infinity = 0, StartSimpleRow = 1, EndSimpleRow = 2, SortableBatchPosition = 3 };
 
     using TPositionVariant = std::variant<std::monostate, std::shared_ptr<TPortionInfo>, std::shared_ptr<TPortionInfo>, const NArrow::NMerger::TSortableBatchPosition*>;
 
     TPositionVariant Position;
 
 public:
+    enum class EPortionInfoIndexPosition {
+        Start,
+        End
+    };
+
     explicit TPositionView(const NArrow::NMerger::TSortableBatchPosition* sortableBatchPosition);
-    TPositionView(std::shared_ptr<TPortionInfo> portionInfo, bool isLeft);
+    TPositionView(std::shared_ptr<TPortionInfo> portionInfo, EPortionInfoIndexPosition keyPosition);
     TPositionView() = default;
+
+    static TPositionView FromPortionInfoIndexStart(std::shared_ptr<TPortionInfo> portionInfo);
+    static TPositionView FromPortionInfoIndexEnd(std::shared_ptr<TPortionInfo> portionInfo);
 
     NArrow::NMerger::TSortableBatchPosition GetSortableBatchPosition() const;
     std::partial_ordering Compare(const TPositionView& rhs) const;

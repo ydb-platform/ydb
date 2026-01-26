@@ -26,8 +26,8 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
 
     if (IntervalTree) {
         IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
-            PortionIntervalTree::TPositionView(info, true), true,
-            PortionIntervalTree::TPositionView(info, false), true), info);
+            PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(info), true,
+            PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(info), true), info);
     }
 }
 
@@ -178,8 +178,8 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
         AFL_VERIFY(Portions.emplace(portionId, portion).second);
         if (IntervalTree) {
             IntervalTree->AddRange(PortionIntervalTree::TPortionIntervalTree::TOwnedRange(
-                PortionIntervalTree::TPositionView(portion, true), true,
-                PortionIntervalTree::TPositionView(portion, false), true), portion);
+                PortionIntervalTree::TPositionView::FromPortionInfoIndexStart(portion), true,
+                PortionIntervalTree::TPositionView::FromPortionInfoIndexEnd(portion), true), portion);
         }
     }
 }

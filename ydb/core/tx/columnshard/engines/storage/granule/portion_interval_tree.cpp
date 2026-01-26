@@ -6,15 +6,23 @@ TPositionView::TPositionView(const NArrow::NMerger::TSortableBatchPosition* sort
     : Position(sortableBatchPosition) {
 }
 
-TPositionView::TPositionView(std::shared_ptr<TPortionInfo> portionInfo, bool isLeft)
-    : Position(isLeft ? TPositionVariant(std::in_place_index<LeftSimpleRow>, portionInfo)
-                      : TPositionVariant(std::in_place_index<RightSimpleRow>, portionInfo)) {
+TPositionView::TPositionView(std::shared_ptr<TPortionInfo> portionInfo, EPortionInfoIndexPosition keyPosition)
+    : Position(keyPosition == EPortionInfoIndexPosition::Start ? TPositionVariant(std::in_place_index<StartSimpleRow>, std::move(portionInfo))
+                                                               : TPositionVariant(std::in_place_index<EndSimpleRow>, std::move(portionInfo))) {
+}
+
+TPositionView TPositionView::FromPortionInfoIndexStart(std::shared_ptr<TPortionInfo> portionInfo) {
+    return TPositionView(std::move(portionInfo), EPortionInfoIndexPosition::Start);
+}
+
+TPositionView TPositionView::FromPortionInfoIndexEnd(std::shared_ptr<TPortionInfo> portionInfo) {
+    return TPositionView(std::move(portionInfo), EPortionInfoIndexPosition::End);
 }
 
 NArrow::NMerger::TSortableBatchPosition TPositionView::GetSortableBatchPosition() const {
-    if (auto val = std::get_if<LeftSimpleRow>(&Position); val) {
+    if (auto val = std::get_if<StartSimpleRow>(&Position); val) {
         return (*val)->IndexKeyStart().BuildSortablePosition();
-    } else if (auto val = std::get_if<RightSimpleRow>(&Position); val) {
+    } else if (auto val = std::get_if<EndSimpleRow>(&Position); val) {
         return (*val)->IndexKeyEnd().BuildSortablePosition();
     } else if (auto val = std::get_if<SortableBatchPosition>(&Position); val) {
         return **val;
@@ -30,12 +38,12 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
 
     if (Position.index() == SortableBatchPosition || rhs.Position.index() == SortableBatchPosition) {
         return GetSortableBatchPosition().ComparePartial(rhs.GetSortableBatchPosition());
-    } else if (auto val = std::get_if<LeftSimpleRow>(&Position); val) {
+    } else if (auto val = std::get_if<StartSimpleRow>(&Position); val) {
         return (*val)->IndexKeyStart().CompareNotNull(
-            rhs.Position.index() == LeftSimpleRow ? std::get<LeftSimpleRow>(rhs.Position)->IndexKeyStart() : std::get<RightSimpleRow>(rhs.Position)->IndexKeyEnd());
-    } else if (auto val = std::get_if<RightSimpleRow>(&Position); val) {
+            rhs.Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(rhs.Position)->IndexKeyStart() : std::get<EndSimpleRow>(rhs.Position)->IndexKeyEnd());
+    } else if (auto val = std::get_if<EndSimpleRow>(&Position); val) {
         return (*val)->IndexKeyEnd().CompareNotNull(
-            rhs.Position.index() == LeftSimpleRow ? std::get<LeftSimpleRow>(rhs.Position)->IndexKeyStart() : std::get<RightSimpleRow>(rhs.Position)->IndexKeyEnd());
+            rhs.Position.index() == StartSimpleRow ? std::get<StartSimpleRow>(rhs.Position)->IndexKeyStart() : std::get<EndSimpleRow>(rhs.Position)->IndexKeyEnd());
     }
 
     AFL_VERIFY(false)("error", "invalid type in TPositionView variant for Compare")("type", Position.index());

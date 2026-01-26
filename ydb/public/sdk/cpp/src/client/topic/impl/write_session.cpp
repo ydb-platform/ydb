@@ -194,7 +194,10 @@ TKeyedWriteSession::TKeyedWriteSession(
         }
 
         Partitions.push_back(
-            TPartitionInfo().PartitionId(partition.GetPartitionId()).FromBound(partition.GetFromBound().value_or("")).ToBound(partition.GetToBound()));
+            TPartitionInfo()
+            .PartitionId(partition.GetPartitionId())
+            .FromBound(partition.GetFromBound().value_or(""))
+            .ToBound(partition.GetToBound()));
     }
 
     switch (partitionChooserStrategy) {
@@ -452,6 +455,34 @@ NThreading::TFuture<void> TKeyedWriteSession::WaitEvent() {
     return EventsProcessedFuture;
 }
 
+void TKeyedWriteSession::PopInFlightMessage() {
+    Y_ABORT_UNLESS(!InFlightMessages.empty());
+    const ui64 partition = InFlightMessages.front().Partition;
+    const auto it = InFlightMessages.begin();
+
+    auto mapIt = InFlightMessagesIndex.find(partition);
+    if (mapIt != InFlightMessagesIndex.end()) {
+        auto& list = mapIt->second;
+        for (auto listIt = list.begin(); listIt != list.end(); ++listIt) {
+            if (*listIt == it) {
+                list.erase(listIt);
+                break;
+            }
+        }
+        if (list.empty()) {
+            InFlightMessagesIndex.erase(mapIt);
+        }
+    }
+
+    InFlightMessages.pop_front();
+}
+
+void TKeyedWriteSession::PushInFlightMessage(ui64 partition, TMessageInfo&& message) {
+    InFlightMessages.push_back(std::move(message));
+    auto [listIt, _] = InFlightMessagesIndex.try_emplace(partition, std::list<std::list<TMessageInfo>::iterator>());
+    listIt->second.push_back(std::prev(InFlightMessages.end()));
+}
+
 void TKeyedWriteSession::TransferEventsToOutputQueue() {
     bool eventsTransferred = false;
     bool shouldAddReadyToAcceptEvent = false;
@@ -473,7 +504,7 @@ void TKeyedWriteSession::TransferEventsToOutputQueue() {
         auto remainingAcks = acks.find(head.Partition);
         if (remainingAcks != acks.end() && remainingAcks->second.size() > 0) {
             EventsOutputQueue.push_back(buildOutputAckEvent(remainingAcks->second, *head.Message.SeqNo_));
-            InFlightMessages.pop_front();
+            PopInFlightMessage();
             continue;
         }
 
@@ -502,7 +533,7 @@ void TKeyedWriteSession::TransferEventsToOutputQueue() {
             shouldAddReadyToAcceptEvent = true;
         }
 
-        InFlightMessages.pop_front();
+        PopInFlightMessage();
     }
 
     if (shouldAddReadyToAcceptEvent) {
@@ -566,13 +597,11 @@ std::vector<TWriteSessionEvent::TEvent> TKeyedWriteSession::GetEvents(bool block
 }
 
 std::optional<TContinuationToken> TKeyedWriteSession::GetContinuationToken(ui64 partition) {
-    // Only check under lock, never wait here. Waiting in GetContinuationToken would
+    // Only check, never wait here. Waiting in GetContinuationToken would
     // prevent RunMainWorker from processing ReadyFutures and re-subscribing to
     // partition WaitEvent() futures; without re-subscription we stop receiving new
     // ReadyToAccept events and can deadlock. The caller must WaitForEvents() in the
     // main loop when nullopt is returned.
-    std::lock_guard lock(GlobalLock);
-
     if (!SessionsIndex.contains(partition)) {
         return std::nullopt;
     }
@@ -671,7 +700,7 @@ void TKeyedWriteSession::RunMainWorker() {
             if (continuationToken) {
                 auto msgToSave = *msgToSend;
                 writeSession->Session->Write(std::move(*continuationToken), std::move(msgToSend->Message), msgToSend->Tx);
-                InFlightMessages.push_back(std::move(msgToSave));
+                PushInFlightMessage(partition, std::move(msgToSave));
                 didWrite = true;
             }
         }
@@ -708,6 +737,32 @@ void TKeyedWriteSession::RunMainWorker() {
     // Add SessionClosedEvent only if needed
     std::lock_guard lock(GlobalLock);
     AddSessionClosedEvent();
+}
+
+void TKeyedWriteSession::HandleAutoPartitioning(ui64 partition) {
+    // TODO: implement full logic
+    TDescribeTopicSettings describeTopicSettings;
+    auto topicConfig = Client->DescribeTopic(Settings.Path_, describeTopicSettings).GetValueSync();
+    const auto& newPartitions = topicConfig.GetTopicDescription().GetPartitions();
+    auto partitionId = Partitions[partition].PartitionId_;
+    auto partitionInfo = std::find_if(newPartitions.begin(), newPartitions.end(), [partitionId](const auto& partitionInfo) {
+        return partitionInfo.GetPartitionId() == partitionId;
+    });
+    Y_ABORT_UNLESS(partitionInfo != newPartitions.end(), "Partition info not found");
+
+    auto childrenPartitions = partitionInfo->GetChildPartitionIds();
+    for (const auto& partition : newPartitions) {
+        if (std::find(childrenPartitions.begin(), childrenPartitions.end(), partition.GetPartitionId()) == childrenPartitions.end()) {
+            continue;
+        }
+
+        Partitions.push_back(
+            TPartitionInfo()
+            .PartitionId(partition.GetPartitionId())
+            .FromBound(partition.GetFromBound().value_or(""))
+            .ToBound(partition.GetToBound())
+        );
+    }
 }
 
 TWriterCounters::TPtr TKeyedWriteSession::GetCounters() {

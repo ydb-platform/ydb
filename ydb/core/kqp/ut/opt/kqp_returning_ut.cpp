@@ -215,7 +215,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         CompareYson(R"([[20000;#]])", FormatResultSetYson(result.GetResultSet(0)));
     }
@@ -227,7 +227,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         CompareYson(R"([[20000;[100]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
@@ -239,7 +239,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         CompareYson(R"([[20000;[100]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
@@ -251,7 +251,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
     }
@@ -264,7 +264,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[2;[2]]])", FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(R"([[1;[3]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
@@ -277,7 +277,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[3;[2]]])", FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(R"([[2;[4];[2]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
@@ -301,7 +301,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[1;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -312,7 +312,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[2;[4];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -323,7 +323,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[2;[4];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -334,7 +334,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[3]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -345,7 +345,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[2;[2]];[3;[2]];[1;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -964,6 +964,106 @@ Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListWithNullable, QueryService) {
 
         CompareYson(R"([[20u;["delete_nullable1"]]])",
             ExecuteReturningQueryWithParams(kikimr, QueryService, deleteQuery, deleteParams));
+    }
+}
+
+Y_UNIT_TEST_TWIN(ReturningDeleteUpdate, UseSink) {
+    auto settings = TKikimrSettings().SetWithSampleTables(false);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+    TKikimrRunner kikimr(settings);
+
+    auto client = kikimr.GetQueryClient();
+
+    {
+        auto result = client.ExecuteQuery(R"(
+            CREATE TABLE test (
+                c1 Uint64 NOT NULL,
+                c2 Uint64 NOT NULL,
+                c3 Uint64 NOT NULL,
+                PRIMARY KEY (c1)
+            );)",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = client.ExecuteQuery(
+            R"(
+            DELETE FROM test WHERE c1 = 0 RETURNING *;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        auto result = client.ExecuteQuery(
+            R"(
+            DELETE FROM test WHERE c1 = 0 RETURNING c1;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        auto result = client.ExecuteQuery(
+            R"(
+            DELETE FROM test WHERE c1 = 0 RETURNING c1, c2;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        auto result = client.ExecuteQuery(
+            R"(
+            DELETE FROM test ON (c1) VALUES (0) RETURNING c1;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        auto result = client.ExecuteQuery(
+            R"(
+            UPDATE test SET c2 = 0 WHERE c1 = 0 RETURNING *;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        auto result = client.ExecuteQuery(
+            R"(
+            UPDATE test SET c2 = 0 WHERE c1 = 0 RETURNING c1;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        auto result = client.ExecuteQuery(
+            R"(
+            UPDATE test ON (c1, c2) VALUES (0, 0) RETURNING c1;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        auto result = client.ExecuteQuery(
+            R"(
+            UPDATE test ON (c1, c2) VALUES (0, 0) RETURNING *;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 

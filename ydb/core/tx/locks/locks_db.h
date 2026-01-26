@@ -40,6 +40,7 @@ public:
                 lock.Counter = rowset.template GetValue<typename Schema::Locks::Counter>();
                 lock.CreateTs = rowset.template GetValue<typename Schema::Locks::CreateTimestamp>();
                 lock.Flags = rowset.template GetValue<typename Schema::Locks::Flags>();
+                lock.QueryTraceId = rowset.template GetValueOrDefault<typename Schema::Locks::QueryTraceId>(0);
                 lockIndex[lock.LockId] = rows.size() - 1;
                 if (!rowset.Next()) {
                     return false;

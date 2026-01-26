@@ -115,8 +115,8 @@ namespace NKikimr::NDDisk {
         std::queue<std::tuple<ui64, ui64>> ChunkAllocateQueue;
         THashMap<ui64, std::function<void()>> LogCallbacks;
         ui64 NextCookie = 1;
-        THashMap<void*, std::function<void(NPDisk::TEvChunkWriteResult&)>> WriteCallbacks;
-        THashMap<void*, std::function<void(NPDisk::TEvChunkReadResult&)>> ReadCallbacks;
+        THashMap<ui64, std::function<void(NPDisk::TEvChunkWriteRawResult&)>> WriteCallbacks;
+        THashMap<ui64, std::function<void(NPDisk::TEvChunkReadRawResult&)>> ReadCallbacks;
 
         void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
         void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);
@@ -126,8 +126,8 @@ namespace NKikimr::NDDisk {
 
         void Handle(NPDisk::TEvCutLog::TPtr ev);
 
-        void Handle(NPDisk::TEvChunkWriteResult::TPtr ev);
-        void Handle(NPDisk::TEvChunkReadResult::TPtr ev);
+        void Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev);
+        void Handle(NPDisk::TEvChunkReadRawResult::TPtr ev);
 
         ui64 GetFirstLsnToKeep() const;
 
@@ -205,9 +205,6 @@ namespace NKikimr::NDDisk {
         // Read/write
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        THashMap<TString, size_t> BlockRefCount;
-        THashMap<std::tuple<ui64, ui64, ui32>, const TString*> Blocks;
-
         void Handle(TEvWrite::TPtr ev);
         void Handle(TEvRead::TPtr ev);
 
@@ -225,6 +222,7 @@ namespace NKikimr::NDDisk {
             std::map<ui64, TRecord> Records;
         };
 
+        THashMap<TString, size_t> BlockRefCount;
         std::map<std::tuple<ui64, ui64>, TPersistentBuffer> PersistentBuffers;
 
         struct TWriteInFlight {

@@ -424,10 +424,6 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
     BlobEncoder.SyncHeadKeys();
-
-    // New blocks have been recorded. You can now delete the keys of the repackaged blocks.
-    DefferedKeysForDeletion.clear();
-
     BlobEncoder.SyncNewHeadKey();
 
     if (BlobEncoder.IsNothingWritten()) { //Nothing writed at all

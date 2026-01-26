@@ -2,24 +2,38 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
+std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks() const {
+    std::vector<TCompactionTaskData> result;
     AFL_VERIFY(Portions.size());
-    TCompactionTaskData result(NextLevel->GetLevelId(), CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
+    result.emplace_back(NextLevel->GetLevelId(), CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
+    i64 tasksLeft = GetMaxConcurrency();
     for (auto&& i : Portions) {
-        result.AddCurrentLevelPortion(
+        result.back().AddCurrentLevelPortion(
             i.GetPortion(), NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);
-        if (!result.CanTakeMore()) {
+        if (!result.back().CanTakeMore()) {
             //            result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
-            break;
+            if (--tasksLeft <= 0) {
+                break;
+            }
+            result.emplace_back(NextLevel->GetLevelId(), CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
         }
     }
+    
+    if (result.back().IsEmpty()) {
+        result.pop_back();
+    }
+    AFL_VERIFY(!result.empty());
 
-    if (result.CanTakeMore()) {
+    if (result.back().CanTakeMore()) {
         PredOptimization = TInstant::Now();
     } else {
         PredOptimization = std::nullopt;
     }
     return result;
+}
+
+ui64 TZeroLevelPortions::GetMaxConcurrency() const {
+    return std::clamp(ui64(GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) / std::max(NextLevel->GetExpectedPortionSize(), GetExpectedPortionSize())), ui64(1), Concurrency);
 }
 
 ui64 TZeroLevelPortions::DoGetWeight(bool highPriority) const {
@@ -75,13 +89,14 @@ TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
 TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel,
     const TLevelCounters& levelCounters, const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop,
     const ui64 expectedBlobsSize, const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors,
-    const TString& defaultSelectorName, const ui64 highPriorityContribution, bool compactAtLevel)
+    const TString& defaultSelectorName, const ui64 concurrency, const ui64 highPriorityContribution, bool compactAtLevel)
     : TBase(levelIdx, nextLevel, overloadChecker, levelCounters, selectors, defaultSelectorName)
     , DurationToDrop(durationToDrop)
     , ExpectedBlobsSize(expectedBlobsSize)
     , PortionsCountAvailable(portionsCountAvailable)
     , HighPriorityContribution(highPriorityContribution)
-    , CompactAtLevel(compactAtLevel) {
+    , CompactAtLevel(compactAtLevel)
+    , Concurrency(concurrency) {
     if (DurationToDrop != TDuration::Max() && PredOptimization) {
         *PredOptimization -= TDuration::Seconds(RandomNumber<ui32>(DurationToDrop.Seconds()));
     }

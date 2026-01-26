@@ -40,7 +40,7 @@ class TEventHolder {
     TIntrusivePtr<TEventSerializedData> Buffer;
     TBSProxyContextPtr BSProxyCtx;
     std::unique_ptr<IEventBase> LocalEvent;
-    std::optional<std::weak_ptr<TMessageRelevanceTracker>> Tracker;
+    std::optional<TMessageRelevance> Tracker;
 
 public:
     TEventHolder()
@@ -93,7 +93,7 @@ public:
     }
 
     bool Relevant() const {
-        return !Tracker || !Tracker->expired();
+        return !Tracker || Tracker->IsRelevant();
     }
 
     ui32 GetByteSize() const {

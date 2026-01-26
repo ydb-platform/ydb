@@ -205,7 +205,7 @@ public:
                     }
                     AFL_VERIFY(indexMeta->GetColumnIds().size() == 1);
                     indexIdToColumnId.emplace(indexMeta->GetIndexId(), columnId);
-                    if (!indexMeta->IsInplaceData()) {
+                    if (!indexMeta->IsInplaceData(portionInfo->GetPortionInfo().GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId))) {
                         portionInfo->FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
                     } else {
                         const std::vector<TString> data = portionInfo->GetIndexInplaceDataOptional(indexMeta->GetIndexId());

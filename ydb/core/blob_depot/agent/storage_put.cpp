@@ -147,7 +147,7 @@ namespace NKikimr::NBlobDepot {
                     footer.StoredBlobId = Request.Id;
                 }
 
-                auto put = [&](EBlobType type, TRcBuf&& buffer) {
+                auto put = [&](EBlobType type, TRope&& buffer) {
                     const auto& [id, groupId] = kind.MakeBlobId(Agent, BlobSeqId, type, 0, buffer.size());
                     Y_ABORT_UNLESS(!locator->HasGroupId() || locator->GetGroupId() == groupId);
                     locator->SetGroupId(groupId);
@@ -162,17 +162,17 @@ namespace NKikimr::NBlobDepot {
 
                 if (SuppressFooter) {
                     // write the blob as is, we don't need footer for this kind
-                    put(EBlobType::VG_DATA_BLOB, TRcBuf(std::move(Request.Buffer)));
+                    put(EBlobType::VG_DATA_BLOB, std::move(Request.Buffer));
                 } else if (Request.Buffer.size() + sizeof(TVirtualGroupBlobFooter) <= MaxBlobSize) {
                     // write single blob with footer
                     TRope buffer = TRope(std::move(Request.Buffer));
                     buffer.Insert(buffer.End(), std::move(footerData));
                     buffer.Compact();
-                    put(EBlobType::VG_COMPOSITE_BLOB, TRcBuf(std::move(buffer)));
+                    put(EBlobType::VG_COMPOSITE_BLOB, std::move(buffer));
                 } else {
                     // write data blob and blob with footer
-                    put(EBlobType::VG_DATA_BLOB, TRcBuf(std::move(Request.Buffer)));
-                    put(EBlobType::VG_FOOTER_BLOB, TRcBuf(std::move(footerData)));
+                    put(EBlobType::VG_DATA_BLOB, std::move(Request.Buffer));
+                    put(EBlobType::VG_FOOTER_BLOB, TRope(std::move(footerData)));
                 }
 
                 if (IssueUncertainWrites) {
@@ -361,12 +361,13 @@ namespace NKikimr::NBlobDepot {
 
                 LocatorInFlight.emplace(TS3Locator::FromProto(*locator));
 
-                TString key = TS3Locator::FromProto(*locator).MakeObjectName(Agent.S3BasePath);
+                const TS3Locator temp = TS3Locator::FromProto(*locator);
+                TString key = temp.MakeObjectName(Agent.S3BasePath);
 
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA54, "starting WriteActor", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Key, key));
 
-                WriterActorId = IssueWriteS3(std::move(key), std::move(Request.Buffer), Request.Id);
+                WriterActorId = IssueWriteS3(std::move(key), std::move(Request.Buffer), Request.Id, temp);
 
                 ConnectionInstanceOnStart = Agent.ConnectionInstance;
 #else

@@ -21,10 +21,8 @@ TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
     AFL_VERIFY(sourceArray);
     NSubColumns::TDataBuilder builder(columnType, settings);
     IChunkedArray::TReader reader(sourceArray);
-    std::vector<std::shared_ptr<arrow::Array>> storage;
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
         auto address = reader.GetReadChunk(i);
-        storage.emplace_back(address.GetArray());
         auto conclusion = settings.GetDataExtractor()->AddDataToBuilders(address.GetArray(), builder);
         if (conclusion.IsFail()) {
             return conclusion;
@@ -72,7 +70,7 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     ui32 columnIdx = 0;
     TMonotonic pred = TMonotonic::Now();
     for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
-        TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
+        TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::binary(), externalInfo.GetDefaultSerializer());
         blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
         auto* cInfo = proto.AddKeyColumns();
         cInfo->SetSize(blobRanges.back().size());
@@ -125,7 +123,6 @@ public:
     }
 
     TConclusion<NBinaryJson::TBinaryJson> Finish() {
-        auto str = Result.GetStringRobust();
         auto bJson = NBinaryJson::SerializeToBinaryJson(Result.GetStringRobust());
         if (const TString* val = std::get_if<TString>(&bJson)) {
             return TConclusionStatus::Fail(*val);
@@ -136,7 +133,7 @@ public:
         }
     }
 
-    void SetValueByPath(const TString& path, const TString& valueStr) {
+    void SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue) {
         ui32 start = 0;
         bool enqueue = false;
         bool wasEnqueue = false;
@@ -192,9 +189,9 @@ public:
         if (wasEnqueue) {
             AFL_VERIFY(path.size() > start + 2)("path", path)("start", start);
             TStringBuf key(path.data() + start + 1, (path.size() - 1) - start - 1);
-            current->InsertValue(key, valueStr);
+            current->InsertValue(key, jsonValue);
         } else {
-            AFL_VERIFY(path.size() > start);
+            AFL_VERIFY(path.size() >= start)("path", path)("start", start);
             TStringBuf key(path.data() + start, (path.size()) - start);
             ui32 keyIndex;
             if (key.StartsWith("[") && key.EndsWith("]") && TryFromString<ui32>(key.data() + 1, key.size() - 2, keyIndex)) {
@@ -204,11 +201,11 @@ public:
                 if (current->GetArraySafe().size() <= keyIndex) {
                     current->GetArraySafe().resize(keyIndex + 1);
                 }
-                current->GetArraySafe()[keyIndex] = valueStr;
+                current->GetArraySafe()[keyIndex] = jsonValue;
             } else {
                 AFL_VERIFY(!current->IsArray())("key", key)("current", current->GetStringRobust())("full", Result.GetStringRobust())(
                     "current_type", current->GetType());
-                current->InsertValue(key, valueStr);
+                current->InsertValue(key, jsonValue);
             }
         }
     }
@@ -241,15 +238,15 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
             }
         };
 
-        const auto addValueToJson = [&](const TString& path, const TString& valueStr) {
-            value.SetValueByPath(path, valueStr);
+        const auto addValueToJson = [&](const TString& path, const NJson::TJsonValue& jsonValue) {
+            value.SetValueByPath(path, jsonValue);
         };
 
-        auto onRecordKV = [&](const ui32 index, const std::string_view valueView, const bool isColumn) {
+        auto onRecordKV = [&](const ui32 index, const NJson::TJsonValue& jsonValue, const bool isColumn) {
             if (isColumn) {
-                addValueToJson(ColumnsData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
+                addValueToJson(ColumnsData.GetStats().GetColumnNameString(index), jsonValue);
             } else {
-                addValueToJson(OthersData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
+                addValueToJson(OthersData.GetStats().GetColumnNameString(index), jsonValue);
             }
         };
         it.ReadRecord(recordIndex, onStartRecord, onRecordKV, onFinishRecord);

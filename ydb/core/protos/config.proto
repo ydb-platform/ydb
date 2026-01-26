@@ -41,6 +41,7 @@ import "ydb/core/protos/nbs/blockstore.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "yql/essentials/core/file_storage/proto/file_storage.proto";
 import "yql/essentials/providers/common/proto/gateways_config.proto";
+import "ydb/core/protos/s3_settings.proto";
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
@@ -1185,7 +1186,7 @@ message TSharedReadingConfig {
     optional bool Enabled = 1;
     optional uint64 TimeoutBeforeStartSessionSec = 2;
     optional uint64 SendStatusPeriodSec = 3;
-    optional uint64 MaxSessionUsedMemory = 4; 
+    optional uint64 MaxSessionUsedMemory = 4;
     optional bool WithoutConsumer = 5;
     optional TJsonParserConfig JsonParser = 7;
     optional TCompileServiceConfig CompileService = 8;
@@ -1753,6 +1754,12 @@ message TImmediateControlsConfig {
             DefaultValue: 2 }];
 
         optional TRequestReportingSettings RequestReportingSettings = 12;
+
+        optional uint64 MaxPutTimeoutSeconds = 13 [(ControlOptions) = {
+            Description: "Maximum amount of time TEvPut request can work until it is terminated with DEADLINE status by DSProxy",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 60 }]; // 1 minute
     }
 
     message TPDiskControls {
@@ -1879,6 +1886,7 @@ message TAuditConfig {
         optional EFormat Format = 1 [default = JSON];
         optional string LogName = 2;
         optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
+        optional TUAClientConfig UAClientConfig = 4; // If not specified, the configuration is taken from common TLogConfig section
     }
 
     message TLogClassConfig {
@@ -2180,6 +2188,13 @@ message TColumnShardConfig {
     optional uint64 BadPortionSizeLimit = 51 [default = 524288];
     optional uint64 BadPortionsLimit = 52;
     optional bool CombineChunksInResult = 54 [default = true];
+    optional bool EnableParallelCompaction = 56 [default = false];
+    optional NKikimrSchemeOp.TS3Settings S3Client = 58;
+
+    oneof DefaultCompaction {
+        string DefaultCompactionPreset = 61 [default = "lc-buckets"];
+        NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
+    }
 }
 
 message TSchemeShardConfig {
@@ -2189,7 +2204,7 @@ message TSchemeShardConfig {
         // to disable set to 0
         optional uint32 InFlightLimit = 2 [default = 10000];
     }
-    // after this amount of time we forcely write full stats to local DB
+    // after this amount of time we forcibly write full stats to local DB
     // to disable set to 0
     optional uint32 StatsBatchTimeoutMs = 1 [default = 100];
 
@@ -2207,6 +2222,11 @@ message TSchemeShardConfig {
     // number of shards per table
     // 0 means default - NKikimrIndexBuilder.TIndexBuildSettings.max_shards_in_flight
     optional uint32 MaxRestoreBuildIndexShardsInFlight = 6 [default = 1000];
+
+    // number of shards per table
+    // database level default for TTL mechanics
+    // 0 means no limit
+    optional uint32 MaxTTLShardsInFlight = 7 [default = 0];
 }
 
 message TCompactionConfig {
@@ -2504,6 +2524,7 @@ message TKafkaProxyConfig {
     optional bool AutoCreateTopicsEnable = 13 [default = false];
     optional uint32 TopicCreationDefaultPartitions = 14 [default = 1];
     optional bool AutoCreateConsumersEnable = 15 [default = true];
+    optional string PublicHost = 16;
 }
 
 message TAwsCompatibilityConfig {

@@ -82,6 +82,7 @@ TPartitionActor::TPartitionActor(
 
 void TPartitionActor::MakeCommit(const TActorContext& ctx) {
     ui64 offset = ClientReadOffset;
+
     if (CommitsDisabled || NotCommitedToFinishParents.size() != 0 || CommitsInfly.size() >= MAX_COMMITS_INFLY)
         return;
 
@@ -159,8 +160,8 @@ void TPartitionActor::Bootstrap(const TActorContext& ctx) {
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
 }
 
-const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents() const {
-    const auto* partition = TopicHolder->PartitionGraph->GetPartition(Partition.Partition);
+const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::shared_ptr<NPQ::TPartitionGraph> partitionGraph) const {
+    const auto* partition = partitionGraph->GetPartition(Partition.Partition);
     if (partition) {
         return partition->AllParents;
     }
@@ -170,7 +171,9 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents() const
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    const auto& parents = GetParents();
+    // extend the lifetime for PartitionGraph
+    auto partitionGraph = TopicHolder->PartitionGraph;
+    const auto& parents = GetParents(partitionGraph);
     if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
         for (auto& parent: parents) {
@@ -437,23 +440,6 @@ TString GetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::Dat
 TString GetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch) {
     Y_ABORT_UNLESS(batch);
     return batch->producer_id();
-}
-
-void SetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString value) {
-    Y_ABORT_UNLESS(batch);
-    batch->set_source_id(std::move(value));
-}
-
-void SetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch, TString value) {
-    Y_ABORT_UNLESS(batch);
-    if (IsUtf(value)) {
-        batch->set_producer_id(std::move(value));
-    } else {
-        TString res = Base64Encode(value);
-        batch->set_producer_id(res);
-        (*batch->mutable_write_session_meta())["_encoded_producer_id"] = res;
-
-    }
 }
 
 void SetBatchExtraField(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString key, TString value) {

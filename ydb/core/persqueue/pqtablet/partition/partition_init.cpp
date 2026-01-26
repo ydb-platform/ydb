@@ -36,6 +36,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
     Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
+    Steps.push_back(MakeHolder<TDeleteKeysStep>(this));
     Steps.push_back(MakeHolder<TInitFieldsStep>(this));
 
     CurrentStep = Steps.begin();
@@ -337,13 +338,6 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
            Partition()->BlobEncoder.NewHead.Offset = Partition()->BlobEncoder.Head.Offset = Partition()->BlobEncoder.EndOffset;
         }
 
-        if (meta.HasStartOffset()) {
-            GetContext().StartOffset = meta.GetStartOffset();
-        }
-        if (meta.HasEndOffset()) {
-            GetContext().EndOffset = meta.GetEndOffset();
-        }
-
         Partition()->SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();
         Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
@@ -508,16 +502,15 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             FillBlobsMetaData(ctx);
             FormHeadAndProceed();
 
-            if (GetContext().StartOffset && *GetContext().StartOffset != Partition()->GetStartOffset()) {
-                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->GetStartOffset());
-                Y_ABORT("meta is broken");
-                return PoisonPill(ctx);
-            }
-            if (GetContext().EndOffset && *GetContext().EndOffset != Partition()->GetEndOffset()) {
-                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->GetEndOffset());
-                Y_ABORT("meta is broken");
-                return PoisonPill(ctx);
-            }
+            // AFL_ENSURE(!GetContext().StartOffset || *GetContext().StartOffset >= Partition()->GetStartOffset())
+            //     ("d", "StartOffset from meta and blobs are different")
+            //     ("l", *GetContext().StartOffset)
+            //     ("r", Partition()->GetStartOffset());
+
+            // AFL_ENSURE(!GetContext().EndOffset || *GetContext().EndOffset == Partition()->GetEndOffset())
+            //     ("d", "EndOffset from meta and blobs are different")
+            //     ("l", *GetContext().EndOffset)
+            //     ("r", Partition()->GetEndOffset());
 
             Done(ctx);
             break;
@@ -667,7 +660,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const TActorContext&) {
             const auto k = TKey::FromString(pair.GetKey(), PartitionId());
             if (!actualKeys.contains(pair.GetKey())) {
                 PQ_LOG_D("unknown key " << pair.GetKey() << " will be deleted");
-                Partition()->DeletedKeys->emplace_back(k.ToString());
+                GetContext().DeletedKeys.emplace_back(k.ToString());
                 continue;
             }
             if (dataKeysBody.empty()) { //no data - this is first pair of first range
@@ -851,6 +844,41 @@ void TInitDataRangeStep::FormHeadAndProceed() {
     PQ_INIT_ENSURE(fwz.Head.Offset >= startOffset || fwz.Head.Offset == startOffset - 1 && fwz.Head.PartNo > 0);
 }
 
+//
+// TDeleteKeysStep
+//
+
+TDeleteKeysStep::TDeleteKeysStep(TInitializer* initializer)
+    : TBaseKVStep(initializer, "TDeleteKeysStep", true) {
+}
+
+void TDeleteKeysStep::Execute(const TActorContext &ctx) {
+    if (GetContext().DeletedKeys.empty()) {
+        Done(ctx);
+        return;
+    }
+
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    for (auto& key : GetContext().DeletedKeys) {
+        auto* cmd = request->Record.AddCmdDeleteRange();
+        cmd->MutableRange()->SetFrom(key);
+        cmd->MutableRange()->SetIncludeFrom(true);
+        cmd->MutableRange()->SetTo(std::move(key));
+        cmd->MutableRange()->SetIncludeTo(true);
+    }
+    GetContext().DeletedKeys = {};
+
+    ctx.Send(Partition()->TabletActorId, request.release());
+}
+
+void TDeleteKeysStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
+    if (!ValidateResponse(*this, ev, ctx)) {
+        PoisonPill(ctx);
+        return;
+    }
+
+    Done(ctx);
+}
 
 //
 // TInitDataStep
@@ -907,13 +935,21 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
                 ui32 size = headKeys[i].Size;
                 ui64 offset = key.GetOffset();
-                while (currentLevel + 1 < totalLevels && size < compactLevelBorder[currentLevel + 1])
+                while (currentLevel + 1 < totalLevels && size < compactLevelBorder[currentLevel + 1]) {
                     ++currentLevel;
-                PQ_INIT_ENSURE(size < compactLevelBorder[currentLevel]);
+                }
+                PQ_INIT_ENSURE(size < compactLevelBorder[currentLevel])
+                    ("l", size)
+                    ("r", compactLevelBorder[currentLevel])
+                    ("c", currentLevel);
 
                 dataKeysHead[currentLevel].AddKey(key, size);
-                PQ_INIT_ENSURE(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
-                PQ_INIT_ENSURE(!dataKeysHead[currentLevel].NeedCompaction());
+                PQ_INIT_ENSURE(dataKeysHead[currentLevel].KeysCount() < AppData(ctx)->PQConfig.GetMaxBlobsPerLevel())
+                    ("l", dataKeysHead[currentLevel].KeysCount())
+                    ("r", AppData(ctx)->PQConfig.GetMaxBlobsPerLevel())
+                    ("c", currentLevel);
+                PQ_INIT_ENSURE(!dataKeysHead[currentLevel].NeedCompaction())
+                    ("c", currentLevel);
 
                 PQ_LOG_D("read res partition offset " << offset << " endOffset " << Partition()->BlobEncoder.EndOffset
                         << " key " << key.GetOffset() << "," << key.GetCount() << " valuesize " << read.GetValue().size()

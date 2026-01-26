@@ -64,7 +64,7 @@ public:
         }
 
         bool operator()(const TSourceConstructor& l, const TSourceConstructor& r) const {
-            return r.Start < l.Start;
+            return std::make_pair(r.Start, r.GetSourceId()) < std::make_pair(l.Start, l.GetSourceId());
         }
     };
 
@@ -75,7 +75,7 @@ class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSource
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>;
     ui32 CurrentSourceIdx = 0;
-    std::vector<TInsertWriteId> Uncommitted;    
+    std::vector<TInsertWriteId> Uncommitted;
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;

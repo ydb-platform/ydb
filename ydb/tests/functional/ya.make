@@ -10,6 +10,7 @@ RECURSE(
     clickbench
     cms
     config
+    dstool
     encryption
     hive
     kqp

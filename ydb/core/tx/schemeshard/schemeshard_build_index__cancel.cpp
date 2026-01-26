@@ -65,6 +65,10 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         indexBuildInfo.CancelRequested = true;
+        indexBuildInfo.IsBroken = false; // allow to recover by cancelling broken index builds
+        if (indexBuildInfo.State == TIndexBuildInfo::EState::Invalid) {
+            indexBuildInfo.State = TIndexBuildInfo::EState::Filling;
+        }
         Self->PersistBuildIndexCancelRequest(db, indexBuildInfo);
 
         Progress(indexBuildInfo.Id);

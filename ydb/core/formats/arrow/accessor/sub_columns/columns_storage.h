@@ -7,6 +7,7 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -49,7 +50,7 @@ public:
     private:
         ui32 KeyIndex;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        const arrow::StringArray* CurrentArrayData;
+        const arrow::BinaryArray* CurrentArrayData;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
@@ -71,10 +72,12 @@ public:
             return KeyIndex;
         }
 
-        std::string_view GetValue() const {
+        std::string_view GetRawValue() const {
             auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
             return std::string_view(view.data(), view.size());
         }
+
+        NArrow::NAccessor::TBinaryJsonValueView GetValue() const;
 
         bool HasValue() const {
             return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
@@ -129,7 +132,7 @@ public:
         , Records(data) {
         AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount())("records", Records->num_columns())("stats", Stats.GetColumnsCount());
         for (auto&& i : Records->GetColumns()) {
-            AFL_VERIFY(i->GetDataType()->id() == arrow::utf8()->id());
+            AFL_VERIFY(i->GetDataType()->id() == arrow::binary()->id());
         }
     }
 };

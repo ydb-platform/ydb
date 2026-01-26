@@ -9,6 +9,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
 #include <contrib/libs/xxhash/xxhash.h>
 #include <util/string/join.h>
+#include <yql/essentials/types/binary_json/format.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 namespace NKikimr::NArrow::NAccessor {
 class TSubColumnsArray;
@@ -19,7 +21,7 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 class TColumnElements {
 private:
     YDB_READONLY_DEF(TStringBuf, KeyName);
-    YDB_READONLY_DEF(std::deque<TStringBuf>, Values);
+    YDB_READONLY_DEF(std::deque<NBinaryJson::TBinaryJson>, Values);
     YDB_READONLY_DEF(std::vector<ui32>, RecordIndexes);
     YDB_READONLY(ui32, DataSize, 0);
     std::shared_ptr<IChunkedArray> Accessor;
@@ -37,7 +39,7 @@ public:
         : KeyName(key) {
     }
 
-    void AddData(const TStringBuf sb, const ui32 index) {
+    void AddData(const NBinaryJson::TBinaryJson& sb, const ui32 index) {
         Values.emplace_back(sb);
         AFL_VERIFY(RecordIndexes.empty() || RecordIndexes.back() < index);
         RecordIndexes.emplace_back(index);
@@ -46,12 +48,6 @@ public:
 };
 
 class TDataBuilder {
-public:
-    class IBuffers {
-    public:
-        virtual ~IBuffers() = default;
-    };
-
 private:
     class TStorageAddress {
     private:
@@ -82,14 +78,9 @@ private:
     std::deque<TString> StorageStrings;
     const std::shared_ptr<arrow::DataType> Type;
     const TSettings Settings;
-    std::vector<std::shared_ptr<IBuffers>> Buffers;
 
 public:
     TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings);
-
-    void StoreBuffer(const std::shared_ptr<IBuffers>& data) {
-        Buffers.emplace_back(data);
-    }
 
     void StartNextRecord() {
         ++CurrentRecordIndex;
@@ -103,7 +94,15 @@ public:
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
-        itElements->second.AddData(GetNullString(), CurrentRecordIndex);
+        itElements->second.AddData(GetNullBinaryJson(), CurrentRecordIndex);
+    }
+
+    static const NBinaryJson::TBinaryJson& GetNullBinaryJson() {
+        const static auto res = NBinaryJson::SerializeToBinaryJson("null", false);
+        const static auto nullBinaryJson = std::get_if<NBinaryJson::TBinaryJson>(&res);
+        AFL_VERIFY(nullBinaryJson);
+
+        return *nullBinaryJson;
     }
 
     static const TString& GetNullString() {
@@ -115,30 +114,12 @@ public:
         return std::string_view(GetNullString().data(), GetNullString().size());
     }
 
-    void AddKV(const TStringBuf key, const TStringBuf value) {
+    void AddKV(const TStringBuf key, const NBinaryJson::TBinaryJson& value) {
         auto itElements = Elements.find(key);
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
         itElements->second.AddData(value, CurrentRecordIndex);
-    }
-
-    void AddKVOwn(const TStringBuf key, std::string&& value) {
-        Storage.emplace_back(std::move(value));
-        auto itElements = Elements.find(key);
-        if (itElements == Elements.end()) {
-            itElements = Elements.emplace(key, key).first;
-        }
-        itElements->second.AddData(Storage.back(), CurrentRecordIndex);
-    }
-
-    void AddKVOwn(const TStringBuf key, TString&& value) {
-        StorageStrings.emplace_back(std::move(value));
-        auto itElements = Elements.find(key);
-        if (itElements == Elements.end()) {
-            itElements = Elements.emplace(key, key).first;
-        }
-        itElements->second.AddData(StorageStrings.back(), CurrentRecordIndex);
     }
 
     class THeapElements {
@@ -166,7 +147,7 @@ public:
             return KeyIndex;
         }
 
-        const TStringBuf* GetValuePointer() const {
+        const NBinaryJson::TBinaryJson* GetValuePointer() const {
             return &Elements->GetValues()[Index];
         }
 

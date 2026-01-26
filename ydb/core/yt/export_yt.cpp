@@ -7,6 +7,8 @@
     #include <ydb/core/protos/flat_scheme_op.deps.pb.h> // Y_IGNORE
 #endif
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/datashard/type_serialization.h>
@@ -686,7 +688,9 @@ IBuffer* TYtExport::CreateBuffer() const {
     const auto& settings = Task.GetYTSettings();
     const auto& scanSettings = Task.GetScanSettings();
     const ui64 maxRows = scanSettings.GetRowsBatchSize() ? scanSettings.GetRowsBatchSize() : Max<ui64>();
-    const ui64 maxBytes = scanSettings.GetBytesBatchSize();
+
+    const ui64 configMaxBytes = AppData()->DataShardConfig.GetBackupBytesBatchSize();
+    const ui64 maxBytes = scanSettings.HasBytesBatchSize() ? scanSettings.GetBytesBatchSize() : configMaxBytes;
 
     return new TYtBuffer(Columns, maxRows, maxBytes, settings.GetUseTypeV3());
 }

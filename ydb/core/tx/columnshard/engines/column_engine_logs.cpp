@@ -4,7 +4,7 @@
 #include "changes/actualization/construction/context.h"
 #include "changes/cleanup_portions.h"
 #include "changes/cleanup_tables.h"
-#include "changes/general_compaction.h"
+#include "changes/counters/general.h"
 #include "changes/ttl.h"
 #include "loading/stages.h"
 
@@ -211,17 +211,19 @@ ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLock
     }
 }
 
-std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(
+std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCompaction(
     const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
     auto granule = GranulesStorage->GetGranuleForCompaction(dataLocksManager);
     if (!granule) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no granules for start compaction");
-        return nullptr;
+        return {};
     }
     granule->OnStartCompaction();
-    auto changes = granule->GetOptimizationTask(granule, dataLocksManager);
-    if (!changes) {
+    TMonotonic startTime = TMonotonic::Now();
+    auto changes = granule->GetOptimizationTasks(granule, dataLocksManager);
+    NChanges::TGeneralCompactionCounters::OnTasksGeneratred((TMonotonic::Now() - startTime).MicroSeconds(), changes.size());
+    if (changes.empty()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")(
             "weight", granule->GetCompactionPriority().DebugString());
     }

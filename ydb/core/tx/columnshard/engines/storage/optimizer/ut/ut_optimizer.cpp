@@ -40,8 +40,8 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         planner.AddPortion(maker.Make(1, 100, 10000));
         Cerr << planner.GetDescription() << Endl;
         NKikimr::NOlap::TCompactionLimits limits;
-        auto task = planner.GetOptimizationTask(limits, nullptr);
-        Y_ABORT_UNLESS(!task);
+        auto tasks = planner.GetOptimizationTasks(limits, nullptr);
+        Y_ABORT_UNLESS(!tasks.empty());
     }
 
     Y_UNIT_TEST(MergeSmall) {
@@ -51,9 +51,9 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         planner.AddPortion(maker.Make(101, 200, 10000));
         Cerr << planner.GetDescription() << Endl;
         NKikimr::NOlap::TCompactionLimits limits;
-        auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTask(limits, nullptr));
-        Y_ABORT_UNLESS(task);
-        Y_ABORT_UNLESS(task->SwitchedPortions.size() == 2);
+        auto tasks = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTasks(limits, nullptr));
+        Y_ABORT_UNLESS(!tasks.empty());
+        Y_ABORT_UNLESS(tasks.front()->SwitchedPortions.size() == 2);
     }
 
     Y_UNIT_TEST(MergeSmall1) {
@@ -65,9 +65,9 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         planner.AddPortion(maker.Make(10, 20, 40000));
         Cerr << planner.GetDescription() << Endl;
         NKikimr::NOlap::TCompactionLimits limits;
-        auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTask(limits, nullptr));
-        Y_ABORT_UNLESS(task);
-        Y_ABORT_UNLESS(task->SwitchedPortions.size() == 4);
+        auto tasks = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTasks(limits, nullptr));
+        Y_ABORT_UNLESS(!tasks.empty());
+        Y_ABORT_UNLESS(tasks.front()->SwitchedPortions.size() == 4);
     }
 
     Y_UNIT_TEST(MergeSmall2) {
@@ -80,11 +80,11 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
         planner.AddPortion(maker.Make(1000, 2000, 40000));
         Cerr << planner.GetDescription() << Endl;
         NKikimr::NOlap::TCompactionLimits limits;
-        auto task = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTask(limits, nullptr));
-        Y_ABORT_UNLESS(task);
-        Y_ABORT_UNLESS(task->SwitchedPortions.size() == 2);
-        Y_ABORT_UNLESS(task->SwitchedPortions[0].GetPortionId() == 1);
-        Y_ABORT_UNLESS(task->SwitchedPortions[1].GetPortionId() == 2);
+        auto tasks = dynamic_pointer_cast<NKikimr::NOlap::TCompactColumnEngineChanges>(planner.GetOptimizationTasks(limits, nullptr));
+        Y_ABORT_UNLESS(!tasks.empty());
+        Y_ABORT_UNLESS(tasks.front()->SwitchedPortions.size() == 2);
+        Y_ABORT_UNLESS(tasks.front()->SwitchedPortions[0].GetPortionId() == 1);
+        Y_ABORT_UNLESS(tasks.front()->SwitchedPortions[1].GetPortionId() == 2);
     }
 
 };

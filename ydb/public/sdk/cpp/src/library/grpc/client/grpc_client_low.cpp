@@ -79,7 +79,7 @@ private:
 #endif
         }
 
-        if (!SetOption(fd, IPPROTO_TCP, TCP_NODELAY, TcpNoDelay_)) {
+        if (!SetOption(fd, IPPROTO_TCP, TCP_NODELAY, static_cast<int>(TcpNoDelay_))) {
             std::cerr << std::format("Failed to set TCP_NODELAY option: {}", strerror(errno)) << std::endl;
             return false;
         }

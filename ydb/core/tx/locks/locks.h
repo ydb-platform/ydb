@@ -49,6 +49,8 @@ public:
         TVector<TPathId> WriteTables;
     };
 
+    virtual bool HasChanges() const = 0;
+
     virtual bool Load(TVector<TLockRow>& rows) = 0;
 
     // Returns true when a new lock may be added with the given lockId
@@ -676,6 +678,8 @@ public:
         CleanupPending.clear();
         CleanupCandidates.clear();
         PendingSubscribeLocks.clear();
+        PendingRestoreRemoveQueue.Clear();
+        PendingRestoreBreakQueue.Clear();
     }
 
     const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
@@ -705,6 +709,9 @@ private:
     TPriorityQueue<TVersionedLockId> CleanupCandidates;
     TList<TPendingSubscribeLock> PendingSubscribeLocks;
     ui64 Counter = 0;
+
+    TIntrusiveList<TLockInfo, TLockInfoExpireListTag> PendingRestoreRemoveQueue;
+    TIntrusiveList<TLockInfo, TLockInfoExpireListTag> PendingRestoreBreakQueue;
 
     TTableLocks::TPtr GetTableLocks(const TTableId& table) const {
         auto it = Tables.find(table.PathId);
@@ -966,6 +973,7 @@ public:
     bool Load(ILocksDb& db);
 
     void RestoreInMemoryLocks(THashMap<ui64, ILocksDb::TLockRow>&& rows);
+    bool RestorePersistentState(ILocksDb* db);
 
     const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
         return Locker.GetLocks();

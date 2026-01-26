@@ -44,6 +44,7 @@ public:
 private:
     THashMap<ui64, TOperation::TPtr> MigratedTxs;
     bool InMemoryStateActorStarted = false;
+    bool Restarted = false;
 };
 
 bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
@@ -101,6 +102,14 @@ void TDataShard::OnInMemoryStateRestored(THashMap<ui64, TOperation::TPtr> migrat
 bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute");
 
+    TDataShardLocksDb locksDb(*Self, txc);
+    if (Self->SysLocks.RestorePersistentState(&locksDb)) {
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute: persistent lock state updated, restarting");
+        Self->OnInMemoryStateRestored(std::move(MigratedTxs));
+        Restarted = true;
+        return true;
+    }
+
     if (!MigratedTxs.empty()) {
         bool wasEmpty = Self->TransQueue.GetPlan().empty();
 
@@ -148,6 +157,10 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
 }
 
 void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
+    if (Restarted) {
+        return;
+    }
+
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Complete");
 
     if (Self->InMemoryStateActor && InMemoryStateActorStarted) {

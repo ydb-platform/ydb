@@ -15,7 +15,34 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
     }
 
     auto result = NArrow::TColumnFilter::BuildDenyFilter();
-    NArrow::NMerger::TRWSortableBatchPosition iterator(data, 0, false);
+    std::vector<std::string> sortingColumns;
+    if (!SortedRanges.empty()) {
+        const auto& firstRange = SortedRanges.front();
+        if (!firstRange.GetPredicateFrom().IsAll()) {
+            sortingColumns = firstRange.GetPredicateFrom().GetColumnNames();
+        } else if (!firstRange.GetPredicateTo().IsAll()) {
+            sortingColumns = firstRange.GetPredicateTo().GetColumnNames();
+        }
+    }
+
+    if (sortingColumns.empty() && !SortedRanges.empty()) {
+        for (auto&& range : SortedRanges) {
+            if (!range.GetPredicateFrom().IsAll()) {
+                sortingColumns = range.GetPredicateFrom().GetColumnNames();
+                break;
+            }
+
+            if (!range.GetPredicateTo().IsAll()) {
+                sortingColumns = range.GetPredicateTo().GetColumnNames();
+                break;
+            }
+        }
+    }
+
+    NArrow::NMerger::TRWSortableBatchPosition iterator = sortingColumns.empty() 
+        ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
+        : NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingColumns, std::vector<std::string>(), false);
+
     bool reachedEnd = false;
     for (const auto& range : SortedRanges) {
         const ui64 initialIdx = iterator.GetPosition();

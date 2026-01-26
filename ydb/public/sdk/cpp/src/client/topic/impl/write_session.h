@@ -97,7 +97,7 @@ private:
 
     struct WriteSessionWrapper {
         WriteSessionPtr Session;
-        ui32 Partition;
+        const ui32 Partition;
         ui64 QueueSize = 0;
         std::shared_ptr<TIdleSession> IdleSession = nullptr;
 

@@ -174,7 +174,7 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
         for (auto item : maybeList.Cast()) {
             if (auto upsert = item.Maybe<TKqlUpsertRows>()) {
                 if (upsert.Cast().Table().Raw() == returning.Table().Raw()) {
-                    const auto modeSetting = GetSetting(upsert.Cast().Settings().Ref(), "Mode");
+                    const auto modeSetting = upsert.Cast().Settings().IsValid() ? GetSetting(upsert.Cast().Settings().Ref(), "Mode") : nullptr;
                     return buildReturningRows(
                             upsert.Input().Cast(),
                             upsert.Columns().Cast(),
@@ -199,7 +199,7 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
     }
 
     if (auto upsert = returning.Update().Maybe<TKqlUpsertRows>()) {
-        const auto modeSetting = GetSetting(upsert.Cast().Settings().Ref(), "Mode");
+        const auto modeSetting = upsert.Cast().Settings().IsValid() ? GetSetting(upsert.Cast().Settings().Ref(), "Mode") : nullptr;
         return buildReturningRows(
             upsert.Input().Cast(),
             upsert.Columns().Cast(),

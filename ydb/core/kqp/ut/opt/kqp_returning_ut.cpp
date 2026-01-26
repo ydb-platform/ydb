@@ -215,7 +215,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         CompareYson(R"([[20000;#]])", FormatResultSetYson(result.GetResultSet(0)));
     }
@@ -227,7 +227,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         CompareYson(R"([[20000;[100]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
@@ -239,7 +239,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         CompareYson(R"([[20000;[100]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
@@ -251,7 +251,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
     }
@@ -264,7 +264,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[2;[2]]])", FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(R"([[1;[3]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
@@ -277,7 +277,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[3;[2]]])", FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(R"([[2;[4];[2]]])", FormatResultSetYson(result.GetResultSet(1)));
     }
@@ -301,7 +301,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[1;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -312,7 +312,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[2;[4];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -323,7 +323,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[2;[4];[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -334,7 +334,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[3]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
@@ -345,7 +345,7 @@ Y_UNIT_TEST(ReturningSerial) {
         )");
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT(result.IsSuccess());
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson(R"([[2;[2]];[3;[2]];[1;[3]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 

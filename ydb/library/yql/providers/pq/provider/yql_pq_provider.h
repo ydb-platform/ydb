@@ -52,6 +52,7 @@ public:
     bool SupportRtmrMode = false;
     bool UseActorSystemThreadsInTopicClient = true;
     bool AllowTransparentSystemColumns = true;
+    bool FiniteTopicsReadByDefault = false;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 

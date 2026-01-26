@@ -1930,8 +1930,14 @@ private:
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 
-        if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->StreamingDisposition) {
-            state->Disposition = *requestContext->StreamingDisposition;
+        if (const auto requestContext = SessionCtx->GetUserRequestContext()) {
+            state->FiniteTopicsReadByDefault = !requestContext->IsStreamingQuery;
+
+            if (const auto disposition = requestContext->StreamingDisposition) {
+                state->Disposition = *disposition;
+            }
+        } else {
+            state->FiniteTopicsReadByDefault = true;
         }
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));

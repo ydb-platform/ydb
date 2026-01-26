@@ -229,30 +229,30 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         {}
 
         class TRetryState {
-            public:
-                explicit TRetryState(TDuration timeout)
-                    : Timeout(timeout)
-                {}
-                TDuration GetNextDelay() {
-                    constexpr TDuration MaxDelay = TDuration::Seconds(10);
-                    constexpr TDuration MinDelay = TDuration::MilliSeconds(100); // from second retry
-                    TDuration ret = Delay; // The first delay is zero
-                    Delay = ClampVal(Delay * 2, MinDelay, MaxDelay);
-                    return ret ? RandomizeDelay(ret) : ret;
-                }
+        public:
+            explicit TRetryState(TDuration timeout)
+                : Timeout(timeout)
+            {}
+            TDuration GetNextDelay() {
+                constexpr TDuration MaxDelay = TDuration::Seconds(10);
+                constexpr TDuration MinDelay = TDuration::MilliSeconds(100); // from second retry
+                TDuration ret = Delay; // The first delay is zero
+                Delay = ClampVal(Delay * 2, MinDelay, MaxDelay);
+                return ret ? RandomizeDelay(ret) : ret;
+            }
 
-                bool IsTimeout() const {
-                    return TInstant::Now() - DisconnectedTime > Timeout;
-                }
-            private:
-                static TDuration RandomizeDelay(TDuration baseDelay) {
-                    const TDuration::TValue half = baseDelay.GetValue() / 2;
-                    return TDuration::FromValue(half + RandomNumber<TDuration::TValue>(half));
-                }
-            private:
-                TDuration Delay; // The first time retry will be done instantly.
-                TInstant DisconnectedTime = TInstant::Now();
-                TDuration Timeout;
+            bool IsTimeout() const {
+                return TInstant::Now() - DisconnectedTime > Timeout;
+            }
+        private:
+            static TDuration RandomizeDelay(TDuration baseDelay) {
+                const TDuration::TValue half = baseDelay.GetValue() / 2;
+                return TDuration::FromValue(half + RandomNumber<TDuration::TValue>(half));
+            }
+        private:
+            TDuration Delay; // The first time retry will be done instantly.
+            TInstant DisconnectedTime = TInstant::Now();
+            TDuration Timeout;
         };
 
         struct TCounters {

@@ -163,6 +163,10 @@
       {
         "name": "Metadata",
         "type": "Utf8?"
+      },
+      {
+        "name": "IsTruncated",
+        "type": "Bool?"
       }
     ],
     "primary_key": [

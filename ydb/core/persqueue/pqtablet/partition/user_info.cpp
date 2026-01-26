@@ -450,7 +450,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
         auto s = counters
             ->GetSubgroup("counters", IsServerless ? "topics_per_partition_serverless" : "topics_per_partition")
             ->GetSubgroup("host", "");
-        if (auto id = Config.GetMonitoringProjectId(); !id.empty()) {
+        if (const auto& id = Config.GetMonitoringProjectId(); !id.empty()) {
             s = s->GetSubgroup("monitoring_project_id", id);
         }
         return s
@@ -464,7 +464,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
         auto s = counters
             ->GetSubgroup("counters", "topics_per_partition")
             ->GetSubgroup("host", "cluster");
-        if (auto id = Config.GetMonitoringProjectId(); !id.empty()) {
+        if (const auto& id = Config.GetMonitoringProjectId(); !id.empty()) {
             s = s->GetSubgroup("monitoring_project_id", id);
         }
         return s

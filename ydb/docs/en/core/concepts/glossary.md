@@ -229,6 +229,28 @@ A **consumer** is an entity that reads messages from a topic.
 
 **Changefeed** or **stream of changes** is an ordered list of changes in a given [table](#table) published via a [topic](#topic).
 
+### Backup collection {#backup-collection}
+
+A **backup collection** is a [schema object](#scheme-object) that organizes full and incremental [backups](#backup) for selected [row-oriented tables](#row-oriented-table). Collections enable [point-in-time recovery](https://en.wikipedia.org/wiki/Point-in-time_recovery) by maintaining [backup chains](#backup-chain) and ensuring consistent restoration across multiple tables. A table can only belong to one backup collection at a time.
+
+For more information, see [{#T}](datamodel/backup-collection.md).
+
+#### Backup {#backup}
+
+A **backup** is a copy of data at a specific point in time that can be used to restore the data. In the context of [backup collections](#backup-collection), there are two types:
+
+#### Full Backup {#full-backup}
+
+A **full backup**: A complete snapshot of all data in the collection. Serves as the foundation for [backup chains](#backup-chain) and can be restored independently.
+
+#### Incremental Backup {#incremental-backup}
+
+A **incremental backup**: Captures only changes (inserts, updates, deletes) since the previous backup. Requires the entire backup chain for restoration.
+
+#### Backup chain {#backup-chain}
+
+A **backup chain** is an ordered sequence of [backups](#backup) starting with a full backup followed by zero or more incremental backups. Each incremental backup depends on all previous backups in the chain. Deleting any backup in the chain makes subsequent incremental backups unrestorable.
+
 ### Asynchronous replication instance {#async-replication-instance}
 
 **Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replicated objects, etc.) It can also be used to retrieve the status of asynchronous replication, such as the [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), and more.

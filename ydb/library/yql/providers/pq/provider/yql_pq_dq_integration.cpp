@@ -568,7 +568,6 @@ public:
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`skip.json.errors` is supported only in shared reading mode"));
             return {};
         }
-        sharedReading = true;
         Add(props, SharedReading, ToString(sharedReading), pos, ctx);
 
         if (!streamingTopicReadEnabled) {

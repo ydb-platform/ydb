@@ -5,11 +5,15 @@ PRAGMA warning('disable', '4510');
 
 $type = Struct<x: Int32, y: Int32, z: Int32>;
 $keys = AsTuple(AsAtom('x'), AsAtom('y'), AsAtom('z'));
+
 $range_for = ($pred) -> (YQL::RangeComputeFor($type, $pred, $keys));
+
 $pred1 = ($row) -> (($row.x, $row.y, $row.z) >= (11, 22, 33));
 $pred2 = ($row) -> (($row.x, $row.y, $row.z) > (11, 22, 33));
+
 $pred3 = ($row) -> (($row.x, $row.y, $row.z) < (11, 22, 33));
 $pred4 = ($row) -> (($row.x, $row.y, $row.z) <= (11, 22, 33));
+
 $pred5 = ($row) -> (($row.x, $row.y, $row.z) > (111, 222, 333) AND ($row.x, $row.y, $row.z) <= (111, 333, 444));
 $pred6 = ($row) -> (($row.x, $row.y, $row.z) >= (111, 222, 333) AND ($row.x, $row.y, $row.z) < (111, 222, 333));
 
@@ -24,8 +28,10 @@ SELECT
 
 $pred1 = ($row) -> (($row.x, $row.y) >= (11, 22));
 $pred2 = ($row) -> (($row.x, $row.y) > (11, 22));
+
 $pred3 = ($row) -> (($row.x, $row.y) < (11, 22));
 $pred4 = ($row) -> (($row.x, $row.y) <= (11, 22));
+
 $pred5 = ($row) -> (($row.x, $row.y) > (111, 222) AND ($row.x, $row.y) <= (111, 333));
 $pred6 = ($row) -> (($row.x, $row.y) >= (111, 222) AND ($row.x, $row.y) < (111, 222));
 

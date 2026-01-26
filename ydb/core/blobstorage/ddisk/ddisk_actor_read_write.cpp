@@ -4,7 +4,7 @@
 
 namespace NKikimr::NDDisk {
 
-    void TDDiskActor::Handle(TEvDDiskWrite::TPtr ev) {
+    void TDDiskActor::Handle(TEvWrite::TPtr ev) {
         if (!CheckQuery(*ev)) {
             return;
         }
@@ -69,7 +69,7 @@ namespace NKikimr::NDDisk {
         }
 
 
-        SendReply(*ev, std::make_unique<TEvDDiskWriteResult>(NKikimrBlobStorage::TDDiskReplyStatus::OK));
+        SendReply(*ev, std::make_unique<TEvWriteResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
     }
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkWriteResult::TPtr ev) {
@@ -86,7 +86,7 @@ namespace NKikimr::NDDisk {
         WriteCallbacks.erase(it);
     }
 
-    void TDDiskActor::Handle(TEvDDiskRead::TPtr ev) {
+    void TDDiskActor::Handle(TEvRead::TPtr ev) {
         if (!CheckQuery(*ev)) {
             return;
         }
@@ -122,7 +122,7 @@ namespace NKikimr::NDDisk {
             }
         }
 
-        SendReply(*ev, std::make_unique<TEvDDiskReadResult>(NKikimrBlobStorage::TDDiskReplyStatus::OK, std::nullopt,
+        SendReply(*ev, std::make_unique<TEvReadResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt,
             std::move(result)));
     }
 

@@ -80,14 +80,12 @@ Y_UNIT_TEST_SUITE(ValidateFsPathTests) {
 
     Y_UNIT_TEST(ComponentContainingDots) {
         TString error;
-        // "file..txt" is a valid filename, not a path traversal
         UNIT_ASSERT(ValidateFsPath("/mnt/file..txt", "test path", error));
         UNIT_ASSERT(error.empty());
     }
 
     Y_UNIT_TEST(ComponentStartingWithDots) {
         TString error;
-        // "...hidden" is a valid filename
         UNIT_ASSERT(ValidateFsPath("/mnt/...hidden", "test path", error));
         UNIT_ASSERT(error.empty());
     }
@@ -118,7 +116,6 @@ Y_UNIT_TEST_SUITE(ValidateFsPathTests) {
 
     Y_UNIT_TEST(HiddenFile) {
         TString error;
-        // .bashrc is a valid filename (starts with dot but is not just ".")
         UNIT_ASSERT(ValidateFsPath("/home/user/.bashrc", "test path", error));
         UNIT_ASSERT(error.empty());
     }

@@ -9,7 +9,7 @@
 #include "hive_schema.h"
 #include "hive_log.h"
 #include "monitoring.h"
-#include "tx__set_down.h"
+#include "tx__set_down.cpp"
 
 namespace NKikimr {
 namespace NHive {
@@ -39,14 +39,6 @@ TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev) {
         }
     }
     return cgi;
-}
-
-NMon::TEvRemoteBinaryInfoRes* MakeRawHttpEvent(const TString& status, const TString& content) {
-    return new NMon::TEvRemoteBinaryInfoRes(
-        TStringBuilder() << "HTTP/1.1 " << status << "\r\n"
-        << "Content-Type: application/json\r\n\r\n"
-        << content
-    );
 }
 
 class TTxMonEvent_DbState : public TTransactionBase<THive> {
@@ -1752,10 +1744,19 @@ public:
                                        </div>
                                    </div>
                                </div>
-                               <div class='row'>
-                                 <div class='col-md-12'>
+                               <div class='row' style='margin-top:20px'>
+                                 <div class='col-md-9'>
                                    <input id='reassign_async' type='checkbox' name='Async'>
                                    <label for='reassign_async'>Async</label>
+                                 </div>
+                                 <div class='col-md-3'>
+                                 <div in='store_state_group' class='input-group'>
+                                    <span class='input-group-addon'>Store state in</span>
+                                    <select id='store_state' class='form-control'>
+                                        <option value='actor'>Actor</option>
+                                        <option value='browser'>Browser</option>
+                                    </select>
+                                 </div>
                                  </div>
                                </div>
                                <div class='row'>
@@ -1802,6 +1803,10 @@ public:
                                        </div>
                                    </div>
                                </div>
+                           </div>
+                           <div class = 'row'>
+                               <h4 class='col-md-6' id='last_reassign'></h4>
+                               <h4 class='col-md-6'>Reassigns currently running: <a id='current_reassigns' href='#'>0</a></h4>
                            </div>
                            <div class='modal-footer'>
                                <span id='status_text' style='float:left'></span>
@@ -1922,6 +1927,7 @@ public:
             out << "{type:" << (ui32)(itTablet->first) << ",name:'" << TTabletTypes::TypeToStr(itTablet->first) << "',channels:" << itTablet->second << "}";
         }
         out << "];";
+        out << "var lastReassign = '" << Self->LastReassign << "';";
         out << R"___(
 
 $('.container')
@@ -1937,6 +1943,9 @@ function initReassignGroups() {
         opt.value = tablets[tab].type;
         domTabletType.add(opt);
     }
+    $('#last_reassign').text(lastReassign);
+    var current_reassigns_link = document.getElementById('current_reassigns');
+    current_reassigns_link.href = 'app?TabletID=' + hiveId + '&page=Subactors';
 }
 
 initReassignGroups();
@@ -2032,15 +2041,59 @@ function cancel() {
 }
 
 function reassignGroups() {
-    $('#tablets_processed_group').parent().css({visibility: 'visible'});
-    $('#current_inflight_group').parent().css({visibility: 'visible'});
-    //$('#time_left_group').parent().css({visibility: 'visible'});
-    $('#progress_bar_group').parent().css({visibility: 'visible'});
-    $('#button_query').addClass('disabled');
-    $('#button_reassign').addClass('disabled');
-    tablets_processed = 0;
-    current_inflight = 0;
-    continueReassign();
+    if ($('#store_state').val() == 'browser') {
+        $('#tablets_processed_group').parent().css({visibility: 'visible'});
+        $('#current_inflight_group').parent().css({visibility: 'visible'});
+        //$('#time_left_group').parent().css({visibility: 'visible'});
+        $('#progress_bar_group').parent().css({visibility: 'visible'});
+        $('#button_query').addClass('disabled');
+        $('#button_reassign').addClass('disabled');
+        tablets_processed = 0;
+        current_inflight = 0;
+        continueReassign();
+    } else {
+        var storage_pool = $('#tablet_storage_pool').val();
+        var storage_group = $('#tablet_storage_group').val();
+        var tablet_type = $('#tablet_type').val();
+        var channel_from = parseInt($('#tablet_from_channel').val());
+        var channel_to = parseInt($('#tablet_to_channel').val());
+        var percent = $('#tablet_percent').val() + '&wait=0';
+        var async = $('#reassign_async')[0].checked;
+        var url = 'app?TabletID=' + hiveId + '&page=ReassignTablet' + '&tablet=all' + '&wait=0';
+        if (storage_pool) {
+            url = url + '&storagePool=' + storage_pool;
+        }
+        if (storage_group) {
+            url = url + '&group=' + storage_group;
+        }
+        if (tablet_type) {
+            url = url + '&type=' + tablet_type;
+        }
+        if (percent) {
+            url = url + '&percent=' + percent;
+        }
+        if (channel_from != 0 || channel_to != 255) {
+            var channels = [];
+            for (let i = channel_from; i <= channel_to; i++) {
+                channels.push(i);
+            }
+            url = url + '&channels=' + channels.join(',');
+        }
+        url = url + (async ? '1' : '0');
+        $.ajax({
+            type: 'POST',
+            url: url,
+            success: function() {
+
+            },
+            error: function(jqXHR, status) {
+                $('#status_text').text(status);
+            },
+            complete: function() {
+                $('#status_text').text("Started reassign actor");
+            },
+        });
+    }
 }
 
 function setDown(element, nodeId, down) {
@@ -2234,6 +2287,7 @@ function fillDataShort(result) {
                     balancerHtml.cells[5].innerHTML = '';
                 }
             }
+            $('#current_reassigns').text(result.ReassignsRunning);
         }
         clearAlert();
     }
@@ -2565,6 +2619,7 @@ public:
         jsonData["StorageScatter"] = GetValueWithColoredGlyph(Self->StorageScatter, Self->GetMinStorageScatterToBalance());
         jsonData["WarmUp"] = Self->WarmUp;
         jsonData["Types"] = GetTypesHtml(Self->SeenTabletTypes, Self->GetTabletLimit());
+        jsonData["ReassignsRunning"] = Self->ReassignsRunning;
 
         if (Cgi.Get("nodes") == "1") {
             TVector<TNodeInfo*> nodeInfos;
@@ -2653,7 +2708,6 @@ public:
 class TTxMonEvent_SetDown : public TTxSetDown, public TLoggedMonTransaction {
 public:
     TString Response;
-    TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
@@ -2667,7 +2721,6 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Response = R"({"error":"Must use POST request"})";
-            Status = THttpStatus::BAD_REQUEST;
             return true;
         }
         NIceDb::TNiceDb db(txc.DB);
@@ -2679,14 +2732,13 @@ public:
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Down\":" + (Down ? "true" : "false") + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
-            Status = THttpStatus::BAD_REQUEST;
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxMonEvent_SetDown(" << NodeId << ")::Complete Response=" << Response);
-        ctx.Send(Source, MakeRawHttpEvent(Status, Response));
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
     }
 };
 
@@ -2696,7 +2748,6 @@ public:
     const TNodeId NodeId;
     const bool Freeze;
     TString Response;
-    TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_SetFreeze(const TActorId& source, TNodeId nodeId, bool freeze, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
@@ -2713,7 +2764,6 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Response = R"({"error":"Must use POST request"})";
-            Status = THttpStatus::BAD_REQUEST;
             return true;
         }
         NIceDb::TNiceDb db(txc.DB);
@@ -2728,14 +2778,13 @@ public:
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Freeze\":" + (Freeze ? "true" : "false") + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
-            Status = THttpStatus::BAD_REQUEST;
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxMonEvent_SetFreeze(" << NodeId << ")::Complete Response=" << Response);
-        ctx.Send(Source, MakeRawHttpEvent(Status, Response));
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
     }
 };
 
@@ -2744,7 +2793,6 @@ public:
     const TActorId Source;
     const TNodeId NodeId;
     TString Response;
-    TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_KickNode(const TActorId& source, TNodeId nodeId, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
@@ -2759,7 +2807,6 @@ public:
     bool Execute(TTransactionContext&, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Response = R"({"error":"Must use POST request"})";
-            Status = THttpStatus::BAD_REQUEST;
             return true;
         }
         TNodeInfo* node = Self->FindNode(NodeId);
@@ -2772,14 +2819,13 @@ public:
             Response = "{\"TabletsKicked\":" + ToString(kicked) + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
-            Status = THttpStatus::BAD_REQUEST;
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxMonEvent_KickNode(" << NodeId << ")::Complete Response=" << Response);
-        ctx.Send(Source, MakeRawHttpEvent(Status, Response));
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
     }
 };
 
@@ -2868,10 +2914,10 @@ public:
                 Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, WaitActorId));
             } else {
                 Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, {}));
-                ctx.Send(Source, MakeRawHttpEvent(THttpStatus::OK, R"({"status":"SCHEDULED"})"));
+                ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"status":"SCHEDULED"})"));
             }
         } else {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"status":"ERROR"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"status":"ERROR"})"));
         }
     }
 };
@@ -2882,7 +2928,6 @@ public:
     int MaxMovements = 1000;
     ui64 MaxInFlight = 1;
     TString Response = "{}";
-    TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_Rebalance(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
@@ -2890,9 +2935,8 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        auto cgi = GetParams(ev->Get());
-        MaxMovements = FromStringWithDefault(cgi.Get("movements"), MaxMovements);
-        MaxInFlight = FromStringWithDefault(cgi.Get("inflight"), MaxInFlight);
+        MaxMovements = FromStringWithDefault(ev->Get()->Cgi().Get("movements"), MaxMovements);
+        MaxInFlight = FromStringWithDefault(ev->Get()->Cgi().Get("inflight"), MaxInFlight);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
@@ -2900,7 +2944,6 @@ public:
     bool Execute(TTransactionContext&, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Response = R"({"error":"Must use POST request"})";
-            Status = THttpStatus::BAD_REQUEST;
             return true;
         }
         Self->StartHiveBalancer({
@@ -2912,7 +2955,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        ctx.Send(Source, MakeRawHttpEvent(Status, Response));
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
     }
 };
 
@@ -2921,7 +2964,6 @@ public:
     const TActorId Source;
     TStorageBalancerSettings Settings;
     TString Response = "{}";
-    TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
 
     TTxMonEvent_StorageRebalance(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
@@ -2929,10 +2971,9 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        auto cgi = GetParams(ev->Get());
-        Settings.NumReassigns = FromStringWithDefault(cgi.Get("reassigns"), 1000);
-        Settings.MaxInFlight = FromStringWithDefault(cgi.Get("inflight"), 1);
-        Settings.StoragePool = cgi.Get("pool");
+        Settings.NumReassigns = FromStringWithDefault(ev->Get()->Cgi().Get("reassigns"), 1000);
+        Settings.MaxInFlight = FromStringWithDefault(ev->Get()->Cgi().Get("inflight"), 1);
+        Settings.StoragePool = ev->Get()->Cgi().Get("pool");
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
@@ -2940,7 +2981,6 @@ public:
     bool Execute(TTransactionContext&, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Response = R"({"error":"Must use POST request"})";
-            Status = THttpStatus::BAD_REQUEST;
             return true;
         }
         Self->StartHiveStorageBalancer(Settings);
@@ -2948,7 +2988,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        ctx.Send(Source, MakeRawHttpEvent(Status, Response));
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(Response));
     }
 };
 
@@ -2963,7 +3003,7 @@ public:
         , Source(source)
         , Event(ev->Release())
     {
-        TenantName = GetParams(ev->Get()).Get("tenantName");
+        TenantName = ev->Get()->Cgi().Get("tenantName");
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE_FROM_SCRATCH; }
@@ -2993,67 +3033,6 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
-    }
-};
-
-class TReassignTabletWaitActor : public TActor<TReassignTabletWaitActor>, public ISubActor {
-public:
-    TActorId Source;
-    ui32 TabletsTotal = 0;
-    ui32 TabletsDone = 0;
-    THive* Hive;
-    NJson::TJsonValue Response;
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::HIVE_MON_REQUEST;
-    }
-
-    TReassignTabletWaitActor(const TActorId& source, THive* hive)
-        : TActor(&TReassignTabletWaitActor::StateWork)
-        , Source(source)
-        , Hive(hive)
-    {}
-
-    void PassAway() override {
-        Hive->RemoveSubActor(this);
-        return IActor::PassAway();
-    }
-
-    void Cleanup() override {
-        PassAway();
-    }
-
-    TSubActorId GetId() const override {
-        return SelfId().LocalId();
-    }
-
-    void AddTablet(TLeaderTabletInfo* tablet) {
-        tablet->ActorsToNotifyOnRestart.push_back(SelfId());
-        ++TabletsTotal;
-    }
-
-    void AddContext(const TString& key, const TString& value) {
-        Response[key] = value;
-    }
-
-    void CheckCompletion() {
-        if (TabletsDone >= TabletsTotal) {
-            Response["total"] = TabletsDone;
-            Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Response, false)));
-            PassAway();
-        }
-    }
-
-    void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
-        ++TabletsDone;
-        CheckCompletion();
-    }
-
-    STATEFN(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            cFunc(TEvents::TSystem::PoisonPill, PassAway);
-            hFunc(TEvPrivate::TEvRestartComplete, Handle);
-        }
     }
 };
 
@@ -3103,6 +3082,16 @@ public:
             return std::holds_alternative<TAllTablets>(TabletId) && TabletType == TTabletTypes::TypeInvalid;
         }
 
+        template <typename TStream>
+        void ToString(TStream& out) const {
+            if (std::holds_alternative<TTabletId>(TabletId)) {
+                out << std::get<TTabletId>(TabletId) << ", ";
+            }
+            if (TabletType != TTabletTypes::TypeInvalid) {
+                out << TTabletTypes::EType_Name(TabletType) << ", ";
+            }
+        }
+
     };
 
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
@@ -3110,13 +3099,13 @@ public:
     TTabletFilter TabletFilter;
     TVector<ui32> TabletChannels;
     ui32 GroupId = 0;
+    TString StoragePool;
     TVector<ui32> ForcedGroupIds;
     TString Error;
     bool Wait = true;
     bool Async = false;
-    bool BypassLimit = false;
-
-    static constexpr size_t REASSIGN_SOFT_LIMIT = 500;
+    ui64 MaxInFlight = 1;
+    ui32 TabletPercent = 100;
 
     TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive, const TCgiParameters& params)
         : TBase(hive)
@@ -3126,21 +3115,25 @@ public:
     {
         TabletChannels = Scan<ui32>(SplitString(params.Get("channel"), ","));
         GroupId = FromStringWithDefault(params.Get("group"), GroupId);
+        StoragePool = params.Get("storagePool");
         ForcedGroupIds = Scan<ui32>(SplitString(params.Get("forcedGroup"), ","));
         Wait = FromStringWithDefault(params.Get("wait"), Wait);
         Async = FromStringWithDefault(params.Get("async"), Async);
-        BypassLimit = FromStringWithDefault(params.Get("bypassLimit"), BypassLimit);
+        MaxInFlight = FromStringWithDefault(params.Get("inflight"), MaxInFlight);
+        TabletPercent = FromStringWithDefault<ui32>(params.Get("percent"), TabletPercent);
+        TabletPercent = std::min(TabletPercent, 100u);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
 
-    TInstant GetMaxTimestamp(const TLeaderTabletInfo* tablet) const {
+    TInstant GetMaxTimestamp(const TReassignOperation& operation) const {
         TInstant max;
+        const auto* tablet = Self->FindTablet(operation.TabletId);
         for (const auto& channel : tablet->TabletStorageInfo->Channels) {
-            if (TabletChannels.empty()
+            if (operation.TabletChannels.empty()
                     || std::find(
-                        TabletChannels.begin(),
-                        TabletChannels.end(),
+                        operation.TabletChannels.begin(),
+                        operation.TabletChannels.end(),
                         channel.Channel) != TabletChannels.end()) {
                 if (tablet->ChannelProfileNewGroup.test(channel.Channel)) {
                     return TInstant::Max();
@@ -3154,7 +3147,7 @@ public:
         return max;
     }
 
-    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+    bool Execute(TTransactionContext&, const TActorContext&) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             Error = "Must use POST request";
             return true;
@@ -3178,14 +3171,7 @@ public:
             | std::views::transform([](auto&& p) -> TLeaderTabletInfo* { return &p.second; })
             | std::views::filter(TabletFilter);
 
-        TVector<THolder<TEvHive::TEvReassignTablet>> operations;
-        TActorId waitActorId;
-        TReassignTabletWaitActor* waitActor = nullptr;
-        if (Wait) {
-            waitActor = new TReassignTabletWaitActor(Source, Self);
-            waitActorId = ctx.RegisterWithSameMailbox(waitActor);
-            Self->SubActors.emplace_back(waitActor);
-        }
+        std::vector<TReassignOperation> operations;
         for (TLeaderTabletInfo* tablet : tablets) {
             TVector<ui32> channels;
             TVector<ui32> forcedGroupIds;
@@ -3193,6 +3179,9 @@ public:
             if (GroupId != 0) {
                 skip = true;
                 for (const auto& channel : tablet->TabletStorageInfo->Channels) {
+                    if (StoragePool && channel.StoragePool != StoragePool) {
+                        continue;
+                    }
                     if (TabletChannels.empty() || Find(TabletChannels, channel.Channel) != TabletChannels.end()) {
                         const auto* latest = channel.LatestEntry();
                         if (latest != nullptr && latest->GroupID == GroupId) {
@@ -3212,29 +3201,29 @@ public:
             if (skip) {
                 continue;
             }
-            if (Wait) {
-                waitActor->AddTablet(tablet);
-            }
-            operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds, Async));
-            if (!BypassLimit && operations.size() >= REASSIGN_SOFT_LIMIT) {
-                if (Wait) {
-                    waitActor->AddContext("limit_reached", "true");
-                }
-                break;
-            }
+            operations.emplace_back(tablet->Id, channels, forcedGroupIds, Async);
         }
-        if (Wait) {
-            waitActor->CheckCompletion();
+        TStringBuilder description;
+        TabletFilter.ToString(description);
+        if (StoragePool) {
+            description << StoragePool << ", ";
         }
-        for (auto& op : operations) {
-            ctx.Send(Self->SelfId(), op.Release());
+        description << (GroupId ? ToString(GroupId) : "all groups");
+        if (TabletPercent != 100) {
+            description << ", " << TabletPercent << "%";
+            std::sort(operations.begin(), operations.end(), [this](const auto& lhs, const auto& rhs) -> bool {
+                return GetMaxTimestamp(lhs) < GetMaxTimestamp(rhs);
+            });
+            auto it = operations.begin() + operations.size() * TabletPercent / 100;
+            operations.erase(it, operations.end());
         }
+        Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description);
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         if (Error) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
@@ -3341,7 +3330,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Error) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
@@ -3489,17 +3478,17 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet == nullptr) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Tablet not found"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Tablet not found\"}"));
             return true;
         }
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node == nullptr) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Node not found"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Node not found\"}"));
             return true;
         }
         if (Wait) {
@@ -3583,7 +3572,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -3605,7 +3594,7 @@ public:
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
         } else {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Tablet not found"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Tablet not found\"}"));
         }
         return true;
     }
@@ -3637,7 +3626,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
             return true;
         }
         TDomainInfo* domain = Self->FindDomain(DomainId);
@@ -3660,7 +3649,7 @@ public:
             WriteOperation(db, jsonOperation);
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"OK\"}"));
         } else {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Domain not found"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"Domain not found\"}"));
         }
         return true;
     }
@@ -3738,7 +3727,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -3760,7 +3749,7 @@ public:
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
         } else {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Tablet not found"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Tablet not found"})"));
         }
         return true;
     }
@@ -4229,7 +4218,7 @@ public:
         if (Info) {
             ctx.Register(new TResetter(std::move(Info), Source, KnownGeneration));
         } else if (Error) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {
             Y_ABORT("unexpected state");
         }
@@ -4266,7 +4255,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Event->GetMethod() != HTTP_METHOD_POST) {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
             return true;
         }
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
@@ -4280,7 +4269,7 @@ public:
             }
             TSubDomainKey oldDomain(rowset.GetValueOrDefault<Schema::Tablet::ObjectDomain>());
             if (clientOldDomain && oldDomain != clientOldDomain) {
-                ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Old domain does not match, have " << oldDomain <<  ", provided " << clientOldDomain << "\"}"));
+                ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Old domain does not match, have " << oldDomain <<  ", provided " << clientOldDomain << "\"}"));
                 return true;
             }
             if (rowset.HaveValue<Schema::Tablet::ObjectDomain>() && (bool)oldDomain) {
@@ -4288,7 +4277,7 @@ public:
                     ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"ALREADY\"}"));
                     return true;
                 } else if (!clientOldDomain) {
-                    ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Domain already set to " << oldDomain << "\"}"));
+                    ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Domain already set to " << oldDomain << "\"}"));
                     return true;
                 }
             }
@@ -4301,7 +4290,7 @@ public:
             WriteOperation(db, jsonOperation);
             Success = true;
         } else {
-            ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Tablet not found\"}"));
+            ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Tablet not found\"}"));
         }
         return true;
     }
@@ -4849,23 +4838,23 @@ public:
 bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
     if (httpInfo->GetMethod() != HTTP_METHOD_POST) {
-        ctx.Send(ev->Sender, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Must use POST request"})"));
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes(R"({"error":"Must use POST request"})"));
         return false;
     }
     if (!GetEnableDestroyOperations()) {
-        ctx.Send(ev->Sender, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, "{\"error\":\"destroy operations are disabled\"}"));
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"destroy operations are disabled\"}"));
         return false;
     }
     TCgiParameters cgi(httpInfo->Cgi());
     TStringBuilder keyData;
     keyData << cgi.Get("tablet") << cgi.Get("owner") << cgi.Get("owner_idx");
     if (keyData.empty()) {
-        ctx.Send(ev->Sender, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, "{\"error\":\"tablet, owner or owner_idx parameters not set\"}"));
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"tablet, owner or owner_idx parameters not set\"}"));
         return false;
     }
     TString key = MD5::Data(keyData);
     if (key != cgi.Get("key")) {
-        ctx.Send(ev->Sender, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, "{\"error\":\"key parameter is incorrect\"}"));
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"key parameter is incorrect\"}"));
         return false;
     }
     return true;

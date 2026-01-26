@@ -517,21 +517,19 @@ namespace NLastGetoptFork {
             L << "_get_comp_words_by_ref -n \"\\\"'><=;|&(:\" cur prev words cword";
             L;
             L << "local need_space=\"1\"";
+            L << "declare disable_completion_for_options=\"0\"";
+            L << "declare disable_completion_for_args=\"0\"";
+            L << "declare -A disabled_options=()";
+            L << "declare -A disabled_args=()";
             L << "local IFS=$' \\t\\n'";
             L;    
-            L << "while true; do";
-            {
-                I;
-                if (chooser != nullptr && opts != nullptr) {
-                        GenerateBothCompletion(out, *chooser, *opts, manager, 1);
-                    } else if (chooser != nullptr) {
-                        GenerateModesCompletion(out, *chooser, manager, 1);
-                    } else if (opts != nullptr) {
-                        GenerateOptsCompletion(out, *opts, manager, 1);
-                    }
-                L << "break";
+            if (chooser != nullptr && opts != nullptr) {
+                GenerateBothCompletion(out, *chooser, *opts, manager, 1);
+            } else if (chooser != nullptr) {
+                GenerateModesCompletion(out, *chooser, manager, 1);
+            } else if (opts != nullptr) {
+                GenerateOptsCompletion(out, *opts, manager, 1);
             }
-            L << "done";
             L;
             L << "__ltrim_colon_completions \"$cur\"";
             L;
@@ -566,210 +564,279 @@ namespace NLastGetoptFork {
         auto modes = chooser.GetUnsortedModes();
         auto unorderedOpts = opts.GetOpts();
 
-        L << "if [[ ${cword} == " << level << " ]] ; then";
+        L << "disable_completion_for_options=\"0\"";
+        L << "disable_completion_for_args=\"0\"";
+        L << "disabled_options=()";
+        L << "disabled_args=()";
+        L;
+        L << "while true; do";
         {
             I;
-            L << "if [[ ${cur} == -* ]] ;  then";
+            L << "if [[ ${cword} == " << level << " ]] ; then";
             {
                 I;
-                auto& line = L << "COMPREPLY+=( $(compgen -W '";
-                TStringBuf sep = "";
-                for (auto& opt : unorderedOpts) {
-                    if (opt->IsHidden()) {
-                        continue;
-                    }
+                L << "if [[ ${cur} == -* ]] ;  then";
+                {
+                    I;
+                    L << "if ! [[ ${disable_completion_for_options} == 1 ]] ; then";
+                    {
+                        I;
+                        auto& line = L << "local words=(";
+                        TStringBuf sep = "";
+                        for (auto& opt : unorderedOpts) {
+                            if (opt->IsHidden()) {
+                                continue;
+                            }
 
-                    for (auto& shortName : opt->GetShortNames()) {
-                        line << sep << "-" << B(TStringBuf(&shortName, 1));
-                        sep = " ";
+                            for (auto& shortName : opt->GetShortNames()) {
+                                line << sep << "'-" << B(TStringBuf(&shortName, 1)) << "'";
+                                sep = " ";
+                            }
+                            for (auto& longName: opt->GetLongNames()) {
+                                line << sep << "'--" << B(longName) << "'";
+                                sep = " ";
+                            }
+                        }
+                        line << ")";
+                        L << "for word in \"${words[@]}\"; do";
+                        {
+                            I;    
+                            L << "if ! [[ -v disabled_options[\"$word\"] ]] ; then";
+                            {
+                                I;
+                                L << "COMPREPLY+=( $(compgen -W \"$word\" -- ${cur}) )";
+                            }
+                            L << "fi";
+                        }
+                        L << "done";
                     }
-                    for (auto& longName: opt->GetLongNames()) {
-                        line << sep << "--" << B(longName);
-                        sep = " ";
-                    }
+                    L << "fi";
                 }
-                line << "' -- ${cur}) )";
+                L << "else";
+                {
+                    I;
+                    L << "if ! [[ ${disable_completion_for_args} == 1 ]] ; then";
+                    {
+                        I;
+                        auto& line = L << "COMPREPLY+=( $(compgen -W '";
+                        TStringBuf sep = "";
+                        for (auto& mode : modes) {
+                            if (!mode->Hidden && !mode->NoCompletion) {
+                                line << sep << B(mode->Name);
+                                sep = " ";
+                            }
+                        }
+                        line << "' -- ${cur}) )";
+                    }
+                    L << "fi";
+                }
+                L << "fi";
             }
             L << "else";
             {
                 I;
-                auto& line = L << "COMPREPLY+=( $(compgen -W '";
-                TStringBuf sep = "";
-                for (auto& mode : modes) {
-                    if (!mode->Hidden && !mode->NoCompletion) {
-                        line << sep << B(mode->Name);
-                        sep = " ";
+                L << "case \"${words[" << level << "]}\" in";
+                {
+                    I;
+
+                    for (auto& opt : unorderedOpts) {
+                        if (opt->IsHidden()) {
+                            continue;
+                        }
+                        GenerateOptCompletion(out, opts, *opt, manager, level);
                     }
+                    
+                    for (auto& mode : modes) {
+                        if (mode->Name.empty() || mode->Hidden || mode->NoCompletion) {
+                            continue;
+                        }
+
+                        auto& line = L << BB(mode->Name);
+                        for (auto& alias : mode->Aliases) {
+                            line << "|" << BB(alias);
+                        }
+                        line << ")";
+                        {
+                            I;
+                            auto mainArgs = dynamic_cast<TMainClassArgs*>(mode->Main);
+                            auto mainModes = dynamic_cast<TMainClassModes*>(mode->Main);
+                            if (mainArgs && mainModes) {
+                                GenerateBothCompletion(out, mainModes->GetSubModes(), mainArgs->GetOptions(), manager, level + 1);
+                            } else if (mainArgs) {
+                                GenerateOptsCompletion(out, mainArgs->GetOptions(), manager, level + 1);
+                            } else if (mainModes) {
+                                GenerateModesCompletion(out, mainModes->GetSubModes(), manager, level + 1);
+                            } else {
+                                GenerateDefaultOptsCompletion(out, manager);
+                            }
+
+                            L << ";;";
+                        }
+                    }
+                L << "esac";
                 }
-                line << "' -- ${cur}) )";
             }
             L << "fi";
+            L << "break";
         }
-        L << "else";
+        L << "done";
+    }
+
+    void TBashCompletionGenerator::GenerateOptCompletion(TFormattedOutput& out, const TOpts& opts, const TOpt& opt, NComp::TCompleterManager&, size_t level) {
+        auto& line = L;
+        TStringBuf sep = "";
+        for (auto& shortName : opt.GetShortNames()) {
+            line << sep << "'-" << B(TStringBuf(&shortName, 1)) << "'";
+            sep = "|";
+        }
+        for (auto& longName: opt.GetLongNames()) {
+            line << sep << "'--" << B(longName) << "'";
+            sep = "|";
+        }
+        line << ")";
         {
             I;
-            L << "case \"${words[" << level << "]}\" in";
-            {
-                I;
-
-                for (auto& opt : unorderedOpts) {
-                    if (opt->IsHidden()) {
-                        continue;
+            if (opt.DisableCompletionForOptions_) {
+                L << "disable_completion_for_options=\"1\"";
+            }
+            if (opt.DisableCompletionForFreeArgs_) {
+                L << "disable_completion_for_args=\"1\"";
+            }
+            
+            for (auto disabledShortName : opt.DisableCompletionForChar_) {
+                auto disabledOpt = opts.FindCharOption(disabledShortName);
+                if (disabledOpt) {
+                    for (auto shortName: disabledOpt->GetShortNames()) {
+                        L << "disabled_options[\"-" << shortName << "\"]=\"1\"";
                     }
+                    for (auto& longName: disabledOpt->GetLongNames()) {
+                        L << "disabled_options[\"-" << longName << "\"]=\"1\"";
+                    }
+                } else {
+                    L << "disabled_options[\"-" << disabledShortName << "\"]=\"1\"";
+                }
 
-                    auto& line = L;
+            }
+            for (auto& disabledLongName : opt.DisableCompletionForLongName_) {
+                auto disabledOpt = opts.FindLongOption(disabledLongName);
+                if (disabledOpt) {
+                    for (auto shortName: disabledOpt->GetShortNames()) {
+                        L << "disabled_options[\"--" << shortName << "\"]=\"1\"";
+                    }
+                    for (auto& longName: disabledOpt->GetLongNames()) {
+                        L << "disabled_options[\"--" << longName << "\"]=\"1\"";
+                    }
+                } else {
+                L << "disabled_options[\"--" << disabledLongName << "\"]=\"1\"";
+                }
+            }
+            for (auto disabledArgIndex : opt.DisableCompletionForFreeArg_) {
+                L << "disabled_args[" << disabledArgIndex << "]=\"1\"";
+            }
+            if (!opt.AllowMultipleCompletion_) {
+                for (auto& shortName : opt.GetShortNames()) {
+                    L << "disabled_options[\"-" << shortName << "\"]=\"1\"";
+                }
+                for (auto& longName: opt.GetLongNames()) {
+                    L << "disabled_options[\"--" << longName << "\"]=\"1\"";
+                }
+            }                        
+
+            if (opt.HasArg_ == EHasArg::NO_ARGUMENT) {
+                // pop option from words
+                L << "cword=$((cword-1))";
+                L << "words=(\"${words[@]:0:" << level << "}\" \"${words[@]:" << level + 1 << "}\")";
+                L << "continue";
+            } else if (opt.HasArg_ == EHasArg::REQUIRED_ARGUMENT) {
+                L << "if [[ ${cword} == " << level + 1 << " ]] ; then";
+                {
+                    I;
+                    if (opt.Completer_ != nullptr) {
+                        opt.Completer_->GenerateBash(out);
+                    } else {
+                        L << ": # no-op: no completer for option";
+                    }
+                }
+                L << "else";
+                {
+                    I;
+                    // pop option and its argument from words
+                    L << "cword=$((cword-2))";
+                    L << "words=(\"${words[@]:0:" << level << "}\" \"${words[@]:" << level + 2 << "}\")";
+                    L << "continue";
+                }          
+                L << "fi";                      
+            } else if (opt.HasArg_ == EHasArg::OPTIONAL_ARGUMENT) {
+                L << "if [[ ${cword} == " << level + 1 << " ]] ; then";
+                {
+                    I;
+                    if (opt.Completer_ != nullptr) {
+                        opt.Completer_->GenerateBash(out);
+                    } else {
+                        L << ": # no-op: no completer for option";
+                    }
+                }
+                L << "else";
+                {
+                    I;
+                    // check if option has argument set -- so that we know how many words to skip
+                    L << "args=0";
+                    auto& line = L << "opts='@(";
                     TStringBuf sep = "";
-                    for (auto& shortName : opt->GetShortNames()) {
-                        line << sep << "'-" << B(TStringBuf(&shortName, 1)) << "'";
-                        sep = "|";
+                    for (auto& opt : opts.GetOpts()) {
+                        if (opt->IsHidden()) {
+                            continue;
+                        }
+                        for (auto& shortName : opt->GetShortNames()) {
+                            line << sep << "-" << B(TStringBuf(&shortName, 1));
+                            sep = "|";
+                        }
+                        for (auto& longName: opt->GetLongNames()) {
+                            line << sep << "--" << B(longName);
+                            sep = "|";
+                        }
                     }
-                    for (auto& longName: opt->GetLongNames()) {
-                        line << sep << "'--" << B(longName) << "'";
-                        sep = "|";
-                    }
-                    line << ")";
+                    line << ")'";
+                    L << "for (( i=" << level + 1 << "; i < cword; i++ )); do";
                     {
                         I;
-                        if (opt->HasArg_ == EHasArg::NO_ARGUMENT) {
-                            // pop option from words
-                            L << "cword=$((cword-1))";
-                            L << "words=(\"${words[@]:0:" << level << "}\" \"${words[@]:" << level + 1 << "}\")";
-                            L << "continue";
-                        } else if (opt->HasArg_ == EHasArg::REQUIRED_ARGUMENT) {
-                            L << "if [[ ${cword} == " << level + 1 << " ]] ; then";
-                            {
-                                I;
-                                if (opt->Completer_ != nullptr) {
-                                    opt->Completer_->GenerateBash(out);
-                                } else {
-                                    L << ": # no-op: no completer for option";
-                                }
-                            }
-                            L << "else";
-                            {
-                                I;
-                                // pop option and its argument from words
-                                L << "cword=$((cword-2))";
-                                L << "words=(\"${words[@]:0:" << level << "}\" \"${words[@]:" << level + 2 << "}\")";
-                                L << "continue";                                
-                            }          
-                            L << "fi";                      
-                            } else if (opt->HasArg_ == EHasArg::OPTIONAL_ARGUMENT) {
-                            L << "if [[ ${cword} == " << level + 1 << " ]] ; then";
-                            {
-                                I;
-                                if (opt->Completer_ != nullptr) {
-                                    opt->Completer_->GenerateBash(out);
-                                } else {
-                                    L << ": # no-op: no completer for option";
-                                }
-                            }
-                            L << "else";
-                            {
-                                I;
-                                // check if option has argument set -- so that we know how many words to skip
-                                L << "args=0";
-                                auto& line = L << "opts='@(";
-                                TStringBuf sep = "";
-                                for (auto& opt : unorderedOpts) {
-                                    if (opt->IsHidden()) {
-                                        continue;
-                                    }
-                                    for (auto& shortName : opt->GetShortNames()) {
-                                        line << sep << "-" << B(TStringBuf(&shortName, 1));
-                                        sep = "|";
-                                    }
-                                    for (auto& longName: opt->GetLongNames()) {
-                                        line << sep << "--" << B(longName);
-                                        sep = "|";
-                                    }
-                                }
-                                for (auto &mode : modes) {
-                                    if (mode->Name.empty() || mode->Hidden || mode->NoCompletion) {
-                                        continue;
-                                    }
-
-                                    line << sep << BB(mode->Name);
-                                    sep = "|";
-                                    for (auto& alias : mode->Aliases) {
-                                        line << sep << BB(alias);
-                                    }
-                                }
-                                line << ")'";
-                                L << "for (( i=" << level + 1 << "; i < cword; i++ )); do";
-                                {
-                                    I;
-                                    L << "if [[ ${words[i]} == $opts ]]; then";
-                                    {
-                                        I;
-                                        L << "break";                                        
-                                    }
-                                    L << "else";
-                                    {
-                                        I;
-                                        L << "(( args++ ))";
-                                    }
-                                    L << "fi";
-                                }
-                                L << "done";
-                                L;
-
-                                L << "if [[ $args == 0 ]] ; then ";
-                                {
-                                    I;
-                                    // pop option from words
-                                    L << "cword=$((cword-1))";
-                                    L << "words=(\"${words[@]:0:" << level << "}\" \"${words[@]:" << level + 1 << "}\")";
-                                    L << "continue";
-                                }
-                                L << "else";
-                                {
-                                    I;
-                                    // pop option and its argument from words
-                                    L << "cword=$((cword-2))";
-                                    L << "words=(\"${words[@]:0:" << level << "}\" \"${words[@]:" << level + 2 << "}\")";
-                                    L << "continue";
-                                }
-                                L << "fi";
+                        L << "if [[ ${words[i]} == $opts ]]; then";
+                        {
+                            I;
+                            L << "break";                                        
+                        }
+                        L << "else";
+                        {
+                            I;
+                            L << "(( args++ ))";
                         }
                         L << "fi";
                     }
-                    }
-                    L << ";;";
-                }
+                    L << "done";
+                    L;
 
-                for (auto& mode : modes) {
-                    if (mode->Name.empty() || mode->Hidden || mode->NoCompletion) {
-                        continue;
-                    }
-
-                    auto& line = L << BB(mode->Name);
-                    for (auto& alias : mode->Aliases) {
-                        line << "|" << BB(alias);
-                    }
-                    line << ")";
-
+                    L << "if [[ $args == 0 ]] ; then ";
                     {
                         I;
-                        auto mainArgs = dynamic_cast<TMainClassArgs*>(mode->Main);
-                        auto mainModes = dynamic_cast<TMainClassModes*>(mode->Main);
-                        if (mainArgs && mainModes) {
-                            GenerateBothCompletion(out, mainModes->GetSubModes(), mainArgs->GetOptions(), manager, level + 1);
-                        } else if (mainArgs) {
-                            GenerateOptsCompletion(out, mainArgs->GetOptions(), manager, level + 1);
-                        } else if (mainModes) {
-                            GenerateModesCompletion(out, mainModes->GetSubModes(), manager, level + 1);
-                        } else {
-                            GenerateDefaultOptsCompletion(out, manager);
-                        }
-
-                        L << ";;";
-                        }
+                        // pop option from words
+                        L << "cword=$((cword-1))";
+                        L << "words=(\"${words[@]:0:" << level << "}\" \"${words[@]:" << level + 1 << "}\")";
+                        L << "continue";
                     }
-                    L << "esac";
+                    L << "else";
+                    {
+                        I;
+                        // pop option and its argument from words
+                        L << "cword=$((cword-2))";
+                        L << "words=(\"${words[@]:0:" << level << "}\" \"${words[@]:" << level + 2 << "}\")";
+                        L << "continue";
+                    }
+                    L << "fi";
                 }
+                L << "fi";
+            }
         }
-        L << "fi";
+        L << ";;";
     }
 
     void TBashCompletionGenerator::GenerateModesCompletion(TFormattedOutput& out, const TModChooser& chooser, NComp::TCompleterManager& manager, size_t level) {
@@ -843,137 +910,157 @@ namespace NLastGetoptFork {
         L << "fi";
     }
 
-    void TBashCompletionGenerator::GenerateOptsCompletion(TFormattedOutput& out, const TOpts& opts, NComp::TCompleterManager&, size_t level) {
+    void TBashCompletionGenerator::GenerateOptsCompletion(TFormattedOutput& out, const TOpts& opts, NComp::TCompleterManager& manager, size_t level) {
         auto unorderedOpts = opts.GetOpts();
-
-        L << "if [[ ${cur} == -* ]] ;  then";
+        L << "disable_completion_for_options=\"0\"";
+        L << "disable_completion_for_args=\"0\"";
+        L << "disabled_options=()";
+        L << "disabled_args=()";
+        L;
+        L << "while true; do";
         {
             I;
-            auto& line = L << "COMPREPLY+=( $(compgen -W '";
-            TStringBuf sep = "";
-            for (auto& opt : unorderedOpts) {
-                if (opt->IsHidden()) {
-                    continue;
-                }
 
-                for (auto& shortName : opt->GetShortNames()) {
-                    line << sep << "-" << B(TStringBuf(&shortName, 1));
-                    sep = " ";
-                }
-                for (auto& longName: opt->GetLongNames()) {
-                    line << sep << "--" << B(longName);
-                    sep = " ";
-                }
-            }
-            line << "' -- ${cur}) )";
-        }
-        L << "else";
-        {
-            I;
-            L << "case ${prev} in";
+            L << "if [[ ${cword} == " << level << " ]] && [[ ${cur} == -* ]] ; then";
             {
                 I;
-                for (auto& opt : unorderedOpts) {
-                    if (opt->HasArg_ == EHasArg::NO_ARGUMENT || opt->IsHidden()) {
-                        continue;
-                    }
-
-                    auto& line = L;
-                    TStringBuf sep = "";
-                    for (auto& shortName : opt->GetShortNames()) {
-                        line << sep << "'-" << B(TStringBuf(&shortName, 1)) << "'";
-                        sep = "|";
-                    }
-                    for (auto& longName: opt->GetLongNames()) {
-                        line << sep << "'--" << B(longName) << "'";
-                        sep = "|";
-                    }
-                    line << ")";
-                    {
-                        I;
-                        if (opt->Completer_ != nullptr) {
-                            opt->Completer_->GenerateBash(out);
-                        }
-                        L << ";;";
-                    }
-                }
-
-                L << "*)";
                 {
                     I;
+                    L << "if ! [[ ${disable_completion_for_options} == 1 ]] ; then";
+                    {
+                        I;
+                        auto& line = L << "local words=(";
+                        TStringBuf sep = "";
+                        for (auto& opt : unorderedOpts) {
+                            if (opt->IsHidden()) {
+                                continue;
+                            }
 
-                    L << "args=0";
-                    auto& line = L << "opts='@(";
-                    TStringBuf sep = "";
+                            for (auto& shortName : opt->GetShortNames()) {
+                                line << sep << "'-" << B(TStringBuf(&shortName, 1)) << "'";
+                                sep = " ";
+                            }
+                            for (auto& longName: opt->GetLongNames()) {
+                                line << sep << "'--" << B(longName) << "'";
+                                sep = " ";
+                            }
+                        }
+                        line << ")";
+                        L << "for word in \"${words[@]}\"; do";
+                        {
+                            I;    
+                            L << "if ! [[ -v disabled_options[\"$word\"] ]] ; then";
+                            {
+                                I;
+                                L << "COMPREPLY+=( $(compgen -W \"$word\" -- ${cur}) )";
+                            }
+                            L << "fi";
+                        }
+                        L << "done";
+                    }
+                    L << "fi";
+                }                
+            }
+            L << "else";
+            {
+                I;
+                L << "case \"${words[" << level << "]}\" in";
+                {
+                    I;
                     for (auto& opt : unorderedOpts) {
-                        if (opt->HasArg_ == EHasArg::NO_ARGUMENT || opt->IsHidden()) {
+                        if (opt->IsHidden()) {
                             continue;
                         }
-                        for (auto& shortName : opt->GetShortNames()) {
-                            line << sep << "-" << B(TStringBuf(&shortName, 1));
-                            sep = "|";
-                        }
-                        for (auto& longName: opt->GetLongNames()) {
-                            line << sep << "--" << B(longName);
-                            sep = "|";
-                        }
+                        GenerateOptCompletion(out, opts, *opt, manager, level);
                     }
-                    line << ")'";
-                    L << "for (( i=" << level << "; i < cword; i++ )); do";
+
+                    L << "*)";
+                    {
+                    I;
+                    L << "if ! [[ ${disable_completion_for_args} == 1 ]] ; then";
                     {
                         I;
-                        L << "if [[ ${words[i]} != -* && ${words[i-1]} != $opts ]]; then";
+                        L << "args=0";
+                        auto& line = L << "opts='@(";
+                        TStringBuf sep = "";
+                        for (auto& opt : unorderedOpts) {
+                            if (opt->HasArg_ == EHasArg::NO_ARGUMENT || opt->IsHidden()) {
+                                continue;
+                            }
+                            for (auto& shortName : opt->GetShortNames()) {
+                                line << sep << "-" << B(TStringBuf(&shortName, 1));
+                                sep = "|";
+                            }
+                            for (auto& longName: opt->GetLongNames()) {
+                                line << sep << "--" << B(longName);
+                                sep = "|";
+                            }
+                        }
+                        line << ")'";
+                        L << "for (( i=" << level << "; i < cword; i++ )); do";
                         {
                             I;
-                            L << "(( args++ ))";
-                        }
-                        L << "fi";
-                    }
-                    L << "done";
-                    L;
-
-                    auto argSpecs = opts.GetFreeArgSpecs();
-                    size_t numFreeArgs = opts.GetFreeArgsMax();
-                    bool unlimitedArgs = false;
-                    if (numFreeArgs == TOpts::UNLIMITED_ARGS) {
-                        numFreeArgs = argSpecs.empty() ? 0 : (argSpecs.rbegin()->first + 1);
-                        unlimitedArgs = true;
-                    }
-
-                    L << "case ${args} in";
-                    {
-                        I;
-
-                        for (size_t i = 0; i < numFreeArgs; ++i) {
-                            L << i << ")";
+                            L << "if [[ ${words[i]} != -* && ${words[i-1]} != $opts ]]; then";
                             {
                                 I;
-                                auto& spec = argSpecs[i];
-                                if (spec.Completer_ != nullptr) {
-                                    spec.Completer_->GenerateBash(out);
+                                L << "(( args++ ))";
+                            }
+                            L << "fi";
+                        }
+                        L << "done";
+                        L;
+
+                        auto argSpecs = opts.GetFreeArgSpecs();
+                        size_t numFreeArgs = opts.GetFreeArgsMax();
+                        bool unlimitedArgs = false;
+                        if (numFreeArgs == TOpts::UNLIMITED_ARGS) {
+                            numFreeArgs = argSpecs.empty() ? 0 : (argSpecs.rbegin()->first + 1);
+                            unlimitedArgs = true;
+                        }
+
+                        L << "case ${args} in";
+                        {
+                            I;
+
+                            for (size_t i = 0; i < numFreeArgs; ++i) {
+                                L << i << ")";
+                                {
+                                    I;
+                                    auto& spec = argSpecs[i];
+                                    if (spec.Completer_ != nullptr) {
+                                        L << "if ! [[ -v disabled_args[" << i << "] ]] ; then ";
+                                        {
+                                            I;
+                                            spec.Completer_->GenerateBash(out);
+                                        }
+                                        L << "fi";
+                                    }
+                                    L << ";;";
                                 }
-                                L << ";;";
+                            }
+                            if (unlimitedArgs) {
+                                L << "*)";
+                                {
+                                    I;
+                                    auto& spec = opts.GetTrailingArgSpec();
+                                    if (spec.Completer_ != nullptr) {
+                                        spec.Completer_->GenerateBash(out);
+                                    }
+                                    L << ";;";
+                                }
                             }
                         }
-                        if (unlimitedArgs) {
-                            L << "*)";
-                            {
-                                I;
-                                auto& spec = opts.GetTrailingArgSpec();
-                                if (spec.Completer_ != nullptr) {
-                                    spec.Completer_->GenerateBash(out);
-                                }
-                                L << ";;";
-                            }
-                        }
+                        L << "esac";
                     }
-                    L << "esac";
-                    L << ";;";
+                    L << "fi";
                 }
+                }
+                L << "esac";
             }
-            L << "esac";
+            L << "fi";
+            L << "break";
         }
-        L << "fi";
+        L << "done";
     }
 
     void TBashCompletionGenerator::GenerateDefaultOptsCompletion(TFormattedOutput& out, NComp::TCompleterManager&) {

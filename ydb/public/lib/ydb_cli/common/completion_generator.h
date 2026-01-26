@@ -53,6 +53,7 @@ namespace NLastGetoptFork {
         static void GenerateModesCompletion(TFormattedOutput& out, const TModChooser& chooser, NComp::TCompleterManager& manager, size_t level);
         static void GenerateOptsCompletion(TFormattedOutput& out, const TOpts& opts, NComp::TCompleterManager& manager, size_t level);
         static void GenerateDefaultOptsCompletion(TFormattedOutput& out, NComp::TCompleterManager& manager);
+        static void GenerateOptCompletion(TFormattedOutput& out, const TOpts& opts, const TOpt& opt, NComp::TCompleterManager& manager, size_t level);
     };
 
     namespace NEscaping {

@@ -532,12 +532,16 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - Rust
 
   ```rust
-  use ydb::{Query, TransactionOptions};
-
-  let query = Query::new("SELECT 1");
-  let tx_options = TransactionOptions::new()
-      .with_serializable_read_write();
-  let result = client.query(query, tx_options).await?;
+  use ydb::{TransactionOptions};
+  
+  let tx_options = TransactionOptions::default().with_mode(
+    ydb::Mode::SerializableReadWrite
+  );
+  let table_client = db.table_client().clone_with_transaction_options(tx_options);
+  let result = table_client.retry_transaction(|mut tx| async move {
+    let res = tx.query("SELECT 1".into()).await?;
+    return Ok(res)
+  }).await?;
   ```
 
 - PHP
@@ -785,12 +789,14 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - Rust
 
   ```rust
-  use ydb::{Query, TransactionOptions};
-
-  let query = Query::new("SELECT 1");
-  let tx_options = TransactionOptions::new()
-      .with_online_read_only();
-  let result = client.query(query, tx_options).await?;
+  let tx_options = TransactionOptions::default().with_mode(
+    ydb::Mode::OnlineReadonly,
+  ).with_autocommit(true);
+  let table_client = db.table_client().clone_with_transaction_options(tx_options);
+  let result = table_client.retry_transaction(|mut tx| async move {
+    let res = tx.query("SELECT 1".into()).await?;
+    return Ok(res)
+  }).await?;
   ```
 
 - PHP
@@ -1007,14 +1013,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Rust
 
-  ```rust
-  use ydb::{Query, TransactionOptions};
-
-  let query = Query::new("SELECT 1");
-  let tx_options = TransactionOptions::new()
-      .with_stale_read_only();
-  let result = client.query(query, tx_options).await?;
-  ```
+  Stale Read-Only mode is not supported.
 
 - PHP
 
@@ -1254,14 +1253,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Rust
 
-  ```rust
-  use ydb::{Query, TransactionOptions};
-
-  let query = Query::new("SELECT 1");
-  let tx_options = TransactionOptions::new()
-      .with_snapshot_read_only();
-  let result = client.query(query, tx_options).await?;
-  ```
+  Snapshot Read-Only mode is not supported.
 
 - PHP
 
@@ -1517,14 +1509,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Rust
 
-  ```rust
-  use ydb::{Query, TransactionOptions};
-
-  let query = Query::new("SELECT 1");
-  let tx_options = TransactionOptions::new()
-      .with_snapshot_read_write();
-  let result = client.query(query, tx_options).await?;
-  ```
+  Snapshot Read-Write mode is not supported.
 
 - PHP
 

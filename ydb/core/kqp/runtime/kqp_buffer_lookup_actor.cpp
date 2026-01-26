@@ -425,11 +425,17 @@ public:
                     break;
                 }
             }
-            RuntimeError(
-                NYql::NDqProto::StatusIds::ABORTED,
-                NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder() << "Transaction locks invalidated. Table: `"
-                    << lookupState.Worker->GetTablePath() << "`.");
+            {
+                TString message;
+                if (auto lockIssue = Settings.TxManager->GetLockIssue()) {
+                    message = lockIssue->GetMessage();
+                } else {
+                    message = TStringBuilder() << "Transaction locks invalidated. Table: `"
+                        << lookupState.Worker->GetTablePath() << "`.";
+                }
+                RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
+                    NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+            }
             return;
         }
 
@@ -440,14 +446,15 @@ public:
                 if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
                     Settings.TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
                 }
-                NYql::TIssues issues;
-                issues.AddIssue(*Settings.TxManager->GetLockIssue());
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::ABORTED,
-                    NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                    TStringBuilder() << "Transaction locks invalidated. Table: `"
-                        << lookupState.Worker->GetTablePath() << "`.",
-                    std::move(issues));
+                TString message;
+                if (auto lockIssue = Settings.TxManager->GetLockIssue()) {
+                    message = lockIssue->GetMessage();
+                } else {
+                    message = TStringBuilder() << "Transaction locks invalidated. Table: `"
+                        << lookupState.Worker->GetTablePath() << "`.";
+                }
+                RuntimeError(NYql::NDqProto::StatusIds::ABORTED,
+                    NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
                 return;
             }
         }

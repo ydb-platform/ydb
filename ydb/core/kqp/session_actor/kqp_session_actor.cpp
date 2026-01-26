@@ -286,7 +286,10 @@ public:
         auto as = TActivationContext::ActorSystem();
         ev->Get()->SetClientLostAction(selfId, as);
 
-        auto queryTraceId = GenerateTraceQueryId();
+        ui64 queryTraceId = 0;
+        if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            queryTraceId = GenerateTraceQueryId();
+        }
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, queryTraceId, Settings.Database, Settings.ApplicationName, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
             Settings.TableService, Settings.QueryService, SessionId, AppData()->MonotonicTimeProvider->Now(), Settings.MutableExecuterConfig->RuntimeParameterSizeLimit.load());
@@ -2412,10 +2415,16 @@ public:
                         collectVictimStats(brokenLockQueryTraceId);
                     } else if (ev->BrokenLockPathId || ev->BrokenLockShardId) {
                         YQL_ENSURE(!QueryState->TxCtx->TxManager);
+                        // Get victim QueryTraceId from the broken lock or first query in transaction
+                        TMaybe<ui64> victimQueryTraceId = ev->BrokenLockQueryTraceId
+                            ? TMaybe<ui64>(*ev->BrokenLockQueryTraceId)
+                            : QueryState->TxCtx->QueryTextCollector.GetFirstQueryTraceId();
                         if (ev->BrokenLockPathId) {
-                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
+                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId,
+                                victimQueryTraceId));
                         } else {
-                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId));
+                            issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId,
+                                victimQueryTraceId));
                         }
                         logVictimTli(std::nullopt);
                         collectVictimStats(std::nullopt);

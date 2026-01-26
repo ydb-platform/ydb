@@ -110,7 +110,7 @@
 
 ## Запись в таблицы {#table-write}
 
-Запись результата в таблицу {{ ydb-short-name }} возможна с помощью [UPSERT INTO](../yql/reference/syntax/upsert_into.md). Пример доступен по ссылке [{#T}](../dev/streaming-query/table-writings.md)
+Запись результата в таблицу {{ ydb-short-name }} возможна с помощью [UPSERT INTO](../yql/reference/syntax/upsert_into.md). Пример доступен по ссылке [{#T}](../dev/streaming-query/table-writing.md)
 
 
 {% note alert %}

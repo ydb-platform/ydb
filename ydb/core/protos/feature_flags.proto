@@ -138,7 +138,7 @@ message TFeatureFlags {
     optional bool EnableViews = 112 [default = true];
     optional bool EnableServerlessExclusiveDynamicNodes = 113 [default = false];
     optional bool EnableAccessServiceBulkAuthorization = 114 [default = false];
-    optional bool EnableAddColumsWithDefaults = 115 [ default = false];
+    optional bool EnableAddColumsWithDefaults = 115 [default = true];
     optional bool EnableReplaceIfExistsForExternalEntities = 116 [ default = false];
     optional bool EnableCMSRequestPriorities = 117 [default = true];
     optional bool EnableKeyvalueLogBatching = 118 [default = false];

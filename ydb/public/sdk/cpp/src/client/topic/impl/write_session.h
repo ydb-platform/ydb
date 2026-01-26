@@ -170,6 +170,9 @@ private:
 
     void TransferEventsToOutputQueue();
 
+    void PopInFlightMessage();
+    void PushInFlightMessage(ui64 partition, TMessageInfo&& message);
+
     void SubscribeToPartition(ui64 partition);
 
     void AddReadyToAcceptEvent();
@@ -199,6 +202,8 @@ private:
     void WaitForEvents();
 
     void WaitSomeAction(std::unique_lock<std::mutex>& lock);
+
+    void HandleAutoPartitioning(ui64 partition);
     
 public:
     TKeyedWriteSession(const TKeyedWriteSessionSettings& settings,
@@ -245,6 +250,7 @@ private:
     std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
     std::list<TMessageInfo> PendingMessages;
     std::list<TMessageInfo> InFlightMessages;
+    std::unordered_map<ui64, std::list<std::list<TMessageInfo>::iterator>> InFlightMessagesIndex;
 
     NThreading::TPromise<void> MessagesNotEmptyPromise;
     NThreading::TFuture<void> MessagesNotEmptyFuture;

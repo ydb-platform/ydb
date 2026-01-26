@@ -393,7 +393,7 @@ def test_create_and_drop_the_same_tenant2(ydb_cluster, ydb_endpoint, robust_retr
         logger.debug("done %d", iNo)
 
 
-ef test_recreate_database(ydb_cluster):
+def test_recreate_database(ydb_cluster):
     database = '/Root/users/database'
     for i in range(2):
         ydb_cluster.create_database(

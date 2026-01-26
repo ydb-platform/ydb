@@ -318,6 +318,8 @@ namespace {
         case EPathTypeView:
         case EPathTypeReplication:
         case EPathTypeTransfer:
+        case EPathTypeExternalDataSource:
+        case EPathTypeExternalTable:
             result.CreationQuery = typedScheme.Scheme;
             break;
         case EPathTypeCdcStream:
@@ -377,6 +379,22 @@ namespace {
                 result.emplace(transferKey, item.CreationQuery);
                 if (withChecksum) {
                     result.emplace(NBackup::ChecksumKey(transferKey), item.CreationQuery.Checksum);
+                }
+                break;
+            }
+            case EPathTypeExternalDataSource: {
+                auto externalDataSourceKey = prefix + "/create_external_data_source.sql";
+                result.emplace(externalDataSourceKey, item.CreationQuery);
+                if (withChecksum) {
+                    result.emplace(NBackup::ChecksumKey(externalDataSourceKey), item.CreationQuery.Checksum);
+                }
+                break;
+            }
+            case EPathTypeExternalTable: {
+                auto externalTableKey = prefix + "/create_external_table.sql";
+                result.emplace(externalTableKey, item.CreationQuery);
+                if (withChecksum) {
+                    result.emplace(NBackup::ChecksumKey(externalTableKey), item.CreationQuery.Checksum);
                 }
                 break;
             }
@@ -5435,7 +5453,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .RunFakeConfigDispatcher(true)
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
-        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
@@ -5533,7 +5550,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .RunFakeConfigDispatcher(true)
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
-        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         ui64 txId = 100;
 
@@ -6770,6 +6786,388 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::IsTransfer,
         });
     }
+
+    Y_UNIT_TEST(ExternalDataSourceImport) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(1);
+        bucketContent.emplace("/DataSource", GenerateTestData(
+            {
+                EPathTypeExternalDataSource,
+                R"(
+                    -- database: "/MyRoot"
+                    CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
+                    WITH (
+                        SOURCE_TYPE = 'ClickHouse',
+                        LOCATION = 'https://clickhousedb.net',
+                        PASSWORD_SECRET_NAME = 'password_secret',
+                        AUTH_METHOD = 'BASIC',
+                        DATABASE_NAME = 'clickhouse',
+                        LOGIN = 'my_login',
+                        PROTOCOL = 'NATIVE',
+                        USE_TLS = 'TRUE'
+                    );
+                )"
+            }
+        ));
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "DataSource"
+                destination_path: "/MyRoot/DataSource"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DataSource"), {
+            NLs::Finished,
+            NLs::IsExternalDataSource,
+        });
+    }
+
+    Y_UNIT_TEST(ExternalDataSourceExportImport) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "DataSource"
+            SourceType: "ClickHouse"
+            Location: "https://clickhousedb.net"
+            Auth {
+                Basic {
+                    Login: "my_login",
+                    PasswordSecretName: "password_secret"
+                }
+            }
+            Properties {
+                Properties {
+                    key: "database_name",
+                    value: "clickhouse"
+                }
+                Properties {
+                    key: "protocol",
+                    value: "NATIVE"
+                }
+                Properties {
+                    key: "use_tls",
+                    value: "TRUE"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TString exportRequest = Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/DataSource"
+                    destination_prefix: "DataSource"
+                }
+            }
+        )", port);
+
+        TestExport(runtime, ++txId, "/MyRoot", exportRequest);
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestDropExternalDataSource(runtime, ++txId, "/MyRoot", "DataSource");
+        env.TestWaitNotification(runtime, txId);
+
+        TString importRequest = Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "DataSource"
+                    destination_path: "/MyRoot/DataSource"
+                }
+            }
+        )", port);
+
+        TestImport(runtime, ++txId, "/MyRoot", importRequest);
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DataSource"), {
+            NLs::Finished,
+            NLs::IsExternalDataSource,
+        });
+    }
+
+    Y_UNIT_TEST(ExternalTableImport) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(2);
+        bucketContent.emplace("/DataSource", GenerateTestData(
+            {
+                EPathTypeExternalDataSource,
+                R"(
+                    -- database: "/MyRoot"
+                    CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
+                    WITH (
+                        SOURCE_TYPE = 'ObjectStorage',
+                        LOCATION = 'https://s3.cloud.net/bucket',
+                        AUTH_METHOD = 'AWS',
+                        AWS_ACCESS_KEY_ID_SECRET_NAME = 'id_secret',
+                        AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'access_secret',
+                        AWS_REGION = 'ru-central-1'
+                    );
+                )"
+            }
+        ));
+        bucketContent.emplace("/ExternalTable", GenerateTestData(
+            {
+                EPathTypeExternalTable,
+                R"(
+                    -- database: "/MyRoot"
+                    -- backup root: "/MyRoot"
+                    CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
+                        key Uint64 NOT NULL,
+                        value1 Uint64?,
+                        value2 Utf8 NOT NULL
+                    ) WITH (
+                        DATA_SOURCE = '/MyRoot/DataSource',
+                        LOCATION = 'bucket'
+                    )
+                )"
+            }
+        ));
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "ExternalTable"
+                destination_path: "/MyRoot/ExternalTable"
+              }
+              items {
+                source_prefix: "DataSource"
+                destination_path: "/MyRoot/DataSource"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), {
+            NLs::Finished,
+            NLs::IsExternalTable,
+        });
+    }
+
+    Y_UNIT_TEST(ExternalTableImportToAnotherDatabase) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        THashMap<TString, TTestDataWithScheme> bucketContent(2);
+        bucketContent.emplace("/DataSource", GenerateTestData(
+            {
+                EPathTypeExternalDataSource,
+                R"(
+                    -- database: "/MyRoot"
+                    CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
+                    WITH (
+                        SOURCE_TYPE = 'ObjectStorage',
+                        LOCATION = 'https://s3.cloud.net/bucket',
+                        AUTH_METHOD = 'AWS',
+                        AWS_ACCESS_KEY_ID_SECRET_NAME = 'id_secret',
+                        AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'access_secret',
+                        AWS_REGION = 'ru-central-1'
+                    );
+                )"
+            }
+        ));
+        bucketContent.emplace("/ExternalTable", GenerateTestData(
+            {
+                EPathTypeExternalTable,
+                R"(
+                    -- database: "/AnotherRoot"
+                    -- backup root: "/AnotherRoot"
+                    CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
+                        key Uint64 NOT NULL,
+                        value1 Uint64?,
+                        value2 Utf8 NOT NULL
+                    ) WITH (
+                        DATA_SOURCE = '/AnotherRoot/DataSource',
+                        LOCATION = 'bucket'
+                    )
+                )"
+            }
+        ));
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "ExternalTable"
+                destination_path: "/MyRoot/ExternalTable"
+              }
+              items {
+                source_prefix: "DataSource"
+                destination_path: "/MyRoot/DataSource"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), {
+            NLs::Finished,
+            NLs::IsExternalTable,
+        });
+    }
+
+    Y_UNIT_TEST(ExternalTableExportImport) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "DataSource"
+            SourceType: "ObjectStorage"
+            Location: "https://s3.cloud.net/bucket"
+            Auth {
+                Aws {
+                    AwsAccessKeyIdSecretName: "id_secret",
+                    AwsSecretAccessKeySecretName: "access_secret"
+                    AwsRegion: "ru-central-1"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ExternalTable"
+            SourceType: "General"
+            DataSourcePath: "/MyRoot/DataSource"
+            Location: "bucket"
+            Columns { Name: "key" Type: "Uint64" NotNull: true }
+            Columns { Name: "value1" Type: "Uint64" }
+            Columns { Name: "value2" Type: "Utf8" NotNull: true }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TString exportRequest = Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/DataSource"
+                    destination_prefix: "DataSource"
+                }
+                items {
+                    source_path: "/MyRoot/ExternalTable"
+                    destination_prefix: "ExternalTable"
+                }
+            }
+        )", port);
+
+        TestExport(runtime, ++txId, "/MyRoot", exportRequest);
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestDropExternalTable(runtime, ++txId, "/MyRoot", "ExternalTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropExternalDataSource(runtime, ++txId, "/MyRoot", "DataSource");
+        env.TestWaitNotification(runtime, txId);
+
+        TString importRequest = Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "ExternalTable"
+                    destination_path: "/MyRoot/ExternalTable"
+                }
+                items {
+                    source_prefix: "DataSource"
+                    destination_path: "/MyRoot/DataSource"
+                }
+            }
+        )", port);
+
+        TestImport(runtime, ++txId, "/MyRoot", importRequest);
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalTable"), {
+            NLs::Finished,
+            NLs::IsExternalTable,
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
@@ -6815,6 +7213,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 if (createdByQuery) {
                     runtime.GetAppData().FeatureFlags.SetEnableViews(true);
                     runtime.GetAppData().FeatureFlags.SetEnableReplication(true);
+                    runtime.GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
                 }
             }
 
@@ -7517,6 +7916,84 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                             CONSUMER = 'consumerName',
                             BATCH_SIZE_BYTES = 8388608,
                             FLUSH_INTERVAL = Interval('PT60S')
+                        );
+                    )"
+                }
+            },
+        }, settings);
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleExternalDataSource) {
+        ShouldSucceed(
+            {
+                EPathTypeExternalDataSource,
+                R"(
+                    -- database: "/MyRoot"
+                    CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
+                    WITH (
+                        SOURCE_TYPE = 'ClickHouse',
+                        LOCATION = 'https://clickhousedb.net',
+                        PASSWORD_SECRET_NAME = 'password_secret',
+                        AUTH_METHOD = 'BASIC',
+                        DATABASE_NAME = 'clickhouse',
+                        LOGIN = 'my_login',
+                        PROTOCOL = 'NATIVE',
+                        USE_TLS = 'TRUE'
+                    );
+                )"
+            }
+        );
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleExternalTable) {
+        const auto settings = R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_prefix: "ExternalTable"
+                    destination_path: "/MyRoot/ExternalTable"
+                }
+                items {
+                    source_prefix: "DataSource"
+                    destination_path: "/MyRoot/DataSource"
+                }
+            }
+        )";
+
+        ShouldSucceed({
+            {
+                "/ExternalTable",
+                {
+                    EPathTypeExternalTable,
+                    R"(
+                        -- database: "/MyRoot"
+                        -- backup root: "/MyRoot"
+                        CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
+                            key Uint64 NOT NULL,
+                            value1 Uint64?,
+                            value2 Utf8 NOT NULL
+                        ) WITH (
+                            DATA_SOURCE = '/MyRoot/DataSource',
+                            LOCATION = 'bucket'
+                        )
+                    )"
+                }
+            },
+            {
+                "/DataSource",
+                {
+                    EPathTypeExternalDataSource,
+                    R"(
+                        -- database: "/MyRoot"
+                        CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `DataSource`
+                        WITH (
+                            SOURCE_TYPE = 'ObjectStorage',
+                            LOCATION = 'https://s3.cloud.net/bucket',
+                            AUTH_METHOD = 'AWS',
+                            AWS_ACCESS_KEY_ID_SECRET_NAME = 'id_secret',
+                            AWS_SECRET_ACCESS_KEY_SECRET_NAME = 'access_secret',
+                            AWS_REGION = 'ru-central-1'
                         );
                     )"
                 }

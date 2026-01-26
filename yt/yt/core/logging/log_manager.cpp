@@ -1591,7 +1591,7 @@ TFiberMessageTagGuard::TFiberMessageTagGuard(std::string messageTag)
     SetThreadMessageTag(std::move(messageTag));
 }
 
-TFiberMessageTagGuard::TFiberMessageTagGuard(TFiberMessageTagGuard&& other)
+TFiberMessageTagGuard::TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noexcept
     : OldMessageTag_(std::move(other.OldMessageTag_))
     , Active_(other.Active_)
 {

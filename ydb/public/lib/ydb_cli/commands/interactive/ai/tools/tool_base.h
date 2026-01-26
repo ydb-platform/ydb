@@ -2,9 +2,7 @@
 
 #include "tool_interface.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log.h>
-
-#include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -13,7 +11,7 @@ protected:
     inline const static NColorizer::TColors Colors = NConsoleClient::AutoColors(Cout);
 
 public:
-    TToolBase(const NJson::TJsonValue& parametersSchema, const TString& description, const TInteractiveLogger& log);
+    TToolBase(const NJson::TJsonValue& parametersSchema, const TString& description);
 
     const NJson::TJsonValue& GetParametersSchema() const final;
 
@@ -27,9 +25,6 @@ protected:
     virtual bool AskPermissions() = 0;
 
     virtual TResponse DoExecute() = 0;
-
-protected:
-    const TInteractiveLogger Log;
 
 private:
     const NJson::TJsonValue ParametersSchema;

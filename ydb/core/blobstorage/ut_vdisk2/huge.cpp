@@ -156,27 +156,46 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
         SetRandomSeed(FromString<int>(GetEnv("SEED", "1")));
         std::optional<TTestEnv> env(std::in_place);
 
-        TString blobValue = TString::Uninitialized(400_KB);
+        TString blobValue = TString::Uninitialized(69541);
 
         auto changeMinHugeBlobSize = [&env](ui32 size) {
             env->ChangeMinHugeBlobSize(size);
             Cerr << "Change MinHugeBlobSize# " << size << Endl;
         };
 
-        ui32 minHugeBlobSizeBefore = 500_KB;
-        ui32 minHugeBlobSizeAfter = 300_KB;
+        ui32 minHugeBlobSizeBefore = 100_KB;
+        ui32 minHugeBlobSizeAfter = 32513;
 
-        memset(blobValue.Detach(), 1, blobValue.size());
+        {
+            char* data = blobValue.Detach();
+            static const char pattern[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            const size_t patternLen = sizeof(pattern) - 1;
+
+            size_t offset = 0;
+            size_t remaining = blobValue.size();
+
+            while (remaining >= patternLen) {
+                memcpy(data + offset, pattern, patternLen);
+                offset += patternLen;
+                remaining -= patternLen;
+            }
+
+            if (remaining) {
+                memcpy(data + offset, pattern, remaining);
+            }
+        }
 
         changeMinHugeBlobSize(minHugeBlobSizeBefore);
 
-        ui32 step = 1;
+        {
+            ui32 step = 1;
 
-        for (size_t i = 0; i < 100; i++) {
-            TLogoBlobID id(1, 1, step++, 0, blobValue.size(), 0, 1);
+            for (size_t i = 0; i < 100; i++) {
+                TLogoBlobID id(1, 1, step++, 0, blobValue.size(), 0, 1);
 
-            auto res = env->Put(id, blobValue);
-            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrProto::OK);
+                auto res = env->Put(id, blobValue);
+                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrProto::OK);
+            }
         }
 
         auto getCounters = [&env](ui8 level) {
@@ -194,6 +213,27 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
             return std::make_tuple(numItemsHuge, numItemsInplaced);
         };
 
+        auto checkBlobs = [&env, &blobValue]() {
+            ui32 step = 1;
+
+            for (size_t i = 0; i < 100; i++) {
+                TLogoBlobID id(1, 1, step++, 0, blobValue.size(), 0, 1);
+
+                NKikimrBlobStorage::TEvVGetResult res = env->Get(id);
+                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(res.ResultSize(), 1);
+                const auto& value = res.GetResult(0);
+                UNIT_ASSERT_VALUES_EQUAL(value.GetStatus(), NKikimrProto::OK);
+                TString bufferData = value.GetBufferData();
+
+                if (bufferData != blobValue) {
+                    UNIT_ASSERT_C(false, "Mismatch for id# " << id);
+                }
+            }
+        };
+
+        checkBlobs();
+
         env->Compact(true); // Fresh only
 
         {
@@ -201,6 +241,8 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
             UNIT_ASSERT_VALUES_EQUAL(numItemsHuge, 0);
             UNIT_ASSERT_VALUES_EQUAL(numItemsInplaced, 100);
         }
+
+        checkBlobs();
 
         env->Compact();
 
@@ -218,6 +260,8 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
             UNIT_ASSERT_VALUES_EQUAL(numItemsInplaced, 100);
         }
 
+        checkBlobs();
+
         env->Compact();
 
         {
@@ -225,6 +269,8 @@ Y_UNIT_TEST_SUITE(VDiskTest) {
             UNIT_ASSERT_VALUES_EQUAL(numItemsHuge, 100);
             UNIT_ASSERT_VALUES_EQUAL(numItemsInplaced, 0);
         }
+
+        checkBlobs();
     }
 
 }

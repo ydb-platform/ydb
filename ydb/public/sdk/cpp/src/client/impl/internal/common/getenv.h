@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/src/client/impl/internal/internal_header.h>
+
 #include <string>
 
 namespace NYdb::inline Dev {
@@ -7,4 +9,3 @@ namespace NYdb::inline Dev {
 std::string GetStrFromEnv(const char* envVarName, const std::string& defaultValue = "");
 
 } // namespace NYdb
-

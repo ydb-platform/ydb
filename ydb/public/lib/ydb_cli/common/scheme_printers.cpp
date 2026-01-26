@@ -3,7 +3,6 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/tabbed_table.h>
-#include <library/cpp/colorizer/colors.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
 namespace NYdb {

@@ -6,6 +6,7 @@
 
 #include <fmt/format.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/common/log.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -14,7 +15,7 @@ namespace NYdb::NConsoleClient {
             config, std::unique_ptr<TLogBackend>(
                         CreateLogBackend(
                             "cerr",
-                            TClientCommand::TConfig::VerbosityLevelToELogPriority(
+                            VerbosityLevelToELogPriority(
                                 config.VerbosityLevel))
                             .Release())));
 

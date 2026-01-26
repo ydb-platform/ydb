@@ -537,6 +537,7 @@ class TestViewer(object):
                                     'PathId',
                                     'PublicKeys',
                                     'OriginalUserToken',
+                                    'HashesInitParams',
                                     })
 
         # groups

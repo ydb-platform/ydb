@@ -121,7 +121,7 @@ TActorId CreateMessageDeadlineChangerActor(NActors::TTestActorRuntime& runtime, 
     return readerId;
 }
 
-TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime,const TString& databasePath, const TString& topicPath) {
+TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath) {
     auto edgeId = runtime.AllocateEdgeActor();
     auto readerId = runtime.Register(NDescriber::CreateDescriberActor(edgeId, databasePath, {topicPath}));
     runtime.EnableScheduleForActor(readerId);

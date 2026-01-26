@@ -240,7 +240,7 @@ class THyperscanCapture: public THyperscanUdfBase {
 public:
     class TFactory: public THyperscanUdfBase {
     public:
-        TFactory(TSourcePosition pos)
+        explicit TFactory(TSourcePosition pos)
             : Pos_(pos)
         {
         }
@@ -305,7 +305,7 @@ class THyperscanReplace: public THyperscanUdfBase {
 public:
     class TFactory: public THyperscanUdfBase {
     public:
-        TFactory(TSourcePosition pos)
+        explicit TFactory(TSourcePosition pos)
             : Pos_(pos)
         {
         }

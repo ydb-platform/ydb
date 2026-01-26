@@ -71,6 +71,7 @@ RECURSE_FOR_TESTS(
     ut_bridge
     ut_check_integrity
     ut_comp_defrag
+    ut_ddisk
     ut_donor
     ut_group_reconfiguration
     ut_huge

@@ -15,7 +15,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Project, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
 
 /* Represents aggregation phases. */
 enum EAggregationPhase : ui32 {Intermediate, Final};
@@ -108,11 +108,6 @@ struct TOrderEnforcer {
     EOrderEnforcerReason Reason;
     TVector<TSortElement> SortElements;
 };
-
-/**
- * Build key selector for sort and merge operations from the enforcer
- */
-std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> BuildSortKeySelector(const TVector<TSortElement>& sortElements, TExprContext &ctx, TPositionHandle pos);
 
 /**
  * Per-operator physical plan properties
@@ -254,19 +249,19 @@ struct TStageGraph {
         return res;
     }
 
-    bool IsSourceStage(const int id) {
+    bool IsSourceStage(const int id) const {
         return SourceStageRenames.contains(id);
     }
 
-    bool IsSourceStageRowType(const int id) {
+    bool IsSourceStageRowType(const int id) const {
         return IsSourceStageTypeImpl(id, NYql::EStorageType::RowStorage);
     }
 
-    bool IsSourceStageColumnType(const int id) {
+    bool IsSourceStageColumnType(const int id) const {
         return IsSourceStageTypeImpl(id, NYql::EStorageType::ColumnStorage);
     }
 
-    NYql::EStorageType GetStorageType(const int id) {
+    NYql::EStorageType GetStorageType(const int id) const {
         auto it = SourceStageRenames.find(id);
         if (it != SourceStageRenames.end()) {
             return it->second.StorageType;
@@ -306,7 +301,7 @@ struct TStageGraph {
     void TopologicalSort();
 private:
 
-    bool IsSourceStageTypeImpl(const int id, const NYql::EStorageType tableStorageType) {
+    bool IsSourceStageTypeImpl(const int id, const NYql::EStorageType tableStorageType) const {
         auto it = SourceStageRenames.find(id);
         if (it != SourceStageRenames.end()) {
             return it->second.StorageType == tableStorageType;
@@ -323,12 +318,20 @@ struct TSubplanEntry {
     std::shared_ptr<IOperator> Plan;
     TVector<TInfoUnit> Tuple;
     ESubplanType Type;
+    TInfoUnit IU;
 };
 
 struct TSubplans {
 
     void Add(TInfoUnit iu, TSubplanEntry entry) {
         OrderedList.push_back(iu);
+        PlanMap.insert({iu, entry});
+    }
+
+    void Replace(TInfoUnit iu, std::shared_ptr<IOperator> op) {
+        auto entry = PlanMap.at(iu);
+        entry.Plan = op;
+        PlanMap.erase(iu);
         PlanMap.insert({iu, entry});
     }
 
@@ -396,6 +399,8 @@ class IOperator {
 
     virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) { Y_UNUSED(map); Y_UNUSED(ctx); }
 
+    virtual void ReplaceChild(std::shared_ptr<IOperator> oldChild, std::shared_ptr<IOperator> newChild);
+
     /***
      * Rename information units of this operator using a specified mapping
      */
@@ -407,7 +412,7 @@ class IOperator {
     virtual TString ToString(TExprContext& ctx) = 0;
 
     bool IsSingleConsumer() { return Parents.size() <= 1; }
-    const TTypeAnnotationNode * GetTypeAnn() { return Type; }
+    const TTypeAnnotationNode* GetTypeAnn() { return Type; }
 
     const EOperator Kind;
     TPhysicalOpProps Props;
@@ -499,6 +504,8 @@ public:
     TInfoUnit GetElementName() const;
     bool IsExpression() const;
     bool IsRename() const;
+    bool IsSingleCallable(THashSet<TString> allowedCallables) const;
+    TVector<TInfoUnit> InputIUs() const;
     TExprNode::TPtr GetExpression() const;
     TExprNode::TPtr& GetExpression();
     TInfoUnit GetRename() const;
@@ -511,7 +518,7 @@ private:
 
 class TOpMap : public IUnaryOperator {
   public:
-    TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project);
+    TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
@@ -520,15 +527,32 @@ class TOpMap : public IUnaryOperator {
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenamesWithTransforms(TPlanProps& props) const;
     virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
 
-    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList = {}) override;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                   const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
 
-    virtual void ComputeMetadata(TRBOContext & ctx, TPlanProps & planProps) override;
-    virtual void ComputeStatistics(TRBOContext & ctx, TPlanProps & planProps) override;
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+    virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
     virtual TString ToString(TExprContext& ctx) override;
+    bool IsOrdered() const { return Ordered; }
 
     TVector<TMapElement> MapElements;
     bool Project = true;
+    bool Ordered = false;
+};
+
+/**
+ * OpAddDependencies is a temporary operator to infuse dependencies into a correlated subplan
+ * This operator needs to be removed during query decorrelation
+ */
+class TOpAddDependencies : public IUnaryOperator {
+  public:
+    TOpAddDependencies(std::shared_ptr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& columns, const TVector<const TTypeAnnotationNode*>& types);
+    virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TString ToString(TExprContext& ctx) override;
+
+    TVector<TInfoUnit> Dependencies;
+    TVector<const TTypeAnnotationNode*> Types;
 };
 
 class TOpProject : public IUnaryOperator {
@@ -544,11 +568,12 @@ class TOpProject : public IUnaryOperator {
 
 struct TOpAggregationTraits {
     TOpAggregationTraits() = default;
-    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction)
-        : OriginalColName(originalColName), AggFunction(aggFunction) {}
+    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction, const TInfoUnit& resultColName)
+        : OriginalColName(originalColName), AggFunction(aggFunction), ResultColName(resultColName) {}
 
     TInfoUnit OriginalColName;
     TString AggFunction;
+    TInfoUnit ResultColName;
 };
 
 class TOpAggregate: public IUnaryOperator {
@@ -686,12 +711,13 @@ class TOpRoot : public IUnaryOperator {
 
     struct Iterator {
         struct IteratorItem {
-            IteratorItem(std::shared_ptr<IOperator> curr, std::shared_ptr<IOperator> parent, size_t idx)
-                : Current(curr), Parent(parent), ChildIndex(idx) {}
+            IteratorItem(std::shared_ptr<IOperator> curr, std::shared_ptr<IOperator> parent, size_t idx, std::shared_ptr<TInfoUnit> subplanIU)
+                : Current(curr), Parent(parent), ChildIndex(idx), SubplanIU(subplanIU) {}
 
             std::shared_ptr<IOperator> Current;
             std::shared_ptr<IOperator> Parent;
             size_t ChildIndex;
+            std::shared_ptr<TInfoUnit> SubplanIU;
         };
 
         using iterator_category = std::input_iterator_tag;
@@ -706,10 +732,10 @@ class TOpRoot : public IUnaryOperator {
 
             std::unordered_set<std::shared_ptr<IOperator>> visited;
             for (auto subplan : Root->PlanProps.Subplans.Get()) {
-                BuildDfsList(subplan.Plan, {}, size_t(0), visited);
+                BuildDfsList(subplan.Plan, {}, size_t(0), visited, std::make_shared<TInfoUnit>(subplan.IU));
             }
             auto child = ptr->GetInput();
-            BuildDfsList(child, {}, size_t(0), visited);
+            BuildDfsList(child, {}, size_t(0), visited, nullptr);
             CurrElement = 0;
         }
 
@@ -738,12 +764,12 @@ class TOpRoot : public IUnaryOperator {
 
       private:
         void BuildDfsList(std::shared_ptr<IOperator> current, std::shared_ptr<IOperator> parent, size_t childIdx,
-                          std::unordered_set<std::shared_ptr<IOperator>> &visited) {
+                          std::unordered_set<std::shared_ptr<IOperator>> &visited, std::shared_ptr<TInfoUnit> subplanIU) {
             for (size_t idx = 0; idx < current->Children.size(); idx++) {
-                BuildDfsList(current->Children[idx], current, idx, visited);
+                BuildDfsList(current->Children[idx], current, idx, visited, subplanIU);
             }
             if (!visited.contains(current)) {
-                DfsList.push_back(IteratorItem(current, parent, childIdx));
+                DfsList.push_back(IteratorItem(current, parent, childIdx, subplanIU));
             }
             visited.insert(current);
         }

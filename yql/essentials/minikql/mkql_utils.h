@@ -44,7 +44,7 @@ public:
 private:
     inline TStatus() = default;
 
-    inline TStatus(TString&& error)
+    inline explicit TStatus(TString&& error)
         : Error_(std::move(error))
     {
     }

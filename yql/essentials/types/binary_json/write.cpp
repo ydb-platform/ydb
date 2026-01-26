@@ -45,7 +45,7 @@ using namespace NYql::NDom;
 namespace {
 
 struct TContainer {
-    TContainer(EContainerType type)
+    explicit TContainer(EContainerType type)
         : Type(type)
     {
     }
@@ -184,7 +184,7 @@ struct TPODWriter {
  */
 class TBinaryJsonSerializer {
 public:
-    TBinaryJsonSerializer(TJsonIndex&& json)
+    explicit TBinaryJsonSerializer(TJsonIndex&& json)
         : Json_(std::move(json))
     {
     }

@@ -340,10 +340,20 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTransfer().FileName);
     }
 
+    static bool IsExternalDataSource(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateExternalDataSource().FileName);
+    }
+
+    static bool IsExternalTable(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateExternalTable().FileName);
+    }
+
     static bool IsCreatedByQuery(TStringBuf schemeKey) {
         return IsView(schemeKey)
             || IsReplication(schemeKey)
-            || IsTransfer(schemeKey);
+            || IsTransfer(schemeKey)
+            || IsExternalDataSource(schemeKey)
+            || IsExternalTable(schemeKey);
     }
 
     static bool NoObjectFound(Aws::S3::S3Errors errorType) {
@@ -853,13 +863,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                         }
 
                         const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
-                        std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout;
-                        if (*indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext) {
-                            const auto& settings = index.global_fulltext_index().fulltext_settings();
-                            layout = settings.has_layout() ? settings.layout() : Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
-                        }
 
-                        for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns, layout)) {
+                        for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
                             const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
                             IndexImplTablePrefixes.push_back({implTablePrefix, implTablePrefix});
                         }

@@ -522,7 +522,7 @@ class TLazySequenceAsDict: public NUdf::TBoxedValue {
 private:
     class TKeyIterator: public NUdf::TBoxedValue {
     public:
-        TKeyIterator(Py_ssize_t size)
+        explicit TKeyIterator(Py_ssize_t size)
             : Size_(size)
             , Index_(0)
         {

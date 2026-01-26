@@ -1,7 +1,17 @@
+* Added download progress bar to the `ydb update` command.
+* Improved progress bars: consistent MiB/GiB units, stable speed display, dual progress bar for the `ydb import file` command showing both in-progress and confirmed bytes.
+* Interactive mode enhancements:
+  * Introduced `/help` for interactive command guidance.
+  * Introduced the `/config` command, providing an interactive dialog to view and customize CLI settings, including:
+    * Enabling/disabling autocompletion hints.
+    * Enabling/disabling color output in YDB CLI.
+    * Interactively selecting a color theme from a set of predefined options, with support for cloning and customizing your own theme.
 * Added the `Created by`, `Create time` and `End time` fields to the "build index" and the "execute script" operations in the `ydb operation` subcommands.
 * Added the `--include-index-data` option to the `ydb export s3` command, enabling index data export.
 * Added the `--index-population-mode` option to the `ydb import s3` command, allowing selection of the index population mode (e.g. build or import).
 * Added unified time interval format support across CLI commands. Options accepting time durations now support explicit time units (e.g., `5s`, `2m`, `1h`) while maintaining backward compatibility with plain numbers interpreted using their original default units.
+* Fixed static credentials parsing to avoid using a profile password when the username comes from another source.
+* Added "Cache mode" option to column families description instead of deprecated "Keep in memory" option in the `ydb scheme describe` command.
 
 ## 2.28.0 ##
 

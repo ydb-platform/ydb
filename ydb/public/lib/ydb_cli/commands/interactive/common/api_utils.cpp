@@ -1,7 +1,7 @@
 #include "api_utils.h"
-
-#include "interactive_log_defs.h"
 #include "json_utils.h"
+
+#include <ydb/public/lib/ydb_cli/common/log.h>
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -94,9 +94,8 @@ bool THttpExecutor::TResponse::IsSuccess() const {
     return HttpCode >= 200 && HttpCode < 300;
 }
 
-THttpExecutor::THttpExecutor(const TString& apiUrl, const TString& authToken, const TInteractiveLogger& log)
-    : Log(log)
-    , ApiUrl(apiUrl)
+THttpExecutor::THttpExecutor(const TString& apiUrl, const TString& authToken)
+    : ApiUrl(apiUrl)
     , ApiHeaders(CreateApiHeaders(authToken))
     , HttpGateway(NYql::IHTTPGateway::Make())
 {}
@@ -174,11 +173,11 @@ TString THttpExecutor::PrettifyModelApiError(ui64 httpCode, const TString& respo
 }
 
 NYql::IHTTPGateway::TOnResult THttpExecutor::GetHttpCallback(NThreading::TPromise<TResponse> response) const {
-    return [response, Log = Log](NYql::IHTTPGateway::TResult result) mutable -> void {
+    return [response](NYql::IHTTPGateway::TResult result) mutable -> void {
         const auto curlCode = result.CurlResponseCode;
         if (curlCode == CURLE_OK) {
             if (result.Issues) {
-                YDB_CLI_LOG(Warning, "API response has issues:\n" << result.Issues.ToString());
+                GetGlobalLogger().Warning() << "API response has issues:\n" << result.Issues.ToString();
             }
 
             auto& content = result.Content;
@@ -216,11 +215,11 @@ TString CreateApiUrl(const TString& baseUrl, const TString& uri) {
     return TStringBuilder() << RemoveFinalSlash(sanitizedUrl) << uri;
 }
 
-std::vector<TString> ListModelNames(const TString& apiBaseEndpoint, const TString& authToken, const TInteractiveLogger& log) {
+std::vector<TString> ListModelNames(const TString& apiBaseEndpoint, const TString& authToken) {
     THttpExecutor::TResponse response;
     {
         const auto spinner = std::make_shared<TStaticProgressWaiter>("Listing models...");
-        response = NAi::THttpExecutor(NAi::CreateApiUrl(apiBaseEndpoint, "/models"), authToken, log).Get();
+        response = NAi::THttpExecutor(NAi::CreateApiUrl(apiBaseEndpoint, "/models"), authToken).Get();
     }
 
     if (!response.IsSuccess()) {

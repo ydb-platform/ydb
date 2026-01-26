@@ -15,8 +15,8 @@ TFmrTableDataServiceSortedWriter::TFmrTableDataServiceSortedWriter(
     const TFmrWriterSettings& settings,
     TSortingColumns keyColumns
 )
-    : TFmrTableDataServiceBaseWriter(tableId, partId, tableDataService, columnGroupSpec, settings),
-    KeyColumns_(std::move(keyColumns))
+    : TFmrTableDataServiceBaseWriter(tableId, partId, tableDataService, columnGroupSpec, settings)
+    , KeyColumns_(std::move(keyColumns))
 {
 }
 
@@ -24,30 +24,35 @@ void TFmrTableDataServiceSortedWriter::PutRows() {
     if (TableContent_.Size() == 0) {
         return;
     }
-    std::unordered_map<TString, TString> splittedYsonByColumnGroups;
     auto currentYsonContent = TString(TableContent_.Data(), TableContent_.Size());
+
+    const auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
 
     auto parserKeyIndexes = TParserFragmentListIndex(currentYsonContent, KeyColumns_.Columns);
     parserKeyIndexes.Parse();
     const auto& chunkIndexes = parserKeyIndexes.GetRows();
 
     CheckIsSorted(currentYsonContent, chunkIndexes);
-
-    TSortedRowMetadata metadata{chunkIndexes, KeyColumns_.Columns};
-    TStringStream metadataStream;
-    metadata.Save(&metadataStream);
-
-    auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
-    auto tableDataServiceMetaChunkId = GetTableDataServiceMetaChunkId(ChunkCount_);
-
-    auto tdsService = this->TableDataService_;
-
-    PutYsonByColumnGroups(currentYsonContent).Subscribe([tdsService, &tableDataServiceGroup, &tableDataServiceMetaChunkId, &metadataStream](const NThreading::TFuture<void>& future) {
-        future.GetValue();
-        return tdsService->Put(tableDataServiceGroup, tableDataServiceMetaChunkId,metadataStream.Str());
-    });
     auto sortedChunkStats = GetSortedChunkStats(currentYsonContent, chunkIndexes);
-    PartIdChunkStats_.emplace_back(TChunkStats{.Rows = CurrentChunkRows_, .DataWeight = TableContent_.Size(), .SortedChunkStats = sortedChunkStats});
+
+    PutYsonByColumnGroups(currentYsonContent).GetValueSync();
+
+    if (ColumnGroupSpec_.IsEmpty()) {
+        TSortedRowMetadata metadata{chunkIndexes, KeyColumns_.Columns};
+        TStringStream metadataStream;
+        metadata.Save(&metadataStream);
+        TableDataService_->Put(
+            tableDataServiceGroup,
+            GetTableDataServiceMetaChunkId(ChunkCount_),
+            metadataStream.Str()
+        ).GetValueSync();
+    }
+
+    PartIdChunkStats_.emplace_back(TChunkStats{
+        .Rows = CurrentChunkRows_,
+        .DataWeight = TableContent_.Size(),
+        .SortedChunkStats = sortedChunkStats,
+    });
     ClearTableData();
 }
 
@@ -78,20 +83,20 @@ TSortedChunkStats TFmrTableDataServiceSortedWriter::GetSortedChunkStats(TStringB
     auto sortOrders = KeyColumns_.SortOrders;
     TBinaryYsonComparator comparator(currentYsonContent, sortOrders);
 
-    auto upBoundIt = chunkIndexes[chunkIndexes.size() - 1];
-    auto downBoundIt = chunkIndexes[0];
+    auto upBoundaryIndexes = chunkIndexes.back();
+    auto downBoundaryIndexes = chunkIndexes.front();
 
-    NYT::TNode upBoundRow = GetKeyRowByIndexes(currentYsonContent, upBoundIt);
-    NYT::TNode downBoundRow = GetKeyRowByIndexes(currentYsonContent, downBoundIt);
-    return {.IsSorted = true, .FirstRowKeys = downBoundRow};
+    NYT::TNode upBoundaryKeys = GetKeyRowByIndexes(currentYsonContent, upBoundaryIndexes);
+    NYT::TNode downBoundaryKeys = GetKeyRowByIndexes(currentYsonContent, downBoundaryIndexes);
+    return {.IsSorted = true, .FirstRowKeys = downBoundaryKeys, .LastRowKeys = upBoundaryKeys};
 }
 
 void TFmrTableDataServiceSortedWriter::CheckIsSorted(TStringBuf currentYsonContent, const TVector<TRowIndexMarkup>& chunkIndexes) const {
     TBinaryYsonComparator comparator(currentYsonContent, KeyColumns_.SortOrders);
     for (ui64 i = 0; i < chunkIndexes.size() - 1; ++i) {
-        const auto& FirstRowKeys = chunkIndexes[i];
-        const auto& secondRow = chunkIndexes[i + 1];
-        if (comparator.CompareRows(FirstRowKeys, secondRow) > 0) {
+        const auto& curRowKeys = chunkIndexes[i];
+        const auto& nextRowKeys = chunkIndexes[i + 1];
+        if (comparator.CompareRows(curRowKeys, nextRowKeys) > 0) {
             ythrow yexception() << "Data is not sorted";
         }
     }

@@ -336,11 +336,27 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     }
                     break;
                 }
-                case EIndexType::GlobalFulltext: {
+                case EIndexType::GlobalFulltextPlain: {
                     Ydb::Table::FulltextIndexSettings settings;
                     std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::FulltextIndexSettings expected;
                     expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
+                    auto column = expected.add_columns();
+                    column->set_column("Value");
+                    column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+                    column->mutable_analyzers()->set_use_filter_lowercase(true);
+                    column->mutable_analyzers()->set_use_filter_length(true);
+                    column->mutable_analyzers()->set_filter_length_max(42);
+                    if (!google::protobuf::util::MessageDifferencer::Equals(settings, expected)) {
+                        continue;
+                    }
+                    break;
+                }
+                case EIndexType::GlobalFulltextRelevance: {
+                    Ydb::Table::FulltextIndexSettings settings;
+                    std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
+                    Ydb::Table::FulltextIndexSettings expected;
+                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
                     auto column = expected.add_columns();
                     column->set_column("Value");
                     column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
@@ -746,8 +762,10 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
             return NYdb::NTable::EIndexType::GlobalUnique;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-            return NYdb::NTable::EIndexType::GlobalFulltext;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+            return NYdb::NTable::EIndexType::GlobalFulltextPlain;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
         default:
             UNIT_FAIL("No conversion to API for this index type");
             return NYdb::NTable::EIndexType::Unknown;
@@ -803,15 +821,28 @@ void TestRestoreTableWithIndex(
                     );)", "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW");
             }
             break;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             query = fmt::format(R"(CREATE TABLE `{table}` (
                 Key Uint32,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),
-                INDEX {index} GLOBAL USING fulltext
+                INDEX {index} GLOBAL USING fulltext_plain
                     ON (Value)
-                    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
+                    WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
+                ) WITH (
+                    STORE = {store}
+                );)", "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW");
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            query = fmt::format(R"(CREATE TABLE `{table}` (
+                Key Uint32,
+                Group Uint32,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX {index} GLOBAL USING fulltext_relevance
+                    ON (Value)
+                    WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
                 ) WITH (
                     STORE = {store}
                 );)", "table"_a = table, "index"_a = index, "store"_a = isOlap ? "COLUMN" : "ROW");
@@ -2426,7 +2457,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewWithNamedExpressions) {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2447,7 +2477,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewSelectFromIndex) {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2471,7 +2500,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             return; // TODO: fix me issue@26498
         }
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2524,9 +2552,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        // query client lives on the node 0, so it is enough to enable the views only on it
-        server.GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
-
         const TString view = JoinFsPaths(alice, "view");
         const TString table = JoinFsPaths(alice, "a", "b", "c", "table");
         const TString restoredView = JoinFsPaths(bob, "view");
@@ -2545,7 +2570,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewDependentOnAnotherView) {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2738,7 +2762,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestViewBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -3192,7 +3215,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
-            case EIndexTypeGlobalFulltext:
+            case EIndexTypeGlobalFulltextPlain:
+            case EIndexTypeGlobalFulltextRelevance:
                 return TestTableWithIndexBackupRestore(IsOlap, Value);
             case EIndexTypeInvalid:
                 break; // not applicable
@@ -3763,7 +3787,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_DEBUG);
             runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_DEBUG);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
-            runtime.GetAppData().FeatureFlags.SetEnableViews(true);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
         }
 
@@ -3813,6 +3836,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             NYdb::NScheme::ESchemeEntryType::Topic,
             NYdb::NScheme::ESchemeEntryType::Replication,
             NYdb::NScheme::ESchemeEntryType::Transfer,
+            NYdb::NScheme::ESchemeEntryType::ExternalDataSource,
+            NYdb::NScheme::ESchemeEntryType::ExternalTable,
         }, entry.Type) && entry.Name != "replica"; // Hack to avoid replica table export
     }
 
@@ -4341,6 +4366,69 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    void TestExternalTableBackupRestore() {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+
+        auto driver = TDriver(driverConfig);
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+
+        TestExternalTableSettingsArePreserved(
+            "/Root/externalTable",
+            "/Root/externalDataSource",
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, testEnv.GetS3Port()),
+            CreateRestoreLambda(driver, testEnv.GetS3Port(), {"externalTable", "externalDataSource"})
+        );
+    }
+
+    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType) {
+        TS3TestEnv testEnv;
+        auto& featureFlags = testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
+
+        const auto endpoint = Sprintf("localhost:%u", testEnv.GetServer().GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+        if (secretType) {
+            driverConfig.SetAuthToken("root@builtin");
+        }
+
+        auto driver = TDriver(driverConfig);
+        TSchemeClient schemeClient(driver);
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+
+        if (secretType) {
+            TPermissions permissions("root@builtin", {"ydb.generic.full"});
+            const auto result = schemeClient.ModifyPermissions("/Root",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TestExternalDataSourceSettingsArePreserved(
+            "/Root/externalDataSource",
+            tableSession,
+            querySession,
+            CreateBackupLambda(driver, testEnv.GetS3Port()),
+            CreateRestoreLambda(driver, testEnv.GetS3Port(), {"externalDataSource"}),
+            NDump::TRestoreSettings{},
+            secretType,
+            authType
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType, IsOlap) {
         if (IsOlap) {
             return; // TODO: fix me issue@26498
@@ -4379,9 +4467,15 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 TestTransferBackupRestore(ESecretType::SecretTypeScheme);
                 break;
             case EPathTypeExternalTable:
-                break; // https://github.com/ydb-platform/ydb/issues/10438
-            case EPathTypeExternalDataSource:
-                break; // https://github.com/ydb-platform/ydb/issues/10439
+                return TestExternalTableBackupRestore();
+            case EPathTypeExternalDataSource: {
+                TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeAws);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws);
+                return;
+            }
             case EPathTypeResourcePool:
                 break; // https://github.com/ydb-platform/ydb/issues/10440
             case EPathTypeKesus:
@@ -4419,7 +4513,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
-            case EIndexTypeGlobalFulltext:
+            case EIndexTypeGlobalFulltextPlain:
+            case EIndexTypeGlobalFulltextRelevance:
                 TestTableWithIndexBackupRestore(IsOlap, Value);
                 break;
             case EIndexTypeInvalid:

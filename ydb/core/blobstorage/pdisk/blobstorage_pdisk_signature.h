@@ -35,7 +35,8 @@ public:
         SignatureAddBulkSst = 21,
         SignatureScrub = 22,
         SignatureMetadata = 23,
-        Max = 24
+        SignatureDDiskChunkMap = 24,
+        Max = 25
     };
 
     TLogSignature(ui8 val = 0, bool hasCommit = false)

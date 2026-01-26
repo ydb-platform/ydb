@@ -302,7 +302,7 @@ private:
 
 class TFileStorageWithAsync: public TFileStorageDecorator {
 public:
-    TFileStorageWithAsync(TFileStoragePtr fs)
+    explicit TFileStorageWithAsync(TFileStoragePtr fs)
         : TFileStorageDecorator(std::move(fs))
         , QueueStarted_(0)
     {

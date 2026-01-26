@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
-#include <ydb/core/persqueue/writer/writer.cpp>
+#include <ydb/core/persqueue/writer/writer.h>
 
 namespace {
     using namespace NKafka;
@@ -124,7 +124,7 @@ namespace {
             }
 
             void AssertCorrectOptsInPartitionWriter(const TActorId& writerId, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId) {
-                NKikimr::NPQ::TPartitionWriter* writer = dynamic_cast<NKikimr::NPQ::TPartitionWriter*>(Ctx->Runtime->FindActor(writerId));
+                const auto* writer = dynamic_cast<NKikimr::NPQ::TPartitionWriterOpts::IGetter*>(Ctx->Runtime->FindActor(writerId));
                 UNIT_ASSERT(writer);
                 const TPartitionWriterOpts& writerOpts = writer->GetOpts();
 

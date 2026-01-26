@@ -3,6 +3,9 @@ import os
 from devtools.yamaker.modules import Switch, Linkable
 from devtools.yamaker.project import CMakeNinjaNixProject
 
+EXCEPTION_ONLY_SRCS = ["exception.cc"]
+NOEXCEPT_ONLY_SRCS = ["noexception.cc"]
+
 
 def post_install(self):
     os.unlink(self.dstdir + "/unwind-itanium.h")
@@ -20,6 +23,30 @@ def post_install(self):
             "contrib/libs/libunwind",
             "library/cpp/sanitizer/include",
         }
+        # make that if from https://github.com/libcxxrt/libcxxrt/blob/a6f71cbc3a1e1b8b9df241e081fa0ffdcde96249/src/CMakeLists.txt#L12
+        for src in EXCEPTION_ONLY_SRCS:
+            if src in libcxxrt.SRCS:
+                libcxxrt.SRCS.remove(src)
+        for src in NOEXCEPT_ONLY_SRCS:
+            if src in libcxxrt.SRCS:
+                libcxxrt.SRCS.remove(src)
+        libcxxrt.after(
+            "SRCS",
+            Switch(
+                {
+                    "NO_CXX_EXCEPTIONS": Linkable(SRCS=NOEXCEPT_ONLY_SRCS),
+                    "default": Linkable(SRCS=EXCEPTION_ONLY_SRCS),
+                }
+            ),
+        )
+        libcxxrt.after(
+            "SRCS",
+            """
+            IF (NO_CXX_EXCEPTIONS)
+                CFLAGS(-D_CXXRT_NO_EXCEPTIONS)
+            ENDIF()
+            """,
+        )
 
 
 libcxxrt = CMakeNinjaNixProject(
@@ -32,6 +59,7 @@ libcxxrt = CMakeNinjaNixProject(
         "unwind.h",
     ],
     post_install=post_install,
+    copy_sources=NOEXCEPT_ONLY_SRCS,
 )
 
 libcxxrt.copy_top_sources_except |= {

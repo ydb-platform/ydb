@@ -190,6 +190,10 @@ void Replxx::set_preload_buffer( std::string const& preloadText ) {
 	_impl->set_preload_buffer( preloadText );
 }
 
+void Replxx::set_preload_buffer_without_changes( std::string const& preloadText ) {
+	_impl->set_preload_buffer_without_changes( preloadText );
+}
+
 void Replxx::set_word_break_characters( char const* wordBreakers ) {
 	_impl->set_word_break_characters( wordBreakers );
 }

@@ -83,6 +83,7 @@ TPartitionActor::TPartitionActor(
 
 void TPartitionActor::MakeCommit(const TActorContext& ctx) {
     ui64 offset = ClientReadOffset;
+
     if (CommitsDisabled || NotCommitedToFinishParents.size() != 0 || CommitsInfly.size() >= MAX_COMMITS_INFLY)
         return;
 
@@ -440,23 +441,6 @@ TString GetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::Dat
 TString GetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch) {
     AFL_ENSURE(batch);
     return batch->producer_id();
-}
-
-void SetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString value) {
-    AFL_ENSURE(batch);
-    batch->set_source_id(std::move(value));
-}
-
-void SetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch, TString value) {
-    AFL_ENSURE(batch);
-    if (IsUtf(value)) {
-        batch->set_producer_id(std::move(value));
-    } else {
-        TString res = Base64Encode(value);
-        batch->set_producer_id(res);
-        (*batch->mutable_write_session_meta())["_encoded_producer_id"] = res;
-
-    }
 }
 
 void SetBatchExtraField(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString key, TString value) {

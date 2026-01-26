@@ -29,6 +29,10 @@ def kill_tablet_request(cluster, tablet_id, token):
     return requests.get(f'http://{cluster_http_endpoint(cluster)}/tablets?RestartTabletID={tablet_id}', headers=authorization_headers(token))
 
 
+def get_table_content_for_tablet_request(cluster, tablet_id, tablet_table_id, token):
+    return requests.get(f'http://{cluster_http_endpoint(cluster)}/tablets/db?TabletID={tablet_id}&TableID={tablet_table_id}', headers=authorization_headers(token))
+
+
 def sql_request(cluster, database, sql, token):
     headers = authorization_headers(token)
     headers['content-type'] = 'application/json'

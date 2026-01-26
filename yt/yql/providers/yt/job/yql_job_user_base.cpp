@@ -237,6 +237,12 @@ void TYqlUserJobBase::DoImpl() {
         YQL_ENSURE(value.IsFinish());
     }
 
+    value = {};
+    CompGraph->Invalidate();
+    if (auto pos = CompGraph->GetNotConsumedLinear()) {
+        UdfTerminate((TStringBuilder() << pos << " Linear value is not consumed").c_str());
+    }
+
     MKQL_SET_STAT(JobStats, Job_CalcTime, (ThreadCPUTime() - beginCalcTime) / 1000);
 
     if (auto mkqlReader = dynamic_cast<TMkqlReaderImpl*>(reader.Get())) {

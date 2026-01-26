@@ -37,7 +37,7 @@ namespace {
 
         return state;
     }
-    
+
     ui32 GetTablePartsFromRequest(const Ydb::Table::CreateTableRequest& table) {
         switch (table.partitions_case()) {
             case Ydb::Table::CreateTableRequest::PartitionsCase::kUniformPartitions:
@@ -89,7 +89,7 @@ namespace {
         }
     }
 
-    void AddBuildIndexesItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx, 
+    void AddBuildIndexesItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx,
         i32 indexIdx, Ydb::Import::ImportItemProgress& itemProgress) {
 
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
@@ -321,6 +321,12 @@ void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& im
         NIceDb::TUpdate<Schema::Imports::StartTime>(importInfo.StartTime.Seconds()),
         NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo.EndTime.Seconds()),
         NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size())
+    );
+}
+
+void TSchemeShard::PersistImportSettings(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+    db.Table<Schema::Imports>().Key(importInfo.Id).Update(
+        NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.SettingsSerialized)
     );
 }
 

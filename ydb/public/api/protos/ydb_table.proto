@@ -90,7 +90,7 @@ message KMeansTreeSettings {
     VectorIndexSettings settings = 1;
 
     optional uint32 clusters = 2;
-    
+
     optional uint32 levels = 3;
 
     optional uint32 overlap_clusters = 4;
@@ -228,59 +228,59 @@ message FulltextIndexSettings {
     message Analyzers {
         // See Tokenizer enum
         optional Tokenizer tokenizer = 1;
-    
+
         // Language used for language-sensitive operations like stopword filtering and stemming
         // Example: language = "english"
         // By default is not specified and no language-specific logic is applied
         optional string language = 2;
-    
+
         // Whether to convert tokens to lowercase
         // Example:
         //   Token: "Quick"
         //   Output: "quick"
         optional bool use_filter_lowercase = 100;
-    
+
         // Whether to remove common stopwords like "the", "a", "is"
         // Example: language = "english"
         //   Tokens: ["the", "quick", "brown"]
         //   Output: ["quick", "brown"]
         optional bool use_filter_stopwords = 110;
-    
+
         // Whether to apply character n-gram indexing to each token
         // Must be used with filter_ngram_min_length and filter_ngram_max_length
         // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
         //   Token: "search"
         //   Output: ["sea", "ear", "arc", "rch", "sear", "earc", "arch"]
         optional bool use_filter_ngram = 120;
-    
+
         // Whether to apply edge n-gram indexing (prefix-based) to each token
         // Used with filter_ngram_min_length and filter_ngram_max_length
         // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
         //   Token: "search"
         //   Output: ["sea", "sear"]
         optional bool use_filter_edge_ngram = 121;
-    
+
         // Minimum length of n-grams to generate (inclusive)
         // Must be used with use_filter_ngram or use_filter_edge_ngram
         // Default value is 3
         optional int32 filter_ngram_min_length = 122 [(Ydb.value) = ">= 0"];
-    
+
         // Maximum length of n-grams to generate (inclusive)
         // Must be used with use_filter_ngram or use_filter_edge_ngram
         // Default value is 4
         optional int32 filter_ngram_max_length = 123 [(Ydb.value) = ">= 0"];
-    
+
         // Whether to filter tokens by their length
         // Must be used with filter_length_min or filter_length_max
         // Example: filter_length_min = 4, filter_length_max = 6
         //   Tokens: ["foo", "fooba", "foobar", "foobarbaz"]
         //   Output: ["fooba", "foobar"]
         optional bool use_filter_length = 130;
-    
+
         // Minimum token length to keep (inclusive)
         // Must be used with use_filter_length
         optional int32 filter_length_min = 131 [(Ydb.value) = ">= 0"];
-    
+
         // Maximum token length to keep (inclusive)
         // Must be used with use_filter_length
         optional int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
@@ -312,7 +312,12 @@ message FulltextIndexSettings {
     repeated ColumnAnalyzers columns = 2;
 }
 
-message GlobalFulltextIndex {
+message GlobalFulltextPlainIndex {
+    GlobalIndexSettings settings = 1;
+    FulltextIndexSettings fulltext_settings = 2;
+}
+
+message GlobalFulltextRelevanceIndex {
     GlobalIndexSettings settings = 1;
     FulltextIndexSettings fulltext_settings = 2;
 }
@@ -329,7 +334,8 @@ message TableIndex {
        GlobalAsyncIndex global_async_index = 4;
        GlobalUniqueIndex global_unique_index = 6;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
-       GlobalFulltextIndex global_fulltext_index = 8;
+       GlobalFulltextPlainIndex global_fulltext_plain_index = 8;
+       GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 9;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
@@ -354,7 +360,8 @@ message TableIndexDescription {
        GlobalAsyncIndex global_async_index = 5;
        GlobalUniqueIndex global_unique_index = 8;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
-       GlobalFulltextIndex global_fulltext_index = 10;
+       GlobalFulltextPlainIndex global_fulltext_plain_index = 10;
+       GlobalFulltextRelevanceIndex global_fulltext_relevance_index = 11;
     }
     Status status = 4;
     // list of columns content to be copied in to index table

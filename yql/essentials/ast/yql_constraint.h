@@ -491,7 +491,7 @@ class TEmptyConstraintNode final: public TConstraintNode {
 protected:
     friend struct TExprContext;
 
-    TEmptyConstraintNode(TExprContext& ctx);
+    explicit TEmptyConstraintNode(TExprContext& ctx);
     TEmptyConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);
     TEmptyConstraintNode(TEmptyConstraintNode&& constr);
 

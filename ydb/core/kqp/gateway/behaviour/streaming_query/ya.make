@@ -29,6 +29,7 @@ PEERDIR(
     ydb/library/conclusion
     ydb/library/query_actor
     ydb/library/table_creator
+    ydb/library/yql/providers/pq/proto
     ydb/services/metadata
     ydb/services/metadata/abstract
     ydb/services/metadata/manager

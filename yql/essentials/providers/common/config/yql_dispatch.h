@@ -110,7 +110,7 @@ public:
     public:
         using TPtr = TIntrusivePtr<TSettingHandler>;
 
-        TSettingHandler(const TString& name)
+        explicit TSettingHandler(const TString& name)
             : Name_(name)
         {
         }
@@ -346,7 +346,7 @@ public:
         bool IgnoreInFullReplay_ = false;
     };
 
-    TSettingDispatcher(const TQContext& qContext = {})
+    explicit TSettingDispatcher(const TQContext& qContext = {})
         : QContext_(qContext)
     {
     }
@@ -354,7 +354,7 @@ public:
     TSettingDispatcher(const TSettingDispatcher&) = delete;
 
     template <class TContainer>
-    TSettingDispatcher(const TContainer& validClusters)
+    explicit TSettingDispatcher(const TContainer& validClusters)
         : ValidClusters(validClusters.begin(), validClusters.end())
     {
     }

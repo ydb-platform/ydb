@@ -105,7 +105,11 @@ protected:
         TAutoPtr<IDataSet::TIterator> it = DataSetPtr->First();
         while (it->IsValid()) {
             const auto &x = *it->Get();
-            PutLogoBlobToVDisk(ctx, VDiskInfo.ActorID, VDiskInfo.VDiskID, x.Id, x.Data, x.HandleClass);
+            auto s = x.Data;
+            if (Conf->GroupInfo->Type.GetErasure() == NKikimr::TBlobStorageGroupType::Erasure4Plus2Block) {
+                s.resize(Conf->GroupInfo->Type.PartSize(x.Id));
+            }
+            PutLogoBlobToVDisk(ctx, VDiskInfo.ActorID, VDiskInfo.VDiskID, x.Id, s, x.HandleClass);
             Counter++;
             it->Next();
         }

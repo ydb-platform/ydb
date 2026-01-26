@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/misc/public.h>
 
+#include <yt/yt/library/profiling/sensor.h>
+
 #include <library/cpp/yt/misc/guid.h>
 
 #include <library/cpp/yt/compact_containers/compact_vector.h>
@@ -39,6 +41,8 @@ struct TTracingAttributes;
 // we should avoid include-dependencies here.
 using TRequestId = TGuid;
 constexpr TRequestId InvalidRequestId = {};
+
+YT_DEFINE_GLOBAL(const NProfiling::TProfiler, TracingProfiler, "/tracing");
 
 ////////////////////////////////////////////////////////////////////////////////
 

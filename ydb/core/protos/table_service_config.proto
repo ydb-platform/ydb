@@ -448,7 +448,7 @@ message TTableServiceConfig {
         All = 1;
     }
 
-    optional EBackportMode BackportMode = 108 [ default = Released, (InvalidateCompileCache) = true];
+    optional EBackportMode BackportMode = 108 [ default = All, (InvalidateCompileCache) = true];
 
     optional bool EnableFallbackToYqlOptimizer = 109 [default = false, (InvalidateCompileCache) = true];
 
@@ -476,4 +476,6 @@ message TTableServiceConfig {
     optional bool DefaultEnableShuffleEliminationForAggregation = 118 [default = false, (InvalidateCompileCache) = true];
 
     optional bool Antlr4ParserIsAmbiguityError = 119 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool DqHashOperatorsUseBlocks = 120 [default = false, (InvalidateCompileCache) = true];
 };

@@ -2,14 +2,13 @@
 
 #include "model_interface.h"
 
-#include <ydb/public/lib/ydb_cli//commands/interactive/common/api_utils.h>
-#include <ydb/public/lib/ydb_cli//commands/interactive/common/interactive_log.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/common/api_utils.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
 class TModelBase : public IModel {
 public:
-    TModelBase(const TString& apiUrl, const TString& authToken, const TInteractiveLogger& log);
+    TModelBase(const TString& apiUrl, const TString& authToken);
 
     TResponse HandleMessages(const std::vector<TMessage>& messages, std::function<void()> onStartWaiting = {}, std::function<void()> onFinishWaiting = {}) final;
 
@@ -24,7 +23,6 @@ protected:
     NJson::TJsonValue ChatCompletionRequest;
 
 private:
-    const TInteractiveLogger Log;
     THttpExecutor HttpExecutor;
 };
 

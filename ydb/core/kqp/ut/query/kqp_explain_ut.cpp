@@ -1197,9 +1197,13 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], lookupCount);
     }
 
-    Y_UNIT_TEST_TWIN(UpdateSecondaryConditional, UseSink) {
+    Y_UNIT_TEST_QUAD(UpdateSecondaryConditional, UseSink, UseStreamIndex) {
+        if (!UseSink && UseStreamIndex) {
+            return;
+        }
         TKikimrSettings settings;
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1221,13 +1225,13 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 2);
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
 
         auto deletesConstCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
         UNIT_ASSERT_VALUES_EQUAL(deletesConstCount, UseSink ? 0 : 1);
 
         auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
-        UNIT_ASSERT_VALUES_EQUAL(deletesCount, UseSink ? 1 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, UseSink ? (UseStreamIndex ? 0 : 1) : 1);
 
         auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableFullScan");
         UNIT_ASSERT_VALUES_EQUAL(fullScansCount, 1);
@@ -1252,7 +1256,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             UNIT_ASSERT_VALUES_EQUAL(counter["FullScan"], fullScansCount);
         }
 
-        {
+        if (!UseStreamIndex) {
             const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[1].GetMapSafe();
             UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys/Index/indexImplTable");
 
@@ -1297,7 +1301,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 2);
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 0 : 2));
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
 
         auto deletesConstCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
         UNIT_ASSERT_VALUES_EQUAL(deletesConstCount, UseSink ? 0 : 1);
@@ -1323,8 +1327,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             countOperationsByType("reads");
             countOperationsByType("writes");
 
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], (UseStreamIndex ? 0 : 1));
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], (UseStreamIndex ? 1 : 0));
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 0);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
             UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], fullScansCount);
         }
@@ -1344,6 +1348,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("tables").GetArraySafe().size(), 1);
         }
     }
 
@@ -1374,10 +1380,10 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT_VALUES_EQUAL(upsertsConstCount, UseSink ? 0 : 2);
 
         auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
-        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 0 : 2));
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
 
         auto updatesCount = CountPlanNodesByKv(plan, "Name", "Update");
-        UNIT_ASSERT_VALUES_EQUAL(updatesCount, UseSink ? (UseStreamIndex ? 1 : 0) : 0);
+        UNIT_ASSERT_VALUES_EQUAL(updatesCount, 0);
 
         auto deletesConstCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
         UNIT_ASSERT_VALUES_EQUAL(deletesConstCount, UseSink ? 0 : 1);
@@ -1402,8 +1408,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
             countOperationsByType("writes");
             
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], (UseStreamIndex ? 1 : 0));
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], (UseStreamIndex ? 0 : 1));
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
             UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
         }
 
@@ -1419,10 +1425,13 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
             };
 
             countOperationsByType("reads");
-            countOperationsByType("writes");
 
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
-            UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 1);
+            if (!UseStreamIndex) {
+                countOperationsByType("writes");
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], UseStreamIndex ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], UseStreamIndex ? 0 : 1);
             UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], fullScansCount);
         }
     }

@@ -64,12 +64,9 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         CompareYson(R"([[["::1"];["/Root/KeyValue"];[2u]]])", StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST_TWIN(Sessions, EnableRealSystemViewPaths) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableRealSystemViewPaths(EnableRealSystemViewPaths);
+    Y_UNIT_TEST(Sessions) {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
-        settings.SetFeatureFlags(featureFlags);
         settings.SetAuthToken("root@builtin");  // root@builtin becomes cluster admin
         TKikimrRunner kikimr(settings);
 
@@ -666,11 +663,8 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
     Y_UNIT_TEST(QuerySessionsOrderByDesc) {
         // Test ORDER BY DESC for query_sessions sys view
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableRealSystemViewPaths(true);
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
-        settings.SetFeatureFlags(featureFlags);
         settings.SetAuthToken("root@builtin");
         TKikimrRunner kikimr(settings);
 

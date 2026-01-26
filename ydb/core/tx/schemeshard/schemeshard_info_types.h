@@ -545,6 +545,13 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         bool IsBackup = false;
         bool IsRestore = false;
 
+        // Coordinated schema version for backup operations.
+        // Set once by first subop that touches this AlterData via InitAlterData(opId).
+        // All related operations use this pre-agreed version.
+        // When all users release (CoordinatedVersionUsers becomes empty), AlterData is cleaned up.
+        TMaybe<ui64> CoordinatedSchemaVersion;
+        THashSet<TOperationId> CoordinatedVersionUsers;
+
         NKikimrSchemeOp::TTableDescription TableDescriptionDiff;
         TMaybeFail<NKikimrSchemeOp::TTableDescription> TableDescriptionFull;
 
@@ -755,8 +762,6 @@ public:
         }
     }
 
-    static void GetIndexObjectCount(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc, ui32& indexTableCount, ui32& sequenceCount, ui32& indexTableShards);
-
     void ResetDescriptionCache();
     TVector<ui32> FillDescriptionCache(TPathElement::TPtr pathInfo);
 
@@ -775,12 +780,50 @@ public:
     }
 
 
+    // InitAlterData without tracking - for loading persisted state (init.cpp)
     void InitAlterData() {
         if (!AlterData) {
             AlterData = new TTableInfo::TAlterTableInfo;
-            AlterData->AlterVersion = AlterVersion + 1; // calc next AlterVersion
+            AlterData->AlterVersion = AlterVersion + 1;
             AlterData->NextColumnId = NextColumnId;
         }
+    }
+
+    // InitAlterData with tracking - for coordinated versioning operations.
+    // Tracks which operations are using this AlterData. When all release, it's cleaned up.
+    // Also ensures CoordinatedSchemaVersion is set in TableDescriptionFull for persistence.
+    void InitAlterData(const TOperationId& opId) {
+        // If AlterData exists but has no users, it's stale from restart - reset it
+        if (AlterData && AlterData->CoordinatedVersionUsers.empty()) {
+            AlterData.Reset();
+        }
+        if (!AlterData) {
+            AlterData = new TTableInfo::TAlterTableInfo;
+            AlterData->AlterVersion = AlterVersion + 1;
+            AlterData->CoordinatedSchemaVersion = AlterVersion + 1;
+            AlterData->NextColumnId = NextColumnId;
+        }
+        // Ensure TableDescriptionFull exists and has CoordinatedSchemaVersion set for persistence
+        if (!AlterData->TableDescriptionFull) {
+            AlterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
+        }
+        AlterData->TableDescriptionFull->SetCoordinatedSchemaVersion(*AlterData->CoordinatedSchemaVersion);
+        AlterData->CoordinatedVersionUsers.insert(opId);
+    }
+
+    // Release AlterData after coordinated versioning operation completes.
+    // When all users release, AlterData is cleaned up.
+    // Returns true if AlterData was fully released (all users done).
+    bool ReleaseAlterData(const TOperationId& opId) {
+        if (!AlterData) {
+            return false;
+        }
+        AlterData->CoordinatedVersionUsers.erase(opId);
+        if (AlterData->CoordinatedVersionUsers.empty()) {
+            AlterData.Reset();
+            return true;  // Caller should clear AlterTableFull from DB
+        }
+        return false;
     }
 
     void PrepareAlter(TAlterDataPtr alterData) {
@@ -2632,7 +2675,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 Y_ENSURE(success, description);
                 break;
             }
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
                 auto success = SpecializedIndexDescription
                     .emplace<NKikimrSchemeOp::TFulltextIndexDescription>()
                     .ParseFromString(description);
@@ -2699,7 +2743,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
                 break;
-            case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                 alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
                 break;
             default:
@@ -3195,7 +3240,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     ui64 Id;  // TxId from the original TEvCreateImportRequest
     TString Uid;
     EKind Kind;
-    const TString SettingsSerialized;
+    TString SettingsSerialized;
     std::variant<Ydb::Import::ImportFromS3Settings,
                  Ydb::Import::ImportFromFsSettings> Settings;
     TPathId DomainPathId;
@@ -3333,6 +3378,19 @@ public:
 
         void AddError(const TString& err);
     };
+
+    // Erases encryption key and syncronize it with SettingsSerialized
+    // Returns true if settings changed
+    bool EraseEncryptionKey() {
+        return std::visit([this](auto& settings) {
+            if (settings.encryption_settings().has_symmetric_key()) {
+                settings.mutable_encryption_settings()->clear_symmetric_key();
+                Y_ABORT_UNLESS(settings.SerializeToString(&SettingsSerialized));
+                return true;
+            }
+            return false;
+        }, Settings);
+    }
 
     // Fills items from schema mapping:
     // - if user specified no items, fills all from schema mapping;

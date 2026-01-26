@@ -1048,7 +1048,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 80);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 64);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 31);
                 UNIT_ASSERT(            !stats.query_phases(0).table_access(0).has_deletes());
@@ -1434,7 +1434,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), UseStreamIndex ? 2 : 1); // TODO: avoid unnecessary UPDATE operation for StreamIndex
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
             }
 
@@ -5194,7 +5194,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/TestTable", {
-            .ExpectedReads = UseStreamIndex ? 2 : 1, // TODO: don't use EvWrite UPDATE for conditional statements.
+            .ExpectedReads = 1,
             .ExpectedUpdates = 1
         });
 
@@ -6240,7 +6240,47 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
-}
 
+    Y_UNIT_TEST(UniqueIndexNotNullColumns) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestUpdateUniqIndexNotNull` (
+                    id Int64,
+                    val1 Int64 NOT NULL,
+                    val2 Int64 NOT NULL,
+                    PRIMARY KEY(id),
+                    INDEX idx GLOBAL UNIQUE SYNC ON (val1, val2)
+                );
+
+                CREATE TABLE `/Root/TestInsertIndexNotNullDefault` (
+                    Key Uint64,
+                    Index1 Int32 NOT NULL DEFAULT 1,
+                    PRIMARY KEY (Key),
+                    INDEX Index GLOBAL ON (Index1)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                UPDATE `/Root/TestUpdateUniqIndexNotNull` SET val1 = 3;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                INSERT INTO `/Root/TestInsertIndexNotNullDefault` (Key) VALUES (1);
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+}
 }
 }

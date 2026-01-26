@@ -1,7 +1,6 @@
 #include "print_utils.h"
 #include "progress_indication.h"
 
-#include <library/cpp/colorizer/colors.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 

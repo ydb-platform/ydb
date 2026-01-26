@@ -22,6 +22,9 @@
 #include <yt/yt/core/http/client.h>
 #include <yt/yt/core/http/http.h>
 
+#include <yt/yt/core/https/client.h>
+#include <yt/yt/core/https/config.h>
+
 #include <library/cpp/yson/node/node_io.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -60,17 +63,18 @@ void CheckError(const TString& requestId, NHttp::IResponsePtr response)
 
 void PingTx(NHttp::IClientPtr httpClient, const TPingableTransaction& tx)
 {
-    auto url = TString::Join("http://", tx.GetContext().ServerName, "/api/", tx.GetContext().Config->ApiVersion, "/ping_tx");
+    const auto context = tx.GetContext();
+    auto url = TString::Join(context.UseTLS ? "https://" : "http://", context.ServerName, "/api/", context.Config->ApiVersion, "/ping_tx");
     auto headers = New<NHttp::THeaders>();
     auto requestId = CreateGuidAsString();
 
     headers->Add("Host", url);
     headers->Add("User-Agent", TProcessState::Get()->ClientVersion);
 
-    if (const auto& serviceTicketAuth = tx.GetContext().ServiceTicketAuth) {
+    if (const auto& serviceTicketAuth = context.ServiceTicketAuth) {
         const auto serviceTicket = serviceTicketAuth->Ptr->IssueServiceTicket();
         headers->Add("X-Ya-Service-Ticket", serviceTicket);
-    } else if (const auto& token = tx.GetContext().Token; !token.empty()) {
+    } else if (const auto& token = context.Token; !token.empty()) {
         headers->Add("Authorization", "OAuth " + token);
     }
 
@@ -86,7 +90,7 @@ void PingTx(NHttp::IClientPtr httpClient, const TPingableTransaction& tx)
 
     YT_LOG_DEBUG("REQ %v - sending request (HostName: %v; Method POST %v; X-YT-Parameters (sent in body): %v)",
         requestId,
-        tx.GetContext().ServerName,
+        context.ServerName,
         url,
         strParams
     );
@@ -203,15 +207,23 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config)
+ITransactionPingerPtr CreateTransactionPinger(const TConfigPtr& config, bool useTLS)
 {
     YT_LOG_DEBUG("Using async transaction pinger");
-    auto httpClientConfig = NYT::New<NHttp::TClientConfig>();
-    httpClientConfig->MaxIdleConnections = 16;
     auto httpPoller = NConcurrency::CreateThreadPoolPoller(
         config->AsyncHttpClientThreads,
         "tx_http_client_poller");
-    auto httpClient = NHttp::CreateClient(std::move(httpClientConfig), std::move(httpPoller));
+    NHttp::IClientPtr httpClient;
+
+    if (useTLS) {
+        auto httpsClientConfig = NYT::New<NHttps::TClientConfig>();
+        httpsClientConfig->MaxIdleConnections = 16;
+        httpClient = NHttps::CreateClient(std::move(httpsClientConfig), std::move(httpPoller));
+    } else {
+        auto httpClientConfig = NYT::New<NHttp::TClientConfig>();
+        httpClientConfig->MaxIdleConnections = 16;
+        httpClient = NHttp::CreateClient(std::move(httpClientConfig), std::move(httpPoller));
+    }
 
     return MakeIntrusive<TSharedTransactionPinger>(
         std::move(httpClient),

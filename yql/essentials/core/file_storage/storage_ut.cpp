@@ -24,7 +24,7 @@ private:
     TFsPath Path_;
 
 public:
-    TTestDir(const TString& name) {
+    explicit TTestDir(const TString& name) {
         Y_ENSURE(name.length() > 0, "have to specify name");
         Y_ENSURE(name.find('.') == TString::npos, "must be simple name");
         Y_ENSURE(name.find('/') == TString::npos, "must be simple name");

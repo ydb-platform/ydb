@@ -26,6 +26,8 @@ import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.cms_pb2 as kikimr_cms
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
+from ydb.public.api.grpc.draft import ydb_nbs_v1_pb2_grpc as nbs_grpc_server
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.apps.dstool.lib.arg_parser import print_error_with_usage
 import ydb.apps.dstool.lib.table as table
 import typing
@@ -292,8 +294,6 @@ def get_vslot_extended_id(vslot):
 def get_pdisk_inferred_settings(pdisk):
     if (pdisk.PDiskMetrics.HasField('SlotCount')):
         return pdisk.PDiskMetrics.SlotCount, pdisk.PDiskMetrics.SlotSizeInUnits
-    elif (pdisk.InferPDiskSlotCountFromUnitSize != 0):
-        return 0, 0
     else:
         return pdisk.ExpectedSlotCount, pdisk.PDiskConfig.SlotSizeInUnits
 
@@ -729,6 +729,16 @@ def create_readonly_request(args, vslot, value):
 
 def invoke_wipe_request(request):
     return invoke_bsc_request(request)
+
+
+def invoke_nbs_request(request_type, request):
+    return invoke_grpc(request_type, request, stub_factory=nbs_grpc_server.NbsServiceStub)
+
+
+def print_nbs_request_result(args, request, response):
+    success = response.operation.ready and response.operation.status == StatusIds.SUCCESS
+    error_reason = 'Request has failed: \n{0}\n{1}\n'.format(request, response)
+    print_status_if_verbose(args, success, error_reason)
 
 
 @inmemcache('base_config_and_storage_pools', cache_enable_param='cache')

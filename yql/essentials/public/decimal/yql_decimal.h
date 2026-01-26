@@ -174,7 +174,7 @@ struct TDecimal {
     TDecimal() = default;
 
     template <typename T>
-    TDecimal(T t)
+    TDecimal(T t) // NOLINT(google-explicit-constructor)
         : Value(t)
     {
     }
@@ -231,7 +231,7 @@ protected:
     const TInt128 Bound_;
 
 public:
-    TDecimalMultiplicator(
+    explicit TDecimalMultiplicator(
         ui8 precision,
         ui8 scale = 0 /* unused */)
         : Bound_(GetDivider(precision))
@@ -279,7 +279,7 @@ public:
 template <typename TRight>
 class TDecimalDivisor {
 public:
-    TDecimalDivisor(
+    explicit TDecimalDivisor(
         ui8 precision = 0 /* unused */,
         ui8 scale = 0 /* unused */)
     {
@@ -350,7 +350,7 @@ public:
 template <>
 class TDecimalRemainder<TInt128> {
 public:
-    TDecimalRemainder(
+    explicit TDecimalRemainder(
         ui8 precision = 0 /*unused*/,
         ui8 scale = 0 /*unused*/)
     {

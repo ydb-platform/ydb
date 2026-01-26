@@ -279,6 +279,7 @@ public:
                             .WithExternalSourceFactory(ExternalSourceFactory)
                             .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
                             .WithSysViewRewritten(table.GetSysViewRewritten())
+                            .WithTopicsIo(SessionCtx->Config().FeatureFlags.GetEnableTopicsSqlIoOperations())
             );
 
             futures.push_back(future.Apply([result, queryType]
@@ -819,11 +820,6 @@ public:
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 }
             } else if (tableDesc.Metadata->Kind == EKikimrTableKind::View && !IsShowCreate(*read)) {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableViews()) {
-                    ctx.AddError(TIssue(node->Pos(ctx),
-                                        "Views are disabled. Please contact your system administrator to enable the feature"));
-                    return nullptr;
-                }
 
                 ctx.Step
                     .Repeat(TExprStep::ExpandApplyForLambdas)

@@ -213,6 +213,9 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
     : TypeCtx(typeCtx)
     , KqpCtx(*kqpCtx)
     , RBO(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), std::move(peepholeTypeAnnTransformer), funcRegistry) {
+    // Predicate pull-up stage
+    TVector<std::shared_ptr<IRule>> filterPullUpRules{std::make_shared<TPullUpCorrelatedFilterRule>()};
+    RBO.AddStage(std::make_shared<TRuleBasedStage>("Correlated predicte pullup", std::move(filterPullUpRules)));
     // Initial stages.
     TVector<std::shared_ptr<IRule>> inlineScalarSubPlanStageRules{std::make_shared<TInlineScalarSubplanRule>()};
     RBO.AddStage(std::make_shared<TRuleBasedStage>("Inline scalar subplans", std::move(inlineScalarSubPlanStageRules)));

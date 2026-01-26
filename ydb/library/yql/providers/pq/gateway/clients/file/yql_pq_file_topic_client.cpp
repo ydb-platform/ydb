@@ -341,8 +341,10 @@ struct TDummyPartitionSession final : public TPartitionSession {
 
 class TFileTopicClient final : public ITopicClient {
 public:
-    explicit TFileTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics)
-        : Topics(topics)
+    TFileTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings)
+        : Database(settings.Database)
+        , Topics(topics)
+        , AllowSkipDatabasePrefix(settings.SkipDatabasePrefix)
     {}
 
     TAsyncStatus CreateTopic(const TString& path, const TCreateTopicSettings& settings) final {
@@ -378,13 +380,14 @@ public:
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings) final {
         Y_ENSURE(!settings.Topics_.empty());
         const auto& topic = settings.Topics_.front();
-        const auto& topicPath = topic.Path_;
+        const TString topicPath(topic.Path_);
 
         Y_ENSURE(topic.PartitionIds_.size() >= 1);
         const ui64 partitionId = topic.PartitionIds_.front();
 
-        const auto topicsIt = Topics.find(make_pair("pq", topicPath));
-        Y_ENSURE(topicsIt != Topics.end());
+        const auto& key = std::make_pair("pq", SkipDatabasePrefix(topicPath));
+        const auto topicsIt = Topics.find(key);
+        Y_ENSURE(topicsIt != Topics.end(), "Cluster: " << key.first << ", topic: " << key.second << " not found");
         auto filePath = topicsIt->second.Path;
         Y_ENSURE(filePath);
 
@@ -409,8 +412,9 @@ public:
     }
 
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings) final {
-        const auto topicsIt = Topics.find(std::make_pair("pq", settings.Path_));
-        Y_ENSURE(topicsIt != Topics.end());
+        const auto& key = std::make_pair("pq", SkipDatabasePrefix(TString(settings.Path_)));
+        const auto topicsIt = Topics.find(key);
+        Y_ENSURE(topicsIt != Topics.end(), "Cluster: " << key.first << ", topic: " << key.second << " not found");
         const auto& filePath = topicsIt->second.Path;
         Y_ENSURE(filePath);
 
@@ -423,13 +427,19 @@ public:
     }
 
 private:
+    TString SkipDatabasePrefix(const TString& path) const {
+        return AllowSkipDatabasePrefix ? NYql::SkipDatabasePrefix(path, Database) : path;
+    }
+
+    const TString Database;
     const THashMap<TClusterNPath, TDummyTopic> Topics;
+    const bool AllowSkipDatabasePrefix = false;
 };
 
 } // anonymous namespace
 
-ITopicClient::TPtr CreateFileTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics) {
-    return MakeIntrusive<TFileTopicClient>(topics);
+ITopicClient::TPtr CreateFileTopicClient(const THashMap<TClusterNPath, TDummyTopic>& topics, const TFileTopicClientSettings& settings) {
+    return MakeIntrusive<TFileTopicClient>(topics, settings);
 }
 
 } // namespace NYql

@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Upsert exist row with default values in columns 2, 3 =========\n";
         {
-            TVector<ui32> columnIds = {1, 4, 5, 2, 3}; // key and numerical columns
+            TVector<ui32> columnIds = {1, 4, 5, 2, 3}; // key and numeric columns
             ui32 defaultFilledColumns = 2;
 
             TVector<TCell> cells = {
@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 {"int16_val", "Int16", false, false},     // id=7
                 {"int32_val", "Int32", false, false},     // id=8
                 {"int64_val", "Int64", false, false},     // id=9
-                {"utf8_val", "Utf8", false, false},       // id=10 (not numerical)
+                {"utf8_val", "Utf8", false, false},       // id=10 (not numeric)
                 {"double_val", "Double", false, false}   // id=11 (not supported by increment)
             });
 
@@ -427,14 +427,14 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7, 8, 9}; // key and numerical columns
             TVector<TCell> increments = {
                 TCell::Make(ui64(1)),    // key
-                TCell::Make(ui8(5)),     // +5 к uint8_val
-                TCell::Make(ui16(50)),   // +50 к uint16_val
-                TCell::Make(ui32(500)),  // +500 к uint32_val
-                TCell::Make(ui64(5000)), // +5000 к uint64_val
-                TCell::Make(i8(5)),      // +5 к int8_val
-                TCell::Make(i16(10)),    // +50 к int16_val
-                TCell::Make(i32(100)),   // +100 к int32_val
-                TCell::Make(i64(1000))   // +1000 к int64_val
+                TCell::Make(ui8(5)),     // +5 to uint8_val
+                TCell::Make(ui16(50)),   // +50 to uint16_val
+                TCell::Make(ui32(500)),  // +500 to uint32_val
+                TCell::Make(ui64(5000)), // +5000 to uint64_val
+                TCell::Make(i8(5)),      // +5 to int8_val
+                TCell::Make(i16(10)),    // +50 to int16_val
+                TCell::Make(i32(100)),   // +100 to int32_val
+                TCell::Make(i64(1000))   // +1000 to int64_val
             };
 
             auto result = Increment(runtime, sender, shard, tableId, txId,
@@ -609,6 +609,69 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 "key = 3, uint8_val = 15, uint16_val = 150, uint32_val = 1500, "
                 "uint64_val = 15000, int8_val = -15, int16_val = -55, int32_val = -550, int64_val = -5500, "
                 "utf8_val = othertext\\0, double_val = 3.15\n"
+            );
+        }
+    }
+
+    Y_UNIT_TEST(UpsertIncrement) {
+
+        auto [runtime, server, sender] = TestCreateServer();
+
+        // Define a table with different column types
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint64", true, false},           // key (id=1)
+                {"uint32_val", "Uint32", false, false},   // id=2
+                {"uint64_val", "Uint64", false, false}    // id=3
+            });
+
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        ui64 txId = 100;
+
+        Cout << "========= Upsert a row using upsert-increment =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3}; // key and numeric columns
+            TVector<TCell> increments = {
+                TCell::Make(ui64(1)),    // key
+                TCell::Make(ui32(500)),  // +500 to uint32_val
+                TCell::Make(ui64(5000)), // +5000 to uint64_val
+            };
+
+            auto result = UpsertIncrement(runtime, sender, shard, tableId, txId,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        Cout << "========= Verify the inserted row =========\n";
+        {
+            auto tableState = ReadTable(server, shards, tableId);
+
+            UNIT_ASSERT_STRINGS_EQUAL(tableState,
+                "key = 1, uint32_val = 500, uint64_val = 5000\n"
+            );
+        }
+
+        Cout << "========= Try to insert a row and increment another row =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3}; // key column and uint8_val column
+            TVector<TCell> increments = {
+                TCell::Make(ui64(7)), TCell::Make(ui32(20)), TCell::Make(ui64(200)),  // id 7 don't exist
+                TCell::Make(ui64(1)), TCell::Make(ui32(-30)), TCell::Make(ui64(-300)) // id 1 exists
+            };
+
+            auto result = UpsertIncrement(runtime, sender, shard, tableId, txId,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments);
+            UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        Cout << "========= Verify data after increments =========\n";
+        {
+            auto tableState = ReadTable(server, shards, tableId);
+
+            UNIT_ASSERT_STRINGS_EQUAL(tableState,
+                "key = 1, uint32_val = 470, uint64_val = 4700\n"
+                "key = 7, uint32_val = 20, uint64_val = 200\n"
             );
         }
     }

@@ -34,6 +34,8 @@ struct TMetrics {
     TTabletPercentileCounter MessageLocks;
     // stores the duration of message locking
     TTabletPercentileCounter MessageLockingDuration;
+    // stores the duration of message waiting for locking from writing to the topic
+    TTabletPercentileCounter WaitingLockingDuration;
 };
 
 // MLP не работает если включена компактифкация по ключу!!! (иначе не понятно как прореживать скомпакченные значения)
@@ -43,9 +45,11 @@ NActors::IActor* CreateConsumerActor(
     const NActors::TActorId& tabletActorId,
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
+    const NKikimrPQ::TPQTabletConfig& topicConfig,
     const NKikimrPQ::TPQTabletConfig_TConsumer& config,
     const std::optional<TDuration> retentionPeriod,
-    ui64 partitionEndOffset
+    ui64 partitionEndOffset,
+    NMonitoring::TDynamicCounterPtr detailedMetricsRoot
 );
 
 TString MakeSnapshotKey(ui32 partitionId, const TString& consumerName);

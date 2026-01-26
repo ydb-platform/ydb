@@ -74,6 +74,10 @@ public:
         return SkipJsonErrors;
     }
 
+    TExprNode::TPtr GetSharedReading() const {
+        return SharedReading;
+    }
+
     bool Parse(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx);
 
 private:
@@ -97,6 +101,7 @@ private:
     TExprNode::TPtr WatermarkIdleTimeout;
     TExprNode::TPtr Watermark;
     TExprNode::TPtr SkipJsonErrors;
+    TExprNode::TPtr SharedReading;
 };
 
 } // namespace NYql

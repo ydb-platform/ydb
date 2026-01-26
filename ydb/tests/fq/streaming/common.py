@@ -115,3 +115,14 @@ class StreamingTestBase(TestYdsBase):
         result = self.get_sensors(kikimr, node_id, "utils").find_sensor(
             {"activity": activity, "sensor": "ActorsAliveByActivity", "execpool": "User"})
         return result if result is not None else 0
+
+    def wait_actor_count(self, kikimr: Kikimr, activity: str, expected_count: int):
+        deadline = time.time() + 60
+        while True:
+            count = 0
+            for node_id in kikimr.cluster.nodes:
+                count = count + self.get_actor_count(kikimr, node_id, activity)
+                if count == expected_count:
+                    return node_id  # return any node
+            assert time.time() < deadline, f"Waiting actor {activity} count failed, current count {count}"
+            time.sleep(1)

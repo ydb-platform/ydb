@@ -12,9 +12,6 @@ logger = logging.getLogger(__name__)
 
 class TestStreamingInYdb(StreamingTestBase):
     def get_input_name(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
-        if local_topics and shared:
-            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
-
         endpoint = self.get_endpoint(kikimr, local_topics)
         source_name = entity_name(name)
         self.init_topics(source_name, create_output=False, partitions_count=partitions_count, endpoint=endpoint)
@@ -26,9 +23,6 @@ class TestStreamingInYdb(StreamingTestBase):
             return f"`{source_name}`.`{self.input_topic}`", endpoint
 
     def get_io_names(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
-        if local_topics and shared:
-            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
-
         endpoint = self.get_endpoint(kikimr, local_topics)
         source_name = entity_name(name)
         self.init_topics(source_name, create_output=True, partitions_count=partitions_count, endpoint=endpoint)
@@ -59,17 +53,20 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_limit(self, kikimr, entity_name, local_topics):
-        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_shared_reading_limit", local_topics, entity_name, partitions_count=10, shared=True)
+        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_shared_reading_limit", local_topics, entity_name, partitions_count=10)
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
                 FORMAT="json_each_row",
-                SCHEMA=(time String NOT NULL))
+                SCHEMA=(time String NOT NULL),
+                SHARED_READING="TRUE")
             WHERE time like "%lunch%"
             LIMIT 1"""
 
         future1 = kikimr.ydb_client.query_async(sql)
         future2 = kikimr.ydb_client.query_async(sql)
+
+        self.wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 10)
         time.sleep(3)
         data = ['{"time": "lunch time"}']
         self.write_stream(data, endpoint=endpoint)
@@ -119,7 +116,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_insert_to_topic(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "shared_reading_insert_to_topic", local_topics, entity_name, partitions_count=10, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, "shared_reading_insert_to_topic", local_topics, entity_name, partitions_count=10)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -127,7 +124,8 @@ class TestStreamingInYdb(StreamingTestBase):
                 $in = SELECT time FROM {inp}
                 WITH (
                     FORMAT="json_each_row",
-                    SCHEMA=(time String NOT NULL))
+                    SCHEMA=(time String NOT NULL),
+                    SHARED_READING="TRUE")
                 WHERE time like "%lunch%";
                 INSERT INTO {out} SELECT time FROM $in;
             END DO;'''
@@ -138,6 +136,7 @@ class TestStreamingInYdb(StreamingTestBase):
         kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
         path1 = f"/Root/{query_name1}"
         self.wait_completed_checkpoints(kikimr, path1)
+        self.wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 10)
 
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']
@@ -166,7 +165,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_restart_nodes(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "reading_restart_nodes", local_topics, entity_name, partitions_count=1, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, "reading_restart_nodes", local_topics, entity_name, partitions_count=1)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -174,7 +173,8 @@ class TestStreamingInYdb(StreamingTestBase):
                 $in = SELECT value FROM {inp}
                 WITH (
                     FORMAT="json_each_row",
-                    SCHEMA=(value String NOT NULL))
+                    SCHEMA=(value String NOT NULL),
+                    SHARED_READING="TRUE")
                 WHERE value like "%value%";
                 INSERT INTO {out} SELECT value FROM $in;
             END DO;'''
@@ -183,6 +183,7 @@ class TestStreamingInYdb(StreamingTestBase):
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
+        self.wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
         self.write_stream(['{"value": "value1"}'], endpoint=endpoint)
         expected_data = ['value1']
@@ -207,7 +208,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_restore_state(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_read_topic_restore_state", local_topics, entity_name, partitions_count=1, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, "test_read_topic_restore_state", local_topics, entity_name, partitions_count=1)
 
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
@@ -218,7 +219,8 @@ class TestStreamingInYdb(StreamingTestBase):
                 $in = SELECT * FROM {inp}
                     WITH (
                         FORMAT="json_each_row",
-                        SCHEMA=(dt UINT64, str STRING));
+                        SCHEMA=(dt UINT64, str STRING),
+                        SHARED_READING="TRUE");
                 $mr = SELECT * FROM $in
                     MATCH_RECOGNIZE(
                         MEASURES
@@ -240,6 +242,7 @@ class TestStreamingInYdb(StreamingTestBase):
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
+        self.wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
         data = [
             '{"dt": 1696849942000001, "str": "A" }',
@@ -268,7 +271,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_json_errors(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_json_errors", local_topics, entity_name, partitions_count=10, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, "test_json_errors", local_topics, entity_name, partitions_count=10)
 
         name = "test_json_errors"
         sql = R'''
@@ -278,6 +281,7 @@ class TestStreamingInYdb(StreamingTestBase):
                 WITH (
                     FORMAT="json_each_row",
                     `skip.json.errors` = "true",
+                    SHARED_READING="TRUE",
                     SCHEMA=(time UINT32 NOT NULL, data String NOT NULL));
                 INSERT INTO {out} SELECT data FROM $in;
             END DO;'''
@@ -285,6 +289,7 @@ class TestStreamingInYdb(StreamingTestBase):
         path = f"/Root/{name}"
         kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, path)
+        self.wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 10)
 
         data = [
             '{"time": 101, "data": "hello1"}',
@@ -298,7 +303,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_restart_query_by_rescaling(self, kikimr, entity_name, local_topics):
-        inp, out, endpoint = self.get_io_names(kikimr, "test_restart_query_by_rescaling", local_topics, entity_name, partitions_count=10, shared=True)
+        inp, out, endpoint = self.get_io_names(kikimr, "test_restart_query_by_rescaling", local_topics, entity_name, partitions_count=10)
 
         name = "test_restart_query_by_rescaling"
         sql = R'''
@@ -310,7 +315,8 @@ class TestStreamingInYdb(StreamingTestBase):
                 $in = SELECT time FROM {inp}
                 WITH (
                     FORMAT="json_each_row",
-                    SCHEMA=(time String NOT NULL))
+                    SCHEMA=(time String NOT NULL),
+                    SHARED_READING="TRUE")
                 WHERE time like "%time%";
                 INSERT INTO {out} SELECT time FROM $in;
             END DO;'''
@@ -318,6 +324,7 @@ class TestStreamingInYdb(StreamingTestBase):
         path = f"/Root/{name}"
         kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
         self.wait_completed_checkpoints(kikimr, path)
+        self.wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 10)
 
         message_count = 20
         for i in range(message_count):

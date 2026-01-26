@@ -95,6 +95,10 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
                 SkipJsonErrors = readSettings->Child(i);
                 continue;
             }
+            if (readSettings->Child(i)->Head().IsAtom("sharedreading")) {
+                SharedReading = readSettings->Child(i);
+                continue;
+            }
         }
     }
 

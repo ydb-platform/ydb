@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     direct_block_group.cpp
+    request.cpp
 )
 
 PEERDIR(

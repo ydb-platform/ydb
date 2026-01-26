@@ -232,8 +232,7 @@ public:
         const TString& DbId,
         const TString& DbPath,
         const bool isServerless,
-        const TString& FolderId,
-        const TString& MonitoringProjectId);
+        const TString& FolderId);
 
     void Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx);
 
@@ -296,7 +295,6 @@ private:
     TString DbPath;
     bool IsServerless;
     TString FolderId;
-    TString MonitoringProjectId;
     mutable ui64 CurReadRuleGeneration;
 };
 

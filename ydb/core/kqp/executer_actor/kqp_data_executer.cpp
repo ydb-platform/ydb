@@ -3090,30 +3090,10 @@ private:
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
 
-                    // Debug: Log all locks being processed
-                    bool isError = (lock.GetCounter() >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin);
-                    Cerr << "FillLocksFromExtraData: lock_id=" << lock.GetLockId() 
-                         << ", shard_id=" << lock.GetDataShard()
-                         << ", counter=" << lock.GetCounter()
-                         << ", isError=" << isError
-                         << ", query_trace_id=" << (lock.HasQueryTraceId() ? lock.GetQueryTraceId() : 0)
-                         << ", TxManager=" << (TxManager ? "yes" : "no") << Endl;
-
                     if (TxManager) {
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
-                        if (!TxManager->AddLock(lock.GetDataShard(), lock)) {
-                            // Lock is broken - force broken locks status for proper TLI logging
-                            // This is needed for InvisibleRowSkips where read-only snapshot transactions
-                            // would otherwise skip the BrokenLocks() check
-                            TxManager->SetForceBrokenLocks();
-                            Cerr << "FillLocksFromExtraData: SetForceBrokenLocks() called for lock_id=" << lock.GetLockId() 
-                                 << ", TxManager ptr=" << TxManager.get() << Endl;
-                            // Also store the QueryTraceId for TLI logging
-                            if (lock.HasQueryTraceId() && lock.GetQueryTraceId() != 0) {
-                                TxManager->SetBrokenLockQueryTraceId(lock.GetQueryTraceId());
-                            }
-                        }
+                        TxManager->AddLock(lock.GetDataShard(), lock);
                     }
                 }
 

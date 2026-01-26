@@ -95,8 +95,6 @@ public:
     virtual const std::optional<NYql::TIssue>& GetLockIssue() const = 0;
     virtual void SetBrokenLockQueryTraceId(ui64 queryTraceId) = 0;
     virtual std::optional<ui64> GetBrokenLockQueryTraceId() const = 0;
-    // Force broken locks status (used for InvisibleRowSkips where lock breakage must be reported)
-    virtual void SetForceBrokenLocks() = 0;
 
     virtual const THashSet<ui64>& GetShards() const = 0;
     virtual ui64 GetShardsCount() const = 0;

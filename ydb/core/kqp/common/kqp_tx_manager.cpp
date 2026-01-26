@@ -301,9 +301,6 @@ public:
     }
 
     bool BrokenLocks() const override {
-        if (ForceBrokenLocks_) {
-            return true;
-        }
         return LocksIssue.has_value() && !(HasSnapshot() && IsReadOnly());
     }
 
@@ -319,10 +316,6 @@ public:
 
     std::optional<ui64> GetBrokenLockQueryTraceId() const override {
         return BrokenLockQueryTraceId_;
-    }
-
-    void SetForceBrokenLocks() override {
-        ForceBrokenLocks_ = true;
     }
 
     const THashSet<ui64>& GetShards() const override {
@@ -576,7 +569,6 @@ private:
     bool ReadOnly = true;
     bool ValidSnapshot = false;
     bool HasOlapTableShard = false;
-    bool ForceBrokenLocks_ = false;
     std::optional<NYql::TIssue> LocksIssue;
     std::optional<ui64> BrokenLockQueryTraceId_;
 

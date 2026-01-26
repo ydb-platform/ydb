@@ -352,14 +352,12 @@ namespace {
     TKikimrSettings MakeKikimrSettings(bool useSink, TStringStream& ss) {
         TKikimrSettings settings;
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        settings.AppConfig.MutableLogTliConfig()->SetQueryTextLogMode(NKikimrProto::TLogTliConfig_ELogMode_ORIGINAL);
         settings.LogStream = &ss;
         settings.SetWithSampleTables(false);
         return settings;
     }
 
     void ConfigureKikimrForTli(TKikimrRunner& kikimr, bool logEnabled) {
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).LogTliConfig.SetQueryTextLogMode(NKikimrProto::TLogTliConfig_ELogMode_ORIGINAL);
         if (logEnabled) {
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TLI, NLog::PRI_INFO);
         }

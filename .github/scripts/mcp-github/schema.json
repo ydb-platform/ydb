@@ -1,0 +1,282 @@
+{
+  "version": "1.0",
+  "tools": [
+    {
+      "name": "get_repo_file",
+      "description": "Получить содержимое файла из YDB репозитория на GitHub",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Путь к файлу (например, ydb/core/client/client.h)" },
+          "ref": { "type": "string", "description": "Ветка, тег или commit SHA (опционально, по умолчанию main)" }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "search_repo_files",
+      "description": "Поиск файлов в репозитории по имени или пути",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Поисковый запрос (имя файла или путь)" },
+          "extension": { "type": "string", "description": "Расширение для фильтрации (например, .py, .cpp)" }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "search_repo_content",
+      "description": "Поиск по содержимому файлов в репозитории",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Поисковый запрос по содержимому" },
+          "path": { "type": "string", "description": "Ограничить поиск поддиректорией (опционально)" },
+          "extension": { "type": "string", "description": "Расширение файла для фильтрации" },
+          "per_page": { "type": "integer", "description": "Максимум результатов (1–100, по умолчанию 20)" }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "get_repo_tree",
+      "description": "Получить структуру директории в репозитории",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Путь к директории (по умолчанию корень)" },
+          "recursive": { "type": "boolean", "description": "Рекурсивно все файлы (по умолчанию false)" },
+          "ref": { "type": "string", "description": "Ветка, тег или commit SHA (опционально)" }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "get_file_info",
+      "description": "Получить метаинформацию о файле (размер, SHA, URL)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Путь к файлу" },
+          "ref": { "type": "string", "description": "Ветка/тег/commit (опционально)" }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "get_file_commits",
+      "description": "История коммитов для файла",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Путь к файлу" },
+          "ref": { "type": "string", "description": "Ветка/тег/commit (опционально)" },
+          "per_page": { "type": "integer", "description": "Максимум коммитов (1–100, по умолчанию 20)" }
+        },
+        "required": ["path"]
+      }
+    },
+    {
+      "name": "get_commit_diff",
+      "description": "Детали и diff по коммиту. Для PR из форка — repo=head_repo из get_pull_request.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sha": { "type": "string", "description": "SHA коммита" },
+          "repo": { "type": "string", "description": "Репо owner/repo. Для форка — head_repo. Иначе ydb-platform/ydb." }
+        },
+        "required": ["sha"]
+      }
+    },
+    {
+      "name": "get_pull_request",
+      "description": "Информация о PR. Возвращает head_sha, head_repo, is_fork для форков.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "number": { "type": "integer", "description": "Номер pull request" }
+        },
+        "required": ["number"]
+      }
+    },
+    {
+      "name": "get_pull_request_files",
+      "description": "Изменённые файлы и diff по PR. Работает и для PR из форка.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "number": { "type": "integer", "description": "Номер pull request" }
+        },
+        "required": ["number"]
+      }
+    },
+    {
+      "name": "search_pull_requests",
+      "description": "Поиск pull request по запросу",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Поисковый запрос (GitHub search syntax)" },
+          "state": { "type": "string", "description": "open/closed/all (опционально)" },
+          "per_page": { "type": "integer", "description": "Максимум результатов (1–100, по умолчанию 20)" }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "get_issue",
+      "description": "Информация об issue по номеру",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "number": { "type": "integer", "description": "Номер issue" }
+        },
+        "required": ["number"]
+      }
+    },
+    {
+      "name": "search_issues",
+      "description": "Поиск issues по запросу",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Поисковый запрос (GitHub search syntax)" },
+          "state": { "type": "string", "description": "open/closed/all (опционально)" },
+          "per_page": { "type": "integer", "description": "Максимум результатов (1–100, по умолчанию 20)" }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "get_workflow_runs",
+      "description": "Список запусков workflow. branch = ветка запуска (фильтр). У run — workflow_branch (head_branch).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workflow": { "type": "string", "description": "Имя workflow: Regression-run_Small_and_Medium, Regression-run_Large или regression_run_small_medium.yml" },
+          "branch": { "type": "string", "description": "Ветка запуска (фильтр). По умолчанию main." },
+          "status": { "type": "string", "description": "completed/in_progress/queued (опционально)" },
+          "per_page": { "type": "integer", "description": "Максимум запусков (1–100, по умолчанию 10)" }
+        },
+        "required": ["workflow"]
+      }
+    },
+    {
+      "name": "get_workflow_run_jobs",
+      "description": "Список jobs для запуска workflow",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": { "type": "integer", "description": "ID запуска workflow" },
+          "per_page": { "type": "integer", "description": "Максимум jobs (1–100, по умолчанию 50)" }
+        },
+        "required": ["run_id"]
+      }
+    },
+    {
+      "name": "compare_workflow_failures",
+      "description": "Сравнить последние два запуска workflow по report_t.json",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workflow": { "type": "string", "description": "Имя workflow или файл (regression_run_large.yml)" },
+          "branch": { "type": "string", "description": "Ветка (по умолчанию main)" },
+          "artifact_name_contains": { "type": "string", "description": "Подстрока имени артефакта (по умолчанию report_t)" },
+          "artifact_file_name": { "type": "string", "description": "Имя файла в zip (по умолчанию report_t.json)" },
+          "per_page": { "type": "integer", "description": "Сколько запусков смотреть (1–100, по умолчанию 10)" }
+        },
+        "required": ["workflow"]
+      }
+    },
+    {
+      "name": "get_run_report",
+      "description": "Скачать report.json из storage, вернуть только failures/muted + report_url, html_url. Полный отчёт не отдаётся.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "report_url": { "type": "string", "description": "Полный URL report.json (если известен)" },
+          "run_id": { "type": "integer", "description": "ID workflow run. В storage — run_id, не job_id. Предпочтительно." },
+          "job_id": { "type": "integer", "description": "Опционально. Tool резолвит job_id → run_id." },
+          "suite": { "type": "string", "description": "Suite, например Regression-run_Small_and_Medium" },
+          "platform": { "type": "string", "description": "Платформа, например ya-main-x86-64 или ya-main-x86-64-msan" },
+          "try_number": { "type": "integer", "description": "try 1..3. Если не указан — ищет try_3, try_2, try_1" },
+          "base_url": { "type": "string", "description": "Базовый URL логов. По умолчанию ydb-gh-logs/ydb-platform/ydb. Не ydb-public, не reports." },
+          "max_failures": { "type": "integer", "description": "Максимум падений в выдаче (по умолчанию 200)" }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "compare_run_reports",
+      "description": "Сравнить два report.json по current_run_id и previous_run_id. НЕ previous = run_id - 1. Для «сравни с предыдущим» — compare_with_previous_run.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "current_report_url": { "type": "string", "description": "URL текущего report.json" },
+          "previous_report_url": { "type": "string", "description": "URL предыдущего report.json" },
+          "current_run_id": { "type": "integer", "description": "ID текущего run (предпочтительно). В storage — run_id." },
+          "previous_run_id": { "type": "integer", "description": "ID предыдущего run. Из get_workflow_runs(per_page=2): runs[1]. Не run_id - 1!" },
+          "current_job_id": { "type": "integer", "description": "Альтернатива current_report_url (требует suite+platform)" },
+          "previous_job_id": { "type": "integer", "description": "Альтернатива previous_report_url (требует suite+platform)" },
+          "suite": { "type": "string", "description": "Suite при использовании job_id/run_id" },
+          "platform": { "type": "string", "description": "Платформа при использовании job_id/run_id" },
+          "current_try": { "type": "integer", "description": "try для текущего (1..3)" },
+          "previous_try": { "type": "integer", "description": "try для предыдущего (1..3)" },
+          "max_new_failures": { "type": "integer", "description": "Максимум новых падений в выдаче (по умолчанию 200)" },
+          "max_fixed_failures": { "type": "integer", "description": "Максимум исправленных в выдаче (по умолчанию 200)" }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "compare_with_previous_run",
+      "description": "Сравнить последний и предпоследний run по workflow+branch. По умолчанию main, relwithdebinfo. Если since/until — только запуски за эти даты. Не run_id - 1.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workflow": { "type": "string", "description": "Regression-run_Small_and_Medium, Regression-run_Large, Regression-whitelist-run, nightly_small, whitelist и т.д." },
+          "branch": { "type": "string", "description": "Ветка запуска (фильтр). По умолчанию main." },
+          "test_branch": { "type": "string", "description": "Ветка тестов (platform). Если не задана — branch." },
+          "build_preset": { "type": "string", "description": "relwithdebinfo, asan, tsan, msan. По умолчанию relwithdebinfo." },
+          "since": { "type": "string", "description": "Начало диапазона дат YYYY-MM-DD. Используй с until." },
+          "until": { "type": "string", "description": "Конец диапазона дат YYYY-MM-DD. Используй с since." },
+          "max_new_failures": { "type": "integer", "description": "Максимум новых падений (по умолчанию 200)" },
+          "max_fixed_failures": { "type": "integer", "description": "Максимум исправленных (по умолчанию 200)" }
+        },
+        "required": ["workflow"]
+      }
+    },
+    {
+      "name": "get_regression_report",
+      "description": "Один вызов: отчёт по ночным/whitelist/compatibility тестам. Сам находит run_id, скачивает report. Не нужны get_workflow_runs → get_workflow_run_jobs → get_run_report.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workflow": { "type": "string", "description": "Regression-run_Small_and_Medium, Regression-run_Large, Regression-whitelist-run, Regression-run_compatibility, nightly_small, whitelist, compatibility" },
+          "branch": { "type": "string", "description": "Ветка запуска workflow (фильтр). По умолчанию main." },
+          "test_branch": { "type": "string", "description": "Ветка тестов (platform). Если не задана — branch. Нужна при «workflow из A, тесты по B»." },
+          "build_preset": { "type": "string", "description": "relwithdebinfo, asan, tsan, msan (по умолчанию relwithdebinfo)" },
+          "max_failures": { "type": "integer", "description": "Максимум падений в выдаче (по умолчанию 200)" }
+        },
+        "required": ["workflow"]
+      }
+    },
+    {
+      "name": "get_run_errors_matrix",
+      "description": "Таблица «ветка × конфигурация»: по run_id — failures_count и report_url/html_url в каждой ячейке. Для «количество ошибок по конфигурации и ветке, число — ссылка».",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": { "type": "integer", "description": "ID workflow run" },
+          "suite": { "type": "string", "description": "Suite, например Regression-run_Small_and_Medium" },
+          "workflow": { "type": "string", "description": "Альтернатива suite: nightly_small, Regression-run_Small_and_Medium и т.д." },
+          "branches": { "type": "array", "items": { "type": "string" }, "description": "Ветки (по умолчанию main, stable-25-2, stable-25-2-1, stable-25-3, ...)" },
+          "build_presets": { "type": "array", "items": { "type": "string" }, "description": "Конфигурации (по умолчанию relwithdebinfo, release-asan, release-tsan, release-msan)" },
+          "base_url": { "type": "string", "description": "Базовый URL логов. По умолчанию ydb-gh-logs/ydb-platform/ydb. Не ydb-public, не reports." }
+        },
+        "required": ["run_id"]
+      }
+    }
+  ]
+}

@@ -234,6 +234,22 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                 .Build()
             .Build());
 
+        // Tagged vector converted from a parameter
+        runQueryWithParams(Q_(R"(
+            DECLARE $embedding AS List<Uint8>;
+            $TargetEmbedding = Knn::ToBinaryStringUint8($embedding);
+            SELECT * FROM `/Root/TestTable`
+            ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+            LIMIT 3
+        )"), db.GetParamsBuilder()
+            .AddParam("$embedding")
+                .BeginList()
+                    .AddListItem().Uint8(0x67)
+                    .AddListItem().Uint8(0x71)
+                .EndList()
+                .Build()
+            .Build());
+
         // LIMIT 1
         expectedLimit = 1;
         runQuery(Q_(R"(

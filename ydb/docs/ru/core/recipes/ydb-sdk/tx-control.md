@@ -1214,8 +1214,6 @@
   });
   ```
 
-{% endlist %}
-
 - Rust
 
   Режим Snapshot Read-Only не поддерживается в rust sdk.
@@ -1241,6 +1239,8 @@
     ['tx_mode' => 'snapshot_read_only']
   );
   ```
+
+{% endlist %}
 
 ## Snapshot Read-Write {#snapshot-read-write}
 

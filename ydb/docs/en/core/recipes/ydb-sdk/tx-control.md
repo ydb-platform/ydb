@@ -1272,10 +1272,6 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
   );
   ```
 
-- Rust
-
-  Snapshot Read-Only mode is not supported.
-
 {% endlist %}
 
 ## Snapshot Read-Write {#snapshot-read-write}

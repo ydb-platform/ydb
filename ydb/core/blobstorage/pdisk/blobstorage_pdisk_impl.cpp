@@ -1887,7 +1887,7 @@ void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str,
         Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), OwnerSystem, 0,
         Cfg->SlotSizeInUnits,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), TVector<TChunkIdx>(),
-        Cfg->RetrieveDeviceType(), isTinyDisk, error.Str()));
+        Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, error.Str()));
     Mon.YardInit.CountResponse();
 }
 
@@ -1943,7 +1943,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
                 DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner,
                 ownerRound, Cfg->SlotSizeInUnits,
                 GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), ownedChunks,
-                Cfg->RetrieveDeviceType(), isTinyDisk, ""));
+                Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(owner, result->StartingPoints);
     ownerData.VDiskId = vDiskId;
@@ -2108,7 +2108,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner, ownerRound,
         Cfg->SlotSizeInUnits,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType) | ui32(NKikimrBlobStorage::StatusNewOwner), TVector<TChunkIdx>(),
-        Cfg->RetrieveDeviceType(), isTinyDisk, ""));
+        Cfg->RetrieveDeviceType(), isTinyDisk, Format.SectorSize, ""));
 
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
     WriteSysLogRestorePoint(new TCompletionEventSender(
@@ -3119,6 +3119,14 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
     P_LOG(PRI_DEBUG, BPD01, "PreprocessRequest", (RequestType, TypeName(*request)), (OwnerId, request->Owner),
             (OwnerRound, request->OwnerRound), (errStatus, errStatus));
 
+    auto readableAndWritable = [&](TChunkState& state) {
+        return state.CommitState == TChunkState::DATA_RESERVED
+            || state.CommitState == TChunkState::DATA_COMMITTED
+            || state.CommitState == TChunkState::DATA_DECOMMITTED
+            || state.CommitState == TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
+            || state.CommitState == TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS;
+    };
+
     switch (request->GetType()) {
         case ERequestType::RequestLogRead:
         {
@@ -3177,11 +3185,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 SendChunkReadError(read, err, NKikimrProto::ERROR);
                 return false;
             }
-            if (state.CommitState != TChunkState::DATA_RESERVED
-                    && state.CommitState != TChunkState::DATA_COMMITTED
-                    && state.CommitState != TChunkState::DATA_DECOMMITTED
-                    && state.CommitState != TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
-                    && state.CommitState != TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS) {
+            if (!readableAndWritable(state)) {
                 err << "chunk has unexpected CommitState# " << state.CommitState;
                 SendChunkReadError(read, err, NKikimrProto::ERROR);
                 return false;
@@ -3283,11 +3287,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 delete request;
                 return false;
             }
-            if (state.CommitState != TChunkState::DATA_RESERVED
-                    && state.CommitState != TChunkState::DATA_COMMITTED
-                    && state.CommitState != TChunkState::DATA_DECOMMITTED
-                    && state.CommitState != TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
-                    && state.CommitState != TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS) {
+            if (!readableAndWritable(state)) {
                 err << "Can't write chunkIdx# " << ev.ChunkIdx
                     << " destination chunk has CommitState# " << state.CommitState
                     << " ownerId# " << ev.Owner;
@@ -3316,6 +3316,94 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             ev.Completion->Parts = ev.PartsPtr;
 
             return true;
+        }
+        case ERequestType::RequestChunkReadRaw: {
+            auto& ev = *static_cast<TChunkReadRaw*>(request);
+
+            auto errorPrefix = [&] {
+                return std::ref(err
+                    << "Can't raw-read Owner# " << (int)ev.Owner
+                    << " ChunkIdx# " << ev.ChunkIdx
+                    << " Offset# " << ev.Offset
+                    << " Size# " << ev.Size
+                    << ": ");
+            };
+
+            if (ev.Offset % Format.SectorSize) {
+                errorPrefix() << "unaligned offset";
+            } else if (ev.Size % Format.SectorSize) {
+                errorPrefix() << "unaligned size";
+            } else if (!ev.Size) {
+                errorPrefix() << "zero size";
+            } else if (!ev.ChunkIdx || ChunkState.size() <= ev.ChunkIdx) {
+                errorPrefix() << "incorrect chunk index";
+            } else if (TChunkState& state = ChunkState[ev.ChunkIdx]; state.OwnerId != ev.Owner) {
+                errorPrefix() << "chunk isn't owned";
+            } else if (!IsOwnerUser(state.OwnerId)) {
+                errorPrefix() << "chunk is owned by system";
+            } else if (!readableAndWritable(state)) {
+                errorPrefix() << "incorrect commit state";
+            } else {
+                NWilson::TTraceId traceId = ev.Span.GetTraceId();
+                auto completion = std::make_unique<TCompletionChunkReadRaw>(ev.Size, ev.Sender, ev.Cookie, std::move(ev.Span));
+                const ui64 diskOffset = Format.Offset(ev.ChunkIdx, 0, ev.Offset);
+                void *buffer = completion->GetBuffer();
+                BlockDevice->PreadAsync(buffer, ev.Size, diskOffset, completion.release(), ev.ReqId, &traceId);
+                return false;
+            }
+
+            PCtx->ActorSystem->Send(ev.Sender, new TEvChunkReadRawResult(NKikimrProto::ERROR, err.Str()), ev.Cookie);
+            delete request;
+            return false;
+        }
+        case ERequestType::RequestChunkWriteRaw: {
+            auto& ev = *static_cast<TChunkWriteRaw*>(request);
+
+            auto errorPrefix = [&] {
+                return std::ref(err
+                    << "Can't raw-write Owner# " << (int)ev.Owner
+                    << " ChunkIdx# " << ev.ChunkIdx
+                    << " Offset# " << ev.Offset
+                    << " Size# " << ev.Data.size()
+                    << ": ");
+            };
+
+            if (ev.Offset % Format.SectorSize) {
+                errorPrefix() << "unaligned offset";
+            } else if (ev.Data.size() % Format.SectorSize) {
+                errorPrefix() << "unaligned size";
+            } else if (!ev.Data.size()) {
+                errorPrefix() << "zero size";
+            } else if (!ev.ChunkIdx || ChunkState.size() <= ev.ChunkIdx) {
+                errorPrefix() << "incorrect chunk index";
+            } else if (TChunkState& state = ChunkState[ev.ChunkIdx]; state.OwnerId != ev.Owner) {
+                errorPrefix() << "chunk isn't owned";
+            } else if (!IsOwnerUser(state.OwnerId)) {
+                errorPrefix() << "chunk is owned by system";
+            } else if (!readableAndWritable(state)) {
+                errorPrefix() << "incorrect commit state";
+            } else {
+                TRcBuf buffer;
+                auto iter = ev.Data.Begin();
+                if (iter.ContiguousSize() == ev.Data.size() && reinterpret_cast<uintptr_t>(iter.ContiguousData()) % 4096 == 0) {
+                    buffer = iter.GetChunk();
+                } else {
+                    buffer = TRcBuf::UninitializedPageAligned(ev.Data.size());
+                    iter.ExtractPlainDataAndAdvance(buffer.GetDataMut(), buffer.size());
+                }
+
+                const auto span = buffer.GetContiguousSpan();
+                NWilson::TTraceId traceId = ev.Span.GetTraceId();
+                const ui64 diskOffset = Format.Offset(ev.ChunkIdx, 0, ev.Offset);
+
+                auto completion = std::make_unique<TCompletionChunkWriteRaw>(std::move(buffer), ev.Sender, ev.Cookie, std::move(ev.Span));
+                BlockDevice->PwriteAsync(span.data(), span.size(), diskOffset, completion.release(), ev.ReqId, &traceId);
+                return false;
+            }
+
+            PCtx->ActorSystem->Send(ev.Sender, new TEvChunkWriteRawResult(NKikimrProto::ERROR, err.Str()), ev.Cookie);
+            delete request;
+            return false;
         }
         case ERequestType::RequestChunkTrim:
             request->JobKind = NSchLab::JobKindWrite;
@@ -4113,6 +4201,7 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestContinueReadMetadata:
         case ERequestType::RequestYardResize:
         case ERequestType::RequestChangeExpectedSlotCount:
+        case ERequestType::RequestChunkReadRaw:
             return false;
 
         // Can't be processed in read-only mode.
@@ -4153,6 +4242,11 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
                         req.VDiskId, req.SlayOwnerRound, req.PDiskId, req.VSlotId, errorReason));
             return true;
         }
+
+        case ERequestType::RequestChunkWriteRaw:
+            PCtx->ActorSystem->Send(sender, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::CORRUPTED, errorReason), 0,
+                request->Cookie);
+            return true;
 
         case ERequestType::RequestWriteMetadata:
         case ERequestType::RequestWriteMetadataResult:

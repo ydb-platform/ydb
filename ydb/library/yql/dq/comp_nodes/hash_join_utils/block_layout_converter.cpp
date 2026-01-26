@@ -59,9 +59,9 @@ public:
     {}
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-        MKQL_ENSURE(array->buffers.size() == 2, Sprintf("Got %i buffers instead of 2", array->buffers.size())); // todo: better assertions in whole file
-        return {array->GetValues<ui8>(1)};
-    }
+		MKQL_ENSURE(array->buffers.size() == 2, Sprintf("Got %i buffers instead of 2", array->buffers.size()));
+		return { reinterpret_cast<const ui8*>(array->GetValues<TLayout>(1)) };
+	}
 
     TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array) override {
         Y_ENSURE(array->buffers.size() > 0);
@@ -72,7 +72,7 @@ public:
     TVector<ui8*> GetColumnsData(std::shared_ptr<arrow::ArrayData> array) override {
         Y_ENSURE(array->buffers.size() == 2);
 
-        return {array->GetMutableValues<ui8>(1)};
+		return { reinterpret_cast<ui8*>(array->GetMutableValues<TLayout>(1)) };
     }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
@@ -125,11 +125,10 @@ public:
     {}
 
     TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) override {
-        Y_ENSURE(array->buffers.size() == 2);
-        Y_ENSURE(array->child_data.empty());
-
-        return {array->GetValues<ui8>(1)};
-    }
+		Y_ENSURE(array->buffers.size() == 2);
+		Y_ENSURE(array->child_data.empty());
+		return { reinterpret_cast<const ui8*>(array->GetValues<NUdf::TUnboxedValue>(1)) };
+	}
 
     TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array) override {
         Y_ENSURE(array->buffers.size() > 0);
@@ -141,7 +140,7 @@ public:
         Y_ENSURE(array->buffers.size() == 2);
         Y_ENSURE(array->child_data.empty());
 
-        return {array->GetMutableValues<ui8>(1)};
+		return { reinterpret_cast<ui8*>(array->GetMutableValues<NUdf::TUnboxedValue>(1)) };
     }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {
@@ -241,7 +240,10 @@ public:
         MKQL_ENSURE(array->buffers.size() == 3, Sprintf("Got %i instead", array->buffers.size()));
         Y_ENSURE(array->child_data.empty());
 
-        return {array->GetValues<ui8>(1), array->GetValues<ui8>(2)};
+        const auto* offsets = reinterpret_cast<const ui8*>(array->GetValues<TOffset>(1));
+        const auto* values = array->buffers[2] ? array->buffers[2]->data() : nullptr;
+
+        return {offsets, values};
     }
 
     TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array) override {
@@ -254,7 +256,10 @@ public:
         Y_ENSURE(array->buffers.size() == 3);
         Y_ENSURE(array->child_data.empty());
 
-        return {array->GetMutableValues<ui8>(1), array->GetMutableValues<ui8>(2)};
+        auto* offsets = reinterpret_cast<ui8*>(array->GetMutableValues<TOffset>(1));
+        auto* values = array->buffers[2] ? array->buffers[2]->mutable_data() : nullptr;
+
+        return {offsets, values};
     }
 
     TVector<ui8*> GetNullBitmap(std::shared_ptr<arrow::ArrayData> array) override {

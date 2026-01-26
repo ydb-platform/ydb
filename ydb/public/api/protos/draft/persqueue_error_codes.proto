@@ -58,6 +58,4 @@ enum EErrorCode {
     KAFKA_DUPLICATE_SEQUENCE_NUMBER = 35;
 
     ERROR = 100;
-
-    STALE_LEADER = 101;
 }

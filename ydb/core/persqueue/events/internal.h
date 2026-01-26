@@ -364,15 +364,13 @@ struct TEvPQ {
     };
 
     struct TEvGetMaxSeqNoRequest : public TEventLocal<TEvGetMaxSeqNoRequest, EvGetMaxSeqNoRequest> {
-        TEvGetMaxSeqNoRequest(const ui64 cookie, const TVector<TString>& sourceIds, bool checkPartitionIsActive = false)
+        TEvGetMaxSeqNoRequest(const ui64 cookie, const TVector<TString>& sourceIds)
         : Cookie(cookie)
         , SourceIds(sourceIds)
-        , CheckPartitionIsActive(checkPartitionIsActive)
         {}
 
         ui64 Cookie;
         TVector<TString> SourceIds;
-        bool CheckPartitionIsActive;
     };
 
     struct TEvMonResponse : public TEventLocal<TEvMonResponse, EvMonResponse> {

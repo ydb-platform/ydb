@@ -45,7 +45,6 @@ inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEF
     pqConfig.SetClusterTablePath("/Root/PQ/Config/V2/Cluster");
     pqConfig.SetVersionTablePath("/Root/PQ/Config/V2/Versions");
     pqConfig.SetTopicsAreFirstClassCitizen(false);
-    pqConfig.SetUseSrcIdMetaMappingInFirstClass(false);
     pqConfig.SetRoot("/Root/PQ");
     pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
     pqConfig.MutableQuotingConfig()->SetQuotersDirectoryPath("/Root/PersQueue/System/Quoters");

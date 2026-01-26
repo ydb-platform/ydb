@@ -1737,22 +1737,14 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
-    if (ev->Get()->CheckPartitionIsActive && !IsActive()) {
-        auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie, false);
-        NKikimrClient::TResponse& resp = *response->Response;
-        resp.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
-        resp.SetErrorCode(NPersQueue::NErrorCode::STALE_LEADER);
-        ctx.Send(TabletActorId, response.Release());
-        return;
-    }
-
     auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie, false);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
-
+    
     auto& result = *resp.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult();
+    result.SetIsPartitionActive(IsActive());
     for (const auto& sourceId : ev->Get()->SourceIds) {
         auto& protoInfo = *result.AddSourceIdInfo();
         protoInfo.SetSourceId(sourceId);

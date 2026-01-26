@@ -158,7 +158,7 @@ private:
         }
 
         TThis::PartitionHelper.Open(oldNode->TabletId, ctx);
-        TThis::PartitionHelper.SendMaxSeqNoRequest(oldNode->Id, TThis::SourceId, ctx, true);
+        TThis::PartitionHelper.SendMaxSeqNoRequest(oldNode->Id, TThis::SourceId, ctx);
     }
 
     void HandleMaxSeqNo(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -175,6 +175,10 @@ private:
         }
 
         const auto& result = response.GetCmdGetMaxSeqNoResult();
+        if (result.GetIsPartitionActive()) {
+            return TThis::ReplyError(ErrorCode::INITIALIZING, "Got response from stale leader", ctx);
+        }
+
         if (result.SourceIdInfoSize() < 1) {
             return TThis::ReplyError(ErrorCode::INITIALIZING, "Empty source id info", ctx);
         }

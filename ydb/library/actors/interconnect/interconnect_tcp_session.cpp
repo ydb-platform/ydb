@@ -93,6 +93,18 @@ namespace NActors {
         Send(ReceiverId, new TEvInterconnect::TEvCloseInputSession);
     }
 
+    bool TInterconnectSessionTCP::IsRdmaInUse() {
+        if (RdmaQp) {
+            using NInterconnect::NRdma::TQueuePair;
+            const TQueuePair::TQpState res = RdmaQp->GetState(false);
+            const TQueuePair::TQpS* qpState = std::get_if<TQueuePair::TQpS>(&res);
+            if (qpState) {
+                return TQueuePair::IsRtsState(*qpState);
+            }
+        }
+        return false;
+    }
+
     void TInterconnectSessionTCP::Handle(TEvTerminate::TPtr& ev) {
         Terminate(ev->Get()->Reason);
     }
@@ -273,7 +285,8 @@ namespace NActors {
 
         LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64 " qp: %d",
             ev->Sender.ToString().data(), ev->Get()->Self.ToString().data(), ev->Get()->Peer.ToString().data(),
-            i64(*ev->Get()->Socket), (ev->Get()->RdmaQp ? (int)ev->Get()->RdmaQp->GetQpNum() : -1));
+            i64(*ev->Get()->Socket),
+            (ev->Get()->RdmaHanshakeResult.IsOk() ? (int)ev->Get()->RdmaHanshakeResult.GetOk()->RdmaQp->GetQpNum() : -1));
 
         NewConnectionSet = TActivationContext::Now();
         BytesWrittenToSocket = 0;
@@ -282,8 +295,12 @@ namespace NActors {
         Socket = std::move(ev->Get()->Socket);
         XdcSocket = std::move(ev->Get()->XdcSocket);
 
-        auto cq = std::move(ev->Get()->RdmaCq);
-        RdmaQp = std::move(ev->Get()->RdmaQp);
+        NInterconnect::NRdma::ICq::TPtr cq;
+        RdmaQp.reset();
+        if (auto rdmaSuccess = ev->Get()->RdmaHanshakeResult.GetOk()) {
+            cq = std::move(rdmaSuccess->RdmaCq);
+            RdmaQp = std::move(rdmaSuccess->RdmaQp);
+        }
 
         if (XdcSocket) {
             ZcProcessor.ApplySocketOption(*XdcSocket);

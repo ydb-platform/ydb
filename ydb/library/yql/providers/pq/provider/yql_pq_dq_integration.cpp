@@ -561,6 +561,8 @@ public:
                 }
                 if (!TryFromString<bool>(settingValue->Content(), withSharedReading)) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "`SHARED_READING` must be boolean type"));
+                    return {};
+                }
             }
         }
         bool sharedReading = UseSharedReading(clusterConfiguration, withSharedReading, format);

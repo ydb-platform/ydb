@@ -225,8 +225,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
      struct TNodesTracker {
         explicit TNodesTracker(TDuration timeout)
-            : Timeout(timeout) {
-        };
+            : Timeout(timeout)
+        {}
 
         class TRetryState {
             public:

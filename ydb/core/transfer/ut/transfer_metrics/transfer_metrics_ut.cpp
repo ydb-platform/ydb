@@ -27,7 +27,7 @@ auto DetailedMetricCheck = [](bool withHost, const auto& metricsList) {
             return result;
         }
         if (!withHost && workerIter.IsEnd()) {
-            result.first = TStringBuilder() << "No worker label "; //(have labels: " << JoinSeq(", ", metric.Labels) << ")";
+            result.first = TStringBuilder() << "No worker label ";
             return result;
         }
         if (!workerIter.IsEnd() && !host.empty()) {

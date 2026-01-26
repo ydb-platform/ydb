@@ -1176,6 +1176,7 @@ class TestViewer(object):
                 break
 
             time.sleep(1)
+
         if "stats" in describe_result:
             describe_result["stats"] = {}
 

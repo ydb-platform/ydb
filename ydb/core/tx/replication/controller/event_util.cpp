@@ -53,6 +53,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     if (metricsLevel) {
         command.SetMetricsLevel(metricsLevel);
     }
+
     command.MutableReplicationLocation()->CopyFrom(replicationLocation);
 
     auto& readerSettings = *command.MutableRemoteTopicReader();

@@ -79,6 +79,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             ResponseQueue.emplace_back(std::move(req));
             ProcessData();
         }
+
         ReadQueue.pop_front();
     }
 
@@ -119,6 +120,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         for (auto& msg : result.Messages) {
             totalSize += msg.GetData().size();
         }
+
         auto* event = new TEvWorker::TEvData(result.PartitionId, ToString(result.PartitionId), std::move(result.Messages));
 
         if (Settings.ReportStats_) {
@@ -189,6 +191,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         if (Settings.ReportStats_) {
             SendError();
         }
+
         switch (ev->Get()->Result.GetStatus()) {
         case NYdb::EStatus::SCHEME_ERROR:
         case NYdb::EStatus::BAD_REQUEST:

@@ -115,7 +115,7 @@ struct TPDiskConfig : public TThrRefBase {
     // unlike the macro, it does not disable metadata encryption.
     // Tests need a runtime way to emulate DISABLE_PDISK_ENCRYPTION.
     // Until runtime on/off encryption is fully supported, keep this hacky flag.
-    bool EnableFormatEncryption = true;
+    bool EnableFormatAndMetadataEncryption = true;
 
     ui32 ChunkSize = 128 << 20;
     ui32 SectorSize = 4 << 10;

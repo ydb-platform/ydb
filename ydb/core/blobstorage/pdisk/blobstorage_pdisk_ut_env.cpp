@@ -15,7 +15,7 @@ void RecreateOwner(TActorTestContext& testCtx, TVDiskIDOwnerRound& vdisk) {
 
 void TestChunkWriteReleaseRun(bool encryption) {
     TActorTestContext::TSettings settings{};
-    settings.EnableFormatEncryption = encryption;
+    settings.EnableFormatAndMetadataEncryption = encryption;
     settings.EnableSectorEncryption = encryption;
     TActorTestContext testCtx(settings);
 

@@ -31,8 +31,12 @@ public:
         // Always store the first query (needed for victim stats attribution)
         // For subsequent queries, only store if TLI logging is enabled
         if (QueryTexts.empty() || IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
-            // Only add if it's different from the previous query to avoid duplicates
-            if (QueryTexts.empty() || QueryTexts.back().second != queryText) {
+            // Only add if (queryTraceId, queryText) pair is different from the previous entry
+            // This ensures we can resolve QueryTraceId → QueryText even when same text is executed
+            // multiple times with different trace IDs
+            if (QueryTexts.empty() ||
+                QueryTexts.back().first != queryTraceId ||
+                QueryTexts.back().second != queryText) {
                 QueryTexts.push_back({queryTraceId, queryText});
                 // Keep only the last N queries to prevent unbounded memory growth
                 constexpr size_t MAX_QUERY_TEXTS = 100;
@@ -239,16 +243,16 @@ inline void LogTli(const TTliLogParams& params, const TActorContext& ctx) {
     LogKeyValue("Message", params.Message, ss);
     LogKeyValue("TraceId", params.TraceId, ss);
 
-    // Determine if this is a breaker or victim log based on which TraceId is set
-    const bool isBreaker = params.BreakerQueryTraceId.Defined();
+    // Determine if this is a breaker or victim log based on which TraceId is set (and non-zero)
+    const bool isBreaker = params.BreakerQueryTraceId.Defined() && *params.BreakerQueryTraceId != 0;
 
     if (isBreaker) {
         LogKeyValue("BreakerQueryTraceId", ToString(*params.BreakerQueryTraceId), ss);
-    } else if (params.VictimQueryTraceId) {
+    } else if (params.VictimQueryTraceId && *params.VictimQueryTraceId != 0) {
         LogKeyValue("VictimQueryTraceId", ToString(*params.VictimQueryTraceId), ss);
     }
 
-    if (params.CurrentQueryTraceId) {
+    if (params.CurrentQueryTraceId && *params.CurrentQueryTraceId != 0) {
         LogKeyValue("CurrentQueryTraceId", ToString(*params.CurrentQueryTraceId), ss);
     }
 

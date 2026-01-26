@@ -46,6 +46,7 @@ def get_all_cgi_params(url):
 
             SELECT $callable(url)["name"] AS name FROM `{source_name}`.`{self.input_topic}`
             WITH (
+                STREAMING = "TRUE",
                 FORMAT = "json_each_row",
                 SCHEMA (
                     url Utf8 NOT NULL

@@ -1415,7 +1415,29 @@ UuidNotNullValue:   [
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false, 1_KB);
         auto client = kikimr.GetQueryClient();
 
+        std::unordered_map<size_t, std::shared_ptr<arrow::Schema>> arrowSchemas;
+        std::unordered_map<size_t, size_t> arrowResultSetsCount;
+        std::unordered_map<size_t, size_t> arrowRowsPerStatement;
+
+        std::unordered_map<size_t, size_t> valueRowsPerStatement;
+
         CreateLargeTable(kikimr, 1000, 4, 4, 100, 10);
+
+        const size_t statementCount = 3;
+        const auto query = R"(
+            SELECT * FROM LargeTable;
+            UPDATE LargeTable SET Data = Data + 1 WHERE Key % 2 = 1 RETURNING Data;
+            SELECT DataText FROM LargeTable WHERE Key % 2 = 0;
+        )";
+
+        // Get rows count for each statement from Value format to compare with Arrow format
+        const auto valueResult = client.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(valueResult.IsSuccess(), valueResult.GetIssues().ToString());
+
+        for (size_t stmt = 0; stmt < statementCount; ++stmt) {
+            const auto resultSet = valueResult.GetResultSet(stmt);
+            valueRowsPerStatement[stmt] = resultSet.RowsCount();
+        }
 
         auto settings = TExecuteQuerySettings()
             .Format(TResultSet::EFormat::Arrow)
@@ -1425,15 +1447,8 @@ UuidNotNullValue:   [
                     .Type(TArrowFormatSettings::TCompressionCodec::EType::Zstd)
                     .Level(10)));
 
-        auto it = client.StreamExecuteQuery(R"(
-            SELECT * FROM LargeTable;
-            UPDATE LargeTable SET Data = Data + 1 WHERE Key % 2 = 1 RETURNING Data;
-            SELECT DataText FROM LargeTable WHERE Key % 2 = 0;
-        )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
+        auto it = client.StreamExecuteQuery(query, TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-
-        std::unordered_map<size_t, std::shared_ptr<arrow::Schema>> arrowSchemas;
-        std::unordered_map<size_t, ui64> counts;
 
         for (;;) {
             auto part = it.ReadNext().GetValueSync();
@@ -1469,16 +1484,20 @@ UuidNotNullValue:   [
                 auto arrowBatch = NArrow::DeserializeBatch(TString(batches[0]), arrowSchemas[idx]);
                 UNIT_ASSERT_C(arrowBatch, "Batch must be deserialized");
                 UNIT_ASSERT_C(arrowBatch->ValidateFull().ok(), "Batch validation failed");
-                UNIT_ASSERT_GT_C(arrowBatch->num_rows(), 0, "Batch must have at least 1 row");
 
-                ++counts[idx];
+                arrowRowsPerStatement[idx] += arrowBatch->num_rows();
+                ++arrowResultSetsCount[idx];
             }
         }
 
-        UNIT_ASSERT_C(counts.size() == 3, "Expected 3 result set indexes");
+        UNIT_ASSERT_C(arrowResultSetsCount.size() == 3, "Expected 3 result set indexes");
 
-        for (const auto& [idx, count] : counts) {
+        for (const auto& [idx, count] : arrowResultSetsCount) {
             UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets for statement with ResultSetIndex = " << idx);
+        }
+
+        for (const auto& [idx, count] : arrowRowsPerStatement) {
+            UNIT_ASSERT_VALUES_EQUAL_C(count, valueRowsPerStatement[idx], "Rows count mismatch for statement with ResultSetIndex = " << idx);
         }
     }
 

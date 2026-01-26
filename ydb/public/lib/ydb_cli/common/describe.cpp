@@ -342,7 +342,7 @@ void PrintColumnFamilies(const NTable::TTableDescription& tableDescription, IOut
     if (tableDescription.GetColumnFamilies().empty()) {
         return;
     }
-    TPrettyTable table({ "Name", "Data", "Compression", "Keep in memory" },
+    TPrettyTable table({ "Name", "Data", "Compression", "Cache mode" },
         TPrettyTableConfig().WithoutRowDelimiters());
 
     for (const NTable::TColumnFamilyDescription& family : tableDescription.GetColumnFamilies()) {
@@ -361,15 +361,15 @@ void PrintColumnFamilies(const NTable::TTableDescription& tableDescription, IOut
                     << static_cast<size_t>(family.GetCompression().value()) << ")";
             }
         }
-        TStringBuilder keepInMemory;
-        if (family.GetKeepInMemory().has_value()) {
-            keepInMemory << keepInMemory << family.GetKeepInMemory().value();
+        TStringBuilder cacheMode;
+        if (family.GetCacheMode().has_value()) {
+            cacheMode << family.GetCacheMode().value();
         }
         table.AddRow()
             .Column(0, family.GetName())
             .Column(1, data ? data.value() : "")
             .Column(2, compression)
-            .Column(3, keepInMemory);
+            .Column(3, cacheMode);
     }
     out << Endl << "Column families: " << Endl;
     out << table;

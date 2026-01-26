@@ -176,6 +176,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             case NSchemeCache::TSchemeCacheNavigate::KindTopic:
             case NSchemeCache::TSchemeCacheNavigate::KindReplication:
             case NSchemeCache::TSchemeCacheNavigate::KindTransfer:
+            case NSchemeCache::TSchemeCacheNavigate::KindExternalDataSource:
+            case NSchemeCache::TSchemeCacheNavigate::KindExternalTable:
                 return true;
             case NSchemeCache::TSchemeCacheNavigate::KindColumnTable:
                 return AppData()->FeatureFlags.GetEnableColumnTablesBackup();

@@ -122,7 +122,7 @@ class StreamingTestBase(TestYdsBase):
             count = 0
             for node_id in kikimr.cluster.nodes:
                 count = count + self.get_actor_count(kikimr, node_id, activity)
-                if count == expected_count:
+                if count >= expected_count:
                     return node_id  # return any node
             assert time.time() < deadline, f"Waiting actor {activity} count failed, current count {count}"
             time.sleep(1)

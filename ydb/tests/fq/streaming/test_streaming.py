@@ -40,8 +40,10 @@ class TestStreamingInYdb(StreamingTestBase):
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
-                FORMAT="json_each_row",
-                SCHEMA=(time String NOT NULL))
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (time String NOT NULL)
+            )
             LIMIT 1"""
 
         future = kikimr.ydb_client.query_async(sql)
@@ -57,9 +59,11 @@ class TestStreamingInYdb(StreamingTestBase):
 
         sql = f"""SELECT time FROM {input_name}
             WITH (
-                FORMAT="json_each_row",
-                SCHEMA=(time String NOT NULL),
-                SHARED_READING="TRUE")
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (time String NOT NULL),
+                SHARED_READING="TRUE"
+            )
             WHERE time like "%lunch%"
             LIMIT 1"""
 

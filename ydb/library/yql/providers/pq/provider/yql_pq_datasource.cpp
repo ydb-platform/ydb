@@ -214,6 +214,13 @@ public:
             settings.Add(std::move(skipJsonErrors));
         }
 
+        if (auto streamingTopicRead = topicKeyParser.GetStreamingTopicRead()) {
+            if (!topicKeyParser.ParseStreamingTopicRead(*streamingTopicRead, ctx)) {
+                return nullptr;
+            }
+            settings.Add(std::move(streamingTopicRead));
+        }
+
         if (auto sharedReading = topicKeyParser.GetSharedReading()) {
             settings.Add(std::move(sharedReading));
         }

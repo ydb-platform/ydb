@@ -1,10 +1,12 @@
 #include "yql_pq_topic_key_parser.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 namespace NYql {
 
 namespace {
+
 std::pair<TExprNode::TPtr, TExprNode::TPtr> GetSchema(const TExprNode& settings) {
     for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
         if (settings.Child(i)->Head().IsAtom("userschema")) {
@@ -14,7 +16,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> GetSchema(const TExprNode& settings)
 
     return {};
 }
-}
+
+} // anonymous namespace
 
 TTopicKeyParser::TTopicKeyParser(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx) {
     YQL_ENSURE(Parse(expr, readSettings, ctx), "Failed to parse topic info");
@@ -95,6 +98,10 @@ bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings,
                 SkipJsonErrors = readSettings->Child(i);
                 continue;
             }
+            if (readSettings->Child(i)->Head().IsAtom("streaming")) {
+                StreamingTopicRead = readSettings->Child(i);
+                continue;
+            }
             if (readSettings->Child(i)->Head().IsAtom("sharedreading")) {
                 SharedReading = readSettings->Child(i);
                 continue;
@@ -130,4 +137,25 @@ bool TTopicKeyParser::TryParseObject(const TExprNode& expr, TExprNode::TPtr read
     Compression = TString(expr.Child(2)->Content());
     return true;
 }
+
+std::optional<bool> TTopicKeyParser::ParseStreamingTopicRead(const TExprNode& expr, TExprContext& ctx) {
+    if (expr.ChildrenSize() != 2) {
+        ctx.AddError(TIssue(ctx.GetPosition(expr.Pos()), "Expected STREAMING = value"));
+        return {};
+    }
+
+    const auto settingValue = expr.Child(1);
+    if (!EnsureAtom(*settingValue, ctx)) {
+        return {};
+    }
+
+    bool streamingTopicRead = true;
+    if (!TryFromString(settingValue->Content(), streamingTopicRead)) {
+        ctx.AddError(TIssue(ctx.GetPosition(expr.Pos()), "STREAMING must be boolean type"));
+        return {};
+    }
+
+    return streamingTopicRead;
+}
+
 } // namespace NYql

@@ -7,7 +7,7 @@ namespace NYql {
 
 class TTopicKeyParser {
 public:
-    TTopicKeyParser() {}
+    TTopicKeyParser() = default;
     TTopicKeyParser(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx);
 
     const TString& GetTopicPath() const {
@@ -74,11 +74,17 @@ public:
         return SkipJsonErrors;
     }
 
+    TExprNode::TPtr GetStreamingTopicRead() const {
+        return StreamingTopicRead;
+    }
+
     TExprNode::TPtr GetSharedReading() const {
         return SharedReading;
     }
 
     bool Parse(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx);
+
+    static std::optional<bool> ParseStreamingTopicRead(const TExprNode& expr, TExprContext& ctx);
 
 private:
     bool TryParseKey(const TExprNode& expr, TExprContext& ctx);
@@ -101,6 +107,7 @@ private:
     TExprNode::TPtr WatermarkIdleTimeout;
     TExprNode::TPtr Watermark;
     TExprNode::TPtr SkipJsonErrors;
+    TExprNode::TPtr StreamingTopicRead;
     TExprNode::TPtr SharedReading;
 };
 

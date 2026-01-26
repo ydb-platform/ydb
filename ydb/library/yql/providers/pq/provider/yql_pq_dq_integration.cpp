@@ -420,13 +420,6 @@ public:
         auto clusterConfiguration = GetClusterConfiguration(cluster);
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
-        Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
-        Add(props, Format, format, pos, ctx);
-        Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
-
-        if (clusterConfiguration->UseSsl) {
-            Add(props, UseSslSetting, "1", pos, ctx);
-        }
 
         if (clusterConfiguration->AddBearerToToken) {
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
@@ -571,7 +564,12 @@ public:
             return {};
         }
         Add(props, SharedReading, ToString(sharedReading), pos, ctx);
-
+        Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
+        Add(props, Format, format, pos, ctx);
+        Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
+        if (clusterConfiguration->UseSsl) {
+            Add(props, UseSslSetting, "1", pos, ctx);
+        }
         if (!streamingTopicReadEnabled) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
             return nullptr;

@@ -252,6 +252,10 @@ namespace {
             RdmaReadTimeHistogram->Collect(value);
         }
 
+        void IncRdmaMultipartEvents() override {
+            ++*RdmaMultipartEvents;
+        }
+
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
             auto& ch = GetOutputChannel(channel);
             if (ch.OutgoingTraffic) {
@@ -338,6 +342,7 @@ namespace {
                     "InterconnectQueueTimeHistogramUs", NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
                 RdmaReadTimeHistogram = AdaptiveCounters->GetHistogram(
 +                    "RdmaReadTimeUs", NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
+                RdmaMultipartEvents = AdaptiveCounters->GetCounter("RdmaMultipartEvents", true);
             }
 
             if (updateGlobal) {
@@ -403,6 +408,7 @@ namespace {
         NMonitoring::THistogramPtr PingTimeHistogram;
         NMonitoring::THistogramPtr InterconnectQueueTimeHistogram;
         NMonitoring::THistogramPtr RdmaReadTimeHistogram;
+        NMonitoring::TDynamicCounters::TCounterPtr RdmaMultipartEvents;
 
         std::unordered_map<ui16, TOutputChannel> OutputChannels;
         TOutputChannel OtherOutputChannel;
@@ -620,6 +626,10 @@ namespace {
             RdmaReadTimeHistogram_->Record(value);
         }
 
+        void IncRdmaMultipartEvents() override {
+            RdmaMultipartEvents_->Inc();
+        }
+
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
             auto& ch = GetOutputChannel(channel);
             if (ch.OutgoingTraffic) {
@@ -717,6 +727,7 @@ namespace {
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ic_queue_time_us"}}), NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
                 RdmaReadTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.rdma_read_time_us"}}), NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
+                RdmaMultipartEvents_ = createRate(AdaptiveMetrics_, "interconnect.rdma_multipart_events");
             }
 
             if (updateGlobal) {
@@ -804,6 +815,7 @@ namespace {
         NMonitoring::IHistogram* PingTimeHistogram_;
         NMonitoring::IHistogram* InterconnectQueueTimeHistogram_;
         NMonitoring::IHistogram* RdmaReadTimeHistogram_;
+        NMonitoring::IRate* RdmaMultipartEvents_;
 
         THashMap<ui16, TOutputChannel> OutputChannels_;
         TOutputChannel OtherOutputChannel_;

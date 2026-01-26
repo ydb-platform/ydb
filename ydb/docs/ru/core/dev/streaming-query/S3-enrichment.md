@@ -1,6 +1,4 @@
-# Потоковая загрузка
-
-## Обогащение данных (S3) {#enrichment}
+# Обогащение данных (S3)
 
 В потоковых запросах возможно присоединение к потоку данных из S3 с помощью конструкции `JOIN`. При этом поток обязательно должен находиться в левой части джойна. Механизм имеет ограничения, т.к. правая часть джойна полностью помещается в оперативную память процесса.
 
@@ -76,39 +74,3 @@ FROM
 
 END DO
 ```
-
-## Запись в таблицы {#table-write}
-
-Запись результата в таблицу {{ ydb-short-name }} возможна с помощью [UPSERT INTO](../../yql/reference/syntax/upsert_into).
-
-```yql
-CREATE STREAMING QUERY query_with_table_write AS
-DO BEGIN
-
-UPSERT INTO
-    output_table
-SELECT
-    Unwrap(CAST(Ts AS Timestamp)) AS Ts,
-    Country,
-    Count
-FROM
-    ydb_source.input_topic
-WITH (
-    FORMAT = json_each_row,
-    SCHEMA = (
-        Ts String NOT NULL,
-        Count Uint64 NOT NULL,
-        Country Utf8 NOT NULL
-    )
-)
-
-END DO
-```
-
-{% note alert %}
-
-Не поддерживаются:
-* команда [INSERT INTO](../../yql/reference/syntax/insert_into);
-* Запись в таблицы {{ ydb-short-name }}, находящихся во внешних БД
-
-{% endnote %}

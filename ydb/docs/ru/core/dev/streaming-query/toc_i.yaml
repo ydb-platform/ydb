@@ -1,7 +1,9 @@
 items:
   - name: Отключение чекпоинтов
     href: checkpoints.md
-  - name: Потоковая загрузка
-    href: streaming-query-load.md
+  - name: Запись в таблицы
+    href: table-writing.md
+  - name: Обогащение данных S3
+    href: S3-enrichment.md    
   - name: Форматы данных потоковых запросов при чтении/записи топиков
     href: streaming-query-formats.md

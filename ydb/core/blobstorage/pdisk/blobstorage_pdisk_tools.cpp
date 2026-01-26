@@ -223,7 +223,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
                 ui64 sectorOffset = sysLogOffset + (ui64)((idx / 3) * 3) * (ui64)format.SectorSize;
                 bool isCrcOk = NPDisk::TPDiskHashCalculator().CheckSectorHash(
                         sectorOffset, format.MagicSysLogChunk, sector, format.SectorSize, logFooter->Hash);
-                outInfo.SectorInfo.push_back(TPDiskInfo::TSectorInfo(logFooter->Nonce, logFooter->Version, isCrcOk));
+                outInfo.SectorInfo.push_back(TPDiskInfo::TSectorInfo(logFooter->Nonce, logFooter->GetVersion(), isCrcOk));
             }
 
             return true;

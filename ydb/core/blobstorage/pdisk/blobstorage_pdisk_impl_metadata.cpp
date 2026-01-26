@@ -858,7 +858,7 @@ namespace NKikimr::NPDisk {
         auto& footer = *reinterpret_cast<TDataSectorFooter*>(data + usefulDataSize);
         memset(&footer, 0, sizeof(footer));
         footer.Nonce = RandomNumber<ui64>();
-        footer.Version = PDISK_DATA_VERSION;
+        footer.SetVersionAndEncryption(encryption);
         footer.Hash = hasher.GetHashResult();
 
         TPDiskStreamCypher cypher(encryption);

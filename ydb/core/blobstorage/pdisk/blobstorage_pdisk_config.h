@@ -106,6 +106,9 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui64 StartOwnerRound = 1ull;  // set only by warden
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // set only by warden
+
+    // Setting this flag to false breaks backward compatibility with versions,
+    // which doesn't support non encrypted chunks mixed with ecnrypted ones.
     bool EnableSectorEncryption = true;
 
     // EnableSectorEncryption is not the same as the DISABLE_PDISK_ENCRYPTION macro:

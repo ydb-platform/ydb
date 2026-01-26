@@ -93,7 +93,6 @@ class TSysLogReader : public TThrRefBase {
 
     THolder<TEvReadLogResult> Result;
 
-    TPDiskStreamCypher Cypher;
     TVector<ui64> BadOffsets;
 
     ui32 SizeToRead;

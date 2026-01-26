@@ -39,6 +39,7 @@ private:
             , File(key, OpenAlways | WrOnly | ForAppend)
         {
             File.Flock(LOCK_EX | LOCK_NB);
+            File.Resize(0);
         }
     };
 
@@ -250,7 +251,10 @@ public:
 
             ui64 start = range.first;
             ui64 end = range.second;
-            Y_ABORT_UNLESS(start <= end);
+            if (start > end) {
+                ReplyError<TEvGetObjectResponse>(ev->Sender, key, "Invalid range: start > end");
+                return;
+            }
             ui64 length = end - start + 1;
 
             if ((i64)start >= fileSize) {
@@ -264,9 +268,9 @@ public:
             size_t bytesRead = file.Read((void*)data.data(), length);
             data.resize(bytesRead);
 
-            FS_LOG_I("GetObject"
-                << ": read# " << bytesRead
-                << " bytes from# " << filePath);
+            FS_LOG_I("GetObject read"
+                << ": bytes# " << bytesRead
+                << ", from# " << filePath);
 
             Aws::S3::Model::GetObjectResult awsResult;
             awsResult.SetContentLength(bytesRead);
@@ -312,12 +316,12 @@ public:
             FS_LOG_W("HeadObject"
                 << ": key# " << key
                 << ", error# " << "file not found");
-            ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TString("File not found: ") + ex.what(), Aws::S3::S3Errors::NO_SUCH_KEY);
+                ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TStringBuilder() << "File not found: " << ex.what(), Aws::S3::S3Errors::NO_SUCH_KEY);
         } catch (const std::exception& ex) {
             FS_LOG_E("HeadObject error"
                 << ": key# " << key
                 << ", error# " << ex.what());
-            ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TString("File head error: ") + ex.what());
+                ReplyError<TEvHeadObjectResponse>(ev->Sender, key, TStringBuilder() << "File head error: " << ex.what());
         }
     }
 

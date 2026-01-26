@@ -82,7 +82,7 @@
     }
     defer db.Close(ctx)
     row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.NoTx()),
+      query.WithTxControl(query.ImplicitTxControl()),
     )
     if err != nil {
       fmt.Printf("unexpected error: %v", err)
@@ -209,13 +209,7 @@
 
 - Rust
 
-  ```rust
-  use ydb::Query;
-
-  // ImplicitTx - запрос без явной транзакции
-  let query = Query::new("SELECT 1");
-  let result = client.query(query, None).await?;
-  ```
+  Режим ImplicitTx не поддерживается
 
 - PHP
 
@@ -223,28 +217,12 @@
   <?php
 
   use YdbPlatform\Ydb\Ydb;
-  use YdbPlatform\Ydb\Auth\AccessTokenAuthentication;
 
   $config = [
-      // Database path
-      'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
-
-      // Database endpoint
-      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
-
-      // Auto discovery (dedicated server only)
-      'discovery'   => false,
-
-      // IAM config
-      'iam_config'  => [
-          // 'root_cert_file' => './CA.pem',  Root CA file (uncomment for dedicated server only)
-      ],
-
-      'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
+      // YDB config
   ];
 
   $ydb = new Ydb($config);
-  // ImplicitTx - один запрос без явной транзакции
   $result = $ydb->table()->query('SELECT 1;');
   ```
 
@@ -526,7 +504,7 @@
 
   ```rust
   use ydb::{TransactionOptions};
-  
+
   let tx_options = TransactionOptions::default().with_mode(
     ydb::Mode::SerializableReadWrite
   );
@@ -545,27 +523,18 @@
   use YdbPlatform\Ydb\Ydb;
 
   $config = [
-      // Database path
-      'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
-
-      // Database endpoint
-      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
-
-      // Auto discovery (dedicated server only)
-      'discovery'   => false,
-
-      // IAM config
-      'iam_config'  => [
-          // 'root_cert_file' => './CA.pem',  Root CA file (uncomment for dedicated server only)
-      ],
-
-      'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
+      // YDB config
   ];
 
   $ydb = new Ydb($config);
-  $ydb->table()->retryTransaction(function(Session $session){
-    $session->query('SELECT 1;');
-  })
+  $result = $ydb->table()->retryTransaction(
+    function (Session $session) {
+        return $session->query('SELECT 1 AS value;');
+    },
+    true,
+    null,
+    ['tx_mode' => 'serializable_read_write']
+  );
   ```
 
 {% endlist %}
@@ -792,8 +761,22 @@
 
 - PHP
 
-  Online Read-Only режим не поддерживается напрямую.
-  Используйте Serializable или Snapshot Read-Only для операций чтения.
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $config = [
+      // YDB config
+  ];
+
+  $ydb = new Ydb($config);
+  $result = $ydb->table()->retrySession(function (Session $session) {
+    $query = $session->newQuery('SELECT 1 AS value;');
+    $query->beginTx('online_read_only');
+    return $query->execute();
+  }, true);
+  ```
 
 {% endlist %}
 
@@ -1009,8 +992,22 @@
 
 - PHP
 
-  Stale Read-Only режим не поддерживается напрямую.
-  Используйте Serializable или Snapshot Read-Only для операций чтения.
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $config = [
+      // YDB config
+  ];
+
+  $ydb = new Ydb($config);
+  $result = $ydb->table()->retrySession(function (Session $session) {
+    $query = $session->newQuery('SELECT 1 AS value;');
+    $query->beginTx('stale_read_only');
+    return $query->execute();
+  }, true);
+  ```
 
 {% endlist %}
 
@@ -1222,6 +1219,28 @@
 - Rust
 
   Режим Snapshot Read-Only не поддерживается в rust sdk.
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $config = [
+      // YDB config
+  ];
+
+  $ydb = new Ydb($config);
+  $result = $ydb->table()->retryTransaction(
+    function (Session $session) {
+        return $session->query('SELECT 1 AS value;');
+    },
+    true,
+    null,
+    ['tx_mode' => 'snapshot_read_only']
+  );
+  ```
 
 ## Snapshot Read-Write {#snapshot-read-write}
 
@@ -1475,6 +1494,6 @@
 
 - PHP
 
-  Режим Snapshot Read-Write не поддерживается напрямую в PHP SDK.
+  Режим Snapshot Read-Write не поддерживается в PHP SDK.
 
 {% endlist %}

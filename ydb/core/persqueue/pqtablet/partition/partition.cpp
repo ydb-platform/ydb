@@ -1157,9 +1157,9 @@ void TPartition::LogAndCollectError(NKikimrServices::EServiceKikimr service, con
 
 const TPartitionBlobEncoder& TPartition::GetBlobEncoder(ui64 offset) const
 {
-    if ((offset >= CompactionBlobEncoder.EndOffset) && (offset < BlobEncoder.StartOffset)) {
-        offset = BlobEncoder.StartOffset;
-    }
+    //if ((offset >= CompactionBlobEncoder.EndOffset) && (offset < BlobEncoder.StartOffset)) {
+    //    offset = BlobEncoder.StartOffset;
+    //}
 
     if (BlobEncoder.DataKeysBody.empty()) {
         return CompactionBlobEncoder;
@@ -1178,6 +1178,12 @@ const TPartitionBlobEncoder& TPartition::GetBlobEncoder(ui64 offset) const
 
 const std::deque<TDataKey>& GetContainer(const TPartitionBlobEncoder& zone, ui64 offset)
 {
+    if (zone.HeadKeys.empty()) {
+        return zone.DataKeysBody;
+    } else if (zone.DataKeysBody.empty()) {
+        return zone.HeadKeys;
+    }
+
     return zone.PositionInBody(offset, 0) ? zone.DataKeysBody : zone.HeadKeys;
 }
 

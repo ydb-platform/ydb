@@ -317,6 +317,16 @@ public:
     }
 
     const std::optional<NYql::TIssue>& GetLockIssue() const override {
+        // If we have a BrokenLockQueryTraceId and the issue doesn't contain it, update the issue
+        if (LocksIssue && BrokenLockQueryTraceId_ && *BrokenLockQueryTraceId_ != 0) {
+            TString currentMessage = LocksIssue->GetMessage();
+            if (!currentMessage.Contains("VictimQueryTraceId:")) {
+                TStringBuilder message;
+                message << currentMessage;
+                message << " VictimQueryTraceId: " << *BrokenLockQueryTraceId_ << ".";
+                const_cast<std::optional<NYql::TIssue>&>(LocksIssue) = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
+            }
+        }
         return LocksIssue;
     }
 
@@ -564,6 +574,10 @@ private:
                 first = false;
             }
             message << "`" << path << "`";
+        }
+        message << ".";
+        if (BrokenLockQueryTraceId_ && *BrokenLockQueryTraceId_ != 0) {
+            message << " VictimQueryTraceId: " << *BrokenLockQueryTraceId_ << ".";
         }
         LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     }

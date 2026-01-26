@@ -971,12 +971,16 @@ public:
                 }
             }
 
-            RuntimeError(
-                NYql::NDqProto::StatusIds::ABORTED,
-                NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder() << "Transaction locks invalidated. Table: `"
-                    << TablePath << "`.",
-                getIssues());
+            {
+                NYql::TIssues lockIssues;
+                if (auto lockIssue = TxManager->GetLockIssue()) {
+                    lockIssues.AddIssue(*lockIssue);
+                }
+                for (const auto& issue : getIssues()) {
+                    lockIssues.AddIssue(issue);
+                }
+                RuntimeError(NYql::NDqProto::StatusIds::ABORTED, std::move(lockIssues));
+            }
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION: {
@@ -4448,13 +4452,14 @@ public:
                 }
             }
 
-            ReplyError(
-                NYql::NDqProto::StatusIds::ABORTED,
-                NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
-                TStringBuilder()
-                    << "Transaction locks invalidated. "
-                    << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
-                getIssues());
+            NYql::TIssues lockIssues;
+            if (auto lockIssue = TxManager->GetLockIssue()) {
+                lockIssues.AddIssue(*lockIssue);
+            }
+            for (const auto& issue : getIssues()) {
+                lockIssues.AddIssue(issue);
+            }
+            ReplyError(NYql::NDqProto::StatusIds::ABORTED, std::move(lockIssues));
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION: {

@@ -611,4 +611,32 @@ std::shared_ptr<ITestReadSession> CreateTestReadSession(TestReadSessionSettings 
     }
 }
 
+TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath) {
+    auto edgeId = runtime.AllocateEdgeActor();
+    auto readerId = runtime.Register(NDescriber::CreateDescriberActor(edgeId, databasePath, {topicPath}));
+    runtime.EnableScheduleForActor(readerId);
+    runtime.DispatchEvents();
+
+    return readerId;
+}
+
+THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+    return runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(timeout);
+}
+
+ui64 GetPQRBTabletId(NActors::TTestActorRuntime& runtime, const TString& database, const TString& topic) {
+    CreateDescriberActor(runtime, database, topic);
+    auto result = GetDescriberResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::SUCCESS);
+    return result->Topics[topic].Info->Description.GetBalancerTabletID();
+}
+
+void ReloadPQRBTablet(NActors::TTestActorRuntime& runtime, const TString& database, const TString& topic) {
+    Cerr << (TStringBuilder() << ">>>>>> reload PQRB tablet " << database << " " << topic) << Endl;
+
+    auto tabletId = GetPQRBTabletId(runtime, database, topic);
+    ForwardToTablet(runtime, tabletId, runtime.AllocateEdgeActor(), new TEvents::TEvPoison());
+    Sleep(TDuration::Seconds(1));
+}
+
 }

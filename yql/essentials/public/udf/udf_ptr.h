@@ -21,6 +21,8 @@ struct TDelete {
 template <typename T, typename D = NDetails::TDelete>
 class TUniquePtr {
 public:
+    // Implicit ownership capturing is okay for smart pointers
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TUniquePtr(T* ptr = nullptr)
         : Ptr_(ptr)
     {
@@ -123,6 +125,8 @@ public:
     };
 
 public:
+    // Implicit ownership capturing is okay for smart pointers
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TRefCountedPtr(T* ptr = nullptr)
         : Ptr_(ptr)
     {

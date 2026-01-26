@@ -55,15 +55,15 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
         UNIT_ASSERT_VALUES_EQUAL(stats.PartId, "partId");
         std::vector<TChunkStats> gottenPartIdChunkStats = stats.PartIdChunkStats;
 
-        // Проверяем количество чанков
+        // checking chunks number
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats.size(), 2);
 
-        // Проверяем первый чанк
+        // checking first chunk
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[0].Rows, 2);
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[0].DataWeight, firstPartSize);
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[0].SortedChunkStats.IsSorted, false);
 
-        // Проверяем второй чанк
+        // checking second chunk
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].Rows, 2);
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].DataWeight, secPartSize);
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].SortedChunkStats.IsSorted, false);
@@ -137,14 +137,17 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
         UNIT_ASSERT_VALUES_EQUAL(chunk1Stats.Rows, 2);
         UNIT_ASSERT(chunk1Stats.SortedChunkStats.IsSorted);
 
-        UNIT_ASSERT(chunk1Stats.SortedChunkStats.FirstRowKeys.IsMap());
+        UNIT_ASSERT(chunk1Stats.SortedChunkStats.FirstRowKeys.IsMap() && chunk1Stats.SortedChunkStats.LastRowKeys.IsMap());
         UNIT_ASSERT_VALUES_EQUAL(chunk1Stats.SortedChunkStats.FirstRowKeys["key"].AsInt64(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(chunk1Stats.SortedChunkStats.LastRowKeys["key"].AsInt64(), 50);
+
 
         auto& chunk2Stats = stats.PartIdChunkStats[1];
         UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.Rows, 2);
         UNIT_ASSERT(chunk2Stats.SortedChunkStats.IsSorted);
 
         UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.SortedChunkStats.FirstRowKeys["key"].AsInt64(), 75);
+        UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.SortedChunkStats.LastRowKeys["key"].AsInt64(), 150);
     }
 }
 

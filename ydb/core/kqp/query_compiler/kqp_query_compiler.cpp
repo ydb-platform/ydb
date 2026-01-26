@@ -281,7 +281,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
     for (const auto& columnName : columns) {
         auto column = tableMeta.Columns.FindPtr(columnName);
         if (!column) {
-            if (columnName == "_yql_full_text_relevance") {
+            if (columnName == NTableIndex::NFulltext::FullTextRelevanceColumn) {
                 continue;
             }
 
@@ -344,7 +344,7 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
         }
 
 
-        if (columnName == "_yql_full_text_relevance") {
+        if (columnName == NTableIndex::NFulltext::FullTextRelevanceColumn) {
             auto& columnProto = *opProto.AddColumns();
             // columnProto.SetId(columnId);
             columnProto.SetName(columnName);
@@ -1387,7 +1387,7 @@ private:
             for (auto item : type->GetItems()) {
                 auto* columnProto = fullTextProto.AddColumns();
                 columnProto->SetName(TString(item->GetName()));
-                if (item->GetName() == "_yql_full_text_relevance") {
+                if (item->GetName() == NTableIndex::NFulltext::FullTextRelevanceColumn) {
                     continue;
                 }
 
@@ -1417,7 +1417,7 @@ private:
 
             if (settingsObj.BFactor) {
                 auto bFactor = TExprBase(settingsObj.BFactor);
-                auto just = bFactor.Cast<TCoJust>().Input();
+                auto just = bFactor.Maybe<TCoJust>() ? bFactor.Maybe<TCoJust>().Cast().Input() : bFactor;
                 if (just.Maybe<TCoParameter>()) {
                     fullTextProto.MutableBFactor()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
                 } else {
@@ -1427,7 +1427,7 @@ private:
 
             if (settingsObj.QueryMode) {
                 auto queryMode = TExprBase(settingsObj.QueryMode);
-                auto just = queryMode.Cast<TCoJust>().Input();
+                auto just = queryMode.Maybe<TCoJust>() ? queryMode.Maybe<TCoJust>().Cast().Input() : queryMode;
                 if (just.Maybe<TCoParameter>()) {
                     fullTextProto.MutableQueryMode()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
                 } else {
@@ -1437,7 +1437,7 @@ private:
 
             if (settingsObj.MinimumShouldMatch) {
                 auto minimumShouldMatch = TExprBase(settingsObj.MinimumShouldMatch);
-                auto just = minimumShouldMatch.Cast<TCoJust>().Input();
+                auto just = minimumShouldMatch.Maybe<TCoJust>() ? minimumShouldMatch.Maybe<TCoJust>().Cast().Input() : minimumShouldMatch;
                 if (just.Maybe<TCoParameter>()) {
                     fullTextProto.MutableMinimumShouldMatch()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
                 } else {
@@ -1447,7 +1447,7 @@ private:
 
             if (settingsObj.K1Factor) {
                 auto k1Factor = TExprBase(settingsObj.K1Factor);
-                auto just = k1Factor.Cast<TCoJust>().Input();
+                auto just = k1Factor.Maybe<TCoJust>() ? k1Factor.Maybe<TCoJust>().Cast().Input() : k1Factor;
                 if (just.Maybe<TCoParameter>()) {
                     fullTextProto.MutableK1Factor()->MutableParamValue()->SetParamName(just.Cast<TCoParameter>().Name().StringValue());
                 } else {
@@ -1537,6 +1537,7 @@ private:
     THashMap<TStringBuf, ui32> CreateColumnToOrder(
             const TVector<TStringBuf>& columns,
             const TKikimrTableMetadataPtr& tableMeta,
+            const THashSet<TStringBuf>& localDefaultColumnsIds,
             bool keysFirst) {
         THashSet<TStringBuf> usedColumns;
         for (const auto& columnName : columns) {
@@ -1551,8 +1552,37 @@ private:
                 columnToOrder[columnName] = number++;
             }
         }
+
+        const auto isDefaultColumn = [&tableMeta](const TString& columnName) {
+            const auto defaultKind = tableMeta->Columns.at(columnName).DefaultKind;
+            return defaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
+                || defaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+        };
+
+        // Not DEFAULT columns
+        for (const auto& columnName : tableMeta->ColumnOrder) {
+            if (usedColumns.contains(columnName)
+                    && !columnToOrder.contains(columnName)
+                    && !isDefaultColumn(columnName)) {
+                columnToOrder[columnName] = number++;
+            }
+        }
+
+        // Default columns without local processing
+        for (const auto& columnName : tableMeta->ColumnOrder) {
+            if (usedColumns.contains(columnName)
+                    && !columnToOrder.contains(columnName)
+                    && !localDefaultColumnsIds.contains(columnName)) {
+                AFL_ENSURE(isDefaultColumn(columnName));
+                columnToOrder[columnName] = number++;
+            }
+        }
+
+        // Default columns with local processing
         for (const auto& columnName : tableMeta->ColumnOrder) {
             if (usedColumns.contains(columnName) && !columnToOrder.contains(columnName)) {
+                AFL_ENSURE(isDefaultColumn(columnName));
+                AFL_ENSURE(localDefaultColumnsIds.contains(columnName));
                 columnToOrder[columnName] = number++;
             }
         }
@@ -1591,8 +1621,13 @@ private:
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
             } else if (settings.Mode().Cast().StringValue() == "update") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE);
+            } else if (settings.Mode().Cast().StringValue() == "update_conditional") {
+                AFL_ENSURE(Config->GetEnableIndexStreamWrite()); // Don't allow this mode for old versions.
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL);
             } else if (settings.Mode().Cast().StringValue() == "fill_table") {
                 settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+            } else if (settings.Mode().Cast().StringValue() == "upsert_increment") {
+                settingsProto.SetType(NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT);
             } else {
                 YQL_ENSURE(false, "Unsupported sink mode");
             }
@@ -1604,7 +1639,10 @@ private:
 
                 const auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
 
-                auto fillColumnProto = [] (TStringBuf columnName, const NYql::TKikimrColumnMetadata* column, NKikimrKqp::TKqpColumnMetadataProto* columnProto ) {
+                auto fillColumnProto = [] (
+                        TStringBuf columnName,
+                        const NYql::TKikimrColumnMetadata* column,
+                        NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
                     columnProto->SetId(column->Id);
                     columnProto->SetName(TString(columnName));
                     columnProto->SetTypeId(column->TypeInfo.GetTypeId());
@@ -1614,38 +1652,22 @@ private:
                     }
                 };
 
-                for (const auto& columnName : tableMeta->KeyColumnNames) {
-                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-
-                    auto keyColumnProto = settingsProto.AddKeyColumns();
-                    fillColumnProto(columnName, columnMeta, keyColumnProto);
-                }
-
-                for (const auto& columnName : columns) {
-                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-
-                    auto columnProto = settingsProto.AddColumns();
-                    fillColumnProto(columnName, columnMeta, columnProto);
-                }
-
-                AFL_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
-                const auto columnToOrder = CreateColumnToOrder(
-                    columns,
-                    tableMeta,
-                    tableMeta->Kind == EKikimrTableKind::Datashard);
-                for (const auto& columnName : columns) {
-                    settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
-                }
-
-                settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
-
-                const bool inconsistentWrite = settings.InconsistentWrite().Cast().Value() == "true"sv;
-                AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
-                settingsProto.SetInconsistentTx(inconsistentWrite);
-
+                THashSet<ui32> defaultColumnsIds;
+                THashSet<TStringBuf> localDefaultColumns; // for shards DefaultColumnsCount feature
                 if (Config->GetEnableIndexStreamWrite()) {
+                    for (const auto& columnNameAtom : settings.DefaultColumns().Cast()) {
+                        const auto& columnName = columnNameAtom.StringValue();
+                        const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                        YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                        const bool isDefault = columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE
+                                        ||  columnMeta->DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+                        if (isDefault) {
+                            defaultColumnsIds.insert(columnMeta->Id);
+                            localDefaultColumns.insert(columnName);
+                        }
+                    }
+                
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
 
                     std::vector<size_t> affectedIndexes;
@@ -1669,7 +1691,8 @@ private:
                                 || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
                                 const auto& implTable = tableMeta->ImplTables[index];
 
-                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
+                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
+                                        || settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL) {
                                     if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
                                             return columnsSet.contains(column.first) && !mainKeyColumnsSet.contains(column.first);
                                         })) {
@@ -1711,9 +1734,27 @@ private:
                         });
 
                         if (needLookup) {
+                            AFL_ENSURE(settingsProto.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+
+                            THashSet<TStringBuf> lookupColumnsSet;
+                            for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+                                const auto& indexDescription = tableMeta->Indexes[index];
+
+                                if (indexDescription.Type == TIndexDescription::EType::GlobalSync
+                                        || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
+                                    const auto& implTable = tableMeta->ImplTables[index];
+
+                                    for (const auto& [columnName, columnMeta] : implTable->Columns) {
+                                        lookupColumnsSet.insert(columnName);
+                                    }
+                                }
+                            }
+
                             for (const auto& [columnName, columnMeta] : tableMeta->Columns) {
-                                if (!mainKeyColumnsSet.contains(columnName)) {
+                                if (!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.contains(columnName)) {
                                     lookupColumns.push_back(columnName);
+                                    localDefaultColumns.erase(columnName);
+
                                     auto columnProto = settingsProto.AddLookupColumns();
                                     fillColumnProto(columnName, &columnMeta, columnProto);
                                 }
@@ -1769,6 +1810,7 @@ private:
                         const auto indexColumnToOrder = CreateColumnToOrder(
                             indexColumns,
                             implTable,
+                            localDefaultColumns,
                             true);
                         for (const auto& columnName: indexColumns) {
                             indexSettings->AddWriteIndexes(indexColumnToOrder.at(columnName));
@@ -1778,7 +1820,48 @@ private:
                             indexColumns,
                             tablesMap);
                     }
+                } else {
+                    AFL_ENSURE(localDefaultColumns.empty());
+                    AFL_ENSURE(defaultColumnsIds.empty());
                 }
+
+                for (const auto& columnName : tableMeta->KeyColumnNames) {
+                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                    auto keyColumnProto = settingsProto.AddKeyColumns();
+                    fillColumnProto(columnName, columnMeta, keyColumnProto);
+                }
+
+                for (const auto& columnName : columns) {
+                    const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
+                    YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                    auto columnProto = settingsProto.AddColumns();
+                    fillColumnProto(columnName, columnMeta, columnProto);
+                }
+
+                AFL_ENSURE(tableMeta->Kind == EKikimrTableKind::Datashard || tableMeta->Kind == EKikimrTableKind::Olap);
+                const auto columnToOrder = CreateColumnToOrder(
+                    columns,
+                    tableMeta,
+                    localDefaultColumns,
+                    tableMeta->Kind == EKikimrTableKind::Datashard);
+                for (const auto& columnName : columns) {
+                    settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
+                }
+
+                AFL_ENSURE(settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT
+                            || defaultColumnsIds.empty());
+                for (const auto& defaultColumnId : defaultColumnsIds) { // from plan!!!
+                    settingsProto.AddDefaultColumnsIds(defaultColumnId);
+                }
+
+                settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
+
+                const bool inconsistentWrite = settings.InconsistentWrite().Cast().Value() == "true"sv;
+                AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
+                settingsProto.SetInconsistentTx(inconsistentWrite);
             } else {
                 // Table info will be filled during execution after resolving table by name.
                 settingsProto.MutableTable()->SetPath(TString(settings.Table().Cast().Path()));

@@ -44,7 +44,7 @@ public:
     virtual void SchedulePartitionIdlenessCheck(TInstant) = 0;
 
     virtual void InitWatermarkTracker() = 0;
-    void InitWatermarkTracker(TDuration, TDuration);
+    void InitWatermarkTracker(TDuration, TDuration, const ::NMonitoring::TDynamicCounterPtr& counters = {});
     void MaybeSchedulePartitionIdlenessCheck(TInstant systemTime);
 
     virtual TString GetSessionId() const {

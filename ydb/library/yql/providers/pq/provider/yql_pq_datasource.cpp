@@ -237,6 +237,10 @@ public:
         return &State_->Configuration->Tokens;
     }
 
+    const THashSet<TString>& GetValidClusters() override {
+        return State_->Configuration->GetValidClusters();
+    }
+
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
         Y_UNUSED(compact);
 

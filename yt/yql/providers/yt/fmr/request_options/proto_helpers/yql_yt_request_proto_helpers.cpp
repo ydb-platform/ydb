@@ -197,6 +197,9 @@ NProto::TSortedChunkStats SortedChunkStatsToProto(const TSortedChunkStats& sorte
     if (!sortedChunkStats.FirstRowKeys.IsUndefined()) {
         protoSortedChunkStats.SetFirstRowKeys(NYT::NodeToYsonString(sortedChunkStats.FirstRowKeys));
     }
+    if (!sortedChunkStats.LastRowKeys.IsUndefined()) {
+        protoSortedChunkStats.SetLastRowKeys(NYT::NodeToYsonString(sortedChunkStats.LastRowKeys));
+    }
     return protoSortedChunkStats;
 }
 
@@ -205,6 +208,9 @@ TSortedChunkStats SortedChunkStatsFromProto(const NProto::TSortedChunkStats& pro
     sortedChunkStats.IsSorted = protoSortedChunkStats.GetIsSorted();
     if (!protoSortedChunkStats.GetFirstRowKeys().empty()) {
         sortedChunkStats.FirstRowKeys = NYT::NodeFromYsonString(protoSortedChunkStats.GetFirstRowKeys());
+    }
+    if (!protoSortedChunkStats.GetLastRowKeys().empty()) {
+        sortedChunkStats.LastRowKeys = NYT::NodeFromYsonString(protoSortedChunkStats.GetLastRowKeys());
     }
     return sortedChunkStats;
 }

@@ -13,7 +13,7 @@ namespace NYql::NPrivate {
 
 class TUrlListerManager: public IUrlListerManager {
 public:
-    TUrlListerManager(
+    explicit TUrlListerManager(
         TVector<IUrlListerPtr> urlListers)
         : UrlListers_(std::move(urlListers))
     {

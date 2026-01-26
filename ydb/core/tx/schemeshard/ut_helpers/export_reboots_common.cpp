@@ -24,6 +24,7 @@ void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NK
         {EPathTypeReplication, &TestCreateReplication},
         {EPathTypeTransfer, &TestCreateTransfer},
         {EPathTypeExternalDataSource, &TestCreateExternalDataSource},
+        {EPathTypeExternalTable, &TestCreateExternalTable},
     };
 
     auto it = functions.find(pathType);

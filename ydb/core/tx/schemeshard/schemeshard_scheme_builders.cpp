@@ -4,6 +4,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/ydb_convert/external_data_source_description.h>
+#include <ydb/core/ydb_convert/external_table_description.h>
 #include <ydb/core/ydb_convert/replication_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 
@@ -11,6 +12,7 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
@@ -26,7 +28,6 @@ bool BuildViewScheme(
     const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
     TString& scheme,
     const TString& database,
-    const TString& backupRoot,
     TString& error)
 {
     const auto& pathDesc = describeResult.GetPathDescription();
@@ -42,7 +43,7 @@ bool BuildViewScheme(
         describeResult.GetPath(),
         viewDesc.GetQueryText(),
         database,
-        backupRoot,
+        database,
         issues
     );
 
@@ -82,7 +83,6 @@ bool BuildReplicationScheme(
     const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
     TString& scheme,
     const TString& database,
-    const TString& backupRoot,
     TString& error)
 {
     const auto& pathDesc = describeResult.GetPathDescription();
@@ -100,7 +100,7 @@ bool BuildReplicationScheme(
     }
 
     scheme = NYdb::NDump::BuildCreateReplicationQuery(
-        database, backupRoot, replicationDesc.GetName(),
+        database, database, replicationDesc.GetName(),
         NYdb::NReplication::TReplicationDescription(replicationDescResult));
 
     return true;
@@ -110,7 +110,6 @@ bool BuildTransferScheme(
     const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
     TString& scheme,
     const TString& database,
-    const TString& backupRoot,
     TString& error)
 {
     const auto& pathDesc = describeResult.GetPathDescription();
@@ -128,7 +127,7 @@ bool BuildTransferScheme(
     }
 
     scheme = NYdb::NDump::BuildCreateTransferQuery(
-        database, backupRoot, replicationDesc.GetName(),
+        database, database, replicationDesc.GetName(),
         NYdb::NReplication::TTransferDescription(transferDescResult));
 
     return true;
@@ -157,6 +156,31 @@ bool BuildExternalDataSourceScheme(
     return true;
 }
 
+bool BuildExternalTableScheme(
+    const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
+    TString& scheme,
+    const TString& database,
+    TString& error)
+{
+    const auto& pathDesc = describeResult.GetPathDescription();
+    if (!pathDesc.HasExternalTableDescription()) {
+        error = "Path description does not contain a description of external table";
+        return false;
+    }
+
+    const auto& externalTableDesc = pathDesc.GetExternalTableDescription();
+    Ydb::Table::DescribeExternalTableResult externalTableDescResult;
+    Ydb::StatusIds::StatusCode status;
+
+    if (!FillExternalTableDescription(externalTableDescResult, externalTableDesc, pathDesc.GetSelf(), status, error)) {
+        return false;
+    }
+
+    scheme = NYdb::NDump::BuildCreateExternalTableQuery(database, database, externalTableDescResult);
+
+    return true;
+}
+
 bool BuildScheme(
     const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
     TString& scheme,
@@ -167,15 +191,17 @@ bool BuildScheme(
 
     switch (pathType) {
         case NKikimrSchemeOp::EPathTypeView:
-            return BuildViewScheme(describeResult, scheme, databaseRoot, databaseRoot, error);
+            return BuildViewScheme(describeResult, scheme, databaseRoot, error);
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
             return BuildTopicScheme(describeResult, scheme, error);
         case NKikimrSchemeOp::EPathTypeReplication:
-            return BuildReplicationScheme(describeResult, scheme, databaseRoot, databaseRoot, error);
+            return BuildReplicationScheme(describeResult, scheme, databaseRoot, error);
         case NKikimrSchemeOp::EPathTypeTransfer:
-            return BuildTransferScheme(describeResult, scheme, databaseRoot, databaseRoot, error);
+            return BuildTransferScheme(describeResult, scheme, databaseRoot, error);
         case NKikimrSchemeOp::EPathTypeExternalDataSource:
             return BuildExternalDataSourceScheme(describeResult, scheme, databaseRoot, error);
+        case NKikimrSchemeOp::EPathTypeExternalTable:
+            return BuildExternalTableScheme(describeResult, scheme, databaseRoot, error);
         default:
             error = TStringBuilder() << "unsupported path type: " << pathType;
             return false;

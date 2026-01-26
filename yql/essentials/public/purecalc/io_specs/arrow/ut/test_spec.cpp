@@ -45,7 +45,7 @@ struct TVectorStream: public NYql::NPureCalc::IStream<T*> {
     size_t Index = 0;
 
 public:
-    TVectorStream(TVector<T> items)
+    explicit TVectorStream(TVector<T> items)
         : Data(std::move(items))
     {
     }
@@ -55,29 +55,30 @@ public:
     }
 };
 
-template <typename T>
+template <typename T, typename U = T>
 struct TVectorConsumer: public NYql::NPureCalc::IConsumer<T*> {
-    TVector<T>& Data;
+    using TConverter = std::function<void(TVector<U>&, const T&)>;
+
+    TVector<U>& Data;
+    const TConverter Converter;
     size_t Index = 0;
 
 public:
-    TVectorConsumer(TVector<T>& items)
+    TVectorConsumer(TVector<U>& items, const TConverter& converter)
         : Data(items)
+        , Converter(converter)
     {
     }
 
     void OnObject(T* t) override {
         Index++;
-        Data.push_back(*t);
+        Converter(Data, *t);
     }
 
     void OnFinish() override {
         UNIT_ASSERT_GT(Index, 0);
     }
 };
-
-using ExecBatchStreamImpl = TVectorStream<arrow::compute::ExecBatch>;
-using ExecBatchConsumerImpl = TVectorConsumer<arrow::compute::ExecBatch>;
 
 template <typename TBuilder>
 arrow::Datum MakeArrayDatumFromVector(
@@ -122,21 +123,40 @@ arrow::compute::ExecBatch MakeBatch(ui64 bsize, i64 value, ui64 init = 1) {
     return arrow::compute::ExecBatch(std::move(batchArgs), bsize);
 }
 
-TVector<std::tuple<ui64, i64>> CanonBatches(const TVector<arrow::compute::ExecBatch>& batches) {
-    TVector<std::tuple<ui64, i64>> result;
-    for (const auto& batch : batches) {
-        const auto bsize = batch.length;
+void AddBatch(TVector<std::tuple<ui64, i64>>& result, const arrow::compute::ExecBatch& batch) {
+    const auto bsize = batch.length;
 
-        const auto& avec1 = MakeVectorFromArrayDatum<ui64>(batch.values[0], bsize);
-        const auto& avec2 = MakeVectorFromArrayDatum<i64>(batch.values[1], bsize);
+    const auto& avec1 = MakeVectorFromArrayDatum<ui64>(batch.values[0], bsize);
+    const auto& avec2 = MakeVectorFromArrayDatum<i64>(batch.values[1], bsize);
 
-        for (auto i = 0; i < bsize; i++) {
-            result.push_back(std::make_tuple(avec1[i], avec2[i]));
-        }
+    for (auto i = 0; i < bsize; i++) {
+        result.push_back(std::make_tuple(avec1[i], avec2[i]));
     }
-    std::sort(result.begin(), result.end());
+}
+
+TVector<std::tuple<ui64, i64>> CanonBatches(const TVector<std::tuple<ui64, i64>>& input) {
+    auto result = input;
+    Sort(result);
     return result;
 }
+
+TVector<std::tuple<ui64, i64>> CanonLiteralBatches(const TVector<arrow::compute::ExecBatch>& batches) {
+    TVector<std::tuple<ui64, i64>> data;
+    for (const auto& batch : batches) {
+        AddBatch(data, batch);
+    }
+
+    return CanonBatches(data);
+}
+
+using TExecBatchStreamImpl = TVectorStream<arrow::compute::ExecBatch>;
+struct TExecBatchConsumerImpl: public TVectorConsumer<arrow::compute::ExecBatch, std::tuple<ui64, i64>> {
+public:
+    explicit TExecBatchConsumerImpl(TVector<std::tuple<ui64, i64>>& output)
+        : TVectorConsumer(output, &AddBatch)
+    {
+    }
+};
 
 } // namespace
 
@@ -157,14 +177,14 @@ Y_UNIT_TEST_BLOCKS(TestSingleInput) {
             ETranslationMode::SQL);
 
         const TVector<arrow::compute::ExecBatch> input({MakeBatch(9, 19)});
-        const auto canonInput = CanonBatches(input);
-        ExecBatchStreamImpl items(input);
+        const auto canonInput = CanonLiteralBatches(input);
+        TExecBatchStreamImpl items(input);
 
         auto stream = program->Apply(&items);
 
-        TVector<arrow::compute::ExecBatch> output;
+        TVector<std::tuple<ui64, i64>> output;
         while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
-            output.push_back(*batch);
+            AddBatch(output, *batch);
         }
         const auto canonOutput = CanonBatches(output);
         UNIT_ASSERT_EQUAL(canonInput, canonOutput);
@@ -195,18 +215,18 @@ Y_UNIT_TEST_BLOCKS(TestMultiInput) {
         TVector<arrow::compute::ExecBatch> inputs = {
             MakeBatch(9, 19),
             MakeBatch(7, 17)};
-        const auto canonInputs = CanonBatches(inputs);
+        const auto canonInputs = CanonLiteralBatches(inputs);
 
-        ExecBatchStreamImpl items0({inputs[0]});
-        ExecBatchStreamImpl items1({inputs[1]});
+        TExecBatchStreamImpl items0({inputs[0]});
+        TExecBatchStreamImpl items1({inputs[1]});
 
         const TVector<IStream<arrow::compute::ExecBatch*>*> items({&items0, &items1});
 
         auto stream = program->Apply(items);
 
-        TVector<arrow::compute::ExecBatch> output;
+        TVector<std::tuple<ui64, i64>> output;
         while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
-            output.push_back(*batch);
+            AddBatch(output, *batch);
         }
         const auto canonOutput = CanonBatches(output);
         UNIT_ASSERT_EQUAL(canonInputs, canonOutput);
@@ -236,18 +256,18 @@ Y_UNIT_TEST_BLOCKS(TestInc) {
             ETranslationMode::SQL);
 
         const TVector<arrow::compute::ExecBatch> input({MakeBatch(9, 19)});
-        const auto canonInput = CanonBatches(input);
-        ExecBatchStreamImpl items(input);
+        const auto canonInput = CanonLiteralBatches(input);
+        TExecBatchStreamImpl items(input);
 
         auto stream = program->Apply(&items);
 
-        TVector<arrow::compute::ExecBatch> output;
+        TVector<std::tuple<ui64, i64>> output;
         while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
-            output.push_back(*batch);
+            AddBatch(output, *batch);
         }
         const auto canonOutput = CanonBatches(output);
         const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
-        const auto canonCheck = CanonBatches(check);
+        const auto canonCheck = CanonLiteralBatches(check);
         UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
     } catch (const TCompileError& error) {
         UNIT_FAIL(error.GetIssues());
@@ -272,15 +292,16 @@ Y_UNIT_TEST_BLOCKS(TestSingleInput) {
             ETranslationMode::SQL);
 
         const TVector<arrow::compute::ExecBatch> input({MakeBatch(9, 19)});
-        const auto canonInput = CanonBatches(input);
-        ExecBatchStreamImpl items(input);
+        const auto canonInput = CanonLiteralBatches(input);
+        TExecBatchStreamImpl items(input);
 
         auto stream = program->Apply(&items);
 
-        TVector<arrow::compute::ExecBatch> output;
+        TVector<std::tuple<ui64, i64>> output;
         while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
-            output.push_back(*batch);
+            AddBatch(output, *batch);
         }
+
         const auto canonOutput = CanonBatches(output);
         UNIT_ASSERT_EQUAL(canonInput, canonOutput);
     } catch (const TCompileError& error) {
@@ -309,18 +330,19 @@ Y_UNIT_TEST_BLOCKS(TestInc) {
             ETranslationMode::SQL);
 
         const TVector<arrow::compute::ExecBatch> input({MakeBatch(9, 19)});
-        const auto canonInput = CanonBatches(input);
-        ExecBatchStreamImpl items(input);
+        const auto canonInput = CanonLiteralBatches(input);
+        TExecBatchStreamImpl items(input);
 
         auto stream = program->Apply(&items);
 
-        TVector<arrow::compute::ExecBatch> output;
+        TVector<std::tuple<ui64, i64>> output;
         while (arrow::compute::ExecBatch* batch = stream->Fetch()) {
-            output.push_back(*batch);
+            AddBatch(output, *batch);
         }
+
         const auto canonOutput = CanonBatches(output);
         const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
-        const auto canonCheck = CanonBatches(check);
+        const auto canonCheck = CanonLiteralBatches(check);
         UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
     } catch (const TCompileError& error) {
         UNIT_FAIL(error.GetIssues());
@@ -345,10 +367,10 @@ Y_UNIT_TEST_BLOCKS(TestAllColumns) {
             ETranslationMode::SQL);
 
         arrow::compute::ExecBatch input = MakeBatch(9, 19);
-        const auto canonInput = CanonBatches({input});
-        TVector<arrow::compute::ExecBatch> output;
+        const auto canonInput = CanonLiteralBatches({input});
+        TVector<std::tuple<ui64, i64>> output;
 
-        auto consumer = program->Apply(MakeHolder<ExecBatchConsumerImpl>(output));
+        auto consumer = program->Apply(MakeHolder<TExecBatchConsumerImpl>(output));
 
         UNIT_ASSERT_NO_EXCEPTION([&]() { consumer->OnObject(&input); }());
         UNIT_ASSERT_NO_EXCEPTION([&]() { consumer->OnFinish(); }());
@@ -381,17 +403,17 @@ Y_UNIT_TEST_BLOCKS(TestInc) {
             ETranslationMode::SQL);
 
         arrow::compute::ExecBatch input = MakeBatch(9, 19);
-        const auto canonInput = CanonBatches({input});
-        TVector<arrow::compute::ExecBatch> output;
+        const auto canonInput = CanonLiteralBatches({input});
+        TVector<std::tuple<ui64, i64>> output;
 
-        auto consumer = program->Apply(MakeHolder<ExecBatchConsumerImpl>(output));
+        auto consumer = program->Apply(MakeHolder<TExecBatchConsumerImpl>(output));
 
         UNIT_ASSERT_NO_EXCEPTION([&]() { consumer->OnObject(&input); }());
         UNIT_ASSERT_NO_EXCEPTION([&]() { consumer->OnFinish(); }());
 
         const auto canonOutput = CanonBatches(output);
         const TVector<arrow::compute::ExecBatch> check({MakeBatch(9, 17, 2)});
-        const auto canonCheck = CanonBatches(check);
+        const auto canonCheck = CanonLiteralBatches(check);
         UNIT_ASSERT_EQUAL(canonCheck, canonOutput);
     } catch (const TCompileError& error) {
         UNIT_FAIL(error.GetIssues());

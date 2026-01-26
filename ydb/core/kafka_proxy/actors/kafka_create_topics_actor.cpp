@@ -31,6 +31,24 @@ std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPol
     return result;
 }
 
+
+std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertTimestampType(
+        const std::optional<TString>& configValue, std::optional<TString>& correctTimestampType
+) {
+    if (configValue == MESSAGE_TIMESTAMP_CREATE_TIME || configValue == MESSAGE_TIMESTAMP_LOG_APPEND) {
+        correctTimestampType = configValue;
+        return std::nullopt;
+    }
+    auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+    result->Status = EKafkaErrors::INVALID_REQUEST;
+    result->Message = TStringBuilder()
+        << "Topic-level config '"
+        << MESSAGE_TIMESTAMP_TYPE
+        << "' has invalid/unsupported value: "
+        << configValue.value_or("");
+    return result;
+}
+
 class TCreateTopicActor : public NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreateTopicActor, TKafkaTopicRequestCtx> {
     using TBase = NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreateTopicActor, TKafkaTopicRequestCtx>;
 public:
@@ -43,7 +61,8 @@ public:
             ui32 partitionsNumber,
             std::optional<ui64> retentionMs,
             std::optional<ui64> retentionBytes,
-            std::optional<ECleanupPolicy> cleanupPolicy)
+            std::optional<ECleanupPolicy> cleanupPolicy,
+            std::optional<TString> timestampType)
         : TBase(new TKafkaTopicRequestCtx(
             userToken,
             topicPath,
@@ -58,6 +77,7 @@ public:
         , RetentionMs(retentionMs)
         , RetentionBytes(retentionBytes)
         , CleanupPolicy(cleanupPolicy)
+        , TimestampType(timestampType)
     {
         KAFKA_LOG_D(LogMessage(databaseName));
     };
@@ -98,6 +118,10 @@ public:
         }
         topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
 
+        if (TimestampType.has_value()) {
+            topicRequest.mutable_attributes()->insert({"_timestamp_type", TimestampType.value()});
+        }
+
         TString error;
         TYdbPqCodes codes = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(
                 name,
@@ -136,6 +160,7 @@ private:
     std::optional<ui64> RetentionMs;
     std::optional<ui64> RetentionBytes;
     std::optional<ECleanupPolicy> CleanupPolicy;
+    std::optional<TString> TimestampType;
 
     TStringBuilder LogMessage(TString& databaseName) {
         TStringBuilder stringBuilder = TStringBuilder()
@@ -151,6 +176,10 @@ private:
         if (CleanupPolicy.has_value() && CleanupPolicy.value() == ECleanupPolicy::COMPACT) {
             stringBuilder << ". CleaunpPolicy: compact";
         }
+        if (TimestampType.has_value()) {
+            stringBuilder << ". TimestampType: " << TimestampType.value();
+        }
+
         return stringBuilder;
     }
 };
@@ -193,6 +222,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
         std::optional<TString> retentionMs;
         std::optional<TString> retentionBytes;
         std::optional<ECleanupPolicy> cleanupPolicy;
+        std::optional<TString> messageTimestampType;
 
         std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> unsupportedConfigResponse;
 
@@ -210,6 +240,8 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
                 if (unsupportedConfigResponse.has_value()) {
                     break;
                 }
+            } else if (config.Name.value() == MESSAGE_TIMESTAMP_TYPE) {
+                unsupportedConfigResponse = ConvertTimestampType(config.Value, messageTimestampType);
             }
         }
 
@@ -235,10 +267,11 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
             Context->UserToken,
             topic.Name.value(),
             Context->DatabasePath,
-            topic.NumPartitions,
+            topic.NumPartitions == -1 ? NKikimr::AppData(ctx)->KafkaProxyConfig.GetTopicCreationDefaultPartitions() : topic.NumPartitions,
             convertedRetentions.Ms,
             convertedRetentions.Bytes,
-            cleanupPolicy
+            cleanupPolicy,
+            messageTimestampType
         ));
 
         InflyTopics++;

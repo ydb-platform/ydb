@@ -11,11 +11,11 @@ namespace NKikimr::NSchemeShard {
 
 using namespace NTableIndex;
 
-TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+ISubOperation::TPtr CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
 
     if (!context.SS->EnableAddColumsWithDefaults) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled")};
+        return CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding columns with defaults is disabled");
     }
 
     const auto& op = tx.GetInitiateColumnBuild();
@@ -35,11 +35,9 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
             .IsCommonSensePath();
 
         if (!checks) {
-            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return CreateReject(opId, checks.GetStatus(), checks.GetError());
         }
     }
-
-    TVector<ISubOperation::TPtr> result;
 
     // altering version of the table.
     {
@@ -50,10 +48,8 @@ TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTrans
         auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
         snapshot.SetTableName(tablePath.LeafName());
 
-        result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
+        return CreateInitializeBuildIndexMainTable(opId, outTx);
     }
-
-    return result;
 }
 
 TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
@@ -73,12 +69,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
-            if (!context.SS->EnableVectorIndex) {
-                return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
-            }
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
             if (!context.SS->EnableFulltextIndex) {
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
             }
@@ -223,29 +217,32 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-            bool withRelevance = indexDesc.GetFulltextIndexDescription().GetSettings()
-                .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
-            NKikimrSchemeOp::TTableDescription indexTableDesc, docsTableDesc, dictTableDesc, statsTableDesc;
-            // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS
-            if (indexDesc.IndexImplTableDescriptionsSize() == (withRelevance ? 4 : 1)) {
-                // Descriptions provided by user to override partition policy
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+            NKikimrSchemeOp::TTableDescription indexTableDesc;
+            if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
                 indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
-                if (withRelevance) {
-                    docsTableDesc = indexDesc.GetIndexImplTableDescriptions(1);
-                    dictTableDesc = indexDesc.GetIndexImplTableDescriptions(2);
-                    statsTableDesc = indexDesc.GetIndexImplTableDescriptions(3);
-                }
             }
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc, indexDesc.GetFulltextIndexDescription(), withRelevance);
+            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc, indexDesc.GetFulltextIndexDescription(), /*withRelevance=*/false);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
-            if (withRelevance) {
-                result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
-                result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));
-                result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc)));
+            break;
+        }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+            NKikimrSchemeOp::TTableDescription indexTableDesc, docsTableDesc, dictTableDesc, statsTableDesc;
+            if (indexDesc.IndexImplTableDescriptionsSize() == 4) {
+                indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
+                docsTableDesc = indexDesc.GetIndexImplTableDescriptions(1);
+                dictTableDesc = indexDesc.GetIndexImplTableDescriptions(2);
+                statsTableDesc = indexDesc.GetIndexImplTableDescriptions(3);
             }
+            const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc, indexDesc.GetFulltextIndexDescription(), /*withRelevance=*/true);
+            implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+            result.push_back(createImplTable(std::move(implTableDesc)));
+            result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
+            result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));
+            result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc)));
             break;
         }
         default:

@@ -970,6 +970,7 @@ bool CheckAvailableInExports(NKikimrSchemeOp::EPathType pathType) {
         case NKikimrSchemeOp::EPathTypeReplication:
         case NKikimrSchemeOp::EPathTypeTransfer:
         case NKikimrSchemeOp::EPathTypeExternalDataSource:
+        case NKikimrSchemeOp::EPathTypeExternalTable:
             return true;
         default:
             return false;

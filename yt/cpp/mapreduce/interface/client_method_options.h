@@ -730,6 +730,11 @@ struct TTablePartitionReaderOptions
     ///
     /// Has no effect when used with raw-reader.
     FLUENT_FIELD_OPTION(TFormatHints, FormatHints);
+
+    ///
+    /// @brief Allows to tune which attributes are added to rows while reading tables.
+    ///
+    FLUENT_FIELD_DEFAULT(TControlAttributes, ControlAttributes, TControlAttributes());
 };
 
 /// Options for @ref NYT::IClient::CreateTableWriter

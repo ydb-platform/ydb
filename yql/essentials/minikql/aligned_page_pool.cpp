@@ -68,7 +68,7 @@ class TGlobalPagePool {
     friend class TGlobalPools<T, SysAlign>;
 
 public:
-    TGlobalPagePool(size_t pageSize)
+    explicit TGlobalPagePool(size_t pageSize)
         : PageSize_(pageSize)
     {
     }

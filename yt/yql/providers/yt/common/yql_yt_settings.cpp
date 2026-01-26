@@ -27,8 +27,8 @@ const TRegExMatch CODECS("none|snappy|zlib_[1-9]|lz4(_high_compression)?|quick_l
 
 } // namespace
 
-bool ValidateCompressionCodecValue(const TStringBuf& codec) {
-    return CODECS.Match(codec.data());
+bool ValidateCompressionCodecValue(const TString& codec) {
+    return CODECS.Match(codec.c_str());
 }
 
 void MediaValidator(const NYT::TNode& value) {

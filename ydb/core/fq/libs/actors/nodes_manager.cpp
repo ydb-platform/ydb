@@ -244,6 +244,10 @@ private:
             }
         }
 
+        if (++NextPeer >= Peers.size()) {
+            NextPeer = 0;
+        }
+
         response->Record.ClearError();
         auto& group = *response->Record.MutableNodes();
         group.SetResourceId(resourceId);

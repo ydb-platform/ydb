@@ -20,7 +20,7 @@ bool ConvertInputArrowType(TType* blockType, arrow::ValueDescr& descr) {
 
 class TOutputTypeVisitor: public arrow::TypeVisitor {
 public:
-    TOutputTypeVisitor(TTypeEnvironment& env)
+    explicit TOutputTypeVisitor(TTypeEnvironment& env)
         : Env_(env)
     {
     }

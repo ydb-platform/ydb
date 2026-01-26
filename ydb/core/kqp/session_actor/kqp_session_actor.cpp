@@ -926,6 +926,10 @@ public:
 
         QueryState->TxCtx->OnBeginQuery();
 
+        if (!CheckScriptExecutionState()) {
+            co_return;
+        }
+
         if (QueryState->NeedPersistentSnapshot()) {
             AcquirePersistentSnapshot();
             co_return;
@@ -1445,8 +1449,8 @@ public:
         return false;
     }
 
-    bool CheckScriptExecutionState(TKqpPhyTxHolder::TConstPtr tx, bool isBatchQuery) {
-        if (!QueryState->SaveQueryPhysicalGraph) {
+    bool CheckScriptExecutionState() {
+        if (!QueryState || !QueryState->SaveQueryPhysicalGraph) {
             return true;
         }
 
@@ -1459,7 +1463,8 @@ public:
             return false;
         }
 
-        if (isBatchQuery) {
+        const auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
+        if (IsBatchQuery(phyQuery)) {
             ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for batch queries");
             return false;
         }
@@ -1469,14 +1474,42 @@ public:
             return false;
         }
 
-        if (const auto txCount = QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize(); txCount != 1) {
-            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, TStringBuilder() << "Save state of query supported only for exactly one transaction, but got: " << txCount);
+        if (phyQuery.ResultBindingsSize()) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for queries with results");
             return false;
         }
 
+        const auto txCount = phyQuery.TransactionsSize();
+        if (!txCount) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for empty queries");
+            return false;
+        }
+
+        // Ensure that the transactions before the last one are precomputes
+
+        for (size_t i = 0; i + 1 < txCount; ++i) {
+            const auto tx = QueryState->PreparedQuery->GetPhyTx(i);
+            bool hasWrites = tx->GetHasEffects();
+            if (!hasWrites) {
+                for (const auto& stage : tx->GetStages()) {
+                    if (stage.SinksSize()) {
+                        hasWrites = true;
+                        break;
+                    }
+                }
+            }
+
+            if (hasWrites) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for queries with intermediate writes");
+                return false;
+            }
+        }
+
+        // Ensure that the last transaction can be saved
+
         const auto& txCtx = *QueryState->TxCtx;
-        if (txCtx.HasTableRead || txCtx.TopicOperations.GetSize() != 0) {
-            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table reads and topic operations");
+        if (txCtx.TopicOperations.GetSize()) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for topic operations");
             return false;
         }
 
@@ -1492,23 +1525,9 @@ public:
             }
         }
 
-        if (!tx) {
-            if (txCtx.DeferredEffects.Empty()) {
-                // All transactions already finished
-                return true;
-            }
-            tx = txCtx.DeferredEffects.begin()->PhysicalTx;
-        }
-
-        YQL_ENSURE(tx);
-
+        const auto tx = QueryState->PreparedQuery->GetPhyTx(txCount - 1);
         for (const auto& stage : tx->GetStages()) {
             for (const auto& source : stage.GetSources()) {
-                if (!source.HasExternalSource()) {
-                    ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for queries with non external sources");
-                    return false;
-                }
-
                 // Solomon provider may use runtime listing,
                 // YT provider opens read session during compilation,
                 // so we can't save and restore such queries
@@ -1555,11 +1574,11 @@ public:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }
 
-        const bool isBatchQuery = IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery());
-        if (!CheckTransactionLocks(tx) || !CheckTopicOperations() || !CheckScriptExecutionState(tx, isBatchQuery)) {
+        if (!CheckTransactionLocks(tx) || !CheckTopicOperations()) {
             return;
         }
 
+        const bool isBatchQuery = IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery());
         if (isBatchQuery && (!tx || !tx->IsLiteralTx())) {
             ExecutePartitioned(tx);
         } else if (QueryState->TxCtx->ShouldExecuteDeferredEffects()) {
@@ -1853,17 +1872,22 @@ public:
     }
 
     void SendToExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& request, bool isRollback = false) {
+        bool allowSaveState = false;
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
             QueryState->StatementResultSize = GetResultsCount(request);
+
+            if (const auto& preparedQuery = QueryState->PreparedQuery) {
+                allowSaveState = !isRollback && QueryState->CurrentTx + 1 == preparedQuery->GetPhysicalQuery().TransactionsSize();
+            }
         }
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
-        request.SaveQueryPhysicalGraph = QueryState && QueryState->SaveQueryPhysicalGraph && request.Transactions.size() == 1 && !isRollback;
-        request.QueryPhysicalGraph = QueryState && !isRollback ? QueryState->QueryPhysicalGraph : nullptr;
+        request.SaveQueryPhysicalGraph = allowSaveState && QueryState->SaveQueryPhysicalGraph;
+        request.QueryPhysicalGraph = allowSaveState ? QueryState->QueryPhysicalGraph : nullptr;
         STLOG_D("Sending to Executer",
             (span_id_size, request.TraceId.GetSpanIdSize()),
             (trace_id, TraceId()));

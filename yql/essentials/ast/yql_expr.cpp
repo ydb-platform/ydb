@@ -140,7 +140,7 @@ struct TContext {
     TString File;
     ui16 SyntaxVersion = 0;
 
-    TContext(TExprContext& expr)
+    explicit TContext(TExprContext& expr)
         : Expr(expr)
     {
     }
@@ -1712,7 +1712,7 @@ template <typename K, typename V>
 using TUnorderedMapIAllocator = std::unordered_map<K, V, std::hash<K>, std::equal_to<K>, TStdIAllocator<std::pair<const K, V>>>;
 
 struct TFrameContext {
-    TFrameContext(IAllocator* allocator)
+    explicit TFrameContext(IAllocator* allocator)
         : Nodes(std::less<size_t>(), allocator)
         , TopoSortedNodes(allocator)
         , Bindings(0, allocator)

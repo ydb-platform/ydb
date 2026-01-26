@@ -18,12 +18,12 @@ public:
 
     bool IsBaggageAdditionEnabled()
     {
-        return EnableBaggageAddition_.load(std::memory_order_relaxed);
+        return EnableBaggageAddition_.load(std::memory_order::relaxed);
     }
 
     void Configure(const TBaggageManagerConfigPtr& config)
     {
-        EnableBaggageAddition_.store(config->EnableBaggageAddition, std::memory_order_relaxed);
+        EnableBaggageAddition_.store(config->EnableBaggageAddition, std::memory_order::relaxed);
     }
 
 private:

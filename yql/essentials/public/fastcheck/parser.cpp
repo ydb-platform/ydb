@@ -42,7 +42,7 @@ private:
 
     class TPGParseEventsHandler: public IPGParseEvents {
     public:
-        TPGParseEventsHandler(TCheckResponse& res)
+        explicit TPGParseEventsHandler(TCheckResponse& res)
             : Res_(res)
         {
         }

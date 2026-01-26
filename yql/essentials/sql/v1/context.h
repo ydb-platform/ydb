@@ -410,6 +410,7 @@ public:
     bool DisableLegacyNotNull = false;
     bool DebugPositions = false;
     bool StrictWarningAsError = false;
+    bool WindowNewPipeline = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;
@@ -464,7 +465,7 @@ protected:
     typedef TSet<ui32> TSetType;
 
 protected:
-    TTranslation(TContext& ctx);
+    explicit TTranslation(TContext& ctx);
 
 public:
     TContext& Context();

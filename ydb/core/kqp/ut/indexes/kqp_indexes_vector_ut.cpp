@@ -319,7 +319,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     // Test that vector index queries work when selecting only non-PK columns
     Y_UNIT_TEST_TWIN(VectorIndexSelectWithoutPkColumns, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -352,7 +351,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void DoTestOrderByCosine(ui32 indexLevels, int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -448,7 +446,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithBitQuantization, Nullable, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -498,7 +495,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(OrderByNoUnwrap) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -545,7 +541,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(BuildIndexTimesAndUser) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -589,7 +584,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(VectorIndexNoBulkUpsert) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -627,7 +621,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void DoTestVectorIndexDelete(const TString& deleteQuery, int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -696,7 +689,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void DoTestVectorIndexInsert(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -761,7 +753,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void DoTestVectorIndexUpdateNoChange(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -810,7 +801,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(VectorIndexUpdateNoClusterChange, Covered, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -845,7 +835,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     void DoTestVectorIndexUpdateClusterChange(const TString& updateQuery, int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -920,7 +909,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     // First index level build is processed differently when table has 1 and >1 partitions so we check both cases
     Y_UNIT_TEST_QUAD(EmptyVectorIndexUpdate, Partitioned, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -989,7 +977,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         };
 
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         featureFlags.SetEnableAccessToIndexImplTables(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -1071,7 +1058,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(OrderByReject) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
@@ -1124,7 +1110,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
     Y_UNIT_TEST(VectorResolveDuplicateEvent) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)

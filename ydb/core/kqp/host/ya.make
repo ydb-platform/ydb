@@ -24,7 +24,6 @@ PEERDIR(
     ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/pq/provider
     ydb/library/yql/providers/s3/expr_nodes
-    ydb/public/sdk/cpp/src/client/impl/internal/common
     yql/essentials/core
     yql/essentials/core/services
     yql/essentials/minikql/invoke_builtins

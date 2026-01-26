@@ -9,7 +9,7 @@ namespace {
 
 class TDummyLexer: public ILexer {
 public:
-    TDummyLexer(const TString& name)
+    explicit TDummyLexer(const TString& name)
         : Name_(name)
     {
     }
@@ -29,7 +29,7 @@ private:
 
 class TDummyFactory: public ILexerFactory {
 public:
-    TDummyFactory(const TString& name)
+    explicit TDummyFactory(const TString& name)
         : Name_(name)
     {
     }

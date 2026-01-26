@@ -26,8 +26,8 @@ message THostConfigDrive {
 
     // optional PDisk config for these drives; if not set, default configuration is applied; overrides host-wide default
     NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6;
-    uint64 InferPDiskSlotCountFromUnitSize = 7;
-    uint32 InferPDiskSlotCountMax = 8;
+    reserved 7; // uint64 InferPDiskSlotCountFromUnitSize, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
+    reserved 8; // uint32 InferPDiskSlotCountMax, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
 }
 
 // Command used to define typical host configuration. It it used while defining new typical host configurations and as
@@ -646,6 +646,20 @@ message TRecommissionGroups {
     repeated uint32 GroupIds = 1;
 }
 
+message TInferPDiskSlotCountForDriveTypeSettings {
+    // NodeWarden infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits by the formula
+    // ExpectedSlotCount = TotalSize / (UnitSize * SlotSizeInUnits)
+    // where SlotSizeInUnits = 2^N is chosen to meet ExpectedSlotCount <= MaxSlots
+    optional uint64 UnitSize = 1; // in bytes
+    optional uint32 MaxSlots = 2;
+    optional bool PreferInferredSettingsOverExplicit = 3; // Unless true, PDisk.ExpectedSlotCount overrides inferred settings
+}
+
+message TInferPDiskSlotCountSettings {
+    optional TInferPDiskSlotCountForDriveTypeSettings Rot = 1;
+    optional TInferPDiskSlotCountForDriveTypeSettings Ssd = 2;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -787,8 +801,8 @@ message TBaseConfig {
         string LastSeenSerial = 18;
         bool ReadOnly = 19;
         TMaintenanceStatus.E MaintenanceStatus = 20;
-        uint64 InferPDiskSlotCountFromUnitSize = 21;
-        uint32 InferPDiskSlotCountMax = 22;
+        reserved 21; // uint64 InferPDiskSlotCountFromUnitSize = 21
+        reserved 22; // uint32 InferPDiskSlotCountMax = 22
     }
     message TVSlot {
         message TDonorDisk {
@@ -859,6 +873,7 @@ message TBaseConfig {
     repeated TNode Node = 4;
     repeated TDevice Device = 5;
     TUpdateSettings Settings = 6;
+    TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 7;
 }
 
 message TMoveCommand {

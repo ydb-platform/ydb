@@ -2,7 +2,7 @@
 
 #include "tool_interface.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_log.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace NYdb::NConsoleClient::NAi {
 
@@ -11,7 +11,6 @@ struct TDescribeToolSettings {
     TDriver Driver;
 };
 
-ITool::TPtr CreateDescribeTool(const TDescribeToolSettings& settings, const TInteractiveLogger& log);
+ITool::TPtr CreateDescribeTool(const TDescribeToolSettings& settings);
 
 } // namespace NYdb::NConsoleClient::NAi
-

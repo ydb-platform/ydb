@@ -69,6 +69,8 @@ RECURSE_FOR_TESTS(
     ut_topic_splitmerge
     ut_topic_set_boundaries
     ut_transfer
+    ut_truncate_table_reboots
+    ut_truncate_table_simple
     ut_ttl
     ut_user_attributes
     ut_user_attributes_reboots
@@ -221,6 +223,7 @@ SRCS(
     schemeshard__operation_side_effects.cpp
     schemeshard__operation_side_effects.h
     schemeshard__operation_split_merge.cpp
+    schemeshard__operation_truncate_table.cpp
     schemeshard__operation_upgrade_subdomain.cpp
     schemeshard__pq_stats.cpp
     schemeshard__publish_to_scheme_board.cpp

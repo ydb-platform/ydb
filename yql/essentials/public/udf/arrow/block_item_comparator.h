@@ -220,7 +220,7 @@ public:
 template <bool Nullable>
 class TTupleBlockItemComparator: public TBlockItemComparatorBase<TTupleBlockItemComparator<Nullable>, Nullable> {
 public:
-    TTupleBlockItemComparator(TVector<std::unique_ptr<IBlockItemComparator>>&& children)
+    explicit TTupleBlockItemComparator(TVector<std::unique_ptr<IBlockItemComparator>>&& children)
         : Children_(std::move(children))
     {
     }
@@ -268,7 +268,7 @@ private:
 
 class TExternalOptionalBlockItemComparator: public TBlockItemComparatorBase<TExternalOptionalBlockItemComparator, true> {
 public:
-    TExternalOptionalBlockItemComparator(std::unique_ptr<IBlockItemComparator> inner)
+    explicit TExternalOptionalBlockItemComparator(std::unique_ptr<IBlockItemComparator> inner)
         : Inner_(std::move(inner))
     {
     }

@@ -181,7 +181,7 @@ public:
         return Name;
     }
 
-    TGenericAsStruct(size_t argc)
+    explicit TGenericAsStruct(size_t argc)
         : Argc_(argc)
     {
     }

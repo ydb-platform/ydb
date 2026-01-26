@@ -121,14 +121,20 @@ public:
         TString Name;
         TPtr Expr;
 
+        // Is so heavily used
+        // NOLINTNEXTLINE(google-explicit-constructor)
         TIdPart(const TString& name)
             : Name(name)
         {
         }
+
+        // Is so heavily used
+        // NOLINTNEXTLINE(google-explicit-constructor)
         TIdPart(TPtr expr)
             : Expr(expr)
         {
         }
+
         TIdPart Clone() const {
             TIdPart res(Name);
             res.Expr = Expr ? Expr->Clone() : nullptr;
@@ -137,7 +143,7 @@ public:
     };
 
 public:
-    INode(TPosition pos);
+    explicit INode(TPosition pos);
     virtual ~INode();
 
     TPosition GetPos() const;
@@ -437,7 +443,7 @@ public:
 
 class TAstDirectNode final: public INode {
 public:
-    TAstDirectNode(TAstNode* node);
+    explicit TAstDirectNode(TAstNode* node);
 
     TAstNode* Translate(TContext& ctx) const override;
 
@@ -451,13 +457,13 @@ protected:
 
 class TAstListNode: public INode {
 public:
-    TAstListNode(TPosition pos);
+    explicit TAstListNode(TPosition pos);
     ~TAstListNode() override;
 
     TAstNode* Translate(TContext& ctx) const override;
 
 protected:
-    explicit TAstListNode(const TAstListNode& node);
+    TAstListNode(const TAstListNode& node);
     explicit TAstListNode(TPosition pos, TVector<TNodePtr>&& nodes);
     TPtr ShallowCopy() const override;
     bool DoInit(TContext& ctx, ISource* src) override;
@@ -475,7 +481,7 @@ protected:
 
 class TAstListNodeImpl final: public TAstListNode {
 public:
-    TAstListNodeImpl(TPosition pos);
+    explicit TAstListNodeImpl(TPosition pos);
     TAstListNodeImpl(TPosition pos, TVector<TNodePtr> nodes);
     void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
 
@@ -662,7 +668,7 @@ public:
         WRITE
     };
 
-    ITableKeys(TPosition pos);
+    explicit ITableKeys(TPosition pos);
     virtual const TString* GetTableName() const;
     virtual TNodePtr BuildKeys(TContext& ctx, EBuildKeysMode mode) = 0;
 
@@ -883,7 +889,7 @@ public:
 
     ~TColumnNode() override;
     bool IsAsterisk() const override;
-    virtual bool IsArtificial() const;
+    bool IsArtificial() const;
     const TString* GetColumnName() const override;
     const TString* GetSourceName() const override;
     TColumnNode* GetColumnNode() override;
@@ -1120,7 +1126,7 @@ protected:
 
 class TAsteriskNode: public INode {
 public:
-    TAsteriskNode(TPosition pos);
+    explicit TAsteriskNode(TPosition pos);
     bool IsAsterisk() const override;
     TPtr DoClone() const override;
     TAstNode* Translate(TContext& ctx) const override;
@@ -1163,6 +1169,9 @@ private:
     TNodePtr Node_;
 };
 
+class TObjectFeatureNode;
+using TObjectFeatureNodePtr = TIntrusivePtr<TObjectFeatureNode>;
+
 struct TStringContent {
     TString Content;
     NYql::NUdf::EDataSlot Type = NYql::NUdf::EDataSlot::String;
@@ -1185,7 +1194,7 @@ struct TTtlSettings {
         TNodePtr EvictionDelay;
         std::optional<TIdentifier> StorageName;
 
-        TTierSettings(const TNodePtr& evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
+        explicit TTierSettings(const TNodePtr& evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
     };
 
     TIdentifier ColumnName;
@@ -1224,7 +1233,7 @@ struct TTableSettings {
 };
 
 struct TFamilyEntry {
-    TFamilyEntry(const TIdentifier& name)
+    explicit TFamilyEntry(const TIdentifier& name)
         : Name(name)
     {
     }
@@ -1242,7 +1251,8 @@ struct TIndexDescription {
         GlobalAsync,
         GlobalSyncUnique,
         GlobalVectorKmeansTree,
-        GlobalFulltext
+        GlobalFulltextPlain,
+        GlobalFulltextRelevance
     };
 
     struct TIndexSetting {
@@ -1252,7 +1262,7 @@ struct TIndexDescription {
         TPosition ValuePosition;
     };
 
-    TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)
+    explicit TIndexDescription(const TIdentifier& name, EType type = EType::GlobalSync)
         : Name(name)
         , Type(type)
     {
@@ -1288,7 +1298,7 @@ struct TChangefeedSettings {
 };
 
 struct TChangefeedDescription {
-    TChangefeedDescription(const TIdentifier& name)
+    explicit TChangefeedDescription(const TIdentifier& name)
         : Name(name)
         , Disable(false)
     {
@@ -1401,7 +1411,7 @@ struct TTopicConsumerSettings {
 };
 
 struct TTopicConsumerDescription {
-    TTopicConsumerDescription(const TIdentifier& name)
+    explicit TTopicConsumerDescription(const TIdentifier& name)
         : Name(name)
     {
     }
@@ -1502,7 +1512,7 @@ struct TStreamingQuerySettings {
     inline static constexpr char QUERY_TEXT_FEATURE[] = "__query_text";
     inline static constexpr char QUERY_AST_FEATURE[] = "__query_ast";
 
-    std::map<TString, TDeferredAtom> Features;
+    TObjectFeatureNodePtr Features;
 };
 
 TString IdContent(TContext& ctx, const TString& str);
@@ -1624,13 +1634,13 @@ TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAt
 TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
 TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-                                    std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
+                                    TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TString& objectId, const TString& typeId,
-                                    bool existingOk, bool replaceIfExists, std::map<TString, TDeferredAtom>&& features, const TObjectOperatorContext& context);
+                                    bool existingOk, bool replaceIfExists, TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildAlterObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-                                   bool missingOk, std::map<TString, TDeferredAtom>&& features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
+                                   bool missingOk, TObjectFeatureNodePtr features, std::set<TString>&& featuresToReset, const TObjectOperatorContext& context);
 TNodePtr BuildDropObjectOperation(TPosition pos, const TString& secretId, const TString& typeId,
-                                  bool missingOk, std::map<TString, TDeferredAtom>&& options, const TObjectOperatorContext& context);
+                                  bool missingOk, TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
                                      std::vector<std::pair<TString, TString>>&& targets,
                                      std::map<TString, TNodePtr>&& settings,

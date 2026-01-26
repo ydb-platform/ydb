@@ -169,6 +169,7 @@ message TEvLoginResult {
     optional string Token = 2;  // signed jwt token
     optional string SanitizedToken = 3;  // sanitized token without signature
     optional bool IsAdmin = 4;
+    optional string ServerSignature = 5; // for SASL SCRAM auth
 }
 
 message TEvListUsers {

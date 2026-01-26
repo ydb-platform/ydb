@@ -7,6 +7,7 @@
 #include "udf_version.h"
 
 #include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/utils/is_pod.h>
 
 #include <util/system/yassert.h>     // FAIL, VERIFY_DEBUG
 #include <util/generic/utility.h>    // Min, Max
@@ -1008,11 +1009,7 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(TUnboxedValuePod, 16);
 
-static_assert(std::is_trivially_destructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_copy_assignable<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_move_assignable<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_copy_constructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_move_constructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
+static_assert(NYql::IsPod<TUnboxedValuePod>, "Incompatible with LLVM codegeneration!");
 
 //////////////////////////////////////////////////////////////////////////////
 // TUnboxedValue
@@ -1022,7 +1019,12 @@ public:
     inline TUnboxedValue() noexcept = default;
     inline ~TUnboxedValue() noexcept;
 
+    // They are almost the same thing.
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TUnboxedValue(const TUnboxedValuePod& value) noexcept;
+
+    // They are almost the same thing.
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TUnboxedValue(TUnboxedValuePod&& value) noexcept;
 
     inline TUnboxedValue(const TUnboxedValue& value) noexcept;
@@ -1047,7 +1049,7 @@ template <typename TResourceData, const char* ResourceTag>
 class TBoxedResource: public TBoxedValue {
 public:
     template <typename... Args>
-    inline TBoxedResource(Args&&... args)
+    inline explicit TBoxedResource(Args&&... args)
         : ResourceData_(std::forward<Args>(args)...)
     {
     }
@@ -1083,14 +1085,14 @@ template <typename TResourceData>
 class TBoxedDynamicResource: public TBoxedValue {
 public:
     template <typename... Args>
-    inline TBoxedDynamicResource(TString&& tag, Args&&... args)
+    inline explicit TBoxedDynamicResource(TString&& tag, Args&&... args)
         : ResourceData_(std::forward<Args>(args)...)
         , Tag_(std::move(tag))
     {
     }
 
     template <typename... Args>
-    inline TBoxedDynamicResource(const TString& tag, Args&&... args)
+    inline explicit TBoxedDynamicResource(const TString& tag, Args&&... args)
         : ResourceData_(std::forward<Args>(args)...)
         , Tag_(tag)
     {

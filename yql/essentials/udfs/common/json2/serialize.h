@@ -18,7 +18,7 @@ using namespace NBinaryJson;
 template <EDataSlot ResultType>
 class TSerialize: public TBoxedValue {
 public:
-    TSerialize(TSourcePosition pos)
+    explicit TSerialize(TSourcePosition pos)
         : Pos_(pos)
     {
     }

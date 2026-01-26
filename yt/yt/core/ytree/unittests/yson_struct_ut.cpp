@@ -3415,7 +3415,7 @@ DEFINE_POLYMORPHIC_YSON_STRUCT(MyPoly, TPolyBase,
     ((Drv2) (TPolyDerived2))
 );
 
-TEST(TYsonStructTest, TestPolymorphicYsonStruct)
+TEST(TYsonStructTest, PolymorphicYsonStruct)
 {
     TMyPoly poly;
 
@@ -3475,7 +3475,7 @@ TEST(TYsonStructTest, TestPolymorphicYsonStruct)
     EXPECT_EQ(drv2Ptr->Field2, 144);
 }
 
-TEST(TYsonStructTest, TestPolymorphicYsonStructSaveLoad)
+TEST(TYsonStructTest, PolymorphicYsonStructSaveLoad)
 {
     auto drv = New<TPolyDerived2>();
     drv->Field2 = 5;
@@ -3495,7 +3495,7 @@ TEST(TYsonStructTest, TestPolymorphicYsonStructSaveLoad)
     EXPECT_EQ(drv->Field2, 5);
 }
 
-TEST(TYsonStructTest, TestPolymorphicYsonStructMergeIfPossible)
+TEST(TYsonStructTest, PolymorphicYsonStructMergeIfPossible)
 {
     TMyPoly poly;
 
@@ -3535,7 +3535,7 @@ DEFINE_POLYMORPHIC_YSON_STRUCT(MyPolyWithoutBaseMapping, TPolyBase,
     ((Drv2) (TPolyDerived2))
 );
 
-TEST(TYsonStructTest, TestPolymorphicYsonWithoutBaseMapping)
+TEST(TYsonStructTest, PolymorphicYsonWithoutBaseMapping)
 {
     TMyPolyWithoutBaseMapping poly;
 
@@ -3574,7 +3574,7 @@ DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(MyPolyDefaultWithoutBaseMapping, Drv
     ((Drv2) (TPolyDerived2))
 );
 
-TEST(TYsonStructTest, TestPolymorphicYsonStructDefaultWithoutBaseMapping)
+TEST(TYsonStructTest, PolymorphicYsonStructDefaultWithoutBaseMapping)
 {
     TMyPolyDefaultWithoutBaseMapping poly;
 
@@ -3623,7 +3623,7 @@ DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(MyPolyDefault, Drv1, TPolyBase,
     ((Drv2) (TPolyDerived2))
 );
 
-TEST(TYsonStructTest, TestPolymorphicYsonStructDefault)
+TEST(TYsonStructTest, PolymorphicYsonStructDefault)
 {
     TMyPolyDefault poly;
 
@@ -3689,7 +3689,7 @@ DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(MyPolyDefaultEnum, EMyPolyD
     ((Drv2) (TPolyDerived2))
 );
 
-TEST(TYsonStructTest, TestPolymorphicYsonStructDefaultEnum)
+TEST(TYsonStructTest, PolymorphicYsonStructDefaultEnum)
 {
     TMyPolyDefaultEnum poly;
 
@@ -3749,7 +3749,7 @@ DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(MyPolyDefaultEnumWithoutBas
     ((Drv2) (TPolyDerived2))
 );
 
-TEST(TYsonStructTest, TestPolymorphicYsonStructDefaultEnumWithoutBaseMapping)
+TEST(TYsonStructTest, PolymorphicYsonStructDefaultEnumWithoutBaseMapping)
 {
     TMyPolyDefaultEnumWithoutBaseMapping poly;
 

@@ -355,8 +355,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EarlyMergeJoin(TExprBas
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AddPruneKeys(TExprBase node, TExprContext& ctx) const {
     // Analogue to flow2 core EquiJoin optimizer with PushPruneKeysIntoYtOperation optimizer
-    static const char optName[] = "EmitPruneKeys";
-    if (!IsOptimizerEnabled<optName>(*State_->Types) || IsOptimizerDisabled<optName>(*State_->Types)) {
+    if (!IsEmitPruneKeysEnabled(State_->Types)) {
         return node;
     }
     auto equiJoin = node.Cast<TYtEquiJoin>();

@@ -5,7 +5,7 @@ SRCS(
     yql_yt_gateway_coordinator_integration_ut.cpp
     yql_yt_ordered_partitioner_ut.cpp
     yql_yt_fmr_partitioner_ut.cpp
-    yql_fmr_boundary_keys_ut.cpp
+    yql_yt_fmr_boundary_keys_ut.cpp
 )
 
 PEERDIR(

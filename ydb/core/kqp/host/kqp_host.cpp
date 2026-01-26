@@ -1028,10 +1028,6 @@ private:
             }
         }
 
-        if (!SessionCtx->Config().FeatureFlags.GetEnableImplicitScanQueryInScripts()) {
-            return false;
-        }
-
         bool hasIndexReads = false;
         bool hasJoins = false;
         VisitExpr(queryBlock.Results().Ptr(), [&hasIndexReads, &hasJoins] (const TExprNode::TPtr& exprNode) {
@@ -1816,7 +1812,7 @@ private:
             configuration.DisablePragma(configuration.AtomicUploadCommit, false, "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
             configuration.DefaultOutputKeyFlushTimeout = TDuration::Minutes(1);
         } else if (queryType != EKikimrQueryType::Script) {
-            configuration.DisablePragma(configuration.AtomicUploadCommit, false, "Atomic upload commit is supported only for script execution operations, pragma value was ignored");
+            configuration.DisablePragma(configuration.AtomicUploadCommit, false, "");
         }
         configuration.WriteThroughDqIntegration = true;
         configuration.Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
@@ -1933,6 +1929,10 @@ private:
         state->Gateway = FederatedQuerySetup->PqGateway;
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
+
+        if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->StreamingDisposition) {
+            state->Disposition = *requestContext->StreamingDisposition;
+        }
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));

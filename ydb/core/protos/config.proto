@@ -615,6 +615,7 @@ message TMonitoringConfig {
     optional string MonitoringCertificate = 14 [(Ydb.sensitive) = true];
     optional string MonitoringCertificateFile = 15;
     optional string MonitoringPrivateKeyFile = 20;
+    optional string MonitoringCaFile = 22;
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];

@@ -86,6 +86,8 @@ NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner,
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else if (!ydbSessionId.empty()) {
         return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request));
+    } else if (!request->MTlsClientCertificate.empty()) {
+        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
     } else {
         return nullptr;
     }
@@ -401,7 +403,9 @@ public:
     }
 
     bool CredentialsProvided() {
-        return Container.GetCookie("ydb_session_id") || Container.GetHeader("Authorization");
+        return Container.GetCookie("ydb_session_id") ||
+            Container.GetHeader("Authorization") ||
+            !Event->Get()->Request->MTlsClientCertificate.empty();
     }
 
     TString YdbToHttpError(Ydb::StatusIds::StatusCode status) {
@@ -1022,6 +1026,9 @@ public:
         if (cookies.Has("ydb_session_id")) {
             return true;
         }
+        if (!request->MTlsClientCertificate.empty()) {
+            return true;
+        }
         return false;
     }
 
@@ -1232,6 +1239,9 @@ public:
         }
         NHttp::TCookies cookies(headers["Cookie"]);
         if (cookies.Has("ydb_session_id")) {
+            return true;
+        }
+        if (!request->MTlsClientCertificate.empty()) {
             return true;
         }
         return false;
@@ -1667,6 +1677,7 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     addPort->SslCertificatePem = Config.Certificate;
     addPort->CertificateFile = Config.CertificateFile;
     addPort->PrivateKeyFile = Config.PrivateKeyFile;
+    addPort->CaFile = Config.CaFile;
     addPort->Secure = !Config.Certificate.empty() || !Config.CertificateFile.empty();
     addPort->MaxRequestsPerSecond = Config.MaxRequestsPerSecond;
 

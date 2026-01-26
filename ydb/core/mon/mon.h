@@ -39,6 +39,7 @@ public:
         TString Certificate; // certificate/private key data in PEM format
         TString CertificateFile; // certificate file path in PEM format (OpenSSL feature: may optionally contain both certificate chain and private key in the same PEM file if PrivateKeyFile is not set)
         TString PrivateKeyFile; // private key file path for the certificate in PEM format
+        TString CaFile; // CA certificate file path for verifying client certificates (mTLS)
         ui32 MaxRequestsPerSecond = 0;
         TDuration InactivityTimeout = TDuration::Minutes(2);
         TString AllowOrigin;

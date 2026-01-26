@@ -230,7 +230,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
         class TRetryState {
             public:
-                TRetryState(TDuration timeout)
+                explicit TRetryState(TDuration timeout)
                     : Timeout(timeout)
                 {}
                 TDuration GetNextDelay() {

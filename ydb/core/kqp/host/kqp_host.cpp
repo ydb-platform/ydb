@@ -1895,17 +1895,10 @@ private:
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 
-<<<<<<< HEAD
-=======
         if (const auto requestContext = SessionCtx->GetUserRequestContext()) {
             state->StreamingTopicsReadByDefault = requestContext->IsStreamingQuery;
-
-            if (const auto disposition = requestContext->StreamingDisposition) {
-                state->Disposition = *disposition;
-            }
         }
 
->>>>>>> 21bd8c4f153 (YQ-5042 added setting `STREAMING` with default value FALSE for pq select (#32652))
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
     }

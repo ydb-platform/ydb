@@ -313,45 +313,6 @@ public:
         }
     }
 
-<<<<<<< HEAD
-=======
-    void TestReadTopicBasic(const TString& testSuffix) {
-        const TString sourceName = "sourceName" + testSuffix;
-        const TString topicName = "topicName" + testSuffix;
-        CreateTopic(topicName);
-
-        CreatePqSourceBasicAuth(sourceName, UseSchemaSecrets());
-
-        const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
-            SELECT key || "{id}", value FROM `{source}`.`{topic}` WITH (
-                STREAMING = "TRUE",
-                FORMAT = "json_each_row",
-                SCHEMA = (
-                    key String NOT NULL,
-                    value String NOT NULL
-                )
-            )
-            LIMIT 1;
-            )",
-            "source"_a=sourceName,
-            "topic"_a=topicName,
-            "id"_a=testSuffix
-        ));
-
-        WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
-
-        CheckScriptResult(scriptExecutionOperation, 2, 1, [testSuffix](TResultSetParser& result) {
-            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1" + testSuffix);
-            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
-        });
-
-        const auto metadata = GetScriptExecutionOperation(scriptExecutionOperation).Metadata();
-        const auto& plan = metadata.ExecStats.GetPlan();
-        UNIT_ASSERT(plan);
-        UNIT_ASSERT_STRING_CONTAINS(*plan, "Mkql_TotalNodes");
-    }
-
->>>>>>> 21bd8c4f153 (YQ-5042 added setting `STREAMING` with default value FALSE for pq select (#32652))
     // Table client SDK
 
     void ExecSchemeQuery(const TString& query, EStatus expectedStatus = EStatus::SUCCESS) {
@@ -1175,14 +1136,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             CreatePqSourceBasicAuth(sourceName, useSchemaSecrets);
 
             const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
-                SELECT key || "{id}", value FROM `{source}`.`{topic}`
-                    WITH (
-                        FORMAT="json_each_row",
-                        SCHEMA=(
-                            key String NOT NULL,
-                            value String NOT NULL
-                        ))
-                    LIMIT 1;
+                SELECT key || "{id}", value FROM `{source}`.`{topic}` WITH (
+                    STREAMING = "TRUE",
+                    FORMAT = "json_each_row",
+                    SCHEMA = (
+                        key String NOT NULL,
+                        value String NOT NULL
+                    )
+                )
+                LIMIT 1;
                 )",
                 "source"_a=sourceName,
                 "topic"_a=topicName,
@@ -1706,81 +1668,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n{\"data\": \"x\"}");
     }
 
-<<<<<<< HEAD
-=======
-    Y_UNIT_TEST_F(S3AtomicUploadCommitDisabledForStreamingQueries, TStreamingTestFixture) {
-        constexpr char sourceBucket[] = "test_bucket_disable_atomic_upload_commit";
-        constexpr char objectPath[] = "test_bucket_object.json";
-        constexpr char objectContent[] = R"({"data": "x"})";
-        CreateBucketWithObject(sourceBucket, objectPath, objectContent);
-
-        constexpr char s3SourceName[] = "s3Source";
-        CreateS3Source(sourceBucket, s3SourceName);
-
-        const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
-            PRAGMA s3.AtomicUploadCommit = "true";
-            INSERT INTO `{s3_source}`.`path/` WITH (
-                FORMAT = "json_each_row"
-            ) SELECT * FROM `{s3_source}`.`{object_path}` WITH (
-                FORMAT = "json_each_row",
-                SCHEMA (
-                    data String NOT NULL
-                )
-            )
-        )", "s3_source"_a = s3SourceName, "object_path"_a = objectPath), {
-            .SaveState = true
-        }, /* waitRunning */ false);
-
-        const auto& readyOp = WaitScriptExecution(operationId);
-        UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
-        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n{\"data\": \"x\"}");
-    }
-
-    Y_UNIT_TEST_F(S3PartitioningKeysFlushTimeout, TStreamingTestFixture) {
-        const auto pqGateway = SetupMockPqGateway();
-        constexpr char sourceBucket[] = "test_bucket_partitioning_keys_flush";
-        constexpr char s3SourceName[] = "s3Source";
-        CreateBucket(sourceBucket);
-        CreateS3Source(sourceBucket, s3SourceName);
-
-        constexpr char inputTopicName[] = "inputTopicName";
-        constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
-        CreatePqSource(pqSourceName);
-
-        const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
-            PRAGMA s3.OutputKeyFlushTimeout = "1s";
-            PRAGMA ydb.DisableCheckpoints = "TRUE";
-            PRAGMA ydb.MaxTasksPerStage = "1";
-
-            INSERT INTO `{s3_source}`.`path/` WITH (
-                FORMAT = json_each_row,
-                PARTITIONED_BY = key
-            ) SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
-                STREAMING = "TRUE",
-                FORMAT = json_each_row,
-                SCHEMA (
-                    data String NOT NULL,
-                    key Uint64 NOT NULL
-                )
-            )
-        )", "s3_source"_a = s3SourceName, "pq_source"_a = pqSourceName, "input_topic"_a = inputTopicName), {
-            .SaveState = true
-        });
-
-        auto readSession = pqGateway->WaitReadSession(inputTopicName);
-        readSession->AddDataReceivedEvent(0, R"({"data": "x", "key": 0})");
-
-        Sleep(TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "");
-
-        readSession->AddDataReceivedEvent(1, R"({"data": "y", "key": 1})");
-
-        Sleep(TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n");
-    }
-
->>>>>>> 21bd8c4f153 (YQ-5042 added setting `STREAMING` with default value FALSE for pq select (#32652))
     Y_UNIT_TEST_F(CrossJoinWithNotExistingDataSource, TStreamingTestFixture) {
         const auto connectorClient = SetupMockConnectorClient();
 

@@ -22,6 +22,11 @@ public:
         , Counters_(counters)
     {}
 
+    TDqWatermarkTrackerImpl(const TDqWatermarkTrackerImpl& parent, bool)
+        : LogPrefix_(parent.LogPrefix_)
+        , Counters_(parent.Counters_)
+    {}
+
     ~TDqWatermarkTrackerImpl() {
         if (IdleInputs_) {
             size_t idleableCount = 0;

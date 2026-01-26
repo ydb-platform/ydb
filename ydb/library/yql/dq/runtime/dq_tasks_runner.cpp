@@ -632,7 +632,7 @@ public:
                 if (inputDesc.GetSource().GetWatermarksMode() != NDqProto::WATERMARKS_MODE_DISABLED) {
                     inputUsesWatermarks = true;
                     if (transform && WatermarksTracker) {
-                        transform->WatermarksTracker.emplace(/*logPrefix=*/"");
+                        transform->WatermarksTracker.emplace(*WatermarksTracker, true);
                         transform->WatermarksTracker->TransferInput(*WatermarksTracker, i, false);
                     }
                 }
@@ -668,7 +668,7 @@ public:
                         inputUsesWatermarks = true;
                         if (transform && WatermarksTracker) {
                             if (!transform->WatermarksTracker) {
-                                transform->WatermarksTracker.emplace(/*logPrefix=*/"");
+                                transform->WatermarksTracker.emplace(*WatermarksTracker, true);
                             }
                             transform->WatermarksTracker->TransferInput(*WatermarksTracker, channelId, true);
                         }

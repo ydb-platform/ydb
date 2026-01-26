@@ -422,6 +422,7 @@ def test_recreate_database(ydb_cluster):
         ydb_cluster.remove_database(database)
         ydb_cluster.unregister_and_stop_slots(database_nodes)
 
+
 def test_check_access(ydb_cluster):
     users = {}
     for user in ('user_1', 'user_2'):

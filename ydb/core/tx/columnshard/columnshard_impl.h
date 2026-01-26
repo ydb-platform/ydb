@@ -41,6 +41,7 @@
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/locks/locks.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -63,6 +64,9 @@ class TMovePortionsChange;
 namespace NReader {
 class TTxScan;
 class TTxInternalScan;
+namespace NCommon {
+class TReadMetadata;
+}
 namespace NPlain {
 class TIndexScannerConstructor;
 }
@@ -110,6 +114,7 @@ class TTxBlobsWritingFinished;
 class TTxBlobsWritingFailed;
 class TWriteTasksQueue;
 class TWriteTask;
+class TCommitOperation;
 
 namespace NLoading {
 class TTxControllerInitializer;
@@ -211,6 +216,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
     friend class NOlap::NReader::NSimple::TIndexScannerConstructor;
+    friend class NOlap::NReader::NCommon::TReadMetadata;
     friend class NOlap::TRemovePortionsChange;
     friend class NOlap::TMovePortionsChange;
 
@@ -265,6 +271,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     void Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvReportBaseStatistics::TPtr&);
+    void Handle(TEvPrivate::TEvReportExecutorStatistics::TPtr&);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
@@ -300,6 +308,12 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
+    void SubscribeLockIfNotAlready(const ui64 lockId, const ui32 lockNodeId) const;
+    void ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie);
+    void TransactionToAbort(const ui64 lockId);
+    void MaybeAbortTransaction(const ui64 lockId);
+    void CancelTransaction(const ui64 txId);
 
     void HandleInit(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
 
@@ -433,7 +447,8 @@ protected:
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
             HFunc(NActors::TEvents::TEvWakeup, Handle);
             HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
-
+            hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);
+            hFunc(TEvPrivate::TEvReportExecutorStatistics, Handle);
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
             HFunc(TEvPrivate::TEvWriteDraft, Handle);
             HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
@@ -461,6 +476,7 @@ protected:
             HFunc(NColumnShard::TEvPrivate::TEvAskColumnData, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvColumnShard::TEvOverloadUnsubscribe, Handle);
+            HFunc(NLongTxService::TEvLongTxService::TEvLockStatus, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -516,7 +532,6 @@ private:
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     NBackgroundTasks::TControlInterfaceContainer<NOlap::NColumnFetching::TColumnDataManager> ColumnDataManager;
 
-    TActorId StatsReportPipe;
     std::vector<TActorId> ActorsToStop;
 
     TInFlightReadsTracker InFlightReadsTracker;
@@ -539,6 +554,11 @@ private:
     TActorId SpaceWatcherId;
     THashMap<TActorId, TActorId> PipeServersInterconnectSessions;
 
+    TActorId StatsReportPipe;
+    std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
+    ui32 JitterIntervalMS = 200;
+    ui32 BaseStatsEvInflight = 0;
+    ui32 ExecutorStatsEvInflight = 0;
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
 
@@ -587,9 +607,12 @@ private:
     void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
 
-    void SendPeriodicStats();
-    void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
-    void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev);
+    void SendPeriodicStats(bool);
+    void ScheduleBaseStatistics();
+    void ScheduleExecutorStatistics();
+
+    void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
+    void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
 
 public:
     ui64 TabletTxCounter = 0;

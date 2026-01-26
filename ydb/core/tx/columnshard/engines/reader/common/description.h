@@ -34,6 +34,7 @@ public:
     // Table
     ui64 TxId = 0;
     std::optional<ui64> LockId;
+    std::optional<ui32> LockNodeId;
     std::optional<NKikimrDataEvents::ELockMode> LockMode;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
     std::shared_ptr<NOlap::TPKRangesFilter> PKRangesFilter;
@@ -61,18 +62,26 @@ public:
         ScanCursor = cursor;
     }
 
-    void SetLock(std::optional<ui64> lockId, std::optional<NKikimrDataEvents::ELockMode> lockMode, const NColumnShard::TLockFeatures* lock) {
+    void SetLock(
+        std::optional<ui64> lockId, 
+        std::optional<ui32> lockNodeId,
+        std::optional<NKikimrDataEvents::ELockMode> lockMode, 
+        const NColumnShard::TLockFeatures* lock,
+        const bool readOnlyConflicts
+    ) {
         LockId = lockId;
+        LockNodeId = lockNodeId;
         LockMode = lockMode;
+        auto snapshotIsolation = lockId.has_value() && lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
 
-        auto snapshotIsolation = lockMode.value_or(NKikimrDataEvents::OPTIMISTIC) == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
-
-        // always true for now, will be false for reads that check only conflicts (comming soon with Snapshot Isolation)
-        readNonconflictingPortions = true;
+        readNonconflictingPortions = !readOnlyConflicts;
 
         // do not check conflicts for Snapshot isolated txs or txs with no lock
-        readConflictingPortions = LockId.has_value() && !snapshotIsolation;
+        readConflictingPortions = (LockId.has_value() && !snapshotIsolation) || readOnlyConflicts;
 
+        // if we need conflicting portions, we just take all uncommitted portions (from other txs and own)
+        // but if we do not need conflicting portions, we need to remember own portions ids,
+        // so that we can pick only own uncommitted portions for the read
         if (readNonconflictingPortions && !readConflictingPortions && lock != nullptr && lock->GetWriteOperations().size() > 0) {
             ownPortions = THashSet<TInsertWriteId>();
             for (auto& writeOperation : lock->GetWriteOperations()) {
@@ -86,6 +95,10 @@ public:
         AFL_VERIFY(readNonconflictingPortions || readConflictingPortions);
         if (ownPortions.has_value() && !ownPortions->empty()) {
             AFL_VERIFY(readNonconflictingPortions);
+        }
+        // we do not have cases (at the moment) when we need to read only conflicts for a scan with no transaction
+        if (!LockId.has_value()) {
+            AFL_VERIFY(!readOnlyConflicts);
         }
     }
 

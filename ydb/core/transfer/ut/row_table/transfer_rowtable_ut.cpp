@@ -57,6 +57,11 @@ Y_UNIT_TEST_SUITE(Transfer_RowTable)
         ColumnType_Date(TableType);
     }
 
+    Y_UNIT_TEST(ColumnType_Decimal)
+    {
+        ColumnType_Decimal(TableType);
+    }
+
     Y_UNIT_TEST(ColumnType_Double)
     {
         ColumnType_Double(TableType);

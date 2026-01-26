@@ -38,6 +38,8 @@ SRCS(
     keyvalue_stored_state_data.cpp
     keyvalue_stored_state_data.h
     keyvalue_trash_key_arbitrary.h
+    keyvalue_utils.cpp
+    keyvalue_utils.h
 )
 
 PEERDIR(

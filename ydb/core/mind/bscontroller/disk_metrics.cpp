@@ -111,6 +111,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
             SysViewChangedPDisks.insert(pdiskId);
         } else if (const auto it = StaticPDisks.find(pdiskId); it != StaticPDisks.end()) {
             it->second.PDiskMetrics = m;
+            it->second.PDiskMetrics->SetUpdateTimestamp(now.GetValue());
         } else {
             STLOG(PRI_NOTICE, BS_CONTROLLER, BSCTXUDM03, "PDisk not found", (PDiskId, pdiskId));
         }

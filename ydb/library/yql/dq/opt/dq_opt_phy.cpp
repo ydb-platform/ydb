@@ -1549,7 +1549,13 @@ TExprBase DqBuildFinalizeByKeyStage(TExprBase node, TExprContext& ctx,
 //       hard to work with. We should consider making it more explicit, something like ProcessScalar on the
 //       top level of expression graph.
 
-TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOptimizationContext&) {
+TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TBuildAggregationResultStageOptions& options) {
+    Y_UNUSED(optCtx);
+
+    if (!options.IsEnabled) {
+        return node;
+    }
+
     if (!node.Maybe<TCoAsList>()) {
         return node;
     }
@@ -1597,7 +1603,7 @@ TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOpti
                 return false;
             }
 
-            if (expr.Maybe<TDqPhyPrecompute>().IsValid()) {
+            if (options.ApplyForDqPhyPrecompute && expr.Maybe<TDqPhyPrecompute>().IsValid()) {
                 auto precompute = expr.Cast<TDqPhyPrecompute>();
                 auto maybeConnection = precompute.Connection().Maybe<TDqCnValue>();
 
@@ -2743,11 +2749,13 @@ TExprBase DqBuildSqlIn(TExprBase node, TExprContext& ctx, IOptimizationContext& 
         .Done();
 }
 
-TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage)
-{
+TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TParentsMap& parentsMap,
+                                  bool allowStageMultiUsage, const TBuildAggregationResultStageOptions& options) {
     TMaybeNode<TDqCnUnionAll> maybeUnionAll;
     if (const auto maybeToOptional = node.Maybe<TCoToOptional>()) {
+        if (!IsSuitableToBuildScalarPrecompute(node, parentsMap, allowStageMultiUsage, options)) {
+            return node;
+        }
         maybeUnionAll = maybeToOptional.Cast().List().Maybe<TDqCnUnionAll>();
     } else if (const auto maybeHead = node.Maybe<TCoHead>()) {
         maybeUnionAll = maybeHead.Cast().Input().Maybe<TDqCnUnionAll>();

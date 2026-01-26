@@ -404,13 +404,18 @@ Value* GenCompareFunction<false>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCo
 
     block = test;
 
-    const auto less = info.Features & NUdf::EDataTypeFeatures::FloatType ?
-        CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_OLT, lhs, rhs, "less", block): // float
-        info.Features & (NUdf::EDataTypeFeatures::SignedIntegralType | NUdf::EDataTypeFeatures::TimeIntervalType | NUdf::EDataTypeFeatures::DecimalType) ?
-        CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, lhs, rhs, "less", block): // signed
-        info.Features & (NUdf::EDataTypeFeatures::UnsignedIntegralType | NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType) ?
-        CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, lhs, rhs, "less", block): // unsigned
-        rhs; // bool
+    const auto less = info.Features & NUdf::EDataTypeFeatures::FloatType // float
+                          ? CmpInst::Create(Instruction::FCmp, FCmpInst::FCMP_OLT, lhs, rhs, "less", block)
+                          : info.Features & (NUdf::EDataTypeFeatures::SignedIntegralType | // signed
+                                             NUdf::EDataTypeFeatures::TimeIntervalType |
+                                             NUdf::EDataTypeFeatures::DecimalType |
+                                             NUdf::EDataTypeFeatures::ExtDateType)
+                                ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLT, lhs, rhs, "less", block)
+                            : info.Features & (NUdf::EDataTypeFeatures::UnsignedIntegralType | // unsigned
+                                               NUdf::EDataTypeFeatures::DateType |
+                                               NUdf::EDataTypeFeatures::TzDateType)
+                                ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_ULT, lhs, rhs, "less", block)
+                                : rhs; // bool
 
     const auto out = SelectInst::Create(less, ConstantInt::get(resultType, -1), ConstantInt::get(resultType, 1), "out", block);
     res->addIncoming(out, block);

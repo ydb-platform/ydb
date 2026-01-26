@@ -117,7 +117,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     for (auto& col : *copyAlter.MutableColumns()) {
         bool hasDefault = col.HasDefaultFromLiteral();
         if (hasDefault && !context.SS->EnableAddColumsWithDefaults) {
-            errStr = Sprintf("Column addition with default value is not supported now.");
+            errStr = Sprintf("Adding columns with defaults is disabled");
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
@@ -149,7 +149,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
 
     NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-    if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), appData, isServerless, errStr)
+    if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), copyAlter.GetColumns(), appData, isServerless, errStr)
         || !TPartitionConfigMerger::VerifyAlterParams(table->PartitionConfig(), compilationPartitionConfig, appData, shadowDataAllowed, errStr)) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;

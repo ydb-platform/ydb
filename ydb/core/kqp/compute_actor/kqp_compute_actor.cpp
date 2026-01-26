@@ -105,8 +105,9 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
 
         NYql::NDq::RegisterDQSolomonReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
         NYql::NDq::RegisterDQSolomonWriteActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
-        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, nullptr);
-        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, nullptr);
+        bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
+        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
+        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters);
     }
 
     return factory;
@@ -148,19 +149,17 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
 }
 
 TConclusionStatus TCPULimits::DeserializeFromProto(const NKikimrKqp::TEvStartKqpTasksRequest& config) {
+    const static auto maxThreadsCount = TActivationContext::ActorSystem()->GetPoolMaxThreadsCount(TActivationContext::AsActorContext().SelfID.PoolID());
     const auto share = config.GetPoolMaxCpuShare();
     if (share <= 0 || 1 < share) {
         return TConclusionStatus::Fail("cpu share have to be in (0, 1] interval");
     }
-    NActors::TExecutorPoolStats poolStats;
-    TVector<NActors::TExecutorThreadStats> threadsStats;
-    TActivationContext::ActorSystem()->GetPoolStats(TActivationContext::AsActorContext().SelfID.PoolID(), poolStats, threadsStats);
-    CPUGroupThreadsLimit = Max<ui64>(poolStats.MaxThreadCount, 1) * share;
+    CPUGroupThreadsLimit = Max<ui64>(1, maxThreadsCount) * share;
     CPUGroupName = config.GetPoolId();
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKqp
 } // namespace NKikimr
 
 namespace NKikimr::NKqp {

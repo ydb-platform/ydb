@@ -130,6 +130,11 @@ inline ui64 Checker<ui64>::Get(const ::Ydb::Value& value) {
 }
 
 template<>
+inline std::pair<ui64, i64> Checker<std::pair<ui64, i64>>::Get(const ::Ydb::Value& value) {
+    return std::make_pair(value.high_128(), value.low_128());
+}
+
+template<>
 inline double Checker<double>::Get(const ::Ydb::Value& value) {
     return value.double_value();
 }
@@ -819,10 +824,10 @@ struct MainTestCase {
                 for (size_t i = 0; i < expectations.size(); ++i) {
                     auto& row = proto.rows(i);
                     auto& rowExpectations = expectations[i];
-                    for (size_t i = 0; i < rowExpectations.size(); ++i) {
-                        auto& c = rowExpectations[i];
+                    for (size_t j = 0; j < rowExpectations.size(); ++j) {
+                        auto& c = rowExpectations[j];
                         TString msg = TStringBuilder() << "Row " << i << " column '" << c.first << "': ";
-                        c.second->Assert(msg, row.items(i));
+                        c.second->Assert(msg, row.items(j));
                     }
                 }
 

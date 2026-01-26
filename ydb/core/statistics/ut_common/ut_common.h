@@ -89,7 +89,8 @@ TDatabaseInfo CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount
 
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* saTabletId = nullptr);
 
-
+NKikimrScheme::TEvDescribeSchemeResult DescribeTable(
+    TTestActorRuntime& runtime, TActorId sender, const TString& path);
 TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const TString &path);
 TVector<ui64> GetColumnTableShards(TTestActorRuntime& runtime, TActorId sender,const TString &path);
 

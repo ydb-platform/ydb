@@ -26,10 +26,12 @@ using namespace NTabletFlatExecutor;
 struct TReadIteratorVectorTopItem {
     TOwnedCellVec Row;
     double Distance = 0;
+    TString UniqueKey;
 
-    TReadIteratorVectorTopItem(TArrayRef<const TCell> cells, double distance):
+    TReadIteratorVectorTopItem(TArrayRef<const TCell> cells, double distance, TString&& uniqueKey):
         Row(TOwnedCellVec(cells)),
-        Distance(distance) {
+        Distance(distance),
+        UniqueKey(std::move(uniqueKey)) {
     }
 
     bool operator<(const TReadIteratorVectorTopItem& rhs) const {
@@ -42,25 +44,48 @@ struct TReadIteratorVectorTop {
     ui32 Limit = 0;
     TString Target;
     std::unique_ptr<NKMeans::IClusters> KMeans;
+    std::vector<ui32> DistinctColumns;
+
+    std::unordered_set<TString> UniqueKeys;
     std::vector<TReadIteratorVectorTopItem> Rows;
     ui64 TotalReadRows = 0;
     ui64 TotalReadBytes = 0;
 
     void AddRow(TConstArrayRef<TCell> cells) {
+        TotalReadRows++;
+        TotalReadBytes += EstimateSize(cells);
+        TString serializedKey;
+        if (DistinctColumns.size()) {
+            TVector<TCell> key;
+            for (auto colIdx: DistinctColumns) {
+                key.push_back(cells.at(colIdx));
+            }
+            serializedKey = TSerializedCellVec::Serialize(key);
+            if (UniqueKeys.contains(serializedKey)) {
+                return;
+            }
+        }
         const auto embedding = cells.at(Column).AsBuf();
         if (!KMeans->IsExpectedSize(embedding)) {
             return;
         }
-        TotalReadRows++;
-        TotalReadBytes += EstimateSize(cells);
         double distance = KMeans->CalcDistance(embedding, Target);
         if (Rows.size() < Limit) {
-            Rows.emplace_back(cells, distance);
+            if (DistinctColumns.size()) {
+                UniqueKeys.insert(serializedKey);
+            }
+            Rows.emplace_back(cells, distance, std::move(serializedKey));
             std::push_heap(Rows.begin(), Rows.end());
         } else if (distance < Rows.front().Distance) {
-            Rows.emplace_back(cells, distance);
+            if (DistinctColumns.size()) {
+                UniqueKeys.insert(serializedKey);
+            }
+            Rows.emplace_back(cells, distance, std::move(serializedKey));
             std::push_heap(Rows.begin(), Rows.end());
             std::pop_heap(Rows.begin(), Rows.end());
+            if (DistinctColumns.size()) {
+                UniqueKeys.erase(Rows.back().UniqueKey);
+            }
             Rows.pop_back();
         }
     }
@@ -2162,13 +2187,24 @@ public:
             } else if (!topK.HasTargetVector()) {
                 error = "Target vector is not specified";
             } else {
-                topState->KMeans = NKMeans::CreateClusters(topK.GetSettings(), 0, error);
-                if (!topState->KMeans && error == "") {
+                // Use auto-detect if vector_dimension is 0 (brute force search without index)
+                if (topK.GetSettings().vector_dimension() == 0) {
+                    topState->KMeans = NKMeans::CreateClustersAutoDetect(topK.GetSettings(), topK.GetTargetVector(), 0, error);
+                } else {
+                    topState->KMeans = NKMeans::CreateClusters(topK.GetSettings(), 0, error);
+                }
+                if (!topState->KMeans && error.empty()) {
                     error = "CreateClusters failed";
                 }
                 if (topState->KMeans && !topState->KMeans->IsExpectedSize(topK.GetTargetVector())) {
                     error = "Target vector has invalid format";
                 }
+            }
+            for (auto& colIdx: topK.GetDistinctColumns()) {
+                if (colIdx >= record.ColumnsSize()) {
+                    error = TStringBuilder() << "Too large unique column index: " << colIdx;
+                }
+                topState->DistinctColumns.push_back(colIdx);
             }
             if (error != "") {
                 SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST, TStringBuilder()

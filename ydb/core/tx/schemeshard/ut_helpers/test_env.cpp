@@ -625,6 +625,11 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
+    if (!app.ColumnShardConfig.HasStatistics()) {
+        app.ColumnShardConfig.MutableStatistics()->SetReportBaseStatisticsPeriodMs(1000);
+        app.ColumnShardConfig.MutableStatistics()->SetReportExecutorStatisticsPeriodMs(1000);
+    }
+
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);
         app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
@@ -1186,8 +1191,8 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::functio
         },
         Max<ui32>(),
         Max<ui64>(),
-        0,
-        0,
+        Bucket,
+        TotalBuckets,
         KillOnCommit
     );
 }
@@ -1208,7 +1213,10 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithPipeResets(std::function<v
 
             activeZone = true;
             testScenario(*Runtime, activeZone);
-        }
+        },
+        Max<ui32>(),
+        Bucket,
+        TotalBuckets
     );
 }
 

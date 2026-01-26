@@ -10,7 +10,6 @@
 
 namespace NSQLTranslationV1 {
 
-using NALPDefault::SQLv1LexerTokens;
 using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;

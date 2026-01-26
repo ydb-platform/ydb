@@ -58,16 +58,6 @@ enum EQueryAction {
     QUERY_ACTION_TOPIC = 10;
 };
 
-enum EIsolationLevel {
-    ISOLATION_LEVEL_UNDEFINED = 0;
-    ISOLATION_LEVEL_SERIALIZABLE = 1;
-    ISOLATION_LEVEL_READ_COMMITTED = 2;
-    ISOLATION_LEVEL_READ_UNCOMMITTED = 3;
-    ISOLATION_LEVEL_READ_STALE = 4;
-    ISOLATION_LEVEL_SNAPSHOT_RO = 5;
-    ISOLATION_LEVEL_SNAPSHOT_RW = 6;
-};
-
 message TTopicOperationsRequest {
     optional string Consumer = 1;
     repeated TopicOffsets Topics = 2;
@@ -650,8 +640,8 @@ message TEvStartKqpTasksRequest {
     optional double PoolMaxCpuShare = 12; // used for TCPULimits for ColumnShards
     optional NKikimrDataEvents.ELockMode LockMode = 19;
     optional string UserToken = 20;
+    optional bool SupportShuttingDown = 21 [default = true];
     optional bool EnableWatermarks = 22 [default = false];
-
     reserved 15;
     reserved 16;
     reserved 18;
@@ -672,12 +662,14 @@ message TEvStartKqpTasksResponse {
         QUERY_EXECUTION_UNITS_LIMIT_EXCEEDED = 4;
         // any other error
         INTERNAL_ERROR = 5;
+        NODE_SHUTTING_DOWN = 6;
     }
 
     message TNotStartedTask {
         optional uint64 TaskId = 1;
         optional ENotStartedTaskReason Reason = 2;
         optional string Message = 3;
+        optional uint64 RequestId = 4;
     }
 
     optional uint64 TxId = 1;
@@ -863,6 +855,7 @@ message TReadVectorTopK {
     optional Ydb.Table.VectorIndexSettings Settings = 2;
     optional string TargetVector = 3;
     optional uint32 Limit = 4;
+    repeated uint32 DistinctColumns = 5;
 }
 
 message TKqpStreamLookupSettings {
@@ -882,7 +875,7 @@ message TKqpStreamLookupSettings {
     optional NKikimrDataEvents.ELockMode LockMode = 14;
     optional bool AllowUseFollowers = 15;
     optional bool IsTableImmutable = 16;
-    optional EIsolationLevel IsolationLevel = 17 [default = ISOLATION_LEVEL_UNDEFINED];
+    optional NKqpProto.EIsolationLevel IsolationLevel = 17 [default = ISOLATION_LEVEL_UNDEFINED];
     optional string Database = 18;
     optional TReadVectorTopK VectorTopK = 19;
 }

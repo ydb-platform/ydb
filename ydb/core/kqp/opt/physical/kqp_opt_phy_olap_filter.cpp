@@ -200,6 +200,7 @@ TMaybeNode<TExprBase> YqlIfPushdown(const TCoIf& ifOp, const TExprNode& argument
             .First(std::get<0U>(*params))
             .Second(std::get<1U>(*params))
             .Third(std::get<2U>(*params))
+            .OpType(ExpandType(ifOp.Pos(), *(ifOp.Ptr()->GetTypeAnn()), ctx))
             .Done();
     }
 
@@ -465,6 +466,22 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             out.emplace_back(node.Cast());
         }
         return out;
+    } else if (auto node = nodeIn.Maybe<TCoOr>()) {
+        auto opOr = node.Cast().Ptr();
+        TVector<TExprBase> conditions;
+        for (ui32 i = 0; i < opOr->ChildrenSize(); ++i) {
+            auto argNode = convertNode(TExprBase(opOr->ChildPtr(i)));
+            if (!argNode.IsValid()) {
+                return TVector<TExprBase>();
+            }
+            conditions.push_back(argNode.Cast());
+        }
+        // clang-format off
+        auto result = Build<TKqpOlapOr>(ctx, pos)
+            .Add(conditions)
+        .Done();
+        // clang-format on
+        return {result};
     } else if (const auto& node = convertNode(nodeIn); node.IsValid()) {
         return {node.Cast()};
     } else {
@@ -1112,6 +1129,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             .Done();
     }
 
+    Y_ENSURE(olapFilter.IsValid(), "KqpOlapFilter was not constructed.");
     auto newProcessLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"olap_filter_row"})
         .Body<TExprApplier>()

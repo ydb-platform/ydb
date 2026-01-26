@@ -3413,5 +3413,576 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             "{ items { int32_value: 13 } items { int32_value: 1004 } }");
     }
 
+    Y_UNIT_TEST(UncommittedUpdateLockMissingRow) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001);
+        )");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        UNIT_ASSERT(tableId);
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        // Observe write results and corresponding locks
+        size_t writeResults = 0;
+        std::deque<NKikimrDataEvents::TLock> writeLocks;
+        auto writeResultsObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>(
+            [&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+                auto* msg = ev->Get();
+                for (const auto& lock : msg->Record.GetTxLocks()) {
+                    writeLocks.push_back(lock);
+                }
+                ++writeResults;
+            });
+
+        // Conditionally change UPSERT into UPDATE operations
+        size_t writesChanged = 0;
+        size_t writesObserved = 0;
+        bool changeUpsertToUpdate = false;
+        auto changeUpsertToUpdateObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWrite>(
+            [&](NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+                if (changeUpsertToUpdate) {
+                    auto* msg = ev->Get();
+                    for (auto& op : *msg->Record.MutableOperations()) {
+                        if (op.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT) {
+                            op.SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
+                            ++writesChanged;
+                        }
+                    }
+                }
+                ++writesObserved;
+            });
+
+        // Only a single existing row should be updated
+        // Bug: the missing row was not locked in any way
+        TString sessionId, txId;
+        changeUpsertToUpdate = true;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 2001);
+            )"),
+            "<empty>");
+        changeUpsertToUpdate = false;
+        UNIT_ASSERT_VALUES_EQUAL(writesObserved, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(writesChanged, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(writeResults, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(writeLocks.size(), 1u);
+        {
+            const auto& lock = writeLocks.back();
+            UNIT_ASSERT_C(
+                !lock.GetHasWrites() && lock.GetCounter() < 1000000,
+                "Unexpected lock: " << lock.DebugString());
+        }
+
+        // Upsert a value which conflicts with the update above
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 3001), (3, 3002);
+            )"),
+            "<empty>");
+
+        // Observe current state of the table
+        // Now the above update could only commit after keys 2 and 3 appeared
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 3001 } }, "
+            "{ items { int32_value: 3 } items { int32_value: 3002 } }");
+
+        // Since we cannot possibly commit without also updating 2 the commit must abort
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (3, 2002);
+            )"),
+            "ERROR: ABORTED");
+    }
+
+    Y_UNIT_TEST(UncommittedUpdateLockNewRowAboveSnapshot) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001),
+                (11, 1002);
+        )");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        UNIT_ASSERT(tableId);
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        // Observe write results and corresponding locks
+        size_t writeResults = 0;
+        std::deque<NKikimrDataEvents::TLock> writeLocks;
+        auto writeResultsObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>(
+            [&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+                auto* msg = ev->Get();
+                for (const auto& lock : msg->Record.GetTxLocks()) {
+                    writeLocks.push_back(lock);
+                }
+                ++writeResults;
+            });
+
+        // Conditionally change UPSERT into UPDATE operations
+        size_t writesChanged = 0;
+        size_t writesObserved = 0;
+        bool changeUpsertToUpdate = false;
+        auto changeUpsertToUpdateObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWrite>(
+            [&](NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+                if (changeUpsertToUpdate) {
+                    auto* msg = ev->Get();
+                    for (auto& op : *msg->Record.MutableOperations()) {
+                        if (op.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT) {
+                            op.SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
+                            ++writesChanged;
+                        }
+                    }
+                }
+                ++writesObserved;
+            });
+
+        // Perform a SELECT query which will establish a repeatable read snapshot
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                SELECT key, value FROM `/Root/table` WHERE key = 11;
+            )"),
+            "{ items { int32_value: 11 } items { int32_value: 1002 } }");
+
+        // Make sure timecast advances past the snapshot
+        runtime.SimulateSleep(TDuration::Seconds(2));
+
+        // Upsert some new rows above the snapshot
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 3001), (3, 3002);
+            )"),
+            "<empty>");
+
+        writeResults = 0;
+        writeLocks.clear();
+        writesChanged = 0;
+        writesObserved = 0;
+
+        // Bug: row doesn't exist in the snapshot, but there was no lock and no conflict detection
+        // When fixed the read lock should report "already broken", which would result in an aborted error
+        changeUpsertToUpdate = true;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 2001);
+            )"),
+            "ERROR: ABORTED");
+        changeUpsertToUpdate = false;
+        UNIT_ASSERT_C(writesObserved >= 1u, writesObserved);
+        UNIT_ASSERT_C(writesChanged >= 1u, writesChanged);
+        UNIT_ASSERT_C(writeResults >= 1u, writeResults);
+        UNIT_ASSERT_VALUES_EQUAL(writeLocks.size(), 1u);
+        {
+            const auto& lock = writeLocks.back();
+            UNIT_ASSERT_C(
+                !lock.GetHasWrites() && lock.GetCounter() == TSysTables::TLocksTable::TLock::ErrorAlreadyBroken,
+                "Unexpected lock: " << lock.DebugString());
+        }
+    }
+
+    Y_UNIT_TEST(UncommittedUpdateLockDeletedRowAboveSnapshot) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001),
+                (11, 1002);
+        )");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        UNIT_ASSERT(tableId);
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        // Observe write results and corresponding locks
+        size_t writeResults = 0;
+        std::deque<NKikimrDataEvents::TLock> writeLocks;
+        auto writeResultsObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>(
+            [&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+                auto* msg = ev->Get();
+                for (const auto& lock : msg->Record.GetTxLocks()) {
+                    writeLocks.push_back(lock);
+                }
+                ++writeResults;
+            });
+
+        // Conditionally change UPSERT into UPDATE operations
+        size_t writesChanged = 0;
+        size_t writesObserved = 0;
+        bool changeUpsertToUpdate = false;
+        auto changeUpsertToUpdateObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWrite>(
+            [&](NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+                if (changeUpsertToUpdate) {
+                    auto* msg = ev->Get();
+                    for (auto& op : *msg->Record.MutableOperations()) {
+                        if (op.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT) {
+                            op.SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
+                            ++writesChanged;
+                        }
+                    }
+                }
+                ++writesObserved;
+            });
+
+        // Perform a SELECT query which will establish a repeatable read snapshot
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                SELECT key, value FROM `/Root/table` WHERE key = 11;
+            )"),
+            "{ items { int32_value: 11 } items { int32_value: 1002 } }");
+
+        // Make sure timecast advances past the snapshot
+        runtime.SimulateSleep(TDuration::Seconds(2));
+
+        // Delete an existing row above the snapshot
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                DELETE FROM `/Root/table` WHERE key = 1;
+            )"),
+            "<empty>");
+
+        writeResults = 0;
+        writeLocks.clear();
+        writesChanged = 0;
+        writesObserved = 0;
+
+        // Row exists in the snapshot, but the update doesn't make sense since it would never be able to commit
+        changeUpsertToUpdate = true;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                UPSERT INTO `/Root/table` (key, value) VALUES (1, 2001);
+            )"),
+            "ERROR: ABORTED");
+        changeUpsertToUpdate = false;
+        UNIT_ASSERT_C(writesObserved >= 1u, writesObserved);
+        UNIT_ASSERT_C(writesChanged >= 1u, writesChanged);
+        UNIT_ASSERT_C(writeResults >= 1u, writeResults);
+        UNIT_ASSERT_VALUES_EQUAL(writeLocks.size(), 1u);
+        {
+            const auto& lock = writeLocks.back();
+            UNIT_ASSERT_C(
+                !lock.GetHasWrites() && lock.GetCounter() == TSysTables::TLocksTable::TLock::ErrorAlreadyBroken,
+                "Unexpected lock: " << lock.DebugString());
+        }
+    }
+
+    Y_UNIT_TEST(UncommittedUpdateLockUncommittedNewRow) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001),
+                (11, 1002);
+        )");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        UNIT_ASSERT(tableId);
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        // Observe write results and corresponding locks
+        size_t writeResults = 0;
+        std::deque<NKikimrDataEvents::TLock> writeLocks;
+        auto writeResultsObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>(
+            [&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+                auto* msg = ev->Get();
+                for (const auto& lock : msg->Record.GetTxLocks()) {
+                    writeLocks.push_back(lock);
+                }
+                ++writeResults;
+            });
+
+        // Conditionally change UPSERT into UPDATE operations
+        size_t writesChanged = 0;
+        size_t writesObserved = 0;
+        bool changeUpsertToUpdate = false;
+        auto changeUpsertToUpdateObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWrite>(
+            [&](NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+                if (changeUpsertToUpdate) {
+                    auto* msg = ev->Get();
+                    for (auto& op : *msg->Record.MutableOperations()) {
+                        if (op.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT) {
+                            op.SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
+                            ++writesChanged;
+                        }
+                    }
+                }
+                ++writesObserved;
+            });
+
+        // Perform a SELECT query which will establish a repeatable read snapshot
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                SELECT key, value FROM `/Root/table` WHERE key = 11;
+            )"),
+            "{ items { int32_value: 11 } items { int32_value: 1002 } }");
+
+        // Make sure timecast advances past the snapshot
+        runtime.SimulateSleep(TDuration::Seconds(2));
+
+        // Upsert some new rows above the snapshot
+        TString sessionId2, txId2;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId2, txId2, R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 3001), (3, 3002);
+            )"),
+            "<empty>");
+
+        writeResults = 0;
+        writeLocks.clear();
+        writesChanged = 0;
+        writesObserved = 0;
+
+        // Row doesn't exist in the snapshot and there's a chance for tx to commit
+        // The conflict with tx2 must be recorded however
+        changeUpsertToUpdate = true;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 2001);
+            )"),
+            "<empty>");
+        changeUpsertToUpdate = false;
+        UNIT_ASSERT_C(writesObserved == 1u, writesObserved);
+        UNIT_ASSERT_C(writesChanged == 1u, writesChanged);
+        UNIT_ASSERT_C(writeResults == 1u, writeResults);
+        UNIT_ASSERT_VALUES_EQUAL(writeLocks.size(), 1u);
+        {
+            const auto& lock = writeLocks.back();
+            UNIT_ASSERT_C(
+                !lock.GetHasWrites() && lock.GetCounter() < 1000000,
+                "Unexpected lock: " << lock.DebugString());
+        }
+
+        // Now we commit tx2, which makes it impossible to commit tx1
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId2, txId2, R"(
+                SELECT 1;
+            )"),
+            "{ items { int32_value: 1 } }");
+
+        // Trying to commit tx1 should fail with an aborted error now
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (3, 2002);
+            )"),
+            "ERROR: ABORTED");
+    }
+
+    Y_UNIT_TEST(UncommittedUpdateLockUncommittedDeleteRow) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001),
+                (11, 1002);
+        )");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        UNIT_ASSERT(tableId);
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        // Observe write results and corresponding locks
+        size_t writeResults = 0;
+        std::deque<NKikimrDataEvents::TLock> writeLocks;
+        auto writeResultsObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>(
+            [&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+                auto* msg = ev->Get();
+                for (const auto& lock : msg->Record.GetTxLocks()) {
+                    writeLocks.push_back(lock);
+                }
+                ++writeResults;
+            });
+
+        // Conditionally change UPSERT into UPDATE operations
+        size_t writesChanged = 0;
+        size_t writesObserved = 0;
+        bool changeUpsertToUpdate = false;
+        auto changeUpsertToUpdateObserver = runtime.AddObserver<NEvents::TDataEvents::TEvWrite>(
+            [&](NEvents::TDataEvents::TEvWrite::TPtr& ev) {
+                if (changeUpsertToUpdate) {
+                    auto* msg = ev->Get();
+                    for (auto& op : *msg->Record.MutableOperations()) {
+                        if (op.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT) {
+                            op.SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE);
+                            ++writesChanged;
+                        }
+                    }
+                }
+                ++writesObserved;
+            });
+
+        // Perform a SELECT query which will establish a repeatable read snapshot
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                SELECT key, value FROM `/Root/table` WHERE key = 11;
+            )"),
+            "{ items { int32_value: 11 } items { int32_value: 1002 } }");
+
+        // Make sure timecast advances past the snapshot
+        runtime.SimulateSleep(TDuration::Seconds(2));
+
+        // Delete a row in an uncommitted transaction
+        TString sessionId2, txId2;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId2, txId2, R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                DELETE FROM `/Root/table` WHERE key = 1;
+            )"),
+            "<empty>");
+        UNIT_ASSERT_VALUES_EQUAL(writeResults, 1u);
+
+        writeResults = 0;
+        writeLocks.clear();
+        writesChanged = 0;
+        writesObserved = 0;
+
+        // Row with key=1 exist in the snapshot and must be updated (might commit later)
+        // The conflict with tx2 must be recorded however
+        changeUpsertToUpdate = true;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, R"(
+                PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+                UPSERT INTO `/Root/table` (key, value) VALUES (1, 2001);
+            )"),
+            "<empty>");
+        changeUpsertToUpdate = false;
+        UNIT_ASSERT_C(writesObserved == 1u, writesObserved);
+        UNIT_ASSERT_C(writesChanged == 1u, writesChanged);
+        UNIT_ASSERT_C(writeResults == 1u, writeResults);
+        UNIT_ASSERT_VALUES_EQUAL(writeLocks.size(), 1u);
+        {
+            const auto& lock = writeLocks.back();
+            UNIT_ASSERT_C(
+                lock.GetHasWrites() && lock.GetCounter() < 1000000,
+                "Unexpected lock: " << lock.DebugString());
+        }
+
+        // Now we commit tx2, which makes it impossible to commit tx1
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId2, txId2, R"(
+                SELECT 1;
+            )"),
+            "{ items { int32_value: 1 } }");
+
+        // Trying to commit tx1 should fail with an aborted error now
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 2002);
+            )"),
+            "ERROR: ABORTED");
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

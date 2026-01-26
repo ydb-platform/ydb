@@ -262,7 +262,8 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    std::string_view suffix)
+    std::string_view suffix,
+    bool withForeign)
 {
     auto tableColumns = ExtractInfo(baseTable);
     THashSet<TString> indexColumns = indexDataColumns;
@@ -274,11 +275,18 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     implTableDesc.SetName(TString::Join(NKMeans::PostingTable, suffix));
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
     {
-        auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NKMeans::ParentColumn);
-        parentColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
-        parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
-        parentColumn->SetNotNull(true);
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NKMeans::ParentColumn);
+        col->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
+        col->SetTypeId(NSchemeShard::ClusterIdTypeId);
+        col->SetNotNull(true);
+    }
+    if (withForeign) {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NKMeans::IsForeignColumn);
+        col->SetType(NTableIndex::NKMeans::IsForeignTypeName);
+        col->SetTypeId(NTableIndex::NKMeans::IsForeignType);
+        col->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NKMeans::ParentColumn);
     FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
@@ -310,6 +318,54 @@ auto CalcVectorKmeansTreePrefixImplTableDescImpl(
         idColumn->SetDefaultFromSequence(NKMeans::IdColumnSequence);
     }
     implTableDesc.AddKeyColumnNames(NKMeans::IdColumn);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+auto CalcVectorKmeansTreeBuildOverlapTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix)
+{
+    auto tableColumns = ExtractInfo(baseTable);
+    THashSet<TString> indexColumns = indexDataColumns;
+    for (const auto & keyColumn: tableColumns.Keys) {
+        indexColumns.insert(keyColumn);
+    }
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(TString::Join(NKMeans::PostingTable, suffix));
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NKMeans::ParentColumn);
+        col->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
+        col->SetTypeId(NSchemeShard::ClusterIdTypeId);
+        col->SetNotNull(true);
+    }
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NKMeans::DistanceColumn);
+        col->SetType(NTableIndex::NKMeans::DistanceTypeName);
+        col->SetTypeId(NTableIndex::NKMeans::DistanceType);
+        col->SetNotNull(true);
+    }
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName(NKMeans::IsForeignColumn);
+        col->SetType(NTableIndex::NKMeans::IsForeignTypeName);
+        col->SetTypeId(NTableIndex::NKMeans::IsForeignType);
+        col->SetNotNull(true);
+    }
+
+    FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
+    // ParentColumn in the end of the key
+    implTableDesc.AddKeyColumnNames(NKMeans::ParentColumn);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
 
@@ -387,9 +443,10 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    std::string_view suffix)
+    std::string_view suffix,
+    bool withForeign)
 {
-    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix);
+    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix, withForeign);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
@@ -399,7 +456,7 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix)
 {
-    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix);
+    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix, false);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
@@ -420,6 +477,16 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc)
 {
     return CalcVectorKmeansTreePrefixImplTableDescImpl(indexKeyColumns, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeBuildOverlapTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix)
+{
+    return CalcVectorKmeansTreeBuildOverlapTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix);
 }
 
 bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TColumnTypes& columnTypes, TString& explain) {

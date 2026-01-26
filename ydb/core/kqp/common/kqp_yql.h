@@ -60,6 +60,7 @@ struct TKqpStreamLookupSettings {
     static constexpr TStringBuf VectorTopIndexSettingName = "VectorTopIndex";
     static constexpr TStringBuf VectorTopLimitSettingName = "VectorTopLimit";
     static constexpr TStringBuf VectorTopTargetSettingName = "VectorTopTarget";
+    static constexpr TStringBuf VectorTopDistinctSettingName = "VectorTopDistinct";
 
     // stream lookup strategy types
     static constexpr std::string_view LookupStrategyName = "LookupRows"sv;
@@ -76,11 +77,15 @@ struct TKqpStreamLookupSettings {
     TExprNode::TPtr VectorTopTarget;
     TExprNode::TPtr VectorTopLimit;
 
+    bool VectorTopDistinct = false;
+
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
     static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupTable& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupIndex& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TKqpCnStreamLookup& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TCoNameValueTupleList& node);
+    static bool HasVectorTopDistinct(const NNodes::TKqlStreamLookupTable& node);
+    static bool HasVectorTopDistinct(const NNodes::TCoNameValueTupleList& node);
 };
 
 struct TKqpDeleteRowsIndexSettings {
@@ -130,6 +135,10 @@ public:
     static constexpr TStringBuf TabletIdName = "TabletId";
     static constexpr TStringBuf PointPrefixLenSettingName = "PointPrefixLen";
     static constexpr TStringBuf IndexSelectionDebugInfoSettingName = "IndexSelectionDebugInfo";
+    static constexpr TStringBuf VectorTopKColumnSettingName = "VectorTopKColumn";
+    static constexpr TStringBuf VectorTopKMetricSettingName = "VectorTopKMetric";
+    static constexpr TStringBuf VectorTopKTargetSettingName = "VectorTopKTarget";
+    static constexpr TStringBuf VectorTopKLimitSettingName = "VectorTopKLimit";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
@@ -138,6 +147,12 @@ public:
     bool ForcePrimary = false;
     ui64 PointPrefixLen = 0;
     THashMap<TString, TString> IndexSelectionInfo;
+
+    // Vector top-K pushdown settings for brute force vector search
+    TString VectorTopKColumn;
+    TString VectorTopKMetric;
+    TExprNode::TPtr VectorTopKTarget;
+    TExprNode::TPtr VectorTopKLimit;
 
     void AddSkipNullKey(const TString& key);
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }

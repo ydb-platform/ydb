@@ -37,6 +37,91 @@ using namespace NYql::NNodes;
 
 namespace {
 
+// Helper function to set VectorTopK metric from string
+void SetVectorTopKMetric(Ydb::Table::VectorIndexSettings* indexSettings, const TString& metric) {
+    if (metric == "CosineDistance") {
+        indexSettings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+    } else if (metric == "CosineSimilarity") {
+        indexSettings->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE);
+    } else if (metric == "InnerProductSimilarity") {
+        indexSettings->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
+    } else if (metric == "ManhattanDistance") {
+        indexSettings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN);
+    } else if (metric == "EuclideanDistance") {
+        indexSettings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
+    } else {
+        YQL_ENSURE(false, "Unrecognized VectorTopK metric: " << metric);
+    }
+}
+
+// Helper function to set VectorTopK target vector expression
+void SetVectorTopKTarget(NKqpProto::TKqpPhyValue* targetProto, const TExprNode::TPtr& targetExpr) {
+    TExprBase expr(targetExpr);
+    if (expr.Maybe<TCoString>()) {
+        auto* literal = targetProto->MutableLiteralValue();
+        literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+        literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
+        literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+    } else if (expr.Maybe<TCoParameter>()) {
+        targetProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+    } else {
+        YQL_ENSURE(false, "Unexpected VectorTopKTarget callable '" << expr.Ref().Content()
+            << "'. Expected TCoString or TCoParameter.");
+    }
+}
+
+// Helper function to set VectorTopK limit expression
+void SetVectorTopKLimit(NKqpProto::TKqpPhyValue* limitProto, const TExprNode::TPtr& limitExpr) {
+    TExprBase expr(limitExpr);
+    if (expr.Maybe<TCoUint64>()) {
+        auto* literal = limitProto->MutableLiteralValue();
+        literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+        literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+        literal->MutableValue()->SetUint64(FromString<ui64>(expr.Cast<TCoUint64>().Literal().Value()));
+    } else if (expr.Maybe<TCoParameter>()) {
+        limitProto->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+    } else {
+        YQL_ENSURE(false, "Unexpected VectorTopKLimit callable '" << expr.Ref().Content()
+            << "'. Expected TCoUint64 or TCoParameter.");
+    }
+}
+
+// Helper function to fill VectorTopK settings
+template <typename TColumnsRange>
+void FillVectorTopKSettings(
+    NKqpProto::TKqpPhyVectorTopK& vectorTopK,
+    const TKqpReadTableSettings& settings,
+    const TColumnsRange& columns)
+{
+    // Find column index
+    ui32 columnIdx = 0;
+    bool columnFound = false;
+    for (const auto& col : columns) {
+        if (col.Value() == settings.VectorTopKColumn) {
+            columnFound = true;
+            break;
+        }
+        columnIdx++;
+    }
+    YQL_ENSURE(columnFound, "VectorTopK column " << settings.VectorTopKColumn << " not found in read columns");
+    vectorTopK.SetColumn(columnIdx);
+
+    // Set the metric settings
+    auto* indexSettings = vectorTopK.MutableSettings();
+    SetVectorTopKMetric(indexSettings, settings.VectorTopKMetric);
+
+    // Default vector settings: when vector_dimension is 0, actual type and dimension
+    // will be auto-detected from the target vector's format at runtime.
+    indexSettings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+    indexSettings->set_vector_dimension(0);
+
+    // Set target vector
+    SetVectorTopKTarget(vectorTopK.MutableTargetVector(), settings.VectorTopKTarget);
+
+    // Set limit
+    SetVectorTopKLimit(vectorTopK.MutableLimit(), settings.VectorTopKLimit);
+}
+
 NKqpProto::TKqpPhyTx::EType GetPhyTxType(const EPhysicalTxType& type) {
     switch (type) {
         case EPhysicalTxType::Compute: return NKqpProto::TKqpPhyTx::TYPE_COMPUTE;
@@ -393,7 +478,7 @@ void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& ta
 }
 
 template <typename TReader, typename TProto>
-void FillReadRanges(const TReader& read, const TKikimrTableMetadata&, TProto& readProto) {
+void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta*/, TProto& readProto) {
     auto ranges = read.Ranges().template Maybe<TCoParameter>();
 
     if (ranges.IsValid()) {
@@ -428,6 +513,13 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata&, TProto& re
         readProto.SetSorted(settings.IsSorted());
         if (settings.TabletId) {
             readProto.SetTabletId(*settings.TabletId);
+        }
+    }
+
+    // Handle VectorTopK settings for brute force vector search
+    if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadRanges>) {
+        if (settings.VectorTopKColumn) {
+            FillVectorTopKSettings(*readProto.MutableVectorTopK(), settings, read.Columns());
         }
     }
 
@@ -646,6 +738,9 @@ public:
 
         queryProto.SetForceImmediateEffectsExecution(
             Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+
+        queryProto.SetDefaultTxMode(
+            Config->DefaultTxMode.Get().GetOrElse(NKqpProto::ISOLATION_LEVEL_UNDEFINED));
 
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
         queryProto.SetEnableWatermarks(Config->EnableWatermarks);
@@ -1167,6 +1262,11 @@ private:
                     YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content());
                 }
             }
+
+            // Handle VectorTopK settings for brute force vector search
+            if (readSettings.VectorTopKColumn) {
+                FillVectorTopKSettings(*readProto.MutableVectorTopK(), readSettings, settings.Columns().Cast());
+            }
         } else {
             YQL_ENSURE(false, "Unsupported source type");
         }
@@ -1491,15 +1591,21 @@ private:
         *vectorTopK.MutableSettings() = kmeansDesc.GetSettings().Getsettings();
 
         // Column index
+        THashMap<TStringBuf, ui32> readColumnIndexes;
         ui32 columnIdx = 0;
         for (const auto& column: streamLookupProto.GetColumns()) {
-            if (column == settings.VectorTopColumn) {
-                break;
-            }
-            columnIdx++;
+            readColumnIndexes[column] = columnIdx++;
         }
-        YQL_ENSURE(columnIdx < streamLookup.Columns().Size());
-        vectorTopK.SetColumn(columnIdx);
+        YQL_ENSURE(readColumnIndexes.contains(settings.VectorTopColumn));
+        vectorTopK.SetColumn(readColumnIndexes.at(settings.VectorTopColumn));
+
+        // Unique columns - required when we read from the index posting table and overlap is enabled
+        if (settings.VectorTopDistinct) {
+            for (const auto& keyColumn: mainTable->Metadata->KeyColumnNames) {
+                YQL_ENSURE(readColumnIndexes.contains(keyColumn));
+                vectorTopK.AddDistinctColumns(readColumnIndexes.at(keyColumn));
+            }
+        }
 
         // Limit - may be a parameter which will be linked later
         TExprBase expr(settings.VectorTopLimit);
@@ -1813,6 +1919,8 @@ private:
             // Index settings
             auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
             *vectorResolveProto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
+            vectorResolveProto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
+            vectorResolveProto.SetOverlapRatio(kmeansDesc.GetSettings().overlap_ratio());
 
             // Main table
             FillTablesMap(vectorResolve.Table(), tablesMap);

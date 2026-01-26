@@ -26,6 +26,10 @@ public:
         , Compression(compression) {
     }
 
+    explicit TTierConfig(const TTierProto& config)
+        : ProtoConfig(config) {
+    }
+
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto);
 
     NJson::TJsonValue SerializeConfigToJson() const;

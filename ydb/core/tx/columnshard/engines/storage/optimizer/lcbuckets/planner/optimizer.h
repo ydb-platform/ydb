@@ -67,12 +67,12 @@ protected:
         return false;
     }
 
-    virtual void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         std::vector<std::vector<TPortionInfo::TPtr>> removePortionsByLevel;
         removePortionsByLevel.resize(Levels.size());
         std::vector<std::vector<TPortionInfo::TPtr>> addPortionsByLevels;
         addPortionsByLevels.resize(Levels.size());
-        for (auto&& [_, i] : remove) {
+        for (auto&& i : remove) {
             if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
             }
@@ -81,7 +81,7 @@ protected:
             removePortionsByLevel[i->GetCompactionLevel()].emplace_back(i);
         }
         std::vector<TPortionInfo::TPtr> problemPortions;
-        for (auto&& [_, i] : add) {
+        for (auto&& i : add) {
             if (i->GetProduced() == NPortion::EProduced::EVICTED) {
                 continue;
             }

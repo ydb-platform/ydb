@@ -7,6 +7,7 @@ import "ydb/core/scheme/protos/key_range.proto";
 import "ydb/core/scheme/protos/pathid.proto";
 import "ydb/core/protos/data_events.proto";
 import "ydb/core/protos/kqp.proto";
+import "ydb/core/protos/kqp_physical.proto";
 import "ydb/library/formats/arrow/protos/ssa.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tx.proto";
@@ -273,6 +274,10 @@ message TKqpReadRangesSourceSettings {
     optional bool IsBatch = 22 [default = false];
 
     optional bool IsTableImmutable = 23 [default = false];
+    optional NKqpProto.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
+
+    // Vector top-K pushdown for brute force vector search
+    optional NKikimrKqp.TReadVectorTopK VectorTopK = 26;
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -306,6 +311,13 @@ message TKqpVectorResolveSettings {
 
     // Input root cluster ID column (for the prefixed index)
     optional uint32 RootClusterColumnIndex = 16;
+
+    // Database name for KqpReadActor
+    optional string Database = 17;
+
+    // Parameters for finding overlapping clusters (multiple clusters per row)
+    optional uint32 OverlapClusters = 18;
+    optional double OverlapRatio = 19;
 }
 
 message TKqpTaskInfo {
@@ -1610,6 +1622,12 @@ message TEvLocalKMeansRequest {
     repeated string DataColumns = 20;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 22;
+
+    optional string DatabaseName = 23;
+
+    optional uint32 OverlapClusters = 24;
+    optional double OverlapRatio = 25;
+    optional bool OverlapOutForeign = 26;
 }
 
 message TEvLocalKMeansResponse {
@@ -1658,6 +1676,12 @@ message TEvReshuffleKMeansRequest {
     repeated string DataColumns = 15;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 16;
+
+    optional string DatabaseName = 17;
+
+    optional uint32 OverlapClusters = 18;
+    optional double OverlapRatio = 19;
+    optional bool OverlapOutForeign = 20;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1696,6 +1720,8 @@ message TEvRecomputeKMeansRequest {
     repeated string Clusters = 10;
 
     optional string EmbeddingColumn = 11;
+
+    optional bool SkipOverlapForeign = 12;
 }
 
 message TEvRecomputeKMeansResponse {
@@ -1724,7 +1750,7 @@ message TEvIncrementalRestoreResponse {
         RETRY = 1;
         ERROR = 2;
     }
-    
+
     optional uint64 TxId = 1;
     optional uint64 TableId = 2;
     optional uint64 OperationId = 3;
@@ -1769,6 +1795,12 @@ message TEvPrefixKMeansRequest {
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 18;
 
     repeated string SourcePrimaryKeyColumns = 19;
+
+    optional string DatabaseName = 20;
+
+    optional uint32 OverlapClusters = 21;
+    optional double OverlapRatio = 22;
+    optional bool OverlapOutForeign = 23;
 }
 
 message TEvPrefixKMeansResponse {
@@ -1785,6 +1817,58 @@ message TEvPrefixKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+}
+
+// Copy rows from an intermediate build table with more than <OverlapClusters> overlapping clusters
+// to another build or posting table with UP TO <OverlapClusters> overlapping clusters.
+// Source columns: <PK columns>, __ydb_parent, __ydb_foreign, __ydb_distance, <data columns>
+// Build destination columns: __ydb_parent, <PK columns>, __ydb_foreign, <data columns in the same order>
+// Posting destination columns: __ydb_parent, <PK columns>, <data columns in the same order>
+message TEvFilterKMeansRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 SnapshotTxId = 4;
+    optional uint64 SnapshotStep = 5;
+
+    optional uint64 SeqNoGeneration = 6;
+    optional uint64 SeqNoRound = 7;
+
+    optional EKMeansState Upload = 8;
+    optional string OutputName = 9;
+    optional string DatabaseName = 10;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
+
+    optional uint32 OverlapClusters = 12;
+    optional double OverlapRatio = 13;
+
+    // When the source build table split point is in the middle of a key, first and last keys
+    // in the shard require cross-shard filtering which is performed by the scheme shard
+    // and thus not copied directly but returned to the schemeshard
+    optional bool SkipFirstKey = 14;
+    optional bool SkipLastKey = 15;
+}
+
+message TEvFilterKMeansResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 RequestSeqNoGeneration = 4;
+    optional uint64 RequestSeqNoRound = 5;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 6;
+    repeated Ydb.Issue.IssueMessage Issues = 7;
+
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 8;
+
+    // First and last key rows if skipped in the scan
+    repeated bytes FirstKeyRows = 9;
+    repeated bytes LastKeyRows = 10;
 }
 
 message TEvCdcStreamScanRequest {

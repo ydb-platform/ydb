@@ -306,38 +306,12 @@ private:
     std::shared_ptr<TTxController::ITransactionOperator> TxOperator;
 };
 
-class TAbortWriteTransaction: public NTabletFlatExecutor::TTransactionBase<TColumnShard> {
-private:
-    using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
-
-public:
-    TAbortWriteTransaction(TColumnShard* self, const ui64 txId, const TActorId source, const ui64 cookie)
-        : TBase(self)
-        , TxId(txId)
-        , Source(source)
-        , Cookie(cookie) {
+void TColumnShard::ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie) {
+    if (auto lock = OperationsManager->GetLockOptional(op->GetLockId()); lock) {
+        lock->SetTxId(op->GetTxId());
     }
-
-    virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        Self->GetOperationsManager().AbortTransactionOnExecute(*Self, TxId, txc);
-        return true;
-    }
-
-    virtual void Complete(const TActorContext& ctx) override {
-        LWPROBE(EvWriteResult, Self->TabletID(), Source.ToString(), TxId, Cookie, "abort", true, "");
-        Self->GetOperationsManager().AbortTransactionOnComplete(*Self, TxId);
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), TxId);
-        ctx.Send(Source, result.release(), 0, Cookie);
-    }
-    TTxType GetTxType() const override {
-        return TXTYPE_PROPOSE;
-    }
-
-private:
-    ui64 TxId;
-    TActorId Source;
-    ui64 Cookie;
-};
+    Execute(new TProposeWriteTransaction(this, op, source, cookie));
+}
 
 void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     TMemoryProfileGuard mpg("NEvents::TDataEvents::TEvWrite");
@@ -376,7 +350,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     if (behaviour == EOperationBehaviour::AbortWriteLock) {
         LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "AbortWriteLock", true, false, ToString(NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED), "");
-        Execute(new TAbortWriteTransaction(this, record.GetLocks().GetLocks()[0].GetLockId(), source, cookie), ctx);
+        auto lockId = record.GetLocks().GetLocks()[0].GetLockId();
+        TransactionToAbort(lockId);
+        // answer kqp right away, the actual aborting may happen later (or might already happened)
+        LWPROBE(EvWriteResult, TabletID(), source.ToString(), lockId, cookie, "abort", true, "");
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(TabletID(), lockId);
+        ctx.Send(source, result.release(), 0, cookie);
         return;
     }
 
@@ -386,6 +365,25 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), record.GetTxId(), status, message);
         ctx.Send(source, result.release(), 0, cookie);
     };
+
+    if (behaviour == EOperationBehaviour::WriteWithLock) {
+        if (auto lock = OperationsManager->GetLockOptional(record.GetLockTxId()); lock && lock->NeedsAborting()) {
+            sendError("lock is already aborted", NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+            return;
+        }
+    }
+
+    const auto inFlightLocksRangesBytes = NOlap::TPKRangeFilter::GetFiltersTotalMemorySize();
+    const ui64 inFlightLocksRangesBytesLimit = AppDataVerified().ColumnShardConfig.GetInFlightLocksRangesBytesLimit();
+    if (behaviour == EOperationBehaviour::WriteWithLock && inFlightLocksRangesBytes > inFlightLocksRangesBytesLimit) {
+        TransactionToAbort(record.GetLockTxId());
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "In flight locks ranges bytes limit exceeded")
+            ("inFlightLocksRangesBytes", inFlightLocksRangesBytes)
+            ("inFlightLocksRangesBytesLimit", inFlightLocksRangesBytesLimit);
+        sendError("overloaded by in flight locks ranges memory limit", NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        return;
+    }
+
     if (behaviour == EOperationBehaviour::CommitWriteLock) {
         auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
         auto conclusionParse = commitOperation->Parse(*ev->Get());
@@ -427,10 +425,10 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                                 " != " + ::ToString(commitOperation->GetInternalGenerationCounter()),
                             NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
                     } else {
-                        Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
+                        ProposeTransaction(commitOperation, source, cookie);
                     }
                 } else {
-                    Execute(new TProposeWriteTransaction(this, commitOperation, source, cookie), ctx);
+                    ProposeTransaction(commitOperation, source, cookie);
                 }
             }
         }
@@ -542,6 +540,8 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     } else {
         lockId = record.GetLockTxId();
     }
+    // Serializable by default
+    NKikimrDataEvents::ELockMode lockMode = record.HasLockMode() ? record.GetLockMode() : NKikimrDataEvents::OPTIMISTIC;
 
     const bool isBulk = operation.HasIsBulk() && operation.GetIsBulk();
 
@@ -551,13 +551,13 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         auto snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(mvccSnapshot);
         if (snapshotSchema->GetVersion() != schema->GetVersion()) {
             const TString errorMessage = TStringBuilder() << "schema version mismatch with snapshot: "
-                << "tx_id=" << record.GetTxId() 
+                << "tx_id=" << record.GetTxId()
                 << ", snapshot=" << mvccSnapshot
                 << ", snapshot_schema_version=" << snapshotSchema->GetVersion()
                 << ", request_schema_version=" << schema->GetVersion()
                 << ", table_id=" << schemeShardLocalPathId
                 << ", lock_id=" << lockId;
-            
+
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "schema_version_mismatch")
                 ("tx_id", record.GetTxId())
                 ("snapshot", TStringBuilder() << mvccSnapshot)
@@ -568,7 +568,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                 ("path_id", pathId)
                 ("source", source.ToString())
                 ("cookie", cookie);
-            
+
             LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false,
                 operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), errorMessage);
             sendError(errorMessage, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
@@ -578,7 +578,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
 
-    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, *mType, behaviour, writeTimeout, record.GetTxId(),
+    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, lockMode, record.GetLockNodeId(), *mType, behaviour, writeTimeout, record.GetTxId(),
         isBulk, record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>()));
     WriteTasksQueue->Drain(false, ctx);
 }

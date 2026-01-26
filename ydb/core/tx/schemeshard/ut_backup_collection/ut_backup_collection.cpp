@@ -1622,10 +1622,10 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         runtime.AdvanceCurrentTime(TDuration::Seconds(1));
 
-        // TEvDataEnd should be received before TEvHandshake with writer
+        // TEvTerminateWriter should be received before TEvHandshake with writer
         TBlockEvents<NReplication::NService::TEvWorker::TEvHandshake> block(runtime);
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NReplication::NService::TEvWorker::TEvDataEnd::EventType) {
+            if (ev->GetTypeRewrite() == NReplication::NService::TEvWorker::TEvTerminateWriter::EventType) {
                 block.Unblock();
             }
             return TTestActorRuntime::EEventAction::PROCESS;

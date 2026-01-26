@@ -1,14 +1,10 @@
 #include "query_utils.h"
 
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
-#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr3/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr3_ansi/proto_parser.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
@@ -110,7 +106,7 @@ struct TTokenCollector {
     void operator()(const NProtoBuf::Message& message) {
         if (const auto* token = dynamic_cast<const TToken*>(&message)) {
             const auto& value = token->GetValue();
-            if (token->GetId() != NALPDefault::SQLv1LexerTokens::TOKEN_EOF) {
+            if (token->GetValue() != "<EOF>") {
                 if (!Tokens.empty()) {
                     Tokens << ' ';
                 }
@@ -220,19 +216,40 @@ TString GetDatabase(const TString& query) {
     return GetToken(query, R"(-- database: ")");
 }
 
-TString GetSecretName(const TString& query) {
-    TString secretName;
-    if (auto pwd = GetToken(query, R"(PASSWORD_SECRET_NAME = ')")) {
-        secretName = std::move(pwd);
-    } else if (auto token = GetToken(query, R"(TOKEN_SECRET_NAME = ')")) {
-        secretName = std::move(token);
+TVector<TSecretSetting> GetSecretSettings(const TString& query) {
+    static const TVector<TString> SECRET_SETTING_NAMES = [] {
+        static const TVector<TString> settings = {
+            "TOKEN_SECRET",
+            "PASSWORD_SECRET",
+            "SERVICE_ACCOUNT_SECRET",
+            "AWS_ACCESS_KEY_ID_SECRET",
+            "AWS_SECRET_ACCESS_KEY_SECRET",
+        };
+        TVector<TString> result;
+        for (const auto& name : settings) {
+            result.push_back(name + "_NAME");
+            result.push_back(name + "_PATH");
+        }
+
+        return result;
+    }();
+
+    TVector<TSecretSetting> result;
+    for (const auto& settingName : SECRET_SETTING_NAMES) {
+        auto secretSettingValue = GetToken(query, settingName + " = '");
+        if (!secretSettingValue) {
+            continue;
+        }
+        if (secretSettingValue.EndsWith("'")) {
+            secretSettingValue.resize(secretSettingValue.size() - 1);
+        }
+        result.push_back(TSecretSetting{
+            .Name = settingName,
+            .Value = secretSettingValue,
+        });
     }
 
-    if (secretName.EndsWith("'")) {
-        secretName.resize(secretName.size() - 1);
-    }
-
-    return secretName;
+    return result;
 }
 
 bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::TIssues& issues) {
@@ -246,8 +263,6 @@ bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::T
     }
 
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
-    parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
     parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
@@ -269,13 +284,9 @@ bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues
     settings.Arena = &arena;
 
     NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
-    lexers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiLexerFactory();
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
-    parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
     parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
@@ -313,11 +324,11 @@ bool RewriteRefs(TString& queryStr, TStringBuf db, TStringBuf backupRoot, TStrin
 }
 
 bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, NYql::TIssues& issues) {
-    return RewriteRefs<TRule_table_ref>(query, "", backupRoot, restoreRoot, issues);
+    return RewriteRefs<TRule_an_id_table>(query, "", backupRoot, restoreRoot, issues);
 }
 
 bool RewriteTableRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {
-    return RewriteRefs<TRule_table_ref>(query, GetDatabase(query), GetBackupRoot(query), restoreRoot, issues);
+    return RewriteRefs<TRule_an_id_table>(query, GetDatabase(query), GetBackupRoot(query), restoreRoot, issues);
 }
 
 bool RewriteObjectRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {

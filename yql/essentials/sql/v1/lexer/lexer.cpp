@@ -2,8 +2,6 @@
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/parser/lexer_common/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
@@ -51,11 +49,7 @@ private:
     }
 
     static NSQLTranslation::TLexerFactoryPtr GetMaybeFactory(const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor) {
-        if (!ansi && !antlr4 && flavor == ELexerFlavor::Default) {
-            return lexers.Antlr3;
-        } else if (ansi && !antlr4 && flavor == ELexerFlavor::Default) {
-            return lexers.Antlr3Ansi;
-        } else if (!ansi && antlr4 && flavor == ELexerFlavor::Default) {
+        if (!ansi && antlr4 && flavor == ELexerFlavor::Default) {
             return lexers.Antlr4;
         } else if (ansi && antlr4 && flavor == ELexerFlavor::Default) {
             return lexers.Antlr4Ansi;

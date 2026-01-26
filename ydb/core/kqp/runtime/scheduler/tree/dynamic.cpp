@@ -27,33 +27,52 @@ TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStati
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
     newQuery->Demand = Demand.load();
+
+    // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction
+    const auto burstUsage = BurstUsage.load();
+    const auto burstUsageResume = BurstUsageResume.load();
+    const auto burstUsageExtra = BurstUsageExtra.load();
+    const auto burstThrottle = BurstThrottle.load();
+    newQuery->BurstUsage += burstUsage - PrevBurstUsage;
+    newQuery->BurstUsage += burstUsageResume - PrevBurstUsageResume;
+    newQuery->BurstUsage += burstUsageExtra - PrevBurstUsageExtra;
+    newQuery->BurstThrottle = burstThrottle - PrevBurstThrottle;
+    PrevBurstUsage = burstUsage;
+    PrevBurstUsageResume = burstUsageResume;
+    PrevBurstUsageExtra = burstUsageExtra;
+    PrevBurstThrottle = burstThrottle;
+
     newQuery->Usage = Usage.load();
     return newQuery;
 }
 
 TSchedulableTaskList::iterator TQuery::AddTask(const TSchedulableTaskPtr& task) {
-    TWriteGuard lock(TasksMutex);
+    TGuard lock(TasksMutex);
     return SchedulableTasks.emplace(SchedulableTasks.end(), task, false);
 }
 
-void TQuery::RemoveTask(const TSchedulableTaskList::iterator& it) {
-    TWriteGuard lock(TasksMutex);
-    SchedulableTasks.erase(it);
-}
-
 ui32 TQuery::ResumeTasks(ui32 count) {
-    TReadGuard lock(TasksMutex);
+    TTryGuard lock(TasksMutex);
     ui32 run = 0;
+
+    if (!lock) {
+        // Either tasks are resumed somewhere else - which is ok, or we're adding new task - which is infrequent event.
+        return run;
+    }
 
     count = std::min<ui32>(count, SchedulableTasks.size());
     count = std::min<ui32>(count, Throttle);
 
-    for (auto it = SchedulableTasks.begin(); run < count && it != SchedulableTasks.end(); ++it) {
-        if (it->second) {
-            if (auto task = it->first.lock()) {
+    for (auto it = SchedulableTasks.begin(); run < count && it != SchedulableTasks.end();) {
+        if (auto task = it->first.lock()) {
+            if (it->second) {
                 task->Resume();
                 ++run;
             }
+            ++it;
+        } else {
+            // Lazy removal is acceptable since the query initially has constant number of tasks.
+            it = SchedulableTasks.erase(it);
         }
     }
 
@@ -84,6 +103,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters->Demand       = group->GetCounter("Demand",       false); // snapshot
     Counters->InFlight     = group->GetCounter("InFlight",     false);
     Counters->Waiting      = group->GetCounter("Waiting",      false);
+    Counters->Queries      = group->GetCounter("Queries",      false);
     Counters->Usage        = group->GetCounter("Usage",        true);
     Counters->UsageResume  = group->GetCounter("UsageResume",  true);
     Counters->Throttle     = group->GetCounter("Throttle",     true);
@@ -94,6 +114,8 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
 
     Counters->Delay = group->GetHistogram("Delay",
         NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
+
+    Counters->AdjustedSatisfaction = group->GetCounter("AdjustedSatisfaction", true); // snapshot
 }
 
 NSnapshot::TPool* TPool::TakeSnapshot() {
@@ -113,6 +135,9 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
     }
 
     if (IsLeaf()) {
+        if (Counters) {
+            Counters->Queries->Set(ChildrenSize());
+        }
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
             newPool->AddQuery(NSnapshot::TQueryPtr(query->TakeSnapshot()));
         });

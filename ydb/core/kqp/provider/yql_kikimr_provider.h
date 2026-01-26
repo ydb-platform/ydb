@@ -458,7 +458,7 @@ public:
 public:
     THashMap<TString, TYdbOperations> TableOperations;
     THashMap<TKikimrPathId, TString> TableByIdMap;
-    TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
+    TMaybe<NKqpProto::EIsolationLevel> EffectiveIsolationLevel;
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
     bool Readonly = false;
     bool Invalidated = false;

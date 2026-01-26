@@ -8,7 +8,7 @@
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <library/cpp/protobuf/util/simple_reflection.h>
@@ -124,6 +124,11 @@ private:
         }
         case TRule_table_hint::kAltTableHint4: {
             const auto& alt = msg.GetAlt_table_hint4();
+            Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
+            break;
+        }
+        case TRule_table_hint::kAltTableHint5: {
+            const auto& alt = msg.GetAlt_table_hint5();
             Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
             break;
         }

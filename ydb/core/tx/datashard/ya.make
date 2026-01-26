@@ -220,6 +220,7 @@ SRCS(
 
     build_index/prefix_kmeans.cpp
     build_index/kmeans_helper.cpp
+    build_index/filter_kmeans.cpp
     build_index/local_kmeans.cpp
     build_index/sample_k.cpp
     build_index/secondary_index.cpp

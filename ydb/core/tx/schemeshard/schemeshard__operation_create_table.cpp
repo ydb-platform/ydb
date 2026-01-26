@@ -58,8 +58,8 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
                       const TVector<ui32>& keyColIds,
                       const TVector<NScheme::TTypeInfo>& keyColTypeIds,
                       TString& errStr,
-                      TVector<TTableShardInfo>& partitions,
-                      const TSchemeLimits& limits) {
+                      TVector<TTableShardInfo>& partitions)
+{
     ui32 partitionCount = 1;
     if (op.HasUniformPartitionsCount()) {
         partitionCount = op.GetUniformPartitionsCount();
@@ -67,8 +67,8 @@ bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
         partitionCount = op.SplitBoundarySize() + 1;
     }
 
-    if (partitionCount == 0 || partitionCount > limits.MaxShardsInPath) {
-        errStr = Sprintf("Invalid partition count specified: %u", partitionCount);
+    if (partitionCount == 0) {
+        errStr = Sprintf("Invalid table partition count specified: %u", partitionCount);
         return false;
     }
 
@@ -109,8 +109,8 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
                         const NKikimrSchemeOp::TTableDescription& op,
                         const NScheme::TTypeRegistry* typeRegistry,
                         TString& errStr,
-                        TVector<TTableShardInfo>& partitions,
-                        const TSchemeLimits& limits) {
+                        TVector<TTableShardInfo>& partitions)
+{
     const TVector<ui32>& keyColIds = tableInfo->KeyColumnIds;
     if (keyColIds.size() == 0) {
         errStr = Sprintf("No key columns specified");
@@ -130,7 +130,7 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
         keyColTypeIds.push_back(type);
     }
 
-    if (!InitPartitioning(op, typeRegistry, keyColIds, keyColTypeIds, errStr, partitions, limits)) {
+    if (!InitPartitioning(op, typeRegistry, keyColIds, keyColTypeIds, errStr, partitions)) {
         return false;
     }
 
@@ -586,7 +586,7 @@ public:
 
         std::optional<TString> defaultPoolKind = InferDefaultPoolKind(domainInfo->EffectiveStoragePools(), schema.GetPartitionConfig());
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), AppData(), isServerless, errStr)
+        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), schema.GetColumns(), AppData(), isServerless, errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
@@ -625,7 +625,7 @@ public:
 
         TVector<TTableShardInfo> partitions;
 
-        if (!DoInitPartitioning(tableInfo, schema, typeRegistry, errStr, partitions, domainInfo->GetSchemeLimits())) {
+        if (!DoInitPartitioning(tableInfo, schema, typeRegistry, errStr, partitions)) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
         }

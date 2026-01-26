@@ -1343,8 +1343,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     it->second.PartitionsLocked.Inc();
     it->second.PartitionsInfly.Inc();
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign"
-        << ": record# " << record);
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX
+        << " user=" << (Token ? Token->GetUserSID() : "-")
+        << " topic=" << converter->GetPrintableString()
+        << " assign: record# " << record);
 
     ctx.Send(actorId, new TEvPQProxy::TEvLockPartition(0, {}, false, false));
 }
@@ -1444,7 +1446,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " sending to client partition status");
-    SendControlMessage(it->second.Partition, std::move(result), ctx);
+    SendControlMessage(it->second.Partition, std::move(result), ctx, false);
 }
 
 template <bool UseMigrationProtocol>
@@ -1487,11 +1489,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvUpdateSessio
 
 
 template <bool UseMigrationProtocol>
-bool TReadSessionActor<UseMigrationProtocol>::SendControlMessage(TPartitionId id, TServerMessage&& message, const TActorContext& ctx) {
+bool TReadSessionActor<UseMigrationProtocol>::SendControlMessage(TPartitionId id, TServerMessage&& message, const TActorContext& ctx, bool buffer) {
     id.AssignId = 0;
 
     auto it = PartitionToControlMessages.find(id);
-    if (it == PartitionToControlMessages.end()) {
+    if (!buffer || it == PartitionToControlMessages.end()) {
         return WriteToStreamOrDie(ctx, std::move(message));
     } else {
         AFL_ENSURE(it->second.Infly);
@@ -2447,26 +2449,26 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
     auto& topic = it->second;
     NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
 
+    TPartitionActorInfo* partitionInfo = nullptr;
+    for (auto& [_, p] : Partitions) {
+        if (p.Partition.Partition == msg->PartitionId) {
+            partitionInfo = &p;
+            break;
+        }
+    }
+
+    if (!partitionInfo) {
+        return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
+            << "Inconsistent state #04", ctx);
+    }
+
+    partitionInfo->EndOffset = msg->EndOffset;
+    partitionInfo->ReadingFinished = true;
+
+    NotifyChildren(*partitionInfo, ctx);
+
     if constexpr (!UseMigrationProtocol) {
         if (AutoPartitioningSupport) {
-            TPartitionActorInfo* partitionInfo = nullptr;
-            for (auto& [_, p] : Partitions) {
-                if (p.Partition.Partition == msg->PartitionId) {
-                    partitionInfo = &p;
-                    break;
-                }
-            }
-
-            if (!partitionInfo) {
-                return CloseSession(PersQueue::ErrorCode::ERROR, TStringBuilder()
-                    << "Inconsistent state #04", ctx);
-            }
-
-            partitionInfo->EndOffset = msg->EndOffset;
-            partitionInfo->ReadingFinished = true;
-
-            NotifyChildren(*partitionInfo, ctx);
-
             TServerMessage result;
             result.set_status(Ydb::StatusIds::SUCCESS);
             auto* r = result.mutable_end_partition_session();

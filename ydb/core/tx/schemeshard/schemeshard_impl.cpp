@@ -5098,6 +5098,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     ConfigureStatsOperations(appData->SchemeShardConfig, ctx);
     MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
     MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
+    MaxTTLShardsInFlight = appData->SchemeShardConfig.GetMaxTTLShardsInFlight();
 
     SendStatsIntervalSecondsDedicated = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsDedicated();
     SendStatsIntervalSecondsServerless = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsServerless();
@@ -5371,6 +5372,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvRecomputeKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvFilterKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
@@ -7619,6 +7621,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         newPartitioningSet.reserve(newPartitioning.size());
         const auto& oldPartitioning = tableInfo->GetPartitions();
 
+        TInstant now = AppData()->TimeProvider->Now();
         for (const auto& p: newPartitioning) {
             if (!oldPartitioning.empty())
                 newPartitioningSet.insert(p.ShardIdx);
@@ -7627,7 +7630,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
             auto it = partitionStats.find(p.ShardIdx);
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
-                UpdateShardMetrics(p.ShardIdx, it->second);
+                UpdateShardMetrics(p.ShardIdx, it->second, now);
             }
         }
 
@@ -7752,6 +7755,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         ConfigureStatsOperations(schemeShardConfig, ctx);
         MaxCdcInitialScanShardsInFlight = schemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
         MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
+        MaxTTLShardsInFlight = schemeShardConfig.GetMaxTTLShardsInFlight();
     }
 
     if (appConfig.HasTableProfilesConfig()) {

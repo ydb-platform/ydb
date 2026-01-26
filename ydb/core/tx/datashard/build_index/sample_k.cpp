@@ -49,6 +49,8 @@ protected:
     const TSerializedTableRange TableRange;
     const TSerializedTableRange RequestedRange;
     const ui64 K;
+    bool SkipForeign = false;
+    NTable::TPos IsForeignPos = 0;
 
     ui64 TabletId = 0;
     ui64 BuildId = 0;
@@ -88,6 +90,16 @@ public:
     {
         LOG_I("Create " << Debug());
 
+        NTable::TPos pos = 0;
+        for (const auto& col: request.GetColumns()) {
+            if (col == NTableIndex::NKMeans::IsForeignColumn) {
+                SkipForeign = true;
+                IsForeignPos = pos;
+                break;
+            }
+            pos++;
+        }
+
         auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
 
         if (scanRange.From) {
@@ -126,9 +138,28 @@ public:
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
-        Sampler.Add([&row](){
-            return TSerializedCellVec::Serialize(*row);
-        });
+        if (SkipForeign) {
+            bool foreign = (*row).at(IsForeignPos).AsValue<bool>();
+            if (foreign) {
+                // Skip rows from "non-domestic" clusters to not affect K-means centroids
+                return EScan::Feed;
+            }
+            TVector<TCell> cells;
+            NTable::TPos pos = 0;
+            for (const auto& cell: *row) {
+                if (pos != IsForeignPos) {
+                    cells.push_back(cell);
+                }
+                pos++;
+            }
+            Sampler.Add([&cells](){
+                return TSerializedCellVec::Serialize(cells);
+            });
+        } else {
+            Sampler.Add([&row](){
+                return TSerializedCellVec::Serialize(*row);
+            });
+        }
 
         if (Sampler.GetMaxProbability() == 0) {
             return EScan::Final;

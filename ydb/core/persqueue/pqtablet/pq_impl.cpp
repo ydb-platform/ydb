@@ -1821,6 +1821,8 @@ void TPersQueue::HandleUpdateWriteTimestampRequest(const ui64 responseCookie, NW
 void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
+    auto& pqConfig = AppData(ctx)->PQConfig;
+
     PQ_ENSURE(req.CmdWriteSize());
     MeteringSink.MayFlush(ctx.Now()); // To ensure hours' border;
     if (Config.GetMeteringMode() != NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
@@ -1879,6 +1881,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 it->second.Inc(cmd.ByteSize());
         }
 
+        ui64 createTimestampMs = 0;
+        ui64 writeTimestampMs = 0;
+
         TString errorStr = "";
         if (!cmd.HasSeqNo() && !req.GetIsDirectWrite()) {
             errorStr = "no SeqNo";
@@ -1910,14 +1915,18 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "Too big Heartbeat";
         } else if (cmd.HasHeartbeat() && cmd.HasTotalParts() && cmd.GetTotalParts() != 1) {
             errorStr = "Heartbeat must be a single-part message";
-        }
-        ui64 createTimestampMs = 0, writeTimestampMs = 0;
-        if (cmd.HasCreateTimeMS() && cmd.GetCreateTimeMS() >= 0)
-            createTimestampMs = cmd.GetCreateTimeMS();
-        if (cmd.HasWriteTimeMS() && cmd.GetWriteTimeMS() > 0) {
-            writeTimestampMs = cmd.GetWriteTimeMS();
-            if (!cmd.GetDisableDeduplication()) {
-                errorStr = "WriteTimestamp avail only without deduplication";
+        } else if (cmd.GetData().size() > pqConfig.GetMaxMessageSizeBytes()) {
+            errorStr = TStringBuilder() << "Too big message. Max message size is " << pqConfig.GetMaxMessageSizeBytes()
+                << " bytes, but got " << cmd.GetData().size() << " bytes";
+        } else {
+            if (cmd.HasCreateTimeMS() && cmd.GetCreateTimeMS() >= 0) {
+                createTimestampMs = cmd.GetCreateTimeMS();
+            }
+            if (cmd.HasWriteTimeMS() && cmd.GetWriteTimeMS() > 0) {
+                writeTimestampMs = cmd.GetWriteTimeMS();
+                if (!cmd.GetDisableDeduplication()) {
+                    errorStr = "WriteTimestamp avail only without deduplication";
+                }
             }
         }
 
@@ -5204,8 +5213,10 @@ void TPersQueue::BeginDeletePartitions(const TWriteId& writeId, TTxWriteInfo& wr
         PQ_LOG_TX_D("Already deleting WriteInfo");
         return;
     }
+    writeInfo.Deleting = true;
     if (writeInfo.Partitions.empty()) {
         TryDeleteWriteId(writeId, writeInfo, ActorContext());
+        TxWritesChanged = true;
     } else {
         for (auto& [_, partitionId] : writeInfo.Partitions) {
             PQ_ENSURE(Partitions.contains(partitionId));
@@ -5214,7 +5225,6 @@ void TPersQueue::BeginDeletePartitions(const TWriteId& writeId, TTxWriteInfo& wr
             Send(partition.Actor, new TEvPQ::TEvDeletePartition);
         }
     }
-    writeInfo.Deleting = true;
 }
 
 void TPersQueue::BeginDeletePartitions(const TDistributedTransaction& tx)

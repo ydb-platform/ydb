@@ -29,19 +29,28 @@ using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
+    constexpr int F_NULLABLE        = 1 << 0;
+    constexpr int F_COVERING        = 1 << 1;
+    constexpr int F_UNDERSCORE_DATA = 1 << 2;
+    constexpr int F_BIT_VECTOR      = 1 << 3;
+    constexpr int F_NON_PARTITIONED = 1 << 4;
+    constexpr int F_RETURNING       = 1 << 5;
+    constexpr int F_SIMILARITY      = 1 << 6;
+    constexpr int F_OVERLAP         = 1 << 7;
+
     NYdb::NTable::TDataQueryResult ExecuteDataQuery(TSession& session, const TString& query) {
         const auto txSettings = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
         return session.ExecuteDataQuery(query, txSettings,
             TExecDataQuerySettings().KeepInQueryCache(true).CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
     }
 
-    std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, TTxSettings txSettings, const TString& query, bool covered = false) {
+    std::vector<i64> DoPositiveQueryVectorIndex(TSession& session, TTxSettings txSettings, const TString& query, int flags = 0) {
         {
             auto result = session.ExplainDataQuery(query).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(),
                 "Failed to explain: `" << query << "` with " << result.GetIssues().ToString());
 
-            if (covered) {
+            if (flags & F_COVERING) {
                 // Check that the query doesn't use main table
                 NJson::TJsonValue plan;
                 NJson::ReadJsonTree(result.GetPlan(), &plan, true);
@@ -71,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    void DoPositiveQueriesVectorIndex(TSession& session, TTxSettings txSettings, const TString& mainQuery, const TString& indexQuery, bool covered = false) {
+    void DoPositiveQueriesVectorIndex(TSession& session, TTxSettings txSettings, const TString& mainQuery, const TString& indexQuery, int flags = 0) {
         auto toStr = [](const auto& rs) -> TString {
             TStringBuilder b;
             for (const auto& r : rs) {
@@ -84,7 +93,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_EQUAL_C(mainResults.size(), 3, toStr(mainResults));
         UNIT_ASSERT_C(std::unique(mainResults.begin(), mainResults.end()) == mainResults.end(), toStr(mainResults));
 
-        auto indexResults = DoPositiveQueryVectorIndex(session, txSettings, indexQuery, covered);
+        auto indexResults = DoPositiveQueryVectorIndex(session, txSettings, indexQuery, flags);
         absl::c_sort(indexResults);
         UNIT_ASSERT_EQUAL_C(indexResults.size(), 3, toStr(indexResults));
         UNIT_ASSERT_C(std::unique(indexResults.begin(), indexResults.end()) == indexResults.end(), toStr(indexResults));
@@ -99,9 +108,11 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         std::string_view direction,
         std::string_view left,
         std::string_view right,
-        bool covered = false
+        int flags = 0
     ) {
-        constexpr std::string_view target = "$target = \"\x67\x71\x03\";";
+        constexpr std::string_view uint8Target = "$target = \"\x67\x71\x03\";";
+        constexpr std::string_view bitTarget = "$target = \"\x3F\x02\x0A\";";
+        const std::string_view target = flags & F_BIT_VECTOR ? bitTarget : uint8Target;
         std::string metric = std::format("Knn::{}({}, {})", function, left, right);
         // no metric in result
         {
@@ -117,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 ORDER BY {} {}
                 LIMIT 3;
             )", target, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, txSettings, plainQuery, indexQuery, covered);
+            DoPositiveQueriesVectorIndex(session, txSettings, plainQuery, indexQuery, flags);
         }
         // metric in result
         {
@@ -132,7 +143,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 ORDER BY {} {}
                 LIMIT 3;
             )", target, metric, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, txSettings, plainQuery, indexQuery, covered);
+            DoPositiveQueriesVectorIndex(session, txSettings, plainQuery, indexQuery, flags);
         }
         // metric as result
         {
@@ -148,7 +159,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 ORDER BY m {}
                 LIMIT 3;
             )", target, metric, direction)));
-            DoPositiveQueriesVectorIndex(session, txSettings, plainQuery, indexQuery, covered);
+            DoPositiveQueriesVectorIndex(session, txSettings, plainQuery, indexQuery, flags);
         }
     }
 
@@ -157,31 +168,32 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         TTxSettings txSettings,
         std::string_view function,
         std::string_view direction,
-        bool covered = false) {
+        int flags = 0) {
         // target is left, member is right
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "$target", "emb", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "$target", "emb", flags);
         // target is right, member is left
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "emb", "$target", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "emb", "$target", flags);
     }
 
     void DoPositiveQueriesVectorIndexOrderByCosine(
         TSession& session,
-        TTxSettings txSettings = TTxSettings::SerializableRW(),
-        bool covered = false) {
+        int flags = 0,
+        TTxSettings txSettings = TTxSettings::SerializableRW()) {
         // distance, default direction
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "", flags);
         // distance, asc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "ASC", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "ASC", flags);
         // similarity, desc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineSimilarity", "DESC", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineSimilarity", "DESC", flags);
     }
 
-    TSession DoOnlyCreateTableForVectorIndex(TTableClient& db, bool nullable, const TString& dataCol = "data", bool partitioned = true) {
+    TSession DoOnlyCreateTableForVectorIndex(TTableClient& db, int flags = 0) {
+        const char* dataCol = flags & F_UNDERSCORE_DATA ? "___data" : "data";
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         {
             auto tableBuilder = db.GetTableBuilder();
-            if (nullable) {
+            if (flags & F_NULLABLE) {
                 tableBuilder
                     .AddNullableColumn("pk", EPrimitiveType::Int64)
                     .AddNullableColumn("emb", EPrimitiveType::String)
@@ -193,7 +205,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     .AddNonNullableColumn(dataCol, EPrimitiveType::String);
             }
             tableBuilder.SetPrimaryKeyColumns({"pk"});
-            if (partitioned) {
+            if (!(flags & F_NON_PARTITIONED)) {
                 tableBuilder.BeginPartitioningSettings()
                     .SetMinPartitionsCount(3)
                 .EndPartitioningSettings();
@@ -210,8 +222,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         return session;
     }
 
-    TSession DoCreateTableForVectorIndex(TTableClient& db, bool nullable, const TString& dataCol = "data") {
-        auto session = DoOnlyCreateTableForVectorIndex(db, nullable, dataCol);
+    TSession DoCreateTableForVectorIndex(TTableClient& db, int flags = 0) {
+        const char* dataCol = flags & F_UNDERSCORE_DATA ? "___data" : "data";
+        auto session = DoOnlyCreateTableForVectorIndex(db, flags);
         {
             const TString query1 = TStringBuilder()
                 << "UPSERT INTO `/Root/TestTable` (pk, emb, " << dataCol << ") VALUES "
@@ -233,27 +246,92 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         return session;
     }
 
-    void DoCreateVectorIndex(TSession& session, bool covered = false, bool ___data = false) {
+    void DoCreateVectorIndex(TSession& session, int flags = 0) {
         // Add an index
         const TString createIndex(Q_(Sprintf(R"(
             ALTER TABLE `/Root/TestTable`
                 ADD INDEX index1
                 GLOBAL USING vector_kmeans_tree
                 ON (emb)%s
-                WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-        )", covered ? (___data ? " COVER (___data, emb)" : " COVER (data, emb)") : "")));
+                WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2%s);
+            )", (flags & F_COVERING) ? ((flags & F_UNDERSCORE_DATA) ? " COVER (___data, emb)" : " COVER (data, emb)") : "",
+            (flags & F_OVERLAP) ? ", overlap_clusters=2" : "")));
 
         auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
-    TSession DoCreateTableAndVectorIndex(TTableClient& db, bool nullable, bool covered = false, bool ___data = false) {
-        auto session = DoCreateTableForVectorIndex(db, nullable, ___data ? "___data" : "data");
-        DoCreateVectorIndex(session, covered, ___data);
+    TSession DoCreateTableAndVectorIndex(TTableClient& db, int flags = 0) {
+        auto session = DoCreateTableForVectorIndex(db, flags);
+        DoCreateVectorIndex(session, flags);
         return session;
     }
 
-    Y_UNIT_TEST_QUAD(OrderByCosineLevel1, Nullable, UseSimilarity) {
+    void DoCheckOverlap(TSession& session, const TString& indexName) {
+        // Check number of rows in the posting table (should be 2x input rows)
+        {
+            const TString query1(Q_(Sprintf(R"(
+                SELECT COUNT(*), COUNT(DISTINCT pk) FROM `/Root/TestTable/%s/indexImplPostingTable`;
+            )", indexName.c_str())));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[20u;10u]]");
+        }
+
+        // Check that a select query without main table PK columns works
+        // (it didn't because UniqueColumns filtering pushdown requires PK columns in the result)
+        {
+            const TString query1(Q1_(Sprintf(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                $target = "\x67\x71\x03";
+                SELECT data FROM `/Root/TestTable` VIEW %s
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT 3;
+            )", indexName.c_str())));
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "Failed to execute: `" << query1 << "` with " << result.GetIssues().ToString());
+        }
+    }
+
+    // Test that vector index queries work when selecting only non-PK columns
+    Y_UNIT_TEST_TWIN(VectorIndexSelectWithoutPkColumns, Overlap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        const int flags = (Overlap ? F_OVERLAP : 0);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, flags);
+
+        // Query selecting only 'data' column (not PK columns)
+        {
+            const TString query1(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                $target = "\x67\x71\x03";
+                SELECT data FROM `/Root/TestTable` VIEW index1
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT 3;
+            )"));
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "Failed to execute: `" << query1 << "` with " << result.GetIssues().ToString());
+        }
+    }
+
+    void DoTestOrderByCosine(ui32 indexLevels, int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -266,15 +344,19 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForVectorIndex(db, Nullable);
+        auto session = DoCreateTableForVectorIndex(db, flags);
         {
             const TString createIndex(Q_(Sprintf(R"(
                 ALTER TABLE `/Root/TestTable`
                     ADD INDEX index
                     GLOBAL USING vector_kmeans_tree
-                    ON (emb)
-                    WITH (%s=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
-            )", UseSimilarity ? "similarity" : "distance")));
+                    ON (emb)%s
+                    WITH (%s=cosine, vector_type="uint8", vector_dimension=2, levels=%d, clusters=2%s);
+                )",
+                (flags & F_COVERING ? " COVER (data, emb)" : ""),
+                (flags & F_SIMILARITY ? "similarity" : "distance"),
+                indexLevels,
+                (flags & F_OVERLAP ? ", overlap_clusters=2" : ""))));
 
             auto result = session.ExecuteSchemeQuery(createIndex)
                           .ExtractValueSync();
@@ -288,16 +370,27 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_EQUAL(indexes.size(), 1);
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            if (flags & F_COVERING) {
+                std::vector<std::string> indexDataColumns{"data", "emb"};
+                UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), indexDataColumns);
+            }
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, UseSimilarity
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, flags & F_SIMILARITY
                 ? NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity
                 : NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-            UNIT_ASSERT_EQUAL(settings.Levels, 1);
+            UNIT_ASSERT_EQUAL(settings.Levels, indexLevels);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+            UNIT_ASSERT_EQUAL(settings.OverlapClusters, (flags & F_OVERLAP) ? 2 : 0);
+            UNIT_ASSERT_EQUAL(settings.OverlapRatio, 0);
         }
-        DoPositiveQueriesVectorIndexOrderByCosine(session);
+
+        if (flags & F_OVERLAP) {
+            DoCheckOverlap(session, "index");
+        }
+
+        DoPositiveQueriesVectorIndexOrderByCosine(session, flags);
 
         {
             const TString dropIndex(Q_("ALTER TABLE `/Root/TestTable` DROP INDEX index"));
@@ -306,51 +399,32 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    Y_UNIT_TEST_QUAD(OrderByCosineLevel1, Nullable, UseSimilarity) {
+        DoTestOrderByCosine(1, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0));
+    }
+
+    Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithOverlap, Nullable, Covered) {
+        DoTestOrderByCosine(1, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    }
+
     Y_UNIT_TEST_QUAD(OrderByCosineLevel2, Nullable, UseSimilarity) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
+        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0));
+    }
 
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+    Y_UNIT_TEST_TWIN(OrderByCosineLevel2WithCover, Nullable) {
+        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING);
+    }
 
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForVectorIndex(db, Nullable);
-        {
-            const TString createIndex(Q_(Sprintf(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (emb)
-                    WITH (%s=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )", UseSimilarity ? "similarity" : "distance")));
+    Y_UNIT_TEST_QUAD(OrderByCosineLevel2WithOverlap, Nullable, Covered) {
+        DoTestOrderByCosine(2, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
+    }
 
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
+    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3) {
+        DoTestOrderByCosine(3, 0);
+    }
 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_EQUAL(indexes.size(), 1);
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
-            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, UseSimilarity
-                ? NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity
-                : NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-            UNIT_ASSERT_EQUAL(settings.Levels, 2);
-            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
-        }
-        DoPositiveQueriesVectorIndexOrderByCosine(session);
+    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3WithOverlap) {
+        DoTestOrderByCosine(3, F_OVERLAP);
     }
 
     Y_UNIT_TEST(OrderByNoUnwrap) {
@@ -365,8 +439,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
+        const int flags = F_NULLABLE;
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableAndVectorIndex(db, true);
+        auto session = DoCreateTableAndVectorIndex(db, flags);
 
         {
             const TString query1(Q1_(R"(
@@ -399,52 +474,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForVectorIndex(db, false);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (emb)
-                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_EQUAL(indexes.size(), 1);
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
-            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-            UNIT_ASSERT_EQUAL(settings.Levels, 3);
-            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
-        }
-        // TODO: fix somehow?
-        // DoPositiveQueriesVectorIndexOrderByCosine(session);
-    }
-
     Y_UNIT_TEST(BuildIndexTimesAndUser) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
@@ -462,7 +491,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             .SetDatabase("/Root")
             .SetAuthToken("root@builtin"));
         auto db = NYdb::NTable::TTableClient(driver);
-        auto session = DoCreateTableForVectorIndex(db, false);
+        auto session = DoCreateTableForVectorIndex(db);
         {
             const TString createIndex(Q_(R"(
                 ALTER TABLE `/Root/TestTable`
@@ -500,8 +529,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
+        const int flags = F_NULLABLE;
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableAndVectorIndex(db, true);
+        auto session = DoCreateTableAndVectorIndex(db, flags);
 
         const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
 
@@ -526,7 +556,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_bulk);
     }
 
-    void DoTestVectorIndexDelete(const TString& deleteQuery, bool returning, bool covered) {
+    void DoTestVectorIndexDelete(const TString& deleteQuery, int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -537,14 +567,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
+        flags |= F_NULLABLE;
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableAndVectorIndex(db, true, covered);
+        auto session = DoCreateTableAndVectorIndex(db, flags);
 
         {
             auto result = session.ExecuteDataQuery(deleteQuery, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            if (returning) {
+            if (flags & F_RETURNING) {
                 UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"vv\\3\"];[9]]]");
             }
         }
@@ -562,37 +593,39 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexDeletePk, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexDeletePk, Covered, Overlap) {
         // DELETE WHERE from the table with index should succeed
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=9;)"), false, Covered);
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=9;)"),
+            (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexDeleteFilter, Covered) {
         // DELETE WHERE with non-PK filter from the table with index should succeed
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9";)"), false, Covered);
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9";)"), (Covered ? F_COVERING : 0));
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexDeleteOn, Covered) {
         // DELETE ON from the table with index should succeed too (it uses a different code path)
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk`;)"), false, Covered);
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk`;)"), (Covered ? F_COVERING : 0));
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexDeletePkReturning, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexDeletePkReturning, Covered, Overlap) {
         // DELETE WHERE from the table with index should succeed
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=9 RETURNING data, emb, pk;)"), true, Covered);
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE pk=9 RETURNING data, emb, pk;)"),
+            F_RETURNING | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexDeleteFilterReturning, Covered) {
         // DELETE WHERE with non-PK filter from the table with index should succeed
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9" RETURNING data, emb, pk;)"), true, Covered);
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` WHERE data="9" RETURNING data, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0));
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexDeleteOnReturning, Covered) {
         // DELETE ON from the table with index should succeed too (it uses a different code path)
-        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk` RETURNING data, emb, pk;)"), true, Covered);
+        DoTestVectorIndexDelete(Q_(R"(DELETE FROM `/Root/TestTable` ON SELECT 9 AS `pk` RETURNING data, emb, pk;)"), F_RETURNING | (Covered ? F_COVERING : 0));
     }
 
-    void DoTestVectorIndexInsert(bool returning, bool covered) {
+    void DoTestVectorIndexInsert(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -603,8 +636,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
+        flags |= F_NULLABLE;
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableAndVectorIndex(db, true, covered);
+        auto session = DoCreateTableAndVectorIndex(db, flags);
 
         const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
 
@@ -613,15 +647,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             TString query1(Q_(R"(
                 INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
                 (10, "\x11\x62\x03", "10"),
-                (11, "\x77\x75\x03", "11")
+                (11, "\x75\x77\x03", "11")
             )"));
-            query1 += (returning ? " RETURNING data, emb, pk;" : ";");
+            query1 += (flags & F_RETURNING ? " RETURNING data, emb, pk;" : ";");
 
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            if (returning) {
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"10\"];[\"\\021b\\3\"];[10]];[[\"11\"];[\"wu\\3\"];[11]]]");
+            if (flags & F_RETURNING) {
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"10\"];[\"\\021b\\3\"];[10]];[[\"11\"];[\"uw\\3\"];[11]]]");
             }
         }
 
@@ -643,15 +677,20 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u];[1u]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
+                (flags & F_OVERLAP ? "[[2u];[2u]]" : "[[1u];[1u]]"));
         }
     }
 
     Y_UNIT_TEST_QUAD(VectorIndexInsert, Returning, Covered) {
-        DoTestVectorIndexInsert(Returning, Covered);
+        DoTestVectorIndexInsert((Returning ? F_RETURNING : 0) | (Covered ? F_COVERING : 0));
     }
 
-    void DoTestVectorIndexUpdateNoChange(bool covered, bool ___data) {
+    Y_UNIT_TEST_QUAD(VectorIndexInsertWithOverlap, Returning, Covered) {
+        DoTestVectorIndexInsert(F_OVERLAP | (Returning ? F_RETURNING : 0) | (Covered ? F_COVERING : 0));
+    }
+
+    void DoTestVectorIndexUpdateNoChange(int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -662,14 +701,15 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
+        flags |= F_NULLABLE;
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableAndVectorIndex(db, true, covered, ___data);
+        auto session = DoCreateTableAndVectorIndex(db, flags);
 
         TString orig = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
 
         // Update to the table with index should succeed (but embedding does not change)
         {
-            const TString query1(Q_(___data
+            const TString query1(Q_(flags & F_UNDERSCORE_DATA
                 ? "UPDATE `/Root/TestTable` SET `___data`=\"20\" WHERE `pk`=9;"
                 : "UPDATE `/Root/TestTable` SET `data`=\"20\" WHERE `pk`=9;"
             ));
@@ -680,26 +720,26 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
 
         const TString updated = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
-        if (covered) {
+        if (flags & F_COVERING) {
             SubstGlobal(orig, "\"9\"", "\"20\"");
         }
         UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
     }
 
-    Y_UNIT_TEST(VectorIndexUpdateNoChange) {
-        DoTestVectorIndexUpdateNoChange(false, false);
+    Y_UNIT_TEST_TWIN(VectorIndexUpdateNoChange, Overlap) {
+        DoTestVectorIndexUpdateNoChange((Overlap ? F_OVERLAP : 0));
     }
 
-    Y_UNIT_TEST(VectorIndexUpdateNoChangeCovered) {
-        DoTestVectorIndexUpdateNoChange(true, false);
+    Y_UNIT_TEST_TWIN(VectorIndexUpdateNoChangeCovered, Overlap) {
+        DoTestVectorIndexUpdateNoChange(F_COVERING | (Overlap ? F_OVERLAP : 0));
     }
 
     // Similar to VectorIndexUpdateNoChange, but data column is named ___data to make it appear before __ydb_parent in struct types
-    Y_UNIT_TEST(VectorIndexUpdateColumnOrder) {
-        DoTestVectorIndexUpdateNoChange(true, true);
+    Y_UNIT_TEST_TWIN(VectorIndexUpdateColumnOrder, Overlap) {
+        DoTestVectorIndexUpdateNoChange(F_COVERING | F_UNDERSCORE_DATA | (Overlap ? F_OVERLAP : 0));
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdateNoClusterChange, Covered) {
+    Y_UNIT_TEST_QUAD(VectorIndexUpdateNoClusterChange, Covered, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -710,8 +750,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
+        const int flags = F_NULLABLE | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0);
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableAndVectorIndex(db, true, Covered);
+        auto session = DoCreateTableAndVectorIndex(db, flags);
 
         TString orig = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
 
@@ -733,7 +774,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
     }
 
-    void DoTestVectorIndexUpdateClusterChange(const TString& updateQuery, bool returning, bool covered) {
+    void DoTestVectorIndexUpdateClusterChange(const TString& updateQuery, int flags) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -744,8 +785,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
 
+        flags |= F_NULLABLE;
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableAndVectorIndex(db, true, covered);
+        auto session = DoCreateTableAndVectorIndex(db, flags);
 
         const TString orig = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
 
@@ -754,7 +796,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             auto result = session.ExecuteDataQuery(updateQuery, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            if (returning) {
+            if (flags & F_RETURNING) {
                 UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"\\0031\\3\"];[9]]]");
             }
         }
@@ -771,36 +813,43 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u]]");
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)),
+                (flags & F_OVERLAP ? "[[2u]]" : "[[1u]]"));
         }
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdatePkClusterChange, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9;)"), false, Covered);
+    Y_UNIT_TEST_QUAD(VectorIndexUpdatePkClusterChange, Covered, Overlap) {
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9;)"),
+            (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpdateFilterClusterChange, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9";)"), false, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9";)"),
+            (Covered ? F_COVERING : 0));
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpsertClusterChange, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9");)"), false, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9");)"),
+            (Covered ? F_COVERING : 0));
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexUpdatePkClusterChangeReturning, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9 RETURNING `data`, `emb`, `pk`;)"), true, Covered);
+    Y_UNIT_TEST_QUAD(VectorIndexUpdatePkClusterChangeReturning, Covered, Overlap) {
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9 RETURNING `data`, `emb`, `pk`;)"),
+            F_RETURNING | (Covered ? F_COVERING : 0) | (Overlap ? F_OVERLAP : 0));
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpdateFilterClusterChangeReturning, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9" RETURNING `data`, `emb`, `pk`;)"), true, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9" RETURNING `data`, `emb`, `pk`;)"),
+            F_RETURNING | (Covered ? F_COVERING : 0));
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpsertClusterChangeReturning, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9") RETURNING `data`, `emb`, `pk`;)"), true, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9") RETURNING `data`, `emb`, `pk`;)"),
+            F_RETURNING | (Covered ? F_COVERING : 0));
     }
 
     // First index level build is processed differently when table has 1 and >1 partitions so we check both cases
-    Y_UNIT_TEST_TWIN(EmptyVectorIndexUpdate, Partitioned) {
+    Y_UNIT_TEST_QUAD(EmptyVectorIndexUpdate, Partitioned, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -812,9 +861,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
+        const int flags = (Partitioned ? 0 : F_NON_PARTITIONED) | (Overlap ? F_OVERLAP : 0);
         auto db = kikimr.GetTableClient();
-        auto session = DoOnlyCreateTableForVectorIndex(db, false, "data", Partitioned);
-        DoCreateVectorIndex(session, false);
+        auto session = DoOnlyCreateTableForVectorIndex(db, flags);
+        DoCreateVectorIndex(session, flags);
 
         // Check that the index has a stub cluster hierarchy but the posting table is empty
         const TString level = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplLevelTable");
@@ -859,54 +909,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SimpleVectorIndexOrderByCosineDistanceWithCover, Nullable) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForVectorIndex(db, Nullable);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (emb) COVER (emb, data)
-                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_EQUAL(indexes.size(), 1);
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            std::vector<std::string> indexKeyColumns{"emb"};
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
-            std::vector<std::string> indexDataColumns{"emb", "data"};
-            UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), indexDataColumns);
-            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-            UNIT_ASSERT_EQUAL(settings.Levels, 2);
-            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
-        }
-        DoPositiveQueriesVectorIndexOrderByCosine(session, TTxSettings::SerializableRW(), true /*covered*/);
-    }
-
     Y_UNIT_TEST_TWIN(CoveredVectorIndexWithFollowers, StaleRO) {
         const TString mainTableName = "/Root/TestTable";
         const TString levelTableName = "/Root/TestTable/index/indexImplLevelTable";
@@ -930,8 +932,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         //kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         //kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
+        const int flags = F_COVERING;
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForVectorIndex(db, false);
+        auto session = DoCreateTableForVectorIndex(db, flags);
         {
             const TString createIndex(Q_(R"(
                 ALTER TABLE `/Root/TestTable`
@@ -970,7 +973,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             checkFollowerDescription(tableName);
         }
 
-        DoPositiveQueriesVectorIndexOrderByCosine(session, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW(), true /*covered*/);
+        DoPositiveQueriesVectorIndexOrderByCosine(session, flags, StaleRO ? TTxSettings::StaleRO() : TTxSettings::SerializableRW());
 
         if (StaleRO) {
             // from leader - should NOT read
@@ -1010,7 +1013,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForVectorIndex(db, false);
+        auto session = DoCreateTableForVectorIndex(db);
 
         for (const auto & check: TVector<TVector<const char*>>({
             {"distance=cosine", "Knn::CosineDistance(emb, 'abc') DESC", "Knn::CosineSimilarity(emb, ...) DESC or Knn::CosineDistance(emb, ...) ASC"},
@@ -1050,6 +1053,56 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    Y_UNIT_TEST(VectorResolveDuplicateEvent) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        const int flags = F_NULLABLE;
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, flags); });
+
+        int capturedCount = 0;
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::EventType &&
+                runtime->FindActorName(ev->GetRecipientRewrite()) == "NKikimr::NKqp::TKqpVectorResolveActor") {
+                capturedCount++;
+                if (capturedCount == 3) {
+                    // Add a duplicate event (checking issue #27095)
+                    auto dup = new NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(
+                        ev->Get<NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived>()->InputIndex);
+                    runtime->Send(new IEventHandle(ev->Recipient, ev->Sender, dup));
+                }
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        // Insert to the table with index should succeed
+        {
+            TString query1(Q_(R"(
+                INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
+                (10, "\x11\x62\x03", "10"),
+                (11, "\x77\x75\x03", "11")
+            )"));
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT(result.IsSuccess());
+        }
+    }
+
     TVector<std::pair<TActorId, TActorId>> ResolveFollowers(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex) {
         auto sender = runtime.AllocateEdgeActor(nodeIndex);
         runtime.Send(new IEventHandle(MakeStateStorageProxyID(), sender,
@@ -1072,8 +1125,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         auto runtime = kikimr.GetTestServer().GetRuntime();
         runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
 
+        const int flags = F_NULLABLE | (Covered ? F_COVERING : 0);
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
-        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, true, Covered); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, flags); });
 
         if (Followers) {
             std::vector<TString> tableNames = {

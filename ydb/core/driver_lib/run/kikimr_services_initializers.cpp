@@ -1832,11 +1832,11 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
         }
 
         if (Config.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
-            const auto& kakfaConfig = Config.GetKafkaProxyConfig();
+            const auto& kafkaConfig = Config.GetKafkaProxyConfig();
             TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
             desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address;
-            desc->Port = kakfaConfig.GetListeningPort();
-            desc->Ssl = kakfaConfig.HasSslCertificate();
+            desc->Port = kafkaConfig.GetListeningPort();
+            desc->Ssl = kafkaConfig.HasSslCertificate();
 
             desc->EndpointId = NGRpcService::KafkaEndpointId;
             endpoints.push_back(std::move(desc));
@@ -2263,12 +2263,10 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NKqp::MakeKqpFinalizeScriptServiceId(NodeId),
             TActorSetupCmd(finalize, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        if (appData->FeatureFlags.GetEnableSchemaSecrets()) {
-            auto describeSchemaSecretsService = NKqp::TDescribeSchemaSecretsServiceFactory().CreateService();
-            setup->LocalServices.push_back(std::make_pair(
-                NKqp::MakeKqpDescribeSchemaSecretServiceId(NodeId),
-                TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
-        }
+        auto describeSchemaSecretsService = NKqp::TDescribeSchemaSecretsServiceFactory().CreateService();
+        setup->LocalServices.push_back(std::make_pair(
+            NKqp::MakeKqpDescribeSchemaSecretServiceId(NodeId),
+            TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }
 
@@ -3037,6 +3035,11 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
                 TMailboxType::HTSwap, appData->UserPoolId
             )
         );
+        const auto &grpcConfig = Config.GetGRpcConfig();
+        const TString &address = grpcConfig.GetHost() && grpcConfig.GetHost() != "[::]" ? grpcConfig.GetHost() : FQDNHostName();
+        auto& kafkaMutableConfig = *Config.MutableKafkaProxyConfig();
+        kafkaMutableConfig.SetPublicHost(grpcConfig.GetPublicHost() ? grpcConfig.GetPublicHost() : address);
+
         setup->LocalServices.emplace_back(
             TActorId(),
             TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),

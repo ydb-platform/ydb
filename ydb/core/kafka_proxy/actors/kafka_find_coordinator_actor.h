@@ -16,15 +16,8 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx);
-    
-private:
-    STATEFN(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse, Handle);
-        }
-    }
 
-    void Handle(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev, const NActors::TActorContext& ctx);
+private:
 
     void SendResponseOkAndDie(const TString& host, i32 port, ui64 nodeId, const NActors::TActorContext& ctx);
     void SendResponseFailAndDie(EKafkaErrors error, const TString& message, const NActors::TActorContext& ctx);

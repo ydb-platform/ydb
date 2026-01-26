@@ -8,6 +8,7 @@ SRCS(
     columnshard.cpp
     common_data.cpp
     engine_logs.cpp
+    histogram_borders.cpp
     indexation.cpp
     req_tracer.cpp
     scan.cpp

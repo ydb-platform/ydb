@@ -6,12 +6,23 @@ option java_package = "ru.yandex.kikimr.proto";
 
 import "google/protobuf/any.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
+
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/sys_view_types.proto";
+
+enum EIsolationLevel {
+    ISOLATION_LEVEL_UNDEFINED = 0;
+    ISOLATION_LEVEL_SERIALIZABLE = 1;
+    ISOLATION_LEVEL_READ_COMMITTED = 2;
+    ISOLATION_LEVEL_READ_UNCOMMITTED = 3;
+    ISOLATION_LEVEL_READ_STALE = 4;
+    ISOLATION_LEVEL_SNAPSHOT_RO = 5;
+    ISOLATION_LEVEL_SNAPSHOT_RW = 6;
+};
 
 message TKqpPhyExternalBinding {
 }
@@ -224,6 +235,8 @@ message TKqpPhyOpReadRanges {
     TKqpPhyValue ItemsLimit = 2;
     // Reverse sign, i.e. if user ask ORDER BY ... DESC we need to read table in reverse direction
     bool Reverse = 3;
+    // Vector top-K pushdown settings for brute force vector search
+    TKqpPhyVectorTopK VectorTopK = 4;
 }
 
 message TKqpPhyTableOperation {
@@ -308,6 +321,7 @@ message TKqpPhyVectorTopK {
     Ydb.Table.VectorIndexSettings Settings = 2;
     TKqpPhyValue TargetVector = 3;
     TKqpPhyValue Limit = 4;
+    repeated uint32 DistinctColumns = 5;
 }
 
 message TKqpPhyCnStreamLookup {
@@ -335,6 +349,8 @@ message TKqpPhyCnVectorResolve {
     bytes OutputType = 8;
     uint32 ClusterColumnOutPos = 9;
     optional uint32 RootClusterColumnIndex = 10;
+    optional uint32 OverlapClusters = 11;
+    optional double OverlapRatio = 12;
 }
 
 message TKqpPhyCnSequencer {
@@ -411,6 +427,8 @@ message TKqpReadRangesSource {
     repeated string SkipNullKeys = 8;
     uint64 SequentialInFlightShards = 9;
     bool IsTableImmutable = 10;
+    // Vector top-K pushdown for brute force vector search
+    TKqpPhyVectorTopK VectorTopK = 11;
 }
 
 message TKqpExternalSource {
@@ -654,4 +672,5 @@ message TKqpPhyQuery {
     uint32 LangVer = 16;
     optional bool DisableCheckpoints = 17;
     optional bool EnableWatermarks = 18;
+    optional EIsolationLevel DefaultTxMode = 19;
 }

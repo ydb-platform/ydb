@@ -68,6 +68,8 @@
 
 #include <util/generic/ptr.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+
 namespace NKikimr::NSchemeShard::NBackground {
 struct TEvListRequest;
 }
@@ -245,6 +247,7 @@ public:
 
     THashMap<TPathId, TTableInfo::TPtr> Tables;
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
+    ui32 MaxTTLShardsInFlight = 0;
 
     THashMap<TPathId, TTableIndexInfo::TPtr> Indexes;
     THashMap<TPathId, TCdcStreamInfo::TPtr> CdcStreams;
@@ -382,7 +385,7 @@ public:
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
     ui32 StatsMaxBatchSize = 0;
-    THashMap<TTxState::ETxType, ui32> InFlightLimits;
+    absl::flat_hash_map<TTxState::ETxType, ui32> InFlightLimits;
 
     // time when we opened the batch
     bool TableStatsBatchScheduled = false;
@@ -993,7 +996,7 @@ public:
     void RemoveBackgroundCleaning(const TPathId& pathId);
     std::optional<TTempDirInfo> ResolveTempDirInfo(const TPathId& pathId);
 
-    void UpdateShardMetrics(const TShardIdx& shardIdx, const TPartitionStats& newStats);
+    void UpdateShardMetrics(const TShardIdx& shardIdx, const TPartitionStats& newStats, TInstant now);
     void RemoveShardMetrics(const TShardIdx& shardIdx);
 
     NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardCompactionInfo& info);
@@ -1563,6 +1566,7 @@ public:
         struct TTxReplySampleK;
         struct TTxReplyReshuffleKMeans;
         struct TTxReplyRecomputeKMeans;
+        struct TTxReplyFilterKMeans;
         struct TTxReplyLocalKMeans;
         struct TTxReplyPrefixKMeans;
         struct TTxReplyUploadSample;
@@ -1585,6 +1589,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& recompute);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvFilterKMeansResponse::TPtr& filter);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
@@ -1602,6 +1607,7 @@ public:
     void Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvRecomputeKMeansResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvFilterKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);

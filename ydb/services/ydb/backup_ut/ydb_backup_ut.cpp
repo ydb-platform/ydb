@@ -119,6 +119,18 @@ struct TTenantsTestSettings : TKikimrTestSettings {
     static constexpr bool PrecreatePools = false;
 };
 
+enum class ESecretType {
+    SecretTypeOld,
+    SecretTypeScheme,
+};
+
+enum class EAuthType {
+    AuthTypeNone,
+    AuthTypeToken,
+    AuthTypePassword,
+    AuthTypeAws,
+};
+
 }
 
 namespace {
@@ -288,6 +300,12 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                 continue;
             }
             if (settings->Clusters != 80) {
+                continue;
+            }
+            if (settings->OverlapClusters != 3) {
+                continue;
+            }
+            if (settings->OverlapRatio != 1.2) {
                 continue;
             }
             return true;
@@ -678,7 +696,7 @@ void TestRestoreTableWithIndex(
                 PRIMARY KEY (Key),
                 INDEX %s GLOBAL USING vector_kmeans_tree
                     ON (Group, Value)
-                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80, overlap_clusters=3, overlap_ratio="1.2")
             );)", table, index);
         } else {
             query = Sprintf(R"(CREATE TABLE `%s` (
@@ -688,7 +706,7 @@ void TestRestoreTableWithIndex(
                 PRIMARY KEY (Key),
                 INDEX %s GLOBAL USING vector_kmeans_tree
                     ON (Value)
-                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80, overlap_clusters=3, overlap_ratio="1.2")
             );)", table, index);
         }
     } else {
@@ -795,6 +813,90 @@ void TestViewQueryTextIsPreserved(
         DescribeView(viewClient, view).GetQueryText(),
         originalText
     );
+}
+
+void TestViewWithNamedExpressions(
+        const char* view, const char* table, NQuery::TSession& session,
+        TBackupFunction&& backup, TRestoreFunction&& restore)
+{
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", table
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+            UPSERT INTO `%s` (
+                Key,
+                Value
+            )
+            VALUES (1, "one");
+        )", table
+    ));
+
+    ExecuteQuery(session, Sprintf(R"(
+        $named_exp = (SELECT `Value` FROM `%s` WHERE Key = 1);
+        $named_exp_2 = (SELECT * FROM $named_exp);
+        CREATE VIEW `%s` WITH security_invoker = TRUE AS
+            SELECT * FROM `%s` WHERE `Value` = $named_exp_2 AND `Value` = $named_exp;
+    )", table, view, table), true);
+    const auto originalContent = GetTableContent(session, view);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+            )", view
+        ), true
+    );
+
+    restore();
+    CompareResults(GetTableContent(session, view), originalContent);
+}
+
+void TestViewSelectFromIndex(
+        const char* view, const char* table, NQuery::TSession& session,
+        TBackupFunction&& backup, TRestoreFunction&& restore)
+{
+    ExecuteQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Value Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX indexByValue GLOBAL SYNC ON (Value)
+                );
+            )", table
+        ), true
+    );
+    ExecuteQuery(session, Sprintf(R"(
+            UPSERT INTO `%s` (
+                Key,
+                Value
+            )
+            VALUES (1, "one");
+        )", table
+    ));
+
+
+    ExecuteQuery(session, Sprintf(R"(
+        CREATE VIEW `%s` WITH security_invoker = TRUE AS
+            SELECT * FROM `%s` VIEW `indexByValue` WHERE `Value` = "one";
+    )", view, table), true);
+    const auto originalContent = GetTableContent(session, view);
+
+    backup();
+
+    ExecuteQuery(session, Sprintf(R"(
+                DROP VIEW `%s`;
+            )", view
+        ), true
+    );
+
+    restore();
+    CompareResults(GetTableContent(session, view), originalContent);
 }
 
 // The view might be restored to a different path from the original. The path might be in a different database.
@@ -1266,11 +1368,13 @@ void TestReplicationSettingsArePreserved(
         TReplicationClient& client,
         TBackupFunction&& backup,
         TRestoreFunction&& restore,
-        bool useSecret,
+        const TMaybe<ESecretType> tokenSecretType,
         const NDump::TRestoreSettings& restorationSettings = {})
 {
-    if (useSecret) {
-        ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+    if (tokenSecretType == ESecretType::SecretTypeScheme) {
+        ExecuteQuery(session, "CREATE SECRET `replication_secret` WITH (value = 'root@builtin');", true);
+    } else if (tokenSecretType == ESecretType::SecretTypeOld) {
+        ExecuteQuery(session, "CREATE OBJECT `replication_secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
     }
     ExecuteQuery(session, "CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k));", true);
     ExecuteQuery(session, Sprintf(R"(
@@ -1279,10 +1383,12 @@ void TestReplicationSettingsArePreserved(
                 WITH (
                     CONNECTION_STRING = 'grpc://%s/?database=/Root'
                     %s
+                    %s
                 );
             )",
             endpoint.c_str(),
-            (useSecret ? ", TOKEN_SECRET_NAME = 'secret'" : "")
+            (tokenSecretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'replication_secret'" : ""),
+            (tokenSecretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'replication_secret'" : "")
         ), true
     );
 
@@ -1293,8 +1399,10 @@ void TestReplicationSettingsArePreserved(
         const auto& params = desc.GetConnectionParams();
         UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
         UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
-        if (useSecret) {
-            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "secret");
+        if (tokenSecretType == ESecretType::SecretTypeScheme) {
+            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "/Root/replication_secret");
+        } else if (tokenSecretType == ESecretType::SecretTypeOld) {
+            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "replication_secret");
         }
 
         const auto& items = desc.GetItems();
@@ -1321,17 +1429,61 @@ Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TSession
 }
 
 void TestExternalDataSourceSettingsArePreserved(
-    const char* path, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup, TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings = {}
+    const char* path, TSession& tableSession, NQuery::TSession& querySession, TBackupFunction&& backup,
+    TRestoreFunction&& restore, const NDump::TRestoreSettings& restorationSettings, const TMaybe<ESecretType>& secretType,
+    EAuthType authType
 ) {
-    ExecuteQuery(querySession, Sprintf(R"(
-                CREATE EXTERNAL DATA SOURCE `%s` WITH (
-                    SOURCE_TYPE = "ObjectStorage",
-                    LOCATION = "192.168.1.1:8123",
-                    AUTH_METHOD = "NONE"
-                );
-            )", path
-        ), true
-    );
+    if (secretType == ESecretType::SecretTypeScheme) {
+        ExecuteQuery(querySession, "CREATE SECRET `eds_secret` WITH (value = 'secret');", true);
+    } else if (secretType == ESecretType::SecretTypeOld) {
+        ExecuteQuery(querySession, "CREATE OBJECT `eds_secret` (TYPE SECRET) WITH (value = 'secret');", true);
+    }
+
+    TString createEdsQuery;
+    switch (authType) {
+        case EAuthType::AuthTypeToken: /* fallthrough */
+        case EAuthType::AuthTypeNone: {
+            createEdsQuery = Sprintf(
+                R"(
+                    CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                        SOURCE_TYPE = "Ydb",
+                        LOCATION = "192.168.1.1:8123",
+                        DATABASE_NAME = "/Root/test/",
+                        AUTH_METHOD = "%s"
+                        %s -- TOKEN_SECRET_NAME if needed
+                        %s -- TOKEN_SECRET_PATH if needed
+                    );
+                )",
+                path,
+                (!secretType ? "NONE" : "TOKEN"),
+                (secretType == ESecretType::SecretTypeScheme ? ", TOKEN_SECRET_PATH = 'eds_secret'" : ""),
+                (secretType == ESecretType::SecretTypeOld ? ", TOKEN_SECRET_NAME = 'eds_secret'" : "")
+            );
+            break;
+        }
+        case EAuthType::AuthTypeAws: { // checks more than one secret
+            createEdsQuery = Sprintf(
+                R"(
+                    CREATE EXTERNAL DATA SOURCE `%s` WITH (
+                        SOURCE_TYPE="ObjectStorage",
+                        LOCATION = "192.168.1.1:8123",
+                        AUTH_METHOD="AWS",
+                        AWS_REGION="ru-central-1",
+                        %s="eds_secret",
+                        %s="eds_secret"
+                    );
+                )",
+                path,
+                (secretType == ESecretType::SecretTypeScheme ? "AWS_ACCESS_KEY_ID_SECRET_PATH" : "AWS_ACCESS_KEY_ID_SECRET_NAME"),
+                (secretType == ESecretType::SecretTypeScheme ? "AWS_SECRET_ACCESS_KEY_SECRET_PATH" : "AWS_SECRET_ACCESS_KEY_SECRET_NAME")
+            );
+            break;
+        } default: {
+            UNIT_ASSERT_C(false, "Unsupported test setting");
+        }
+    }
+
+    ExecuteQuery(querySession, createEdsQuery, true);
     const auto originalDescription = DescribeExternalDataSource(tableSession, path);
 
     backup();
@@ -1876,6 +2028,48 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(RestoreViewWithNamedExpressions) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* view = "/Root/view";
+        constexpr const char* table = "/Root/a/b/c/table";
+
+        TestViewWithNamedExpressions(
+            view,
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewSelectFromIndex) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* view = "/Root/view";
+        constexpr const char* table = "/Root/a/b/c/table";
+
+        TestViewSelectFromIndex(
+            view,
+            table,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     Y_UNIT_TEST(RestoreViewReferenceTable) {
         TKikimrWithGrpcAndRootSchema server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
@@ -2139,12 +2333,13 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestReplicationBackupRestore(bool useSecret = true) {
+    void TestReplicationBackupRestore(const TMaybe<ESecretType>& tokenSecretType) {
         TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(tokenSecretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
-        if (useSecret) {
+        if (tokenSecretType) {
             driverConfig.SetAuthToken("root@builtin");
         }
         auto driver = TDriver(driverConfig);
@@ -2153,7 +2348,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
         TReplicationClient replicationClient(driver);
 
-        if (useSecret) {
+        if (tokenSecretType) {
             TPermissions permissions("root@builtin", {"ydb.generic.full"});
             const auto result = schemeClient.ModifyPermissions("/Root",
                 TModifyPermissionsSettings().AddGrantPermissions(permissions)
@@ -2168,7 +2363,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             endpoint, session, replicationClient,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup),
-            useSecret
+            tokenSecretType
         );
     }
 
@@ -2217,16 +2412,32 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
-    void TestExternalDataSourceBackupRestore() {
+    void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
+
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root");
+        if (secretType) {
+            driverConfig.SetAuthToken("root@builtin");
+        }
+        auto driver = TDriver(driverConfig);
         TTableClient tableClient(driver);
         auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
         NQuery::TQueryClient queryClient(driver);
         auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        TSchemeClient schemeClient(driver);
+        if (secretType) {
+            TPermissions permissions("root@builtin", {"ydb.generic.full"});
+            const auto result = schemeClient.ModifyPermissions("/Root",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
@@ -2237,15 +2448,19 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             tableSession,
             querySession,
             CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup)
+            CreateRestoreLambda(driver, pathToBackup),
+            NDump::TRestoreSettings{},
+            secretType,
+            authType
         );
     }
 
-    Y_UNIT_TEST(RestoreExternalDataSourceWithoutSecret) {
+    void RestoreExternalDataSourceWithoutSecret(bool useSchemeSecret) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(useSchemeSecret);
 
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TTableClient tableClient(driver);
@@ -2257,29 +2472,51 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        ExecuteQuery(querySession, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'secret');", true);
-        ExecuteQuery(querySession, R"(
-            CREATE EXTERNAL DATA SOURCE `/Root/externalDataSource` WITH (
-                SOURCE_TYPE = "PostgreSQL",
-                DATABASE_NAME = "db",
-                LOCATION = "192.168.1.1:8123",
-                AUTH_METHOD = "BASIC",
-                LOGIN = "user",
-                PASSWORD_SECRET_NAME = "secret"
-            );
-        )", true);
+        if (useSchemeSecret) {
+            ExecuteQuery(querySession, "CREATE SECRET `secret` WITH (value = 'secret');", true);
+        } else {
+            ExecuteQuery(querySession, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'secret');", true);
+        }
+        ExecuteQuery(
+            querySession,
+            Sprintf(
+                R"(
+                    CREATE EXTERNAL DATA SOURCE `/Root/externalDataSource` WITH (
+                        SOURCE_TYPE = "PostgreSQL",
+                        DATABASE_NAME = "db",
+                        LOCATION = "192.168.1.1:8123",
+                        AUTH_METHOD = "BASIC",
+                        LOGIN = "user",
+                        %s = "secret"
+                    );
+                )",
+                useSchemeSecret ? "PASSWORD_SECRET_PATH" : "PASSWORD_SECRET_NAME"),
+                true);
 
         NDump::TClient backupClient(driver);
         {
             const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        ExecuteQuery(querySession, "DROP OBJECT `secret` (TYPE SECRET);", true);
+
+        if (useSchemeSecret) {
+            ExecuteQuery(querySession, "DROP SECRET `secret`;", true);
+        } else {
+            ExecuteQuery(querySession, "DROP OBJECT `secret` (TYPE SECRET);", true);
+        }
         ExecuteQuery(querySession, "DROP EXTERNAL DATA SOURCE `/Root/externalDataSource`;", true);
         {
             const auto result = backupClient.Restore(pathToBackup, "/Root");
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(RestoreExternalDataSourceWithoutSecretUseSchemeSecret) {
+        RestoreExternalDataSourceWithoutSecret(/* useSchemeSecret */ true);
+    }
+
+    Y_UNIT_TEST(RestoreExternalDataSourceWithoutSecretUseOldSecret) {
+        RestoreExternalDataSourceWithoutSecret(/* useSchemeSecret */ false);
     }
 
     void TestExternalTableBackupRestore() {
@@ -2365,13 +2602,21 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeCdcStream:
                 return TestChangefeedBackupRestore();
             case EPathTypeReplication:
-                return TestReplicationBackupRestore();
+                TestReplicationBackupRestore(ESecretType::SecretTypeOld);
+                TestReplicationBackupRestore(ESecretType::SecretTypeScheme);
+                return;
             case EPathTypeTransfer:
                 break; // https://github.com/ydb-platform/ydb/issues/10436
             case EPathTypeExternalTable:
                 return TestExternalTableBackupRestore();
-            case EPathTypeExternalDataSource:
-                return TestExternalDataSourceBackupRestore();
+            case EPathTypeExternalDataSource: {
+                TestExternalDataSourceBackupRestore(/* secretType */ Nothing(), EAuthType::AuthTypeNone);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeToken);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeToken);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeOld, EAuthType::AuthTypeAws);
+                TestExternalDataSourceBackupRestore(ESecretType::SecretTypeScheme, EAuthType::AuthTypeAws);
+                return;
+            }
             case EPathTypeResourcePool:
                 break; // https://github.com/ydb-platform/ydb/issues/10440
             case EPathTypeKesus:
@@ -2488,7 +2733,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), restorationSettings,
+            ESecretType::SecretTypeOld, EAuthType::AuthTypeToken
         );
 
         cleanup();
@@ -2503,7 +2749,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), true, restorationSettings
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeOld, restorationSettings
         );
 
         cleanup();
@@ -2523,6 +2769,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
         auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetAuthToken("root@builtin"));
@@ -2582,7 +2829,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings),
+            NDump::TRestoreSettings{}, ESecretType::SecretTypeOld, EAuthType::AuthTypeToken
         );
 
         cleanup();
@@ -2597,7 +2845,12 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         cleanup();
         TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
-            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), true
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeOld, restorationSettings
+        );
+
+        cleanup();
+        TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), ESecretType::SecretTypeScheme, restorationSettings
         );
     }
 
@@ -2625,7 +2878,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
-        TestReplicationBackupRestore(false);
+        TestReplicationBackupRestore(/* tokenSecretType */ Nothing());
     }
 
     Y_UNIT_TEST(ReplicasAreNotBackedUp) {
@@ -3066,6 +3319,34 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         TestViewQueryTextIsPreserved(
             view,
             viewClient,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view" })
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewWithNamedExpressions) {
+        TS3TestEnv testEnv;
+        constexpr const char* view = "/Root/view";
+        constexpr const char* table = "/Root/a/b/c/table";
+
+        TestViewWithNamedExpressions(
+            view,
+            table,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view" })
+        );
+    }
+
+    Y_UNIT_TEST(RestoreViewSelectFromIndex) {
+        TS3TestEnv testEnv;
+        constexpr const char* view = "/Root/view";
+        constexpr const char* table = "/Root/a/b/c/table";
+
+        TestViewSelectFromIndex(
+            view,
+            table,
             testEnv.GetQuerySession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "view" })

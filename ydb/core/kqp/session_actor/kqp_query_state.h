@@ -400,7 +400,7 @@ public:
             return false;
         }
 
-        if (TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
+        if (TxCtx->EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW) {
             // ReadWrite snapshot isolation transaction with can only use uncommitted data.
             // WriteOnly snapshot isolation transaction is executed like serializable transaction.
             return !TxCtx->HasTableRead;
@@ -422,8 +422,8 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
-        if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE &&
-                *TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
+        if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
+                *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW) {
             return false;
         }
 

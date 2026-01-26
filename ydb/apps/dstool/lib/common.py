@@ -1266,14 +1266,18 @@ def flush_cache():
     cache.clear()
 
 
-def print_json_result(status: str, description: str = None, file=sys.stdout):
+def print_json_result(status: str, description: str = None, file=None):
+    if file is None:
+        file = sys.stdout
     d = {'status': status}
     if description is not None:
         d['description'] = description
     print(json.dumps(d), file=file)
 
 
-def print_result(format: str, status: str, description: str = None, file=sys.stderr):
+def print_result(format: str, status: str, description: str = None, file=None):
+    if file is None:
+        file = sys.stderr
     if format == 'json':
         print_json_result(status, description)
     else:

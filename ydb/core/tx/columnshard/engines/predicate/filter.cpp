@@ -104,8 +104,8 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimple
 
 TPKRangesFilter::TPKRangesFilter() {
     auto range = TPKRangeFilter::Build(TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo());
-    Y_ABORT_UNLESS(range);
-    SortedRanges.emplace_back(*range);
+    Y_ABORT_UNLESS(range.IsSuccess());
+    SortedRanges.emplace_back(range.DetachResult());
 }
 
 std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {

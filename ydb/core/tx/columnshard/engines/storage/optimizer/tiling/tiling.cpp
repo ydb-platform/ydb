@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/library/intersection_tree/intersection_tree.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level/counters.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -281,10 +282,13 @@ struct TLevel {
     TPortionMap Compacting;
     bool CheckCompactions = true;
 
+    const NLCBuckets::TLevelCounters& Counters;
+
     TLevel* Next = nullptr;
 
-    TLevel(ui32 level)
+    TLevel(ui32 level, const NLCBuckets::TLevelCounters& counters)
         : Level(level)
+        , Counters(counters)
     {}
 
     bool Empty() const {
@@ -303,6 +307,7 @@ struct TLevel {
     }
 
     void Add(const TPortionInfo::TPtr& p) {
+        Counters.Portions->AddPortion(p);
         Remove(p->GetPortionId());
         Portions[p->GetPortionId()] = p;
         TotalBlobBytes += p->GetTotalBlobBytes();
@@ -318,6 +323,7 @@ struct TLevel {
         auto it = Portions.find(id);
         if (it != Portions.end()) {
             const auto& p = it->second;
+            Counters.Portions->RemovePortion(it->second);
             Intersections.Remove(p->GetPortionId());
             TotalBlobBytes -= p->GetTotalBlobBytes();
             Portions.erase(it);
@@ -459,12 +465,16 @@ struct TLevel {
 
 class TOptimizerPlanner : public IOptimizerPlanner, private TSettings {
     using TBase = IOptimizerPlanner;
+    std::shared_ptr<NLCBuckets::TCounters> Counters;
+    std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo;
 
 public:
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
             const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const TSettings& settings = {})
         : TBase(pathId, settings.NodePortionsCountLimit)
         , TSettings(settings)
+        , Counters(std::make_shared<NLCBuckets::TCounters>())
+        , PortionsInfo(std::make_shared<TSimplePortionsGroupInfo>())
         , StoragesManager(storagesManager)
         , PrimaryKeysSchema(primaryKeysSchema)
     {
@@ -510,9 +520,12 @@ private:
         return false;
     }
 
-    void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+    void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
         std::vector<TPortionInfo::TPtr> sortedRemove;
-        for (const auto& [_, p] : remove) {
+        for (const auto& p : remove) {
+            if (p->GetProduced() != NPortion::EVICTED) {
+                PortionsInfo->RemovePortion(p);
+            }
             sortedRemove.push_back(p);
         }
         std::sort(sortedRemove.begin(), sortedRemove.end(), [](const auto& a, const auto& b) {
@@ -530,7 +543,7 @@ private:
         }
 
         std::vector<TPortionInfo::TPtr> sortedAdd;
-        for (const auto& [_, p] : add) {
+        for (const auto& p : add) {
             sortedAdd.push_back(p);
         }
         std::sort(sortedAdd.begin(), sortedAdd.end(), [](const auto& a, const auto& b) {
@@ -539,10 +552,10 @@ private:
 
         for (const auto& p : sortedAdd) {
             switch (p->GetProduced()) {
-                case NPortion::INACTIVE:
                 case NPortion::EVICTED:
                     break;
                 default: {
+                    PortionsInfo->AddPortion(p);
                     ui32 level = p->GetCompactionLevel();
                     if (level >= MaxLevels) {
                         level = MaxLevels - 1;
@@ -562,7 +575,7 @@ private:
     TLevel& EnsureLevel(ui32 level) {
         while (level >= Levels.size()) {
             ui32 next = Levels.size();
-            Levels.emplace_back(next);
+            Levels.emplace_back(next, Counters->GetLevelCounters(next));
             if (next > 0) {
                 Levels[next - 1].Next = &Levels.back();
             }

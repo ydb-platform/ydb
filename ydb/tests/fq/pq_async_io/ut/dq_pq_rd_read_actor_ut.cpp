@@ -74,7 +74,8 @@ public:
                 actor.GetHolderFactory(),
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 freeSpace,
-                CreateMockPqGateway({.Runtime = CaSetup->Runtime.get()})
+                CreateMockPqGateway({.Runtime = CaSetup->Runtime.get()}),
+                true
             );
 
             actor.InitAsyncInput(dqAsyncInput, dqAsyncInputAsActor);

@@ -687,7 +687,7 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
     if (runConfig.ServicesMask.EnableKqp) {
         auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig();
         auto& featureFlags = runConfig.AppConfig.GetFeatureFlags();
-        KqpShutdownController.Reset(new NKqp::TKqpShutdownController(NKqp::MakeKqpProxyID(runConfig.NodeId), tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
+        KqpShutdownController.Reset(new NKqp::TKqpShutdownController(runConfig.NodeId, tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
         KqpShutdownController->Initialize(ActorSystem.Get());
     }
 }
@@ -766,7 +766,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["object_storage"] = &hasObjectStorage;
         TServiceCfg hasClickhouseInternal = services.empty();
         names["clickhouse_internal"] = &hasClickhouseInternal;
-        TServiceCfg hasRateLimiter = false;
+        TServiceCfg hasRateLimiter = services.empty();
         names["rate_limiter"] = &hasRateLimiter;
         TServiceCfg hasExport = services.empty();
         names["export"] = &hasExport;

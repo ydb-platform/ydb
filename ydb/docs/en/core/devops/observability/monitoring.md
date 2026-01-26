@@ -48,33 +48,55 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
 
 1. [Install](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
 
-1. Edit the Prometheus [configuration file](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml):
+1. Edit the Prometheus [configuration files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus):
 
-    1. In the `targets` section, specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of each storage node and database node running on the server.
-
-        For example, for a cluster of three servers, where each server runs one storage node on port 8765 and two database nodes on ports 8766 and 8767, you need to specify nine addresses for all metric subgroups except disk metrics (for disk metric subgroups, you only need to specify storage node addresses):
+    1. In the `targets` section of [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml), specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of storage nodes running on the servers.
 
         ```json
-        static_configs:
-        - targets:
-          - ydb-s1.example.com:8765
-          - ydb-s1.example.com:8766
-          - ydb-s1.example.com:8767
-          - ydb-s2.example.com:8765
-          - ydb-s2.example.com:8766
-          - ydb-s2.example.com:8767
-          - ydb-s3.example.com:8765
-          - ydb-s3.example.com:8766
-          - ydb-s3.example.com:8767
+        - labels:
+            container: ydb-static
+          targets:
+          - "ydb-s1.example.com:8765"
+          - "ydb-s2.example.com:8765"
+          - "ydb-s3.example.com:8765"
         ```
 
-        For a local single-node YDB cluster, specify one address in the `targets` section:
+        For a local single-node YDB cluster, specify one address in the targets section:
 
         ```json
-        - targets: ["localhost:8765"]
+        - labels:
+            container: ydb-static
+          targets:
+          - "localhost:8765"
         ```
 
-    1. If necessary, in the `tls_config` section, specify the [Certificate Authority (CA) certificate](../deployment-options/manual/initial-deployment.md#tls-certificates) that signed the other TLS certificates of the {{ ydb-short-name }} cluster:
+   1. In the `targets` section of [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml), specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of all database nodes running on the servers.
+
+        ```json
+        - labels:
+            container: ydb-dynamic
+          targets:
+          - "ydb-s1.example.com:31002"
+          - "ydb-s1.example.com:31012"
+          - "ydb-s1.example.com:31022"
+          - "ydb-s2.example.com:31002"
+          - "ydb-s2.example.com:31012"
+          - "ydb-s2.example.com:31022"
+          - "ydb-s3.example.com:31002"
+          - "ydb-s3.example.com:31012"
+          - "ydb-s3.example.com:31022"
+        ```
+
+        For a local single-node YDB cluster, specify one address in the targets section:
+
+        ```json
+        - labels:
+            container: ydb-dynamic
+          targets:
+          - "localhost:8765"
+        ```
+
+    1. If necessary, in the `tls_config` section of [`prometheus_ydb.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/prometheus_ydb.yml), specify the [Certificate Authority (CA) certificate](../deployment-options/manual/initial-deployment.md#tls-certificates) that signed the other TLS certificates of the {{ ydb-short-name }} cluster:
 
        ```json
        scheme: https
@@ -82,7 +104,7 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
            ca_file: '<ydb-ca-file>'
        ```
 
-1. [Start](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus using the edited configuration file.
+1. [Start](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus using `prometheus_ydb.yml` as a configuration file.
 
 1. [Install and start](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
 

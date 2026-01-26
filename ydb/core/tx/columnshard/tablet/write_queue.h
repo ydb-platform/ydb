@@ -20,6 +20,8 @@ private:
     const ui64 Cookie;
     const NOlap::TSnapshot MvccSnapshot;
     const ui64 LockId;
+    const NKikimrDataEvents::ELockMode LockMode;
+    const ui32 LockNodeId;
     const NEvWrite::EModificationType ModificationType;
     const EOperationBehaviour Behaviour;
     const TMonotonic Created = TMonotonic::Now();
@@ -38,7 +40,7 @@ public:
     }
 
     TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId, const NActors::TActorId recipientId,
-        const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie, const NOlap::TSnapshot& mvccSnapshot, const ui64 lockId,
+        const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie, const NOlap::TSnapshot& mvccSnapshot, const ui64 lockId, const NKikimrDataEvents::ELockMode lockMode, const ui64 lockNodeId,
         const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout, const ui64 txId, const bool isBulk, const std::optional<ui64>& overloadSubscribeSeqNo)
         : ArrowData(arrowData)
         , Schema(schema)
@@ -49,6 +51,8 @@ public:
         , Cookie(cookie)
         , MvccSnapshot(mvccSnapshot)
         , LockId(lockId)
+        , LockMode(lockMode)
+        , LockNodeId(lockNodeId)
         , ModificationType(modificationType)
         , Behaviour(behaviour)
         , Timeout(timeout)

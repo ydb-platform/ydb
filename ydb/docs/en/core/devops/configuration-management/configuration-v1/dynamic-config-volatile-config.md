@@ -1,6 +1,5 @@
 # Volatile Configurations
 
-{% include [deprecated](_includes/deprecated.md) %}
 
 Volatile configurations are a special type of configurations that complement dynamic ones and are not persistent. That is, these configurations are reset when the [Console tablet](../../../concepts/glossary.md#console) moves or restarts, as well as when the main configuration is updated.
 

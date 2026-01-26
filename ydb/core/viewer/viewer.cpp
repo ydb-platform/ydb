@@ -132,8 +132,7 @@ public:
                 .RelPath = "healthcheck",
                 .ActorSystem = ctx.ActorSystem(),
                 .ActorId = ctx.SelfID,
-                .UseAuth = true,
-                .AllowedSIDs = databaseAllowedSIDs,
+                .UseAuth = false, // auth is checked inside handler
             });
             mon->RegisterActorPage({
                 .RelPath = "vdisk",

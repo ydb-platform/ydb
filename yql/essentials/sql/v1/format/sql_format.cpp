@@ -3,7 +3,7 @@
 #include <yql/essentials/parser/lexer_common/lexer.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
 #include <library/cpp/resource/resource.h>
@@ -3365,8 +3365,7 @@ bool SqlFormatSimple(const NSQLTranslationV1::TLexers& lexers,
 
 THashSet<TString> GetKeywords() {
     TString grammar;
-    // ANTLR4-MIGRATION: just change SQLv1 to SQLv1Antlr4
-    Y_ENSURE(NResource::FindExact("SQLv1.g.in", &grammar));
+    Y_ENSURE(NResource::FindExact("SQLv1Antlr4.g.in", &grammar));
     THashSet<TString> res;
     TVector<TString> lines;
     Split(grammar, "\n", lines);

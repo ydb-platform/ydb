@@ -91,6 +91,8 @@ namespace NKikimr::NStorage {
 
         ui32 RefCount = 0;
         bool Temporary = false;
+        ui32 ExpectedSlotCount = 0;
+        ui32 SlotSizeInUnits = 0;
 
         std::optional<ui64> ShredGenerationIssued;
         std::variant<std::monostate, ui64, TString> ShredState; // not issued, finished with generation, aborted
@@ -256,6 +258,7 @@ namespace NKikimr::NStorage {
         TControlWrapper ReportingControllerBucketSize;
         TControlWrapper ReportingControllerLeakDurationMs;
         TControlWrapper ReportingControllerLeakRate;
+        TControlWrapper MaxPutTimeoutSeconds;
 
         TControlWrapper EnableDeepScrubbing;
 

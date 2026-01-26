@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
             }
 
             const auto& meta = scriptExecutionOperation.Metadata();
-            UNIT_ASSERT_VALUES_EQUAL(meta.ExecStatus, NYdb::NQuery::EExecStatus::Running);
+            UNIT_ASSERT_C(IsIn({NYdb::NQuery::EExecStatus::Unspecified, NYdb::NQuery::EExecStatus::Starting, NYdb::NQuery::EExecStatus::Running}, meta.ExecStatus), meta.ExecStatus);
 
             if (const auto& resultsMeta = meta.ResultSetsMeta; !resultsMeta.empty()) {
                 UNIT_ASSERT_VALUES_EQUAL(resultsMeta.size(), 1);

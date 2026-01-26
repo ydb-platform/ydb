@@ -640,7 +640,7 @@ protected:
         TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
 
         switch (Request.IsolationLevel) {
-            case NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW:
+            case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
                 TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
                 break;
             default:
@@ -761,8 +761,11 @@ protected:
             }
 
             for (auto& task : TasksGraph.GetTasks()) {
-                if (task.Meta.NodeId == nodeId && Planner->GetPendingComputeTasks().contains(task.Id)) {
-                    return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
+                if (Planner->GetPendingComputeTasks().contains(task.Id)) {
+                    auto actualNodeId = Planner->GetActualNodeIdForTask(task.Id);
+                    if (actualNodeId && *actualNodeId == nodeId) {
+                        return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
+                    }
                 }
             }
         }
@@ -803,7 +806,28 @@ protected:
                          YqlIssue({}, NYql::TIssuesIds::KIKIMR_OVERLOADED, "Not enough computation units to execute query"));
                     break;
                 }
+                case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
+                    if (!AppData()->FeatureFlags.GetEnableShuttingDownNodeState()) {
+                        LOG_D("Received NODE_SHUTTING_DOWN but feature flag EnableShuttingDownNodeState is disabled");
+                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
+                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                                "Compute node is unavailable"));
+                        break;
+                    }
+                    
+                    LOG_D("Received NODE_SHUTTING_DOWN, attempting run tasks locally");
+                    
+                    ui32 requestId = record.GetNotStartedTasks(0).GetRequestId();
+                    auto localNode = MakeKqpNodeServiceID(SelfId().NodeId());
 
+                    // changes requests nodeId when redirect tasks on local node: used to check on disconnected
+                    if (!Planner->SendStartKqpTasksRequest(requestId, localNode, true)) {
+                        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, 
+                            MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE,
+                                "Compute node is unavailable"));
+                    }
+                    break;
+                }
                 case NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR: {
                     InternalError("KqpNode internal error");
                     break;

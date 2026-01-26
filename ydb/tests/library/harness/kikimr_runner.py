@@ -470,14 +470,14 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def start(self):
+    def start(self, timeout_seconds=240):
         """
         Safely starts kikimr instance.
         Do not override this method.
         """
         try:
             logger.debug("Working directory: " + self.__tmpdir)
-            self.__run()
+            self.__run(timeout_seconds=timeout_seconds)
             return self
 
         except Exception:
@@ -515,7 +515,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 time.sleep(interval)
         raise last_exception
 
-    def __run(self):
+    def __run(self, timeout_seconds=240):
         self.prepare()
 
         for node_id in self.__configurator.all_node_ids():
@@ -530,7 +530,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
         if bs_needed:
-            self.__wait_for_bs_controller_to_start()
+            self.__wait_for_bs_controller_to_start(timeout_seconds=timeout_seconds)
             if not self.__configurator.use_self_management:
                 self.__add_bs_box()
 
@@ -541,6 +541,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 name=p['name'],
                 kind=p['kind'],
                 pdisk_user_kind=p['pdisk_user_kind'],
+                num_groups=p.get('num_groups'),
             )
             pools[p['name']] = p['kind']
 
@@ -836,9 +837,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 if retries == 0:
                     raise
 
-    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None):
+    def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None, num_groups=None):
         if erasure is None:
             erasure = self.__configurator.static_erasure
+        if num_groups is None:
+            num_groups = 2
         request = bs.TConfigRequest()
         cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = 1
@@ -851,7 +854,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         cmd.DefineStoragePool.Kind = kind
         cmd.DefineStoragePool.ErasureSpecies = str(erasure)
         cmd.DefineStoragePool.VDiskKind = "Default"
-        cmd.DefineStoragePool.NumGroups = 2
+        cmd.DefineStoragePool.NumGroups = num_groups
 
         pdisk_filter = cmd.DefineStoragePool.PDiskFilter.add()
         pdisk_filter.Property.add().Type = 0
@@ -859,13 +862,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
         return name
 
-    def __wait_for_bs_controller_to_start(self):
+    def __wait_for_bs_controller_to_start(self, timeout_seconds=240):
         monitors = [node.monitor for node in self.nodes.values()]
 
         def predicate():
             return blobstorage_controller_has_started_on_some_node(monitors)
 
-        timeout_seconds = 240
         bs_controller_started = wait_for(
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )

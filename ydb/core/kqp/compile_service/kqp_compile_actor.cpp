@@ -645,6 +645,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();
     kqpConfig.EnableHtapTx = serviceConfig.GetEnableHtapTx();
     kqpConfig.EnableStreamWrite = serviceConfig.GetEnableStreamWrite();
+    kqpConfig.EnableBatchUpdates = serviceConfig.GetEnableBatchUpdates();
     kqpConfig.BlockChannelsMode = serviceConfig.GetBlockChannelsMode();
     kqpConfig.IdxLookupJoinsPrefixPointLimit = serviceConfig.GetIdxLookupJoinPointsLimit();
     kqpConfig.DefaultCostBasedOptimizationLevel = serviceConfig.GetDefaultCostBasedOptimizationLevel();
@@ -671,6 +672,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnablePointPredicateSortAutoSelectIndex = serviceConfig.GetEnablePointPredicateSortAutoSelectIndex();
     kqpConfig.EnableDqHashCombineByDefault = serviceConfig.GetEnableDqHashCombineByDefault();
     kqpConfig.EnableWatermarks = serviceConfig.GetEnableWatermarks();
+    kqpConfig.EnableBuildAggregationResultStages = serviceConfig.GetEnableBuildAggregationResultStages();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));

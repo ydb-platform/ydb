@@ -53,7 +53,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         NSnapshot::TQuery* TakeSnapshot() override;
 
         TSchedulableTaskList::iterator AddTask(const TSchedulableTaskPtr& task);
-        void RemoveTask(const TSchedulableTaskList::iterator& it);
         ui32 ResumeTasks(ui32 count);
 
     public:
@@ -64,7 +63,13 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         const TDelayParams* const DelayParams; // owned by scheduler
 
     private:
-        TRWMutex TasksMutex;
+        // used to calculate adjusted satisfaction between snapshots
+        ui64 PrevBurstUsage = 0;
+        ui64 PrevBurstUsageResume = 0;
+        ui64 PrevBurstUsageExtra = 0;
+        ui64 PrevBurstThrottle = 0;
+
+        TMutex TasksMutex;
         TSchedulableTaskList SchedulableTasks; // protected by TasksMutex
     };
 

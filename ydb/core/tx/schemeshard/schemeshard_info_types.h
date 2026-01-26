@@ -152,6 +152,7 @@ struct TColumnFamiliesMerger {
     bool Has(ui32 familyId) const;
     NKikimrSchemeOp::TFamilyDescription* Get(ui32 familyId, TString &errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(ui32 familyId, TString& errDescr);
+    NKikimrSchemeOp::TFamilyDescription* Get(const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* Get(ui32 familyId, const TString& familyName, TString& errDescr);
     NKikimrSchemeOp::TFamilyDescription* AddOrGet(ui32 familyId, const TString&  familyName, TString& errDescr);
@@ -175,11 +176,13 @@ struct TPartitionConfigMerger {
     static bool ApplyChanges(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
+        const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
         const TAppData* appData, const bool isServerlessDomain, TString& errDescr);
 
     static bool ApplyChangesInColumnFamilies(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
+        const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
         const bool isServerlessDomain, TString& errDescr);
 
     static THashMap<ui32, size_t> DeduplicateColumnFamiliesById(NKikimrSchemeOp::TPartitionConfig& config);
@@ -331,6 +334,12 @@ private:
     ui64 CPU = 0;
 };
 
+struct TStoragePoolStatsDelta {
+    i64 DataSize = 0;
+    i64 IndexSize = 0;
+};
+using TDiskSpaceUsageDelta = TVector<std::pair<TString, TStoragePoolStatsDelta>>;
+
 struct TTableAggregatedStats {
     TPartitionStats Aggregated;
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
@@ -342,13 +351,13 @@ struct TTableAggregatedStats {
         return Aggregated.PartCount && UpdatedStats.size() == Aggregated.PartCount;
     }
 
-    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
 };
 
 struct TAggregatedStats : public TTableAggregatedStats {
     THashMap<TPathId, TTableAggregatedStats> TableStats;
 
-    void UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats);
+    void UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now);
 };
 
 struct TSubDomainInfo;
@@ -467,6 +476,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 
+    bool IsExternalBlobsEnabled = false;
+
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
 
@@ -575,6 +586,7 @@ public:
         , IsRestore(alterData.IsRestore)
     {
         TableDescription.Swap(alterData.TableDescriptionFull.Get());
+        IsExternalBlobsEnabled = PartitionConfigHasExternalBlobsEnabled(TableDescription.GetPartitionConfig());
     }
 
     static TTableInfo::TPtr DeepCopy(const TTableInfo& other) {
@@ -668,7 +680,7 @@ public:
         ShardsStatsDetached = true;
     }
 
-    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
 
     void RegisterSplitMergeOp(TOperationId txId, const TTxState& txState);
 
@@ -692,12 +704,12 @@ public:
                             const TForceShardSplitSettings& forceShardSplitSettings,
                             TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                             THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
-                            float cpuUsageThreshold, const TTableInfo* mainTableForIndex, TString& reason) const;
+                            float cpuUsageThreshold, const TTableInfo* mainTableForIndex, TInstant now, TString& reason) const;
 
     bool CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                  const TForceShardSplitSettings& forceShardSplitSettings,
                                  TShardIdx shardIdx, const TTabletId& tabletId, TVector<TShardIdx>& shardsToMerge,
-                                 const TTableInfo* mainTableForIndex, TString& reason) const;
+                                 const TTableInfo* mainTableForIndex, TInstant now, TString& reason) const;
 
     bool CheckSplitByLoad(
             const TSplitSettings& splitSettings, TShardIdx shardIdx,
@@ -710,7 +722,7 @@ public:
             return false;
         }
         // Auto split is always enabled, unless table is using external blobs
-        return !PartitionConfigHasExternalBlobsEnabled(PartitionConfig());
+        return (IsExternalBlobsEnabled == false);
     }
 
     bool IsMergeBySizeEnabled(const TForceShardSplitSettings& params) const {
@@ -756,7 +768,7 @@ public:
 
     bool IsSplitByLoadEnabled(const TTableInfo* mainTableForIndex) const {
         // We cannot split when external blobs are enabled
-        if (PartitionConfigHasExternalBlobsEnabled(PartitionConfig())) {
+        if (IsExternalBlobsEnabled) {
             return false;
         }
 
@@ -1964,6 +1976,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     }
 
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {});
+    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& delta);
 
     void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 
@@ -3163,6 +3176,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 K = 0;
         ui32 Levels = 0;
         ui32 Rounds = 0;
+        ui32 OverlapClusters = 0;
+        double OverlapRatio = 0;
+        bool IsPrefixed = false;
 
         // progress
         enum EState : ui32 {
@@ -3170,6 +3186,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Reshuffle,
             MultiLocal,
             Recompute,
+            Filter,
+            FilterBorders,
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -3184,6 +3202,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         NTableIndex::NKMeans::TClusterId ChildBegin = 1;  // included
         NTableIndex::NKMeans::TClusterId Child = ChildBegin;
+
+        TVector<TString> FilterBorderRows;
 
         ui64 TableSize = 0;
 
@@ -3210,6 +3230,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TString WriteTo(bool needsBuildTable = false) const;
         TString ReadFrom() const;
+        int NextBuildIndex() const;
+        const char* NextBuildSuffix() const;
 
         std::pair<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId> RangeToBorders(const TSerializedTableRange& range) const;
 
@@ -3625,7 +3647,14 @@ public:
                     Y_ENSURE(NKikimr::NKMeans::ValidateSettings(desc.settings(), createError), createError);
                     indexInfo->KMeans.K = desc.settings().clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
+                    indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
                     indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
+                    indexInfo->KMeans.OverlapClusters = desc.settings().overlap_clusters()
+                        ? desc.settings().overlap_clusters()
+                        : NTableIndex::NKMeans::DefaultOverlapClusters;
+                    indexInfo->KMeans.OverlapRatio = desc.settings().has_overlap_ratio()
+                        ? desc.settings().overlap_ratio()
+                        : NTableIndex::NKMeans::DefaultOverlapRatio;
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
                     Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
@@ -3656,7 +3685,9 @@ public:
         TSerializedTableRange bound{range};
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
             "AddShardStatus id# " << Id << " shard " << shardIdx);
-        if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex) {
+        if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
+            KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
+            KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders) {
             AddParent(bound, shardIdx);
         }
         Shards.emplace(

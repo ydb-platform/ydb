@@ -7,6 +7,7 @@
 #include "object_processing.h"
 #include "source.h"
 #include "antlr_token.h"
+#include "secret_settings.h"
 
 #include <yql/essentials/sql/settings/partitioning.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
@@ -107,7 +108,6 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& selectStatement, TContext& con
 
 namespace NSQLTranslationV1 {
 
-using NALPDefault::SQLv1LexerTokens;
 using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;
@@ -1488,23 +1488,132 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
     return Nothing();
 }
 
-TMaybe<TColumnConstraints> ColumnConstraints(const TRule_column_schema& node, TTranslation& ctx) {
-    TNodePtr defaultExpr = nullptr;
+TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx) {
+    TNodePtr defaultExpr;
     bool nullable = true;
+    TVector<TIdentifier> families;
 
-    auto constraintsNode = node.GetRule_opt_column_constraints4();
-    if (constraintsNode.HasBlock1()) {
-        nullable = !constraintsNode.GetBlock1().HasBlock1();
-    }
-    if (constraintsNode.HasBlock2()) {
-        TSqlExpression expr(ctx.Context(), ctx.Context().Settings.Mode);
-        defaultExpr = expr.Build(constraintsNode.GetBlock2().GetRule_expr2());
-        if (!defaultExpr) {
-            return {};
+    const auto& optionsList = node.GetRule_column_option_list3();
+
+    enum class EOption {
+        Family,
+        NotNull,
+        DefaultValue
+    };
+
+    std::vector<TRule_column_option> columnOptions;
+    columnOptions.reserve(static_cast<size_t>(EOption::DefaultValue) + 1);
+
+    {
+        switch (optionsList.Alt_case()) {
+            case TRule_column_option_list::kAltColumnOptionList1: {
+                const auto& block = optionsList.GetAlt_column_option_list1().GetRule_column_option_list_space1().GetBlock1();
+                for (const auto& item : block) {
+                    const auto& rule = item.GetRule_column_option1();
+                    columnOptions.push_back(rule);
+                }
+
+                break;
+            }
+
+            case TRule_column_option_list::kAltColumnOptionList2: {
+                const auto& optionsNode = optionsList.GetAlt_column_option_list2().GetRule_column_option_list_comma1();
+                const auto& firstColumnOption = optionsNode.GetRule_column_option2();
+                columnOptions.push_back(firstColumnOption);
+
+                {
+                    auto block = optionsNode.GetBlock3();
+
+                    for (const auto& item : block) {
+                        const auto& rule = item.GetRule_column_option2();
+                        columnOptions.push_back(rule);
+                    }
+                }
+
+                break;
+            }
+
+            case TRule_column_option_list::ALT_NOT_SET: {
+                Y_ABORT("You should change implementation according to grammar changes");
+            }
         }
+
     }
 
-    return TColumnConstraints(defaultExpr, nullable);
+    {
+        std::vector<EOption> usedOptions;
+        usedOptions.reserve(static_cast<size_t>(EOption::DefaultValue) + 1);
+
+        for (const auto& rule : columnOptions) {
+            switch (rule.Alt_case()) {
+                case TRule_column_option::kAltColumnOption1: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::Family) != usedOptions.end()) {
+                        ctx.Context().Error() << "'FAMILY' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::Family);
+
+                    const auto& familyRelation = rule.GetAlt_column_option1().GetRule_family_relation1();
+                    families.push_back(IdEx(familyRelation.GetRule_an_id2(), ctx));
+                    break;
+                }
+                case TRule_column_option::kAltColumnOption2: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::NotNull) != usedOptions.end()) {
+                        ctx.Context().Error() << "'NOT NULL' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::NotNull);
+
+                    nullable = !rule.GetAlt_column_option2().GetRule_nullability1().HasBlock1();
+                    break;
+                }
+                case TRule_column_option::kAltColumnOption3: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::DefaultValue) != usedOptions.end()) {
+                        ctx.Context().Error() << "'DEFAULT' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::DefaultValue);
+
+                    TSqlExpression expr(ctx.Context(), ctx.Context().Settings.Mode);
+
+                    // TODO: We need to refact it
+                    auto legacyNotNullLastValue = ctx.Context().DisableLegacyNotNull;
+                    Y_DEFER {
+                        ctx.Context().DisableLegacyNotNull = legacyNotNullLastValue;
+                    };
+
+                    ctx.Context().DisableLegacyNotNull = true;
+
+                    defaultExpr = expr.Build(rule.GetAlt_column_option3().GetRule_default_value1().GetRule_expr2());
+
+                    if (AnyOf(ctx.Context().Issues.begin(), ctx.Context().Issues.end(), [](const auto& issue) {
+                        return issue.GetCode() == TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL;
+                    })) {
+                        ctx.Context().Error() << "'DEFAULT' option can not use expr which contains literall 'NOT NULL'."
+                                              << " If you wanted to use two different options 'DEFAULT' and 'NOT NULL',"
+                                              << " it is recommended to use the syntax '(DEFAULT value, NOT NULL, ...)'";
+
+                        return {};
+                    }
+
+                    if (!defaultExpr) {
+                        return {};
+                    }
+
+                    break;
+                }
+                case TRule_column_option::ALT_NOT_SET: {
+                    Y_ABORT("You should change implementation according to grammar changes");
+                }
+            }
+        }
+
+    }
+
+    return TColumnOptions{std::move(defaultExpr), nullable, std::move(families)};
 }
 
 TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schema& node) {
@@ -1513,10 +1622,12 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     TNodePtr type = SerialTypeNode(node.GetRule_type_name_or_bind2());
     const bool serial = (type != nullptr);
 
-    const auto constraints = ColumnConstraints(node, *this);
-    if (!constraints){
+    auto columnOptions = ColumnOptions(node, *this);
+    if (!columnOptions) {
         return {};
     }
+
+    auto [defaultExpr, nullable, families] = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -1525,12 +1636,16 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     if (!type) {
         return {};
     }
-    TVector<TIdentifier> families;
-    if (node.HasBlock3()) {
-        const auto& familyRelation = node.GetBlock3().GetRule_family_relation1();
-        families.push_back(IdEx(familyRelation.GetRule_an_id2(), *this));
-    }
-    return TColumnSchema(pos, name, type, constraints->Nullable, families, serial, constraints->DefaultExpr);
+
+    return TColumnSchema(
+        std::move(pos),
+        std::move(name),
+        std::move(type),
+        nullable,
+        std::move(families),
+        serial,
+        std::move(defaultExpr)
+    );
 }
 
 TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
@@ -3431,6 +3546,8 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     //    | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
     //    | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
     //    | WATERMARK AS LPAREN expr RPAREN
+    //    | WATERMARK EQUALS expr
+
     switch (rule.Alt_case()) {
     case TRule_table_hint::kAltTableHint1: {
         const auto& alt = rule.GetAlt_table_hint1();
@@ -3552,6 +3669,18 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         const auto pos = Ctx_.TokenPosition(alt.GetToken1());
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
         auto expr = TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4());
+        if (!expr) {
+            return false;
+        }
+        hints["watermark"] = { BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr)) };
+        break;
+    }
+
+    case TRule_table_hint::kAltTableHint5: {
+        const auto& alt = rule.GetAlt_table_hint5();
+        const auto pos = Ctx_.TokenPosition(alt.GetToken1());
+        TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
+        auto expr = TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr3());
         if (!expr) {
             return false;
         }
@@ -5089,7 +5218,7 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
         Ctx_.Error() << "SOURCE_TYPE requires key";
         return false;
     }
-    if (!ValidateAuthMethod(result)) {
+    if (!ValidateExternalDataSourceAuthMethod(result, Ctx_)) {
         return false;
     }
     return true;
@@ -5129,6 +5258,8 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
         case TRule_alter_external_data_source_action::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
+
+    // no ValidateExternalDataSourceAuthMethod is called b/c its impossible to check format with previously saved settings
 }
 
 bool TSqlTranslation::StoreSecretInheritPermissions(
@@ -5267,50 +5398,6 @@ bool TSqlTranslation::ParseSecretId(const TRule_id_or_at& node, TString& objectI
     if (objectId.empty()) {
         Error() << "Empty secret name";
         return false;
-    }
-    return true;
-}
-
-bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result) {
-    const static TSet<TStringBuf> allAuthFields{
-        "service_account_id",
-        "service_account_secret_name",
-        "login",
-        "password_secret_name",
-        "aws_access_key_id_secret_name",
-        "aws_secret_access_key_secret_name",
-        "aws_region",
-        "token_secret_name"
-    };
-    const static TMap<TStringBuf, TSet<TStringBuf>> authMethodFields{
-        {"NONE", {}},
-        {"SERVICE_ACCOUNT", {"service_account_id", "service_account_secret_name"}},
-        {"BASIC", {"login", "password_secret_name"}},
-        {"AWS", {"aws_access_key_id_secret_name", "aws_secret_access_key_secret_name", "aws_region"}},
-        {"MDB_BASIC", {"service_account_id", "service_account_secret_name", "login", "password_secret_name"}},
-        {"TOKEN", {"token_secret_name"}}
-    };
-    auto authMethodIt = result.find("auth_method");
-    if (authMethodIt == result.end() || authMethodIt->second.GetLiteral() == nullptr) {
-        Ctx_.Error() << "AUTH_METHOD requires key";
-        return false;
-    }
-    const auto& authMethod = *authMethodIt->second.GetLiteral();
-    auto it = authMethodFields.find(authMethod);
-    if (it == authMethodFields.end()) {
-        Ctx_.Error() << "Unknown AUTH_METHOD = " << authMethod;
-        return false;
-    }
-    const auto& currentAuthFields = it->second;
-    for (const auto& authField: allAuthFields) {
-        if (currentAuthFields.contains(authField) && !result.contains(TString{authField})) {
-            Ctx_.Error() << to_upper(TString{authField}) << " requires key";
-            return false;
-        }
-        if (!currentAuthFields.contains(authField) && result.contains(TString{authField})) {
-            Ctx_.Error() << to_upper(TString{authField}) << " key is not supported for AUTH_METHOD = " << authMethod;
-            return false;
-        }
     }
     return true;
 }

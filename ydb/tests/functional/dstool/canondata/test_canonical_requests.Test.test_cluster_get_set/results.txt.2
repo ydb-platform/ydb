@@ -1,0 +1,15 @@
+dstool -e <endpoint> --mon-port <mon_port> cluster set --disable-self-heal
+Exit Status: 0
+===== stderr =====
+success
+
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    UpdateSettings {
+      EnableSelfHeal: false
+    }
+  }
+}

@@ -11,7 +11,8 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
     def setup(self):
         if min(self.versions) < (25, 1):
             pytest.skip("Only available since 25-1")
-        self.rows_count = 5
+        self.rows_count = 9
+        self.rows_per_user = 3
         self.index_name = "vector_idx"
         self.vector_dimension = 3
         self.vector_types = {
@@ -40,31 +41,21 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
         values.append(numb)
         return ",".join(str(val) for val in values)
 
-    def _create_index(self, vector_type, table_name, distance=None, similarity=None):
-        if distance is not None:
-            create_index_sql = f"""
-                ALTER TABLE {table_name}
-                ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
-                ON (vec)
-                WITH (distance={distance},
-                      vector_type={vector_type},
-                      vector_dimension={self.vector_dimension},
-                      levels=2,
-                      clusters=10
-                );
-            """
-        else:
-            create_index_sql = f"""
-                ALTER TABLE {table_name}
-                ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
-                ON (vec)
-                WITH (similarity={similarity},
-                      vector_type={vector_type},
-                      vector_dimension={self.vector_dimension},
-                      levels=2,
-                      clusters=10
-                );
-            """
+    def _create_index(self, vector_type, table_name, target, prefixed):
+        prefix = ""
+        if prefixed:
+            prefix = "user, "
+        create_index_sql = f"""
+            ALTER TABLE {table_name}
+            ADD INDEX `{self.index_name}` GLOBAL USING vector_kmeans_tree
+            ON ({prefix}vec)
+            WITH ({target},
+                  vector_type={vector_type},
+                  vector_dimension={self.vector_dimension},
+                  levels=2,
+                  clusters=10
+            );
+        """
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(create_index_sql)
 
@@ -80,74 +71,99 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
 
         assert wait_for(predicate, timeout_seconds=100, step_seconds=1), "Error getting index status"
 
-    def write_data(self, name, vector_type, table_name):
+    def _write_data(self, name, vector_type, table_name):
         values = []
         for key in range(self.rows_count):
             vector = self.get_vector(vector_type, key + 1)
-            values.append(f'({key}, Untag({name}([{vector}]), "{vector_type}"))')
+            user = 1 + (key % self.rows_per_user)
+            values.append(f'({key}, {user}, Untag({name}([{vector}]), "{vector_type}Vector"))')
 
         sql_upsert = f"""
-                UPSERT INTO `{table_name}` (key, vec)
+                UPSERT INTO `{table_name}` (key, user, vec)
                 VALUES {",".join(values)};
             """
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(sql_upsert)
 
-    def select_from_index(self):
-        querys = []
-        for vector_type in self.vector_types.keys():
-            for distance in self.targets.keys():
-                for distance_func in self.targets[distance].keys():
-                    order = "ASC" if distance != "similarity" else "DESC"
-                    vector = self.get_vector(f"{vector_type}Vector", 1)
-                    querys.append(
-                        f"""
-                        $Target = {self.vector_types[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
-                        SELECT key, vec, {self.targets[distance][distance_func]}(vec, $Target) as target
-                        FROM {vector_type}_{distance}_{distance_func}
-                        VIEW `{self.index_name}`
-                        ORDER BY {self.targets[distance][distance_func]}(vec, $Target) {order}
-                        LIMIT {self.rows_count};
-                    """
-                    )
-        for _ in self.roll():
-            with ydb.QuerySessionPool(self.driver) as session_pool:
-                for qyery in querys:
-                    result_sets = session_pool.execute_with_retries(qyery)
+    def _get_queries(self):
+        queries = []
+        for prefixed in ['', '_pfx']:
+            for vector_type in self.vector_types.keys():
+                for distance in self.targets.keys():
+                    for distance_func in self.targets[distance].keys():
+                        table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}"
+                        order = "ASC" if distance != "similarity" else "DESC"
+                        vector = self.get_vector(f"{vector_type}Vector", 1)
+                        where = ""
+                        if prefixed:
+                            where = "WHERE user=1"
+                        queries.append([
+                            True, f"""
+                            $Target = {self.vector_types[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
+                            SELECT key, vec, {self.targets[distance][distance_func]}(vec, $Target) as target
+                            FROM `{table_name}`
+                            VIEW `{self.index_name}`
+                            {where}
+                            ORDER BY {self.targets[distance][distance_func]}(vec, $Target) {order}
+                            LIMIT {self.rows_count};"""
+                        ])
+                        # Insert, update, upsert, delete
+                        key = self.rows_count+1
+                        vector = self.get_vector(vector_type, key+1)
+                        queries.append([
+                            False, f"""
+                            INSERT INTO `{table_name}` (key, user, vec)
+                            VALUES ({key}, {1 + (key) % self.rows_per_user},
+                                Untag({self.vector_types[vector_type]}([{vector}]), "{vector_type}Vector"))
+                            """
+                        ])
+                        vector = self.get_vector(vector_type, key+2)
+                        queries.append([
+                            False, f"""
+                            UPDATE `{table_name}` SET user=user+1,
+                                vec=Untag({self.vector_types[vector_type]}([{vector}]), "{vector_type}Vector")
+                            WHERE key={key}
+                            """
+                        ])
+                        vector = self.get_vector(vector_type, key+3)
+                        queries.append([
+                            False, f"""
+                            UPSERT INTO `{table_name}` (key, user, vec)
+                            VALUES ({key}, {1 + (key) % self.rows_per_user},
+                                Untag({self.vector_types[vector_type]}([{vector}]), "{vector_type}Vector"))
+                            """
+                        ])
+                        queries.append([
+                            False, f"""
+                            DELETE FROM `{table_name}` WHERE key={key}
+                            """
+                        ])
+        return queries
+
+    def _do_queries(self, queries):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for [is_select, query] in queries:
+                result_sets = session_pool.execute_with_retries(query)
+                if is_select:
                     assert len(result_sets[0].rows) > 0, "Query returned an empty set"
                     rows = result_sets[0].rows
                     for row in rows:
                         assert row['target'] is not None, "the distance is None"
 
+    def select_from_index(self):
+        queries = self._get_queries()
+        for _ in self.roll():
+            self._do_queries(queries)
+
     def select_from_index_without_roll(self):
-        querys = []
-        for vector_type in self.vector_types.keys():
-            for distance in self.targets.keys():
-                for distance_func in self.targets[distance].keys():
-                    order = "ASC" if distance != "similarity" else "DESC"
-                    vector = self.get_vector(f"{vector_type}Vector", 1)
-                    querys.append(
-                        f"""
-                        $Target = {self.vector_types[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
-                        SELECT key, vec, {self.targets[distance][distance_func]}(vec, $Target) as target
-                        FROM {vector_type}_{distance}_{distance_func}
-                        VIEW `{self.index_name}`
-                        ORDER BY {self.targets[distance][distance_func]}(vec, $Target) {order}
-                        LIMIT {self.rows_count};
-                    """
-                    )
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            for query in querys:
-                result_sets = session_pool.execute_with_retries(query)
-                assert len(result_sets[0].rows) > 0, "Query returned an empty set"
-                rows = result_sets[0].rows
-                for row in rows:
-                    assert row['target'] is not None, "the distance is None"
+        queries = self._get_queries()
+        self._do_queries(queries)
 
     def create_table(self, table_name):
         query = f"""
                 CREATE TABLE {table_name} (
                     key Int64 NOT NULL,
+                    user Uint64 NOT NULL,
                     vec String NOT NULL,
                     PRIMARY KEY (key)
                 )
@@ -156,26 +172,22 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
             session_pool.execute_with_retries(query)
 
     def test_vector_index(self):
-        for vector_type in self.vector_types.keys():
-            for distance in self.targets.keys():
-                for distance_func in self.targets[distance].keys():
-                    self.create_table(table_name=f"{vector_type}_{distance}_{distance_func}")
-                    self.write_data(
-                        name=self.vector_types[vector_type],
-                        vector_type=f"{vector_type}Vector",
-                        table_name=f"{vector_type}_{distance}_{distance_func}",
-                    )
-                    if distance == "similarity":
-                        self._create_index(
-                            table_name=f"{vector_type}_{distance}_{distance_func}",
+        for prefixed in ['', '_pfx']:
+            for vector_type in self.vector_types.keys():
+                for distance in self.targets.keys():
+                    for distance_func in self.targets[distance].keys():
+                        table_name = f"{vector_type}_{distance}_{distance_func}{prefixed}"
+                        self.create_table(table_name)
+                        self._write_data(
+                            name=self.vector_types[vector_type],
                             vector_type=vector_type,
-                            similarity=distance_func,
+                            table_name=table_name,
                         )
-                    else:
                         self._create_index(
-                            table_name=f"{vector_type}_{distance}_{distance_func}",
+                            table_name=table_name,
                             vector_type=vector_type,
-                            distance=distance_func,
+                            target=f"{distance}={distance_func}",
+                            prefixed=prefixed,
                         )
         self.wait_index_ready()
         self.select_from_index()

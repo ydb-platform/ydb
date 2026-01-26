@@ -157,9 +157,9 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 {
     Y_UNUSED(config);
 
-    if (*txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE &&
-        *txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RO &&
-        *txCtx.EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW)
+    if (*txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
+        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO &&
+        *txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW)
         return false;
 
     if (txCtx.GetSnapshot().IsValid())
@@ -232,7 +232,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         return true;
     }
 
-    if (*txCtx.EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
+    if (*txCtx.EffectiveIsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW) {
         if (hasEffects && !txCtx.HasTableRead) {
             YQL_ENSURE(txCtx.HasTableWrite);
             // Don't need snapshot for WriteOnly transaction.

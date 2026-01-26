@@ -123,11 +123,11 @@ public:
         TasksGraph.GetMeta().AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
         Target = creator;
 
-        YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
+        YQL_ENSURE(Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_UNDEFINED);
 
         if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {
-            YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE
-                || Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW);
+            YQL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SERIALIZABLE
+                || Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW);
         }
 
         ReadOnlyTx = IsReadOnlyTx();
@@ -182,7 +182,7 @@ public:
     bool GetUseFollowers() const {
         return (
             // first, we must specify read stale flag.
-            Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_STALE &&
+            Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_STALE &&
             // next, if snapshot is already defined, so in this case followers are not allowed.
             !GetSnapshot().IsValid() &&
             // ensure that followers are allowed only for read only transactions.
@@ -1869,7 +1869,7 @@ private:
                     if (stageInfo.Meta.ShardKey->RowOperation != TKeyDesc::ERowOperation::Read) {
                         error = TStringBuilder() << "Non-read operations can't be performed on async index table"
                             << ": " << stageInfo.Meta.ShardKey->TableId;
-                    } else if (Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_READ_STALE) {
+                    } else if (Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_STALE) {
                         error = TStringBuilder() << "Read operation can be performed on async index table"
                             << ": " << stageInfo.Meta.ShardKey->TableId << " only with StaleRO isolation level";
                     }
@@ -1980,7 +1980,7 @@ private:
 
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
-            case NKikimrKqp::ISOLATION_LEVEL_READ_UNCOMMITTED:
+            case NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED:
                 YQL_ENSURE(ReadOnlyTx);
                 YQL_ENSURE(!VolatileTx);
                 TasksGraph.GetMeta().AllowInconsistentReads = true;
@@ -2817,13 +2817,17 @@ private:
             }
         }
 
+        auto counters = Counters->Counters->GetKqpCounters();
+        if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {
+            counters = counters->GetSubgroup("path", context->StreamingQueryPath);
+        }
         const auto& checkpointId = context->CheckpointId;
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
             ::NFq::TCoordinatorId(checkpointId, Generation),
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
             {},
-            Counters->Counters->GetKqpCounters()->GetSubgroup("path", context->StreamingQueryPath),
+            counters,
             graphParams,
             stateLoadMode,
             streamingDisposition).Release());
@@ -2831,7 +2835,10 @@ private:
             << ", execution id " << context->CurrentExecutionId
             << ", checkpoint id " << checkpointId << ", generation " << Generation
             << ", state load mode " << FederatedQuery::StateLoadMode_Name(stateLoadMode)
-            << ", streaming disposition " << streamingDisposition.ShortDebugString());
+            << ", streaming disposition " << streamingDisposition.ShortDebugString()
+            << ", has QueryPhysicalGraph " << (Request.QueryPhysicalGraph != nullptr)
+            << ", enabled watermarks " << (Request.QueryPhysicalGraph ? Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks() : false)
+        );
     }
 
 private:

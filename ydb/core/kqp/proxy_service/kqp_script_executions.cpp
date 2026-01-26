@@ -185,12 +185,13 @@ class TScriptExecutionsTablesCreator : public NTableCreator::TMultiTableCreator 
     using TBase = NTableCreator::TMultiTableCreator;
 
 public:
-    explicit TScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags)
+    explicit TScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags, ui64 generation)
         : TBase({
             GetScriptExecutionsCreator(featureFlags),
             GetScriptExecutionLeasesCreator(featureFlags),
             GetScriptResultSetsCreator(featureFlags)
         })
+        , Generation(generation)
     {}
 
 private:
@@ -293,9 +294,12 @@ private:
     }
 
     void OnTablesCreated(bool success, NYql::TIssues issues) override  {
-        Send(Owner, new TEvScriptExecutionsTablesCreationFinished(success, std::move(issues)));
+        Send(Owner, new TEvScriptExecutionsTablesCreationFinished(success, std::move(issues)), 0, Generation);
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvStartScriptExecutionBackgroundChecks());
     }
+
+private:
+    const ui64 Generation = 0;
 };
 
 Ydb::Query::ExecMode GetExecModeFromAction(NKikimrKqp::EQueryAction action) {
@@ -2817,6 +2821,8 @@ public:
             DECLARE $execution_id AS Text;
 
             SELECT
+                operation_status,
+                finalization_status,
                 retry_state
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
@@ -2850,6 +2856,10 @@ public:
 
         // Script execution info
         if (NYdb::TResultSetParser result(ResultSets[0]); result.TryNextRow()) {
+            if (!result.ColumnParser("operation_status").GetOptionalInt32() || result.ColumnParser("finalization_status").GetOptionalInt32()) {
+                return Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Can not reset retray state then operation is running or not finalized");
+            }
+
             if (const auto& serializedRetryState = result.ColumnParser("retry_state").GetOptionalJsonDocument()) {
                 NJson::TJsonValue value;
                 if (!NJson::ReadJsonTree(*serializedRetryState, &value)) {
@@ -2865,7 +2875,11 @@ public:
         // Lease info
         if (NYdb::TResultSetParser result(ResultSets[1]); result.TryNextRow()) {
             if (const auto leaseState = result.ColumnParser("lease_state").GetOptionalInt32()) {
-                DropLease = static_cast<ELeaseState>(*leaseState) == ELeaseState::WaitRetry;
+                if (static_cast<ELeaseState>(*leaseState) != ELeaseState::WaitRetry) {
+                    return Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Can not reset retry state then operation is running or not finalized");
+                }
+
+                DropLease = true;
             }
         }
 
@@ -2934,8 +2948,24 @@ private:
 
 class TCancelScriptExecutionOperationActor : public TActorBootstrapped<TCancelScriptExecutionOperationActor> {
     using TBase = TActorBootstrapped<TCancelScriptExecutionOperationActor>;
+    using TRetryPolicy = IRetryPolicy<>;
+
+    enum class EState {
+        GetScriptExecutionOperationStatus,
+        ResetRetryPolicy,
+        WaitQueryExecution,
+        CancelScriptExecution,
+        WaitCancelScriptExecution,
+    };
 
 public:
+    // Cancellation pipeline:
+    // 1. Get script execution operation status and:
+    //    - Finalize script execution if lease expired or there is not finished finalization
+    // 2. If script execution is running now, send cancel request to run script actor [race with script execution finalization and retries]
+    // 3. If script execution has retry state - reset it and also ensure that script execution is stopped
+    // 4. If error occurred - retry from step 1, otherwise reply SUCCESS
+
     TCancelScriptExecutionOperationActor(TEvCancelScriptExecutionOperation::TPtr ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
         : Request(std::move(ev))
         , QueryServiceConfig(queryServiceConfig)
@@ -2943,8 +2973,11 @@ public:
     {}
 
     void Bootstrap() {
-        auto userSID = Request->Get()->UserSID;
-        if (const auto& error = CheckScriptExecutionAccess(userSID)) {
+        Become(&TCancelScriptExecutionOperationActor::StateFunc);
+        KQP_PROXY_LOG_D("Bootstrap");
+
+        UserSID = Request->Get()->UserSID;
+        if (const auto& error = CheckScriptExecutionAccess(UserSID)) {
             return Reply(Ydb::StatusIds::UNAUTHORIZED, error);
         }
 
@@ -2955,11 +2988,7 @@ public:
         }
 
         ExecutionId = *executionId;
-
-        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, false, 0, userSID));
-        KQP_PROXY_LOG_D("Bootstrap. Start TCheckLeaseStatusActor " << checkerId);
-
-        Become(&TCancelScriptExecutionOperationActor::StateFunc);
+        ContinueCancel();
     }
 
     STRICT_STFUNC(StateFunc,
@@ -2969,117 +2998,237 @@ public:
         hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
         IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+        sFunc(TEvents::TEvWakeup, ContinueCancel);
     )
 
-    void Handle(TEvResetScriptExecutionRetriesResponse::TPtr& ev) {
-        RetryStateDropped = true;
-
+    void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             const auto& issues = ev->Get()->Issues;
-            KQP_PROXY_LOG_W("Reset retry state " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
+            KQP_PROXY_LOG_W("Check lease " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
+            return Reply(status, AddRootIssue("Fetch script execution info failed", issues));
+        }
 
-            Reply(status, AddRootIssue("Reset retry state failed", issues, true));
+        RunScriptActor = ev->Get()->RunScriptActorId;
+        HasRetryPolicy = ev->Get()->HasRetryPolicy;
+        const auto& operationStatus = ev->Get()->OperationStatus;
+        KQP_PROXY_LOG_D("Check lease " << ev->Sender << " success, operation status: " << (operationStatus ? Ydb::StatusIds::StatusCode_Name(*operationStatus) : "<null>") << ", has retries: " << HasRetryPolicy);
+
+        if (!operationStatus) {
+            // Cancel running query first, to prevent TLI on retry policy reset
+            State = EState::CancelScriptExecution;
+        } else if (HasRetryPolicy) {
+            // Reset retry policy to prevent further query retries
+            State = EState::ResetRetryPolicy;
+        } else {
+            return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Script execution operation is already finished");
+        }
+
+        ContinueCancel();
+    }
+
+    void Handle(TEvKqp::TEvCancelScriptExecutionResponse::TPtr& ev) {
+        if (ev->Cookie != CancellationCookie) {
             return;
         }
 
-        const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, false));
-        KQP_PROXY_LOG_D("Reset retry state " << ev->Sender << " success, start TCheckLeaseStatusActor " << checkerId);
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
+        const auto status = ev->Get()->Record.GetStatus();
+        if (status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::PRECONDITION_FAILED) {
+            KQP_PROXY_LOG_W("Script execution cancel failed " << status << " from RunScriptActor: " << ev->Sender << ", issues: " << issues.ToOneLineString());
+            return Reply(status, std::move(issues));
+        }
+
+        KQP_PROXY_LOG_D("Got cancel response " << status << " from RunScriptActor: " << ev->Sender << ", issues: " << issues.ToOneLineString());
+
+        if (HasRetryPolicy) {
+            // Double check and reset retry policy to prevent further query retries
+            State = EState::ResetRetryPolicy;
+            ContinueCancel();
+        } else {
+            Reply(status, std::move(issues));
+        }
     }
 
-    void Handle(TEvPrivate::TEvLeaseCheckResult::TPtr& ev) {
-        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
-            RunScriptActor = ev->Get()->RunScriptActorId;
-            const auto& operationStatus = ev->Get()->OperationStatus;
-            KQP_PROXY_LOG_D("Check lease " << ev->Sender << " success" << (operationStatus ? ", operation status: " + Ydb::StatusIds::StatusCode_Name(*operationStatus) : "") << ", CancelSent: " << CancelSent);
+    void Handle(TEvResetScriptExecutionRetriesResponse::TPtr& ev) {
+        const auto status = ev->Get()->Status;
+        const auto& issues = ev->Get()->Issues;
+        if (status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::PRECONDITION_FAILED && status != Ydb::StatusIds::ABORTED) {
+            KQP_PROXY_LOG_W("Reset retry state " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString());
+            Reply(status, AddRootIssue("Reset retry state failed", issues));
+            return;
+        }
 
-            if (ev->Get()->HasRetryPolicy && !RetryStateDropped) {
-                // Request maybe waiting for retry, reset retry state first
+        KQP_PROXY_LOG_D("Reset retry state " << ev->Sender << " finished " << status << ", issues: " << issues.ToOneLineString());
+
+        if (status == Ydb::StatusIds::SUCCESS) {
+            return Reply(Ydb::StatusIds::SUCCESS);
+        }
+
+        State = EState::GetScriptExecutionOperationStatus;
+        if (const NYql::TIssues resultIssues = AddRootIssue("Failed to cancel script execution, query execution is under retry", issues); !ScheduleRetry(resultIssues)) {
+            // Race with script execution retry
+            Reply(status, resultIssues);
+        }
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        const auto reason = ev->Get()->Reason;
+        KQP_PROXY_LOG_W("Delivery failed " << reason << " to RunScriptActor: " << ev->Sender);
+
+        if (State != EState::WaitCancelScriptExecution || ev->Sender != RunScriptActor) {
+            return;
+        }
+
+        if (reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
+            // The actor probably had finished before our cancel message arrived
+            State = EState::GetScriptExecutionOperationStatus;
+        } else {
+            State = EState::CancelScriptExecution;
+        }
+
+        if (const TString message(TStringBuilder() << "Failed to deliver cancel request to destination (delivery problem, reason: " << reason << ")"); !ScheduleRetry(message)) {
+            Reply(Ydb::StatusIds::UNAVAILABLE, message);
+        }
+    }
+
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        const auto nodeId = ev->Get()->NodeId;
+        KQP_PROXY_LOG_W("Delivery failed to RunScriptActor, node " << nodeId << " disconnected");
+
+        if (State != EState::WaitCancelScriptExecution || !RunScriptActor || nodeId != RunScriptActor.NodeId()) {
+            return;
+        }
+
+        State = EState::CancelScriptExecution;
+        if (const TString message("Failed to deliver cancel request to destination (node disconnected)"); !ScheduleRetry(message)) {
+            Reply(Ydb::StatusIds::UNAVAILABLE, message);
+        }
+    }
+
+    void PassAway() override {
+        ResetSessionSubscribe();
+        TBase::PassAway();
+    }
+
+private:
+    void ResetSessionSubscribe() {
+        if (SubscribedOnSession) {
+            Send(TActivationContext::InterconnectProxy(*SubscribedOnSession), new TEvents::TEvUnsubscribe());
+            SubscribedOnSession = Nothing();
+        }
+    }
+
+    void ContinueCancel() {
+        WaitRetry = false;
+        KQP_PROXY_LOG_D("Continue cancel, State: " << static_cast<ui32>(State));
+
+        switch (State) {
+            case EState::GetScriptExecutionOperationStatus: {
+                State = EState::WaitQueryExecution;
+                const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, /* canRetry */ false, 0, UserSID));
+                KQP_PROXY_LOG_D("Start TCheckLeaseStatusActor " << checkerId);
+                break;
+            }
+            case EState::ResetRetryPolicy: {
+                State = EState::WaitQueryExecution;
                 const auto& resetActorId = Register(new TResetScriptExecutionRetriesQueryActor::TRetry(SelfId(), Request->Get()->Database, ExecutionId));
                 KQP_PROXY_LOG_D("Start TResetRetryStateRetryActor " << resetActorId);
-            } else if (operationStatus) {
-                Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Script execution operation is already finished");
-            } else {
-                if (CancelSent) { // We have not found the actor, but after it status of the operation is not defined, something strage happened.
-                    Reply(Ydb::StatusIds::INTERNAL_ERROR, "Failed to cancel script execution operation after undelivered event");
-                } else {
-                    SendCancelToRunScriptActor(); // The race: operation is still working, but it can finish before it receives cancel signal. Try to cancel first and then maybe check its status.
-                }
+                break;
             }
-        } else {
-            KQP_PROXY_LOG_W("Check lease " << ev->Sender << " failed " << ev->Get()->Status << ", issues: " << ev->Get()->Issues.ToOneLineString());
-            Reply(ev->Get()->Status, std::move(ev->Get()->Issues));
+            case EState::CancelScriptExecution: {
+                State = EState::WaitCancelScriptExecution;
+                SendCancelToRunScriptActor();
+                break;
+            }
+            case EState::WaitQueryExecution:
+            case EState::WaitCancelScriptExecution: {
+                break;
+            }
         }
     }
 
     void SendCancelToRunScriptActor() {
-        KQP_PROXY_LOG_D("Send cancel request to RunScriptActor");
+        CancellationCookie++;
+        KQP_PROXY_LOG_D("Send cancel request to RunScriptActor, CancellationCookie: " << CancellationCookie);
+        ResetSessionSubscribe();
+
         ui64 flags = IEventHandle::FlagTrackDelivery;
         if (RunScriptActor.NodeId() != SelfId().NodeId()) {
             flags |= IEventHandle::FlagSubscribeOnSession;
             SubscribedOnSession = RunScriptActor.NodeId();
         }
-        Send(RunScriptActor, new TEvKqp::TEvCancelScriptExecutionRequest(), flags);
-        CancelSent = true;
+
+        Send(RunScriptActor, new TEvKqp::TEvCancelScriptExecutionRequest(), flags, CancellationCookie);
     }
 
-    void Handle(TEvKqp::TEvCancelScriptExecutionResponse::TPtr& ev) {
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
-
-        const auto status = ev->Get()->Record.GetStatus();
-        KQP_PROXY_LOG_D("Got cancel response " << status << " from RunScriptActor: " << ev->Sender << ", issues: " << issues.ToOneLineString());
-
-        Reply(status, std::move(issues));
-    }
-
-    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->Reason == TEvents::TEvUndelivered::ReasonActorUnknown) { // The actor probably had finished before our cancel message arrived.
-            const auto& checkerId = Register(new TCheckLeaseStatusActor(SelfId(), Request->Get()->Database, ExecutionId, QueryServiceConfig, Counters, false)); // Check if the operation has finished.
-            KQP_PROXY_LOG_I("Got delivery problem to RunScriptActor: " << ev->Sender << ", maybe already finished, start lease check " << checkerId);
-        } else {
-            KQP_PROXY_LOG_W("Delivery failed " << ev->Get()->Reason << " to RunScriptActor: " << ev->Sender);
-            Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver cancel request to destination");
-        }
-    }
-
-    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        KQP_PROXY_LOG_W("Delivery failed to RunScriptActor, node " << ev->Get()->NodeId << " disconnected");
-        Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to deliver cancel request to destination");
-    }
-
-    void PassAway() override {
-        if (SubscribedOnSession) {
-            Send(TActivationContext::InterconnectProxy(*SubscribedOnSession), new TEvents::TEvUnsubscribe());
-        }
-        TBase::PassAway();
-    }
-
-private:
     TString LogPrefix() const {
         return TStringBuilder() << "[TCancelScriptExecutionOperationActor] OwnerId: " << Request->Sender << " ActorId: " << SelfId() << " Database: " << Request->Get()->Database << " ExecutionId: " << ExecutionId << " RunScriptActor: " << RunScriptActor << ". ";
     }
 
-    void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
-        KQP_PROXY_LOG_D("Reply " << status << ", issues: " << issues.ToOneLineString());
-        Send(Request->Sender, new TEvCancelScriptExecutionOperationResponse(status, std::move(issues)));
+    bool ScheduleRetry(const NYql::TIssues& issues) {
+        if (WaitRetry) {
+            return true;
+        }
+
+        if (!RetryState) {
+            RetryState = TRetryPolicy::GetExponentialBackoffPolicy(
+                []() {
+                    return ERetryErrorClass::ShortRetry;
+                },
+                TDuration::MilliSeconds(100),
+                TDuration::MilliSeconds(100),
+                TDuration::Seconds(1),
+                10
+            )->CreateRetryState();
+        }
+
+        if (const auto delay = RetryState->GetNextRetryDelay()) {
+            KQP_PROXY_LOG_W("Schedule retry for error: " << issues.ToOneLineString() << " in " << *delay);
+            Issues.AddIssues(std::move(issues));
+            Schedule(*delay, new TEvents::TEvWakeup());
+            WaitRetry = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    bool ScheduleRetry(const TString& message) {
+        return ScheduleRetry({NYql::TIssue(message)});
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues = {}) {
+        Issues.AddIssues(std::move(issues));
+
+        if (status == Ydb::StatusIds::SUCCESS) {
+            KQP_PROXY_LOG_D("Reply success, issues: " << Issues.ToOneLineString());
+        } else {
+            KQP_PROXY_LOG_W("Reply failed, status: " << status << ", issues: " << Issues.ToOneLineString());
+        }
+
+        Send(Request->Sender, new TEvCancelScriptExecutionOperationResponse(status, std::move(Issues)));
         PassAway();
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, const TString& message) {
-        NYql::TIssues issues;
-        issues.AddIssue(message);
-        Reply(status, std::move(issues));
+        Reply(status, {NYql::TIssue(message)});
     }
 
 private:
     const TEvCancelScriptExecutionOperation::TPtr Request;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     const TIntrusivePtr<TKqpCounters> Counters;
+    std::optional<TString> UserSID;
     TString ExecutionId;
     TActorId RunScriptActor;
+    bool HasRetryPolicy = false;
+    ui64 CancellationCookie = 0;
     TMaybe<ui32> SubscribedOnSession;
-    bool RetryStateDropped = false;
-    bool CancelSent = false;
+    TRetryPolicy::IRetryState::TPtr RetryState;
+    EState State = EState::GetScriptExecutionOperationStatus;
+    bool WaitRetry = false;
+    NYql::TIssues Issues;
 };
 
 class TSaveScriptExecutionResultMetaQuery : public TQueryBase {
@@ -3836,7 +3985,7 @@ public:
                 script_sinks,
                 script_secret_names,
                 retry_state,
-                graph_compressed
+                graph_compressed IS NOT NULL AS has_graph
             FROM `.metadata/script_executions`
             WHERE database = $database AND execution_id = $execution_id AND
                   (expire_at > CurrentUtcTimestamp() OR expire_at IS NULL);
@@ -3967,12 +4116,9 @@ public:
             OperationTtl = GetDuration(meta.GetOperationTtl());
             LeaseDuration = GetDuration(meta.GetLeaseDuration());
 
-            if (meta.GetSaveQueryPhysicalGraph()) {
+            if (meta.GetSaveQueryPhysicalGraph() && !result.ColumnParser("has_graph").GetBool()) {
                 // Disable retries if state not saved
-                const auto& graph = result.ColumnParser("graph_compressed").GetOptionalString();
-                if (!graph) {
-                    RetryState.ClearRetryPolicyMapping();
-                }
+                RetryState.ClearRetryPolicyMapping();
             }
         }
 
@@ -4853,12 +4999,13 @@ public:
 
         const TCompressor compressor(*compressionMethod);
         const auto& graph = compressor.Decompress(*graphCompressed);
-
-        if (!PhysicalGraph.ParseFromString(graph)) {
+        NKikimrKqp::TQueryPhysicalGraph graphProto;
+        if (!graphProto.ParseFromString(graph)) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Query physical graph is corrupted");
             return;
         }
 
+        PhysicalGraph = std::move(graphProto);
         Finish();
     }
 
@@ -4869,7 +5016,7 @@ public:
 private:
     const TString Database;
     const TString ExecutionId;
-    NKikimrKqp::TQueryPhysicalGraph PhysicalGraph;
+    std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     i64 LeaseGeneration = 0;
 };
 
@@ -4884,8 +5031,8 @@ IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, c
     return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, counters, maxRunTime, leaseDuration);
 }
 
-IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags) {
-    return new TScriptExecutionsTablesCreator(featureFlags);
+IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags, ui64 generation) {
+    return new TScriptExecutionsTablesCreator(featureFlags, generation);
 }
 
 IActor* CreateForgetScriptExecutionOperationActor(TEvForgetScriptExecutionOperation::TPtr ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {

@@ -18,7 +18,7 @@ def get_version():
         return "unknown"
 
 
-def main():
+def main(args=None):
     parser = ArgumentParser(description='YDB Distributed Storage Administration Tool', version=get_version())
 
     # common options
@@ -27,7 +27,7 @@ def main():
 
     subparsers = parser.add_subparsers(help='Subcommands', dest='global_command', required=True)
     command_map = commands.make_command_map_by_structure(subparsers)
-    args = parser.parse_args()
+    args = parser.parse_args(args)
     try:
         common.apply_args(args)
         commands.run_command(command_map, args)

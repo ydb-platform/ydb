@@ -69,7 +69,8 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    std::string_view suffix = {});
+    std::string_view suffix = {},
+    bool withForeign = false);
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
@@ -91,6 +92,13 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeBuildOverlapTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    std::string_view suffix = {});
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);

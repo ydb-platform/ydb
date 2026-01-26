@@ -136,6 +136,7 @@ TDescribeTopicResult::TTopicSettings::TReadRule::TReadRule(const Ydb::PersQueue:
 
     ConsumerName_ = settings.consumer_name();
     Important_ = settings.important();
+    AvailabilityPeriod_ = TDuration::Seconds(settings.availability_period().seconds());
     StartingMessageTimestamp_ = TInstant::MilliSeconds(settings.starting_message_timestamp_ms());
 
     SupportedFormat_ = static_cast<EFormat>(settings.supported_format());

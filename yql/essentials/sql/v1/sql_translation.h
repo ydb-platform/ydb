@@ -1,6 +1,6 @@
 #pragma once
 #include "context.h"
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 #include <library/cpp/charset/ci_string.h>
 
 namespace NSQLTranslationV1 {
@@ -105,7 +105,7 @@ std::pair<TString, TViewDescription> TableKeyImpl(const std::pair<bool, TString>
 
 std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx, bool hasAt);
 
-TMaybe<TColumnConstraints> ColumnConstraints(const TRule_column_schema& node, TTranslation& ctx);
+TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx);
 
 /// \return optional prefix
 TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id);
@@ -282,7 +282,6 @@ protected:
     bool ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings);
     bool ParseAlterStreamingQueryAction(const TRule_alter_streaming_query_action& node, TStreamingQuerySettings& settings);
 
-    bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
 
     TNodePtr ReturningList(const ::NSQLv1Generated::TRule_returning_columns_list& columns);

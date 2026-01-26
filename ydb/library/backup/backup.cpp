@@ -755,6 +755,16 @@ inline TString Interval(const TDuration& value) {
     return TStringBuilder() << "Interval('PT" << value.Seconds() << "S')";
 }
 
+TString GetSecretSettingName(TStringBuf secretName, const TString& secretSettingPrefix) {
+    return secretName.StartsWith('/') ? secretSettingPrefix + "_PATH" : secretSettingPrefix + "_NAME";
+}
+
+void AddSecretSettingIfNotEmpty(const std::string& secretName, const TString& secretSettingName, TVector<TString>& options) {
+    if (!secretName.empty()) {
+        options.push_back(BuildOption(GetSecretSettingName(secretName, secretSettingName).c_str(), Quote(secretName)));
+    }
+}
+
 TString BuildCreateReplicationQuery(
         const TString& db,
         const TString& backupRoot,
@@ -775,12 +785,12 @@ TString BuildCreateReplicationQuery(
     switch (params.GetCredentials()) {
         case NReplication::TConnectionParams::ECredentials::Static:
             opts.push_back(BuildOption("USER", Quote(params.GetStaticCredentials().User)));
-            opts.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(params.GetStaticCredentials().PasswordSecretName)));
+            AddSecretSettingIfNotEmpty(params.GetStaticCredentials().PasswordSecretName,
+                "PASSWORD_SECRET", opts);
             break;
         case NReplication::TConnectionParams::ECredentials::OAuth:
-            if (const auto& secret = params.GetOAuthCredentials().TokenSecretName; !secret.empty()) {
-                opts.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(secret)));
-            }
+            AddSecretSettingIfNotEmpty(params.GetOAuthCredentials().TokenSecretName,
+                "TOKEN_SECRET", opts);
             break;
     }
 
@@ -839,9 +849,14 @@ void CanonizeForBackup(Ydb::Table::DescribeExternalDataSourceResult& desc) {
     desc.mutable_properties()->erase("REFERENCES");
 }
 
-TString BuildCreateExternalDataSourceQuery(const Ydb::Table::DescribeExternalDataSourceResult& description) {
+TString BuildCreateExternalDataSourceQuery(
+    const Ydb::Table::DescribeExternalDataSourceResult& description,
+    const TString& db)
+{
     return std::format(
+        "-- database: \"{}\"\n"
         "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}` WITH (\n{},\n{}{}\n);",
+        db.c_str(),
         description.self().name().c_str(),
         ToString("SOURCE_TYPE", description.source_type()),
         ToString("LOCATION", description.location()),
@@ -854,7 +869,7 @@ TString BuildCreateExternalDataSourceQuery(const Ydb::Table::DescribeExternalDat
 
 }
 
-void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPath& fsBackupFolder) {
+void BackupExternalDataSource(TDriver driver, const TString& db, const TString& dbPath, const TFsPath& fsBackupFolder) {
     Y_ENSURE(!dbPath.empty());
     LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
@@ -862,7 +877,7 @@ void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPa
     NTable::TTableClient client(driver);
     VerifyStatus(NDump::DescribeExternalDataSource(client, dbPath, description), "describe external data source");
     CanonizeForBackup(description);
-    const auto creationQuery = BuildCreateExternalDataSourceQuery(description);
+    const auto creationQuery = BuildCreateExternalDataSourceQuery(description, db);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalDataSource());
     BackupPermissions(driver, dbPath, fsBackupFolder);
@@ -1047,7 +1062,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             } else if (dbIt.IsReplication()) {
                 BackupReplication(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
             } else if (dbIt.IsExternalDataSource()) {
-                BackupExternalDataSource(driver, dbIt.GetFullPath(), childFolderPath);
+                BackupExternalDataSource(driver, database, dbIt.GetFullPath(), childFolderPath);
             } else if (dbIt.IsExternalTable()) {
                 BackupExternalTable(driver, dbIt.GetFullPath(), childFolderPath);
             } else if (dbIt.IsSystemView()) {

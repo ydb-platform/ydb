@@ -1166,27 +1166,29 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void TryMoveToTryKeepInMemoryCache(TCollection& collection, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, const TActorId& owner) {
-        if (collection.InMemoryOwners && collection.InMemoryOwners.emplace(owner, pageCollection).second) {
-            // new owner for already in-memory collection
-            TVector<TPage*> loadedPages;
-            for (const auto& kv : collection.PageMap) {
-                auto* page = kv.second.Get();
-                switch (page->State) {
-                case PageStateLoaded:
-                    loadedPages.push_back(page);
-                    break;
-                case PageStateEvicted:
-                    // also we need to notify about pages that can be reloaded
-                    if (ActiveInMemoryBytes + TPageTraits::GetSize(page) <= GetInMemoryLimitBytes()) {
-                        ReloadEvictedPage(page, false);
+        if (collection.InMemoryOwners) {
+            if (collection.InMemoryOwners.emplace(owner, pageCollection).second) {
+                // new owner for already in-memory collection
+                TVector<TPage*> loadedPages;
+                for (const auto& kv : collection.PageMap) {
+                    auto* page = kv.second.Get();
+                    switch (page->State) {
+                    case PageStateLoaded:
                         loadedPages.push_back(page);
+                        break;
+                    case PageStateEvicted:
+                        // also we need to notify about pages that can be reloaded
+                        if (ActiveInMemoryBytes + TPageTraits::GetSize(page) <= GetInMemoryLimitBytes()) {
+                            ReloadEvictedPage(page, false);
+                            loadedPages.push_back(page);
+                        }
+                        break;
                     }
-                    break;
                 }
-            }
 
-            if (loadedPages) {
-                NotifyInMemOwner(pageCollection, loadedPages, owner);
+                if (loadedPages) {
+                    NotifyInMemOwner(pageCollection, loadedPages, owner);
+                }
             }
             return;
         }

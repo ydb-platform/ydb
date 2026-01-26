@@ -132,6 +132,21 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, KMeansTreeSearchTopSize);
     REGISTER_SETTING(*this, DisableCheckpoints);
 
+    REGISTER_SETTING(*this, DefaultTxMode).Parser(
+        [](const TString& mode) {
+            if (mode == "SerializableRW") {
+                return NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+            } else if (mode == "SnapshotRW") {
+                return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW;
+            } else if (mode == "SnapshotRO") {
+                return NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;
+            } else if (mode == "StaleRO") {
+                return NKqpProto::ISOLATION_LEVEL_READ_STALE;
+            } else {
+                throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
+            }
+        });
+
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
 

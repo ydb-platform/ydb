@@ -15,7 +15,7 @@ namespace NYdb::inline Dev {
 }
 
 namespace NYdb::inline Dev::NPersQueue {
-    
+
 enum class EFormat {
     BASE = 1,
 };
@@ -57,6 +57,7 @@ struct TDescribeTopicResult : public TStatus {
 
             GETTER(std::string, ConsumerName);
             GETTER(bool, Important);
+            GETTER(TDuration, AvailabilityPeriod);
             GETTER(TInstant, StartingMessageTimestamp);
             GETTER(EFormat, SupportedFormat);
             const std::vector<ECodec>& SupportedCodecs() const {
@@ -68,6 +69,7 @@ struct TDescribeTopicResult : public TStatus {
         private:
             std::string ConsumerName_;
             bool Important_;
+            TDuration AvailabilityPeriod_;
             TInstant StartingMessageTimestamp_;
             EFormat SupportedFormat_;
             std::vector<ECodec> SupportedCodecs_;
@@ -177,6 +179,7 @@ struct TReadRuleSettings {
     using TSelf = TReadRuleSettings;
     FLUENT_SETTING(std::string, ConsumerName);
     FLUENT_SETTING_DEFAULT(bool, Important, false);
+    FLUENT_SETTING_DEFAULT(TDuration, AvailabilityPeriod, TDuration::Zero());
     FLUENT_SETTING_DEFAULT(TInstant, StartingMessageTimestamp, TInstant::Zero());
     FLUENT_SETTING_DEFAULT(EFormat, SupportedFormat, EFormat::BASE)
     FLUENT_SETTING_DEFAULT(std::vector<ECodec>, SupportedCodecs, GetDefaultCodecs());
@@ -187,6 +190,7 @@ struct TReadRuleSettings {
     TReadRuleSettings& SetSettings(const TDescribeTopicResult::TTopicSettings::TReadRule& settings) {
         ConsumerName_ = settings.ConsumerName();
         Important_ = settings.Important();
+        AvailabilityPeriod_ = settings.AvailabilityPeriod();
         StartingMessageTimestamp_ = settings.StartingMessageTimestamp();
         SupportedFormat_ = settings.SupportedFormat();
         SupportedCodecs_.clear();

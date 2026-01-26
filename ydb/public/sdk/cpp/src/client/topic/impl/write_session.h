@@ -117,7 +117,7 @@ private:
             , IdleTimeout(idleTimeout)
         {}
 
-        WriteSessionWrapper* Session;
+        const WriteSessionWrapper* Session;
         const TInstant EmptySince;
         const TDuration IdleTimeout;
 

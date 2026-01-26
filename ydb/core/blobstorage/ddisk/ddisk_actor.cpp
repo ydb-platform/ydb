@@ -16,22 +16,43 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Bootstrap() {
         Become(&TThis::StateFunc);
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD00, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
+        InitPDiskInterface();
     }
 
-    STRICT_STFUNC(TDDiskActor::StateFunc,
-        hFunc(TEvDDiskConnect, Handle)
-        hFunc(TEvDDiskDisconnect, Handle)
-        hFunc(TEvDDiskWrite, Handle)
-        hFunc(TEvDDiskRead, Handle)
-        hFunc(TEvDDiskWritePersistentBuffer, Handle)
-        hFunc(TEvDDiskReadPersistentBuffer, Handle)
-        hFunc(TEvDDiskFlushPersistentBuffer, Handle)
-        hFunc(TEvDDiskWriteResult, Handle)
-        hFunc(TEvents::TEvUndelivered, Handle)
-        hFunc(TEvDDiskListPersistentBuffer, Handle)
-        cFunc(TEvents::TSystem::Poison, PassAway)
-    )
+    STFUNC(TDDiskActor::StateFunc) {
+        auto handleQuery = [&](auto& ev) {
+            if (CanHandleQuery(ev)) {
+                Handle(ev);
+            }
+        };
+
+        STRICT_STFUNC_BODY(
+            hFunc(TEvDDiskConnect, handleQuery)
+            hFunc(TEvDDiskDisconnect, handleQuery)
+            hFunc(TEvDDiskWrite, handleQuery)
+            hFunc(TEvDDiskRead, handleQuery)
+            hFunc(TEvDDiskWritePersistentBuffer, handleQuery)
+            hFunc(TEvDDiskReadPersistentBuffer, handleQuery)
+            hFunc(TEvDDiskFlushPersistentBuffer, handleQuery)
+            hFunc(TEvDDiskListPersistentBuffer, handleQuery)
+
+            hFunc(TEvDDiskWriteResult, Handle)
+            hFunc(TEvents::TEvUndelivered, Handle)
+
+            hFunc(NPDisk::TEvYardInitResult, Handle)
+            hFunc(NPDisk::TEvReadLogResult, Handle)
+            cFunc(TEvPrivate::EvHandleSingleQuery, HandleSingleQuery)
+            hFunc(NPDisk::TEvChunkReserveResult, Handle)
+            hFunc(NPDisk::TEvLogResult, Handle)
+            hFunc(TEvPrivate::TEvHandleEventForChunk, Handle)
+            hFunc(NPDisk::TEvCutLog, Handle)
+            hFunc(NPDisk::TEvChunkWriteResult, Handle)
+            hFunc(NPDisk::TEvChunkReadResult, Handle)
+
+            cFunc(TEvents::TSystem::Poison, PassAway)
+        )
+    }
 
     void TDDiskActor::PassAway() {
         TActorBootstrapped::PassAway();

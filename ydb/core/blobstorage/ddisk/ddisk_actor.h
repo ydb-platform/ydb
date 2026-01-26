@@ -5,6 +5,13 @@
 #include "ddisk.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
+
+#include <queue>
+
+namespace NKikimrBlobStorage::NDDisk::NInternal {
+    class TChunkMapLogRecord;
+}
 
 namespace NKikimr::NDDisk {
 
@@ -43,6 +50,24 @@ namespace NKikimr::NDDisk {
 
         static constexpr ui32 BlockSize = 4096;
 
+    private:
+        struct TEvPrivate {
+            enum {
+                EvHandleSingleQuery = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvHandleEventForChunk,
+            };
+
+            struct TEvHandleEventForChunk : TEventLocal<TEvHandleEventForChunk, EvHandleEventForChunk> {
+                ui64 TabletId;
+                ui64 VChunkIndex;
+
+                TEvHandleEventForChunk(ui64 tabletId, ui64 vChunkIndex)
+                    : TabletId(tabletId)
+                    , VChunkIndex(vChunkIndex)
+                {}
+            };
+        };
+
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
@@ -51,8 +76,72 @@ namespace NKikimr::NDDisk {
         void PassAway() override;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Boot sequence and PDisk management
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        struct TChunkRef {
+            TChunkIdx ChunkIdx;
+            std::queue<std::unique_ptr<IEventHandle>> PendingEventsForChunk;
+        };
+
+        THashMap<ui64, THashMap<ui64, TChunkRef>> ChunkRefs; // TabletId -> (VChunkIndex -> ChunkIdx)
+        TIntrusivePtr<TPDiskParams> PDiskParams;
+        std::vector<TChunkIdx> OwnedChunksOnBoot;
+        ui64 ChunkMapSnapshotLsn = Max<ui64>();
+        std::queue<std::unique_ptr<IEventHandle>> PendingQueries;
+        bool HandlingQueries = false;
+        ui64 NextLsn = 1;
+        std::set<std::tuple<ui64, ui64, ui32>> ChunkMapIncrementsInFlight;
+
+        void InitPDiskInterface();
+        void Handle(NPDisk::TEvYardInitResult::TPtr ev);
+        void Handle(NPDisk::TEvReadLogResult::TPtr ev);
+        void StartHandlingQueries();
+        void HandleSingleQuery();
+
+        template<typename TEvent>
+        bool CanHandleQuery(TAutoPtr<TEventHandle<TEvent>>& ev) {
+            if (HandlingQueries) {
+                return true;
+            }
+            PendingQueries.emplace(ev.Release());
+            return false;
+        }
+
+        // Chunk management code
+
+        std::queue<TChunkIdx> ChunkReserve;
+        bool ReserveInFlight = false;
+        std::queue<std::tuple<ui64, ui64>> ChunkAllocateQueue;
+        THashMap<ui64, std::function<void()>> LogCallbacks;
+        ui64 NextCookie = 1;
+        THashMap<void*, std::function<void(NPDisk::TEvChunkWriteResult&)>> WriteCallbacks;
+        THashMap<void*, std::function<void(NPDisk::TEvChunkReadResult&)>> ReadCallbacks;
+
+        void IssueChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
+        void Handle(NPDisk::TEvChunkReserveResult::TPtr ev);
+        void HandleChunkReserved();
+        void Handle(NPDisk::TEvLogResult::TPtr ev);
+        void Handle(TEvPrivate::TEvHandleEventForChunk::TPtr ev);
+
+        void Handle(NPDisk::TEvCutLog::TPtr ev);
+
+        void Handle(NPDisk::TEvChunkWriteResult::TPtr ev);
+        void Handle(NPDisk::TEvChunkReadResult::TPtr ev);
+
+        ui64 GetFirstLsnToKeep() const;
+
+        void IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit, const NProtoBuf::Message& data,
+            ui64 *startingPointLsnPtr, std::function<void()> callback);
+
+        NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapSnapshot();
+        NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapIncrement(ui64 tabletId, ui64 vChunkIndex,
+            TChunkIdx chunkIdx);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Connection management
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
         struct TConnectionInfo {
             ui64 TabletId;
             ui32 Generation;

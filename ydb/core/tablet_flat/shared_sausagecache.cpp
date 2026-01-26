@@ -243,6 +243,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             MemoryConsumer->SetConsumption(GetStatAllBytes());
         }
 
+        Counters.S3FIFOEvictOps->Set(Cache.GetEvictOpsCounter());
+
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "GC has finished with"
             << " Limit: " << HumanReadableBytes(Cache.GetLimit())
             << " Active: " << HumanReadableBytes(StatActiveBytes)
@@ -1354,6 +1356,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void Evict(TIntrusiveList<TPage>&& pages) {
+        size_t evictedPages = pages.Size();
+        ui64 evictedBytes = 0;
         while (!pages.Empty()) {
             TPage* page = pages.PopFront();
 
@@ -1367,7 +1371,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             if (page->UnUse()) {
                 SharedCachePages->GCList->PushGC(page);
             }
+
+            evictedBytes += TPageTraits::GetSize(page);
         }
+
+        Counters.EvictedPages->Add(evictedPages);
+        Counters.EvictedBytes->Add(evictedBytes);
     }
 
     void EvictNow(TPage* page, THashSet<TCollection*>& recheck) {
@@ -1381,6 +1390,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (page->UnUse()) {
             TryDrop(page, recheck);
         }
+
+        Counters.EvictedPages->Inc();
+        Counters.EvictedBytes->Add(TPageTraits::GetSize(page));
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
@@ -1539,10 +1551,14 @@ public:
         const bool gcFinished = DoGC();
         if (gcFinished) {
             GcInProgress = false;
-        } else if (!GcInProgress) {
-            GcInProgress = true;
-            ActorContext().Send(
-                SelfId(), new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCContinuation)));
+        } else {
+            Counters.UnfinishedGCRuns->Inc();
+            if (!GcInProgress) {
+                GcInProgress = true;
+                ActorContext().Send(
+                    SelfId(),
+                    new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCContinuation)));
+            }
         }
 
         TryLoadInMemoryCollections();

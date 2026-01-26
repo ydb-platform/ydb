@@ -31,6 +31,9 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr LoadInFlyBytes;
     const TCounterPtr TargetInMemoryBytes;
     const TCounterPtr ActiveInMemoryBytes;
+    const TCounterPtr EvictedPages;
+    const TCounterPtr EvictedBytes;
+    const TCounterPtr S3FIFOEvictOps;
 
     // page collection counters:
     const TCounterPtr PageCollections;
@@ -41,6 +44,7 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr PendingRequests;
     const TCounterPtr SucceedRequests;
     const TCounterPtr FailedRequests;
+    const TCounterPtr UnfinishedGCRuns;
 
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 };

@@ -632,6 +632,9 @@ void TClientCommandRootCommon::ParseStaticCredentials(TConfig& config) {
         if (ignoreExplicitProfilePassword || ignoreActiveProfilePassword) {
             Password.reset();
             PasswordFile.clear();
+            if (IsVerbose()) {
+                Cerr << "Ignoring profile password because username is not from the same profile" << Endl;
+            }
             if (TMaybe<TString> envPassword = TryGetEnv("YDB_PASSWORD")) {
                 Password = envPassword.GetRef();
             }

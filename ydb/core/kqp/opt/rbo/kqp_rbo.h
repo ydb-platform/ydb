@@ -121,7 +121,7 @@ public:
  * After the rule-based optimizer generates a final plan (logical plan with detailed physical properties)
  * we convert it into a final physical representation that directly correpsonds to the exection plan
  */
-TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& ctx);
+TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
 
 } // namespace NKqp
 } // namespace NKikimr

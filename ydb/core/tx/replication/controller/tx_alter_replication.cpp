@@ -91,6 +91,7 @@ public:
         if (record.HasLocation()) {
             Replication->SetLocation(record.GetLocation());
         }
+
         Replication->ResetCredentials(ctx);
 
         NIceDb::TNiceDb db(txc.DB);

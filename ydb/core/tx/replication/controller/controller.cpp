@@ -533,6 +533,7 @@ void TController::UpdateStats(const TWorkerId& id, const NKikimrReplication::TWo
     if (!target) {
         return;
     }
+
     target->UpdateStats(id.WorkerId(), stats, AppData()->Counters);
 }
 

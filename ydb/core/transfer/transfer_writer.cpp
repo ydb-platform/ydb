@@ -269,6 +269,7 @@ private:
         if (!LastWriteTime) {
             LastWriteTime = TInstant::Now();
         }
+
         for (auto& message : records) {
             TMessage input {
                 .PartitionId = partitionId,
@@ -307,6 +308,7 @@ private:
                     } else {
                         tablePath = DefaultTablePath;
                     }
+
                     Stats.BytesWritten += m->EstimateSize;
                     Stats.RowsWritten += m->Data.RowCount();
                     if (!TableState->AddData(std::move(tablePath), m->Data, m->EstimateSize)) {
@@ -380,6 +382,7 @@ private:
             ProcessingError = error;
             Stats.WriteErrors++;
         }
+
         SendStats(EWorkerOperation::NONE);
 
         if (ProcessingError) {
@@ -402,6 +405,7 @@ private:
         if (LastWriteTime) {
             LastWriteTime = TInstant::Now();
         }
+
         return StartWork();
     }
 

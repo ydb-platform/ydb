@@ -165,6 +165,7 @@ public:
                 auto* location = ev->Record.MutableLocation();
                 location->SetPath(TPath::Init(pathId, context.SS).PathString());
                 const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
+
                 if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
                     location->SetYcCloudId(it->second);
                 }

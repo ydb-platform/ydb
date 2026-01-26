@@ -173,12 +173,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     ui64 ActiveInMemoryBytes = 0;
     ui64 InFlyInMemoryBytes = 0;
 
+    // True if after after a big drop in cache size, we couldn't finish GC during
+    // a single event handler invocation and yielded to process other events.
+    bool GcInProgress = false;
+
     ui64 GetInMemoryLimitBytes() {
         ui64 remainInFlyLimit = Config.GetInMemoryInFlyLimit() > InFlyInMemoryBytes ? Config.GetInMemoryInFlyLimit() - InFlyInMemoryBytes : 0;
         return Min(AliveInMemoryBytes + remainInFlyLimit, TargetInMemoryBytes);
     }
 
-    void ActualizeCacheSizeLimit() {
+    // Returns true if the limit is fully in sync with the config.
+    bool ActualizeCacheSizeLimit() {
         ui64 limitBytes = MemLimitBytes;
         if (Config.HasMemoryLimit()) {
             limitBytes = Min(limitBytes, Config.GetMemoryLimit());
@@ -187,14 +192,21 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             Counters.ConfigLimitBytes->Set(0);
         }
 
+        ui64 effectiveLimit = Cache.GetLimit() > limitBytes + Config.GetMaxEvictedBytesInSingleGCRun()
+            ? Cache.GetLimit() - Config.GetMaxEvictedBytesInSingleGCRun()
+            : limitBytes;
+
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
-        Cache.UpdateLimit(limitBytes, GetInMemoryLimitBytes());
-        Counters.ActiveLimitBytes->Set(limitBytes);
+        Cache.UpdateLimit(effectiveLimit, GetInMemoryLimitBytes());
+        Counters.ActiveLimitBytes->Set(effectiveLimit);
+
+        return effectiveLimit == limitBytes;
     }
 
-    void DoGC() {
+    // Return true when actually finished
+    bool DoGC() {
         // maybe we already have enough useless pages
         // update StatActiveBytes + StatPassiveBytes
         ProcessGCList();
@@ -204,15 +216,21 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             * Config.GetActivePagesReservationPercent() / 100;
 
         THashSet<TCollection*> recheck;
+        ui64 evictedBytes = 0;
         ui64 evictedInMemoryBytes = 0;
         while (GetStatAllBytes() > MemLimitBytes
             || GetStatAllBytes() > (Config.HasMemoryLimit() ? Config.GetMemoryLimit() : Max<ui64>()) && StatActiveBytes > configActiveReservedBytes)
         {
             if (TPage* evictedPage = Cache.EvictNext()) {
+                auto pageSize = TPageTraits::GetSize(evictedPage);
+                evictedBytes += pageSize;
                 if (evictedPage->CacheMode == ECacheMode::TryKeepInMemory) {
-                    evictedInMemoryBytes += TPageTraits::GetSize(evictedPage);
+                    evictedInMemoryBytes += pageSize;
                 }
                 EvictNow(evictedPage, recheck);
+                if (evictedBytes > Config.GetMaxEvictedBytesInSingleGCRun()) {
+                    break;
+                }
             } else {
                 break;
             }
@@ -230,8 +248,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             << " Active: " << HumanReadableBytes(StatActiveBytes)
             << " Passive: " << HumanReadableBytes(StatPassiveBytes)
             << " LoadInFly: " << HumanReadableBytes(StatLoadInFlyBytes)
+            << " EvictedBytes: " << HumanReadableBytes(evictedBytes)
             << " EvictedInMemoryBytes: " << HumanReadableBytes(evictedInMemoryBytes)
         );
+
+        const bool cacheSizeInSync = ActualizeCacheSizeLimit();
+        return cacheSizeInSync && evictedBytes <= Config.GetMaxEvictedBytesInSingleGCRun();
     }
 
     void Handle(NMemory::TEvConsumerRegistered::TPtr &ev, const TActorContext& ctx) {
@@ -869,7 +891,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             ScheduleGC();
             [[fallthrough]];
         case EWakeupTag::DoGCManual:
+        case EWakeupTag::DoGCContinuation:
             // DoGC will be called at the end of StateFunc
+            GcInProgress = false;
             break;
         }
     }
@@ -1512,7 +1536,15 @@ public:
             HFunc(NMemory::TEvConsumerLimit, Handle);
         }
 
-        DoGC();
+        const bool gcFinished = DoGC();
+        if (gcFinished) {
+            GcInProgress = false;
+        } else if (!GcInProgress) {
+            GcInProgress = true;
+            ActorContext().Send(
+                SelfId(), new TKikimrEvents::TEvWakeup(static_cast<ui64>(EWakeupTag::DoGCContinuation)));
+        }
+
         TryLoadInMemoryCollections();
     }
 

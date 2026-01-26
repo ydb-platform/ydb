@@ -2255,7 +2255,7 @@ public:
 
             NDataIntegrity::LogTli("SessionActor", message, queryText,
                                    QueryState->QueryTraceId, Nothing(), queryTexts,
-                                   TlsActivationContext->AsActorContext());
+                                   TlsActivationContext->AsActorContext(), isCommitAction);
         }
 
         if (QueryState->TxCtx->TxManager) {
@@ -2301,7 +2301,7 @@ public:
                             // This is the QueryTraceId of the specific query that acquired the lock that was broken
                             TMaybe<ui64> victimQueryTraceId;
                             TString victimQueryText;
-                            
+
                             // First try to get QueryTraceId from TxManager (set by write actor for UseSink path)
                             if (auto txManagerQueryTraceId = QueryState->TxCtx->TxManager->GetBrokenLockQueryTraceId()) {
                                 victimQueryTraceId = *txManagerQueryTraceId;
@@ -2316,9 +2316,8 @@ public:
                                 victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
                             }
 
-                            NDataIntegrity::LogTli("SessionActor", message, queryText,
-                                                   Nothing(), victimQueryTraceId, queryTexts,
-                                                   TlsActivationContext->AsActorContext(), Nothing(), victimQueryText);
+                            NDataIntegrity::LogTli("SessionActor", message, queryText, Nothing(), victimQueryTraceId, queryTexts,
+                                                   TlsActivationContext->AsActorContext(), isCommitAction, Nothing(), victimQueryText);
                         }
                     } else if (ev->BrokenLockPathId || ev->BrokenLockShardId) {
                         YQL_ENSURE(!QueryState->TxCtx->TxManager);
@@ -2354,9 +2353,8 @@ public:
                                 victimQueryText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
                             }
 
-                            NDataIntegrity::LogTli("SessionActor", message, queryText,
-                                                   Nothing(), victimQueryTraceId, queryTexts,
-                                                   TlsActivationContext->AsActorContext(), Nothing(), victimQueryText);
+                            NDataIntegrity::LogTli("SessionActor", message, queryText, Nothing(), victimQueryTraceId, queryTexts,
+                                                   TlsActivationContext->AsActorContext(), isCommitAction, Nothing(), victimQueryText);
                         }
                     }
                     break;

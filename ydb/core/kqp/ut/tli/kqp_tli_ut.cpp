@@ -88,7 +88,7 @@ namespace {
                 continue;
             }
             TString result = record.substr(allPos + 11);
-            const size_t allQueryTextsPos = result.find(",AllQueryTexts:");
+            const size_t allQueryTextsPos = result.find(", AllQueryTexts:");
             if (allQueryTextsPos != TString::npos) {
                 result = result.substr(0, allQueryTextsPos);
             }
@@ -109,7 +109,7 @@ namespace {
             }
             TString result = record.substr(victimPos + 17);
             // Stop at comma followed by QueryText:
-            const size_t nextFieldPos = result.find(",QueryText:");
+            const size_t nextFieldPos = result.find(", QueryText:");
             if (nextFieldPos != TString::npos) {
                 result = result.substr(0, nextFieldPos);
             }
@@ -330,8 +330,8 @@ namespace {
             "breaker SessionActor AllQueryTexts should contain breaker query");
         UNIT_ASSERT_C(data.VictimAllQueryTexts && data.VictimAllQueryTexts->Contains(victimQueryText),
             "victim SessionActor AllQueryTexts should contain victim query");
-        UNIT_ASSERT_C(!data.BreakerQueryText || *data.BreakerQueryText == breakerQueryText || *data.BreakerQueryText == "Empty",
-            "breaker SessionActor QueryText should match breaker query or be Empty");
+        UNIT_ASSERT_C(!data.BreakerQueryText || *data.BreakerQueryText == breakerQueryText || *data.BreakerQueryText == "Commit",
+            "breaker SessionActor QueryText should match breaker query or be Commit: " << *data.BreakerQueryText);
         UNIT_ASSERT_VALUES_EQUAL_C(data.VictimQueryText, victimQueryText,
             "victim SessionActor QueryText should match victim query");
         if (victimExtraQueryText) {

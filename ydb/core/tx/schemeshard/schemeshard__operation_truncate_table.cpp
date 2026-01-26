@@ -147,8 +147,12 @@ public:
         table->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, path.Base()->PathId, table);
 
-        if (path.Parent()->IsTableIndex()) {
-            IncParentDirAlterVersionWithRepublish(OperationId, path, context);
+        // This check means that the table being processed is the main one.
+        if (!path.Parent()->IsTableIndex()) {
+            NTableIndexVersion::SyncChildIndexVersions(
+                path.Base(), table, table->AlterVersion,
+                OperationId, context, db
+            );
         }
 
         context.SS->ClearDescribePathCaches(path.Base());
@@ -392,16 +396,8 @@ bool DfsOnTableChildrenTree(TOperationId opId, const TTxTransaction& tx, TOperat
                                 result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with vector indexes")};
                                 return false;
                             }
-                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
-                                // This condition should be removed in the near future
-                                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with fulltext indexes")};
-                                return false;
-                            }
-                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
-                                // This condition should be removed in the near future
-                                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with fulltext indexes")};
-                                return false;
-                            }
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                             case NKikimrSchemeOp::EIndexTypeGlobal:
                             case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
                                 if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::ETypeIndex)) {

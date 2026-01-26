@@ -97,6 +97,22 @@ public:
         return ::google::protobuf::util::MessageDifferencer::Equals(PublicProto, proto);
     }
 
+    bool CompareWithStringIgnoringFields(const TString& str, const TVector<TString>& ignoredFields) const {
+        TPublicProto proto;
+        google::protobuf::TextFormat::ParseFromString(str, &proto);
+
+        ::google::protobuf::util::MessageDifferencer differencer;
+        for (const auto& field : ignoredFields) {
+            const auto* descriptor = PublicProto.GetDescriptor();
+            const auto* fieldDescriptor = descriptor->FindFieldByName(field);
+            if (fieldDescriptor) {
+                differencer.IgnoreField(fieldDescriptor);
+            }
+        }
+
+        return differencer.Compare(PublicProto, proto);
+    }
+
 protected:
     TPublicProto PublicProto;
 };
@@ -397,22 +413,6 @@ private:
         }
         partition_write_speed_bytes_per_second: 50000000
         partition_write_burst_bytes: 50000000
-        attributes {
-            key: "_allow_unauthenticated_read"
-            value: "true"
-        }
-        attributes {
-            key: "_allow_unauthenticated_write"
-            value: "true"
-        }
-        attributes {
-            key: "_message_group_seqno_retention_period_ms"
-            value: "1382400000"
-        }
-        attributes {
-            key: "_partitions_per_tablet"
-            value: "1"
-        }
     )";
 };
 

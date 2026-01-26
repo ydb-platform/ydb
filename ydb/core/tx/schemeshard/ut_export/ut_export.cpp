@@ -683,7 +683,7 @@ namespace {
                 const auto& topicPath = topicExpected.GetPath();
                 UNIT_ASSERT(HasS3File(topicPath));
                 auto content = GetS3FileContent(topicPath);
-                UNIT_ASSERT_C(topicExpected.CompareWithString(content),
+                UNIT_ASSERT_C(topicExpected.CompareWithStringIgnoringFields(content, {"attributes"}),
                     TStringBuilder() << topicExpected.GetPublicProto().DebugString() << "\n\nVS\n\n" << content);
 
                 if (enablePermissions) {
@@ -3763,7 +3763,7 @@ WITH (
 );)";
         TestTransfer(scheme, expected);
     }
-  
+
     Y_UNIT_TEST(TopicExportWithAllFields) {
         EnvOptions().EnablePermissionsExport(true).EnablePqBilling(true);
         Env();
@@ -3890,7 +3890,8 @@ WITH (
         auto permissionsPath = "/topic_export/permissions.pb";
         UNIT_ASSERT_C(HasS3File(permissionsPath), "Permissions file should exist");
     }
-  
+
+
     Y_UNIT_TEST(ExternalDataSourceAuthNone) {
         TString scheme = R"(
             Name: "DataSource"

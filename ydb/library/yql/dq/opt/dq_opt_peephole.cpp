@@ -881,34 +881,6 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     const auto itemTypeLeft = GetSequenceItemType(blockHashJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
     const auto itemTypeRight = GetSequenceItemType(blockHashJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
 
-    TExprNode::TListType leftRenames, rightRenames;
-    std::vector<TString> fullColNames;
-    ui32 outputIndex = 0;
-
-    // Build renames and full column names for left side
-    for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
-        TString name(itemTypeLeft->GetItems()[i]->GetName());
-        if (leftTableLabel) {
-            name = leftTableLabel + "." + name;
-        }
-        fullColNames.push_back(name);
-        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
-        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
-    }
-
-    // Build renames and full column names for right side
-    if (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi") {
-        for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
-            TString name(itemTypeRight->GetItems()[i]->GetName());
-            if (rightTableLabel) {
-                name = rightTableLabel + "." + name;
-            }
-            fullColNames.push_back(name);
-            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
-            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
-        }
-    }
-
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
 
@@ -940,6 +912,68 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         } else {
             rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
             rightConvertedItems.emplace_back(rightName, dryType);
+        }
+    }
+
+    // Build renames based on wide stream layout
+    TExprNode::TListType leftRenames, rightRenames;
+    std::vector<TString> fullColNames;
+    ui32 outputIndex = 0;
+
+    // Build maps for converted columns
+    THashMap<TString, ui32> leftConvertedIndices, rightConvertedIndices;
+    for (auto i = 0U; i < leftConvertedItems.size(); ++i) {
+        leftConvertedIndices[leftConvertedItems[i].first] = itemTypeLeft->GetSize() + i;
+    }
+    for (auto i = 0U; i < rightConvertedItems.size(); ++i) {
+        rightConvertedIndices[rightConvertedItems[i].first] = itemTypeRight->GetSize() + i;
+    }
+
+
+
+    // Build renames and full column names for left side
+    for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
+        const auto& item = itemTypeLeft->GetItems()[i];
+        TString name(item->GetName());
+        if (leftTableLabel) {
+            name = leftTableLabel + "." + name;
+        }
+        fullColNames.push_back(name);
+
+        // Find the index in wide stream
+        ui32 wideStreamIndex;
+        auto it = leftConvertedIndices.find(item->GetName());
+        if (it != leftConvertedIndices.end()) {
+            wideStreamIndex = it->second;
+        } else {
+            wideStreamIndex = i;
+        }
+
+        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(wideStreamIndex)));
+        leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
+    }
+
+    // Build renames and full column names for right side
+    if (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi") {
+        for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
+            const auto& item = itemTypeRight->GetItems()[i];
+            TString name(item->GetName());
+            if (rightTableLabel) {
+                name = rightTableLabel + "." + name;
+            }
+            fullColNames.push_back(name);
+
+            // Find the index in wide stream
+            ui32 wideStreamIndex;
+            auto it = rightConvertedIndices.find(item->GetName());
+            if (it != rightConvertedIndices.end()) {
+                wideStreamIndex = it->second;
+            } else {
+                wideStreamIndex = i;
+            }
+
+            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(wideStreamIndex)));
+            rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
         }
     }
 
@@ -994,6 +1028,8 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(2, blockHashJoin.JoinType().Ptr())
             .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
+            .Add(5, ctx.NewList(pos, std::move(leftRenames)))
+            .Add(6, ctx.NewList(pos, std::move(rightRenames)))
         .Seal()
         .Build();
 

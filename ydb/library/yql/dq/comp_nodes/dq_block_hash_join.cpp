@@ -235,6 +235,8 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             }   
             bool rememberNullBitmaps = !(Kind == EJoinKind::Left && side == ESide::Build);
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool, rememberNullBitmaps);
+            // layouts.SelectSide(side)->DebugPrint();
+
         }
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_, std::move(layouts), Meta_.get());
     }
@@ -408,6 +410,39 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     for(ESide side: EachSide) {
         meta.TempStateIndes.SelectSide(side) = std::exchange(ctx.Mutables.CurValueIndex, meta.InputTypes.SelectSide(side).size() + ctx.Mutables.CurValueIndex);
     }
+
+    std::vector<ui32> rightRenames, leftRenames;
+    const auto leftRenamesNode =
+        AS_VALUE(TTupleLiteral, callable.GetInput(5));
+    const auto rightRenamesNode =
+        AS_VALUE(TTupleLiteral, callable.GetInput(6));
+
+    leftRenames.reserve(leftRenamesNode->GetValuesCount());
+    for (ui32 i = 0; i < leftRenamesNode->GetValuesCount(); ++i) {
+        leftRenames.emplace_back(
+                AS_VALUE(TDataLiteral, leftRenamesNode->GetValue(i))
+                ->AsValue()
+                .Get<ui32>());
+    }
+
+    rightRenames.reserve(rightRenamesNode->GetValuesCount());
+    for (ui32 i = 0; i < rightRenamesNode->GetValuesCount(); ++i) {
+        rightRenames.emplace_back(
+                AS_VALUE(TDataLiteral, rightRenamesNode->GetValue(i))
+                ->AsValue()
+                .Get<ui32>());
+    }
+
+
+  // std::ostringstream os;
+  // os << "[MISHA BHJ renames]" << rawKind << std::endl;
+  // os << "\tLEFT:\n\t";
+  // for (auto x : leftRenames)
+  //   os << x << " ";
+  // os << "\n\tRIGHT:\n\t";
+  // for (auto x : rightRenames)
+  //   os << x << " ";
+  // std::cerr << os.str() << std::endl;
     using enum EJoinKind;
     if (joinKind == Inner) {
         return new TBlockHashJoinWrapper<Inner>(ctx.Mutables, meta, {.Build = rightStream, .Probe = leftStream});

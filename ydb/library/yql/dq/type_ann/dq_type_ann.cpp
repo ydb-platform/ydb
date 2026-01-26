@@ -1196,8 +1196,8 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
-    // BlockHashJoin expects 5 args: leftStream, rightStream, joinKind, leftKeys, rightKeys
-    if (!EnsureArgsCount(*node, 5, ctx)) {
+    // BlockHashJoin expects 7 args: leftStream, rightStream, joinKind, leftKeys, rightKeys, leftRenames, rightRenames
+    if (!EnsureArgsCount(*node, 7, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
@@ -1206,6 +1206,8 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     const auto& joinTypeNode = *node->Child(2);
     auto& leftKeysNode = *node->Child(3);
     auto& rightKeysNode = *node->Child(4);
+    auto& leftRenamesNode = *node->Child(5);
+    auto& rightRenamesNode = *node->Child(6);
 
     if (!EnsureAtom(joinTypeNode, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
@@ -1240,6 +1242,22 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
 
     if (leftKeysNode.ChildrenSize() != rightKeysNode.ChildrenSize()) {
         ctx.AddError(TIssue(ctx.GetPosition(rightKeysNode.Pos()), TStringBuilder() << "Mismatch of key column count"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    if (!EnsureTupleOfAtoms(leftRenamesNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureTupleOfAtoms(rightRenamesNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    if (leftRenamesNode.ChildrenSize() % 2 != 0) {
+        ctx.AddError(TIssue(ctx.GetPosition(leftRenamesNode.Pos()), "Expected even count of atoms for left renames"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (rightRenamesNode.ChildrenSize() % 2 != 0) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightRenamesNode.Pos()), "Expected even count of atoms for right renames"));
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 

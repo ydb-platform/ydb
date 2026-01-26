@@ -2291,9 +2291,9 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NKqp::MakeKqpDescribeSchemaSecretServiceId(NodeId),
             TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        if (Config.GetTableServiceConfig().HasWarmupConfig() && 
-            Config.GetTableServiceConfig().GetWarmupConfig().GetEnabled()) {
-            auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetWarmupConfig());
+        if (Config.GetTableServiceConfig().HasCompileCacheWarmupConfig() && 
+            Config.GetTableServiceConfig().GetCompileCacheWarmupConfig().GetEnabled()) {
+            auto warmupConfig = NKqp::ImportWarmupConfigFromProto(Config.GetTableServiceConfig().GetCompileCacheWarmupConfig());
 
             TString database = appData->TenantName;
             TString cluster = appData->DomainsInfo->Domain ? appData->DomainsInfo->Domain->Name : TString();

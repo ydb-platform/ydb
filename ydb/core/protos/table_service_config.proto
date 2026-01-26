@@ -479,13 +479,13 @@ message TTableServiceConfig {
 
     optional bool DqHashOperatorsUseBlocks = 120 [default = false, (InvalidateCompileCache) = true];
 
-    message TWarmupConfig {
+    message TCompileCacheWarmupConfig {
         optional bool Enabled = 1 [default = false];
-        optional uint32 DeadlineSeconds = 2 [default = 30];
+        optional uint32 DeadlineSeconds = 2 [default = 10];
         optional uint32 MaxConcurrentCompilations = 3 [default = 5];
-        optional uint32 HardDeadlineSeconds = 4 [default = 90];       // Hard deadline: max time from actor start
+        optional uint32 HardDeadlineSeconds = 4 [default = 20];       // Hard deadline: max time from actor start
         optional uint32 MaxQueriesToLoad = 5 [default = 1000];
     }
 
-    optional TWarmupConfig WarmupConfig = 121 [(InvalidateCompileCache) = false];
+    optional TCompileCacheWarmupConfig CompileCacheWarmupConfig = 121 [(InvalidateCompileCache) = false];
 };

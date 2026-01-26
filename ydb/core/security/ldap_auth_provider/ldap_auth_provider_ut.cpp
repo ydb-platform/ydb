@@ -699,7 +699,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
     TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-    UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+    UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
     UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, expectedErrorMessage);
 
     ldapServer.Stop();
@@ -716,7 +716,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         const TString ldapDomain = "@ldap";
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -743,7 +743,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         const TString ldapDomain = "@ldap";
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -770,7 +770,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         const TString ldapDomain = "@ldap";
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -797,7 +797,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         const TString ldapDomain = "@ldap";
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -824,7 +824,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         const TString ldapDomain = "@ldap";
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -851,7 +851,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         const TString ldapDomain = "@ldap";
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -905,7 +905,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         const TString ldapDomain = "@ldap";
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -928,7 +928,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
         UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
 
@@ -947,7 +947,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
         UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
 
@@ -982,7 +982,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, removedUserLogin, removedUserPassword);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
         UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
 
         ldapServer.Stop();
@@ -1000,7 +1000,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
 
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
         UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
 
         ldapServer.Stop();
@@ -1024,7 +1024,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
         const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
@@ -1044,7 +1044,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
         ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + "@ldap");
         const auto& newFetchedGroups = ticketParserResult->Token->GetGroupSIDs();
@@ -1079,7 +1079,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
         const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
@@ -1099,7 +1099,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
         ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + "@ldap");
         const auto& newFetchedGroups = ticketParserResult->Token->GetGroupSIDs();
@@ -1139,7 +1139,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         const TString ldapDomain = "@ldap";
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -1160,7 +1160,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
         ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
-        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
         UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
         UNIT_ASSERT_EQUAL(ticketParserResult->Error.Retryable, false);
@@ -1192,7 +1192,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
         // Server is busy, return retryable error
-        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_C(ticketParserResult->HasError(), "Expected return error message");
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
         UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not login via LDAP");
         UNIT_ASSERT_EQUAL(ticketParserResult->Error.Retryable, true);
@@ -1205,7 +1205,7 @@ void CheckRequiredLdapSettings(std::function<void(NKikimrProto::TLdapAuthenticat
         ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
         // After refresh ticket, server return success
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         const TString ldapDomain = "@ldap";
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -1267,7 +1267,7 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT_C(!ticketParserResult->HasError(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
         const TString ldapDomain = "@ldap";
         UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
@@ -1308,7 +1308,7 @@ Y_UNIT_TEST_SUITE(LdapAuthProviderTest) {
         TAutoPtr<IEventHandle> handle;
         runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
-        UNIT_ASSERT(!ticketParserResult->Error.empty());
+        UNIT_ASSERT(ticketParserResult->HasError());
         UNIT_ASSERT(ticketParserResult->Token == nullptr);
         UNIT_ASSERT_EQUAL_C(ticketParserResult->Error.Message, "Login state is not available", ticketParserResult->Error);
         UNIT_ASSERT_EQUAL_C(ticketParserResult->Error.Retryable, false, ticketParserResult->Error.Retryable);

@@ -736,7 +736,7 @@ private:
 
     void HandleTicketParserResponse(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
-        if (!result.Error.empty()) {
+        if (result.HasError()) {
             RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
             MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
             SendReplyAndDie();

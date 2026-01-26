@@ -180,7 +180,7 @@ void TKafkaSaslAuthActor::HandleLoginResult(TEvSasl::TEvSaslScramFinalServerResp
 }
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx) {
-    if (ev->Get()->Error) {
+    if (ev->Get()->HasError()) {
         if (Context->SaslMechanism == "SCRAM-SHA-256") {
             AuthResponse = NLogin::NSasl::BuildErrorMsg(NLogin::NSasl::EScramServerError::OtherError);
         }

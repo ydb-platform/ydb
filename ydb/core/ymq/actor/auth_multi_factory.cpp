@@ -250,7 +250,7 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
         Counters_.AuthorizeDuration->Collect((TActivationContext::Now() - AuthorizeRequestStartTimestamp_).MilliSeconds());
     });
 
-    if (result.Error) {
+    if (result.HasError()) {
         if (CanRetry() && result.Error.Retryable) {
             ScheduleAuthorizationRetry();
         } else {

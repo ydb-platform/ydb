@@ -4,8 +4,8 @@
 
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_header.h>
 
-#include <memory>
-#include <unordered_map>
+#include <optional>
+#include <string>
 
 namespace NYdb::inline Dev {
 

@@ -384,3 +384,29 @@ non_pk_pg_types = {
     "pgjson": lambda i: '{{"another_key_pg": {}}}'.format(i),
     "pgjsonb": lambda i: '{{"another_doc_key_pg": {}}}'.format(i),
 }
+
+#
+# mixed pg and non-pg types for usage in tests
+#
+
+pk_pg_types_mixed = {
+    **pk_pg_types,
+    # add some native types to test type compatibility
+    "Uint32": lambda i: i,
+    "Decimal(15,0)": lambda i: "{}".format(i),
+    "Utf8": lambda i: f"Utf8 {i}",
+}
+
+pk_pg_types_no_bool_mixed = {
+    **pk_pg_types_no_bool,
+    # add some native types to test type compatibility
+    "Uint32": lambda i: i,
+    "Decimal(15,0)": lambda i: "{}".format(i),
+    "Utf8": lambda i: f"Utf8 {i}",
+}
+
+non_pk_pg_types_mixed = {
+    **non_pk_pg_types,
+    # add some native types to test type compatibility
+    "Double": lambda i: i + 0.2,
+}

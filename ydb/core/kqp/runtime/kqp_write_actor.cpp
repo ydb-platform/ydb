@@ -50,7 +50,10 @@ namespace {
         case NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE:
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE;
         case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL: // Rows were already checked during WHERE execution.
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT;
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT:
+            return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT;
         case NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT:
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
         case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:
@@ -465,6 +468,7 @@ public:
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata,
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata,
+        ui32 defaultColumnsCount,
         i64 priority) {
         YQL_ENSURE(!Closed);
         ShardedWriteController->Open(
@@ -473,6 +477,7 @@ public:
             operationType,
             std::move(keyColumnsMetadata),
             std::move(columnsMetadata),
+            defaultColumnsCount,
             priority);
 
         // At current time only insert operation can fail.
@@ -1515,7 +1520,6 @@ public:
         std::vector<ui32> OldColumnsIndexes;
         TKqpTableWriteActor* WriteActor = nullptr;
         std::vector<NScheme::TTypeInfo> ColumnTypes;
-        bool SkipEqualRows = false;
         bool NeedWriteProjection = true;
     };
 
@@ -1526,7 +1530,6 @@ public:
         std::vector<ui32> OldKeyIndexes; // Old secondary key
 
         IKqpBufferTableLookup* Lookup = nullptr;
-        bool SkipEqualRowsForUniqCheck = false;
     };
 
 private:
@@ -1546,17 +1549,21 @@ public:
             const ui64 deleteCookie,
             const i64 priority,
             const TPathId pathId,
-            const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
+            const NKikimrKqp::TKqpTableSinkSettings::EType operationType,
             std::vector<TPathWriteInfo> writes,
             std::vector<TPathLookupInfo> lookups,
             TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
+            std::vector<ui32> defaultMap,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
         : Cookie(cookie)
         , DeleteCookie(deleteCookie)
         , Priority(priority)
         , PathId(pathId)
         , OperationType(operationType)
+        , DefaultMap(defaultMap)
         , Alloc(std::move(alloc)) {
+
+        AFL_ENSURE(!keyColumns.empty());
         for (const auto& keyColumn : keyColumns) {
             NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(keyColumn.GetTypeId(), keyColumn.GetTypeInfo());
             KeyColumnTypes.push_back(typeInfo);
@@ -1577,7 +1584,6 @@ public:
                 AFL_ENSURE(lookup.OldKeyIndexes.empty());
                 AFL_ENSURE(lookup.FullKeyIndexes.empty());
                 AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.empty());
-                AFL_ENSURE(!lookup.SkipEqualRowsForUniqCheck);
             } else {
                 AFL_ENSURE(lookup.OldKeyIndexes.size() == lookup.KeyIndexes.size());
                 AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.size() == KeyColumnTypes.size());
@@ -1696,7 +1702,7 @@ private:
 
         if (auto lookupInfoIt = PathLookupInfo.find(PathId); lookupInfoIt != PathLookupInfo.end()) {
             // Need to lookup main table
-            AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
+            AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
 
             std::swap(BufferedBatches, ProcessBatches);
 
@@ -1723,7 +1729,7 @@ private:
         }
 
         // TODO: remove !PathLookupInfo.empty() after full error support
-        if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT && !PathLookupInfo.empty()) {
+        if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !PathLookupInfo.empty()) {
             THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> primaryKeysSet;
             for (const auto& batch : ProcessBatches) {
                 for (const auto& row : GetRows(batch)) {
@@ -1749,7 +1755,7 @@ private:
         if (!PathLookupInfo.empty()) {
             // Need to lookup unique indexes.
             // In this case unique indexes keys are subsets of main table key or operation is INSERT.
-            AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE);
+            AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
 
             for (auto& [pathId, lookupInfo] : PathLookupInfo) {
                 AFL_ENSURE(pathId != PathId);
@@ -1775,7 +1781,7 @@ private:
                     Cookie,
                     std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
                     /* fail on existing row*/
-                    OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
+                    OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
             }
 
             State = EState::LOOKUP_UNIQUE_INDEX;
@@ -1789,7 +1795,7 @@ private:
         AFL_ENSURE(!IsError());
         AFL_ENSURE(!ProcessBatches.empty());
         AFL_ENSURE(!ProcessCells.empty());
-        AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
+        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
 
         auto& lookupInfo = PathLookupInfo.at(PathId);
         if (!lookupInfo.Lookup->HasResult(Cookie) && !lookupInfo.Lookup->IsEmpty(Cookie)) {
@@ -1810,9 +1816,6 @@ private:
             AFL_ENSURE(keyToReadCellsIndex.emplace(key, readCells.size() - 1).second);
         });
 
-        const auto& mainWriteInfo = PathWriteInfo.at(PathId);
-        THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> keyChanged;
-
         std::vector<bool> existsMask;
         existsMask.reserve(ProcessCells.size());
         for (size_t index = 0; index < ProcessCells.size(); ++index) {
@@ -1824,20 +1827,24 @@ private:
                 const auto& newCells = TConstArrayRef<TCell>(readCells[keyIt->second]).last(readCells[keyIt->second].size() - KeyColumnTypes.size());
                 AFL_ENSURE(lookupColumnsCount == newCells.size());
 
-                if (mainWriteInfo.SkipEqualRows && !keyChanged.contains(key) && IsEqual(
-                        processCells,
-                        newCells,
-                        mainWriteInfo.NewColumnsIndexes,
-                        mainWriteInfo.OldColumnsIndexes,
-                        mainWriteInfo.ColumnTypes)) {
-                    // skip unchanged rows
+                if (DefaultMap.empty()) {
+                    for (const auto& cell : processCells) {
+                        rowsBatcher->AddCell(cell);
+                    }
+                } else {
                     Memory -= EstimateSize(processCells);
-                    continue;
-                }
-                keyChanged.insert(key);
+                    AFL_ENSURE(DefaultMap.size() == processCells.size());
+                    for (size_t index = 0; index < processCells.size(); ++index) {
+                        AFL_ENSURE(DefaultMap[index] < processCells.size() + newCells.size());
+                        AFL_ENSURE(DefaultMap[index] == 0 || DefaultMap[index] >= processCells.size());
 
-                for (const auto& cell : processCells) {
-                    rowsBatcher->AddCell(cell);
+                        const auto& cell = DefaultMap[index] == 0
+                            ? processCells[index]
+                            : newCells[DefaultMap[index] - processCells.size()];
+
+                        Memory += EstimateSize(TConstArrayRef<TCell>(&cell, 1));
+                        rowsBatcher->AddCell(cell);
+                    }
                 }
 
                 Memory += EstimateSize(newCells);
@@ -1847,10 +1854,13 @@ private:
 
                 rowsBatcher->AddRow();
                 existsMask.push_back(true);
-            } else if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
+            } else if (OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
                 // Skip updates for non-existing rows.
                 Memory -= EstimateSize(processCells);
             } else {
+                // For UPDATE WHERE all rows must exist.
+                AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL);
+
                 for (const auto& cell : processCells) {
                     rowsBatcher->AddCell(cell);
                 }
@@ -1877,7 +1887,7 @@ private:
 
         if (PathLookupInfo.size() > 1) {
             // Lookup unique indexes
-            AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE);
+            AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
 
             AFL_ENSURE(Writes.size() == 1);
             const auto writeRows = GetRows(Writes[0].Batch);
@@ -1889,12 +1899,6 @@ private:
                     continue;
                 }
 
-                const bool isPrimaryKeySubset = std::equal(
-                    lookupInfo.KeyIndexes.begin(),
-                    lookupInfo.KeyIndexes.end(),
-                    lookupInfo.OldKeyIndexes.begin(),
-                    lookupInfo.OldKeyIndexes.end());
-
                 TUniqueSecondaryKeyCollector collector(
                         KeyColumnTypes,
                         lookupInfo.Lookup->GetKeyColumnTypes(),
@@ -1905,19 +1909,15 @@ private:
                 AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
                 AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
                 for (size_t index = 0; index < writeRows.size(); ++index) {
+                    // Only UPSERT/REPLACE/UPDATE here
                     const auto& row = writeRows[index];
-                    if (isPrimaryKeySubset && existsMask[index]
-                            && OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
-                        Error = ConflictWithExistingKeyErrorText;
-                        return false;
-                    }
-                    if (!isPrimaryKeySubset && lookupInfo.SkipEqualRowsForUniqCheck && IsEqual(
-                            row,
-                            {},
-                            lookupInfo.KeyIndexes,
-                            lookupInfo.OldKeyIndexes,
-                            TConstArrayRef<NScheme::TTypeInfo>(lookupInfo.Lookup->GetKeyColumnTypes())
-                                .first(lookupInfo.KeyIndexes.size()))) {
+                    if (existsMask[index]
+                            && IsEqual(
+                                row,
+                                lookupInfo.KeyIndexes,
+                                lookupInfo.OldKeyIndexes,
+                                TConstArrayRef<NScheme::TTypeInfo>(lookupInfo.Lookup->GetKeyColumnTypes())
+                                    .first(lookupInfo.KeyIndexes.size()))) {
                         // skip unchanged keys
                         continue;
                     }
@@ -1948,7 +1948,7 @@ private:
         AFL_ENSURE(ProcessBatches.empty());
         AFL_ENSURE(ProcessCells.empty());
         AFL_ENSURE(!Writes.empty());
-        AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE);
+        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE);
 
         for (auto& [pathId, lookupInfo] : PathLookupInfo) {
             if (pathId != PathId && !lookupInfo.Lookup->HasResult(Cookie) && !lookupInfo.Lookup->IsEmpty(Cookie)) {
@@ -2035,26 +2035,33 @@ private:
                 }
             }
 
+            const bool hasMainTableLookup = PathLookupInfo.contains(PathId);
+
             for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
+                auto rowPossiblyChanged = [&actorInfo, &hasMainTableLookup, this](const TConstArrayRef<TCell> row) {
+                    return OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+                        || OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT
+                        || !hasMainTableLookup
+                        || !IsEqual(
+                            row,
+                            actorInfo.NewColumnsIndexes,
+                            actorInfo.OldColumnsIndexes,
+                            actorInfo.ColumnTypes);
+                };
+
                 // At first, write to indexes
                 if (PathId != actorPathId) {
-                    const bool hasDelete = !actorInfo.DeleteKeysIndexes.empty();
-                    if (hasDelete) {
-                        AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
+                    const bool hasAdditionalDelete = !actorInfo.DeleteKeysIndexes.empty();
+                    if (hasAdditionalDelete) {
+                        AFL_ENSURE(OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+                            && OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
                         {
                             auto deleteProjection = CreateDataBatchProjection(
                                 actorInfo.DeleteKeysIndexes, Alloc);
                             for (const auto& [key, rowAndExists] : keyToRow) {
-                                if (rowAndExists.second && (
-                                        !actorInfo.SkipEqualRows
-                                        || !IsEqual(
-                                            rowAndExists.first,
-                                            {},
-                                            actorInfo.NewColumnsIndexes,
-                                            actorInfo.OldColumnsIndexes,
-                                            actorInfo.ColumnTypes))) {
-                                    deleteProjection->AddRow(rowAndExists.first);
+                                const auto& [row, exists] = rowAndExists;
+                                if (exists && rowPossiblyChanged(row)) {
+                                    deleteProjection->AddRow(row);
                                 }
                             }
                             auto preparedKeyBatch = deleteProjection->Flush();
@@ -2070,13 +2077,9 @@ private:
                                 actorInfo.NewColumnsIndexes, Alloc);
 
                     for (const auto& [key, rowAndExists] : keyToRow) {
-                        if (!rowAndExists.second || !actorInfo.SkipEqualRows || !IsEqual(
-                                rowAndExists.first,
-                                {},
-                                actorInfo.NewColumnsIndexes,
-                                actorInfo.OldColumnsIndexes,
-                                actorInfo.ColumnTypes)) {
-                            projection->AddRow(rowAndExists.first);
+                        const auto& [row, exists] = rowAndExists;
+                        if (!exists || rowPossiblyChanged(row)) {
+                            projection->AddRow(row);
                         }
                     }
                     auto preparedBatch = projection->Flush();
@@ -2128,8 +2131,9 @@ private:
     const ui64 DeleteCookie;
     const i64 Priority;
     const TPathId PathId;
-    const NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
+    const NKikimrKqp::TKqpTableSinkSettings::EType OperationType;
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
+    std::vector<ui32> DefaultMap;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     EState State = EState::BLOCKED;
@@ -2359,6 +2363,7 @@ public:
                 GetOperation(Settings.GetType()),
                 std::move(keyColumnsMetadata),
                 std::move(columnsMetadata),
+                0,
                 Settings.GetPriority());
             WaitingForTableActor = true;
         } catch (const TMemoryLimitExceededException&) {
@@ -2666,14 +2671,14 @@ struct TWriteSettings {
     TString Database;
     TTableId TableId;
     TString TablePath; // for error messages
-    NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
+    NKikimrKqp::TKqpTableSinkSettings::EType OperationType;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> LookupColumns;
     TTransactionSettings TransactionSettings;
     i64 Priority;
-    bool EnableStreamWrite;
     bool IsOlap;
+    THashSet<TStringBuf> DefaultColumns;
 
     struct TIndex {
         TTableId TableId;
@@ -2685,6 +2690,8 @@ struct TWriteSettings {
     };
 
     std::vector<TIndex> Indexes;
+
+    bool EnableStreamWrite;
 };
 
 struct TBufferWriteMessage {
@@ -2912,6 +2919,9 @@ public:
                 InconsistentTx = settings.TransactionSettings.InconsistentTx;
             }
 
+            // Can't have CTAS here
+            AFL_ENSURE(settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL);
+
             auto createWriteActor = [&](const TTableId tableId, const TString& tablePath, const TVector<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns) -> std::pair<TKqpTableWriteActor*, TActorId> {
                 TVector<NScheme::TTypeInfo> keyColumnTypes;
                 keyColumnTypes.reserve(keyColumns.size());
@@ -3083,29 +3093,33 @@ public:
             AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
             for (auto& indexSettings : settings.Indexes) {
                 AFL_ENSURE(!settings.IsOlap);
-                // Flag for the case of UPDATE been processed without doing lookup,
+                // Flag for the case of UPDATE ON been processed without doing lookup,
                 // so no secondary index key columns are touched.
                 // In this case we must use UPDATE operation at shards for all table,
                 // because we don't know if updated rows exist.
                 // No lookup means that secondary key is subset of primary key.
-                const bool updateWithoutLookup = (
-                    settings.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE
+                const bool updateOnWithoutLookup = (
+                    settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE
                     && settings.LookupColumns.empty());
 
                 writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
                     writeCookie,
-                    settings.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
+                    settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
                         ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                        : (updateWithoutLookup
+                        : (updateOnWithoutLookup
                             ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE
                             : NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT),
                     indexSettings.KeyColumns,
                     indexSettings.Columns,
+                    CountLocalDefaults(
+                        settings.DefaultColumns,
+                        indexSettings.Columns,
+                        settings.LookupColumns),
                     settings.Priority);
 
                 const bool needAdditionalDelete = !isSubsetOfPrimaryKeyColumns(indexSettings.KeyColumns)
-                    && settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                    && settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
+                    && settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+                    && settings.OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT;
 
                 if (needAdditionalDelete) {
                     writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
@@ -3113,6 +3127,7 @@ public:
                         NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
                         indexSettings.KeyColumns,
                         indexSettings.KeyColumns,
+                        0, // DELETE doesn't need DEFAULT values
                         settings.Priority);
                 }
 
@@ -3144,8 +3159,6 @@ public:
                         }
                         return result;
                     }(),
-                    .SkipEqualRows = !settings.LookupColumns.empty()
-                        && (settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE),
                     .NeedWriteProjection = true,
                 });
 
@@ -3184,7 +3197,6 @@ public:
                                     indexSettings.KeyPrefixSize},
                                 /* preferAdditionalInputColumns */ true),
                         .Lookup = lookupActor,
-                        .SkipEqualRowsForUniqCheck = !settings.LookupColumns.empty(),
                     });
 
                     lookupActor->SetLookupSettings(
@@ -3205,7 +3217,6 @@ public:
                     .PrimaryInFullKeyIndexes = {},
                     .OldKeyIndexes = {},
                     .Lookup = lookupActor,
-                    .SkipEqualRowsForUniqCheck = false,
                 });
 
                 lookupActor->SetLookupSettings(
@@ -3217,11 +3228,16 @@ public:
 
             writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
                 token.Cookie,
-                (settings.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE && !settings.LookupColumns.empty())
+                (settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE_CONDITIONAL
+                    || (settings.OperationType == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE && !settings.LookupColumns.empty()))
                     ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT // Avoid unnecessary reads at datashard if we have already done lookup
-                    : settings.OperationType,
+                    : GetOperation(settings.OperationType),
                 settings.KeyColumns,
                 settings.Columns,
+                CountLocalDefaults(
+                    settings.DefaultColumns,
+                    settings.Columns,
+                    settings.LookupColumns),
                 settings.Priority);
 
             AFL_ENSURE(settings.KeyColumns.size() <= settings.Columns.size());
@@ -3247,8 +3263,6 @@ public:
                     }
                     return result;
                 }(),
-                .SkipEqualRows = !settings.LookupColumns.empty()
-                    && (settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE),
                 .NeedWriteProjection = !settings.LookupColumns.empty(),
             });
 
@@ -3263,6 +3277,12 @@ public:
                     std::move(writes),
                     std::move(lookups),
                     settings.KeyColumns,
+                    (settings.LookupColumns.empty() || settings.DefaultColumns.empty())
+                        ? std::vector<ui32>{}
+                        : BuildDefaultMap(
+                            settings.DefaultColumns,
+                            settings.Columns,
+                            settings.LookupColumns),
                     Alloc
                 });
 
@@ -4389,6 +4409,10 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
+            if (ev->Get()->Record.HasTxStats()) {
+                LocksBrokenAsBreaker += ev->Get()->Record.GetTxStats().GetLocksBrokenAsBreaker();
+                LocksBrokenAsVictim += ev->Get()->Record.GetTxStats().GetLocksBrokenAsVictim();
+            }
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
@@ -4938,11 +4962,26 @@ private:
                 Settings.GetLookupColumns().begin(),
                 Settings.GetLookupColumns().end());
 
+            THashSet<TStringBuf> defaultColumns;
+            {
+                THashSet<ui32> defaultColumnIds(
+                    Settings.GetDefaultColumnsIds().begin(),
+                    Settings.GetDefaultColumnsIds().end());
+                for (const auto& column : Settings.GetColumns()) {
+                    if (defaultColumnIds.contains(column.GetId())) {
+                        defaultColumns.insert(column.GetName());
+                    }
+                }
+            }
+
+            AFL_ENSURE(Settings.GetDefaultColumnsIds().empty()
+                || Settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT);
+
             ev->Settings = TWriteSettings{
                 .Database = Settings.GetDatabase(),
                 .TableId = TableId,
                 .TablePath = Settings.GetTable().GetPath(),
-                .OperationType = GetOperation(Settings.GetType()),
+                .OperationType = Settings.GetType(),
                 .KeyColumns = std::move(keyColumnsMetadata),
                 .Columns = std::move(columnsMetadata),
                 .LookupColumns = std::move(lookupColumnsMetadata),
@@ -4955,8 +4994,10 @@ private:
                     .LockMode = Settings.GetLockMode(),
                 },
                 .Priority = Settings.GetPriority(),
-                .EnableStreamWrite = Settings.GetEnableStreamWrite(),
                 .IsOlap = Settings.GetIsOlap(),
+                .DefaultColumns = std::move(defaultColumns),
+
+                .EnableStreamWrite = Settings.GetEnableStreamWrite(),
             };
 
             for (const auto& indexSettings : Settings.GetIndexes()) {

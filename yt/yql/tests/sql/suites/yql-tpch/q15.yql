@@ -4,23 +4,18 @@
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
-INSERT INTO plato.@revenue (
-    supplier_no,
-    total_revenue
-)
-SELECT
-    l_suppkey AS supplier_no,
-    Sum(l_extendedprice * (1 - l_discount)) AS total_revenue
-FROM
-    plato.lineitem
-WHERE
-    l_shipdate >= Date('1996-01-01')
-    AND l_shipdate < DateTime::MakeDate(DateTime::ShiftMonths(Date('1996-01-01'), 3))
-GROUP BY
-    l_suppkey
-;
-
-COMMIT;
+$revenue = (
+    SELECT
+        l_suppkey AS supplier_no,
+        Sum(l_extendedprice * (1 - l_discount)) AS total_revenue
+    FROM
+        plato.lineitem
+    WHERE
+        l_shipdate >= Date('1996-01-01')
+        AND l_shipdate < DateTime::MakeDate(DateTime::ShiftMonths(Date('1996-01-01'), 3))
+    GROUP BY
+        l_suppkey
+);
 
 SELECT
     s_suppkey,
@@ -31,14 +26,14 @@ SELECT
 FROM
     plato.supplier
 ,
-    plato.@revenue
+    $revenue
 WHERE
     s_suppkey == supplier_no
     AND total_revenue == (
         SELECT
             Max(total_revenue)
         FROM
-            plato.@revenue
+            $revenue
     )
 ORDER BY
     s_suppkey

@@ -75,6 +75,8 @@ TEngineLogsCounters::TEngineLogsCounters()
 
     CleanupPortionsSkippedByLock = TBase::GetDeriviative("CleanupPortions/SkippedByLock");
     CleanupPortionsLimitExceeded = TBase::GetDeriviative("CleanupPortions/LimitExceeded");
+
+    HistogramAddPortionDurationMs = TBase::GetHistogram("Portions/AddDurationMs", NMonitoring::ExponentialHistogram(15, 2, 2));
 }
 
 void TEngineLogsCounters::OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const {

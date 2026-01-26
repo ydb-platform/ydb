@@ -15,7 +15,7 @@ class TCMSEval : public IColumnStatisticEval {
     ui64 Depth = DEFAULT_DEPTH;
     std::optional<ui32> Seq;
 
-    static constexpr ui64 MIN_WIDTH = 256;
+    static constexpr ui64 MIN_WIDTH = 4096;
     static constexpr ui64 DEFAULT_DEPTH = 8;
 
 public:
@@ -73,14 +73,14 @@ struct TBorder {
 };
 
 class TEWHEval : public IColumnStatisticEval {
-    ui64 NumBuckets;
+    ui32 NumBuckets;
     TBorder RangeStart;
     TBorder RangeEnd;
 
     std::optional<ui32> Seq;
 
 public:
-    TEWHEval(ui64 numBuckets, TBorder rangeStart, TBorder rangeEnd)
+    TEWHEval(ui32 numBuckets, TBorder rangeStart, TBorder rangeEnd)
         : NumBuckets(numBuckets)
         , RangeStart(std::move(rangeStart))
         , RangeEnd(std::move(rangeEnd))

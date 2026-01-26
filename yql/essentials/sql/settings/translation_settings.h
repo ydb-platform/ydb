@@ -55,7 +55,7 @@ enum class EV0Behavior: ui32 {
 
 class ISqlFeaturePolicy: public TThrRefBase {
 public:
-    virtual ~ISqlFeaturePolicy() = default;
+    ~ISqlFeaturePolicy() override = default;
     virtual bool Allow() const = 0;
 
     using TPtr = TIntrusivePtr<ISqlFeaturePolicy>;

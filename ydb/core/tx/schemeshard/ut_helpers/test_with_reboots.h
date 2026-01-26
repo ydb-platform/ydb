@@ -31,6 +31,7 @@ public:
     struct TTestRegistration##N {                                           \
         std::vector<std::string> names;                                     \
         TTestRegistration##N() {                                            \
+            names.reserve(REBOOT_BUCKETS + PIPE_RESET_BUCKETS);             \
             for (int i = 0; i < REBOOT_BUCKETS; i++) {                      \
                 std::string name = (REBOOT_BUCKETS > 1                      \
                     ? (#N "[TabletRebootsBucket") + std::to_string(i) + "]" \

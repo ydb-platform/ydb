@@ -73,7 +73,7 @@ public:
 
         // Fast lane.
         if (amount == 0) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         return DoThrottle(amount);
@@ -303,7 +303,7 @@ private:
 
         ValueCounter_.Increment(amount);
         if (Limit_.load() < 0) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         while (true) {
@@ -319,7 +319,7 @@ private:
             }
 
             if (Available_.compare_exchange_strong(available, available - amount)) {
-                return VoidFuture;
+                return OKFuture;
             }
         }
 
@@ -327,7 +327,7 @@ private:
         auto guard = Guard(SpinLock_);
 
         if (Limit_.load() < 0) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         // Enqueue request to be executed later.
@@ -592,7 +592,7 @@ public:
         YT_VERIFY(amount >= 0);
 
         ValueCounter_.Increment(amount);
-        return VoidFuture;
+        return OKFuture;
     }
 
     bool TryAcquire(i64 amount) override
@@ -943,7 +943,7 @@ public:
             auto guard = Guard(Lock_);
 
             if (DoTryAcquire(amount)) {
-                return VoidFuture;
+                return OKFuture;
             }
 
             promise = NewPromise<void>();

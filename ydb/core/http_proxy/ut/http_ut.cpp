@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
                 TSocketOutput so(sock);
                 so.Write(request);
                 so.Finish();
-           }
+            }
 
             TSocketInput si(sock);
             THttpInput input(&si);
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
             return {httpCode, description, responseBody};
         };
 
-        const bool expectCorrect = contentLengthDiff == 0;  // Content-Length is mandatory
+        const bool expectCorrect = contentLengthDiff == 0; // Content-Length is mandatory
 
         TMaybe<THttpResult> res;
         try {
@@ -162,6 +162,103 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
 
     Y_UNIT_TEST_F(CompressedGzipContentLengthHigher, THttpProxyTestMock) {
         TestContentLengthDiff(*this, +3000, "gzip");
+    }
+
+    void TestStartLine(THttpProxyTestMock& mock, const TMaybe<TStringBuf> startLine, const TConstArrayRef<TStringBuf> auxHeaders) {
+        constexpr TStringBuf headers[]{
+            "Host:example.amazonaws.com",
+            "X-Amz-Target:AmazonSQS.CreateQueue",
+            "X-Amz-Date:20150830T123600Z",
+            "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/ru-central1/service/aws4_request, SignedHeaders=host;x-amz-date, Signature=5da7c1a2acd57cee7505fc6676e4e544621c30862966e37dddb68e92efbe5d6b)__",
+            "Content-Type:application/json",
+        };
+
+        constexpr TStringBuf jsonStr = R"-({"QueueName": "Example"})-";
+        TStringBuf payload = jsonStr;
+        TString request;
+        {
+            TStringOutput ss{request};
+            ss << startLine.GetOrElse("POST /Root HTTP/1.1"sv) << "\r\n";
+            for (const auto h : headers) {
+                ss << h << "\r\n";
+            }
+            for (const auto h : auxHeaders) {
+                ss << h << "\r\n";
+            }
+            ss << "Content-Length: " << payload.size() << "\r\n";
+            ss << "\r\n";
+            ss << payload;
+            ss.Finish();
+        }
+        Cerr << "Http input full " << request.Quote() << Endl;
+        auto post = [&request, &mock]() -> THttpResult {
+            TNetworkAddress addr("::", mock.HttpServicePort);
+            TSocket sock(addr);
+            {
+                TSocketOutput so(sock);
+                so.Write(request);
+                so.Finish();
+            }
+
+            TSocketInput si(sock);
+            THttpInput input(&si);
+
+            ui32 httpCode = ParseHttpRetCode(input.FirstLine());
+            TString description(StripString(TStringBuf(input.FirstLine()).After(' ').After(' ')));
+            TString responseBody = input.ReadAll();
+            Cerr << "Http output full " << responseBody << Endl;
+            return {httpCode, description, responseBody};
+        };
+
+        const bool expectCorrect = !startLine.Defined() && auxHeaders.empty();
+
+        TMaybe<THttpResult> res;
+        try {
+            res = post();
+        } catch (const THttpReadException&) {
+            if (expectCorrect) {
+                throw;
+            }
+        }
+
+        if (expectCorrect) {
+            UNIT_ASSERT(res.Defined());
+            UNIT_ASSERT_VALUES_EQUAL_C(res->HttpCode, 200, LabeledOutput(res->HttpCode, res->Description, res->Body));
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res->Body, &json, true));
+        } else {
+            if (res) {
+                // Option A: Server returns error code
+                UNIT_ASSERT_C(IsUserError(res->HttpCode), LabeledOutput(res->HttpCode, res->Description, res->Body));
+            } else {
+                // Option B: Server may ignore malformed request and close connection
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(InvalidHttpStartLine0, THttpProxyTestMock) {
+        TestStartLine(*this, Nothing(), {});  // valid request
+    }
+    Y_UNIT_TEST_F(InvalidHttpStartLine1, THttpProxyTestMock) {
+        TestStartLine(*this, "", {});
+    }
+    Y_UNIT_TEST_F(InvalidHttpStartLine2, THttpProxyTestMock) {
+        TestStartLine(*this, "POST /Root  HTTP/1.1", {});
+    }
+    Y_UNIT_TEST_F(InvalidHttpStartLine3, THttpProxyTestMock) {
+        TestStartLine(*this, "POST  /Root HTTP/1.1", {});
+    }
+    Y_UNIT_TEST_F(InvalidHttpStartLine4, THttpProxyTestMock) {
+        TestStartLine(*this, "POST /Root\nHTTP/1.1", {});
+    }
+    Y_UNIT_TEST_F(InvalidHttpStartLine5, THttpProxyTestMock) {
+        TestStartLine(*this, Nothing(), {"Not a header"});
+    }
+    Y_UNIT_TEST_F(InvalidHttpStartLine6, THttpProxyTestMock) {
+        TestStartLine(*this, "POST /Root\r\nHTTP/1.1 HTTP/1.1", {});
+    }
+    Y_UNIT_TEST_F(InvalidHttpStartLine7, THttpProxyTestMock) {
+        TestStartLine(*this, "POST /Root?\r\nHTTP/1.1 HTTP/1.1", {});
     }
 
 } // Y_UNIT_TEST_SUITE(TestMalformedRequest)

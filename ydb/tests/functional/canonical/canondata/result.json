@@ -96,6 +96,76 @@
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_explain.script-script_/explain.script.plan"
         }
     },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/contains_basic.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_contains_basic.sql-plan_/fulltext_contains_basic.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/contains_covered.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_contains_covered.sql-plan_/fulltext_contains_covered.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/contains_only_key.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_contains_only_key.sql-plan_/fulltext_contains_only_key.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/contains_orderby.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_contains_orderby.sql-plan_/fulltext_contains_orderby.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/relevance_b.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_relevance_b.sql-plan_/fulltext_relevance_b.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/relevance_basic.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_relevance_basic.sql-plan_/fulltext_relevance_basic.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/relevance_covered.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_relevance_covered.sql-plan_/fulltext_relevance_covered.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/relevance_k1.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_relevance_k1.sql-plan_/fulltext_relevance_k1.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/relevance_k1_b.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_relevance_k1_b.sql-plan_/fulltext_relevance_k1_b.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/relevance_minimum_should_match.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_relevance_minimum_should_match.sql-plan_/fulltext_relevance_minimum_should_match.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/relevance_mode.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_relevance_mode.sql-plan_/fulltext_relevance_mode.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/relevance_mode_minimum.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_relevance_mode_minimum.sql-plan_/fulltext_relevance_mode_minimum.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/relevance_orderby.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_relevance_orderby.sql-plan_/fulltext_relevance_orderby.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[fulltext/relevance_params.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_fulltext_relevance_params.sql-plan_/fulltext_relevance_params.sql.plan"
+        }
+    },
     "test_sql.TestCanonicalFolder1.test_case[index/select_using_index.sql-plan]": {
         "plan": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_select_using_index.sql-plan_/index_select_using_index.sql.plan"

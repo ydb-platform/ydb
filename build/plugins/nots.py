@@ -18,7 +18,7 @@ from _dart_fields import create_dart_record
 
 if TYPE_CHECKING:
     from lib.nots.erm_json_lite import ErmJsonLite
-    from lib.nots.package_manager import PackageManagerType, BasePackageManager
+    from lib.nots.package_manager import PackageManager
     from lib.nots.semver import Version
     from lib.nots.typescript import TsConfig
 
@@ -392,27 +392,16 @@ def _create_erm_json(unit: NotsUnitType):
     return ErmJsonLite.load(erm_packages_path)
 
 
-def _get_pm_type(unit: NotsUnitType) -> 'PackageManagerType':
-    resolved: PackageManagerType | None = unit.get("PM_TYPE")
-    if not resolved:
-        raise Exception("PM_TYPE is not set yet.")
-
-    return resolved
-
-
 def _get_source_path(unit: NotsUnitType) -> str:
     sources_path = unit.get("TS_TEST_FOR_DIR") if unit.get("TS_TEST_FOR") else unit.path()
     return sources_path
 
 
-def _create_pm(unit: NotsUnitType) -> 'BasePackageManager':
-    from lib.nots.package_manager import get_package_manager_type
+def _create_pm(unit: NotsUnitType) -> 'PackageManager':
+    from lib.nots.package_manager import PackageManager
 
     sources_path = _get_source_path(unit)
     module_path = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else unit.get("MODDIR")
-
-    # noinspection PyPep8Naming
-    PackageManager = get_package_manager_type(_get_pm_type(unit))
 
     return PackageManager(
         sources_path=unit.resolve(sources_path),
@@ -448,9 +437,9 @@ def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
 
 @_with_report_configure_error
 def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
-    from lib.nots.package_manager import BasePackageManager
+    from lib.nots.package_manager import PackageManager
 
-    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
+    pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
     erm_json = _create_erm_json(unit)
     dirs = []
 
@@ -487,8 +476,8 @@ def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
 
 @_with_report_configure_error
 def on_ts_configure(unit: NotsUnitType) -> None:
-    from lib.nots.package_manager.base import PackageJson
-    from lib.nots.package_manager.base.utils import build_pj_path
+    from lib.nots.package_manager import PackageJson
+    from lib.nots.package_manager.utils import build_pj_path
     from lib.nots.typescript import TsConfig
 
     tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
@@ -881,7 +870,7 @@ def _select_matching_version(
 
 def _is_ts_proto_auto(unit: NotsUnitType) -> bool:
     """TS_PROTO without package.json"""
-    from lib.nots.package_manager.base.utils import build_pj_path
+    from lib.nots.package_manager.utils import build_pj_path
 
     is_ts_proto = unit.get("TS_PROTO") == "yes" or unit.get("TS_PROTO_PREPARE_DEPS") == "yes"
     if not is_ts_proto:
@@ -908,13 +897,13 @@ def on_ts_proto_configure(unit: NotsUnitType) -> None:
     unit.on_node_modules_configure()
 
     if unit.get("_GRPC_ENABLED") == "yes":
-        from lib.nots.package_manager import BasePackageManager
+        from lib.nots.package_manager import PackageManager
 
         output_services_opts = [s for s in unit.get("_TS_PROTO_OPT").split() if s.startswith("outputServices")]
         if output_services_opts:
             return
 
-        pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+        pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
         version = pj.get_dep_specifier("@grpc/grpc-js")
 
         if version:
@@ -1249,10 +1238,10 @@ def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: 
 
 @_with_report_configure_error
 def on_ts_next_experimental_build_mode(unit: NotsUnitType) -> None:
-    from lib.nots.package_manager import BasePackageManager
+    from lib.nots.package_manager import PackageManager
     from lib.nots.semver import Version
 
-    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+    pj = PackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
     erm_json = _create_erm_json(unit)
     version = _select_matching_version(erm_json, "next", pj.get_dep_specifier("next"))
 

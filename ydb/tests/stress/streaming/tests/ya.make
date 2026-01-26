@@ -25,7 +25,6 @@ PEERDIR(
     ydb/tests/stress/streaming/workload
 )
 
-
 END()
 
 ENDIF()

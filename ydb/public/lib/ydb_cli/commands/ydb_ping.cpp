@@ -4,12 +4,14 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
+#include <library/cpp/threading/future/wait/wait.h>
 #include <library/cpp/time_provider/monotonic.h>
 
 namespace NYdb::NConsoleClient {
 
 namespace {
 
+constexpr int WARMUP_PING_COUNT = 100;
 constexpr int DEFAULT_COUNT = 100;
 constexpr int DEFAULT_INTERVAL_MS = 100;
 constexpr TCommandPing::EPingKind DEFAULT_PING_KIND = TCommandPing::EPingKind::Select1;
@@ -110,10 +112,30 @@ int TCommandPing::RunCommand(TConfig& config) {
     if (PingKind == EPingKind::PlainGrpc) {
         durationsTillGrpc.reserve(Count);
         durationsAfterGrpc.reserve(Count);
-
     }
 
     const TString query = "SELECT 1;";
+
+    try {
+        // here we also want the request to be compiled and cached before we
+        // measure the latency. Note, current query client impl will reuse
+        // opened session and it's enough to make a single warming request
+        if (PingKind == EPingKind::Select1) {
+            PingKqpSelect1(queryClient, query);
+        } else {
+            // in case of TLS first pings might be expensive,
+            // also we want to have connection pool "hot" before measurements
+            std::vector<NDebug::TAsyncPlainGrpcPingResult> warmupPings;
+            warmupPings.reserve(WARMUP_PING_COUNT);
+            for (int i = 0; i < WARMUP_PING_COUNT; ++i) {
+                warmupPings.emplace_back(pingClient.PingPlainGrpc(NDebug::TPlainGrpcPingSettings()));
+            }
+            NThreading::WaitAll(warmupPings).GetValueSync();
+        }
+    } catch (const std::exception& ex) {
+        std::cerr << "Warmup failed: " << ex.what() << std::endl;
+        // still try to continue and most probably display failed pings
+    }
 
     for (int i = 0; i < Count && !IsInterrupted(); ++i) {
         bool isOk;
@@ -272,6 +294,11 @@ bool TCommandPing::PingKqpSelect1(NQuery::TQueryClient& client, const TString& q
     while (!IsInterrupted()) {
         auto streamPart = result.ReadNext().GetValueSync();
         if (!streamPart.IsSuccess()) {
+            TStringStream ss;
+            ss << "Select1 error: ";
+            streamPart.Out(ss);
+            ss << Endl;
+            Cerr << ss.Str();
             if (streamPart.EOS()) {
                 return false;
             }

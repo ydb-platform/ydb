@@ -53,7 +53,7 @@ TIntrusivePtr<THullDs> CreateHullDs(const TBlobStorageGroupInfo& info) {
 Y_UNIT_TEST_SUITE(HullReplWriteSst) {
     Y_UNIT_TEST(Basic) {
         TVector<TVDiskID> vdisks;
-        auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3);
+        auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
         auto replCtx = CreateReplCtx(vdisks, groupInfo);
         auto hullDs = CreateHullDs(*groupInfo);
         TReplSstStreamWriter writer(replCtx, hullDs);

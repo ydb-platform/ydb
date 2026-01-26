@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <yt/cpp/mapreduce/interface/common.h>
+#include <yt/cpp/mapreduce/interface/distributed_session.h>
 
 namespace NYql::NFmr {
 
@@ -33,6 +34,7 @@ enum class ETaskType {
     Unknown,
     Download,
     Upload,
+    SortedUpload,
     Merge,
     Map
 };
@@ -176,6 +178,7 @@ struct TTableStats {
 struct TSortedChunkStats {
     bool IsSorted = false;
     NYT::TNode FirstRowKeys;
+    NYT::TNode LastRowKeys;
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
@@ -218,8 +221,24 @@ namespace std {
 
 namespace NYql::NFmr {
 
+struct TTaskUploadResult {};
+
+struct TTaskDownloadResult {};
+
+struct TTaskMergeResult {};
+
+struct TTaskMapResult {};
+
+struct TTaskSortedUploadResult {
+    TString FragmentResultYson;
+    ui64 FragmentOrder;
+};
+
+using TTaskResult = std::variant<TTaskUploadResult, TTaskDownloadResult, TTaskMergeResult, TTaskMapResult, TTaskSortedUploadResult>;
+
 struct TStatistics {
     std::unordered_map<TFmrTableOutputRef, TTableChunkStats> OutputTables;
+    TTaskResult TaskResult;
 };
 
 using TOperationTableRef = std::variant<TYtTableRef, TFmrTableRef>;
@@ -228,14 +247,54 @@ using TTaskTableRef = std::variant<TYtTableTaskRef, TFmrTableInputRef>;
 
 // TODO - TYtTableTaskRef может быть из нескольких входных таблиц, но TFmrTableInputRef - часть одной таблицы, подумать как лучше
 
+struct TClusterConnection {
+    TString TransactionId;
+    TString YtServerName;
+    TMaybe<TString> Token;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+};
+
+struct TYtReaderSettings {
+    bool WithAttributes = false; // Enable RowIndex and RangeIndex, for now only mode = false is supported.
+};
+
+struct TYtWriterSettings {
+    TMaybe<ui64> MaxRowWeight = Nothing();
+};
+
+struct TStartDistributedWriteOptions {
+    TDuration Timeout = TDuration::Minutes(5);
+    TDuration PingInterval = TDuration::Seconds(1);
+};
+
 struct TUploadOperationParams {
     TFmrTableRef Input;
     TYtTableRef Output;
 };
 
+struct TSortedUploadOperationParams {
+    void UpdateAfterPreparation(std::vector<TString> cookies, TString PartitionId);
+
+    TFmrTableRef Input;
+    TYtTableRef Output;
+    TString SessionId;
+    std::vector<TString> Cookies;
+    TString PartitionId;
+    bool IsOrdered = true;
+};
+
 struct TUploadTaskParams {
     TFmrTableInputRef Input;
     TYtTableRef Output;
+};
+
+struct TSortedUploadTaskParams {
+    TFmrTableInputRef Input;
+    TYtTableRef Output;
+    TString CookieYson;
+    ui64 Order;
 };
 
 struct TDownloadOperationParams {
@@ -279,18 +338,9 @@ struct TMapTaskParams {
     bool IsOrdered;
 };
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TMapOperationParams>;
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams>;
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TMapTaskParams>;
-
-struct TClusterConnection {
-    TString TransactionId;
-    TString YtServerName;
-    TMaybe<TString> Token;
-
-    void Save(IOutputStream* buffer) const;
-    void Load(IInputStream* buffer);
-};
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams>;
 
 struct TFileInfo {
     TString LocalPath; // Path to local file, filled in worker.

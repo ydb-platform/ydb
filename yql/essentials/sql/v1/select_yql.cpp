@@ -512,7 +512,8 @@ private:
 };
 
 bool IsYqlSource(const TNodePtr& node) {
-    return dynamic_cast<TYqlSelectNode*>(node.Get()) ||
+    return IsYqlSubqueryRef(node) ||
+           dynamic_cast<TYqlSelectNode*>(node.Get()) ||
            dynamic_cast<TYqlValuesNode*>(node.Get());
 }
 
@@ -704,9 +705,33 @@ private:
     TNodePtr Node_;
 };
 
-bool IsYqlSubQuery(const TNodePtr& node) {
-    return IsYqlSource(node) ||
-           dynamic_cast<TYqlSubLinkNode*>(node.Get());
+TNodePtr GetYqlSource(const TNodePtr& node) {
+    if (IsYqlSource(node)) {
+        return node;
+    }
+
+    if (auto* link = dynamic_cast<TYqlSubLinkNode*>(node.Get())) {
+        return link->Source();
+    }
+
+    return nullptr;
+}
+
+TNodePtr ToTableExpression(TNodePtr source) {
+    TPosition position = source->GetPos();
+
+    TYqlSelectArgs args = {
+        .Projection = TPlainAsterisk{},
+        .Source = TYqlJoin{
+            .Sources = {
+                TYqlSource{
+                    .Node = std::move(source),
+                },
+            },
+        },
+    };
+
+    return BuildYqlSelect(std::move(position), std::move(args));
 }
 
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args) {

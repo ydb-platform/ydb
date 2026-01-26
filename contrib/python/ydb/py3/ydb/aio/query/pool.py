@@ -76,7 +76,14 @@ class QuerySessionPool:
         if session is None and self._current_size == self._size:
             queue_get = asyncio.ensure_future(self._queue.get())
             task_stop = asyncio.ensure_future(asyncio.ensure_future(self._should_stop.wait()))
-            done, _ = await asyncio.wait((queue_get, task_stop), return_when=asyncio.FIRST_COMPLETED)
+            try:
+                done, _ = await asyncio.wait((queue_get, task_stop), return_when=asyncio.FIRST_COMPLETED)
+            except asyncio.CancelledError:
+                task_stop.cancel()
+                cancelled = queue_get.cancel()
+                if not cancelled and not queue_get.exception():
+                    await self.release(queue_get.result())
+                raise
             if task_stop in done:
                 queue_get.cancel()
                 raise RuntimeError("An attempt to take session from closed session pool.")
@@ -149,7 +156,8 @@ class QuerySessionPool:
           1) QuerySerializableReadWrite() which is default mode;
           2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
           3) QuerySnapshotReadOnly();
-          4) QueryStaleReadOnly().
+          4) QuerySnapshotReadWrite();
+          5) QueryStaleReadOnly().
         :param retry_settings: RetrySettings object.
 
         :return: Result sets or exception in case of execution errors.

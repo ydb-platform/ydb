@@ -92,6 +92,7 @@ message TActorSystemConfig {
         optional int32 MaxAvgPingDeviation = 17;
 
         optional bool HasSharedThread = 18;
+        optional bool AllThreadsAreShared = 24;
         optional uint32 MaxLocalQueueSize = 20;
         optional uint32 MinLocalQueueSize = 21;
 
@@ -133,6 +134,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18;
+    optional bool UseUnitedPool = 22;
     optional bool UseRingQueue = 19 [default = true];
 
     optional bool MonitorStuckActors = 15;
@@ -367,7 +369,8 @@ message TBlobStorageConfig {
     optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
 
     optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
- }
+    optional NKikimrBlobStorage.TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 14;
+}
 
 message TSelfManagementConfig {
     // whether the self management is enabled (through distconf)? (mandatory field)
@@ -1235,8 +1238,10 @@ message TStreamingQueriesConfig {
         optional string DiscoveryCommonHostnamePrefixPatch = 1; // Added to discovered hostnames if original hostname starts with this prefix
     }
 
-    optional TExternalStorageConfig ExternalStorage = 1;
-    optional TExternalTopicsSettings TopicSdkSettings = 2;
+    reserved 1;
+    reserved 2;
+    optional TExternalStorageConfig ExternalStorage = 3;
+    optional TExternalTopicsSettings TopicSdkSettings = 4;
 }
 
 message TQueryServiceConfig {
@@ -1265,9 +1270,8 @@ message TQueryServiceConfig {
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
     reserved 24;
-    reserved 25;
+    optional TStreamingQueriesConfig StreamingQueries = 25;
     reserved 26;
-    optional TStreamingQueriesConfig StreamingQueries = 27;
 }
 
 // Config describes immediate controls and allows
@@ -2467,6 +2471,9 @@ message TColumnShardConfig {
     }
 
     optional uint64 ScanMemoryLimit = 63 [default = 3221225472];
+    optional uint64 CompactionStageMemoryLimit = 64 [default = 3221225472];
+    optional uint64 TieringStageMemoryLimit = 65 [default = 1000000000];
+    optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
 }
 
 message TSchemeShardConfig {

@@ -51,7 +51,8 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
             BIND([&] (const std::string& address) {
                 return this->CreateChannel(address);
             }),
-            outerMemoryUsageTracker),
+            outerMemoryUsageTracker,
+            false),
         CreateNoBaggageService(workerPool->GetInvoker())
     };
 
@@ -62,7 +63,8 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
             BIND([&] (const std::string& address) {
                 return this->CreateChannel(address);
             }),
-            innerMemoryUsageTracker),
+            innerMemoryUsageTracker,
+            false),
         CreateNoBaggageService(workerPool->GetInvoker())
     };
 

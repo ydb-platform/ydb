@@ -60,7 +60,7 @@ void RetireHazardPointer(T* ptr, TReclaimer /*reclaimer*/)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-THazardPtr<T>::THazardPtr(THazardPtr&& other)
+THazardPtr<T>::THazardPtr(THazardPtr&& other) noexcept
     : Ptr_(other.Ptr_)
     , HazardPtr_(other.HazardPtr_)
 {

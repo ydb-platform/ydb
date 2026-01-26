@@ -25,6 +25,8 @@ public:
         const std::vector<TYtResourceInfo>& jobYtResources = {},
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources = {}
     ) = 0;
+
+    virtual std::variant<TError, TStatistics> SortedUpload(const TSortedUploadTaskParams& params, const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections = {}, std::shared_ptr<std::atomic<bool>> cancelFlag = nullptr) = 0;
 };
 
 } // namespace NYql

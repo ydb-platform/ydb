@@ -27,7 +27,7 @@ TIntrusivePtr<TTabletStorageInfo> TabletStorageInfoFromProto(const NKikimrTablet
             auto erasure = TBlobStorageGroupType::ErasureSpeciesByName(channelInfo.GetChannelErasureName());
             x.Type = TBlobStorageGroupType(erasure);
         }
-        Y_ABORT_UNLESS((ui32)x.Type.GetErasure() < x.Type.ErasureSpeciesCount);
+        Y_ABORT_UNLESS(TErasureType::ErasureNames.contains(x.Type.GetErasure()));
 
         x.StoragePool = channelInfo.GetStoragePool();
 

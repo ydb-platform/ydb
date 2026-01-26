@@ -179,7 +179,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
             /* Name */ "twoSortedSegments",
             /* Input */ {
                 4, 5, 6, 7, 8, 9,
-                0, 1, 2, 3
+                0, 1, 2, 3,
             },
             /* ExpectedNumberOfPivots */ 3,
             /* ExpectedOutput */ {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
@@ -189,7 +189,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
             /* Input */ {
                 8, 9,
                 4, 5, 6, 7,
-                0, 1, 2, 3
+                0, 1, 2, 3,
             },
             /* ExpectedNumberOfPivots */ 4,
             /* ExpectedOutput */ {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
@@ -200,7 +200,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 8, 9,
                 6, 7,
                 3, 4, 5,
-                0, 1, 2
+                0, 1, 2,
             },
             /* ExpectedNumberOfPivots */ 5,
             /* ExpectedOutput */ {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
@@ -212,7 +212,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 3, 3.1,
                 2, 2.1,
                 1, 1.1, 1.2,
-                0, 0.1
+                0, 0.1,
             },
             /* ExpectedNumberOfPivots */ 6,
             /* ExpectedOutput */ {
@@ -231,7 +231,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 3, 3.1,
                 2, 2.1,
                 1, 1.1, 1.2,
-                0, 0.1
+                0, 0.1,
             },
             /* ExpectedNumberOfPivots */ 7,
             /* ExpectedOutput */ {
@@ -252,7 +252,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 3, 3.1,
                 2, 2.1,
                 1, 1.1, 1.2,
-                0, 0.1
+                0, 0.1,
             },
             /* ExpectedNumberOfPivots */ 8,
             /* ExpectedOutput */ {
@@ -275,7 +275,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestSortOrMergeImpl)
                 3, 3.1,
                 2, 2.1,
                 1, 1.1, 1.2,
-                0, 0.1
+                0, 0.1,
             },
             /* ExpectedNumberOfPivots */ 9,
             /* ExpectedOutput */ {
@@ -1099,7 +1099,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
             /* ExpectedIsVertical */ false,
             /* ExpectedIsHorizontal */ false,
             /* ExpectedIsPoint */ false,
-            /* ExpectedIsTilted */ true
+            /* ExpectedIsTilted */ true,
         },
         {
             /* Name */ "diagonalSegment",
@@ -1124,7 +1124,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
             /* ExpectedIsVertical */ false,
             /* ExpectedIsHorizontal */ false,
             /* ExpectedIsPoint */ false,
-            /* ExpectedIsTilted */ true
+            /* ExpectedIsTilted */ true,
         },
         {
             /* Name */ "verticalSegment",
@@ -1143,7 +1143,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
             /* ExpectedIsVertical */ true,
             /* ExpectedIsHorizontal */ false,
             /* ExpectedIsPoint */ false,
-            /* ExpectedIsTilted */ false
+            /* ExpectedIsTilted */ false,
         },
         {
             /* Name */ "horizontalSegment",
@@ -1168,7 +1168,7 @@ TEST_F(TPiecewiseLinearFunctionTest, TestPiecewiseSegmentScalar)
             /* ExpectedIsVertical */ false,
             /* ExpectedIsHorizontal */ true,
             /* ExpectedIsPoint */ false,
-            /* ExpectedIsTilted */ false
+            /* ExpectedIsTilted */ false,
         },
         {
             /* Name */ "pointSegment",

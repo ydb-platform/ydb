@@ -86,7 +86,6 @@ protected:
             runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_TRACE);
-            runtime.GetAppData().FeatureFlags.SetEnableViews(true);
             runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
             runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
             runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
@@ -308,6 +307,48 @@ protected:
         for (const TString& checksumFile : checksumFiles) {
             ModifyChecksumAndCheckThatImportFails(checksumFile, copySettings());
         }
+    }
+
+    void TestSchemeObjectEncryptedExportImport(
+        const TString& query,
+        const TString& objectName,
+        const TSet<TString> s3FileList)
+    {
+        using namespace NYdb;
+
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnablePermissionsExport(true);
+
+        // Enable all
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(true);
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableReplication(true);
+
+        auto res = YdbQueryClient().ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        {
+            NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2/dir3", "Prefix");
+            settings
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+
+            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList(s3FileList);
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
+            importSettings
+                .SymmetricKey("Cool random key!");
+
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+        }
+
+        auto desc = YdbSchemeClient().DescribePath(Sprintf("/Root/Restored/%s", objectName.c_str())).GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
     }
 
 private:

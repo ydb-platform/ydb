@@ -35,7 +35,14 @@ public:
                 richPaths.emplace_back(richPath);
             }
             try {
+                YQL_CLOG(TRACE, FastMapReduce) << "Calling YT API GetTablePartitions with DataWeightPerPartition="
+                << settings.MaxDataWeightPerPart << ", MaxParts=" << settings.MaxParts
+                << ", AdjustDataWeightPerPartition=true";
                 NYT::TMultiTablePartitions partitions = transaction->GetTablePartitions(richPaths, getTablePartitionsOptions);
+
+                YQL_CLOG(TRACE, FastMapReduce) << "YT API returned " << partitions.Partitions.size()
+                << " partitions for DataWeightPerPartition=" << settings.MaxDataWeightPerPart;
+
 
                 for (const auto& partition : partitions.Partitions) {
                     TYtTableTaskRef ytTableTaskRef{};

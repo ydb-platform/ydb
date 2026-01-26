@@ -899,6 +899,8 @@ struct TEvBlobStorage {
         EvControllerDistconfRequest                 = 0x1003162d,
         EvControllerDistconfResponse                = 0x1003162e,
         EvControllerUpdateSyncerState               = 0x1003162f,
+        EvControllerAllocateDDiskBlockGroup         = 0x10031630,
+        EvControllerAllocateDDiskBlockGroupResult   = 0x10031631,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -2956,6 +2958,9 @@ struct TEvBlobStorage {
     struct TEvControllerDistconfRequest;
     struct TEvControllerDistconfResponse;
     struct TEvControllerUpdateSyncerState;
+
+    struct TEvControllerAllocateDDiskBlockGroup;
+    struct TEvControllerAllocateDDiskBlockGroupResult;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

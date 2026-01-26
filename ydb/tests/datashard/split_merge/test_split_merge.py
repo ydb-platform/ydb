@@ -8,7 +8,7 @@ from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
     index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync, \
-    filter_dict, pk_pg_types, pk_pg_types_no_bool, non_pk_pg_types
+    filter_dict, pk_pg_types_mixed, pk_pg_types_no_bool_mixed, non_pk_pg_types_mixed
 
 
 class TestSplitMergeBase(TestBase):
@@ -146,25 +146,25 @@ class TestPgSplitMerge(TestPgBase, TestSplitMergeBase):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
-            ("table_index_0_UNIQUE_SYNC", pk_pg_types, {}, pk_pg_types_no_bool, "", "UNIQUE", "SYNC"),
-            ("table_index_0__SYNC", pk_pg_types, {}, pk_pg_types, "", "", "SYNC"),
-            ("table_index_0__ASYNC", pk_pg_types, {}, pk_pg_types, "", "", "ASYNC"),
-            ("table_all_types", pk_pg_types, {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_ttl_pgint4", pk_pg_types, {}, {}, "pgint4", "", ""),
-            ("table_ttl_pgint8", pk_pg_types, {}, {}, "pgint8", "", ""),
-            ("table_ttl_pgdate", pk_pg_types, {}, {}, "pgdate", "", ""),
-            ("table_ttl_pgtimestamp", pk_pg_types, {}, {}, "pgtimestamp", "", ""),
-            ("table_pgint2", filter_dict(pk_pg_types, "pgint2"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_pgint4", filter_dict(pk_pg_types, "pgint4"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_pgint8", filter_dict(pk_pg_types, "pgint8"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_pgnumeric", filter_dict(pk_pg_types, "pgnumeric"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_pgbytea", filter_dict(pk_pg_types, "pgbytea"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_pgtext", filter_dict(pk_pg_types, "pgtext"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_pgvarchar", filter_dict(pk_pg_types, "pgvarchar"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_pguuid", filter_dict(pk_pg_types, "pguuid"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_pgdate", filter_dict(pk_pg_types, "pgdate"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_pgtimestamp", filter_dict(pk_pg_types, "pgtimestamp"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
-            ("table_pginterval", filter_dict(pk_pg_types, "pginterval"), {**pk_pg_types, **non_pk_pg_types}, {}, "", "", ""),
+            ("table_index_0_UNIQUE_SYNC", pk_pg_types_mixed, {}, pk_pg_types_no_bool_mixed, "", "UNIQUE", "SYNC"),
+            ("table_index_0__SYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "SYNC"),
+            ("table_index_0__ASYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "ASYNC"),
+            ("table_all_types", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_ttl_pgint4", pk_pg_types_mixed, {}, {}, "pgint4", "", ""),
+            ("table_ttl_pgint8", pk_pg_types_mixed, {}, {}, "pgint8", "", ""),
+            ("table_ttl_pgdate", pk_pg_types_mixed, {}, {}, "pgdate", "", ""),
+            ("table_ttl_pgtimestamp", pk_pg_types_mixed, {}, {}, "pgtimestamp", "", ""),
+            ("table_pgint2", filter_dict(pk_pg_types_mixed, "pgint2"), {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_pgint4", filter_dict(pk_pg_types_mixed, "pgint4"), {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_pgint8", filter_dict(pk_pg_types_mixed, "pgint8"), {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_pgnumeric", filter_dict(pk_pg_types_mixed, "pgnumeric"), {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_pgbytea", filter_dict(pk_pg_types_mixed, "pgbytea"), {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_pgtext", filter_dict(pk_pg_types_mixed, "pgtext"), {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_pgvarchar", filter_dict(pk_pg_types_mixed, "pgvarchar"), {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_pguuid", filter_dict(pk_pg_types_mixed, "pguuid"), {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_pgdate", filter_dict(pk_pg_types_mixed, "pgdate"), {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_pgtimestamp", filter_dict(pk_pg_types_mixed, "pgtimestamp"), {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_pginterval", filter_dict(pk_pg_types_mixed, "pginterval"), {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
         ]
     )
     def test_merge_split(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):

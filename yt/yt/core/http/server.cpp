@@ -41,7 +41,7 @@ void TCallbackHandler::HandleRequest(const IRequestPtr& req, const IResponseWrit
 ////////////////////////////////////////////////////////////////////////////////
 
 void IServer::AddHandler(
-    const TString& pattern,
+    const std::string& pattern,
     TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler)
 {
     AddHandler(pattern, New<TCallbackHandler>(handler));
@@ -71,11 +71,11 @@ public:
         , Invoker_(std::move(invoker))
         , OwnPoller_(ownPoller)
         , Address_(Listener_ ? Listener_->GetAddress() : TNetworkAddress::CreateIPv6Any(Config_->Port))
-        , Profiling_(HttpProfiler.WithTag("server", Config_->ServerName))
+        , Profiling_(HttpProfiler.WithTag("server", Config_->ServerName), Config_->EnablePerPathRequestProfiling)
         , RequestPathMatcher_(std::move(requestPathMatcher))
     { }
 
-    void AddHandler(const TString& path, const IHttpHandlerPtr& handler) override
+    void AddHandler(const std::string& path, const IHttpHandlerPtr& handler) override
     {
         YT_VERIFY(!Started_);
         RequestPathMatcher_->Add(path, handler);
@@ -178,11 +178,12 @@ private:
             TStatusCodeCounter StatusCodeCounter;
         };
 
-        explicit TProfiling(const TProfiler& profiler)
+        explicit TProfiling(const TProfiler& profiler, bool enablePerPathRequestProfiling)
             : ConnectionsActive(profiler.Gauge("/connections_active"))
             , ConnectionsAccepted(profiler.Counter("/connections_accepted"))
             , ConnectionsDropped(profiler.Counter("/connections_dropped"))
             , RequestsMissingHeaders(profiler.Counter("/requests_missing_headers"))
+            , EnablePerPathRequestProfiling_(enablePerPathRequestProfiling)
             , Profiler_(profiler)
         { }
 
@@ -193,15 +194,22 @@ private:
 
         TRequestProfiling* GetRequestProfiling(const THttpInputPtr& httpRequest)
         {
-            TRequestProfilingKey profilingKey{httpRequest->GetUrl().Path};
-            return RequestProfilingMap_.FindOrInsert(profilingKey, [&] {
-                return New<TRequestProfiling>(Profiler_
-                    .WithTag("path", std::string(std::get<0>(profilingKey))));
-            }).first->Get();
+            if (EnablePerPathRequestProfiling_) {
+                TRequestProfilingKey profilingKey{httpRequest->GetUrl().Path};
+                return RequestProfilingMap_.FindOrInsert(profilingKey, [&] {
+                    return New<TRequestProfiling>(Profiler_
+                        .WithTag("path", std::get<0>(profilingKey)));
+                }).first->Get();
+            } else {
+                return RequestProfilingMap_.FindOrInsert(TRequestProfilingKey{}, [&] {
+                    return New<TRequestProfiling>(Profiler_);
+                }).first->Get();
+            }
         }
 
     private:
-        TProfiler Profiler_;
+        const bool EnablePerPathRequestProfiling_;
+        const TProfiler Profiler_;
 
         // Path.
         using TRequestProfilingKey = std::tuple<std::string>;
@@ -616,13 +624,13 @@ IServerPtr CreateServer(
  *  - trailing-slash redirection: matching "/path/" implies "/path"
  *  - end of path wildcard: "/path/{$}" matches only "/path/" and "/path"
  */
-void TRequestPathMatcher::Add(const TString& pattern, const IHttpHandlerPtr& handler)
+void TRequestPathMatcher::Add(const std::string& pattern, const IHttpHandlerPtr& handler)
 {
     if (pattern.empty()) {
         THROW_ERROR_EXCEPTION("Empty pattern is invalid");
     }
 
-    if (pattern.EndsWith("/{$}")) {
+    if (pattern.ends_with("/{$}")) {
         auto withoutWildcard = pattern.substr(0, pattern.size() - 3);
 
         Exact_[withoutWildcard] = handler;
@@ -639,7 +647,7 @@ void TRequestPathMatcher::Add(const TString& pattern, const IHttpHandlerPtr& han
     }
 }
 
-void TRequestPathMatcher::Add(const TString& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler)
+void TRequestPathMatcher::Add(const std::string& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler)
 {
     Add(pattern, New<TCallbackHandler>(handler));
 }

@@ -219,7 +219,7 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
         self._stream_call = stream_call
         self.from_server_grpc = SyncToAsyncIterator(stream_call.__iter__(), self._wait_executor)
 
-    async def receive(self, timeout: Optional[int] = None) -> Any:
+    async def receive(self, timeout: Optional[int] = None, is_coordination_calls=False) -> Any:
         # todo handle grpc exceptions and convert it to internal exceptions
         try:
             if timeout is None:
@@ -234,7 +234,8 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
         except (grpc.RpcError, grpc.aio.AioRpcError) as e:
             raise connection._rpc_error_handler(self._connection_state, e)
 
-        issues._process_response(grpc_message)
+        if not is_coordination_calls:
+            issues._process_response(grpc_message)
 
         if self._connection_state != "has_received_messages":
             self._connection_state = "has_received_messages"

@@ -113,6 +113,7 @@ public:
             State_->TypeCtx->DqCaptured = true;
             // TODO: drop this after implementing DQS ConstraintTransformer
             State_->TypeCtx->ExpectedConstraints.clear();
+            State_->IsFullCaptureReady = false;
         }
         return status;
     }

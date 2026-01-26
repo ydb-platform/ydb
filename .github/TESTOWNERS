@@ -91,6 +91,7 @@
 /ydb/tests/functional/config @ydb-platform/blobstorage
 /ydb/services/keyvalue/ut @ydb-platform/blobstorage
 /ydb/tests/functional/bridge @ydb-platform/blobstorage
+/ydb/tests/functional/dstool @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core

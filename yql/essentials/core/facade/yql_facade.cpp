@@ -75,7 +75,7 @@ const TString StartTimeLabel = "StartTime";
 
 class TUrlLoader: public IUrlLoader {
 public:
-    TUrlLoader(TFileStoragePtr storage)
+    explicit TUrlLoader(TFileStoragePtr storage)
         : Storage_(storage)
     {
     }
@@ -1433,7 +1433,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
@@ -1512,7 +1512,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {

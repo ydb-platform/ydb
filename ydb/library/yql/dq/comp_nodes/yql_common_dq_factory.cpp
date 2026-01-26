@@ -4,7 +4,6 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
-#include <ydb/library/yql/dq/comp_nodes/dq_hash_aggregate.h>
 
 namespace NYql {
 

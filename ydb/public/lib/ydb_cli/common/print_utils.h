@@ -9,6 +9,9 @@ namespace NYdb::NConsoleClient {
 void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NColorizer::TColors colors);
 TString FormatTime(TInstant time);
 TString FormatDuration(TDuration duration);
+TString FormatBytes(ui64 bytes);
+TString FormatSpeed(double bytesPerSecond);
+TString FormatEta(TDuration duration);
 TString PrettySize(ui64 size);
 TString PrettyNumber(ui64 number);
 TString EntryTypeToString(NScheme::ESchemeEntryType entry);

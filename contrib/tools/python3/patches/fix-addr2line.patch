@@ -1,5 +1,5 @@
---- contrib/tools/python3/Objects/codeobject.c	(index)
-+++ contrib/tools/python3/Objects/codeobject.c	(working tree)
+--- a/Objects/codeobject.c	(index)
++++ b/Objects/codeobject.c	(working tree)
 @@ -768,7 +768,7 @@ PyCode_Addr2Line(PyCodeObject *co, int addrq)
      if (addrq < 0) {
          return co->co_firstlineno;

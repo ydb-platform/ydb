@@ -7,7 +7,8 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-class TPartitionWriterCacheActor : public NActors::TActorBootstrapped<TPartitionWriterCacheActor> {
+class TPartitionWriterCacheActor : public NActors::TActorBootstrapped<TPartitionWriterCacheActor>
+                                 , public NActors::IActorExceptionHandler {
 public:
     TPartitionWriterCacheActor(const TActorId& owner,
                                ui32 partition,
@@ -15,6 +16,7 @@ public:
                                const NPQ::TPartitionWriterOpts& opts);
 
     void Bootstrap(const TActorContext& ctx);
+    bool OnUnhandledException(const std::exception& exc) override;
 
 private:
     using TPartitionWriterPtr = std::unique_ptr<TPartitionWriter>;

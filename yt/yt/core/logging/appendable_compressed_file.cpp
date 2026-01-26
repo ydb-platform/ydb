@@ -151,7 +151,7 @@ private:
             auto guard = Guard(FlushSpinLock_);
             BuffersToFlushCount_ = EnqueuedBuffersCount_;
             if (BuffersToFlushCount_ == CompressedBuffersCount_) {
-                readyToFlushFuture = VoidFuture;
+                readyToFlushFuture = OKFuture;
             } else {
                 ReadyToFlushEvent_ = NewPromise<void>();
                 readyToFlushFuture = ReadyToFlushEvent_.ToFuture();

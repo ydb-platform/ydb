@@ -2,7 +2,6 @@ from .. import _apis, issues
 from .._grpc.grpcwrapper.ydb_coordination_public_types import NodeConfig, DescribeResult
 import logging
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -25,8 +24,8 @@ def wrapper_alter_node(rpc_state, response_pb):
 
 class BaseCoordinationClient:
     def __init__(self, driver):
-        logger.warning("Experimental API: interface may change in future releases.")
         self._driver = driver
+        self._user_warned = False
 
     def _call_create(self, request, settings=None):
         return self._driver(
@@ -63,3 +62,10 @@ class BaseCoordinationClient:
             wrap_result=wrapper_delete_node,
             settings=settings,
         )
+
+    def _log_experimental_api(self):
+        if not self._user_warned:
+            logger.warning(
+                "Coordination Service API is experimental, may contain bugs and may change in future releases."
+            )
+            self._user_warned = True

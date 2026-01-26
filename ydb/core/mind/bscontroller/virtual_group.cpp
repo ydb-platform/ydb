@@ -65,12 +65,15 @@ namespace NKikimr::NBsController {
         }
 
         auto& pool = pools.at(storagePoolId);
+        if (pool.DDisk) {
+            throw TExError() << "can't invoke AllocateVirtualGroup against DDisk pool";
+        }
 
         // create entry in group table
         auto *group = Groups.ConstructInplaceNewEntry(TGroupId::FromValue(groupId.GetRaw()), TGroupId::FromValue(groupId.GetRaw()), 0u, 0u,
             TBlobStorageGroupType::ErasureNone, 0u, NKikimrBlobStorage::TVDiskKind::Default,
             pool.EncryptionMode.GetOrElse(TBlobStorageGroupInfo::EEM_NONE), TBlobStorageGroupInfo::ELCP_INITIAL,
-            TString(), TString(), 0u, 0u, false, false, 0u, TBridgePileId(), storagePoolId, 0u, 0u, 0u);
+            TString(), TString(), 0u, 0u, false, false, 0u, TBridgePileId(), storagePoolId, 0u, 0u, 0u, false);
 
         // bind group to storage pool
         ++pool.NumGroups;

@@ -156,7 +156,7 @@ public:
     {
         Result_.Set(IUnversionedRowsetPtr(this));
         Result_.Reset();
-        return VoidFuture;
+        return OKFuture;
     }
 
     bool Write(TRange<TUnversionedRow> rows) override
@@ -169,7 +169,7 @@ public:
 
     TFuture<void> GetReadyEvent() override
     {
-        return VoidFuture;
+        return OKFuture;
     }
 
     std::optional<TRowsDigest> GetDigest() const override

@@ -619,7 +619,7 @@ public:
                                                                 TopResourceName_##slot##_##hasKey##_##isTop> {         \
     public:                                                                                                            \
         template <typename... Args>                                                                                    \
-        inline TTopResourceData(Args&&... args)                                                                        \
+        inline explicit TTopResourceData(Args&&... args)                                                               \
             : TBoxedResource(std::forward<Args>(args)...)                                                              \
         {                                                                                                              \
         }                                                                                                              \
@@ -712,7 +712,7 @@ UDF_TYPE_ID_MAP(RESOURCE_11)
                                            TopResourceName_Generic_##hasKey##_##isTop> { \
     public:                                                                              \
         template <typename... Args>                                                      \
-        inline TTopResource(Args&&... args)                                              \
+        inline explicit TTopResource(Args&&... args)                                     \
             : TBoxedResource(std::forward<Args>(args)...)                                \
         {                                                                                \
         }                                                                                \

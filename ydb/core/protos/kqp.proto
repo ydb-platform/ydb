@@ -5,7 +5,8 @@ option cc_enable_arenas = true;
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "ydb/library/actors/protos/actors.proto";
-import "ydb/core/scheme/protos/type_info.proto";
+import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/kqp_tablemetadata.proto";
 import "ydb/core/protos/kqp_physical.proto";
 import "ydb/core/protos/kqp_stats.proto";
 import "ydb/core/protos/data_events.proto";
@@ -170,18 +171,10 @@ message TQueryRequest {
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
 }
 
-message TKqpPathIdProto {
-    optional uint64 OwnerId = 1;
-    optional uint64 TableId = 2;
-}
-
 message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
 }
 
-message TFulltextIndexDescription {
-    optional Ydb.Table.FulltextIndexSettings Settings = 1;
-}
 
 message TIndexDescriptionProto {
     optional string Name = 1;
@@ -194,32 +187,8 @@ message TIndexDescriptionProto {
     repeated string DataColumns = 8;
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 9;
-        TFulltextIndexDescription FulltextIndexDescription = 10;
+        NKikimrSchemeOp.TFulltextIndexDescription FulltextIndexDescription = 10;
     }
-};
-
-message TKqpColumnMetadataProto {
-    enum EDefaultKind {
-        DEFAULT_KIND_UNSPECIFIED = 0;
-        DEFAULT_KIND_NULL = 1;
-        DEFAULT_KIND_SEQUENCE = 2;
-        DEFAULT_KIND_LITERAL = 3;
-    };
-
-    optional string Name = 1;
-    optional uint32 Id = 2;
-    optional string Type = 3;
-    optional uint32 TypeId = 4;
-    optional NKikimrProto.TTypeInfo TypeInfo = 7;
-    repeated string Family = 5;
-    optional bool NotNull = 6 [default = false];
-    optional string DefaultFromSequence = 8;
-    optional EDefaultKind DefaultKind = 9;
-    optional Ydb.TypedValue DefaultFromLiteral = 10;
-    // flag that indicates that column is currently under the build
-    // operation.
-    optional bool IsBuildInProgress = 11 [default = false];
-    optional TKqpPathIdProto DefaultFromSequencePathId = 12;
 };
 
 message TKqpTableMetadataProto {
@@ -307,9 +276,8 @@ message TQueryResponseExtraInfo {
 message TQueryResponse {
     optional bytes SessionId = 1;
     reserved 2; // (deprecated) QueryErrors
-    // repeated NKikimrMiniKQL.TResult Results = 3;
-    // optional TQueryProfile Profile = 4; // TODO: Deprecate, use QueryStats
-    reserved 4;
+    reserved 3; // (deprecated) repeated NKikimrMiniKQL.TResult Results = 3
+    reserved 4; // (deprecated) optional TQueryProfile Profile = 4
     optional bytes PreparedQuery = 5;
     optional string QueryAst = 6;
     reserved 7;
@@ -322,6 +290,7 @@ message TQueryResponse {
     optional TTopicOperationsResponse TopicOperations = 14;
     optional string QueryDiagnostics = 15;
     optional TQueryResponseExtraInfo ExtraInfo = 16;
+    optional string EffectivePoolId = 17;
 }
 
 message TEvQueryResponse {
@@ -840,6 +809,8 @@ message TKqpTableSinkSettings {
         MODE_DELETE = 3;
         MODE_UPDATE = 4;
         MODE_FILL = 5;
+        MODE_UPDATE_CONDITIONAL = 6; // UPDATE WHERE
+        MODE_UPSERT_INCREMENT = 7;
     }
 
     optional NKqpProto.TKqpPhyTableId Table = 3;
@@ -862,6 +833,7 @@ message TKqpTableSinkSettings {
     repeated TKqpColumnMetadataProto LookupColumns = 20;
     optional bool IsIndexImplTable = 21;
     optional string Database = 22;
+    repeated uint32 DefaultColumnsIds = 23;
 }
 
 message TReadVectorTopK {
@@ -897,32 +869,38 @@ message TKqpStreamLookupSettings {
 
 message TKqpFullTextSourceSettings {
     message TKqpQuerySettings {
-        repeated TKqpColumnMetadataProto Columns = 4;
-        optional string Query = 1;
+        repeated TKqpColumnMetadataProto Columns = 1;
+        optional string Query = 2;
     }
 
     message TIndexTable {
         optional NKqpProto.TKqpPhyTableId Table = 1;
-        repeated TKqpColumnMetadataProto KeyColumns = 7;
+        repeated TKqpColumnMetadataProto KeyColumns = 2;
         repeated TKqpColumnMetadataProto Columns = 3;
     }
 
     optional NKqpProto.TKqpPhyTableId Table = 1;
     optional string Index = 2;
+    optional NKikimrSchemeOp.TFulltextIndexDescription IndexDescription = 3;
 
-    repeated TKqpColumnMetadataProto KeyColumns = 7;
-    repeated TKqpColumnMetadataProto Columns = 3;
+    repeated TKqpColumnMetadataProto KeyColumns = 4;
+    repeated TKqpColumnMetadataProto Columns = 5;
 
-    repeated TIndexTable IndexTables = 8;
+    repeated TIndexTable IndexTables = 6;
 
-    optional uint64 SkipLimit = 9;
-    optional uint64 Limit = 10;
+    optional uint64 SkipLimit = 7;
+    optional uint64 Limit = 8;
 
-    optional TKqpQuerySettings QuerySettings = 4;
+    optional TKqpQuerySettings QuerySettings = 9;
 
-    optional TKqpSnapshot Snapshot = 5;
+    optional TKqpSnapshot Snapshot = 10;
 
-    optional string Database = 6;
+    optional string Database = 11;
+
+    optional double K1Factor = 12;
+    optional double BFactor = 13;
+    optional string QueryMode = 14;
+    optional string MinimumShouldMatch = 15;
 };
 
 message TKqpSequencerSettings {
@@ -976,6 +954,7 @@ message TScriptExecutionOperationMeta {
     optional bool DisableDefaultTimeout = 13;
     optional string CheckpointId = 14;
     optional string StreamingQueryPath = 15;
+    optional string CustomerSuppliedId = 16;
 }
 
 // stored in column "retry_state" of .metadata/script_executions table

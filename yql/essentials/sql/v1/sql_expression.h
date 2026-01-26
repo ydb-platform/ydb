@@ -148,6 +148,8 @@ private:
     TNodePtr EmptyTuple();
     TNodeResult SmartParenthesis(const TRule_smart_parenthesis& node);
 
+    TNodePtr GetNamedNode(const TString& name);
+
     ESmartParenthesis SmartParenthesisMode_ = ESmartParenthesis::Default;
     bool MaybeUnnamedSmartParenOnTop_ = true;
     bool IsSourceAllowed_ = true;

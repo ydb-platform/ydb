@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.22.4)
+VERSION(3.23.3)
 
 LICENSE(Apache-2.0)
 
@@ -58,6 +58,10 @@ PY_SRCS(
     ydb/aio/connection.py
     ydb/aio/coordination/__init__.py
     ydb/aio/coordination/client.py
+    ydb/aio/coordination/reconnector.py
+    ydb/aio/coordination/semaphore.py
+    ydb/aio/coordination/session.py
+    ydb/aio/coordination/stream.py
     ydb/aio/credentials.py
     ydb/aio/driver.py
     ydb/aio/iam.py
@@ -77,6 +81,8 @@ PY_SRCS(
     ydb/coordination/__init__.py
     ydb/coordination/base.py
     ydb/coordination/client.py
+    ydb/coordination/semaphore.py
+    ydb/coordination/session.py
     ydb/credentials.py
     ydb/dbapi/__init__.py
     ydb/dbapi/connection.py

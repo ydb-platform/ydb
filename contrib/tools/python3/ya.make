@@ -9,6 +9,7 @@ ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.12.tar.gz)
 LICENSE(Python-2.0)
 
 PEERDIR(
+    contrib/libs/blake2
     contrib/libs/expat
     contrib/libs/libbz2
     contrib/libs/libc_compat
@@ -20,6 +21,7 @@ PEERDIR(
 )
 
 ADDINCL(
+    contrib/libs/blake2/include
     contrib/libs/expat
     contrib/libs/libbz2
     contrib/restricted/libffi/include

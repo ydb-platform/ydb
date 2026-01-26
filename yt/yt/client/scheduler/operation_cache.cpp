@@ -19,7 +19,7 @@ TOperationCache::TOperationCache(
     NProfiling::TProfiler profiler)
     : TAsyncExpiringCache(
         std::move(config),
-        NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker(),
+        NRpc::TDispatcher::Get()->GetHeavyInvoker(),
         SchedulerLogger().WithTag("Cache: Operation"),
         std::move(profiler))
     , Attributes_(std::move(attributes))

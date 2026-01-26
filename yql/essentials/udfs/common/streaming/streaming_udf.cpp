@@ -28,7 +28,7 @@ namespace {
 // should be managed externally.
 class TCyclicRWBuffer {
 public:
-    TCyclicRWBuffer(size_t capacity)
+    explicit TCyclicRWBuffer(size_t capacity)
         : Buffer_(capacity)
         , Finished_(false)
         , DataStart_(0)
@@ -458,7 +458,7 @@ private:
 private:
     class MatcherCallback: public TKMPStreamMatcher<char>::ICallback {
     public:
-        MatcherCallback(bool& hasMatch)
+        explicit MatcherCallback(bool& hasMatch)
             : HasMatch_(hasMatch)
         {
         }
@@ -684,7 +684,7 @@ private:
 
 class TStreamingProcess: public TBoxedValue {
 public:
-    TStreamingProcess(TSourcePosition pos)
+    explicit TStreamingProcess(TSourcePosition pos)
         : Pos_(pos)
     {
     }
@@ -729,7 +729,7 @@ private:
 
 class TStreamingProcessInline: public TBoxedValue {
 public:
-    TStreamingProcessInline(TSourcePosition pos)
+    explicit TStreamingProcessInline(TSourcePosition pos)
         : Pos_(pos)
     {
     }

@@ -71,7 +71,7 @@ TFuture<void> TSchemalessFormatWriterBase::GetReadyEvent()
         return MakeFuture(GetError());
     }
     // NB: Must wait for *all* outstanding requests, not just the first (front) one.
-    return WriteFutures_.empty() ? VoidFuture : WriteFutures_.back();
+    return WriteFutures_.empty() ? OKFuture : WriteFutures_.back();
 }
 
 TFuture<void> TSchemalessFormatWriterBase::Close()

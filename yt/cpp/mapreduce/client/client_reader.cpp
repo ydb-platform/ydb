@@ -71,7 +71,7 @@ TClientReader::TClientReader(
         auto transactionId2 = ReadTransaction_ ? ReadTransaction_->GetId() : ParentTransactionId_;
         auto newFormat = GetTableFormat(ClientRetryPolicy_, RawClient_, Context_, transactionId2, Path_);
         if (newFormat) {
-            Format_->Config = *newFormat;
+            Format_.Config = *newFormat;
         }
     }
 

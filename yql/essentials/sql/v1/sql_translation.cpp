@@ -3,6 +3,8 @@
 #include "sql_call_expr.h"
 #include "sql_query.h"
 #include "sql_values.h"
+#include "sql_select_yql.h"
+#include "select_yql.h"
 #include "sql_select.h"
 #include "object_processing.h"
 #include "source.h"
@@ -698,7 +700,7 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
     if (node.GetRule_table_index_type3().HasBlock2()) {
         const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name);
-        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT") {
+        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT_PLAIN" || subType == "FULLTEXT_RELEVANCE") {
             if (indexes.back().Type != TIndexDescription::EType::GlobalSync) {
                 Ctx_.Error() << subType << " index can only be GLOBAL [SYNC]";
                 return false;
@@ -706,8 +708,10 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
             if (subType == "VECTOR_KMEANS_TREE") {
                 indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
-            } else if (subType == "FULLTEXT") {
-                indexes.back().Type = TIndexDescription::EType::GlobalFulltext;
+            } else if (subType == "FULLTEXT_PLAIN") {
+                indexes.back().Type = TIndexDescription::EType::GlobalFulltextPlain;
+            } else if (subType == "FULLTEXT_RELEVANCE") {
+                indexes.back().Type = TIndexDescription::EType::GlobalFulltextRelevance;
             } else {
                 Y_ABORT("Unreachable");
             }
@@ -721,7 +725,9 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
     if (node.HasBlock10()) {
         // const auto& with = node.GetBlock4();
         auto& index = indexes.back();
-        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree || index.Type == TIndexDescription::EType::GlobalFulltext) {
+        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree ||
+            index.Type == TIndexDescription::EType::GlobalFulltextPlain ||
+            index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
             if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
                 return false;
             }
@@ -3922,25 +3928,58 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
     TNodePtr nodeExpr = nullptr;
     switch (rule.GetBlock3().Alt_case()) {
         case TRule_named_nodes_stmt::TBlock3::kAlt1: {
-            TSqlExpression expr(Ctx_, Mode_);
-            TNodePtr result = Unwrap(expr.BuildSourceOrNode(rule.GetBlock3().GetAlt1().GetRule_expr1()));
-            if (TSourcePtr source = MoveOutIfSource(result)) {
-                result = BuildSourceNode(Ctx_.Pos(), std::move(source));
-            }
-            return result;
+            const auto& alt = rule.GetBlock3().GetAlt1().GetRule_expr1();
+            return YqlSelectOrLegacy(
+                [&]() -> TNodeResult {
+                    TSqlExpression expr(Ctx_, Mode_);
+                    expr.SetYqlSelectProduced(true);
+
+                    TNodeResult node = expr.Build(alt);
+                    if (!node) {
+                        return std::unexpected(node.error());
+                    }
+
+                    if (TNodePtr source = GetYqlSource(*node)) {
+                        node = TNonNull(ToTableExpression(std::move(source)));
+                    }
+
+                    return node;
+                },
+                [&]() -> TNodePtr {
+                    TSqlExpression expr(Ctx_, Mode_);
+                    expr.SetYqlSelectProduced(false);
+
+                    TNodePtr result = Unwrap(expr.BuildSourceOrNode(alt));
+                    if (TSourcePtr source = MoveOutIfSource(result)) {
+                        result = BuildSourceNode(Ctx_.Pos(), std::move(source));
+                    }
+
+                    return result;
+                });
         }
 
         case TRule_named_nodes_stmt::TBlock3::kAlt2: {
-            const auto& subselect_rule = rule.GetBlock3().GetAlt2().GetRule_select_unparenthesized_stmt1();
+            const auto& alt = rule.GetBlock3().GetAlt2().GetRule_select_unparenthesized_stmt1();
+            return YqlSelectOrLegacy(
+                [&]() -> TNodeResult {
+                    TNodeResult node = BuildYqlSelectSubExpr(Ctx_, Mode_, alt);
+                    if (!node) {
+                        return std::unexpected(node.error());
+                    }
 
-            TPosition pos;
-            TSourcePtr source = TSqlSelect(Ctx_, Mode_).Build(subselect_rule, pos);
+                    return TNonNull(ToTableExpression(GetYqlSource(std::move(*node))));
+                },
+                [&]() -> TNodePtr {
+                    TSqlSelect select(Ctx_, Mode_);
 
-            if (!source) {
-                return {};
-            }
+                    TPosition pos;
+                    TSourcePtr source = select.Build(alt, pos);
+                    if (!source) {
+                        return nullptr;
+                    }
 
-            return BuildSourceNode(pos, std::move(source));
+                    return BuildSourceNode(pos, std::move(source));
+                });
         }
 
         case TRule_named_nodes_stmt::TBlock3::ALT_NOT_SET:
@@ -5645,7 +5684,7 @@ bool TSqlTranslation::ParseTransferLambda(
 
 class TReturningListColumns: public INode {
 public:
-    TReturningListColumns(TPosition pos)
+    explicit TReturningListColumns(TPosition pos)
         : INode(pos)
     {
     }
@@ -5862,7 +5901,7 @@ TMaybe<TString> TSqlTranslation::ParseObjectPath(const TRule_object_ref& node, T
 }
 
 bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings) {
-    // streaming_query_setting: an_id_or_type = (id_or_type | STRING_VALUE | bool_value)
+    // streaming_query_setting: an_id_or_type = (id_or_type | STRING_VALUE | bool_value | streaming_query_settings)
 
     const auto& id = to_lower(Id(node.GetRule_an_id_or_type1(), *this));
     if (id.StartsWith(TStreamingQuerySettings::RESERVED_FEATURE_PREFIX)) {
@@ -5870,7 +5909,8 @@ bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_set
         return false;
     }
 
-    const auto [it, inserted] = settings.Features.emplace(id, TDeferredAtom{});
+    YQL_ENSURE(settings.Features);
+    const auto [feature, inserted] = settings.Features->AddFeature(id, Ctx_.Pos());
     if (!inserted) {
         Error() << "Found duplicated parameter: " << to_upper(id);
         return false;
@@ -5879,24 +5919,33 @@ bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_set
     const auto& valueNode = node.GetRule_streaming_query_setting_value3();
     switch (valueNode.GetAltCase()) {
         case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue1: {
-            it->second = TDeferredAtom(Ctx_.Pos(), Id(valueNode.GetAlt_streaming_query_setting_value1().GetRule_id_or_type1(), *this));
+            const auto& value = Id(valueNode.GetAlt_streaming_query_setting_value1().GetRule_id_or_type1(), *this);
+            feature = BuildQuotedAtom(Ctx_.Pos(), value);
             break;
         }
         case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue2: {
             const auto& strToken = Ctx_.Token(valueNode.GetAlt_streaming_query_setting_value2().GetToken1());
             const auto& strValue = StringContent(Ctx_, Ctx_.Pos(), strToken);
             if (!strValue) {
-                Error() << "Cannot parse string correctly: " << strToken;
                 return false;
             }
 
-            it->second = TDeferredAtom(Ctx_.Pos(), strValue->Content);
+            feature = BuildQuotedAtom(Ctx_.Pos(), strValue->Content);
             break;
         }
         case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue3: {
-            it->second = TDeferredAtom(BuildLiteralBool(
-                                           Ctx_.Pos(),
-                                           FromString<bool>(Ctx_.Token(valueNode.GetAlt_streaming_query_setting_value3().GetRule_bool_value1().GetToken1()))), Ctx_);
+            const auto& alt = valueNode.GetAlt_streaming_query_setting_value3();
+            const auto& token = Ctx_.Token(alt.GetRule_bool_value1().GetToken1());
+            feature = BuildLiteralBool(Ctx_.Pos(), FromString<bool>(token));
+            break;
+        }
+        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue4: {
+            TStreamingQuerySettings settings;
+            if (!ParseStreamingQuerySettings(valueNode.GetAlt_streaming_query_setting_value4().GetRule_streaming_query_settings1(), settings)) {
+                return false;
+            }
+
+            feature = settings.Features;
             break;
         }
         case TRule_streaming_query_setting_value::ALT_NOT_SET:
@@ -5911,6 +5960,12 @@ bool TSqlTranslation::ParseStreamingQuerySettings(const TRule_streaming_query_se
     //     streaming_query_setting
     //     (, streaming_query_setting)* ,?
     // )
+
+    Ctx_.Token(node.GetToken1());
+
+    if (!settings.Features) {
+        settings.Features = new TObjectFeatureNode(Ctx_.Pos());
+    }
 
     if (!ParseStreamingQuerySetting(node.GetRule_streaming_query_setting2(), settings)) {
         return false;
@@ -5928,7 +5983,13 @@ bool TSqlTranslation::ParseStreamingQuerySettings(const TRule_streaming_query_se
 bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings) {
     // streaming_query_definition: AS DO (BEGIN define_action_or_subquery_body END DO);
 
-    Ctx_.Token(node.GetToken1());
+    const auto& inlineAction = node.GetRule_inline_action3();
+    const auto& queryBegin = inlineAction.GetToken1();
+    Ctx_.Token(queryBegin);
+
+    if (!settings.Features) {
+        settings.Features = new TObjectFeatureNode(Ctx_.Pos());
+    }
 
     // Save query ast to perform type check and validation of allowed expressions
 
@@ -5944,7 +6005,6 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
     clearWorldNode->Add("World");
     innerBlocks.push_back(clearWorldNode);
 
-    const auto& inlineAction = node.GetRule_inline_action3();
     const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, inlineAction.GetRule_define_action_or_subquery_body2());
     auto queryNode = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
     if (!WarnUnusedNodes()) {
@@ -5959,14 +6019,12 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
 
     TNodePtr blockNode = new TAstListNodeImpl(Ctx_.Pos());
     blockNode->Add("block", blockNode->Q(queryNode));
-    settings.Features[TStreamingQuerySettings::QUERY_AST_FEATURE] = TDeferredAtom(blockNode, Ctx_);
+    settings.Features->AddFeature(TStreamingQuerySettings::QUERY_AST_FEATURE, Ctx_.Pos()).first = blockNode;
 
     // Extract whole query text between BEGIN and END tokens
 
-    const auto& queryBegin = inlineAction.GetToken1();
-    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryBegin.GetId(), BEGIN));
-
     const auto& queryEnd = inlineAction.GetToken3();
+    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryBegin.GetId(), BEGIN));
     Y_DEBUG_ABORT_UNLESS(IS_TOKEN(queryEnd.GetId(), END));
 
     auto beginPos = GetQueryPosition(Ctx_.Query, queryBegin);
@@ -5977,7 +6035,7 @@ bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_
     }
 
     beginPos += queryBegin.value().size();
-    settings.Features[TStreamingQuerySettings::QUERY_TEXT_FEATURE] = TDeferredAtom(Ctx_.Pos(), Ctx_.Query.substr(beginPos, endPos - beginPos));
+    settings.Features->AddFeature(TStreamingQuerySettings::QUERY_TEXT_FEATURE, Ctx_.Pos()).first = BuildQuotedAtom(Ctx_.Pos(), Ctx_.Query.substr(beginPos, endPos - beginPos));
 
     return true;
 }
@@ -6021,6 +6079,44 @@ bool TSqlTranslation::ParseAlterStreamingQueryAction(const TRule_alter_streaming
     }
 
     return true;
+}
+
+TNodePtr TSqlTranslation::YqlSelectOrLegacy(
+    std::function<TNodeResult()> yqlSelect,
+    std::function<TNodePtr()> legacy)
+{
+    const EYqlSelectMode mode = Ctx_.GetYqlSelectMode();
+    if (mode == EYqlSelectMode::Disable) {
+        return legacy();
+    }
+
+    const NYql::TLangVersion langVer = YqlSelectLangVersion();
+    if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
+        Error() << "YqlSelect is not available before "
+                << FormatLangVersion(langVer);
+        return nullptr;
+    }
+
+    TNodeResult result = yqlSelect();
+    if (result) {
+        return std::move(*result);
+    }
+
+    switch (result.error()) {
+        case ESQLError::Basic: {
+            return nullptr;
+        }
+        case ESQLError::UnsupportedYqlSelect: {
+            if (mode == EYqlSelectMode::Force) {
+                Error() << "Translation of the statement "
+                        << "to YqlSelect was forced, but unsupported";
+                return nullptr;
+            }
+
+            YQL_ENSURE(mode == EYqlSelectMode::Auto);
+            return legacy();
+        }
+    }
 }
 
 } // namespace NSQLTranslationV1

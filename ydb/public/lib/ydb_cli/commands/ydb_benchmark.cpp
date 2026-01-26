@@ -3,6 +3,7 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
+#include <ydb/public/lib/ydb_cli/common/duration.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/stream/null.h>
 #include <util/string/printf.h>
@@ -90,11 +91,11 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
 
     config.Opts->AddLongOption('v', "verbose", "Verbose output").NoArgument().StoreValue(&VerboseLevel, 1);
 
-    config.Opts->AddLongOption("global-timeout", "Global timeout for all requests")
-        .StoreResult(&GlobalTimeout);
+    config.Opts->AddLongOption("global-timeout", "Global timeout for all requests. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
+        .StoreMappedResult(&GlobalTimeout, &ParseDurationMilliseconds);
 
-    config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request")
-        .StoreResult(&RequestTimeout);
+    config.Opts->AddLongOption("request-timeout", "Timeout for each iteration of each request. Supports time units (e.g., '5s', '1m'). Plain number interpreted as milliseconds.")
+        .StoreMappedResult(&RequestTimeout, &ParseDurationMilliseconds);
 
     config.Opts->AddLongOption('t', "threads", "Number of parallel threads in workload")
         .StoreResult(&Threads).DefaultValue(Threads).RequiredArgument("COUNT");

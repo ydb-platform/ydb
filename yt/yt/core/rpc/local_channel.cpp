@@ -203,7 +203,7 @@ private:
 
         TFuture<void> GetReadyFuture() const override
         {
-            return VoidFuture;
+            return OKFuture;
         }
 
         TFuture<void> Send(TSharedRefArray message, const NBus::TSendOptions& /*options*/) override
@@ -227,7 +227,7 @@ private:
                 default:
                     YT_ABORT();
             }
-            return VoidFuture;
+            return OKFuture;
         }
 
         void SetTosLevel(TTosLevel /*tosLevel*/) override
@@ -357,13 +357,13 @@ private:
         TFuture<void> SendStreamingPayload(const TStreamingPayload& payload) override
         {
             Service_->HandleStreamingPayload(RequestId_, payload);
-            return VoidFuture;
+            return OKFuture;
         }
 
         TFuture<void> SendStreamingFeedback(const TStreamingFeedback& feedback) override
         {
             Service_->HandleStreamingFeedback(RequestId_, feedback);
-            return VoidFuture;
+            return OKFuture;
         }
 
     private:

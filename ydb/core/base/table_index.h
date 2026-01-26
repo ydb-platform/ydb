@@ -53,8 +53,7 @@ NKikimrSchemeOp::EIndexType ConvertIndexType(Ydb::Table::TableIndex::TypeCase ty
 
 std::span<const std::string_view> GetImplTables(
     NKikimrSchemeOp::EIndexType indexType,
-    std::span<const TString> indexKeys,
-    std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout = std::nullopt);
+    std::span<const TString> indexKeys);
 std::span<const std::string_view> GetFulltextImplTables(Ydb::Table::FulltextIndexSettings::Layout layout);
 bool IsImplTable(std::string_view tableName);
 bool IsBuildImplTable(std::string_view tableName);
@@ -124,6 +123,17 @@ namespace NFulltext {
     inline constexpr const char* StatsTable = "indexImplStatsTable";
     inline constexpr const char* DocCountColumn = "__ydb_doc_count";
     inline constexpr const char* SumDocLengthColumn = "__ydb_sum_doc_length";
+
+    inline constexpr const char* FullTextRelevanceColumn = "__ydb_full_text_relevance";
+
+    enum class EQueryMode {
+        Invalid,
+        And,
+        Or
+    };
+
+    EQueryMode QueryModeFromString(const TString& mode, TString& explain);
+    ui32 MinimumShouldMatchFromString(i32 wordsCount, EQueryMode queryMode, const TString& minimumShouldMatch, TString& explain);
 }
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);

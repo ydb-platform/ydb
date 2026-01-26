@@ -83,9 +83,7 @@ namespace NKikimr::NBsController {
             void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
                 if (prev.Mood != cur.Mood ||
                         prev.ExpectedSlotCount != cur.ExpectedSlotCount ||
-                        prev.SlotSizeInUnits != cur.SlotSizeInUnits ||
-                        prev.InferPDiskSlotCountFromUnitSize != cur.InferPDiskSlotCountFromUnitSize ||
-                        prev.InferPDiskSlotCountMax != cur.InferPDiskSlotCountMax) {
+                        prev.SlotSizeInUnits != cur.SlotSizeInUnits) {
                     CreatePDiskEntry(pdiskId, cur);
                 }
             }
@@ -118,8 +116,6 @@ namespace NKikimr::NBsController {
                 pdisk->SetPDiskCategory(pdiskInfo.Kind.GetRaw());
                 pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
                 pdisk->SetManagementStage(Self->SerialManagementStage);
-                pdisk->SetInferPDiskSlotCountFromUnitSize(pdiskInfo.InferPDiskSlotCountFromUnitSize);
-                pdisk->SetInferPDiskSlotCountMax(pdiskInfo.InferPDiskSlotCountMax);
                 if (pdiskInfo.PDiskConfig && !pdisk->MutablePDiskConfig()->ParseFromString(pdiskInfo.PDiskConfig)) {
                     // TODO(alexvru): report this somehow
                 }
@@ -270,11 +266,10 @@ namespace NKikimr::NBsController {
                 } else {
                     Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
                 }
-                const TString storagePoolName = info.Name;
 
                 // push group information to each node that will receive VDisk status update
                 NKikimrBlobStorage::TGroupInfo proto;
-                SerializeGroupInfo(&proto, groupInfo, storagePoolName, scopeId);
+                SerializeGroupInfo(&proto, groupInfo, info, scopeId);
                 for (TNodeId nodeId : nodes) {
                     NKikimrBlobStorage::TNodeWardenServiceSet *service = Services[nodeId].MutableServiceSet();
                     service->AddGroups()->CopyFrom(proto);
@@ -288,7 +283,7 @@ namespace NKikimr::NBsController {
                         dynInfo.PushBackActorId(MakeBlobStorageVDiskID(id.NodeId, id.PDiskId, id.VSlotId));
                     }
                     State.NodeWhiteboardOutbox.emplace_back(new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(
-                        MakeIntrusive<TBlobStorageGroupInfo>(groupInfo.Topology, std::move(dynInfo), storagePoolName,
+                        MakeIntrusive<TBlobStorageGroupInfo>(groupInfo.Topology, std::move(dynInfo), info.Name,
                         scopeId, NPDisk::DEVICE_TYPE_UNKNOWN)));
                 }
 
@@ -446,9 +441,16 @@ namespace NKikimr::NBsController {
                         auto& topology = *group->Topology;
                         // fill in vector of failed disks (that are not fully operational)
                         TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
+                        bool alreadySeenReplicatingWithPhantomsOnly = false;
                         for (const TVSlotInfo *slot : group->VDisksInGroup) {
-                            if (!slot->IsReady) {
+                            bool replicatingWithPhantomsOnly = slot->IsReplicatingWithPhantomsOnly();
+                            // Allow exactly one VDisk that is REPLICATING with only phantoms remaining to be treated as nearly ready
+                            bool allowedOneReplicatingWithPhantomsOnly = replicatingWithPhantomsOnly && !alreadySeenReplicatingWithPhantomsOnly;
+                            if (!slot->IsReady && !allowedOneReplicatingWithPhantomsOnly) {
                                 failed |= {&topology, slot->GetShortVDiskId()};
+                            }
+                            if (replicatingWithPhantomsOnly) {
+                                alreadySeenReplicatingWithPhantomsOnly = true;
                             }
                         }
                         // check the failure model
@@ -977,8 +979,6 @@ namespace NKikimr::NBsController {
                 drive.SetSharedWithOs(value.SharedWithOs);
                 drive.SetReadCentric(value.ReadCentric);
                 drive.SetKind(value.Kind);
-                drive.SetInferPDiskSlotCountFromUnitSize(value.InferPDiskSlotCountFromUnitSize);
-                drive.SetInferPDiskSlotCountMax(value.InferPDiskSlotCountMax);
 
                 if (const auto& config = value.PDiskConfig) {
                     NKikimrBlobStorage::TPDiskConfig& pb = *drive.MutablePDiskConfig();
@@ -1117,12 +1117,6 @@ namespace NKikimr::NBsController {
             pb->SetLastSeenSerial(pdisk.LastSeenSerial);
             pb->SetReadOnly(pdisk.Mood == TPDiskMood::ReadOnly);
             pb->SetMaintenanceStatus(pdisk.MaintenanceStatus);
-            if (pdisk.InferPDiskSlotCountFromUnitSize) {
-                pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
-            }
-            if (pdisk.InferPDiskSlotCountMax) {
-                pb->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
-            }
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {
@@ -1255,10 +1249,10 @@ namespace NKikimr::NBsController {
         }
 
         void TBlobStorageController::SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,
-                const TString& storagePoolName, const TMaybe<TKikimrScopeId>& scopeId) {
+                const TStoragePoolInfo& poolInfo, const TMaybe<TKikimrScopeId>& scopeId) {
             group->SetGroupID(groupInfo.ID.GetRawId());
             group->SetGroupGeneration(groupInfo.Generation);
-            group->SetStoragePoolName(storagePoolName);
+            group->SetStoragePoolName(poolInfo.Name);
 
             group->SetEncryptionMode(groupInfo.EncryptionMode.GetOrElse(0));
             group->SetLifeCyclePhase(groupInfo.LifeCyclePhase.GetOrElse(0));
@@ -1325,6 +1319,10 @@ namespace NKikimr::NBsController {
                 groupInfo.BridgeProxyGroupId->CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
             }
             groupInfo.BridgePileId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+
+            if (poolInfo.DDisk) {
+                group->SetDDisk(true);
+            }
         }
 
         void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {

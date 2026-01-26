@@ -10,12 +10,18 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Writes the given buffer with the length to the standard error.
-void WriteToStderr(const char* buffer, int length);
-//! Writes the given zero-terminated buffer to the standard error.
-void WriteToStderr(const char* buffer);
-//! Same for TStringBuf.
-void WriteToStderr(TStringBuf buffer);
+using TCrashHandlerWriter = void(*)(TStringBuf);
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Writes the given string to the standard error.
+void WriteToStderr(TStringBuf str);
+
+//! Change default crash handler writer (WriteToStderr) to custom one.
+void SetCrashHandlerWriter(TCrashHandlerWriter writer);
+
+//! Writes the given string with crash handler writer (writes to stderr by default).
+void WriteCrashHandlerOutput(TStringBuf str);
 
 #ifdef _unix_
 // Dumps signal, stack frame information and codicils.

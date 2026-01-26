@@ -43,7 +43,7 @@ class TSimpleExpiringCache
 {
 public:
     explicit TSimpleExpiringCache(TAsyncExpiringCacheConfigPtr config, float successProbability = 1.0)
-        : TAsyncExpiringCache<int, int>(std::move(config), NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker(), TestLogger())
+        : TAsyncExpiringCache<int, int>(std::move(config), NRpc::TDispatcher::Get()->GetHeavyInvoker(), TestLogger())
         , Generator_(RandomDevice_())
         , Bernoulli_(successProbability)
     { }
@@ -89,7 +89,7 @@ class TDelayedExpiringCache
 {
 public:
     TDelayedExpiringCache(TAsyncExpiringCacheConfigPtr config, const TDuration& delay)
-        : TAsyncExpiringCache<int, int>(std::move(config), NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker())
+        : TAsyncExpiringCache<int, int>(std::move(config), NRpc::TDispatcher::Get()->GetHeavyInvoker())
         , Delay_(delay)
     { }
 
@@ -480,7 +480,7 @@ class TRevisionCache
 {
 public:
     TRevisionCache(const TAsyncExpiringCacheConfigPtr& config)
-        : TAsyncExpiringCache<int, int>(config, NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker())
+        : TAsyncExpiringCache<int, int>(config, NRpc::TDispatcher::Get()->GetHeavyInvoker())
     { }
 
     std::atomic<int> InitialFetchCount = 0;

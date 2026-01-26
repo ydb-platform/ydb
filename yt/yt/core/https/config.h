@@ -56,6 +56,9 @@ struct TClientConfig
     // If missing then builtin certificate store is used.
     TClientCredentialsConfigPtr Credentials;
 
+    // Allow bypass TLS for http://... URLs.
+    bool AllowHTTP;
+
     REGISTER_YSON_STRUCT(TClientConfig);
 
     static void Register(TRegistrar registrar);

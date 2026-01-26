@@ -967,7 +967,7 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx, NYql::IGraphTransformer &typeAnn)
 {
-    const TPushdownOptions pushdownOptions(kqpCtx.Config->EnableOlapScalarApply, kqpCtx.Config->EnableOlapSubstringPushdown);
+    const TPushdownOptions pushdownOptions(kqpCtx.Config->GetEnableOlapScalarApply(), kqpCtx.Config->GetEnableOlapSubstringPushdown());
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }

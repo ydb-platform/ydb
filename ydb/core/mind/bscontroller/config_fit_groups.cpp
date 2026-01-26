@@ -17,6 +17,7 @@ namespace NKikimr {
             const bool AllowUnusableDisks;
             const bool SettleOnlyOnOperationalDisks;
             const bool IsSelfHealReasonDecommit;
+            const bool DDisk;
             std::deque<ui64> ExpectedSlotSize;
             const ui32 PDiskSpaceMarginPromille;
             const TGroupGeometryInfo Geometry;
@@ -40,6 +41,7 @@ namespace NKikimr {
                 , AllowUnusableDisks(cmd.GetAllowUnusableDisks())
                 , SettleOnlyOnOperationalDisks(cmd.GetSettleOnlyOnOperationalDisks())
                 , IsSelfHealReasonDecommit(cmd.GetIsSelfHealReasonDecommit())
+                , DDisk(storagePool.DDisk)
                 , ExpectedSlotSize(expectedSlotSize)
                 , PDiskSpaceMarginPromille(pdiskSpaceMarginPromille)
                 , Geometry(TBlobStorageGroupType(storagePool.ErasureSpecies), storagePool.GetGroupGeometry())
@@ -112,7 +114,8 @@ namespace NKikimr {
                         StoragePoolId, /* storagePoolId */
                         0, /* numFailRealms */
                         0, /* numFailDomainsPerFailRealm */
-                        0); /* numVDisksPerFailDomain */
+                        0, /* numVDisksPerFailDomain */
+                        false); /* ddisk */
 
                     // bind group to storage pool
                     State.StoragePoolGroups.Unshare().emplace(StoragePoolId, mainGroupId);
@@ -190,7 +193,8 @@ namespace NKikimr {
                     0, Geometry.GetErasure(), desiredPDiskCategory.GetOrElse(0), StoragePool.VDiskKind,
                     StoragePool.EncryptionMode.GetOrElse(0), lifeCyclePhase, mainKeyId, encryptedGroupKey,
                     groupKeyNonce, MainKeyVersion, false, false, groupSizeInUnits, bridgePileId, StoragePoolId,
-                    Geometry.GetNumFailRealms(), Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain());
+                    Geometry.GetNumFailRealms(), Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain(),
+                    DDisk);
 
                 groupInfo->BridgeProxyGroupId = bridgeProxyGroupId;
 
@@ -790,7 +794,7 @@ namespace NKikimr {
                                 TVSlotInfo *vslotInfo = State.VSlots.ConstructInplaceNewEntry(vslotId, vslotId, pdiskInfo,
                                     groupInfo->ID, 0, groupInfo->Generation, StoragePool.VDiskKind, failRealmIdx,
                                     failDomainIdx, vdiskIdx, TMood::Normal, groupInfo, &VSlotReadyTimestampQ,
-                                    TInstant::Zero(), TDuration::Zero());
+                                    TInstant::Zero(), TDuration::Zero(), 0);
                                 vslotInfo->VDiskStatusTimestamp = State.Mono;
 
                                 // mark as uncommitted

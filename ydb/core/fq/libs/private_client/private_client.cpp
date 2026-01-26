@@ -52,7 +52,7 @@ public:
 
     template<class TProtoResult, class TResultWrapper>
     auto MakeResultExtractor(NThreading::TPromise<TResultWrapper> promise, const NMonitoring::THistogramPtr& hist, TInstant startedAt) {
-        return [=, promise = std::move(promise)]
+        return [promise = std::move(promise), startedAt, hist, knownEndpoints=KnownEndpoints]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::unique_ptr<TProtoResult> result;
                 if (any) {
@@ -62,7 +62,7 @@ public:
 
                 hist->Collect((TInstant::Now() - startedAt).MilliSeconds());
 
-                UpdateKnownEndpoints(status.Endpoint);
+                UpdateKnownEndpoints(status.Endpoint, knownEndpoints);
                 promise.SetValue(
                     TResultWrapper(
                         TStatus(std::move(status)),
@@ -217,18 +217,18 @@ public:
     }
 
 private:
-    void UpdateKnownEndpoints([[maybe_unused]] const std::string& endpoint) {
-#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-        std::lock_guard lock(KnownEndpoints->Lock);
-        KnownEndpoints->Endpoints.emplace(endpoint);
-#endif
-    }
-
-private:
 struct TKnownEndpoints {
     std::unordered_set<std::string> Endpoints;
     std::mutex Lock;
 };
+
+private:
+    static void UpdateKnownEndpoints([[maybe_unused]] const std::string& endpoint, [[maybe_unused]] const std::shared_ptr<TKnownEndpoints>& knownEndpoints) {
+#ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
+        std::lock_guard lock(knownEndpoints->Lock);
+        knownEndpoints->Endpoints.emplace(endpoint);
+#endif
+    }
 
 private:
     const NMonitoring::TDynamicCounterPtr Counters;

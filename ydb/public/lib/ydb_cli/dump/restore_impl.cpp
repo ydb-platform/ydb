@@ -418,8 +418,8 @@ TRestoreResult TDelayedRestoreManager::Restore(const TDelayedRestoreCall& call) 
             return Client->RestoreView(call.FsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, call.Settings);
         }
         case ESchemeEntryType::ExternalTable: {
-            const auto& dbPath = std::get<TDelayedRestoreCall::TSimplePath>(call.DbPath);
-            return Client->RestoreExternalTable(call.FsPath, dbPath, call.Settings);
+            const auto& [dbRestoreRoot, dbPathRelativeToRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
+            return Client->RestoreExternalTable(call.FsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, call.Settings);
         }
         case ESchemeEntryType::Replication: {
             const auto& [dbRestoreRoot, dbPathRelativeToRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
@@ -1191,14 +1191,8 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
             return RestoreTopic(fsPath, dbPath, settings);
         case ESchemeEntryType::CoordinationNode:
             return RestoreCoordinationNode(fsPath, dbPath, settings);
-        case ESchemeEntryType::ExternalTable:
-            if (delay) {
-                DelayedRestoreManager.Add(ESchemeEntryType::ExternalTable, fsPath, dbPath, settings);
-                return Result<TRestoreResult>();
-            }
-            return RestoreExternalTable(fsPath, dbPath, settings);
         case ESchemeEntryType::ExternalDataSource:
-            return RestoreExternalDataSource(fsPath, dbPath, dbRestoreRoot, settings);
+            return RestoreExternalDataSource(fsPath, dbRestoreRoot, dbPath, settings);
         case ESchemeEntryType::SysView:
             return RestoreSysView(fsPath, dbPath, settings);
 
@@ -1215,6 +1209,11 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
         case ESchemeEntryType::Transfer:
             if (!delay) {
                 return RestoreTransfer(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+            }
+            [[fallthrough]];
+        case ESchemeEntryType::ExternalTable:
+            if (!delay) {
+                return RestoreExternalTable(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
             }
 
             DelayedRestoreManager.Add(type, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
@@ -1260,13 +1259,13 @@ TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEn
                 return result;
             }
         }
-        if (auto result = RestoreExternalDataSource(fsPath, dbPath, dbRestoreRoot, settings); !result.IsSuccess()) {
+        if (auto result = RestoreExternalDataSource(fsPath, dbRestoreRoot, dbPath, settings); !result.IsSuccess()) {
             return result;
         }
     }
     for (const auto& [dbPath, i] : externalTables) {
         const auto& fsPath = backupEntries[i].FsPath;
-        auto result = RestoreExternalTable(fsPath, dbPath, settings);
+        auto result = RestoreExternalTable(fsPath, dbRestoreRoot, dbPath.substr(dbRestoreRoot.size()), settings);
         if (!result.IsSuccess()) {
             return result;
         }
@@ -1742,8 +1741,8 @@ TRestoreResult TRestoreClient::RestoreCoordinationNode(
 
 TRestoreResult TRestoreClient::RestoreExternalDataSource(
     const TFsPath& fsPath,
-    const TString& dbPath,
     const TString& dbRestoreRoot,
+    const TString& dbPath,
     const TRestoreSettings& settings)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
@@ -1779,10 +1778,12 @@ TRestoreResult TRestoreClient::RestoreExternalDataSource(
 
 TRestoreResult TRestoreClient::RestoreExternalTable(
     const TFsPath& fsPath,
-    const TString& dbPath,
+    const TString& dbRestoreRoot,
+    const TString& dbPathRelativeToRestoreRoot,
     const TRestoreSettings& settings)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
+    const auto dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
 
     LOG_I("Restore external table " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
@@ -1793,7 +1794,7 @@ TRestoreResult TRestoreClient::RestoreExternalTable(
     TString query = ReadExternalTableQuery(fsPath, Log.get());
 
     NYql::TIssues issues;
-    if (!RewriteCreateExternalTableQuery(query, dbPath, issues)) {
+    if (!RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 

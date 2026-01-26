@@ -174,7 +174,7 @@ locale::__imp::__imp(size_t refs) : facet(refs), facets_(N), name_("C") {
   install(&make<codecvt<char16_t, char, mbstate_t> >(1u));
   install(&make<codecvt<char32_t, char, mbstate_t> >(1u));
   _LIBCPP_SUPPRESS_DEPRECATED_POP
-#ifndef _LIBCPP_HAS_NO_CHAR8_T
+#if _LIBCPP_HAS_CHAR8_T
   install(&make<codecvt<char16_t, char8_t, mbstate_t> >(1u));
   install(&make<codecvt<char32_t, char8_t, mbstate_t> >(1u));
 #endif
@@ -219,9 +219,9 @@ locale::__imp::__imp(size_t refs) : facet(refs), facets_(N), name_("C") {
 }
 
 locale::__imp::__imp(const string& name, size_t refs) : facet(refs), facets_(N), name_(name) {
-#ifndef _LIBCPP_HAS_NO_EXCEPTIONS
+#if _LIBCPP_HAS_EXCEPTIONS
   try {
-#endif // _LIBCPP_HAS_NO_EXCEPTIONS
+#endif // _LIBCPP_HAS_EXCEPTIONS
     facets_ = locale::classic().__locale_->facets_;
     for (unsigned i = 0; i < facets_.size(); ++i)
       if (facets_[i])
@@ -242,7 +242,7 @@ locale::__imp::__imp(const string& name, size_t refs) : facet(refs), facets_(N),
     install(new codecvt_byname<char16_t, char, mbstate_t>(name_));
     install(new codecvt_byname<char32_t, char, mbstate_t>(name_));
     _LIBCPP_SUPPRESS_DEPRECATED_POP
-#ifndef _LIBCPP_HAS_NO_CHAR8_T
+#if _LIBCPP_HAS_CHAR8_T
     install(new codecvt_byname<char16_t, char8_t, mbstate_t>(name_));
     install(new codecvt_byname<char32_t, char8_t, mbstate_t>(name_));
 #endif
@@ -268,14 +268,14 @@ locale::__imp::__imp(const string& name, size_t refs) : facet(refs), facets_(N),
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
     install(new messages_byname<wchar_t>(name_));
 #endif
-#ifndef _LIBCPP_HAS_NO_EXCEPTIONS
+#if _LIBCPP_HAS_EXCEPTIONS
   } catch (...) {
     for (unsigned i = 0; i < facets_.size(); ++i)
       if (facets_[i])
         facets_[i]->__release_shared();
     throw;
   }
-#endif // _LIBCPP_HAS_NO_EXCEPTIONS
+#endif // _LIBCPP_HAS_EXCEPTIONS
 }
 
 locale::__imp::__imp(const __imp& other) : facets_(max<size_t>(N, other.facets_.size())), name_(other.name_) {
@@ -291,9 +291,9 @@ locale::__imp::__imp(const __imp& other, const string& name, locale::category c)
   for (unsigned i = 0; i < facets_.size(); ++i)
     if (facets_[i])
       facets_[i]->__add_shared();
-#ifndef _LIBCPP_HAS_NO_EXCEPTIONS
+#if _LIBCPP_HAS_EXCEPTIONS
   try {
-#endif // _LIBCPP_HAS_NO_EXCEPTIONS
+#endif // _LIBCPP_HAS_EXCEPTIONS
     if (c & locale::collate) {
       install(new collate_byname<char>(name));
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
@@ -313,7 +313,7 @@ locale::__imp::__imp(const __imp& other, const string& name, locale::category c)
       install(new codecvt_byname<char16_t, char, mbstate_t>(name));
       install(new codecvt_byname<char32_t, char, mbstate_t>(name));
       _LIBCPP_SUPPRESS_DEPRECATED_POP
-#ifndef _LIBCPP_HAS_NO_CHAR8_T
+#if _LIBCPP_HAS_CHAR8_T
       install(new codecvt_byname<char16_t, char8_t, mbstate_t>(name));
       install(new codecvt_byname<char32_t, char8_t, mbstate_t>(name));
 #endif
@@ -348,14 +348,14 @@ locale::__imp::__imp(const __imp& other, const string& name, locale::category c)
       install(new messages_byname<wchar_t>(name));
 #endif
     }
-#ifndef _LIBCPP_HAS_NO_EXCEPTIONS
+#if _LIBCPP_HAS_EXCEPTIONS
   } catch (...) {
     for (unsigned i = 0; i < facets_.size(); ++i)
       if (facets_[i])
         facets_[i]->__release_shared();
     throw;
   }
-#endif // _LIBCPP_HAS_NO_EXCEPTIONS
+#endif // _LIBCPP_HAS_EXCEPTIONS
 }
 
 template <class F>
@@ -370,9 +370,9 @@ locale::__imp::__imp(const __imp& other, const __imp& one, locale::category c)
   for (unsigned i = 0; i < facets_.size(); ++i)
     if (facets_[i])
       facets_[i]->__add_shared();
-#ifndef _LIBCPP_HAS_NO_EXCEPTIONS
+#if _LIBCPP_HAS_EXCEPTIONS
   try {
-#endif // _LIBCPP_HAS_NO_EXCEPTIONS
+#endif // _LIBCPP_HAS_EXCEPTIONS
     if (c & locale::collate) {
       install_from<std::collate<char> >(one);
 #ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
@@ -389,7 +389,7 @@ locale::__imp::__imp(const __imp& other, const __imp& one, locale::category c)
       install_from<std::codecvt<char16_t, char, mbstate_t> >(one);
       install_from<std::codecvt<char32_t, char, mbstate_t> >(one);
       _LIBCPP_SUPPRESS_DEPRECATED_POP
-#ifndef _LIBCPP_HAS_NO_CHAR8_T
+#if _LIBCPP_HAS_CHAR8_T
       install_from<std::codecvt<char16_t, char8_t, mbstate_t> >(one);
       install_from<std::codecvt<char32_t, char8_t, mbstate_t> >(one);
 #endif
@@ -443,14 +443,14 @@ locale::__imp::__imp(const __imp& other, const __imp& one, locale::category c)
       install_from<std::messages<wchar_t> >(one);
 #endif
     }
-#ifndef _LIBCPP_HAS_NO_EXCEPTIONS
+#if _LIBCPP_HAS_EXCEPTIONS
   } catch (...) {
     for (unsigned i = 0; i < facets_.size(); ++i)
       if (facets_[i])
         facets_[i]->__release_shared();
     throw;
   }
-#endif // _LIBCPP_HAS_NO_EXCEPTIONS
+#endif // _LIBCPP_HAS_EXCEPTIONS
 }
 
 locale::__imp::__imp(const __imp& other, facet* f, long id)
@@ -2831,7 +2831,7 @@ int codecvt<char16_t, char, mbstate_t>::do_length(
 
 int codecvt<char16_t, char, mbstate_t>::do_max_length() const noexcept { return 4; }
 
-#ifndef _LIBCPP_HAS_NO_CHAR8_T
+#if _LIBCPP_HAS_CHAR8_T
 
 // template <> class codecvt<char16_t, char8_t, mbstate_t>
 
@@ -2965,7 +2965,7 @@ int codecvt<char32_t, char, mbstate_t>::do_length(
 
 int codecvt<char32_t, char, mbstate_t>::do_max_length() const noexcept { return 4; }
 
-#ifndef _LIBCPP_HAS_NO_CHAR8_T
+#if _LIBCPP_HAS_CHAR8_T
 
 // template <> class codecvt<char32_t, char8_t, mbstate_t>
 
@@ -3669,16 +3669,16 @@ __codecvt_utf16<char32_t, true>::result __codecvt_utf16<char32_t, true>::do_out(
   const uint32_t* _frm_end = reinterpret_cast<const uint32_t*>(frm_end);
   const uint32_t* _frm_nxt = _frm;
 #endif
-  uint8_t* _to     = reinterpret_cast<uint8_t*>(to);
-  uint8_t* _to_end = reinterpret_cast<uint8_t*>(to_end);
-  uint8_t* _to_nxt = _to;
+  uint8_t* _to             = reinterpret_cast<uint8_t*>(to);
+  uint8_t* _to_end         = reinterpret_cast<uint8_t*>(to_end);
+  uint8_t* _to_nxt         = _to;
 #if defined(_LIBCPP_SHORT_WCHAR)
-  result r = ucs2_to_utf16le(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt, __maxcode_, __mode_);
+  result r                 = ucs2_to_utf16le(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt, __maxcode_, __mode_);
 #else
-  result r = ucs4_to_utf16le(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt, __maxcode_, __mode_);
+  result r                 = ucs4_to_utf16le(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt, __maxcode_, __mode_);
 #endif
-  frm_nxt = frm + (_frm_nxt - _frm);
-  to_nxt  = to + (_to_nxt - _to);
+  frm_nxt                  = frm + (_frm_nxt - _frm);
+  to_nxt                   = to + (_to_nxt - _to);
   return r;
 }
 
@@ -3907,17 +3907,17 @@ __codecvt_utf8_utf16<char32_t>::result __codecvt_utf8_utf16<char32_t>::do_in(
   const uint8_t* _frm_end = reinterpret_cast<const uint8_t*>(frm_end);
   const uint8_t* _frm_nxt = _frm;
 #if defined(_LIBCPP_SHORT_WCHAR)
-  uint16_t* _to     = reinterpret_cast<uint16_t*>(to);
-  uint16_t* _to_end = reinterpret_cast<uint16_t*>(to_end);
-  uint16_t* _to_nxt = _to;
+  uint16_t* _to           = reinterpret_cast<uint16_t*>(to);
+  uint16_t* _to_end       = reinterpret_cast<uint16_t*>(to_end);
+  uint16_t* _to_nxt       = _to;
 #else
-  uint32_t* _to     = reinterpret_cast<uint32_t*>(to);
-  uint32_t* _to_end = reinterpret_cast<uint32_t*>(to_end);
-  uint32_t* _to_nxt = _to;
+  uint32_t* _to           = reinterpret_cast<uint32_t*>(to);
+  uint32_t* _to_end       = reinterpret_cast<uint32_t*>(to_end);
+  uint32_t* _to_nxt       = _to;
 #endif
-  result r = utf8_to_utf16(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt, __maxcode_, __mode_);
-  frm_nxt  = frm + (_frm_nxt - _frm);
-  to_nxt   = to + (_to_nxt - _to);
+  result r                = utf8_to_utf16(_frm, _frm_end, _frm_nxt, _to, _to_end, _to_nxt, __maxcode_, __mode_);
+  frm_nxt                 = frm + (_frm_nxt - _frm);
+  to_nxt                  = to + (_to_nxt - _to);
   return r;
 }
 
@@ -5739,7 +5739,7 @@ template class _LIBCPP_DEPRECATED_IN_CXX20 _LIBCPP_CLASS_TEMPLATE_INSTANTIATION_
     codecvt_byname<char16_t, char, mbstate_t>;
 template class _LIBCPP_DEPRECATED_IN_CXX20 _LIBCPP_CLASS_TEMPLATE_INSTANTIATION_VIS
     codecvt_byname<char32_t, char, mbstate_t>;
-#ifndef _LIBCPP_HAS_NO_CHAR8_T
+#if _LIBCPP_HAS_CHAR8_T
 template class _LIBCPP_CLASS_TEMPLATE_INSTANTIATION_VIS codecvt_byname<char16_t, char8_t, mbstate_t>;
 template class _LIBCPP_CLASS_TEMPLATE_INSTANTIATION_VIS codecvt_byname<char32_t, char8_t, mbstate_t>;
 #endif

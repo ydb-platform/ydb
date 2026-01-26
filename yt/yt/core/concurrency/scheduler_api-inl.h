@@ -50,12 +50,12 @@ TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(TFuture future, EWait
 
 inline void Yield()
 {
-    WaitUntilSet(VoidFuture);
+    WaitUntilSet(OKFuture);
 }
 
 inline void SwitchTo(IInvokerPtr invoker)
 {
-    WaitUntilSet(VoidFuture, std::move(invoker));
+    WaitUntilSet(OKFuture, std::move(invoker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

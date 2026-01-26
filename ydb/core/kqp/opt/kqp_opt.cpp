@@ -89,14 +89,14 @@ bool IsKqpEffectsStage(const TDqStageBase& stage) {
 
 bool NeedSinks(const TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
     return (kqpCtx.IsGenericQuery()
-            || (kqpCtx.IsDataQuery() && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->AllowOlapDataQuery)))
-        && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->EnableOlapSink)
-        && (table.Metadata->Kind != EKikimrTableKind::Datashard || kqpCtx.Config->EnableOltpSink);
+            || (kqpCtx.IsDataQuery() && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->GetAllowOlapDataQuery())))
+        && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->GetEnableOlapSink())
+        && (table.Metadata->Kind != EKikimrTableKind::Datashard || kqpCtx.Config->GetEnableOltpSink());
 }
 
 bool CanEnableStreamWrite(const NYql::TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
     return table.Metadata->Kind == EKikimrTableKind::Olap
-            || (table.Metadata->Kind == EKikimrTableKind::Datashard && kqpCtx.Config->EnableStreamWrite);
+            || (table.Metadata->Kind == EKikimrTableKind::Datashard && kqpCtx.Config->GetEnableStreamWrite());
 }
 
 bool HasReadTable(const TStringBuf table, const TExprNode::TPtr& root) {

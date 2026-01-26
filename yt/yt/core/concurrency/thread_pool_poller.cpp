@@ -256,7 +256,7 @@ public:
         auto* cookie = TPollableCookie::TryFromPollable(pollable.Get());
         if (!cookie) {
             // Pollable was not registered.
-            return VoidFuture;
+            return OKFuture;
         }
 
         DoUnregister(pollable);

@@ -31,7 +31,7 @@ struct TSchemeShard::TExport::TTxList: public TSchemeShard::TXxport::TTxList<
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        return DoExecuteImpl(Self->Exports, txc, ctx);
+        return DoExecuteImpl(Self->Exports, Self->ExportsByTime, txc, ctx);
     }
 
 }; // TTxList

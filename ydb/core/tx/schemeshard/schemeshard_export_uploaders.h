@@ -20,7 +20,7 @@ namespace NKikimr::NSchemeShard {
 
 NActors::IActor* CreateSchemeUploader(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
-    bool enablePermissions, const TMaybe<NBackup::TEncryptionIV>& iv
+    bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,

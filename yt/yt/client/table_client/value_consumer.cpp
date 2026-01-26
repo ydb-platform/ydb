@@ -334,7 +334,7 @@ TWritingValueConsumer::TWritingValueConsumer(
 TFuture<void> TWritingValueConsumer::Flush()
 {
     if (RowBuffer_->GetSize() == 0) {
-        return VoidFuture;
+        return OKFuture;
     }
 
     // We could have multiple value consumers writing into the same Writer.

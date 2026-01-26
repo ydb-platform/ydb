@@ -37,14 +37,14 @@ public:
     { }
 
     TFuture<IResponsePtr> Get(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return Request(EMethod::Get, url, std::nullopt, headers);
     }
 
     TFuture<IResponsePtr> Post(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -52,7 +52,7 @@ public:
     }
 
     TFuture<IResponsePtr> Patch(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -60,7 +60,7 @@ public:
     }
 
     TFuture<IResponsePtr> Put(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers) override
     {
@@ -68,28 +68,28 @@ public:
     }
 
     TFuture<IResponsePtr> Delete(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return Request(EMethod::Delete, url, std::nullopt, headers);
     }
 
     TFuture<IActiveRequestPtr> StartPost(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return StartRequest(EMethod::Post, url, headers);
     }
 
     TFuture<IActiveRequestPtr> StartPatch(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return StartRequest(EMethod::Patch, url, headers);
     }
 
     TFuture<IActiveRequestPtr> StartPut(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers) override
     {
         return StartRequest(EMethod::Put, url, headers);
@@ -97,7 +97,7 @@ public:
 
     TFuture<IResponsePtr> Request(
         EMethod method,
-        const TString& url,
+        const std::string& url,
         const std::optional<TSharedRef>& body,
         const THeadersPtr& headers) override
     {
@@ -148,6 +148,7 @@ private:
     {
         auto context = New<TDialerContext>();
         context->Host = urlRef.Host;
+        context->BypassTLS = urlRef.Protocol == "http";
 
         auto address = GetAddress(urlRef);
 
@@ -196,7 +197,7 @@ private:
     }
 
     template <typename T>
-    TFuture<T> WrapError(const TString& url, TCallback<T()> action)
+    TFuture<T> WrapError(const std::string& url, TCallback<T()> action)
     {
         return BIND([=, this_ = MakeStrong(this), action = std::move(action)] {
             try {
@@ -218,7 +219,7 @@ private:
         TActiveRequest(
             TIntrusivePtr<TClient> client,
             TRequestData data,
-            TString url)
+            std::string url)
             : Client_(std::move(client))
             , Data_(std::move(data))
             , Url_(std::move(url))
@@ -255,12 +256,12 @@ private:
     private:
         const TIntrusivePtr<TClient> Client_;
         const TRequestData Data_;
-        const TString Url_;
+        const std::string Url_;
     };
 
     TRequestData StartAndWriteHeaders(
         EMethod method,
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers)
     {
         auto urlRef = ParseUrl(url);
@@ -285,7 +286,7 @@ private:
 
     TFuture<IActiveRequestPtr> StartRequest(
         EMethod method,
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers)
     {
         return WrapError(url, BIND([=, this, this_ = MakeStrong(this)] () mutable -> IActiveRequestPtr {
@@ -296,7 +297,7 @@ private:
 
     IResponsePtr DoRequest(
         EMethod method,
-        const TString& url,
+        const std::string& url,
         const std::optional<TSharedRef>& body,
         const THeadersPtr& headers,
         int redirectCount = 0)

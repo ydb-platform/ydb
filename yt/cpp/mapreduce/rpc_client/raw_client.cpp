@@ -11,6 +11,7 @@
 
 #include <yt/yt/client/api/file_reader.h>
 #include <yt/yt/client/api/file_writer.h>
+#include <yt/yt/client/api/formatted_table_reader.h>
 
 #include <yt/yt/client/api/rpc_proxy/client_base.h>
 #include <yt/yt/client/api/rpc_proxy/row_stream.h>
@@ -42,7 +43,7 @@ using namespace NYT::NConcurrency;
 // This timeout exceeds some timeouts in server code:
 //   - "replication_reader_failure_timeout"
 //   - "session_timeout"
-const TDuration TableReaderTimeout = TDuration::Minutes(35);
+[[maybe_unused]] const TDuration TableReaderTimeout = TDuration::Minutes(35);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1227,89 +1228,35 @@ std::unique_ptr<IOutputStream> TRpcRawClient::WriteTable(
 std::unique_ptr<IInputStream> TRpcRawClient::ReadTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
-    const TMaybe<TFormat>& format,
+    const TFormat& format,
     const TTableReaderOptions& options)
 {
-    auto* clientBase = VerifyDynamicCast<NApi::NRpcProxy::TClientBase*>(Client_.Get());
-
+    auto apiPath = ToApiRichPath(path);
+    auto apiFormat = NYson::TYsonString(NodeToYsonString(format.Config, NYson::EYsonFormat::Text));
     auto apiOptions = SerializeOptionsForReadTable(transactionId, options);
 
-    auto proxy = clientBase->CreateApiServiceProxy();
+    auto future = Client_->CreateFormattedTableReader(apiPath, apiFormat, apiOptions);
 
-    auto req = proxy.ReadTable();
-    clientBase->InitStreamingRequest(*req);
-    req->ClientAttachmentsStreamingParameters().ReadTimeout = TableReaderTimeout;
-    req->ClientAttachmentsStreamingParameters().WriteTimeout = TableReaderTimeout;
+    auto formatStream = WaitAndProcess(future);
 
-    ToProto(req->mutable_path(), ToApiRichPath(path));
-
-    req->set_unordered(apiOptions.Unordered);
-    req->set_omit_inaccessible_columns(apiOptions.OmitInaccessibleColumns);
-    req->set_enable_table_index(apiOptions.EnableTableIndex);
-    req->set_enable_row_index(apiOptions.EnableRowIndex);
-    req->set_enable_range_index(apiOptions.EnableRangeIndex);
-    req->set_enable_any_unpacking(apiOptions.EnableAnyUnpacking);
-
-    if (apiOptions.Config) {
-        req->set_config(NYson::ConvertToYsonString(*apiOptions.Config).ToString());
-    }
-
-    if (format) {
-        req->set_desired_rowset_format(NApi::NRpcProxy::NProto::RF_FORMAT);
-        req->set_format(NYson::TYsonString(NodeToYsonString(format->Config, NYson::EYsonFormat::Text)).ToString());
-    }
-
-    ToProto(req->mutable_transactional_options(), apiOptions);
-    ToProto(req->mutable_suppressable_access_tracking_options(), apiOptions);
-
-    auto future = NRpc::CreateRpcClientInputStream(std::move(req));
-    auto stream = WaitAndProcess(future);
-
-    auto metaRef = WaitAndProcess(stream->Read());
-
-    NApi::NRpcProxy::NProto::TRspReadTableMeta meta;
-    if (!TryDeserializeProto(&meta, metaRef)) {
-        THROW_ERROR_EXCEPTION("Failed to deserialize table reader meta information");
-    }
-
-    auto rowStream = New<TDeserializingRowStream>(std::move(stream));
-    auto syncAdapter = CreateSyncAdapter(CreateCopyingAdapter(std::move(rowStream)));
+    auto syncAdapter = CreateSyncAdapter(CreateCopyingAdapter(std::move(formatStream)));
     return std::make_unique<TSyncRpcInputStream>(std::move(syncAdapter));
 }
 
 std::unique_ptr<IInputStream> TRpcRawClient::ReadTablePartition(
     const TString& cookie,
-    const TMaybe<TFormat>& format,
+    const TFormat& format,
     const TTablePartitionReaderOptions& options)
 {
-    auto* clientBase = VerifyDynamicCast<NApi::NRpcProxy::TClientBase*>(Client_.Get());
-
-    auto proxy = clientBase->CreateApiServiceProxy();
-
-    auto req = proxy.ReadTablePartition();
-    clientBase->InitStreamingRequest(*req);
-
-    req->set_cookie(cookie);
-
+    auto apiCookie = NYTree::ConvertTo<NApi::TTablePartitionCookiePtr>(NYson::TYsonString(cookie));
+    auto apiFormat = NYson::TYsonString(NodeToYsonString(format.Config, NYson::EYsonFormat::Text));
     auto apiOptions = SerializeOptionsForReadTablePartition(options);
 
-    if (format) {
-        req->set_desired_rowset_format(NApi::NRpcProxy::NProto::RF_FORMAT);
-        req->set_format(NYson::TYsonString(NodeToYsonString(format->Config, NYson::EYsonFormat::Text)).ToString());
-    }
+    auto future = Client_->CreateFormattedTablePartitionReader(apiCookie, apiFormat, apiOptions);
 
-    auto future = NRpc::CreateRpcClientInputStream(std::move(req));
-    auto stream = WaitAndProcess(future);
+    auto formatStream = WaitAndProcess(future);
 
-    auto metaRef = WaitAndProcess(stream->Read());
-
-    NApi::NRpcProxy::NProto::TRspReadTablePartitionMeta meta;
-    if (!TryDeserializeProto(&meta, metaRef)) {
-        THROW_ERROR_EXCEPTION("Failed to deserialize table reader meta information");
-    }
-
-    auto rowStream = New<TDeserializingRowStream>(std::move(stream));
-    auto syncAdapter = CreateSyncAdapter(CreateCopyingAdapter(std::move(rowStream)));
+    auto syncAdapter = CreateSyncAdapter(CreateCopyingAdapter(std::move(formatStream)));
     return std::make_unique<TSyncRpcInputStream>(std::move(syncAdapter));
 }
 
@@ -1814,6 +1761,10 @@ TMultiTablePartitions TRpcRawClient::GetTablePartitions(
             .DataWeight = statistics.DataWeight,
             .RowCount = statistics.RowCount,
         };
+
+        if (entry.Cookie) {
+            partition.Cookie = NYson::ConvertToYsonString(entry.Cookie).ToString();
+        }
 
         result.Partitions.emplace_back(std::move(partition));
     }

@@ -34,7 +34,7 @@ using namespace NKikimr::NMiniKQL;
 
 class TPureDataSinkExecTransformer: public TExecTransformerBase {
 public:
-    TPureDataSinkExecTransformer(const TPureState::TPtr state)
+    explicit TPureDataSinkExecTransformer(const TPureState::TPtr state)
         : State_(state)
     {
         AddHandler({TStringBuf("Result")}, RequireNone(), Hndl(&TPureDataSinkExecTransformer::HandleRes));
@@ -147,6 +147,7 @@ public:
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();
         auto value = graph->GetValue();
+
         bool truncated = false;
         auto type = root.GetStaticType();
         TString data;
@@ -195,6 +196,12 @@ public:
         }
 
         writer.OnEndMap();
+        value = {};
+        graph->Invalidate();
+        if (auto pos = graph->GetNotConsumedLinear()) {
+            throw TErrorException(0) << pos << " Linear value is not consumed";
+        }
+
         input->SetState(TExprNode::EState::ExecutionComplete);
         input->SetResult(ctx.NewAtom(input->Pos(), out.Str()));
         return SyncOk();
@@ -221,7 +228,7 @@ THolder<TExecTransformerBase> CreatePureDataSourceExecTransformer(const TPureSta
 
 class TPureProvider: public TDataProviderBase {
 public:
-    TPureProvider(const TPureState::TPtr& state)
+    explicit TPureProvider(const TPureState::TPtr& state)
         : State_(state)
         , ExecTransformer_([this]() { return CreatePureDataSourceExecTransformer(State_); })
     {

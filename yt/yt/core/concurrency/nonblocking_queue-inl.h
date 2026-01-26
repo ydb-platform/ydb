@@ -60,7 +60,7 @@ TFuture<void> TBoundedNonblockingQueue<T>::Enqueue(TFuture<T> asyncValue)
         AsyncValueQueue_.push(std::move(asyncValue));
 
         if (std::ssize(AsyncValueQueue_) <= SizeLimit_) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         auto promise = NewPromise<void>();
@@ -74,7 +74,7 @@ TFuture<void> TBoundedNonblockingQueue<T>::Enqueue(TFuture<T> asyncValue)
 
         promise.SetFrom(std::move(asyncValue));
 
-        return VoidFuture;
+        return OKFuture;
     }
 }
 

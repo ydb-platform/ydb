@@ -2219,8 +2219,8 @@ TNodeResult TSqlExpression::YqlXorSubExpr(
     }
 
     TNodePtr expr;
-    if (IsYqlSubQuery(*rhs)) {
-        expr = BuildYqlInSubquery(std::move(*rhs), std::move(lhs));
+    if (auto source = GetYqlSource(*rhs)) {
+        expr = BuildYqlInSubquery(std::move(source), std::move(lhs));
     } else {
         TNodePtr hints = BuildTuple(Ctx_.Pos(), {});
         TVector<TNodePtr> args = {
@@ -2745,6 +2745,15 @@ TNodeResult TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node
         case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
+}
+
+TNodePtr TSqlExpression::GetNamedNode(const TString& name) {
+    TNodePtr node = TTranslation::GetNamedNode(name);
+    if (!node) {
+        return nullptr;
+    }
+
+    return WrapYqlSelectSubExpr(std::move(node));
 }
 
 } // namespace NSQLTranslationV1

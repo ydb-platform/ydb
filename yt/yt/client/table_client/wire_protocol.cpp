@@ -1160,7 +1160,7 @@ public:
 
     TFuture<void> GetReadyEvent() const override
     {
-        return VoidFuture;
+        return OKFuture;
     }
 
     TDataStatistics GetDataStatistics() const override
@@ -1247,7 +1247,7 @@ public:
             FlushBlock();
             Closed_ = true;
         }
-        return VoidFuture;
+        return OKFuture;
     }
 
     bool Write(TRange<TUnversionedRow> rows) override
@@ -1275,7 +1275,7 @@ public:
 
     TFuture<void> GetReadyEvent() override
     {
-        return VoidFuture;
+        return OKFuture;
     }
 
     std::vector<TSharedRef> GetCompressedBlocks() override

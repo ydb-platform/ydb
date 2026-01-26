@@ -68,6 +68,11 @@ TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, co
     return MakeIntrusive<TTaskState>(taskStatus, taskId, taskErrorMessage, stats);
 }
 
+void TSortedUploadOperationParams::UpdateAfterPreparation(std::vector<TString> cookies, TString partitionId) {
+    Cookies = std::move(cookies);
+    PartitionId = std::move(partitionId);
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Helper serialization functions
@@ -209,13 +214,14 @@ void TFmrTableId::Load(IInputStream* buffer) {
 
 void TSortedChunkStats::Save(IOutputStream* buffer) const {
     ::SaveMany(buffer, IsSorted,
-               NYT::NodeToYsonString(FirstRowKeys));
+               NYT::NodeToYsonString(FirstRowKeys), NYT::NodeToYsonString(LastRowKeys));
 }
 
 void TSortedChunkStats::Load(IInputStream* buffer) {
-    TString FirstRowKeysStr;
-    ::LoadMany(buffer, IsSorted, FirstRowKeysStr);
+    TString FirstRowKeysStr, LastRowKeysStr;
+    ::LoadMany(buffer, IsSorted, FirstRowKeysStr, LastRowKeysStr);
     FirstRowKeys = NYT::NodeFromYsonString(FirstRowKeysStr);
+    LastRowKeys = NYT::NodeFromYsonString(LastRowKeysStr);
 }
 
 // helper functions for rich path

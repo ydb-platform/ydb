@@ -470,21 +470,23 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             TStringStream errorStream;
             auto returnType = NCommon::BuildType(*node.GetTypeAnn(), ctx.PgmBuilder(), errorStream);
             YQL_ENSURE(returnType, "Failed to build return type: " << errorStream.Str());
-            
+
             auto graceJoinRenames = [&]{
                 auto wideStreamComponentsSize = [](TRuntimeNode node)->int {
                     return AS_TYPE(TMultiType, AS_TYPE(TStreamType,node.GetStaticType())->GetItemType())->GetElementsCount();
                 };
                 TDqUserRenames renames{};
                 for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
-                    renames.emplace_back(index, EJoinSide::kLeft);       
+                    renames.emplace_back(index, EJoinSide::kLeft);
                 }
-                for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
-                    renames.emplace_back(index, EJoinSide::kRight);       
+                if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
+                    for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
+                        renames.emplace_back(index, EJoinSide::kRight);       
+                    }
                 }
-                return TGraceJoinRenames::FromDq(renames);    
+                return TGraceJoinRenames::FromDq(renames);
             }();
-            
+
 
             // Use the specialized DqBlockHashJoin method
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,
@@ -495,7 +497,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
         TDqPhyHashCombine hc(&node);
         const auto flow = MkqlBuildExpr(*node.Child(0U), buildCtx);
         i64 memLimit = 0LL;
-        TryFromString<i64>(node.Child(1U)->Content(), memLimit);
+        const bool isAggregate = !TryFromString<i64>(node.Child(1U)->Content(), memLimit);
         memLimit = std::abs(memLimit);
         const auto keyExtractor = [&](TRuntimeNode::TList items) {
             return MkqlBuildWideLambda(*node.Child(2U), buildCtx, items);
@@ -513,16 +515,22 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             keys.insert(keys.cend(), state.cbegin(), state.cend());
             return MkqlBuildWideLambda(*node.Child(5U), buildCtx, keys);
         };
-        return ctx.PgmBuilder().DqHashCombine(flow, memLimit, keyExtractor, init, update, finish);
+        if (isAggregate) {
+            const auto initLambda = node.Child(3U);
+            const bool isStatePersistable = initLambda->GetTypeAnn()->IsPersistable();
+            return ctx.PgmBuilder().DqHashAggregate(flow, isStatePersistable, keyExtractor, init, update, finish);
+        } else {
+            return ctx.PgmBuilder().DqHashCombine(flow, memLimit, keyExtractor, init, update, finish);
+        }
     });
 
     compiler->AddCallable("FulltextAnalyze",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             YQL_ENSURE(node.ChildrenSize() == 2, "FulltextAnalyze should have 2 arguments: text and settings");
-            
+
             auto textArg = MkqlBuildExpr(*node.Child(0), buildCtx);
             auto settingsArg = MkqlBuildExpr(*node.Child(1), buildCtx);
-            
+
             return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg);
         });
 

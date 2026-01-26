@@ -192,8 +192,7 @@ public:
         const TString& DbId,
         const TString& DbPath,
         const bool isServerless,
-        const TString& FolderId,
-        const TString& MonitoringProjectId);
+        const TString& FolderId);
 
     void Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx);
 
@@ -239,7 +238,6 @@ public:
     ::NMonitoring::TDynamicCounterPtr GetPartitionCounterSubgroup(const TActorContext& ctx) const;
     void SetupDetailedMetrics(const TActorContext& ctx);
     void ResetDetailedMetrics();
-    bool DetailedMetricsAreEnabled() const;
 
     void SetImportant(TUserInfo& userInfo, bool important, TDuration availabilityPeriod);
 
@@ -281,7 +279,6 @@ private:
     TString DbPath;
     bool IsServerless;
     TString FolderId;
-    TString MonitoringProjectId;
     mutable ui64 CurReadRuleGeneration;
 };
 

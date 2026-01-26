@@ -49,6 +49,8 @@ std::string StringFromRef(TRef ref)
 template <class TImpl>
 using TRpcTest = TRpcTestBase<TImpl>;
 template <class TImpl>
+using TRpcAuthenticatedTest = TRpcAuthenticatedTestBase<TImpl>;
+template <class TImpl>
 using TAttachmentsTest = TRpcTestBase<TImpl>;
 template <class TImpl>
 using TNotUdsTest = TRpcTestBase<TImpl>;
@@ -61,6 +63,7 @@ TYPED_TEST_SUITE(TAttachmentsTest, TWithAttachments);
 TYPED_TEST_SUITE(TNotUdsTest, TWithoutUds);
 TYPED_TEST_SUITE(TNotGrpcTest, TWithoutGrpc);
 TYPED_TEST_SUITE(TGrpcTest, TGrpcOnly);
+TYPED_TEST_SUITE(TRpcAuthenticatedTest, TAllTransports);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -738,6 +741,14 @@ TYPED_TEST(TRpcTest, NoService)
 }
 
 TYPED_TEST(TRpcTest, NoMethod)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.NotRegistered();
+    auto rspOrError = req->Invoke().Get();
+    EXPECT_EQ(NRpc::EErrorCode::NoSuchMethod, rspOrError.GetCode());
+}
+
+TYPED_TEST(TRpcAuthenticatedTest, NoMethod)
 {
     TTestProxy proxy(this->CreateChannel());
     auto req = proxy.NotRegistered();

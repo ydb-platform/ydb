@@ -152,7 +152,7 @@ private:
     const TDataPtr Data_;
     TDataStatistics DataStatistics_;
 
-    TFuture<void> ReadyEvent_ = VoidFuture;
+    TFuture<void> ReadyEvent_ = OKFuture;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

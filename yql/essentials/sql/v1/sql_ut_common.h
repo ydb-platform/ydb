@@ -1722,9 +1722,20 @@ Y_UNIT_TEST(CreateTableWithIfNotExists) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
 }
 
-Y_UNIT_TEST(CreateTableWithIfNotExistsYtNotSupported) {
-    ExpectFailWithError("CREATE TABLE IF NOT EXISTS plato.t (a int32);",
-                        "<main>:1:34: Error: CREATE TABLE IF NOT EXISTS is not supported for yt provider.\n");
+Y_UNIT_TEST(CreateTableWithIfNotExistsYt) {
+    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE IF NOT EXISTS t (a int32);");
+    UNIT_ASSERT(res.Root);
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
+                                       line.find(R"__((Write! world sink (Key '('tablescheme (String '"t"))) values '('('mode 'create_if_not_exists) '('columns '('('"a" (AsOptionalType (DataType 'Int32)) '('columnConstrains '()) '()))))))__"));
+        }
+    };
+    TWordCountHive elementStat = {{TString("Write!"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
 }
 
 Y_UNIT_TEST(CreateTempTable) {
@@ -9275,6 +9286,30 @@ Y_UNIT_TEST(DropViewIfExists) {
     UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
 }
 
+Y_UNIT_TEST(DropViewIfExistsYt) {
+    constexpr const char* name = "TheView";
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(std::format(R"(
+                USE plato;
+                DROP VIEW IF EXISTS {};
+            )", name), settings);
+    UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+
+    TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, name);
+            UNIT_ASSERT_STRING_CONTAINS(line, "dropObjectIfExists");
+        }
+    };
+
+    TWordCountHive elementStat = {{"Write!"}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+}
+
 Y_UNIT_TEST(CreateViewWithTablePrefix) {
     NYql::TAstParseResult res = SqlToYql(R"(
                 USE ydb;
@@ -10885,7 +10920,10 @@ USE plato;
 -- Some comment
 CREATE STREAMING QUERY MyQuery WITH (
     RUN = TRUE,
-    RESOURCE_POOL = my_pool
+    RESOURCE_POOL = my_pool,
+    STREAMING_DISPOSITION = (
+        FROM_TIME = "2025-05-04T11:30:34.336938Z"
+    )
 ) AS DO )sql" << "\r" << R"sql(BEGIN
 USE plato;
 $source = SELECT * FROM Input;
@@ -10903,7 +10941,9 @@ USE hahn;
         }
 
         if (word == "__query_text") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n") '('"resource_pool" '"my_pool") '('"run" (Bool '"true")))#");
+            UNIT_ASSERT_STRING_CONTAINS(line, TStringBuilder()
+                                                  << R"#('('"__query_text" '"\nUSE plato;\n$source = SELECT * FROM Input;\nINSERT INTO Output1 SELECT * FROM $source;\nINSERT INTO Output2 SELECT * FROM $source;\n") )#"
+                                                  << R"#('('"resource_pool" '"my_pool") '('"run" (Bool '"true")) '('"streaming_disposition" '('('"from_time" '"2025-05-04T11:30:34.336938Z"))))#");
         }
     };
 
@@ -11078,14 +11118,17 @@ Y_UNIT_TEST(AlterStreamingQuerySetOptions) {
             USE plato;
             ALTER STREAMING QUERY MyQuery SET (
                 WAIT_CHECKPOINT = TRUE,
-                RESOURCE_POOL = other_pool
+                RESOURCE_POOL = other_pool,
+                STREAMING_DISPOSITION = (
+                    TIME_AGO = "PT1H"
+                )
             );
         )sql");
     UNIT_ASSERT_C(res.Root, res.Issues.ToOneLineString());
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
-            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"resource_pool" '"other_pool") '('"wait_checkpoint" (Bool '"true"))))#");
+            UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"resource_pool" '"other_pool") '('"streaming_disposition" '('('"time_ago" '"PT1H"))) '('"wait_checkpoint" (Bool '"true"))))#");
             UNIT_ASSERT_STRING_CONTAINS(line, "alterObject");
         }
     };
@@ -12279,6 +12322,94 @@ Y_UNIT_TEST(DiagnosticMandatoryAsTable) {
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":4:36: Error: Expecting mandatory AS here");
 }
 
+Y_UNIT_TEST(NamedNodeSubqueryScalar) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        $x = (SELECT 1);
+        $y = SELECT 1;
+        SELECT $x, $y;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlSubLink"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 2);
+}
+
+Y_UNIT_TEST(NamedNodeSubqueryIn) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        $x = (SELECT 1);
+        $y = SELECT 1;
+        SELECT 1 IN $x, 1 IN $y;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlSubLink"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 2);
+}
+
+Y_UNIT_TEST(NamedNodeSubqueryExists) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        $x = (SELECT 1);
+        $y = SELECT 1;
+        SELECT 1 FROM (SELECT 1)
+        WHERE EXISTS $x AND EXISTS $y;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(Err2Str(res), "<main>:6:21: Error: no viable alternative at input 'EXISTS $'\n");
+}
+
+Y_UNIT_TEST(NamedNodeSubquerySource) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA AnsiImplicitCrossJoin;
+        $x = (SELECT 1 AS a);
+        $y = SELECT 1 AS b;
+        SELECT a, b FROM $x, $y;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlSubLink"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 0);
+}
+
+Y_UNIT_TEST(NamedNodeSubqueryReuse) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA AnsiImplicitCrossJoin;
+        $x = (SELECT 1 AS a);
+        SELECT a FROM $x;
+        SELECT a FROM $x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 3 + 1);
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
 
 Y_UNIT_TEST_SUITE(CreateViewNewSyntax) {
@@ -12390,6 +12521,25 @@ Y_UNIT_TEST(ErrorOnMissingCluster) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::MakeLangVersion(2025, 5);
     ExpectFailWithError("create view foo as do begin select 1; end do", "<main>:1:1: Error: No cluster name given and no default cluster is selected\n", settings);
+}
+
+Y_UNIT_TEST(CreateViewIfNotExists) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 5);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings("create view if not exists plato.foo as do begin select 1; end do", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "createObjectIfNotExists");
+        }
+    };
+
+    TWordCountHive elementStat = {{"Write!"}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
 }
 
 } // Y_UNIT_TEST_SUITE(CreateViewNewSyntax)

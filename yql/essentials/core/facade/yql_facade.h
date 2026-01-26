@@ -121,7 +121,7 @@ public:
     using TFutureStatus = NThreading::TFuture<TStatus>;
 
 public:
-    ~TProgram();
+    ~TProgram() override;
 
     void SetLanguageVersion(TLangVersion version);
     void SetMaxLanguageVersion(TLangVersion version);

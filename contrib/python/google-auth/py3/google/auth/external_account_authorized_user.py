@@ -70,7 +70,8 @@ class Credentials(
     is used.
     When the credential configuration is accepted from an
     untrusted source, you should validate it before using.
-    Refer https://cloud.google.com/docs/authentication/external/externally-sourced-credentials for more details."""
+    Refer https://cloud.google.com/docs/authentication/external/externally-sourced-credentials for more details.
+    """
 
     def __init__(
         self,
@@ -123,7 +124,7 @@ class Credentials(
         self.token = token
         self.expiry = expiry
         self._audience = audience
-        self._refresh_token_val = refresh_token
+        self._refresh_token = refresh_token
         self._token_url = token_url
         self._token_info_url = token_info_url
         self._client_id = client_id
@@ -170,7 +171,7 @@ class Credentials(
     def constructor_args(self):
         return {
             "audience": self._audience,
-            "refresh_token": self._refresh_token_val,
+            "refresh_token": self._refresh_token,
             "token_url": self._token_url,
             "token_info_url": self._token_info_url,
             "client_id": self._client_id,
@@ -214,7 +215,7 @@ class Credentials(
     @property
     def refresh_token(self):
         """Optional[str]: The OAuth 2.0 refresh token."""
-        return self._refresh_token_val
+        return self._refresh_token
 
     @property
     def token_url(self):
@@ -240,7 +241,7 @@ class Credentials(
     def can_refresh(self):
         return all(
             (
-                self._refresh_token_val,
+                self._refresh_token,
                 self._token_url,
                 self._client_id,
                 self._client_secret,
@@ -278,7 +279,7 @@ class Credentials(
         strip = strip if strip else []
         return json.dumps({k: v for (k, v) in self.info.items() if k not in strip})
 
-    def _refresh_token(self, request):
+    def _perform_refresh_token(self, request):
         """Refreshes the access token.
 
         Args:
@@ -297,7 +298,7 @@ class Credentials(
             )
 
         now = _helpers.utcnow()
-        response_data = self._sts_client.refresh_token(request, self._refresh_token_val)
+        response_data = self._sts_client.refresh_token(request, self._refresh_token)
 
         self.token = response_data.get("access_token")
 
@@ -305,7 +306,7 @@ class Credentials(
         self.expiry = now + lifetime
 
         if "refresh_token" in response_data:
-            self._refresh_token_val = response_data["refresh_token"]
+            self._refresh_token = response_data["refresh_token"]
 
     def _build_trust_boundary_lookup_url(self):
         """Builds and returns the URL for the trust boundary lookup API."""
@@ -320,6 +321,30 @@ class Credentials(
         return _constants._WORKFORCE_POOL_TRUST_BOUNDARY_LOOKUP_ENDPOINT.format(
             universe_domain=self._universe_domain, pool_id=pool_id
         )
+
+    def revoke(self, request):
+        """Revokes the refresh token.
+
+        Args:
+            request (google.auth.transport.Request): The object used to make
+                HTTP requests.
+
+        Raises:
+            google.auth.exceptions.OAuthError: If the token could not be
+                revoked.
+        """
+        if not self._revoke_url or not self._refresh_token:
+            raise exceptions.OAuthError(
+                "The credentials do not contain the necessary fields to "
+                "revoke the refresh token. You must specify revoke_url and "
+                "refresh_token."
+            )
+
+        self._sts_client.revoke_token(
+            request, self._refresh_token, "refresh_token", self._revoke_url
+        )
+        self.token = None
+        self._refresh_token = None
 
     @_helpers.copy_docstring(credentials.Credentials)
     def get_cred_info(self):

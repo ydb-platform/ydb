@@ -36,7 +36,7 @@ class TDirectListHolder: public TComputationValue<TDirectListHolder> {
 public:
     class TIterator: public TComputationValue<TIterator> {
     public:
-        TIterator(const TDirectListHolder* parent)
+        explicit TIterator(const TDirectListHolder* parent)
             : TComputationValue(parent->GetMemInfo())
             , Parent_(const_cast<TDirectListHolder*>(parent))
             , Iterator_(parent->Items_)
@@ -248,7 +248,7 @@ private:
     using TBaseValue = TComputationValue<TVectorHolderBase<TBaseVector>>;
 
 public:
-    TVectorHolderBase(TMemoryUsageInfo* memInfo)
+    explicit TVectorHolderBase(TMemoryUsageInfo* memInfo)
         : TBaseValue(memInfo)
     {
     }
@@ -258,7 +258,7 @@ public:
     {
     }
 
-    ~TVectorHolderBase() {
+    ~TVectorHolderBase() override {
     }
 
 private:
@@ -267,7 +267,7 @@ private:
         using TBase = TTemporaryComputationValue<TValuesIterator>;
 
     public:
-        TValuesIterator(const TVectorHolderBase* parent)
+        explicit TValuesIterator(const TVectorHolderBase* parent)
             : TBase(parent->GetMemInfo())
             , Size_(parent->size())
             , Parent_(const_cast<TVectorHolderBase*>(parent))
@@ -298,7 +298,7 @@ private:
         using TBase = TTemporaryComputationValue<TDictIterator>;
 
     public:
-        TDictIterator(const TVectorHolderBase* parent)
+        explicit TDictIterator(const TVectorHolderBase* parent)
             : TBase(parent->GetMemInfo())
             , Size_(parent->size())
             , Parent_(const_cast<TVectorHolderBase*>(parent))
@@ -453,7 +453,7 @@ public:
 
 class TEmptyContainerHolder: public TComputationValue<TEmptyContainerHolder> {
 public:
-    TEmptyContainerHolder(TMemoryUsageInfo* memInfo)
+    explicit TEmptyContainerHolder(TMemoryUsageInfo* memInfo)
         : TComputationValue(memInfo)
         , None_()
     {
@@ -569,7 +569,7 @@ public:
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const TSortedSetHolder* parent)
+        explicit TIterator(const TSortedSetHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<TSortedSetHolder*>(parent))
             , Iterator_(Parent_->Items_.begin())
@@ -657,7 +657,7 @@ public:
         }
     }
 
-    ~TSortedSetHolder() {
+    ~TSortedSetHolder() override {
         MKQL_MEM_RETURN(GetMemInfo(), &Items_, Items_.capacity() * sizeof(TItems::value_type));
     }
 
@@ -783,7 +783,7 @@ public:
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const TSortedDictHolder* parent)
+        explicit TIterator(const TSortedDictHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<TSortedDictHolder*>(parent))
             , Iterator_(Parent_->Items_.begin())
@@ -871,7 +871,7 @@ public:
         }
     }
 
-    ~TSortedDictHolder() {
+    ~TSortedDictHolder() override {
         MKQL_MEM_RETURN(GetMemInfo(), &Items_, Items_.capacity() * sizeof(TItems::value_type));
     }
 
@@ -997,7 +997,7 @@ class THashedSetHolder: public TComputationValue<THashedSetHolder> {
 public:
     class TIterator: public TComputationValue<TIterator> {
     public:
-        TIterator(const THashedSetHolder* parent)
+        explicit TIterator(const THashedSetHolder* parent)
             : TComputationValue(parent->GetMemInfo())
             , Parent_(const_cast<THashedSetHolder*>(parent))
             , Iterator_(Parent_->Set_.begin())
@@ -1159,7 +1159,7 @@ public:
             AtNull,
             Iterator
         };
-        TIterator(const THashedSingleFixedSetHolder* parent)
+        explicit TIterator(const THashedSingleFixedSetHolder* parent)
             : TComputationValue<TIterator>(parent->GetMemInfo())
             , Parent_(const_cast<THashedSingleFixedSetHolder*>(parent))
             , Iterator_(Parent_->Set_.begin())
@@ -1279,7 +1279,7 @@ public:
             AtNull,
             Iterator
         };
-        TIterator(const THashedSingleFixedCompactSetHolder* parent)
+        explicit TIterator(const THashedSingleFixedCompactSetHolder* parent)
             : TComputationValue<TIterator>(parent->GetMemInfo())
             , Parent_(const_cast<THashedSingleFixedCompactSetHolder*>(parent))
             , Iterator_(Parent_->Set_.Iterate())
@@ -1391,7 +1391,7 @@ public:
 
     class TIterator: public TComputationValue<TIterator> {
     public:
-        TIterator(const THashedCompactSetHolder* parent)
+        explicit TIterator(const THashedCompactSetHolder* parent)
             : TComputationValue(parent->GetMemInfo())
             , Parent_(const_cast<THashedCompactSetHolder*>(parent))
             , Iterator_(Parent_->Set_.Iterate())
@@ -1501,7 +1501,7 @@ public:
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const THashedCompactMapHolder* parent)
+        explicit TIterator(const THashedCompactMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedCompactMapHolder*>(parent))
             , Iterator_(Parent_->Map_.Iterate())
@@ -1683,7 +1683,7 @@ public:
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const THashedCompactMultiMapHolder* parent)
+        explicit TIterator(const THashedCompactMultiMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedCompactMultiMapHolder*>(parent))
             , Iterator_(parent->Map_.Iterate())
@@ -1795,7 +1795,7 @@ public:
     template <bool NoSwap>
     class TIterator: public TTemporaryComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const THashedDictHolder* parent)
+        explicit TIterator(const THashedDictHolder* parent)
             : TTemporaryComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedDictHolder*>(parent))
             , Iterator_(Parent_->Map_.begin())
@@ -1961,7 +1961,7 @@ public:
             AtNull,
             Iterator
         };
-        TIterator(const THashedSingleFixedMapHolder* parent)
+        explicit TIterator(const THashedSingleFixedMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedSingleFixedMapHolder*>(parent))
             , Iterator_(Parent_->Map_.begin())
@@ -2096,7 +2096,7 @@ public:
             AtNull,
             Iterator
         };
-        TIterator(const THashedSingleFixedCompactMapHolder* parent)
+        explicit TIterator(const THashedSingleFixedCompactMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedSingleFixedCompactMapHolder*>(parent))
             , Iterator_(Parent_->Map_.Iterate())
@@ -2319,7 +2319,7 @@ public:
     public:
         class TIterator: public TComputationValue<TIterator> {
         public:
-            TIterator(const THashedSingleFixedCompactMultiMapHolder* parent)
+            explicit TIterator(const THashedSingleFixedCompactMultiMapHolder* parent)
                 : TComputationValue<TIterator>(parent->GetMemInfo())
                 , Parent_(const_cast<THashedSingleFixedCompactMultiMapHolder*>(parent))
                 , Iterator_(Parent_->NullPayloads_.cbegin())
@@ -2382,7 +2382,7 @@ public:
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const THashedSingleFixedCompactMultiMapHolder* parent)
+        explicit TIterator(const THashedSingleFixedCompactMultiMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedSingleFixedCompactMultiMapHolder*>(parent))
             , Iterator_(parent->Map_.Iterate())

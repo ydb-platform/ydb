@@ -1425,110 +1425,6 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
     }
 
-    Y_UNIT_TEST(TTxInit_Checks_EnableVectorIndex) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "vectors"
-            Columns { Name: "id" Type: "Uint64" }
-            Columns { Name: "embedding" Type: "String" }
-            KeyColumnNames: [ "id" ]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        NYdb::NTable::TGlobalIndexSettings globalIndexSettings;
-
-        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> kmeansTreeSettings;
-        {
-            Ydb::Table::KMeansTreeSettings proto;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
-                settings {
-                    metric: DISTANCE_COSINE
-                    vector_type: VECTOR_TYPE_FLOAT
-                    vector_dimension: 1024
-                }
-                levels: 5
-                clusters: 4
-            )", &proto));
-            using T = NYdb::NTable::TKMeansTreeSettings;
-            kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
-        }
-
-        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> blocked(runtime, [&](auto&) {
-            return true;
-        });
-
-        const ui64 buildIndexTx = ++txId;
-        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
-
-        runtime.WaitFor("block", [&]{ return blocked.size(); });
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            Cout << "BuildIndex 1 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: NO");
-        }
-
-        // turn off vector index and check that Scheme Shard has not progress it anymore:
-        runtime.GetAppData().FeatureFlags.SetEnableVectorIndex(false);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            Cout << "BuildIndex 2 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: NO");
-        }
-
-        // cancel should work:
-        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            Cout << "BuildIndex 3 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLATION,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: YES");
-        }
-
-        env.TestWaitNotification(runtime, buildIndexTx);
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            Cout << "BuildIndex 4 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: YES");
-        }
-
-        // there should be no more attempts of index build:
-        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1);
-    }
-
     Y_UNIT_TEST(Shard_Build_Error) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1934,6 +1830,98 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             Cerr << "... posting table contains " << rows << " rows" << Endl;
             UNIT_ASSERT_VALUES_EQUAL(rows, 10);
         }
+    }
+
+    Y_UNIT_TEST(GlobalLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NKikimrScheme::StatusSuccess, "Unexpected status: " << describe.GetStatus());
+        auto curPaths = describe.GetPathDescription().GetDomainDescription().GetPathsInside();
+        auto curShards = describe.GetPathDescription().GetDomainDescription().GetShardsInside();
+
+        TSchemeLimits lowLimits;
+
+        lowLimits.MaxPaths = curPaths+2;
+        lowLimits.MaxShards = curShards+2;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxPaths = curPaths+3;
+        lowLimits.MaxShards = curShards+1;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::Table::GlobalIndexSettings shardingProto;
+        shardingProto.set_uniform_partitions(2);
+        auto sharding = NYdb::NTable::TGlobalIndexSettings::FromProto(shardingProto);
+        lowLimits.MaxPaths = curPaths+3;
+        lowLimits.MaxShards = curShards+4;
+        lowLimits.MaxShardsInPath = 1;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "idx_global", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {sharding, sharding}
+        }, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxShardsInPath = 2;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "idx_global", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {sharding, sharding}
+        });
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(PrefixedLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NKikimrScheme::StatusSuccess, "Unexpected status: " << describe.GetStatus());
+        auto curPaths = describe.GetPathDescription().GetDomainDescription().GetPathsInside();
+        auto curShards = describe.GetPathDescription().GetDomainDescription().GetShardsInside();
+
+        TSchemeLimits lowLimits;
+
+        lowLimits.MaxPaths = curPaths+4;
+        lowLimits.MaxShards = curShards+4;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"prefix", "embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxPaths = curPaths+5;
+        lowLimits.MaxShards = curShards+3;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"prefix", "embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxPaths = curPaths+5;
+        lowLimits.MaxShards = curShards+4;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"prefix", "embedding"});
+        env.TestWaitNotification(runtime, txId);
     }
 
 }

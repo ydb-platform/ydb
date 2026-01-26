@@ -105,7 +105,7 @@ Y_FORCE_INLINE T* TFlsSlot<T>::GetOrCreate() const
 }
 
 template <class T>
-Y_FORCE_INLINE T* TFlsSlot<T>::MaybeGet() const
+Y_FORCE_INLINE T* TFlsSlot<T>::TryGet() const
 {
     return static_cast<T*>(GetCurrentFls()->Get(Index_));
 }

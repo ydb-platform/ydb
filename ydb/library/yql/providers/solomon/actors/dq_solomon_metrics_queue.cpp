@@ -490,7 +490,7 @@ private:
     THashSet<NActors::TActorId> FinishedConsumers;
     THashMap<NActors::TActorId, ui64> FinishingConsumerToLastSeqNo;
 
-    bool HasPendingRequests;
+    bool HasPendingRequests = false;
     THashMap<NActors::TActorId, TDeque<NDqProto::TMessageTransportMeta>> PendingRequests;
     std::vector<NSo::TSelectors> PendingLabelRequests;
     std::vector<NSo::TSelectors> PendingListingRequests;

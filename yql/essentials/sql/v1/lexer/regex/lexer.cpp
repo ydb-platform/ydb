@@ -171,7 +171,7 @@ TGenericLexerGrammar MakeGenericLexerGrammar(
 
 class TRegexLexer: public NSQLTranslation::ILexer {
 public:
-    TRegexLexer(IGenericLexer::TPtr lexer)
+    explicit TRegexLexer(IGenericLexer::TPtr lexer)
         : Lexer_(std::move(lexer))
     {
     }

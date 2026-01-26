@@ -74,13 +74,13 @@ class TLoggingTestBase
 protected:
     const int DateLength = ToString("2014-04-24 23:41:09,804000").length();
 
-    IMapNodePtr DeserializeStructuredEvent(const TString& source, ELogFormat format)
+    IMapNodePtr DeserializeStructuredEvent(const std::string& source, ELogFormat format)
     {
         switch (format) {
             case ELogFormat::Json: {
                 auto builder = CreateBuilderFromFactory(GetEphemeralNodeFactory());
                 builder->BeginTree();
-                TStringStream stream(source);
+                TStringStream stream{TString(source)};
                 ParseJson(&stream, builder.get());
                 return builder->EndTree()->AsMap();
             }
@@ -107,7 +107,7 @@ protected:
         WriteEvent(writer, event);
     }
 
-    void ExpectPlainTextEvent(const TString& line)
+    void ExpectPlainTextEvent(const std::string& line)
     {
         EXPECT_EQ(
             Format("\tD\t%v\t%v\t%v\t\t\n",
@@ -123,13 +123,13 @@ protected:
         writer->Flush();
     }
 
-    std::vector<TString> ReadPlainTextEvents(
-        const TString& fileName,
+    std::vector<std::string> ReadPlainTextEvents(
+        const std::string& fileName,
         std::optional<ECompressionMethod> compressionMethod = {})
     {
         auto splitLines = [&] (IInputStream *input) {
             TString line;
-            std::vector<TString> lines;
+            std::vector<std::string> lines;
             while (input->ReadLine(line)) {
                 if (line.Contains(Logger().GetCategory()->Name)) {
                     lines.push_back(line + "\n");
@@ -153,15 +153,15 @@ protected:
         }
     }
 
-    bool CheckPlainTextLogFileContains(const TString& fileName, const TString& message)
+    bool CheckPlainTextLogFileContains(const std::string& fileName, const std::string& message)
     {
-        if (!NFs::Exists(fileName)) {
+        if (!NFs::Exists(TString(fileName))) {
             return false;
         }
 
         auto lines = ReadPlainTextEvents(fileName);
         for (const auto& line : lines) {
-            if (line.Contains(message)) {
+            if (line.contains(message)) {
                 return true;
             }
         }
@@ -1001,11 +1001,11 @@ class TBuiltinRotationTest
     , public TLoggingTestBase
 {
 protected:
-    std::vector<TString> ListLogFiles(const TString& fileNamePrefix, bool reverse = false, bool keepFirst = false)
+    std::vector<std::string> ListLogFiles(const std::string& fileNamePrefix, bool reverse = false, bool keepFirst = false)
     {
         auto files = NFS::EnumerateFiles("./", /*depth*/ 1, /*sortByName*/ true);
-        std::erase_if(files, [&] (const TString& fileName) {
-            return !fileName.StartsWith(fileNamePrefix);
+        std::erase_if(files, [&] (const std::string& fileName) {
+            return !fileName.starts_with(fileNamePrefix);
         });
         if (reverse || keepFirst) {
             std::reverse(files.begin() + (keepFirst ? 1 : 0), files.end());
@@ -1312,7 +1312,7 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
             SafeCoreDumped = true;
             return TCoreDump{
                 .Path = "",
-                .WrittenEvent = VoidFuture,
+                .WrittenEvent = OKFuture,
             };
         }
         const NYTree::IYPathServicePtr& CreateOrchidService() const override

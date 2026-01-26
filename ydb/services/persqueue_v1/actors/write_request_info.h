@@ -52,7 +52,7 @@ struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvW
 template<class TEvWrite>
 std::pair<TString, TString> TWriteRequestInfoImpl<TEvWrite>::GetTransactionId() const
 {
-    Y_ABORT_UNLESS(!UserWriteRequests.empty());
+    AFL_ENSURE(!UserWriteRequests.empty());
 
     static constexpr bool UseMigrationProtocol = !std::is_same_v<TEvWrite, TEvPQProxy::TEvTopicWrite>;
 

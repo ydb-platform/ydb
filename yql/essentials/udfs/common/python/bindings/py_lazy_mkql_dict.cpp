@@ -29,7 +29,7 @@ protected:
         {
         }
 
-        ~TIterator() {
+        ~TIterator() override {
             const TPyGilLocker lock;
             PyIter_.Reset();
         }
@@ -89,7 +89,7 @@ protected:
         {
         }
 
-        ~TPairIterator() {
+        ~TPairIterator() override {
             const TPyGilLocker lock;
             PyIter_.Reset();
         }
@@ -143,7 +143,7 @@ protected:
     {
     }
 
-    ~TLazyDictBase() {
+    ~TLazyDictBase() override {
         const TPyGilLocker lock;
         PyObject_.Reset();
     }
@@ -522,7 +522,7 @@ class TLazySequenceAsDict: public NUdf::TBoxedValue {
 private:
     class TKeyIterator: public NUdf::TBoxedValue {
     public:
-        TKeyIterator(Py_ssize_t size)
+        explicit TKeyIterator(Py_ssize_t size)
             : Size_(size)
             , Index_(0)
         {
@@ -563,7 +563,7 @@ private:
         {
         }
 
-        ~TIterator() {
+        ~TIterator() override {
             const TPyGilLocker lock;
             PySeq_.Reset();
         }
@@ -620,8 +620,7 @@ public:
     {
     }
 
-    ~TLazySequenceAsDict()
-    {
+    ~TLazySequenceAsDict() override {
         const TPyGilLocker lock;
         PySeq_.Reset();
     }

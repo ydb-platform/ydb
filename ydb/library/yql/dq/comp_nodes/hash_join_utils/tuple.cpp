@@ -14,6 +14,7 @@
 
 #include <arrow/util/bit_util.h>
 
+#include "layout_converter_common.h"
 #include "hashes_calc.h"
 #include "packing.h"
 
@@ -1306,7 +1307,9 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
                 ui32 size = ReadUnaligned<ui8>(res + col.Offset);
 
                 if (size < 255) { // embedded str
-                    std::memcpy(data, res + col.Offset + 1, size);
+                    if (size != 0) {
+                        std::memcpy(data, res + col.Offset + 1, size);
+                    }
                 } else { // overflow buffer used
                     const auto prefixSize =
                         (col.DataSize - 1 - 2 * sizeof(ui32));
@@ -1640,6 +1643,7 @@ void TTupleLayout::TupleDeepCopy(
         to.resize( offset + writeSize);
         std::memcpy(to.data() + offset, range.data(), writeSize);
     };
+    int initSize = std::ssize(outTuple);
     appendRange(outTuple, {inTuple, TotalRowSize});
     for (const auto& col: VariableColumns) {
         ui32 size = ReadUnaligned<ui8>(inTuple + col.Offset);
@@ -1648,7 +1652,7 @@ void TTupleLayout::TupleDeepCopy(
             auto overflowSize   = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
             int outOverflowOffset = std::ssize(outOverflow);
             appendRange(outOverflow, {inOverflow + overflowOffset, overflowSize});
-            WriteUnaligned<ui32>(outTuple.data() + col.Offset + 1 + 0 * sizeof(ui32), outOverflowOffset);
+            WriteUnaligned<ui32>(outTuple.data() + initSize + col.Offset + 1 + 0 * sizeof(ui32), outOverflowOffset);
         }
     }
 }
@@ -1660,9 +1664,14 @@ void TTupleLayout::Concat(
         ui32 dstCount,
         const ui8 *src, const ui8 *srcOverflow, ui32 srcCount, ui32 srcOverflowSize) const 
 {
+    if (srcCount == 0) {
+        return;
+    }
     ui32 dstOverflowOffset = dstOverflow.size();
-    dstOverflow.resize(dstOverflow.size() + srcOverflowSize);
-    std::memcpy(dstOverflow.data() + dstOverflowOffset, srcOverflow, srcOverflowSize);
+    if (srcOverflowSize > 0) {
+        dstOverflow.resize(dstOverflow.size() + srcOverflowSize);
+        std::memcpy(dstOverflow.data() + dstOverflowOffset, srcOverflow, srcOverflowSize);
+    }
 
     constexpr ui32 blockRows = 128;
     dst.resize((dstCount + srcCount) * TotalRowSize);
@@ -1728,6 +1737,94 @@ ui32 TTupleLayout::GetTupleVarSize(const ui8* inTuple) const {
         }
         result += size;
     }
+    return result;
+}
+
+std::string TTupleLayout::Stringify(TSingleTuple tuple) const {
+    std::string result;
+    result += "{";
+    
+    const ui8* row = tuple.PackedData;
+    const ui8* overflow = tuple.OverflowBegin;
+    
+    bool first = true;
+    for (const auto& col : Columns) {
+        if (!first) {
+            result += ", ";
+        }
+        first = false;
+        
+        result += "[" + std::to_string(col.OriginalColumnIndex) + "]";
+        if (col.Role == EColumnRole::Key) {
+            result += "K";
+        } else {
+            result += "P";
+        }
+        result += ": ";
+        
+        // Check if value is NULL using bitmask
+        ui32 colIdx = col.ColumnIndex;
+        ui8 bitmaskByte = ReadUnaligned<ui8>(row + BitmaskOffset + colIdx / 8);
+        bool isValid = (bitmaskByte >> (colIdx % 8)) & 1;
+        
+        if (!isValid) {
+            result += "NULL";
+            continue;
+        }
+        
+        if (col.SizeType == EColumnSizeType::Variable) {
+            // Variable-length field: print as string
+            ui8 sizeOrMarker = ReadUnaligned<ui8>(row + col.Offset);
+            
+            std::string strValue;
+            if (sizeOrMarker < 255) {
+                // Embedded string
+                strValue.assign(reinterpret_cast<const char*>(row + col.Offset + 1), sizeOrMarker);
+            } else {
+                // Overflow buffer used
+                const auto prefixSize = col.DataSize - 1 - 2 * sizeof(ui32);
+                const auto overflowOffset = ReadUnaligned<ui32>(row + col.Offset + 1 + 0 * sizeof(ui32));
+                const auto overflowSize = ReadUnaligned<ui32>(row + col.Offset + 1 + 1 * sizeof(ui32));
+                
+                // First copy the prefix
+                strValue.assign(reinterpret_cast<const char*>(row + col.Offset + 1 + 2 * sizeof(ui32)), prefixSize);
+                // Then append from overflow buffer
+                strValue.append(reinterpret_cast<const char*>(overflow + overflowOffset), overflowSize);
+            }
+            
+            result += "\"" + strValue + "\"";
+        } else {
+            // Fixed-size field: print as integer based on size
+            ui64 value = 0;
+            switch (col.DataSize) {
+                case 1:
+                    value = ReadUnaligned<ui8>(row + col.Offset);
+                    break;
+                case 2:
+                    value = ReadUnaligned<ui16>(row + col.Offset);
+                    break;
+                case 4:
+                    value = ReadUnaligned<ui32>(row + col.Offset);
+                    break;
+                case 8:
+                    value = ReadUnaligned<ui64>(row + col.Offset);
+                    break;
+                default:
+                    // For other sizes, print as hex bytes
+                    result += "0x";
+                    for (ui32 i = 0; i < col.DataSize; ++i) {
+                        ui8 byte = ReadUnaligned<ui8>(row + col.Offset + i);
+                        static const char hexChars[] = "0123456789abcdef";
+                        result += hexChars[(byte >> 4) & 0xF];
+                        result += hexChars[byte & 0xF];
+                    }
+                    continue;
+            }
+            result += std::to_string(value);
+        }
+    }
+    
+    result += "}";
     return result;
 }
 

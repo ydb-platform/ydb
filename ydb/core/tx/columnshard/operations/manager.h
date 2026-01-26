@@ -143,13 +143,9 @@ public:
         return Aborted;
     }
 
-    void SetTxId(const ui64 txId) {
-        AFL_VERIFY(!TxId || TxId == txId)("tx_id", txId)("lock_id", GetLockId())("tx_id_assigned", TxId);
-        TxId = txId;
-    }
-    bool IsTxIdAssigned() const {
-        return TxId != 0;
-    }
+    void SetTxId(const ui64 txId);
+    bool IsTxIdAssigned() const; 
+    ui64 GetTxId() const;
 
     bool IsCommitted(const ui64 lockId) const {
         return Committed.contains(lockId);
@@ -235,13 +231,14 @@ public:
         TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);
     void CommitTransactionOnComplete(
         TColumnShard& owner, const ui64 txId, const ui64 lockId, const NOlap::TSnapshot& snapshot);
-    void LinkTransactionOnExecute(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
+    void LinkTransactionOnExecute(TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc);
+    void PersistLock(TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc);
     void LinkTransactionOnComplete(const ui64 lockId, const ui64 txId);
     void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
     void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId, const ui64 lockId);
 
-    void BreakConflictingTxs(const TLockFeatures& lock);
-    void BreakConflictingTxs(const ui64 lockId);
+    void BreakConflictingTxs(const TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc);
+    void BreakConflictingTxs(const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
 
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
     std::optional<ui64> GetLockForTxOptional(const ui64 txId) const {

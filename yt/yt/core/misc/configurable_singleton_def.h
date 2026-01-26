@@ -31,7 +31,7 @@ public:
     template <class TConfig>
     void SetSingletonConfig(TIntrusivePtr<TConfig> config);
 
-    // Merge all the config pointers from src into self.
+    // Merge all configs from src into self by cloning them.
     // If a config is already present, it is overridden.
     void MergeAllSingletonConfigsFrom(const TSingletonsConfigBase& src);
 

@@ -20,7 +20,7 @@ public:
     using TPtr = TIntrusivePtr<IHighlighter>;
     using TTokenCallback = std::function<void(TToken&& token)>;
 
-    virtual ~IHighlighter() = default;
+    ~IHighlighter() override = default;
     virtual bool Tokenize(
         TStringBuf text,
         const TTokenCallback& onNext,

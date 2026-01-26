@@ -160,21 +160,6 @@ private:
         ActiveUploads.clear();
     }
 
-    void ValidateKey(const TString& key) {
-        if (!BasePath.empty()) {
-            TString basePathWithSlash = BasePath;
-            if (!basePathWithSlash.EndsWith("/")) {
-                basePathWithSlash += "/";
-            }
-
-            bool startsWithBase = key.StartsWith(basePathWithSlash) || key == BasePath;
-            if (!startsWithBase) {
-                ythrow yexception() << "Key does not start with base path: " << key
-                    << " (expected base: " << BasePath << ")";
-            }
-        }
-    }
-
 public:
 
     STATEFN(StateWork) {
@@ -214,8 +199,6 @@ public:
             << ", size# " << body.size());
 
         try {
-            ValidateKey(key);
-
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
 
@@ -251,8 +234,6 @@ public:
             << ", filePath# " << filePath);
 
         try {
-            ValidateKey(key);
-
             TFile file(filePath, RdOnly);
             i64 fileSize = file.GetLength();
 
@@ -262,7 +243,7 @@ public:
                 awsResult.SetETag("\"fs-file\"");
                 Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(std::move(awsResult));
 
-                auto response = std::make_unique<TEvGetObjectResponse>(key, std::make_pair(0ULL, 0ULL), std::move(outcome), TString());
+                auto response = std::make_unique<TEvGetObjectResponse>(key, std::make_pair(0, 0), std::move(outcome), TString());
                 Send(ev->Sender, response.release());
                 return;
             }
@@ -276,7 +257,7 @@ public:
                     return;
                 }
             } else {
-                range = std::make_pair(0ULL, static_cast<ui64>(fileSize - 1));
+                range = std::make_pair(0, fileSize - 1);
             }
 
             ui64 start = range.first;
@@ -328,8 +309,6 @@ public:
             << ", filePath# " << filePath);
 
         try {
-            ValidateKey(key);
-
             TFile file(filePath, RdOnly | Seq);
             i64 fileSize = file.GetLength();
 
@@ -394,8 +373,6 @@ public:
             << ": key# " << originalKey);
 
         try {
-            ValidateKey(originalKey);
-
             const TString key = GetIncompletePath(originalKey.c_str());
             const TString uploadId = TStringBuilder() << key << "_" << CreateGuidAsString();
             TFsPath fsPath(key);
@@ -445,8 +422,6 @@ public:
             << ", size# " << body.size());
 
         try {
-            ValidateKey(originalKey);
-
             const TString key = GetIncompletePath(originalKey.c_str());
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
@@ -458,7 +433,7 @@ public:
                         << "Cannot create new upload session for part " << partNumber
                         << " (uploadId: " << uploadId << "). Session must start with part 1.";
                     FS_LOG_E("UploadPart: " << errorMsg);
-                    ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, errorMsg, Aws::S3::S3Errors::INVALID_REQUEST);
+                    ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, errorMsg, Aws::S3::S3Errors::INTERNAL_FAILURE);
                     return;
                 }
                 it = ActiveUploads.emplace(uploadId, TMultipartUploadSession(key)).first;
@@ -510,8 +485,6 @@ public:
             << ", uploadId# " << uploadId);
 
         try {
-            ValidateKey(key);
-
             const TString incompleteKey = GetIncompletePath(key.c_str());
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
@@ -567,8 +540,6 @@ public:
             << ", uploadId# " << uploadId);
 
         try {
-            ValidateKey(key);
-
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
                 FS_LOG_W("AbortMultipartUpload"

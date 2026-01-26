@@ -160,6 +160,28 @@ private:
         ActiveUploads.clear();
     }
 
+    void ValidateKey(const TString& key) {
+        if (!BasePath.empty()) {
+            TString basePathNormalized;
+            try {
+                basePathNormalized = TFsPath(BasePath).RealPath();
+            } catch (...) {
+                basePathNormalized = BasePath;
+            }
+
+            TString basePathWithSlash = BasePath;
+            if (!basePathWithSlash.EndsWith("/")) {
+                basePathWithSlash += "/";
+            }
+
+            bool startsWithBase = key.StartsWith(basePathWithSlash) || key == basePathNormalized;
+            if (!startsWithBase) {
+                ythrow yexception() << "Key does not start with base path: " << key
+                    << " (expected base: " << basePathNormalized << ")";
+            }
+        }
+    }
+
 public:
 
     STATEFN(StateWork) {
@@ -199,6 +221,8 @@ public:
             << ", size# " << body.size());
 
         try {
+            ValidateKey(key);
+
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
 
@@ -234,6 +258,8 @@ public:
             << ", filePath# " << filePath);
 
         try {
+            ValidateKey(key);
+
             TFile file(filePath, RdOnly);
             i64 fileSize = file.GetLength();
 
@@ -298,6 +324,8 @@ public:
             << ", filePath# " << filePath);
 
         try {
+            ValidateKey(key);
+
             TFile file(filePath, RdOnly | Seq);
             i64 fileSize = file.GetLength();
 
@@ -356,12 +384,15 @@ public:
 
     void Handle(TEvCreateMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-        const TString key = GetIncompletePath(request.GetKey().c_str());
+        const TString originalKey = TString(request.GetKey().data(), request.GetKey().size());
 
         FS_LOG_D("CreateMultipartUpload"
-            << ": key# " << key);
+            << ": key# " << originalKey);
 
         try {
+            ValidateKey(originalKey);
+
+            const TString key = GetIncompletePath(originalKey.c_str());
             const TString uploadId = TStringBuilder() << key << "_" << CreateGuidAsString();
             TFsPath fsPath(key);
             fsPath.Parent().MkDirs();
@@ -378,38 +409,41 @@ public:
             awsResult.SetUploadId(uploadId.c_str());
 
             Aws::Utils::Outcome<Aws::S3::Model::CreateMultipartUploadResult, Aws::S3::S3Error> outcome(std::move(awsResult));
-            auto response = std::make_unique<TEvCreateMultipartUploadResponse>(key, std::move(outcome));
+            auto response = std::make_unique<TEvCreateMultipartUploadResponse>(originalKey, std::move(outcome));
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
-            if (!HandleFileLockError<TEvCreateMultipartUploadResponse>(ex, ev->Sender, key, "CreateMultipartUpload")) {
+            if (!HandleFileLockError<TEvCreateMultipartUploadResponse>(ex, ev->Sender, originalKey, "CreateMultipartUpload")) {
                 FS_LOG_E("CreateMultipartUpload failed with system error"
-                    << ": key# " << key
+                    << ": key# " << originalKey
                     << ", error# " << ex.what()
                     << ", errno# " << ex.Status());
-                ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, key, ex.what());
+                ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, originalKey, ex.what());
             }
         } catch (const std::exception& ex) {
             FS_LOG_E("CreateMultipartUpload failed"
-                << ": key# " << key
+                << ": key# " << originalKey
                 << ", error# " << ex.what());
-            ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, key, ex.what());
+            ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, originalKey, ex.what());
         }
     }
 
     void Handle(TEvUploadPartRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const auto& body = ev->Get()->Body;
-        const TString key = GetIncompletePath(request.GetKey().c_str());
+        const TString originalKey = TString(request.GetKey().data(), request.GetKey().size());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
         const int partNumber = request.GetPartNumber();
 
         FS_LOG_D("UploadPart"
-            << ": key# " << key
+            << ": key# " << originalKey
             << ", uploadId# " << uploadId
             << ", part# " << partNumber
             << ", size# " << body.size());
 
         try {
+            ValidateKey(originalKey);
+
+            const TString key = GetIncompletePath(originalKey.c_str());
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
                 // If the UploadId is not found in ActiveUploads,
@@ -438,30 +472,29 @@ public:
             awsResult.SetETag(etag.c_str());
 
             Aws::Utils::Outcome<Aws::S3::Model::UploadPartResult, Aws::S3::S3Error> outcome(std::move(awsResult));
-            auto response = std::make_unique<TEvUploadPartResponse>(key, std::move(outcome));
+            auto response = std::make_unique<TEvUploadPartResponse>(originalKey, std::move(outcome));
             this->Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {
-            if (!HandleFileLockError<TEvUploadPartResponse>(ex, ev->Sender, key, "UploadPart")) {
+            if (!HandleFileLockError<TEvUploadPartResponse>(ex, ev->Sender, originalKey, "UploadPart")) {
                 FS_LOG_E("UploadPart failed with system error"
-                    << ": key# " << key
+                    << ": key# " << originalKey
                     << ", uploadId# " << uploadId
                     << ", error# " << ex.what()
                     << ", errno# " << ex.Status());
-                ReplyError<TEvUploadPartResponse>(ev->Sender, key, ex.what());
+                ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, ex.what());
             }
         } catch (const std::exception& ex) {
             FS_LOG_E("UploadPart failed"
-                << ": key# " << key
+                << ": key# " << originalKey
                 << ", uploadId# " << uploadId
                 << ", error# " << ex.what());
-            ReplyError<TEvUploadPartResponse>(ev->Sender, key, ex.what());
+            ReplyError<TEvUploadPartResponse>(ev->Sender, originalKey, ex.what());
         }
     }
 
     void Handle(TEvCompleteMultipartUploadRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        const TString incompleteKey = GetIncompletePath(key.c_str());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
         FS_LOG_D("CompleteMultipartUpload"
@@ -469,6 +502,9 @@ public:
             << ", uploadId# " << uploadId);
 
         try {
+            ValidateKey(key);
+
+            const TString incompleteKey = GetIncompletePath(key.c_str());
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
                 // Upload session not found - likely due to actor restart
@@ -523,6 +559,8 @@ public:
             << ", uploadId# " << uploadId);
 
         try {
+            ValidateKey(key);
+
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
                 FS_LOG_W("AbortMultipartUpload"

@@ -48,7 +48,7 @@ class TestStreamingInYdb(StreamingTestBase):
         result_sets1 = future1.result()
         result_sets2 = future2.result()
         assert result_sets1[0].rows[0]['time'] == b'lunch time'
-        assert result_sets2[0].rows[0]['time'] == b'lunch time'
+        assert result_sets2[0].rows[0]['time'] == b'lunch time'        
 
     def test_restart_query(self, kikimr, entity_name):
         source_name = entity_name("test_restart_query")
@@ -238,6 +238,8 @@ class TestStreamingInYdb(StreamingTestBase):
 
         data = ['{"dt": 1696849943000001, "str": "C" }']
         self.write_stream(data)
+        self.wait_completed_checkpoints(kikimr, path)
+
         expected_data = ['{"a_time":null,"b_time":1696849942500001,"c_time":1696849943000001}']
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
 

@@ -2898,6 +2898,70 @@ Y_UNIT_TEST(SmallMsgCompactificationWithRebootsTest) {
     });
 }
 
+Y_UNIT_TEST(Large_Message_On_The_Border_Of_The_Zones) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        tc.Runtime->SetScheduledLimit(3000);
+        //tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(100'000);
+
+        ui32 sourceIdx = 0;
+        auto cmdWrite = [&](const TVector<size_t>& sizes) {
+            TVector<std::pair<ui64, TString>> data;
+            for (size_t k = 1; k <= sizes.size(); ++k) {
+                data.emplace_back(k, TString(sizes[k - 1], 'x'));
+            }
+            TString sourceId = "sourceid_" + ToString(sourceIdx++);
+            CmdWrite(0, sourceId, data, tc, false, {}, false, "", -1, -1, false, false, true);
+        };
+        auto cmdCompaction = [&]() {
+            CmdRunCompaction(0, tc);
+        };
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {}, tc);
+
+        cmdWrite({3500000, 3500000, 3500000, 3500001, 2900001, 2900002});
+        cmdCompaction();
+
+        // блоб с сообщениями 0 и 1, а также началом сообщения 2 удалят по retention
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(3, 6, tc);
+
+        // эмулируем, что CompactedZone.Head пустая
+        CmdRenameKey("d0000000000_00000000000000000004_00004_0000000002_00006|",
+                     "d0000000000_00000000000000000004_00004_0000000002_00006?",
+                     tc);
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(3, 6, tc);
+
+        //
+        // остались ключи:
+        // d0000000000_00000000000000000002_00002_0000000002_00014
+        // d0000000000_00000000000000000004_00004_0000000002_00006?
+        //
+
+        // проверям, что можем перейти на любое из оставшихся сообщений
+        CmdSetOffset(0, "user", 5, false, tc);
+        CmdSetOffset(0, "user", 3, false, tc);
+        CmdSetOffset(0, "user", 4, false, tc);
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(3, 6, tc);
+
+        // проверяем, что может прочитать сообщение, которое лежит между зонами
+        CmdRead(0, 4, 1, Max<i32>(), 1, false, tc, {4});
+        CmdRead(0, 3, 2, Max<i32>(), 2, false, tc, {3, 4});
+    });
+}
+
 Y_UNIT_TEST(The_Keys_Are_Loaded_In_Several_Iterations) {
     auto observer = [](TAutoPtr<IEventHandle>& ev) {
         if (auto* e = ev->CastAsLocal<TEvKeyValue::TEvResponse>(); e) {

@@ -15,7 +15,7 @@ mkdir files
 
 ## Создайте конфигурационный файл Ansible {# ansible-creat-config}
 
-Создайте `ansible.cfg` с конфигурацией Ansible, подходящей для целевой среды развёртывания. Подробности см. в [справочнике по конфигурации Ansible](https://docs.ansible.com/ansible/latest/reference_appendices/config.html). Дальнейшее руководство предполагает, что поддиректория `./inventory` рабочей директории настроена для использования файлов инвентаризации.
+Создайте `ansible.cfg` с конфигурацией Ansible, подходящей для целевой среды развёртывания. Подробности в [справочнике по конфигурации Ansible](https://docs.ansible.com/ansible/latest/reference_appendices/config.html). Дальнейшее руководство предполагает, что поддиректория `./inventory` рабочей директории настроена для использования файлов инвентаризации.
 
 {% cut "Пример стартового ansible.cfg" %}
 
@@ -49,7 +49,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 ## Создайте основной файл инвентаризации {#inventory-create}
 
-Создайте файл `inventory/50-inventory.yaml` и заполните его в зависимости от выбранной топологии (см. [выбор топологии](./deployment-preparation.md#topology-select)). Примеры для каждой поддерживаемой топологии приведены ниже во вкладках — выберите подходящий.
+Создайте файл `inventory/50-inventory.yaml` и заполните его в зависимости от выбранной топологии (подробнее: [выбор топологии](./deployment-preparation.md#topology-select)). Примеры для каждой поддерживаемой топологии приведены ниже во вкладках — выберите подходящий.
 
 {% list tabs %}
 

@@ -1452,6 +1452,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
       }, TransactionMode.SnapshotRw
   );
   ```
+
   {% endcut %}
 
   {% cut "EF" %}

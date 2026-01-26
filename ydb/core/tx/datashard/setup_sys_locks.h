@@ -17,6 +17,15 @@ struct TSetupSysLocks
         SysLocksTable.SetupUpdate(this, db);
     }
 
+    TSetupSysLocks(ui64 lockTxId, ui32 lockNodeId, TDataShard& self, ILocksDb* db)
+        : SysLocksTable(self.SysLocksTable())
+    {
+        LockTxId = lockTxId;
+        LockNodeId = lockNodeId;
+
+        SysLocksTable.SetupUpdate(this, db);
+    }
+
     TSetupSysLocks(ui64 lockTxId, ui32 lockNodeId, ui64 queryTraceId, TDataShard& self, ILocksDb* db)
         : SysLocksTable(self.SysLocksTable())
     {

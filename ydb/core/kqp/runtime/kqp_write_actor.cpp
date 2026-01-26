@@ -3490,30 +3490,9 @@ public:
             actor->FlushBuffers();
         });
 
-        // Debug: Log TxManager state
-        Cerr << "BufferActor Commit: NeedCommit()=" << TxManager->NeedCommit()
-             << ", BrokenLocks()=" << TxManager->BrokenLocks()
-             << ", GetBrokenLockQueryTraceId()=" << (TxManager->GetBrokenLockQueryTraceId() ? *TxManager->GetBrokenLockQueryTraceId() : 0)
-             << ", TxManager ptr=" << TxManager.get() << Endl;
-
         if (!TxManager->NeedCommit()) {
             Rollback(std::move(traceId), /* waitForResult */ true);
         } else if (TxManager->BrokenLocks()) {
-            // Log victim TLI event for InvisibleRowSkips and other broken lock scenarios
-            if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
-                auto brokenQueryTraceId = TxManager->GetBrokenLockQueryTraceId();
-                TMaybe<ui64> victimQueryTraceId = brokenQueryTraceId 
-                    ? MakeMaybe(*brokenQueryTraceId)
-                    : Nothing();
-                NDataIntegrity::LogTli("SessionActor", "Commit was a victim of broken locks",
-                                       TString(), // queryText - not available here
-                                       Nothing(), // breakerQueryTraceId
-                                       victimQueryTraceId,
-                                       TString(), // allQueryTexts - not available here
-                                       TlsActivationContext->AsActorContext(),
-                                       Nothing(), // victimQueryTraceId field for breaker
-                                       TString()); // victimQueryText
-            }
             NYql::TIssues issues;
             issues.AddIssue(*TxManager->GetLockIssue());
             ReplyError(

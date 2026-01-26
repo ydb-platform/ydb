@@ -44,6 +44,10 @@ struct IColumnDataExtractor {
 
     // For reading (Pack): returns const pointers to existing data
     virtual TVector<const ui8*> GetColumnsDataConst(std::shared_ptr<arrow::ArrayData> array) = 0;
+    // Arrow slices (array->offset != 0) do NOT physically shift the null bitmap.
+    // TupleLayout expects bitmaps aligned to logical row indices [0..length).
+    // Therefore, when offset != 0, we must copy and shift the bitmap manually.
+    // If offset == 0, the original bitmap can be reused.
     virtual TVector<const ui8*> GetNullBitmapConst(std::shared_ptr<arrow::ArrayData> array, TVector<std::shared_ptr<arrow::Buffer>>& nullBitmapRelocationBuffer) = 0;
     
     // For writing (Unpack): returns mutable pointers to new buffers

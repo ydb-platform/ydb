@@ -8,6 +8,7 @@ message TJwtInfo {
     optional string PublicKey = 5;
     optional string PrivateKey = 6;
     optional string Audience = 7 [default = "https://iam.api.cloud.yandex.net/iam/v1/tokens"];
+    optional string Token = 8;
 }
 
 message TOAuthInfo {
@@ -55,9 +56,9 @@ message TTokensConfig {
 }
 
 message TOpenIdClientConfig {
-    optional string SecretName = 1;
-    optional string SessionServiceEndpoint = 2;
-    optional string SessionServiceTokenName = 3;
-    optional string AuthorizationServerAddress = 4;
-    repeated string AllowedProxyHosts = 5;
+  optional string SecretName = 1;
+  optional string SessionServiceEndpoint = 2;
+  optional string SessionServiceTokenName = 3;
+  optional string AuthorizationServerAddress = 4;
+  repeated string AllowedProxyHosts = 5;
 }

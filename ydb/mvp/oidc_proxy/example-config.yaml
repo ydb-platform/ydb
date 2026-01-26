@@ -11,7 +11,11 @@ generic:
     ssl_cert_file: path/to/ssl.crt
 
   auth:
-    token_file: path/to/tokenator_config
+    token_file: path/to/tokenator_config # old way
+    jwt_token:
+      subject: "project0tydb_sa"
+      path: "path/to/federated_token"
+      token_service_endpoint: "grpcs://tokens.net:443"
 
 oidc:
   client_id: "client-id"

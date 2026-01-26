@@ -10,7 +10,7 @@
 
 Перед развёртыванием системы обязательно выполните подготовительные действия. Ознакомьтесь с документом [{#T}](deployment-preparation.md).
 
-## Создание директорий для работы {#prepare-directory}
+## Создайте директорию для работы {#prepare-directory}
 
 ```bash
 mkdir deployment
@@ -19,9 +19,9 @@ mkdir -p inventory/group_vars/ydb
 mkdir files
 ```
 
-## Создание конфигурационного файла Ansible {# ansible-creat-config}
+## Создайте конфигурационный файл Ansible {# ansible-creat-config}
 
-Создайте `ansible.cfg` с конфигурацией Ansible, подходящей для вашего окружения. Подробности см. в [справочнике по конфигурации Ansible](https://docs.ansible.com/ansible/latest/reference_appendices/config.html). Дальнейшее руководство предполагает, что поддиректория `./inventory` рабочей директории настроена для использования файлов инвентаризации.
+Создайте `ansible.cfg` с конфигурацией Ansible, подходящей для целевой среды развёртывания. Подробности в [справочнике по конфигурации Ansible](https://docs.ansible.com/ansible/latest/reference_appendices/config.html). Дальнейшее руководство предполагает, что поддиректория `./inventory` рабочей директории настроена для использования файлов инвентаризации.
 
 {% cut "Пример стартового ansible.cfg" %}
 
@@ -32,7 +32,6 @@ mkdir files
 {% endnote %}
 
 ```ini
-[defaults]
 [defaults]
 conditional_bare_variables = False
 force_handlers = True
@@ -57,7 +56,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 {% endcut %}
 
-## Создание основного файла инвентаризации {#inventory-create}
+## Создайте основной файл инвентаризации {#inventory-create}
 
 Создайте файл `inventory/group_vars/ydb/all.yaml` и заполните его.
 
@@ -66,63 +65,49 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 - mirror-3-dc-3nodes
 
   ```yaml
-  ansible_user: имя_пользователя
-  ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
-  system_timezone: UTC
-  system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
-  ydb_dynnodes:
+  # Ansible
+    ansible_user: имя_пользователя
+    ansible_ssh_private_key_file: "/путь/к/вашему/id_rsa"
+  
+  # Система
+    system_timezone: UTC
+    system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
+  
+  # База данных
+    ydb_user: root
+    ydb_dbname: db
 
-    - {"instance": "a", offset: 1}
+  # Хранилище
+    ydb_disks:
+      - name: /dev/vdb
+      label: ydb_disk_1
+      - name: /dev/vdc
+      label: ydb_disk_2
+      - name: /dev/vdd
+      label: ydb_disk_3
+    ydb_pool_kind: ssd
+    ydb_allow_format_drives: true
+    ydb_skip_data_loss_confirmation_prompt: false
+    ydbops_local: true
+    ydb_cores_dynamic: 2
+    ydb_dynnodes:
+      - {"instance": "a", offset: 1}
+    ydb_cores_static:  2
+  
+  #Настройки авторизации
+    ydb_enforce_user_token_requirement: true
 
-  # Examples
-
-  # - {"instance": "b", offset: 2, dbname: "db", affinity: "2,3"}
-
-  # - {"instance": "c", offset: 3, dbname: "db2"}
-
-  ydb_user: root
-  ydb_dbname: db
-
-  # Phisycal disk mapping
-
-  ydb_disks:
-    - name: /dev/vdb
-    label: ydb_disk_1
-    - name: /dev/vdc
-    label: ydb_disk_2
-    - name: /dev/vdd
-    label: ydb_disk_3
-
-  ydb_pool_kind: ssd
-  ydb_allow_format_drives: true
-  ydb_skip_data_loss_confirmation_prompt: false
-  ydbops_local: true
-  ydb_cores_dynamic: 2
-  ydb_cores_static:  2
-  ydb_enforce_user_token_requirement: true
-
-  # ----------------------------------------------------------------------
-
-  # BINARY / PACKAGE SETTINGS
-
-  #
-
-  ydb_version: "версия_системы"
-
-  # ydbd_binary: "{{ ansible_config_file | dirname }}/files/ydbd"
-
-  # ydb_cli_binary: "{{ ansible_config_file | dirname }}/files/ydb"
-
-  # ydbops_binary: "{{ ansible_config_file | dirname }}/files/ydbops"
-
-  # ydb_dstool_binary: "{{ ansible_config_file | dirname }}/files/ydb-dstool"
-
-  # ----------------------------------------------------------------------
-    ```
+  # Узлы
+    ydb_version: "версия_системы"
+   ```
 
 {% endlist %}
 
-{% include notitle [_](./_includes/required-settings.md) %}
+Обязательные настройки, которые нужно адаптировать под окружение в выбранном шаблоне:
+
+1. **Настройка SSH доступа.** Укажите пользователя `ansible_user` и путь к приватному ключу `ansible_ssh_private_key_file`, которые Ansible будет использовать для подключения к вашим серверам.
+2. **Пути к блочным устройствам в файловой системе.** В секции `ydb_disks` шаблон предполагает, что `/dev/vda` предназначен для операционной системы, а следующие диски, такие как `/dev/vdb`, — для слоя хранения {{ ydb-short-name }}. Метки дисков создаются плейбуками автоматически, и их имена могут быть произвольными.
+3. **Версия системы.** В параметре `ydb_version` укажите номер версии {{ ydb-short-name }}, которую нужно установить. Список доступных версий вы найдёте на странице [загрузок](../../../../../downloads/ydb-open-source-database.md).
 
 {% include notitle [_](./_includes/recommended-settings.md) %}
 
@@ -132,7 +117,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
 
 {% endcut %}
 
-## Изменение пароля пользователя root {#change-password}
+## Измените пароль пользователя root {#change-password}
 
 Создайте файл `ansible_vault_password_file` с содержимым:
 
@@ -163,64 +148,47 @@ all:
 - mirror-3-dc-3nodes
 
   ```yaml
-  # YDB configuration options and their values
-  # are described in documentaion https://ydb.tech/en/docs/deploy/configuration/config
-
   metadata:
     kind: MainConfig
     cluster: ""
     version: 0
   config:
     yaml_config_enabled: true
-    erasure: mirror-3-dc # erasue is the parameter that describes
-                       # the fault tolerance mode of the cluster.
-                       # See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
+    erasure: mirror-3-dc
     fail_domain_type: disk
-    self_management_config: # automatic management of static resources (static group, state storage, etc)
+    self_management_config:
       enabled: true
-    default_disk_type: SSD  # default disk type used for group creation of both kinds
-  host_configs: # the list of available host configurations in the cluster.
+    default_disk_type: SSD
+  host_configs:
     - host_config_id: 1
     drive:
-    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configration.
-      type: SSD                                       # kind of the disk: available kinds are SSD, NVME, HDD
+    - path: /dev/disk/by-partlabel/ydb_disk_ssd_01
+      type: SSD
     - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
       type: SSD
     - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
       type: SSD
   hosts:
-    - host: ydb-node-zone-a.local  # storage node DNS name
-      host_config_id: 1                 # numeric host configuration template identifier
-      location:                   # this parameter describes where host is located.
-        body: 1                         # string representing a host serial number.
-        data_center: 'zone-a'           # string representing the datacenter / availability zone where the host is located.
-                                      # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed
-                                      # across 3 datacenters.
-        rack: '1'                       # string representing a rack identifier where the host is located.
-                                      # if cluster is deployed using block-4-2 erasure, all hosts should be distrubited
-                                      # accross at least 8 racks.
-    - host: ydb-node-zone-b.local # storage node DNS name
-      host_config_id: 1                 # numeric host configuration template identifier
-      location:                   # this parameter describes where host is located.
-        body: 2                         # string representing a host serial number.
-        data_center: 'zone-b'           # string representing the datacenter / availability zone where the host is located.
-                                      # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed
-                                      # across 3 datacenters.
-        rack: '1'                       # string representing a rack identifier where the host is located.
-                                      # if cluster is deployed using block-4-2 erasure, all hosts should be distrubited
-                                      # accross at least 8 racks.
-    - host: ydb-node-zone-d.local  # storage node DNS name
-      host_config_id: 1                 # numeric host configuration template identifier
-      location:                   # this parameter describes where host is located.
-        body: 3                         # string representing a host serial number.
-        data_center: 'zone-d'           # string representing the datacenter / availability zone where the host is located.
-                                      # if cluster is deployed using mirror-3-dc fault tolerance mode, all hosts must be distributed
-                                      # across 3 datacenters.
-        rack: '1'                       # string representing a rack identifier where the host is located.
-                                      # if cluster is deployed using block-4-2 erasure, all hosts should be distrubited
-                                      # accross at least 8 racks.
-  actor_system_config:          # the configuration of the actor system which descibes how cores of the instance are distributed
-    use_auto_config: true       # accross different types of workloads in the instance.
+    - host: ydb-node-zone-a.local
+      host_config_id: 1
+      location:
+        body: 1
+        data_center: 'zone-a'
+        rack: '1'
+    - host: ydb-node-zone-b.local
+      host_config_id: 1
+      location:
+        body: 2
+        data_center: 'zone-b'
+        rack: '1'
+    - host: ydb-node-zone-d.local
+      host_config_id: 1
+      location:
+        body: 3
+        data_center: 'zone-d'
+        rack: '1'
+  actor_system_config:
+    use_auto_config: true
     cpu_count: 1
   interconnect_config:
     start_tcp: true
@@ -259,9 +227,7 @@ all:
       - "DATABASE-ADMINS"
       register_dynamic_node_allowed_sids:
       - databaseNodes@cert
-      - root@builtin
-
-  
+      - root@builtin  
     ```
 
 {% endlist %}
@@ -305,16 +271,10 @@ all:
 ```yaml
   ---
 plugin: ydb_platform.ydb.ydb_inventory
-# ydb_config - path to YDB config. 
-# It will be used as:
-# - the source for Ansible inventory
-# - YDB cluster config
-#
-# This file must has empty line at the end
 ydb_config: "files/config.yaml"
   ```
 
-## Развёртывание кластера {{ ydb-short-name }} {# cluster-deployment}
+## Разверните кластер {{ ydb-short-name }} {# cluster-deployment}
 
 После завершения всех описанных выше подготовительных действий фактическое первоначальное развёртывание кластера сводится к выполнению следующей команды из рабочей директории:
 
@@ -324,9 +284,9 @@ ansible-playbook ydb_platform.ydb.initial_setup
 
 Вскоре после начала будет необходимо подтвердить полную очистку настроенных дисков. Затем завершение развёртывания может занять десятки минут в зависимости от окружения и настроек. Этот плейбук выполняет примерно те же шаги, которые описаны в инструкциях для [ручного развёртывания кластера {{ ydb-short-name }}](../../manual/initial-deployment.md).
 
-### Проверка состояния кластера {#cluster-state}
+### Проверьте состояние кластера {#cluster-state}
 
-На последнем этапе плейбук выполнит несколько тестовых запросов, используя настоящие временные таблицы, чтобы перепроверить, что всё действительно работает штатно. При успехе вы увидите статус `ok`, `failed=0` для каждого сервера и результаты этих тестовых запросов (3 и 6), если вывод плейбука установлен достаточно подробным.
+На последнем этапе плейбук выполнит несколько тестовых запросов с использованием настоящих временных таблиц для проверки корректной работы. При успешном выполнении для каждого сервера будут отображены статус ok, failed=0 и результаты тестовых запросов (3 и 6) при достаточно подробном выводе плейбука.
 
 {% cut "Пример вывода" %}
 
@@ -352,11 +312,11 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 ## Дополнительные шаги {# additional-steps}
 
-Самый простой способ исследовать только что развёрнутый кластер — использовать [Embedded UI](../../../../reference/embedded-ui/index.md), работающий на порту 8765 каждого сервера. В вероятном случае, когда у вас нет прямого доступа к этому порту из браузера, вы можете настроить SSH-туннелирование. Для этого выполните команду `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` на локальной машине (при необходимости добавьте дополнительные опции). После успешного установления соединения вы можете перейти по URL [localhost:8765](http://localhost:8765) через браузер. Браузер может попросить принять исключение безопасности. Пример того, как это может выглядеть:
+Самый простой способ исследовать только что развёрнутый кластер — использовать [Embedded UI](../../../../reference/embedded-ui/index.md), работающий на порту 8765 каждого сервера. Если нет прямого доступа к порту из браузера, можно настроить SSH-туннелирование. Для этого выполните команду `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` на локальной машине (при необходимости добавьте дополнительные опции). После успешного установления соединения можно перейти по URL [localhost:8765](http://localhost:8765) через браузер. Браузер может попросить принять исключение безопасности. Пример того, как это может выглядеть:
 
 ![ydb-web-ui](../../../../_assets/ydb-web-console.png)
 
-После успешного создания кластера {{ ydb-short-name }} вы можете проверить его состояние, используя следующую страницу Embedded UI: [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants). Это может выглядеть так:
+После успешного создания кластера {{ ydb-short-name }} проверьте его состояние, используя следующую страницу Embedded UI: [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants). Это может выглядеть так:
 
 ![ydb-cluster-check](../../../../_assets/ydb-cluster-check.png)
 
@@ -389,8 +349,8 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 Параметры команды и их значения:
 
-- `config profile create` — эта команда используется для создания профиля подключения. Вы указываете имя профиля. Более подробную информацию о том, как создавать и изменять профили, можно найти в статье [{#T}](../../../../reference/ydb-cli/profile/create.md).
-- `-e` — конечная точка, строка в формате `protocol://host:port`. Вы можете указать FQDN любого узла кластера и опустить порт. По умолчанию используется порт 2135.
+- `config profile create` — эта команда используется для создания профиля подключения. Укажите имя профиля. Более подробную информацию о том, как создавать и изменять профили, можно найти в статье [{#T}](../../../../reference/ydb-cli/profile/create.md).
+- `-e` — конечная точка, строка в формате `protocol://host:port`. Допускается указать FQDN любого узла кластера и опустить порт. По умолчанию используется порт 2135.
 - `--ca-file` — путь к корневому сертификату для подключений к базе данных по `grpcs`.
 - `--user` — пользователь для подключения к базе данных.
 - `--password-file` — путь к файлу с паролем. Опустите это, чтобы ввести пароль вручную.

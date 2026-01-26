@@ -230,6 +230,27 @@ namespace {
         return foundField ? std::make_optional(result) : std::nullopt;
     }
 
+    std::optional<std::vector<ui64>> ExtractVictimQueryTraceIdOccurrences(
+        const TString& logs,
+        const TString& component,
+        const TString& messagePattern)
+    {
+        std::vector<ui64> result;
+        for (const auto& record : ExtractTliRecords(logs)) {
+            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
+                continue;
+            }
+            auto value = ExtractNumericField(record, "VictimQueryTraceId");
+            if (value) {
+                result.push_back(*value);
+            }
+        }
+        if (result.empty()) {
+            return std::nullopt;
+        }
+        return result;
+    }
+
     void DumpTliRecords(const TString& logs) {
         for (const auto& record : ExtractTliRecords(logs)) {
             Cerr << record << Endl;
@@ -273,6 +294,7 @@ namespace {
         std::optional<ui64> VictimShardCurrentQueryTraceId;
         std::optional<ui64> VictimSessionVictimQueryTraceId;
         std::optional<ui64> VictimShardVictimQueryTraceId;
+        std::optional<std::vector<ui64>> VictimSessionVictimQueryTraceIdOccurrences;
     };
 
     TExtractedTliData ExtractAllTliData(const TString& logs, const TTliLogPatterns& patterns) {
@@ -292,6 +314,8 @@ namespace {
         data.VictimShardCurrentQueryTraceId = ExtractCurrentQueryTraceId(logs, "DataShard", patterns.VictimDatashardMessage);
         data.VictimSessionVictimQueryTraceId = ExtractVictimQueryTraceId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
         data.VictimShardVictimQueryTraceId = ExtractVictimQueryTraceId(logs, "DataShard", patterns.VictimDatashardMessage);
+        data.VictimSessionVictimQueryTraceIdOccurrences = ExtractVictimQueryTraceIdOccurrences(
+            logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
 
         return data;
     }
@@ -424,8 +448,31 @@ namespace {
         }
     }
 
-    EStatus ExecuteVictimCommit(TSession& session, TTransaction& tx, const TString& query) {
-        return session.ExecuteDataQuery(query, TTxControl::Tx(tx).CommitTx()).ExtractValueSync().GetStatus();
+    // Execute victim commit and return both status and issues for verification
+    std::pair<EStatus, TString> ExecuteVictimCommitWithIssues(TSession& session, TTransaction& tx, const TString& query) {
+        auto result = session.ExecuteDataQuery(query, TTxControl::Tx(tx).CommitTx()).ExtractValueSync();
+        return {result.GetStatus(), result.GetIssues().ToString()};
+    }
+
+    // Execute a direct commit (no query) and return both status and issues
+    std::pair<EStatus, TString> CommitTxWithIssues(TTransaction& tx) {
+        auto result = tx.Commit().ExtractValueSync();
+        return {result.GetStatus(), result.GetIssues().ToString()};
+    }
+
+    // Extract VictimQueryTraceId from issue message
+    std::optional<ui64> ExtractVictimQueryTraceIdFromIssue(const TString& issues) {
+        const TString prefix = "VictimQueryTraceId: ";
+        size_t pos = issues.find(prefix);
+        if (pos == TString::npos) {
+            return std::nullopt;
+        }
+        pos += prefix.size();
+        size_t endPos = issues.find('.', pos);
+        if (endPos == TString::npos) {
+            return std::nullopt;
+        }
+        return FromString<ui64>(issues.substr(pos, endPos - pos));
     }
 
     void VerifyTliLogsAndAssert(
@@ -434,7 +481,8 @@ namespace {
         bool UseSink,
         const TString& breakerQueryText,
         const TString& victimQueryText,
-        const std::optional<TString>& victimExtraQueryText = std::nullopt)
+        const std::optional<TString>& victimExtraQueryText = std::nullopt,
+        ui64 expectedVictimQueryTraceId = 0)
     {
         DumpTliRecords(ss.Str());
         const auto patterns = MakeTliLogPatterns(UseSink);
@@ -442,9 +490,53 @@ namespace {
         if (LogEnabled) {
             const auto data = ExtractAllTliData(ss.Str(), patterns);
             AssertCommonTliAsserts(data, breakerQueryText, victimQueryText, victimExtraQueryText);
+            UNIT_ASSERT_C(expectedVictimQueryTraceId != 0,
+                "expectedVictimQueryTraceId should not be 0 when TLI logs are enabled");
+            UNIT_ASSERT_C(data.VictimSessionVictimQueryTraceIdOccurrences.has_value(),
+                "victim SessionActor VictimQueryTraceId should be present");
+            const auto& occurrences = *data.VictimSessionVictimQueryTraceIdOccurrences;
+            UNIT_ASSERT_C(std::find(occurrences.begin(), occurrences.end(), expectedVictimQueryTraceId) != occurrences.end(),
+                "VictimQueryTraceId should match between issue and victim SessionActor log");
         } else {
             AssertNoTliLogsWhenDisabled(ss.Str(), LogEnabled);
         }
+    }
+
+    void VerifyTliIssueAndLogs(
+        const TString& issues,
+        TStringStream& ss,
+        bool LogEnabled,
+        bool UseSink,
+        const TString& breakerQueryText,
+        const TString& victimQueryText,
+        const std::optional<TString>& victimExtraQueryText = std::nullopt)
+    {
+        UNIT_ASSERT_C(issues.Contains("Transaction locks invalidated"),
+            "Issue should contain 'Transaction locks invalidated': " << issues);
+
+        auto victimQueryTraceId = ExtractVictimQueryTraceIdFromIssue(issues);
+        if (LogEnabled) {
+            UNIT_ASSERT_C(victimQueryTraceId.has_value(),
+                "Issue should contain 'VictimQueryTraceId:': " << issues);
+            UNIT_ASSERT_C(*victimQueryTraceId != 0,
+                "VictimQueryTraceId should not be 0: " << issues);
+        } else {
+            UNIT_ASSERT_C(!victimQueryTraceId.has_value(),
+                "Issue should not contain 'VictimQueryTraceId:' when TLI logs are disabled: " << issues);
+        }
+
+        // BreakerQueryTraceId should NOT be present in the issue
+        UNIT_ASSERT_C(!issues.Contains("BreakerQueryTraceId:"),
+            "Issue should NOT contain 'BreakerQueryTraceId:': " << issues);
+
+        VerifyTliLogsAndAssert(
+            ss,
+            LogEnabled,
+            UseSink,
+            breakerQueryText,
+            victimQueryText,
+            victimExtraQueryText,
+            victimQueryTraceId.value_or(0));
     }
 } // namespace
 
@@ -462,9 +554,10 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
         ctx.ExecuteQuery(breakerQueryText);
-        UNIT_ASSERT_VALUES_EQUAL(ExecuteVictimCommit(ctx.VictimSession, victimTx, victimCommitText), EStatus::ABORTED);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliLogsAndAssert(ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     Y_UNIT_TEST_QUAD(SeparateCommit, LogEnabled, UseSink) {
@@ -491,9 +584,10 @@ Y_UNIT_TEST_SUITE(KqpTli) {
             TTxControl::Tx(*breakerTx)).GetValueSync());
         NKqp::AssertSuccessResult(breakerTx->Commit().ExtractValueSync());
 
-        UNIT_ASSERT_VALUES_EQUAL(ExecuteVictimCommit(ctx.VictimSession, victimTx, victimCommitText), EStatus::ABORTED);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliLogsAndAssert(ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     Y_UNIT_TEST_QUAD(ManyTables, LogEnabled, UseSink) {
@@ -529,9 +623,10 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         NKqp::AssertSuccessResult(ctx.Session.ExecuteDataQuery(breakerUpdateTable6, TTxControl::Tx(*breakerTx)).GetValueSync());
         NKqp::AssertSuccessResult(breakerTx->Commit().ExtractValueSync());
 
-        UNIT_ASSERT_VALUES_EQUAL(victimTx.Commit().ExtractValueSync().GetStatus(), EStatus::ABORTED);
+        auto [status, issues] = CommitTxWithIssues(victimTx);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliLogsAndAssert(ss, LogEnabled, UseSink, breakerUpdateTable2, victimSelectTable2);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerUpdateTable2, victimSelectTable2);
     }
 
     // Test: Victim reads key 1, breaker writes key 1, victim writes key 2
@@ -547,9 +642,10 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
         ctx.ExecuteQuery(breakerQueryText);
-        UNIT_ASSERT_VALUES_EQUAL(ExecuteVictimCommit(ctx.VictimSession, victimTx, victimCommitText), EStatus::ABORTED);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliLogsAndAssert(ss, LogEnabled, UseSink, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText);
     }
 
     // Test: Victim reads multiple keys, breaker writes them all
@@ -565,9 +661,10 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
         ctx.ExecuteQuery(breakerQueryText);
-        UNIT_ASSERT_VALUES_EQUAL(ExecuteVictimCommit(ctx.VictimSession, victimTx, victimCommitText), EStatus::ABORTED);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliLogsAndAssert(ss, LogEnabled, UseSink, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText);
     }
 
     // Test: Cross-table lock breakage - victim reads TableA, breaker writes TableA, victim writes TableB
@@ -584,9 +681,10 @@ Y_UNIT_TEST_SUITE(KqpTli) {
 
         auto victimTx = BeginReadTx(ctx.VictimSession, victimQueryText);
         ctx.ExecuteQuery(breakerQueryText);
-        UNIT_ASSERT_VALUES_EQUAL(ExecuteVictimCommit(ctx.VictimSession, victimTx, victimCommitText), EStatus::ABORTED);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        VerifyTliLogsAndAssert(ss, LogEnabled, UseSink, breakerQueryText, victimQueryText);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText);
     }
 
     // Test: Two victims and one breaker scenario
@@ -614,11 +712,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         ctx.ExecuteQuery(breakerQueryText);
 
         // Both victims try to commit - both should be aborted
-        UNIT_ASSERT_VALUES_EQUAL(ExecuteVictimCommit(victim1Session, victim1Tx, victimCommitText), EStatus::ABORTED);
-        UNIT_ASSERT_VALUES_EQUAL(ExecuteVictimCommit(victim2Session, victim2Tx, victimCommitText), EStatus::ABORTED);
+        auto [status1, issues1] = ExecuteVictimCommitWithIssues(victim1Session, victim1Tx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status1, EStatus::ABORTED);
+        VerifyTliIssueAndLogs(issues1, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
 
-        // Verify TLI logs with additional assertions for multiple victims
-        VerifyTliLogsAndAssert(ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
+        auto [status2, issues2] = ExecuteVictimCommitWithIssues(victim2Session, victim2Tx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status2, EStatus::ABORTED);
+        VerifyTliIssueAndLogs(issues2, ss, LogEnabled, UseSink, breakerQueryText, victimQueryText, victimCommitText);
     }
 
     // Test: InvisibleRowSkips - victim reads at snapshot V1, breaker commits at V2, victim reads again
@@ -647,10 +747,10 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         }
 
         // Victim tries to commit -> aborted because lock was broken
-        UNIT_ASSERT_VALUES_EQUAL(ExecuteVictimCommit(ctx.VictimSession, victimTx, victimCommitText), EStatus::ABORTED);
+        auto [status, issues] = ExecuteVictimCommitWithIssues(ctx.VictimSession, victimTx, victimCommitText);
+        UNIT_ASSERT_VALUES_EQUAL(status, EStatus::ABORTED);
 
-        // InvisibleRowSkips: DataShard now emits a victim log during read detection
-        VerifyTliLogsAndAssert(ss, LogEnabled, UseSink, breakerQueryText, victimRead1Text);
+        VerifyTliIssueAndLogs(issues, ss, LogEnabled, UseSink, breakerQueryText, victimRead1Text);
     }
 }
 

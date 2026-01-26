@@ -521,8 +521,10 @@ public:
     }
 };
 
-NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId);
-NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId);
+NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const NYql::TKikimrPathId& pathId,
+    TMaybe<ui64> victimQueryTraceId = Nothing());
+NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableInfo, const ui64& shardId,
+    TMaybe<ui64> victimQueryTraceId = Nothing());
 std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type,
     const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx);
 

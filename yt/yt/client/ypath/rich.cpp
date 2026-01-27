@@ -81,7 +81,7 @@ IAttributeDictionary& TRichYPath::Attributes()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator== (const TRichYPath& lhs, const TRichYPath& rhs)
+bool operator==(const TRichYPath& lhs, const TRichYPath& rhs)
 {
     return lhs.GetPath() == rhs.GetPath() && lhs.Attributes() == rhs.Attributes();
 }

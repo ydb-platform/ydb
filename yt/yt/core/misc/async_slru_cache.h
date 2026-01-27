@@ -166,8 +166,8 @@ public:
         TInsertCookie(const TInsertCookie& other) = delete;
         ~TInsertCookie();
 
-        TInsertCookie& operator = (TInsertCookie&& other);
-        TInsertCookie& operator = (const TInsertCookie& other) = delete;
+        TInsertCookie& operator=(TInsertCookie&& other);
+        TInsertCookie& operator=(const TInsertCookie& other) = delete;
 
         const TKey& GetKey() const;
         TValueFuture GetValue() const;
@@ -200,8 +200,8 @@ public:
     // NB: Shards store reference to the cache, so the cache cannot be simply copied or moved.
     TAsyncSlruCacheBase(const TAsyncSlruCacheBase&) = delete;
     TAsyncSlruCacheBase(TAsyncSlruCacheBase&&) = delete;
-    TAsyncSlruCacheBase& operator = (const TAsyncSlruCacheBase&) = delete;
-    TAsyncSlruCacheBase& operator = (TAsyncSlruCacheBase&&) = delete;
+    TAsyncSlruCacheBase& operator=(const TAsyncSlruCacheBase&) = delete;
+    TAsyncSlruCacheBase& operator=(TAsyncSlruCacheBase&&) = delete;
 
     int GetSize() const;
     i64 GetCapacity() const;

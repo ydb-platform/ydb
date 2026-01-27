@@ -13,7 +13,7 @@ TReachableState::TReachableState(int segmentId, i64 sequenceNumber) noexcept
     , SequenceNumber(sequenceNumber)
 { }
 
-std::strong_ordering TReachableState::operator <=> (const TReachableState& other) const
+std::strong_ordering TReachableState::operator<=>(const TReachableState& other) const
 {
     if (SegmentId != other.SegmentId) {
         return SegmentId <=> other.SegmentId;
@@ -38,7 +38,7 @@ TElectionPriority::TElectionPriority(int lastMutationTerm, TReachableState reach
     , ReachableState(reachableState)
 { }
 
-std::strong_ordering TElectionPriority::operator <=> (const TElectionPriority& other) const
+std::strong_ordering TElectionPriority::operator<=>(const TElectionPriority& other) const
 {
     if (LastMutationTerm != other.LastMutationTerm) {
         return LastMutationTerm <=> other.LastMutationTerm;

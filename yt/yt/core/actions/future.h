@@ -667,8 +667,8 @@ public:
     TFutureHolder(const TFutureHolder<T>& other) = delete;
     TFutureHolder(TFutureHolder<T>&& other) = default;
 
-    TFutureHolder& operator = (const TFutureHolder<T>& other) = delete;
-    TFutureHolder& operator = (TFutureHolder<T>&& other) = default;
+    TFutureHolder& operator=(const TFutureHolder<T>& other) = delete;
+    TFutureHolder& operator=(TFutureHolder<T>&& other) = default;
 
     //! Returns |true| if the holder has an underlying future.
     explicit operator bool() const;

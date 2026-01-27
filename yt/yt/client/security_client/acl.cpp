@@ -152,7 +152,7 @@ void TSerializableAccessControlEntry::Persist(const TStreamPersistenceContext& c
     // NB: Columns and Vital are not persisted since this method is intended only for use in controller.
 }
 
-bool operator == (const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs)
+bool operator==(const TSerializableAccessControlList& lhs, const TSerializableAccessControlList& rhs)
 {
     return lhs.Entries == rhs.Entries;
 }

@@ -70,7 +70,7 @@ public:
         }
     }
 
-    T& operator* ()
+    T& operator*()
     {
         return *Ptr_;
     }
@@ -90,7 +90,7 @@ public:
         return Ptr_;
     }
 
-    bool operator < (const THeapItem<T>& other) const
+    bool operator<(const THeapItem<T>& other) const
     {
         return *Ptr_ < *other;
     }
@@ -194,7 +194,7 @@ public:
         return Items_.size();
     }
 
-    T& operator[] (size_t index)
+    T& operator[](size_t index)
     {
         return *Items_[index];
     }
@@ -238,7 +238,7 @@ struct TEnqueuedTime
     TCpuInstant Value = 0;
 };
 
-bool operator < (const TEnqueuedTime& lhs, const TEnqueuedTime& rhs)
+bool operator<(const TEnqueuedTime& lhs, const TEnqueuedTime& rhs)
 {
     return lhs.Value < rhs.Value;
 }
@@ -286,7 +286,7 @@ struct TExecutionPool final
     { }
 };
 
-bool operator < (const TExecutionPool& lhs, const TExecutionPool& rhs)
+bool operator<(const TExecutionPool& lhs, const TExecutionPool& rhs)
 {
     return lhs.ExcessTime < rhs.ExcessTime;
 }
@@ -314,7 +314,7 @@ struct TBucketBase
     { }
 };
 
-bool operator < (const TBucketBase& lhs, const TBucketBase& rhs)
+bool operator<(const TBucketBase& lhs, const TBucketBase& rhs)
 {
     return std::tie(lhs.ExcessTime, lhs.EnqueuedTime) < std::tie(rhs.ExcessTime, rhs.EnqueuedTime);
 }

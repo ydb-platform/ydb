@@ -155,22 +155,22 @@ inline void TLockMask::Reserve(int size)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr bool operator < (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator<(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return static_cast<int>(lhs) < static_cast<int>(rhs);
 }
 
-constexpr bool operator > (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator>(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return rhs < lhs;
 }
 
-constexpr bool operator <= (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator<=(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return !(rhs < lhs);
 }
 
-constexpr bool operator >= (ESchemaCompatibility lhs, ESchemaCompatibility rhs)
+constexpr bool operator>=(ESchemaCompatibility lhs, ESchemaCompatibility rhs)
 {
     return !(lhs < rhs);
 }

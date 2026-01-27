@@ -97,7 +97,7 @@ TConcurrentCache<T>::TCachedItemRef::TCachedItemRef(typename THashTable::TItemRe
 { }
 
 template <class T>
-typename TConcurrentCache<T>::TLookuper& TConcurrentCache<T>::TLookuper::operator= (TLookuper&& other)
+typename TConcurrentCache<T>::TLookuper& TConcurrentCache<T>::TLookuper::operator=(TLookuper&& other)
 {
     Parent_ = std::move(other.Parent_);
     Primary_ = std::move(other.Primary_);
@@ -172,7 +172,7 @@ typename TConcurrentCache<T>::TLookuper TConcurrentCache<T>::GetSecondaryLookupe
 }
 
 template <class T>
-typename TConcurrentCache<T>::TInserter& TConcurrentCache<T>::TInserter::operator= (TInserter&& other)
+typename TConcurrentCache<T>::TInserter& TConcurrentCache<T>::TInserter::operator=(TInserter&& other)
 {
     Parent_ = std::move(other.Parent_);
     Primary_ = std::move(other.Primary_);

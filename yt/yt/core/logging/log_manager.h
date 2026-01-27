@@ -17,7 +17,7 @@ struct TLogWriterCacheKey
     ELogFamily Family;
 };
 
-bool operator == (const TLogWriterCacheKey& lhs, const TLogWriterCacheKey& rhs);
+bool operator==(const TLogWriterCacheKey& lhs, const TLogWriterCacheKey& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

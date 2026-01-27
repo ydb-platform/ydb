@@ -119,7 +119,7 @@ bool TReplicationCardFetchOptions::Contains(const TReplicationCardFetchOptions& 
     return (selfMask | NDetail::ToBitMask(other)) == selfMask;
 }
 
-TReplicationCardFetchOptions& TReplicationCardFetchOptions::operator |= (const TReplicationCardFetchOptions& other)
+TReplicationCardFetchOptions& TReplicationCardFetchOptions::operator|=(const TReplicationCardFetchOptions& other)
 {
     IncludeCoordinators |= other.IncludeCoordinators;
     IncludeProgress |= other.IncludeProgress;

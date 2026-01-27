@@ -3994,6 +3994,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         const TString tableName = "table-1";
         const ui64 lockTxId = 1011121314;
         const ui64 nodeId = runtime->GetNodeId();
+        const ui64 queryTraceId = 12345;
 
         // Create a read lock
         NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
@@ -4001,6 +4002,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto readRequest1 = helper.GetBaseReadRequest(tableName, 1);
         readRequest1->Record.SetLockTxId(lockTxId);
         readRequest1->Record.SetLockNodeId(nodeId);
+        readRequest1->Record.SetQueryTraceId(queryTraceId);
         AddKeyQuery(*readRequest1, {1});
 
         auto readResult1 = helper.SendRead(tableName, readRequest1.release());

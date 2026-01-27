@@ -26,6 +26,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <atomic>
+#include <util/digest/murmur.h>
 #include <util/stream/zlib.h>
 
 #include <atomic>
@@ -139,7 +140,7 @@ void WriteBinaryProducerIdWithDirectTabletWrite(TTopicSdkTestSetup& setup,
 static std::string FindKeyForBucket(size_t bucket, size_t bucketsCount) {
     for (size_t i = 0; i < 1'000'000; ++i) {
         std::string key = "key-" + ToString(i);
-        if (std::hash<std::string>{}(key) % bucketsCount == bucket) {
+        if (MurmurHash<ui64>(key.data(), key.size()) % bucketsCount == bucket) {
             return key;
         }
     }

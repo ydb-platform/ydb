@@ -1744,6 +1744,7 @@ void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorCont
     resp.SetErrorCode(NPersQueue::NErrorCode::OK);
 
     auto& result = *resp.MutablePartitionResponse()->MutableCmdGetMaxSeqNoResult();
+    result.SetIsPartitionActive(IsActive());
     for (const auto& sourceId : ev->Get()->SourceIds) {
         auto& protoInfo = *result.AddSourceIdInfo();
         protoInfo.SetSourceId(sourceId);
@@ -3440,11 +3441,12 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
         OffloadActor = {};
     }
 
+    if (MonitoringProjectId != Config.GetMonitoringProjectId() || !DetailedMetricsAreEnabled(Config)) {
+        ResetDetailedMetrics();
+    }
     MonitoringProjectId = Config.GetMonitoringProjectId();
     if (DetailedMetricsAreEnabled(Config)) {
         SetupDetailedMetrics();
-    } else {
-        ResetDetailedMetrics();
     }
 }
 

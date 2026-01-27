@@ -4402,11 +4402,19 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             // produce data
             // to part 0
-            auto out0ProduceResponse = kafkaClient.Produce({outputTopicName, 0}, {{std::to_string(i), "123"}}, i, producerInstanceId, transactionalId);
+            auto out0ProduceResponse = kafkaClient.Produce({outputTopicName, 0}, {{std::to_string(i), "123"}, {std::to_string(i + totalTxns * 2), "456"}}, i, producerInstanceId, transactionalId);
             UNIT_ASSERT_VALUES_EQUAL_C(out0ProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR, TStringBuilder() << "Txn " << i + 1);
             // to part 1
-            auto out1ProduceResponse = kafkaClient.Produce({outputTopicName, 1}, {{std::to_string(i + totalTxns), "987"}}, i, producerInstanceId, transactionalId);
+            // checking all ProduceRequests recreation if WriteId is reused
+
+            kafkaClient.ProduceAsync({outputTopicName, 1}, {{std::to_string(i + totalTxns), "987"}}, i, producerInstanceId, transactionalId);
+            kafkaClient.ProduceAsync({outputTopicName, 1}, {{std::to_string(i + totalTxns * 3), "111"}}, i, producerInstanceId, transactionalId);
+
+            auto out1ProduceResponse = kafkaClient.ReadLastResult(11 * i + 4);
             UNIT_ASSERT_VALUES_EQUAL_C(out1ProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR, TStringBuilder() << "Txn " << i + 1);
+
+            auto out2ProduceResponse = kafkaClient.ReadLastResult(11 * i + 5);
+            UNIT_ASSERT_VALUES_EQUAL_C(out2ProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR, TStringBuilder() << "Txn " << i + 1);
 
             // init consumer
             std::vector<TString> topicsToSubscribe;
@@ -4431,11 +4439,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // validate data is accessible in target topic
             auto fetchResponse1 = kafkaClient.Fetch({{outputTopicName, {0, 1}}});
             UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions[0].Records->Records.size(), i + 1);
+            UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions[0].Records->Records.size(), (i + 1) * 2);
             UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions[1].Records->Records.size(), i + 1);
-            auto record1 = fetchResponse1->Responses[0].Partitions[0].Records->Records[i];
-            UNIT_ASSERT_VALUES_EQUAL(TString(record1.Key.value().data(), record1.Key.value().size()), std::to_string(i));
-            UNIT_ASSERT_VALUES_EQUAL(TString(record1.Value.value().data(), record1.Value.value().size()), "123");
+            auto record11 = fetchResponse1->Responses[0].Partitions[0].Records->Records[i * 2];
+            UNIT_ASSERT_VALUES_EQUAL(TString(record11.Key.value().data(), record11.Key.value().size()), std::to_string(i));
+            UNIT_ASSERT_VALUES_EQUAL(TString(record11.Value.value().data(), record11.Value.value().size()), "123");
+            auto record12 = fetchResponse1->Responses[0].Partitions[0].Records->Records[i * 2 + 1];
+            UNIT_ASSERT_VALUES_EQUAL(TString(record12.Key.value().data(), record12.Key.value().size()), std::to_string( i+ totalTxns * 2));
+            UNIT_ASSERT_VALUES_EQUAL(TString(record12.Value.value().data(), record12.Value.value().size()), "456");
             auto record2 = fetchResponse1->Responses[0].Partitions[1].Records->Records[i];
             UNIT_ASSERT_VALUES_EQUAL(TString(record2.Key.value().data(), record2.Key.value().size()), std::to_string(i + totalTxns));
             UNIT_ASSERT_VALUES_EQUAL(TString(record2.Value.value().data(), record2.Value.value().size()), "987");

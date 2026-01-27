@@ -43,6 +43,7 @@ RECURSE(
     mon
     mon_alloc
     memory_controller
+    nbs
     node_whiteboard
     persqueue
     pgproxy

@@ -323,14 +323,15 @@ public:
         CreatePqSourceBasicAuth(sourceName, UseSchemaSecrets());
 
         const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
-            SELECT key || "{id}", value FROM `{source}`.`{topic}`
-                WITH (
-                    FORMAT="json_each_row",
-                    SCHEMA=(
-                        key String NOT NULL,
-                        value String NOT NULL
-                    ))
-                LIMIT 1;
+            SELECT key || "{id}", value FROM `{source}`.`{topic}` WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL,
+                    value String NOT NULL
+                )
+            )
+            LIMIT 1;
             )",
             "source"_a=sourceName,
             "topic"_a=topicName,
@@ -1064,14 +1065,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateTopic(topicName);
 
         const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`{topic}`
-                WITH (
-                    FORMAT="json_each_row",
-                    SCHEMA=(
-                        key String NOT NULL,
-                        value String NOT NULL
-                    ))
-                LIMIT 1;
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL,
+                    value String NOT NULL
+                )
+            )
+            LIMIT 1;
             )",
             "source"_a=sourceName,
             "topic"_a=topicName
@@ -1092,7 +1094,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         // Execute script without existing topic
         const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`topicName`
+            SELECT * FROM `{source}`.`topicName` WITH (STREAMING = "TRUE")
             )",
             "source"_a=sourceName
         ), EExecStatus::Failed);
@@ -1108,7 +1110,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         // Execute script without existing topic
         const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`topicName`
+            SELECT * FROM `{source}`.`topicName` WITH (STREAMING = "TRUE")
             )",
             "source"_a=sourceName
         ), EExecStatus::Failed);
@@ -1137,14 +1139,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreatePqSource(sourceName);
 
         const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`{topic}`
-                WITH (
-                    FORMAT="json_each_row",
-                    SCHEMA=(
-                        key String NOT NULL,
-                        value String NOT NULL
-                    ))
-                LIMIT {partition_count};
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL,
+                    value String NOT NULL
+                )
+            )
+            LIMIT {partition_count};
             )",
             "source"_a=sourceName,
             "topic"_a=topicName,
@@ -1177,7 +1180,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreatePqSourceBasicAuth(sourceName);
 
         const auto result = GetQueryClient()->ExecuteQuery(fmt::format(
-            "SELECT * FROM `{source}`.`{topic}`",
+            R"(SELECT * FROM `{source}`.`{topic}` WITH (STREAMING = "TRUE"))",
             "source"_a=sourceName,
             "topic"_a=topicName
         ), TTxControl::NoTx(), TExecuteQuerySettings().ExecMode(EExecMode::Explain)).ExtractValueSync();
@@ -1209,13 +1212,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreatePqSourceBasicAuth(sourceName);
 
         const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
-            $input = SELECT key, value FROM `{source}`.`{input_topic}`
-                WITH (
-                    FORMAT="json_each_row",
-                    SCHEMA=(
-                        key String NOT NULL,
-                        value String NOT NULL
-                    ));
+            $input = SELECT key, value FROM `{source}`.`{input_topic}` WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL,
+                    value String NOT NULL
+                )
+            );
             INSERT INTO `{source}`.`{output_topic}`
                 SELECT key || value FROM $input;
             )",
@@ -1252,6 +1256,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto op = ExecScript(fmt::format(R"(
             PRAGMA OrderedColumns;
             SELECT * FROM `{source}`.`{topic}` WITH (
+                STREAMING = "TRUE",
                 FORMAT = "json_each_row",
                 SCHEMA (
                     key String NOT NULL,
@@ -1260,6 +1265,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             ) LIMIT 1;
 
             SELECT * FROM `{source}`.`{topic}` WITH (
+                STREAMING = "TRUE",
                 FORMAT = "json_each_row",
                 SCHEMA (
                     value String NOT NULL,
@@ -1293,7 +1299,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto op = ExecScript(fmt::format(R"(
             PRAGMA OrderedColumns;
-            SELECT * FROM `{source}`.`{topic}` LIMIT 1;
+            SELECT * FROM `{source}`.`{topic}` WITH (STREAMING = "TRUE") LIMIT 1;
             )",
             "source"_a=pqSourceName,
             "topic"_a=topicName
@@ -1323,6 +1329,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
                 INSERT INTO `{s3_sink}`.`folder/` WITH (FORMAT = "json_each_row")
                 SELECT * FROM `{source}`.`{topic}` WITH (
+                    STREAMING = "TRUE",
                     FORMAT = "json_each_row",
                     SCHEMA = (
                         key String NOT NULL,
@@ -1368,6 +1375,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto executeQuery = [&](TScriptQuerySettings settings) {
             const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
                 $input = SELECT * FROM `{source}`.`{source_topic}` WITH (
+                    STREAMING = "TRUE",
                     FORMAT = "json_each_row",
                     SCHEMA (
                         time String,
@@ -1431,6 +1439,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
             INSERT INTO `{s3_sink}`.`folder/` WITH (FORMAT = "json_each_row")
             SELECT * FROM `{source}`.`{topic}` WITH (
+                STREAMING = "TRUE",
                 FORMAT = "json_each_row",
                 SCHEMA = (
                     key String NOT NULL,
@@ -1475,13 +1484,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const TString checkpointId = CreateGuidAsString();
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
-                $input = SELECT key, value FROM `{source}`.`{input_topic}`
-                WITH (
-                    FORMAT="json_each_row",
-                    SCHEMA=(
+                $input = SELECT key, value FROM `{source}`.`{input_topic}` WITH (
+                    STREAMING = "TRUE",
+                    FORMAT = "json_each_row",
+                    SCHEMA = (
                         key String NOT NULL,
                         value String NOT NULL
-                    ));
+                    )
+                );
                 INSERT INTO `{source}`.`{output_topic}`
                     SELECT key || value FROM $input;)",
                 "source"_a = sourceName,
@@ -1531,6 +1541,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
+                STREAMING = "TRUE",
                 FORMAT = "json_each_row",
                 SCHEMA (
                     time String,
@@ -1598,6 +1609,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
             INSERT INTO `{source}`.`{output_topic}`
             SELECT event FROM `{source}`.`{input_topic}` WITH (
+                STREAMING = "TRUE",
                 FORMAT = "json_each_row",
                 SCHEMA (
                     time String,
@@ -1712,6 +1724,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 FORMAT = json_each_row,
                 PARTITIONED_BY = key
             ) SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                STREAMING = "TRUE",
                 FORMAT = json_each_row,
                 SCHEMA (
                     data String NOT NULL,

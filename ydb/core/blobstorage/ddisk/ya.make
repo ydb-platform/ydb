@@ -5,6 +5,8 @@ LIBRARY()
         ddisk.h
         ddisk_actor.cpp
         ddisk_actor.h
+        ddisk_actor_boot.cpp
+        ddisk_actor_chunks.cpp
         ddisk_actor_connect.cpp
         ddisk_actor_persistent_buffer.cpp
         ddisk_actor_read_write.cpp

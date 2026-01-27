@@ -1,6 +1,7 @@
 #include "yql_pq_dq_integration.h"
 #include "yql_pq_helpers.h"
 #include "yql_pq_mkql_compiler.h"
+#include "yql_pq_topic_key_parser.h"
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -25,12 +26,11 @@ using namespace NNodes;
 
 namespace {
 
-class TPqDqIntegration: public TDqIntegrationBase {
+class TPqDqIntegration : public TDqIntegrationBase {
 public:
     explicit TPqDqIntegration(const TPqState::TPtr& state)
         : State_(state.Get())
-    {
-    }
+    {}
 
     ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions) {
         size_t topicPartitionsCount = 0;
@@ -223,6 +223,7 @@ public:
 
                 bool sharedReading = false;
                 bool skipErrors = false;
+                bool streamingTopicRead = State_->StreamingTopicsReadByDefault;
                 TString format;
                 size_t const settingsCount = topicSource.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
@@ -256,8 +257,12 @@ public:
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     } else if (name == SkipJsonErrors) {
                         skipErrors = FromString<bool>(Value(setting));
+                    } else if (name == StreamingTopicRead) {
+                        streamingTopicRead = FromString<bool>(Value(setting));
                     }
                 }
+
+                YQL_ENSURE(streamingTopicRead, "Finite topic reading is not supported");
 
                 for (auto prop : topic.Props()) {
                     const TStringBuf name = Name(prop);
@@ -298,7 +303,7 @@ public:
 
                 NYql::NConnector::NApi::TPredicate predicateProto;
                 auto serializedProto = topicSource.FilterPredicate().Ref().Content();
-                YQL_ENSURE (predicateProto.ParseFromString(serializedProto));
+                YQL_ENSURE(predicateProto.ParseFromString(serializedProto));
 
                 TString predicateSql = NYql::FormatPredicate(predicateProto);
                 if (sharedReading) {
@@ -428,6 +433,7 @@ public:
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
         }
 
+        bool streamingTopicReadEnabled = State_->StreamingTopicsReadByDefault;
         TMaybe<TString> watermarksLateEventsPolicy;
         TMaybe<ui64> watermarksGranularityMs;
         TMaybe<ui64> watermarksIdleTimeoutMs;
@@ -542,7 +548,19 @@ public:
                 }
 
                 watermarksIdleTimeoutMs = TDuration::MicroSeconds(out.Get<ui64>()).MilliSeconds();
+            } else if ("streaming" == settingName) {
+                if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
+                    streamingTopicReadEnabled = *parseResult;
+                    Add(props, StreamingTopicRead, ToString(*parseResult), pos, ctx);
+                } else {
+                    return {};
+                }
             }
+        }
+
+        if (!streamingTopicReadEnabled) {
+            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
+            return nullptr;
         }
 
         if (wrSettings.WatermarksMode.GetOrElse("") == "default") {

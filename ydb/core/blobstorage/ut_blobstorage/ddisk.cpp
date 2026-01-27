@@ -71,17 +71,17 @@ Y_UNIT_TEST_SUITE(DDisk) {
                     creds.TabletId = 1;
                     creds.Generation = 1;
                     {
-                        runtime->Send(new IEventHandle(serviceId, edge, new NDDisk::TEvDDiskConnect(creds)), edge.NodeId());
-                        auto res = env.WaitForEdgeActorEvent<NDDisk::TEvDDiskConnectResult>(edge, false);
-                        UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::TDDiskReplyStatus::OK);
+                        runtime->Send(new IEventHandle(serviceId, edge, new NDDisk::TEvConnect(creds)), edge.NodeId());
+                        auto res = env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(edge, false);
+                        UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                         creds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
                     }
 
                     NDDisk::TQueryCredentials pbCreds = creds;
                     {
-                        runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvDDiskConnect(pbCreds)), edge.NodeId());
-                        auto res = env.WaitForEdgeActorEvent<NDDisk::TEvDDiskConnectResult>(edge, false);
-                        UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::TDDiskReplyStatus::OK);
+                        runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvConnect(pbCreds)), edge.NodeId());
+                        auto res = env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(edge, false);
+                        UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                         pbCreds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
                     }
 
@@ -110,13 +110,13 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
                                 Cerr << "write offset# " << offset << " size# " << size << " letter# " << letter << "\n";
 
-                                std::unique_ptr<NDDisk::TEvDDiskWrite> ev(new NDDisk::TEvDDiskWrite(creds,
+                                std::unique_ptr<NDDisk::TEvWrite> ev(new NDDisk::TEvWrite(creds,
                                     {vChunkIndex, offset, size}, {0}));
                                 ev->AddPayload(TRope(std::move(update)));
                                 runtime->Send(new IEventHandle(serviceId, edge, ev.release()), edge.NodeId());
-                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvDDiskWriteResult>(edge, false);
+                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvWriteResult>(edge, false);
 
-                                UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::TDDiskReplyStatus::OK);
+                                UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                                 break;
                             }
 
@@ -128,12 +128,12 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
                                 Cerr << "read offset# " << offset << " size# " << size << "\n";
 
-                                runtime->Send(new IEventHandle(serviceId, edge, new NDDisk::TEvDDiskRead(creds,
+                                runtime->Send(new IEventHandle(serviceId, edge, new NDDisk::TEvRead(creds,
                                     {vChunkIndex, offset, size}, {true})), edge.NodeId());
-                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvDDiskReadResult>(edge, false);
+                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvReadResult>(edge, false);
 
                                 const auto& rr = res->Get()->Record;
-                                UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::TDDiskReplyStatus::OK);
+                                UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                                 UNIT_ASSERT(rr.HasReadResult());
                                 const auto& rr2 = rr.GetReadResult();
                                 UNIT_ASSERT(rr2.HasPayloadId());
@@ -145,11 +145,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
                             }
 
                             case 2: {
-                                runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvDDiskListPersistentBuffer(
+                                runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvListPersistentBuffer(
                                     pbCreds)), edge.NodeId());
-                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvDDiskListPersistentBufferResult>(edge, false);
+                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvListPersistentBufferResult>(edge, false);
                                 const auto& rr = res->Get()->Record;
-                                UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::TDDiskReplyStatus::OK);
+                                UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
 
                                 Cerr << "list\n";
 
@@ -188,12 +188,12 @@ Y_UNIT_TEST_SUITE(DDisk) {
                                 Cerr << "write persistent buffer offset# " << offset << " size# " << size << " lsn# " << lsn
                                     << " letter# " << letter << "\n";
 
-                                std::unique_ptr<NDDisk::TEvDDiskWritePersistentBuffer> ev(new NDDisk::TEvDDiskWritePersistentBuffer(
+                                std::unique_ptr<NDDisk::TEvWritePersistentBuffer> ev(new NDDisk::TEvWritePersistentBuffer(
                                     pbCreds, {vChunkIndex, offset, size}, lsn, {0}));
                                 ev->AddPayload(TRope(std::move(update)));
                                 runtime->Send(new IEventHandle(pbServiceId, edge, ev.release()), edge.NodeId());
-                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvDDiskWritePersistentBufferResult>(edge, false);
-                                UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::TDDiskReplyStatus::OK);
+                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBufferResult>(edge, false);
+                                UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                                 break;
                             }
 
@@ -213,11 +213,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
                                 Cerr << "read persistent buffer offset# " << offsetInBytes << " size# " << size
                                     << " lsn# " << lsn << "\n";
 
-                                runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvDDiskReadPersistentBuffer(
+                                runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvReadPersistentBuffer(
                                     pbCreds, {vChunkIndex, offsetInBytes, size}, lsn, {true})), edge.NodeId());
-                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvDDiskReadPersistentBufferResult>(edge, false);
+                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvReadPersistentBufferResult>(edge, false);
                                 const auto& rr = res->Get()->Record;
-                                UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::TDDiskReplyStatus::OK);
+                                UNIT_ASSERT(rr.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                                 UNIT_ASSERT(rr.HasReadResult());
                                 const auto& rr2 = rr.GetReadResult();
                                 UNIT_ASSERT(rr2.HasPayloadId());
@@ -252,11 +252,11 @@ Y_UNIT_TEST_SUITE(DDisk) {
                                 Cerr << "flush persistent buffer offset# " << offsetInBytes << " size# " << size
                                     << " lsn# " << lsn << " doCommit# " << doCommit << "\n";
 
-                                runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvDDiskFlushPersistentBuffer(
+                                runtime->Send(new IEventHandle(pbServiceId, edge, new NDDisk::TEvFlushPersistentBuffer(
                                     pbCreds, {vChunkIndex, offsetInBytes, size}, lsn, targetDDiskId, ddiskInstanceGuid)),
                                     edge.NodeId());
-                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvDDiskFlushPersistentBufferResult>(edge, false);
-                                UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::TDDiskReplyStatus::OK);
+                                auto res = env.WaitForEdgeActorEvent<NDDisk::TEvFlushPersistentBufferResult>(edge, false);
+                                UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
 
                                 persistentBuffers.erase(lsn);
 

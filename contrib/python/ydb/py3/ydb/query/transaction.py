@@ -48,7 +48,7 @@ class QueryTxStateHelper(abc.ABC):
         QueryTxStateEnum.BEGINED: [],
         QueryTxStateEnum.COMMITTED: [QueryTxStateEnum.COMMITTED, QueryTxStateEnum.ROLLBACKED],
         QueryTxStateEnum.ROLLBACKED: [QueryTxStateEnum.COMMITTED, QueryTxStateEnum.ROLLBACKED],
-        QueryTxStateEnum.DEAD: [],
+        QueryTxStateEnum.DEAD: [QueryTxStateEnum.ROLLBACKED],
     }
 
     @classmethod

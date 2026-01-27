@@ -49,15 +49,14 @@ class WorkloadFulltextIndex(WorkloadBase):
         self.client.query(drop_index_sql, True)
 
     def _create_index(
-        self, index_name, table_path, layout='flat', tokenizer='standard'
+        self, index_name, table_path, index_type, tokenizer='standard'
     ):
-        logger.info(f"""Creating index layout={layout}, tokenizer={tokenizer}""")
+        logger.info(f"""Creating index index_type={index_type}, tokenizer={tokenizer}""")
         create_index_sql = f"""
             ALTER TABLE `{table_path}`
-            ADD INDEX `{index_name}` GLOBAL USING fulltext
+            ADD INDEX `{index_name}` GLOBAL USING {index_type}
             ON (text)
             WITH (
-                layout={layout},
                 tokenizer={tokenizer},
                 use_filter_lowercase=true,
                 use_filter_snowball=true,
@@ -158,16 +157,16 @@ class WorkloadFulltextIndex(WorkloadBase):
             return
         raise Exception("Error getting index status")
 
-    def _check_loop(self, table_path, layout='flat', tokenizer='standard', utf8=False):
+    def _check_loop(self, table_path, index_type, tokenizer='standard', utf8=False):
         if utf8:
             texttype = "Utf8"
         else:
             texttype = "String"
-        index_name = f"{self.index_name_prefix}_{texttype}_{layout}_{tokenizer}"
+        index_name = f"{self.index_name_prefix}_{texttype}_{index_type}_{tokenizer}"
         self._create_index(
             table_path=table_path,
             index_name=index_name,
-            layout=layout,
+            index_type=index_type,
             tokenizer=tokenizer,
         )
         self._wait_index_ready(
@@ -185,7 +184,7 @@ class WorkloadFulltextIndex(WorkloadBase):
             )
         if n == 0:
             raise Exception(f"No rows selected with {self.query_count} contains queries")
-        if layout == 'flat_relevance':
+        if index_type == 'fulltext_relevance':
             n = 0
             for i in range(0, self.query_count):
                 # select from index with Fulltext::Relevance
@@ -221,7 +220,7 @@ class WorkloadFulltextIndex(WorkloadBase):
             self._create_index(
                 index_name=index_name+'Rename',
                 table_path=table_path,
-                layout=layout,
+                index_type=index_type,
                 tokenizer=tokenizer,
             )
             self.client.replace_index(table_path, index_name+'Rename', index_name)
@@ -236,14 +235,14 @@ class WorkloadFulltextIndex(WorkloadBase):
         self._create_table(utf8_table, 1)
 
         utf8_opts = [0, 1]
-        layout_opts = ['flat', 'flat_relevance']
+        index_type_opts = ['fulltext_plain', 'fulltext_relevance']
         tokenizer_opts = ['standard', 'whitespace']
-        opts = list(product(utf8_opts, layout_opts, tokenizer_opts))
+        opts = list(product(utf8_opts, index_type_opts, tokenizer_opts))
         random.shuffle(opts)
         opt_iter = cycle(opts)
 
         while not self.is_stop_requested():
-            [utf8, layout, tokenizer] = next(opt_iter)
+            [utf8, index_type, tokenizer] = next(opt_iter)
             try:
                 self._upsert_values(
                     table_path=tables[utf8],
@@ -253,7 +252,7 @@ class WorkloadFulltextIndex(WorkloadBase):
                 )
                 self._check_loop(
                     table_path=tables[utf8],
-                    layout=layout,
+                    index_type=index_type,
                     tokenizer=tokenizer,
                     utf8=utf8,
                 )

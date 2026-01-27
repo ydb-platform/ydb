@@ -558,14 +558,36 @@ bool TInlineScalarSubplanRule::MatchAndApply(std::shared_ptr<IOperator> &input, 
         auto conjInfo = filter->GetConjunctInfo(props);
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
 
+        TVector<TMapElement> mappings;
+        mappings.push_back(TMapElement(subplanResIU, subplanResIU));
+
+        auto leftIUs = child->GetOutputIUs();
+        bool conflictsWithLeft = false;
+
         for (const auto & cj : conjInfo.JoinConditions) {
-            if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.LeftIU) != addDeps->Dependencies.end()) {
-                joinKeys.push_back(std::make_pair(cj.LeftIU, cj.RightIU));
-            } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), cj.RightIU) != addDeps->Dependencies.end()) {
-                joinKeys.push_back(std::make_pair(cj.RightIU, cj.LeftIU));
-            } else {
+            TInfoUnit leftKey = cj.LeftIU;
+            TInfoUnit rightKey = cj.RightIU;
+
+            if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), rightKey) != addDeps->Dependencies.end()) {
+                std::swap(leftKey, rightKey);
+            } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), leftKey) == addDeps->Dependencies.end()) {
                 Y_ENSURE(false, "Correlated filter missing join condition");
-            }   
+            }
+
+            if (std::find(leftIUs.begin(), leftIUs.end(), rightKey) != leftIUs.end()) {
+                auto newKey = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), false);
+                mappings.push_back(TMapElement(newKey, rightKey));
+                rightKey = newKey;
+                conflictsWithLeft = true;
+            } else {
+                mappings.push_back(TMapElement(rightKey, rightKey));
+            }
+
+            joinKeys.push_back(std::make_pair(leftKey, rightKey));
+        }
+
+        if (conflictsWithLeft) {
+            uncorrSubplan = std::make_shared<TOpMap>(uncorrSubplan, uncorrSubplan->Pos, mappings, true);
         }
 
         auto leftJoin = std::make_shared<TOpJoin>(child, uncorrSubplan, subplan->Pos, "Left", joinKeys);
@@ -810,22 +832,16 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndApply(const std::shared_p
         return input;
     }
 
-    // Don't handle renames at this point, just expressions that acutally compute something
-    for (const auto &mapElement : map->MapElements) {
-        if (!mapElement.IsExpression()) {
-            return input;
-        }
-    }
-
     if (map->GetInput()->Kind != EOperator::Join) {
         return input;
     }
 
     auto join = CastOperator<TOpJoin>(map->GetInput());
-    bool canPushRight = join->JoinKind != "Left" && join->JoinKind != "LeftOnly";
-    bool canPushLeft = join->JoinKind != "Right" && join->JoinKind != "RightOnly";
+    bool canPushRight = join->JoinKind != "Left" && join->JoinKind != "LeftOnly" && join->JoinKind != "LeftSemi";
+    bool canPushLeft = join->JoinKind != "Right" && join->JoinKind != "RightOnly" && join->JoinKind != "RightSemi";
 
     // Make sure the join and its inputs are single consumer
+    // FIXME: join inputs don't have to be single consumer, but this used to break due to mutliple consumer problem
     if (!join->IsSingleConsumer() || !join->GetLeftInput()->IsSingleConsumer() || !join->GetRightInput()->IsSingleConsumer()) {
         return input;
     }
@@ -836,11 +852,8 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleMatchAndApply(const std::shared_p
     TVector<int> removeElements;
 
     for (size_t i = 0; i < map->MapElements.size(); i++) {
-        auto mapElement = map->MapElements[i];
-
-        TVector<TInfoUnit> mapElIUs;
-        auto expression = mapElement.GetExpression();
-        GetAllMembers(expression, mapElIUs, props, false, true);
+        const auto & mapElement = map->MapElements[i];
+        auto mapElIUs = mapElement.InputIUs();
 
         if (!IUSetDiff(mapElIUs, join->GetLeftInput()->GetOutputIUs()).size() && canPushLeft) {
             leftMapElements.push_back(mapElement);
@@ -897,8 +910,70 @@ std::shared_ptr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndApply(const std
     return sort;
 }
 
+std::shared_ptr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+
+    Y_UNUSED(ctx);
+
+    if (input->Kind != EOperator::Filter) {
+        return input;
+    }
+
+    auto filter = CastOperator<TOpFilter>(input);
+    if (filter->GetInput()->Kind != EOperator::Map) {
+        return input;
+    }
+
+    auto map = CastOperator<TOpMap>(filter->GetInput());
+
+    if (map->Project) {
+        return input;
+    }
+
+    auto conjInfo = filter->GetConjunctInfo(props);
+    TVector<TFilterInfo> pushedFilters;
+    TVector<TJoinConditionInfo> pushedJoinConds;
+    TVector<TFilterInfo> remainingFilters;
+    TVector<TJoinConditionInfo> remainingJoinConds;
+
+    TVector<TInfoUnit> newMapColumns;
+    for (const auto & mapEl : map->MapElements) {
+        newMapColumns.push_back(mapEl.GetElementName());
+    }
+
+    for (const auto & f : conjInfo.Filters) {
+        if (IUSetIntersect(f.FilterIUs, newMapColumns).empty()){
+            pushedFilters.push_back(f);
+        } else {
+            remainingFilters.push_back(f);
+        }
+    }
+
+    for (const auto & jc : conjInfo.JoinConditions) {
+        if (IUSetIntersect({jc.LeftIU, jc.RightIU}, newMapColumns).empty()) {
+            pushedJoinConds.push_back(jc);
+        } else {
+            remainingJoinConds.push_back(jc);
+        }
+    }
+
+    if (pushedFilters.empty() && pushedJoinConds.empty()) {
+        return input;
+    }
+
+    filter->SetInput(map->GetInput());
+    filter->FilterLambda = BuildFilterLambdaFromConjuncts(filter->Pos, pushedFilters, pushedJoinConds, ctx.ExprCtx, props.PgSyntax);
+    map->SetInput(filter);
+
+    if (remainingFilters.size() || remainingJoinConds.size()) {
+        auto newFilterLambda = BuildFilterLambdaFromConjuncts(filter->Pos, remainingFilters, remainingJoinConds, ctx.ExprCtx, props.PgSyntax);
+        return std::make_shared<TOpFilter>(map, map->Pos, newFilterLambda);
+    } else {
+        return map;
+    }
+}
+
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
-std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+std::shared_ptr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     Y_UNUSED(props);
 
@@ -915,8 +990,10 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
     auto join = CastOperator<TOpJoin>(filter->GetInput());
 
     // Make sure the join and its inputs are single consumer
-    if (!join->IsSingleConsumer() || !join->GetLeftInput()->IsSingleConsumer() || !join->GetRightInput()->IsSingleConsumer()) {
+    if (!join->IsSingleConsumer()) {
+        YQL_CLOG(TRACE, CoreDq) << "Multiple consumers in push filter rule";
         return input;
+        
     }
 
     if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left") {
@@ -940,9 +1017,9 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
     TVector<std::pair<TInfoUnit, TInfoUnit>> joinConditions;
 
     for (const auto& filter : conjunctInfo.Filters) {
-        if (!IUSetDiff(filter.FilterIUs, leftIUs).size()) {
+        if (IUSetDiff(filter.FilterIUs, leftIUs).empty()) {
             pushLeft.push_back(filter);
-        } else if (!IUSetDiff(filter.FilterIUs, rightIUs).size()) {
+        } else if (IUSetDiff(filter.FilterIUs, rightIUs).empty()) {
             pushRight.push_back(filter);
         } else {
             topLevelPreds.push_back(filter);
@@ -950,13 +1027,13 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
     }
 
     for (const auto& condition : conjunctInfo.JoinConditions) {
-        if (!IUSetDiff({condition.LeftIU}, leftIUs).size() && !IUSetDiff({condition.RightIU}, rightIUs).size()) {
+        if (IUSetDiff({condition.LeftIU}, leftIUs).empty() && IUSetDiff({condition.RightIU}, rightIUs).empty()) {
             joinConditions.push_back(std::make_pair(condition.LeftIU, condition.RightIU));
-        } else if (!IUSetDiff({condition.LeftIU}, rightIUs).size() && !IUSetDiff({condition.RightIU}, leftIUs).size()) {
+        } else if (IUSetDiff({condition.LeftIU}, rightIUs).empty() && IUSetDiff({condition.RightIU}, leftIUs).empty()) {
             joinConditions.push_back(std::make_pair(condition.RightIU, condition.LeftIU));
         } else {
             TVector<TInfoUnit> vars{condition.LeftIU, condition.RightIU};
-            if (!IUSetDiff(vars, leftIUs).size()) {
+            if (IUSetDiff(vars, leftIUs).empty()) {
                 pushLeft.push_back(TFilterInfo(condition.ConjunctExpr, vars));
             } else {
                 pushRight.push_back(TFilterInfo(condition.ConjunctExpr, vars));
@@ -992,7 +1069,7 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleMatchAndApply(const std::share
                 auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, {}, ctx.ExprCtx, props.PgSyntax);
                 rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
                 join->JoinKind = "Inner";
-            } else {
+            } else if (!pushLeft.size()) {
                 return input;
             }
         } else {

@@ -3,8 +3,9 @@ LIBRARY()
 SRCS(
     actor.cpp
     change_message_visibility.cpp
-    error.cpp
     delete_message.cpp
+    error.cpp
+    list_queues.cpp
     receipt.cpp
     receive_message.cpp
     send_message.cpp

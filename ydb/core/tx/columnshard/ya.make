@@ -98,6 +98,7 @@ RECURSE(
     engines
     splitter
     tools/visualize_portions
+    tools/memory_tests
 )
 
 RECURSE_FOR_TESTS(

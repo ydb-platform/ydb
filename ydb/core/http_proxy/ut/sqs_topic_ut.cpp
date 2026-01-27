@@ -28,10 +28,18 @@ namespace {
     using NYdb::TDriver;
     using NYdb::NTopic::TTopicClient;
 
-    TString GetPathFromQueueUrlMap(const NJson::TJsonMap& json) {
-        TString url = GetByPath<TString>(json, "QueueUrl");
+    TString GetPathFromFullQueueUrl(const TString& url) {
         auto [host, path] = NUrl::SplitUrlToHostAndPath(url);
         return ToString(path);
+    }
+
+    TString GetPathFromFullQueueUrl(const NJson::TJsonValue& url) {
+        return GetPathFromFullQueueUrl(url.GetStringSafe());
+    }
+
+    TString GetPathFromQueueUrlMap(const NJson::TJsonMap& json) {
+        TString url = GetByPath<TString>(json, "QueueUrl");
+        return GetPathFromFullQueueUrl(url);
     }
 
     NYdb::TDriverConfig MakeDriverConfig(TFixture& fixture) {
@@ -180,6 +188,66 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"QueueName", requestQueueName},
             });
             UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetPathFromQueueUrlMap(json));
+        }
+
+        Y_UNIT_TEST_F(TestListQueues, TFixture) {
+            NJson::TJsonMap json;
+            json = ListQueues({});
+            UNIT_ASSERT(json["QueueUrls"].GetArray().empty());
+
+            const size_t numOfExampleQueues = 5;
+            {
+                auto driver = MakeDriver(*this);
+                TVector<TString> queueUrls;
+                for (size_t i = 0; i < numOfExampleQueues; ++i) {
+                    Y_ENSURE(CreateTopic(driver, std::format("ExampleQueue-{}", i), "mlp-consumer"));
+                }
+
+                bool multiConsumerTopic = CreateTopic(driver, "AnotherQueue", NYdb::NTopic::TCreateTopicSettings()
+                    .BeginAddConsumer("regular-consumer").EndAddConsumer()
+                    .BeginAddSharedConsumer("ydb-sqs-consumer")
+                        .KeepMessagesOrder(false)
+                        .DefaultProcessingTimeout(TDuration::Seconds(20))
+                    .EndAddConsumer()
+                    .BeginAddSharedConsumer("ydb-sqs-consumer-2")
+                        .KeepMessagesOrder(false)
+                        .DefaultProcessingTimeout(TDuration::Seconds(20))
+                    .EndAddConsumer());
+                Y_ENSURE(multiConsumerTopic);
+
+                bool regularTopic = CreateTopic(driver, "RegularTopic", NYdb::NTopic::TCreateTopicSettings()
+                    .BeginAddConsumer("regular-consumer").EndAddConsumer());
+                Y_ENSURE(regularTopic);
+            }
+            json = ListQueues({});
+            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues + 2);
+
+            json = ListQueues({{"QueueNamePrefix", ""}});
+            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues + 2);
+
+            json = ListQueues({{"QueueNamePrefix", "BadPrefix"}});
+            UNIT_ASSERT(json["QueueUrls"].GetArray().empty());
+
+            json = ListQueues({{"QueueNamePrefix", "Another"}});
+            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(GetPathFromFullQueueUrl(json["QueueUrls"][0]), "/v1/5//Root/12/AnotherQueue/16/ydb-sqs-consumer");
+            UNIT_ASSERT_VALUES_EQUAL(GetPathFromFullQueueUrl(json["QueueUrls"][1]), "/v1/5//Root/12/AnotherQueue/18/ydb-sqs-consumer-2");
+
+            json = ListQueues({{"QueueNamePrefix", "Ex"}});
+            UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), numOfExampleQueues);
+            UNIT_ASSERT_VALUES_EQUAL(GetPathFromFullQueueUrl(json["QueueUrls"][0]), "/v1/5//Root/14/ExampleQueue-0/12/mlp-consumer");
+
+            {
+                json = ListQueues({{"MaxResults", 1}});
+                UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), 1);
+                UNIT_ASSERT(json.Has("NextToken"));
+                TString queueUrl1 = GetPathFromFullQueueUrl(json["QueueUrls"][0]);
+                json = ListQueues({{"MaxResults", 1}, {"NextToken", json["NextToken"].GetString()}});
+                UNIT_ASSERT_VALUES_EQUAL(json["QueueUrls"].GetArray().size(), 1);
+                UNIT_ASSERT(json.Has("NextToken"));
+                TString queueUrl2 = GetPathFromFullQueueUrl(json["QueueUrls"][0]);
+                UNIT_ASSERT_VALUES_UNEQUAL(queueUrl1, queueUrl2);
+            }
         }
 
         struct TSqsTopicPaths {

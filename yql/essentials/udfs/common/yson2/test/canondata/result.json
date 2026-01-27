@@ -119,6 +119,26 @@
             "uri": "file://test.test_IsType_/results.txt"
         }
     ],
+    "test.test[IterateAttrs]": [
+        {
+            "uri": "file://test.test_IterateAttrs_/results.txt"
+        }
+    ],
+    "test.test[IterateList]": [
+        {
+            "uri": "file://test.test_IterateList_/results.txt"
+        }
+    ],
+    "test.test[IterateMap]": [
+        {
+            "uri": "file://test.test_IterateMap_/results.txt"
+        }
+    ],
+    "test.test[IterateScalars]": [
+        {
+            "uri": "file://test.test_IterateScalars_/results.txt"
+        }
+    ],
     "test.test[JsonSerializeSkipMapEntity]": [
         {
             "uri": "file://test.test_JsonSerializeSkipMapEntity_/results.txt"

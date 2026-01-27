@@ -191,19 +191,6 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& pr
     }
 }
 
-TInfoUnit::TInfoUnit(const TString& name, bool subplanContext) : SubplanContext(subplanContext) {
-    if (auto idx = name.find('.'); idx != TString::npos) {
-        Alias = name.substr(0, idx);
-        if (Alias.StartsWith("_alias_")) {
-            Alias = Alias.substr(7);
-        }
-        ColumnName = name.substr(idx + 1);
-    } else {
-        Alias = "";
-        ColumnName = name;
-    }
-}
-
 template <typename DqConnectionType>
 TExprNode::TPtr TConnection::BuildConnectionImpl(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) {
     if (FromSourceStageStorageType == NYql::EStorageType::RowStorage) {
@@ -1273,7 +1260,21 @@ TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) 
     TVector<TInfoUnit> res;
     for (const auto& unit : left) {
         if (std::find(right.begin(), right.end(), unit) == right.end()) {
-            res.push_back(unit);
+            if (std::find(res.begin(), res.end(), unit) == res.end()) {
+                res.push_back(unit);
+            }
+        }
+    }
+    return res;
+}
+
+TVector<TInfoUnit> IUSetIntersect(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
+    TVector<TInfoUnit> res;
+    for (const auto& unit : left) {
+        if (std::find(right.begin(), right.end(), unit) != right.end()) {
+            if (std::find(res.begin(), res.end(), unit) == res.end()) {
+                res.push_back(unit);
+            }
         }
     }
     return res;

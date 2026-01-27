@@ -1265,4 +1265,35 @@ void CmdRunCompaction(const ui32 partition,
     CmdRunCompaction(*tc.Runtime, tc.TabletId, tc.Edge, partition);
 }
 
+void CmdRenameKey(TTestActorRuntime& runtime,
+                  ui64 tabletId,
+                  const TActorId& sender,
+                  const TString& oldKey,
+                  const TString& newKey)
+{
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    auto* rename = request->Record.AddCmdRename();
+    rename->SetOldKey(oldKey);
+    rename->SetNewKey(newKey);
+
+    runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+    auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(TDuration::Seconds(2));
+    UNIT_ASSERT(response);
+
+    UNIT_ASSERT(response->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+    UNIT_ASSERT(response->Record.RenameResultSize() >= 1);
+    UNIT_ASSERT(response->Record.GetRenameResult(0).HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetRenameResult(0).GetStatus(), 0); // NKikimrProto::EReplyStatus::OK
+}
+
+void CmdRenameKey(const TString& oldKey,
+                  const TString& newKey,
+                  TTestContext& tc)
+{
+    CmdRenameKey(*tc.Runtime, tc.TabletId, tc.Edge,
+                 oldKey, newKey);
+}
+
 } // namespace NKikimr::NPQ

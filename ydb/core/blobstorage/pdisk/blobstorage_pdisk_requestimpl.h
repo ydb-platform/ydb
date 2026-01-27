@@ -1300,5 +1300,47 @@ public:
     }
 };
 
+class TChunkReadRaw : public TRequestBase {
+public:
+    TChunkIdx ChunkIdx;
+    ui32 Offset;
+    ui32 Size;
+
+public:
+    TChunkReadRaw(const NPDisk::TEvChunkReadRaw& ev, const TActorId& sender, ui64 cookie, TAtomicBase reqIdx, NWilson::TSpan span)
+        : TRequestBase(sender, TReqId(TReqId::ChunkReadRaw, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other, std::move(span))
+        , ChunkIdx(ev.ChunkIdx)
+        , Offset(ev.Offset)
+        , Size(ev.Size)
+    {
+        SetCookie(cookie);
+    }
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkReadRaw;
+    }
+};
+
+class TChunkWriteRaw : public TRequestBase {
+public:
+    TChunkIdx ChunkIdx;
+    ui32 Offset;
+    TRope Data;
+
+public:
+    TChunkWriteRaw(NPDisk::TEvChunkWriteRaw& ev, const TActorId& sender, ui64 cookie, TAtomicBase reqIdx, NWilson::TSpan span)
+        : TRequestBase(sender, TReqId(TReqId::ChunkWriteRaw, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other, std::move(span))
+        , ChunkIdx(ev.ChunkIdx)
+        , Offset(ev.Offset)
+        , Data(std::move(ev.Data))
+    {
+        SetCookie(cookie);
+    }
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkWriteRaw;
+    }
+};
+
 } // NPDisk
 } // NKikimr

@@ -254,10 +254,13 @@ private:
         TEventsWorker(TKeyedWriteSession* session, std::shared_ptr<TSessionsWorker> sessionsWorker, std::shared_ptr<TMessagesWorker> messagesWorker);
         
         void DoWork();
-        TSessionClosedEvent GetCloseEvent();
         NThreading::TFuture<void> Wait();
+        NThreading::TFuture<void> WaitEvent();
         void UnsubscribeFromPartition(ui64 partition);
         void SubscribeToPartition(ui64 partition);
+        void HandleNewMessage();
+        std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block);
+        std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount = std::nullopt);
 
     private:
         void HandleSessionClosedEvent(TSessionClosedEvent&& event, ui64 partition);
@@ -265,6 +268,8 @@ private:
         void HandleAcksEvent(ui64 partition, TWriteSessionEvent::TAcksEvent&& event);
         void RunEventLoop(WrappedWriteSessionPtr wrappedSession, ui64 partition);
         void TransferEventsToOutputQueue();
+        void AddReadyToAcceptEvent();
+        void AddSessionClosedEvent();
 
         TKeyedWriteSession* Session;
         std::weak_ptr<TSessionsWorker> SessionsWorker;
@@ -273,10 +278,13 @@ private:
         std::vector<NThreading::TFuture<void>> Futures;
         std::unordered_set<size_t> ReadyFutures;
         std::unordered_map<ui64, std::list<TWriteSessionEvent::TEvent>> PartitionsEventQueues;
+        std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
         std::mutex Lock;
     
         NThreading::TFuture<void> NotReadyFuture;
         NThreading::TPromise<void> NotReadyPromise;
+        NThreading::TPromise<void> EventsPromise;
+        NThreading::TFuture<void> EventsFuture;
 
         std::optional<TSessionClosedEvent> CloseEvent;
     };
@@ -309,17 +317,11 @@ private:
 
     static void* RunMainWorkerThread(void* arg);
 
-    void AddReadyToAcceptEvent();
-
-    void AddSessionClosedEvent();
-
     void NonBlockingClose();
 
     void SetCloseDeadline(const TDuration& closeTimeout);
 
     TDuration GetCloseTimeout();
-
-    void WaitSomeAction(std::unique_lock<std::mutex>& lock);
 
     std::string GetProducerId(ui64 partition);
 
@@ -366,12 +368,9 @@ private:
     std::map<std::string, ui64> PartitionsIndex;
 
     TKeyedWriteSessionSettings Settings;
-    std::list<TWriteSessionEvent::TEvent> EventsOutputQueue;
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;
-    NThreading::TPromise<void> EventsProcessedPromise;
-    NThreading::TFuture<void> EventsProcessedFuture;
 
     std::mutex GlobalLock;
     std::atomic_bool Closed = false;

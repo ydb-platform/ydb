@@ -1183,7 +1183,7 @@
         "type": "prometheus",
         "uid": "${ds}"
       },
-      "description": "The maximum (across all partitions) difference between the current time and the recording time of the last recorded message",
+      "description": "The maximum (across all partitions) difference between the current time and the write time of the last written message",
       "fieldConfig": {
         "defaults": {
           "color": {

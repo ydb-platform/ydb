@@ -6,7 +6,7 @@
 
 namespace NKikimr::NDDisk {
 
-    void TDDiskActor::Handle(TEvDDiskWritePersistentBuffer::TPtr ev) {
+    void TDDiskActor::Handle(TEvWritePersistentBuffer::TPtr ev) {
         if (!CheckQuery(*ev)) {
             return;
         }
@@ -36,10 +36,10 @@ namespace NKikimr::NDDisk {
             Y_ABORT_UNLESS(pr.Data == data);
         }
 
-        SendReply(*ev, std::make_unique<TEvDDiskWritePersistentBufferResult>(NKikimrBlobStorage::TDDiskReplyStatus::OK));
+        SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
     }
 
-    void TDDiskActor::Handle(TEvDDiskReadPersistentBuffer::TPtr ev) {
+    void TDDiskActor::Handle(TEvReadPersistentBuffer::TPtr ev) {
         if (!CheckQuery(*ev)) {
             return;
         }
@@ -50,27 +50,27 @@ namespace NKikimr::NDDisk {
 
         const auto it = PersistentBuffers.find({creds.TabletId, selector.VChunkIndex});
         if (it == PersistentBuffers.end()) {
-            SendReply(*ev, std::make_unique<TEvDDiskReadPersistentBufferResult>(
-                NKikimrBlobStorage::TDDiskReplyStatus::MISSING_RECORD));
+            SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
             return;
         }
         const TPersistentBuffer& buffer = it->second;
 
         const auto jt = buffer.Records.find(record.GetLsn());
         if (jt == buffer.Records.end()) {
-            SendReply(*ev, std::make_unique<TEvDDiskReadPersistentBufferResult>(
-                NKikimrBlobStorage::TDDiskReplyStatus::MISSING_RECORD));
+            SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
             return;
         }
         const TPersistentBuffer::TRecord& pr = jt->second;
         Y_ABORT_UNLESS(pr.OffsetInBytes == selector.OffsetInBytes);
         Y_ABORT_UNLESS(pr.Size == selector.Size);
 
-        SendReply(*ev, std::make_unique<TEvDDiskReadPersistentBufferResult>(NKikimrBlobStorage::TDDiskReplyStatus::OK,
+        SendReply(*ev, std::make_unique<TEvReadPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK,
             std::nullopt, pr.Data));
     }
 
-    void TDDiskActor::Handle(TEvDDiskFlushPersistentBuffer::TPtr ev) {
+    void TDDiskActor::Handle(TEvFlushPersistentBuffer::TPtr ev) {
         if (!CheckQuery(*ev)) {
             return;
         }
@@ -81,16 +81,16 @@ namespace NKikimr::NDDisk {
 
         const auto it = PersistentBuffers.find({creds.TabletId, selector.VChunkIndex});
         if (it == PersistentBuffers.end()) {
-            SendReply(*ev, std::make_unique<TEvDDiskFlushPersistentBufferResult>(
-                NKikimrBlobStorage::TDDiskReplyStatus::MISSING_RECORD));
+            SendReply(*ev, std::make_unique<TEvFlushPersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
             return;
         }
         TPersistentBuffer& buffer = it->second;
 
         const auto jt = buffer.Records.find(record.GetLsn());
         if (jt == buffer.Records.end()) {
-            SendReply(*ev, std::make_unique<TEvDDiskFlushPersistentBufferResult>(
-                NKikimrBlobStorage::TDDiskReplyStatus::MISSING_RECORD));
+            SendReply(*ev, std::make_unique<TEvFlushPersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::MISSING_RECORD));
             return;
         }
         TPersistentBuffer::TRecord& pr = jt->second;
@@ -106,7 +106,7 @@ namespace NKikimr::NDDisk {
         if (record.HasDDiskId()) {
             Y_DEBUG_ABORT_UNLESS(record.HasDDiskInstanceGuid());
 
-            auto query = std::make_unique<TEvDDiskWrite>(TQueryCredentials(creds.TabletId, creds.Generation,
+            auto query = std::make_unique<TEvWrite>(TQueryCredentials(creds.TabletId, creds.Generation,
                 record.GetDDiskInstanceGuid(), true), selector, TWriteInstruction(0));
             query->AddPayload(std::move(data));
 
@@ -116,15 +116,15 @@ namespace NKikimr::NDDisk {
             Send(MakeBlobStorageDDiskId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId()),
                 query.release(), IEventHandle::FlagTrackDelivery, cookie);
         } else {
-            SendReply(*ev, std::make_unique<TEvDDiskFlushPersistentBufferResult>(NKikimrBlobStorage::TDDiskReplyStatus::OK));
+            SendReply(*ev, std::make_unique<TEvFlushPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK));
         }
     }
 
-    void TDDiskActor::Handle(TEvDDiskWriteResult::TPtr ev) {
+    void TDDiskActor::Handle(TEvWriteResult::TPtr ev) {
         HandleWriteInFlight(ev->Cookie, [&] {
             const auto& record = ev->Get()->Record;
 
-            auto reply = std::make_unique<TEvDDiskFlushPersistentBufferResult>();
+            auto reply = std::make_unique<TEvFlushPersistentBufferResult>();
             auto& rr = reply->Record;
 
             rr.SetStatus(record.GetStatus());
@@ -137,15 +137,15 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
-        if (ev->Get()->SourceType == TEv::EvDDiskWrite) {
+        if (ev->Get()->SourceType == TEv::EvWrite) {
             HandleWriteInFlight(ev->Cookie, [&] {
-                return std::make_unique<TEvDDiskFlushPersistentBufferResult>(NKikimrBlobStorage::TDDiskReplyStatus::ERROR,
+                return std::make_unique<TEvFlushPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
                     "write undelivered");
             });
         }
     }
 
-    void TDDiskActor::Handle(TEvDDiskListPersistentBuffer::TPtr ev) {
+    void TDDiskActor::Handle(TEvListPersistentBuffer::TPtr ev) {
         if (!CheckQuery(*ev)) {
             return;
         }
@@ -153,7 +153,7 @@ namespace NKikimr::NDDisk {
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
 
-        auto reply = std::make_unique<TEvDDiskListPersistentBufferResult>(NKikimrBlobStorage::TDDiskReplyStatus::OK);
+        auto reply = std::make_unique<TEvListPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
         auto& rr = reply->Record;
 
         for (auto it = PersistentBuffers.lower_bound({creds.TabletId, 0}); it != PersistentBuffers.end() &&

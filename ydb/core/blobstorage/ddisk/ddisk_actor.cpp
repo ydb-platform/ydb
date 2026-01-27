@@ -28,16 +28,16 @@ namespace NKikimr::NDDisk {
         };
 
         STRICT_STFUNC_BODY(
-            hFunc(TEvDDiskConnect, handleQuery)
-            hFunc(TEvDDiskDisconnect, handleQuery)
-            hFunc(TEvDDiskWrite, handleQuery)
-            hFunc(TEvDDiskRead, handleQuery)
-            hFunc(TEvDDiskWritePersistentBuffer, handleQuery)
-            hFunc(TEvDDiskReadPersistentBuffer, handleQuery)
-            hFunc(TEvDDiskFlushPersistentBuffer, handleQuery)
-            hFunc(TEvDDiskListPersistentBuffer, handleQuery)
+            hFunc(TEvConnect, handleQuery)
+            hFunc(TEvDisconnect, handleQuery)
+            hFunc(TEvWrite, handleQuery)
+            hFunc(TEvRead, handleQuery)
+            hFunc(TEvWritePersistentBuffer, handleQuery)
+            hFunc(TEvReadPersistentBuffer, handleQuery)
+            hFunc(TEvFlushPersistentBuffer, handleQuery)
+            hFunc(TEvListPersistentBuffer, handleQuery)
 
-            hFunc(TEvDDiskWriteResult, Handle)
+            hFunc(TEvWriteResult, Handle)
             hFunc(TEvents::TEvUndelivered, Handle)
 
             hFunc(NPDisk::TEvYardInitResult, Handle)
@@ -47,8 +47,8 @@ namespace NKikimr::NDDisk {
             hFunc(NPDisk::TEvLogResult, Handle)
             hFunc(TEvPrivate::TEvHandleEventForChunk, Handle)
             hFunc(NPDisk::TEvCutLog, Handle)
-            hFunc(NPDisk::TEvChunkWriteResult, Handle)
-            hFunc(NPDisk::TEvChunkReadResult, Handle)
+            hFunc(NPDisk::TEvChunkWriteRawResult, Handle)
+            hFunc(NPDisk::TEvChunkReadRawResult, Handle)
 
             cFunc(TEvents::TSystem::Poison, PassAway)
         )

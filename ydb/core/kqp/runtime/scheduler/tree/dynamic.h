@@ -50,7 +50,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
     class TQuery : public TTreeElement, public NHdrf::TQuery<ETreeType::DYNAMIC>, public TSnapshotSwitch<NSnapshot::TQueryPtr>, public std::enable_shared_from_this<TQuery> {
     public:
         // TODO: pass delay params directly to actors from table_service_config
-        TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStaticAttributes& attrs = {});
+        TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMinFairShare, const TStaticAttributes& attrs = {});
 
         NSnapshot::TQuery* TakeSnapshot() override;
 
@@ -65,6 +65,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         NMonitoring::THistogramPtr Delay; // TODO: hacky counter for delays from queries - initialize from pool
         const TDelayParams* const DelayParams; // owned by scheduler
+
+        const bool AllowMinFairShare; // tasks should look at this in case of missing snapshot
 
     private:
         // used to calculate adjusted satisfaction between snapshots

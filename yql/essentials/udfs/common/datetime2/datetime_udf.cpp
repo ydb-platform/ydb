@@ -713,7 +713,6 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
         return false;
     }
 
-<<<<<<< HEAD
     inline bool ValidateMonthFullName(const std::string_view& monthName, ui8& month) {
         static constexpr auto cmp = [](const std::string_view& a, const std::string_view& b) {
             int cmp = strnicmp(a.data(), b.data(), std::min(a.size(), b.size()));
@@ -742,19 +741,6 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
         }
         return false;
     }
-=======
-        const auto typeId = TDataType<TUserDataType>::Id;
-        const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(typeId)).Features;
-
-        builder.UserType(userType);
-
-        // FIXME: Kernels for the extended date type are NYI.
-        if (!(features & NUdf::ExtDateType)) {
-            builder.SupportsBlocks();
-        }
-
-        builder.IsStrict();
->>>>>>> eda42013599 (YQL-20876: Fix DateTime::Split signature)
 
     template<typename TType>
     inline bool Validate(typename TDataType<TType>::TLayout arg);
@@ -835,8 +821,16 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
             }
             auto argType = argsTuple.GetElementType(0);
 
+            const auto typeId = TDataType<TUserDataType>::Id;
+            const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(typeId)).Features;
+
             builder.UserType(userType);
-            builder.SupportsBlocks();
+
+            // FIXME: Kernels for the extended date type are NYI.
+            if (!(features & NUdf::ExtDateType)) {
+                builder.SupportsBlocks();
+            }
+
             builder.IsStrict();
 
             TBlockTypeInspector block(*typeInfoHelper, argType);

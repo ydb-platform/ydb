@@ -425,7 +425,7 @@ public:
                 // it means that a restart has occurred and all parts have started being written again
                 // so we can simply create a new session.
                 if (partNumber != 1) {
-                    TString errorMsg = TStringBuilder()
+                    const TString errorMsg = TStringBuilder()
                         << "Cannot create new upload session for part " << partNumber
                         << " (uploadId: " << uploadId << "). Session must start with part 1.";
                     FS_LOG_E("UploadPart: " << errorMsg);

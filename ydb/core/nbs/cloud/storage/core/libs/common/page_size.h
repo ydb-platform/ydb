@@ -1,0 +1,11 @@
+#pragma once
+
+#include <cstddef>
+
+namespace NCloud {
+
+////////////////////////////////////////////////////////////////////////////////
+
+size_t GetPlatformPageSize();
+
+}   // namespace NCloud

@@ -150,6 +150,24 @@ bool CreateConsistentCopyTables(
 
         TPath srcPath = TPath::Resolve(srcStr, context.SS);
 
+        if (srcPath.Base()->IsReplication()) {
+            Y_ABORT_UNLESS(context.SS->Replications.contains(srcPath.Base()->PathId));
+            auto replicationInfo = context.SS->Replications.at(srcPath.Base()->PathId);
+
+            TPath dstPath = TPath::Resolve(dstStr, context.SS); 
+            
+            auto scheme = TransactionTemplate(dstPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication);
+            scheme.SetFailOnExist(true);
+
+            auto* createOp = scheme.MutableReplication();
+            createOp->SetName(dstPath.LeafName());
+            createOp->CopyFrom(replicationInfo->Description);
+            createOp->ClearState(); 
+
+            result.push_back(CreateNewReplication(NextPartId(nextId, result), scheme));
+            continue;
+        }
+
         {
             TPath::TChecker checks = srcPath.Check();
             checks.IsResolved()

@@ -53,7 +53,7 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
     auto blobsSplittedConclusion = NArrow::SplitByBlobSize(ev->Get()->Data, context);
     AFL_VERIFY(blobsSplittedConclusion.IsSuccess());
     AFL_VERIFY(blobsSplittedConclusion.GetResult().size() == 1);
-    auto writeEvent = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, "cdcuser@TImportActor");
+    auto writeEvent = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, "cdcuser@TImportActor"); // Скорее всего импорт и пользователь не нужен
     NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*writeEvent);
     TString data = blobsSplittedConclusion.GetResult()[0].GetData();
     writer.AddDataToPayload(std::move(data));

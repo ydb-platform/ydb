@@ -41,7 +41,7 @@ protected:
         case NKikimrSchemeOp::TRestoreTask::kS3Settings:
         #ifndef KIKIMR_DISABLE_S3_OPS
             tx->SetAsyncJobActor(ctx.Register(CreateS3Downloader(DataShard.SelfId(), op->GetTxId(), restore, tableInfo, 
-                "cdcuser@restore"), // От имени какого пользователя нужно восстанавливаться?
+                "cdcuser@restore"), // Вряд ли это нужно
                 TMailboxType::HTSwap, AppData(ctx)->BatchPoolId));
             break;
         #else

@@ -86,7 +86,7 @@ TUploadRequest GenerateMkqlRowRequest(ui64 /* tableId */, ui64 keyNum, const TSt
     )", key.data()) + programWithoutKey;
 
     auto request = std::make_unique<TEvTablet::TEvLocalMKQL>();
-    request->Record.SetUserSID("cdcuser@bulk_upsert");
+    request->Record.SetUserSID("cdcuser@bulk_upsert");  // Тесты?
     request->Record.MutableProgram()->MutableProgram()->SetText(programText);
 
     return TUploadRequest(request.release());

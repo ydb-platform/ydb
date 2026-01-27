@@ -5,6 +5,7 @@ TEST_SRCS(
     test_create_tablets.py
     test_kill_tablets.py
     test_drain.py
+    test_http.py
 )
 
 IF (SANITIZER_TYPE)

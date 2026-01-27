@@ -38,13 +38,13 @@ struct TCompletedRequest
 {
     EBlockStoreRequest RequestType;
     TBlockRange64 BlockRange;
-    NProto::TError Error;
+    NYdb::NBS::NProto::TError Error;
     TDuration Elapsed;
 
     TCompletedRequest(
             EBlockStoreRequest requestType,
             const TBlockRange64& blockRange,
-            const NProto::TError& error,
+            const NYdb::NBS::NProto::TError& error,
             TDuration elapsed)
         : RequestType(requestType)
         , BlockRange(blockRange)
@@ -150,7 +150,7 @@ private:
     void SignalCompletion(
         EBlockStoreRequest requestType,
         const TBlockRange64& range,
-        const NProto::TError& error,
+        const NYdb::NBS::NProto::TError& error,
         TDuration elapsed);
 
     void ProcessCompletedRequests();
@@ -218,17 +218,17 @@ bool TTestRunner::SendNextRequest()
     return true;
 }
 
-void doDummyWork(TPromise<NProto::TError> response)
+void doDummyWork(TPromise<NYdb::NBS::NProto::TError> response)
 {
     Sleep(TDuration::MilliSeconds(50));
-    NProto::TError result;
-    result.SetCode(NCloud::EWellKnownResultCodes::S_OK);
+    NYdb::NBS::NProto::TError result;
+    result.SetCode(NYdb::NBS::EWellKnownResultCodes::S_OK);
     response.SetValue(result);
 }
 
-NThreading::TFuture<NProto::TError> getFuture()
+NThreading::TFuture<NYdb::NBS::NProto::TError> getFuture()
 {
-    auto response = NewPromise<NProto::TError>();
+    auto response = NewPromise<NYdb::NBS::NProto::TError>();
     doDummyWork(response);
     return response;
 }
@@ -250,7 +250,7 @@ void TTestRunner::SendReadRequest(const TBlockRange64& range)
         if (FAILED(error.GetCode())) {
             STORAGE_ERROR(LoggingTag
                 << "ReadBlocks request failed with error: "
-                << FormatError(error));
+                << NYdb::NBS::FormatError(error));
         }
 
         p->SignalCompletion(
@@ -300,7 +300,7 @@ bool TTestRunner::CheckSendRequestCondition() const
 void TTestRunner::SignalCompletion(
     EBlockStoreRequest requestType,
     const TBlockRange64& range,
-    const NProto::TError& error,
+    const NYdb::NBS::NProto::TError& error,
     TDuration elapsed)
 {
     CompletionQueue.Enqueue(
@@ -321,7 +321,7 @@ void TTestRunner::ProcessCompletedRequests()
             if (TestResults->Status != NProto::TEST_STATUS_FAILURE) {
                 STORAGE_ERROR(LoggingTag
                     << "Request failed with error: "
-                    << FormatError(request->Error));
+                    << NYdb::NBS::FormatError(request->Error));
             }
 
             TestResults->Status = NProto::TEST_STATUS_FAILURE;

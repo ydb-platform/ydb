@@ -1,6 +1,7 @@
 #include "rpc_fs_path_validation.h"
 
 #include <util/string/builder.h>
+#include <util/folder/pathsplit.h>
 
 namespace NKikimr {
 namespace NGRpcService {

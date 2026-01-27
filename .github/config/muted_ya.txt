@@ -58,6 +58,7 @@ ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Table
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
+ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryService
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryServiceStreamCall
@@ -113,6 +114,7 @@ ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[mixed-ro
 ydb/tests/functional/config [test_distconf.py */*] chunk chunk
 ydb/tests/functional/config test_distconf.py.TestDistConfWithAuth.test_auth_v2_initialization
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_is_operational_with_distconf
+ydb/tests/functional/encryption test_encryption.py.TestEncryption.test_simple_encryption
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/coalesce-and-join.test]

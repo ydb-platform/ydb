@@ -162,7 +162,7 @@ public:
     std::deque<TDLQMessage> GetDLQMessages();
     const std::unordered_set<ui32>& GetLockedMessageGroupsId() const;
     void InitMetrics();
-
+    bool HasRetentionExpiredMessages() const;
 
     struct TPosition {
         std::optional<std::map<ui64, TMessage>::iterator> SlowPosition;

@@ -181,8 +181,8 @@ public:
         return CompareImpl(position, item, itemPosition, item.PositionAddress.size());
     }
 
-    std::partial_ordering ComparePartial(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
-        return CompareImpl(position, item, itemPosition, std::min<ui32>(PositionAddress.size(), item.PositionAddress.size()));
+    std::partial_ordering ComparePrefix(const ui64 position, const TSortableScanData& item, const ui64 itemPosition, const ui32 prefixSize) const {
+        return CompareImpl(position, item, itemPosition, prefixSize);
     }
 
     void AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const;
@@ -485,9 +485,9 @@ public:
         return ApplyOptionalReverseForCompareResult(directResult);
     }
 
-    std::partial_ordering ComparePartial(const TSortableBatchPosition& item) const {
+    std::partial_ordering ComparePrefix(const TSortableBatchPosition& item, const ui32 prefixSize)  const {
         Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
-        const auto directResult = Sorting->ComparePartial(Position, *item.Sorting, item.GetPosition());
+        const auto directResult = Sorting->ComparePrefix(Position, *item.Sorting, item.GetPosition(), prefixSize);
         return ApplyOptionalReverseForCompareResult(directResult);
     }
 
